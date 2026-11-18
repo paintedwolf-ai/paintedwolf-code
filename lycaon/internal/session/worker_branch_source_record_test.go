@@ -189,7 +189,7 @@ func (noopWorkerBranchClaim) ClaimWorkerBranch(context.Context, string) (*api.Wo
 }
 
 type failingWorkerModelStore struct {
-	*store.SQL
+	store.SessionRepository
 	err error
 }
 
@@ -198,11 +198,13 @@ func (s *failingWorkerModelStore) UpdateSession(context.Context, string, func(*a
 }
 
 func TestWorkerModelSaveFailureRemovesPartialChild(t *testing.T) {
-	st := &failingWorkerModelStore{SQL: storetest.New(t, testdbseed.DefaultProjectID), err: errors.New("model save failed")}
+	repositories := storetest.New(t, testdbseed.DefaultProjectID)
+	st := &failingWorkerModelStore{SessionRepository: repositories.Sessions, err: errors.New("model save failed")}
+	repositories.Sessions = st
 	policy := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "fixture", Model: "fixture"},
 	})
-	manager := NewHost(st, Models{Client: nil, Provider: &llm.Service{Router: llm.NewStaticModelRouter(policy)}, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	manager := NewHost(repositories, Models{Client: nil, Provider: &llm.Service{Router: llm.NewStaticModelRouter(policy)}, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create worker parent", err)
 	child, err := manager.Workers.SpawnChild(t.Context(), parent.ID, api.SpawnChildRequest{AgentType: "implement"})
@@ -228,7 +230,7 @@ func TestSpawnedWorkerKeepsPoolAssignmentAfterReload(t *testing.T) {
 		}},
 	})
 	manager := NewHost(st, Models{Client: nil, Provider: &llm.Service{Policy: policy, Router: llm.NewStaticModelRouter(policy)}, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	parent, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create worker parent", err)
 	for i, provider := range []string{"first-provider", "second-provider", "first-provider"} {
 		child, err := manager.Workers.SpawnChild(t.Context(), parent.ID, api.SpawnChildRequest{AgentType: "implement", Prompt: "inspect the fixture"})
@@ -236,7 +238,7 @@ func TestSpawnedWorkerKeepsPoolAssignmentAfterReload(t *testing.T) {
 		if child.ProviderID != provider || child.Model == "" {
 			t.Fatalf("worker %d assignment = %s/%s, want provider %s", i, child.ProviderID, child.Model, provider)
 		}
-		loaded, err := store.NewSQL(database).Get(t.Context(), child.ID)
+		loaded, err := store.NewSQL(database).Sessions.Get(t.Context(), child.ID)
 		testutil.FailErr(t, "reload assigned worker", err)
 		assertWorkerRoutingStable(t, llm.NewStaticModelRouter(policy), loaded, child)
 	}
@@ -266,9 +268,9 @@ func TestWorkerSynthesisSettlesAfterOutcomeAcknowledgement(t *testing.T) {
 	ctx := t.Context()
 	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "mark visible turn busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark visible turn busy", st.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 	q := &pendingOutcomeQueue{pending: []api.WorkerTask{{
 		ID: "job-a", ProjectID: sess.ProjectID, ParentSessionID: sess.ID, Status: api.WorkerStatusComplete,
 	}}}
@@ -287,7 +289,7 @@ func TestWorkerSynthesisSettlesAfterOutcomeAcknowledgement(t *testing.T) {
 	testutil.FailErr(t, "finish worker synthesis", mgr.Runner.Settlement.Finish(ctx, sess.ID, false, true, ""))
 	finishExecution()
 	testutil.FailErr(t, "drain worker synthesis wakes", mgr.Runner.Settlement.Drain(ctx, sess.ID))
-	settled, err := st.Get(ctx, sess.ID)
+	settled, err := st.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read completed session", err)
 	if settled.Status != api.SessionStatusIdle {
 		t.Fatalf("status after acknowledged worker synthesis = %q want idle", settled.Status)
@@ -307,7 +309,7 @@ func TestWorkerValidationEvidenceUnavailablePreservesDelivery(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Verification.SetEvidenceStore(unavailableWorkerEvidence{})
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	task := &api.WorkerTask{ChildSessionID: sess.ID}
 	proof, _ := mgr.Workers.Summaries.Proof(t.Context(), task, nil, "")

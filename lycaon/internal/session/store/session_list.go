@@ -109,7 +109,7 @@ func sessionSummaryFilter(q SummaryQuery) (string, []any) {
 }
 
 // ListProjectSummaries returns one chat page and its total.
-func (s *sqlSessionViews) ListProjectSummaries(ctx context.Context, q SummaryQuery) (SummaryPage, error) {
+func (s *sqlSessions) ListProjectSummaries(ctx context.Context, q SummaryQuery) (SummaryPage, error) {
 	return listProjectSummariesSQL(ctx, s.core, q)
 }
 

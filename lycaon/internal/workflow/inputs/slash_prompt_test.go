@@ -1,23 +1,21 @@
 package inputs_test
 
 import (
-	session "github.com/lycaon/lycaon/internal/session"
-
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/workflow"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func userRowByID(t *testing.T, mgr *workflow.RunManager, sessionID, messageID string) api.Message {
 	t.Helper()
-	msgs, err := mgr.Policy.Sessions.(session.Store).GetMessages(context.Background(), sessionID)
+	msgs, err := mgr.TranscriptStore.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "Sessions.GetMessages", err)
 	for _, msg := range msgs {
 		if msg.ID == messageID {
@@ -29,7 +27,7 @@ func userRowByID(t *testing.T, mgr *workflow.RunManager, sessionID, messageID st
 }
 
 func TestSlashStartEchoesSubmissionIDOnUserRow(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	submissionID := uuid.NewString()
 
@@ -54,7 +52,7 @@ func TestSlashStartEchoesSubmissionIDOnUserRow(t *testing.T) {
 }
 
 func TestSlashStartWithoutSubmissionIDStillMintsUserRow(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 
 	_, handled, err := mgr.Slash.TrySlashPrompt(ctx, sessionID, "/plan", "")
@@ -62,7 +60,7 @@ func TestSlashStartWithoutSubmissionIDStillMintsUserRow(t *testing.T) {
 	if !handled {
 		t.Fatal("expected /plan slash handled")
 	}
-	msgs, err := mgr.Policy.Sessions.(session.Store).GetMessages(ctx, sessionID)
+	msgs, err := mgr.TranscriptStore.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "Sessions.GetMessages", err)
 	for _, msg := range msgs {
 		if msg.Role == api.MessageRoleUser && msg.Content == "/plan" {
@@ -76,7 +74,7 @@ func TestSlashStartWithoutSubmissionIDStillMintsUserRow(t *testing.T) {
 }
 
 func TestSlashStartLeavesSessionStatusToTurns(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	woke := false
 	mgr.Publication.OnPhaseAutoAdvanced = func(context.Context, string, string, string, string) {
@@ -103,7 +101,7 @@ func TestSlashStartLeavesSessionStatusToTurns(t *testing.T) {
 }
 
 func TestHumanStartLeasesStartingWorkflowActivity(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	hub := events.NewMemoryHub()
 	publisher := &events.Publisher{Hub: hub}
@@ -147,7 +145,7 @@ func TestHumanStartLeasesStartingWorkflowActivity(t *testing.T) {
 }
 
 func TestSlashExitEchoesSubmissionIDAndStampsRun(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 
 	_, handled, err := mgr.Slash.TrySlashPrompt(ctx, sessionID, "/plan", uuid.NewString())

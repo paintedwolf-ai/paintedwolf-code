@@ -87,7 +87,7 @@ func TestChildCheckpointAttention(t *testing.T) {
 			if len(combined) != 1 {
 				t.Fatalf("combined approvals = %d, want 1", len(combined))
 			}
-			source := attention.Source{Sessions: sessionstore.NewSQL(database), Checkpoints: mgr}
+			source := attention.Source{Sessions: sessionstore.NewSQL(database).Sessions, Checkpoints: mgr}
 			view, err := source.BuildView(testdbseed.OwnerCaller(t, t.Context(), database))
 			testutil.FailErr(t, "build attention view", err)
 			if len(view.Rows) != 1 || view.Rows[0].SessionID != parent || view.Rows[0].Class != api.AttentionClassNeedsYou {

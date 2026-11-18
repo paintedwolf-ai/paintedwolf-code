@@ -2,15 +2,19 @@ package inputs
 
 import (
 	"context"
+
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type Sessions interface {
-	Get(context.Context, string) (*api.Session, error)
-	GetMessages(context.Context, string) ([]api.Message, error)
-	UpdateMessage(context.Context, string, string, api.Message) (api.Message, error)
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Transcript interface {
+	GetMessages(ctx context.Context, id string) ([]api.Message, error)
+	UpdateMessage(ctx context.Context, sessionID, messageID string, msg api.Message) (api.Message, error)
 }
 type Ambient interface {
 	EnsureSessionWorkflow(context.Context, string) (*api.WorkflowRun, error)

@@ -41,7 +41,7 @@ func TestHTTPCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
 	waitTaskEnqueueCountHTTP(t, h.Server, sess.ID, 3)
 	waitTranscriptContainsHTTP(t, h.Server, sess.ID, "The batch is dispatched.")
 
-	msgs, err := h.Store.GetMessages(ctx, sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	enqueued := 0
 	for _, msg := range msgs {
@@ -89,7 +89,7 @@ func TestHTTPCoordinatorBatchCapRejectE2E(t *testing.T) {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	msgs, err := h.Store.GetMessages(ctx, sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	enqueued := 0
 	for _, msg := range msgs {
@@ -123,7 +123,7 @@ func TestHTTPCoordinatorBatchWorkersOnPackBoardE2E(t *testing.T) {
 	acceptPromptHTTP(t, h.Server, sess.ID, "HTTP_ROSTER")
 	waitTaskEnqueueCountHTTP(t, h.Server, sess.ID, 2)
 
-	_, err := h.Store.GetMessages(ctx, sess.ID)
+	_, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 
 	board, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"detail_level": "compact"}, securityToolContext(sess.ID, sess.WorkspacePath, "coordinator"))

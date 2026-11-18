@@ -125,7 +125,7 @@ func findBlueprintTranscriptMessage(msgs []api.Message, blueprintPath string) (a
 
 // SyncBlueprintTranscript updates the blueprint proposal message.
 func (m *Service) SyncBlueprintTranscript(ctx context.Context, projectID, blueprintPath string, changedWarning bool) error {
-	if m == nil || m.Sessions == nil || m.Getter == nil {
+	if m == nil || m.TranscriptStore == nil || m.Getter == nil {
 		return nil
 	}
 	projectID = strings.TrimSpace(projectID)
@@ -151,7 +151,7 @@ func (m *Service) syncBlueprintTranscript(
 	vars map[string]any,
 	changedWarning bool,
 ) error {
-	if m == nil || m.Sessions == nil || m.Getter == nil || active == nil {
+	if m == nil || m.TranscriptStore == nil || m.Getter == nil || active == nil {
 		return nil
 	}
 	blueprintPath := strings.TrimSpace(active.BlueprintPath)
@@ -172,7 +172,7 @@ func (m *Service) syncBlueprintTranscript(
 	meta := buildBlueprintTranscriptMeta(active, blueprint, awaiting, changedWarning)
 	metaCopy := meta
 
-	msgs, err := m.Sessions.GetMessages(ctx, active.SessionID)
+	msgs, err := m.TranscriptStore.GetMessages(ctx, active.SessionID)
 	if err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func (m *Service) syncBlueprintTranscript(
 		patch.Content = blueprint.Content
 		patch.Blueprint = &metaCopy
 		patch.Kind = api.MessageKindBlueprint
-		if _, err := m.Sessions.UpdateMessage(ctx, active.SessionID, existing.ID, patch); err != nil {
+		if _, err := m.TranscriptStore.UpdateMessage(ctx, active.SessionID, existing.ID, patch); err != nil {
 			return err
 		}
 		m.Transcript.PublishPatch(ctx, active.SessionID, patch)

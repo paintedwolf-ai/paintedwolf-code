@@ -58,7 +58,7 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 		t.Fatalf("unresolved coverage citations outcome = %+v, want grounding refusal", out)
 	}
 
-	testutil.FailErr(t, "seed survey evidence", h.Store.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
+	testutil.FailErr(t, "seed survey evidence", h.Store.Evidence.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
 		Handle: "survey#1", Path: "internal/store/query.go",
 		Kind: "read", Shape: evidence.ShapeFileRegion, SourceTool: "read", Fidelity: evidence.FidelityStructured,
 		LineRanges: []evidence.LineRange{{Start: 88, End: 88}},

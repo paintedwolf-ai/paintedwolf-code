@@ -16,6 +16,7 @@ import (
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -168,7 +169,7 @@ func (f *recordingInventoryService) snapshot() []sourceledger.InventoryRequest {
 
 const testProviderID = "prov-a"
 
-func withSessionStore(store session.Store) testDeps {
+func withSessionStore(store *sessionstore.Repositories) testDeps {
 	return func(d *Dependencies) { d.Core.Store = store }
 }
 

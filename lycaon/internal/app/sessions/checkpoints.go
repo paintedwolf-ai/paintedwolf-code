@@ -36,7 +36,7 @@ import (
 type CheckpointDependencies struct {
 	Database        *db.Store
 	Directory       string
-	Sessions        *store.SQL
+	Sessions        *store.Repositories
 	EventsOutbox    *eventoutbox.Outbox
 	EventPublisher  *events.Publisher
 	Security        *security.Runtime
@@ -99,12 +99,12 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	}
 	wireCredentialObservations(r.Manager, deps.Security.Fingerprinter, deps.Security.Matcher, deps.Security.Harvest)
 	deps.Execution.Host.Executor.Secrets.SetSecretExposureSource(func(c context.Context, chatSessionID string) (bool, error) {
-		return deps.Sessions.SessionSecretExposure(c, chatSessionID)
+		return deps.Sessions.Evidence.SessionSecretExposure(c, chatSessionID)
 	})
 	deps.Execution.Host.Executor.Secrets.SetUntrustedIngestionSource(func(c context.Context, chatSessionID string) (bool, error) {
-		return deps.Sessions.SessionUntrustedContentResult(c, chatSessionID)
+		return deps.Sessions.Evidence.SessionUntrustedContentResult(c, chatSessionID)
 	})
-	deps.Execution.Host.Executor.Network.SetSessionHostLedger(deps.Sessions)
+	deps.Execution.Host.Executor.Network.SetSessionHostLedger(deps.Sessions.Evidence)
 
 	sensitiveDests, err := approvals.LoadMergedConsequenceBandPaths(deps.Directory)
 	if err != nil {
@@ -121,7 +121,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	}
 	deps.Execution.Host.Commands.SetSandboxWriteRootGate(&session.WriteRootCheckpointBroker{
 		Checkpoints:       r.Checkpoints,
-		Store:             deps.Sessions,
+		Store:             deps.Sessions.Sessions,
 		Runtime:           writeRootRT,
 		ReadRuntime:       readPathRT,
 		Consequence:       deriver,
@@ -134,7 +134,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	})
 	deps.Execution.Host.Authority.SetSandboxListenGate(&session.ListenCheckpointBroker{
 		Checkpoints:       r.Checkpoints,
-		Store:             deps.Sessions,
+		Store:             deps.Sessions.Sessions,
 		Runtime:           listenRT,
 		Provenance:        loopbackProv,
 		Authority:         deps.Execution.Host.Authority.ApprovalGate(),
@@ -144,7 +144,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	})
 	deps.Execution.Host.Authority.SetSandboxLoopbackGate(&session.LoopbackCheckpointBroker{
 		Checkpoints:       r.Checkpoints,
-		Store:             deps.Sessions,
+		Store:             deps.Sessions.Sessions,
 		Runtime:           loopbackRT,
 		Provenance:        loopbackProv,
 		Authority:         deps.Execution.Host.Authority.ApprovalGate(),
@@ -154,7 +154,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	})
 	deps.Execution.Host.Authority.SetLocalNetworkGate(&session.LocalNetworkCheckpointBroker{
 		Checkpoints:       r.Checkpoints,
-		Store:             deps.Sessions,
+		Store:             deps.Sessions.Sessions,
 		Listen:            listenRT,
 		Loopback:          loopbackRT,
 		Provenance:        loopbackProv,

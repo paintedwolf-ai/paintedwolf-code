@@ -37,7 +37,7 @@ func TestCoordinatorBatchTurn_oneSynthesisPerTurnLatch(t *testing.T) {
 	mgr.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: "coordinator"}, "coordinator")
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: "coordinator"}, "coordinator")
 	testutil.FailErr(t, "create session", err)
 
 	mgr.Runner.Settlement.Begin(sess.ID, "")
@@ -64,7 +64,7 @@ func TestCoordinatorBatchTurn_groundingRetryDoesNotSetLatch(t *testing.T) {
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: "coordinator"}, "coordinator")
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: "coordinator"}, "coordinator")
 	testutil.FailErr(t, "create session", err)
 
 	mgr.Runner.Settlement.Begin(sess.ID, "")
@@ -89,11 +89,11 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 	database := testdbfixture.Open(t, "execution.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st := store.NewSQL(database)
-	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	parent, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create root", err)
-	child, err := st.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := st.Sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
-	_, _, err = st.PutPromptSubmission(t.Context(), store.PromptSubmission{ID: "admission", SessionID: parent.ID, ProjectID: parent.ProjectID, Origin: store.PromptSubmissionOriginUser, SubmittedBy: parent.OwnerPersonID, InputDigest: "task", InputJSON: "{}"})
+	_, _, err = st.Submissions.PutPromptSubmission(t.Context(), store.PromptSubmission{ID: "admission", SessionID: parent.ID, ProjectID: parent.ProjectID, Origin: store.PromptSubmissionOriginUser, SubmittedBy: parent.OwnerPersonID, InputDigest: "task", InputJSON: "{}"})
 	testutil.FailErr(t, "admit task", err)
 	manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	checkpoints := &executionCheckpoints{}
@@ -107,17 +107,17 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 		}
 	}
 	check(false)
-	admission, _, err := st.ClaimPromptSubmission(t.Context(), "admission")
+	admission, _, err := st.Submissions.ClaimPromptSubmission(t.Context(), "admission")
 	testutil.FailErr(t, "claim prompt", err)
-	testutil.FailErr(t, "complete prompt", st.FinishPromptSubmission(t.Context(), admission.ID, admission.ClaimToken, store.PromptSubmissionComplete, "{}", store.PromptSubmissionFailure{}))
+	testutil.FailErr(t, "complete prompt", st.Submissions.FinishPromptSubmission(t.Context(), admission.ID, admission.ClaimToken, store.PromptSubmissionComplete, "{}", store.PromptSubmissionFailure{}))
 	check(true)
-	foreign, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	foreign, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create unrelated session", err)
-	testutil.FailErr(t, "mark unrelated session busy", st.SetSessionStatus(t.Context(), foreign.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark unrelated session busy", st.Sessions.SetSessionStatus(t.Context(), foreign.ID, api.SessionStatusBusy))
 	check(true)
-	testutil.FailErr(t, "mark child busy", st.SetSessionStatus(t.Context(), child.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark child busy", st.Sessions.SetSessionStatus(t.Context(), child.ID, api.SessionStatusBusy))
 	check(false)
-	testutil.FailErr(t, "mark child idle", st.SetSessionStatus(t.Context(), child.ID, api.SessionStatusIdle))
+	testutil.FailErr(t, "mark child idle", st.Sessions.SetSessionStatus(t.Context(), child.ID, api.SessionStatusIdle))
 	check(true)
 	checkpoints.pending = []api.CheckpointEvent{{SessionID: child.ID, ID: "approval"}}
 	check(false)
@@ -128,10 +128,10 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 	release()
 	check(true)
 	for _, id := range []string{"child-failed", "child-recovered"} {
-		_, _, err := st.PutPromptSubmission(t.Context(), store.PromptSubmission{ID: id, SessionID: child.ID, ProjectID: child.ProjectID, Origin: store.PromptSubmissionOriginUser, SubmittedBy: child.OwnerPersonID, InputDigest: id, InputJSON: "{}"})
+		_, _, err := st.Submissions.PutPromptSubmission(t.Context(), store.PromptSubmission{ID: id, SessionID: child.ID, ProjectID: child.ProjectID, Origin: store.PromptSubmissionOriginUser, SubmittedBy: child.OwnerPersonID, InputDigest: id, InputJSON: "{}"})
 		testutil.FailErr(t, "admit child execution", err)
 		check(false)
-		receipt, _, err := st.ClaimPromptSubmission(t.Context(), id)
+		receipt, _, err := st.Submissions.ClaimPromptSubmission(t.Context(), id)
 		testutil.FailErr(t, "claim child execution", err)
 		status := store.PromptSubmissionComplete
 		failure := store.PromptSubmissionFailure{}
@@ -139,7 +139,7 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 			status = store.PromptSubmissionFailed
 			failure.Code = "provider_overloaded"
 		}
-		testutil.FailErr(t, "settle child execution", st.FinishPromptSubmission(t.Context(), id, receipt.ClaimToken, status, "{}", failure))
+		testutil.FailErr(t, "settle child execution", st.Submissions.FinishPromptSubmission(t.Context(), id, receipt.ClaimToken, status, "{}", failure))
 		check(true)
 		observation, err := manager.Observations.Observe(t.Context(), parent.ID, "admission")
 		testutil.FailErr(t, "observe latest child receipt", err)
@@ -172,11 +172,11 @@ func TestExecutionObservationRejectsMissingSession(t *testing.T) {
 	database := testdbfixture.Open(t, "execution.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st := store.NewSQL(database)
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	_, _, err = st.PutPromptSubmission(t.Context(), store.PromptSubmission{ID: "admission", SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID, InputDigest: "task", InputJSON: "{}"})
+	_, _, err = st.Submissions.PutPromptSubmission(t.Context(), store.PromptSubmission{ID: "admission", SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID, InputDigest: "task", InputJSON: "{}"})
 	testutil.FailErr(t, "admit task", err)
-	testutil.FailErr(t, "delete session", st.Delete(t.Context(), sess.ID))
+	testutil.FailErr(t, "delete session", st.Sessions.Delete(t.Context(), sess.ID))
 	manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	if _, err := manager.Observations.Observe(t.Context(), sess.ID, "admission"); err == nil {
 		t.Fatal("deleted session admission became a wait state")
@@ -188,7 +188,7 @@ func TestExecutionObservationRejectsMissingSession(t *testing.T) {
 
 func TestExecutionTreeSupportsWorkflowStartsWithoutPromptAdmission(t *testing.T) {
 	st := storetest.New(t, "project")
-	root, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project")
+	root, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project")
 	testutil.FailErr(t, "create workflow session", err)
 	manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	observation, err := manager.Observations.Tree(t.Context(), root.ID)
@@ -270,7 +270,7 @@ func TestQueueCoordinatorKickPrependsOnPrompt(t *testing.T) {
 
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	mgr.Coordinator.Guidance.Emit(context.Background(), sess.ID, anchor.ComposeDone, anchor.Envelope{})
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {
@@ -287,7 +287,7 @@ func TestQueueCoordinatorKickPrependsOnPrompt(t *testing.T) {
 	if !foundKick {
 		t.Fatal("expected compose-done kick nudge as host system message")
 	}
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) < 2 {
 		t.Fatalf("messages = %+v want kick + user rows", msgs)
@@ -320,7 +320,7 @@ func TestPromptRenderFailurePreservesCoordinatorKickForRetry(t *testing.T) {
 	mgr.SetPromptEngine(failingKickPromptEngine{err: errors.New("template unavailable")})
 
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err == nil {

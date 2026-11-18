@@ -2,11 +2,11 @@ package harnessfixture
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -27,7 +27,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 	project, err := projects.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: root}}})
 	testutil.FailErr(t, "create project", err)
 	sessions := store.NewSQL(database)
-	parent, err := sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: project.Roots[0].ID}, project.ID)
+	parent, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: project.Roots[0].ID}, project.ID)
 	testutil.FailErr(t, "create parent", err)
 	queue := &fixtureQueue{SQLQueue: worker.NewSQLQueue(database, 2)}
 	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}))
@@ -39,7 +39,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 		{Label: "Filter", Files: map[string]string{"catalog.py": "value = 'filter'\n"}},
 		{Label: "Page", ResultStatus: "partial", Files: map[string]string{"catalog.py": "value = 'page'\n"}},
 	}, IntegrationFiles: map[string]string{"preferences.json": "violet"}}
-	evidence, err := Prepare(t.Context(), queue, sessions, parent, project.Roots[0], setup, nil)
+	evidence, err := Prepare(t.Context(), queue, sessions.Sessions, parent, project.Roots[0], sessions.Transcript, setup, nil)
 	testutil.FailErr(t, "prepare overlays", err)
 	if queue.pendingOutcomes != 0 {
 		t.Fatal("fixture exposed outcomes to the automatic coordinator wake path")
@@ -59,7 +59,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 		if task.Result == nil || task.Result.Status != wantStatus || task.Result.CompletionReport == nil || task.Result.CompletionReport.LegStatus != wantStatus || prepared.ResultStatus != wantStatus {
 			t.Fatalf("worker return did not preserve %s: %+v", wantStatus, task.Result)
 		}
-		child, err := sessions.Get(t.Context(), task.ChildSessionID)
+		child, err := sessions.Sessions.Get(t.Context(), task.ChildSessionID)
 		testutil.FailErr(t, "get child", err)
 		if child.ParentSessionID != parent.ID {
 			t.Fatalf("child parent: %s", child.ParentSessionID)
@@ -95,7 +95,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 	if string(body) != "violet" {
 		t.Fatalf("user edit lost: %q", body)
 	}
-	if _, err := Prepare(t.Context(), queue, sessions, parent, project.Roots[0], setup, nil); err == nil {
+	if _, err := Prepare(t.Context(), queue, sessions.Sessions, parent, project.Roots[0], sessions.Transcript, setup, nil); err == nil {
 		t.Fatal("fixture reused an existing project")
 	}
 }

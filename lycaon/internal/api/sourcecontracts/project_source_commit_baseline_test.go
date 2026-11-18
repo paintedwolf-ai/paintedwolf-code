@@ -26,12 +26,11 @@ import (
 )
 
 func TestCommitBaselineReadsTheNestedRootsOwnFile(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger)
 	_, nested := contractfixture.NestedRootRepo(t)
 
 	p := contractfixture.CreateProjectForTest(t, srv, nested)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 
 	testutil.FailErr(t, "edit working file",
@@ -77,7 +76,6 @@ func TestRestoreGitCausedVersionUsesGitObjectStore(t *testing.T) {
 	repo, nested := contractfixture.NestedRootRepo(t)
 
 	p := contractfixture.CreateProjectForTest(t, srv, nested)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 
 	revParse := func() string {
@@ -165,12 +163,11 @@ func TestRestoreGitCausedVersionUsesGitObjectStore(t *testing.T) {
 // Git restore refuses bytes that do not match the recorded hash.
 
 func TestRestoreGitCausedVersionRefusesDriftedGitBytes(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger, contractfixture.WithPassiveSourceInventory)
 	_, nested := contractfixture.NestedRootRepo(t)
 
 	p := contractfixture.CreateProjectForTest(t, srv, nested)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 
 	reader := contractfixture.NewScriptedGitStateReader(t, nested,
@@ -384,7 +381,7 @@ func commitRestoreRefusesAnotherCommitsBlob(t *testing.T, f contractfixture.Merg
 // Commit restore refuses drifted object identity.
 
 func TestCommitRestoreRefusesADriftedObject(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger)
 	repo, nested := contractfixture.NestedRootRepo(t)
 	head := exec.CommandContext(t.Context(), "git", "-C", repo, "rev-parse", "HEAD")
@@ -394,7 +391,6 @@ func TestCommitRestoreRefusesADriftedObject(t *testing.T) {
 	commit := strings.TrimSpace(string(headOut))
 
 	p := contractfixture.CreateProjectForTest(t, srv, nested)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 	testutil.FailErr(t, "write working bytes",
 		os.WriteFile(filepath.Join(nested, "src", "app.ts"), []byte("working\n"), 0o644))
@@ -431,12 +427,11 @@ func TestCommitRestoreRefusesADriftedObject(t *testing.T) {
 // A committed directory is absent from a file comparison.
 
 func TestCommitBaselineTreatsADirectoryInHeadAsAbsent(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger)
 	_, nested := contractfixture.NestedRootRepo(t)
 
 	p := contractfixture.CreateProjectForTest(t, srv, nested)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 
 	// Replace the committed directory path with a working file.
@@ -474,12 +469,11 @@ func TestCommitBaselineTreatsADirectoryInHeadAsAbsent(t *testing.T) {
 // A file that is not in the commit reads as absent.
 
 func TestCommitBaselineReportsAnUncommittedFileAsAbsent(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger)
 	_, nested := contractfixture.NestedRootRepo(t)
 
 	p := contractfixture.CreateProjectForTest(t, srv, nested)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 
 	testutil.FailErr(t, "write new file",
@@ -512,11 +506,10 @@ func TestCommitBaselineReportsAnUncommittedFileAsAbsent(t *testing.T) {
 // A missing working tree makes the commit baseline unavailable.
 
 func TestCommitBaselineWithoutAWorkingTreeReportsUnavailable(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	dir := t.TempDir()
 	p := contractfixture.CreateProjectForTest(t, srv, dir)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 
 	testutil.FailErr(t, "record edit", ledger.Record(t.Context(), sourceledger.RecordInput{

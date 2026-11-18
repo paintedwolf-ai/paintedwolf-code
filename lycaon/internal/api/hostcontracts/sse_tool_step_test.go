@@ -19,7 +19,7 @@ func TestToolStepReplayKeepsCardsWithoutProse(t *testing.T) {
 			sess := contractfixture.CreateSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
 			msg := wire.Message{ID: "tool-step", Role: wire.MessageRoleAssistant, Content: "internal routing explanation",
 				ToolCalls: []wire.ToolCall{{ID: "wait-call", Name: "wait", Args: map[string]any{"reason": "Waiting for the CLI implementation"}}}}
-			testutil.FailErr(t, "append tool step", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), sess.ID, msg))
+			testutil.FailErr(t, "append tool step", srv.Admin.SessionAdmin.Transcript.TranscriptStore.AppendMessages(t.Context(), sess.ID, msg))
 			if cache == "content" {
 				srv.Admin.SessionAdmin.Lifecycle.Sessions.Runner.Transcript.Streams.CacheReplay(msg.ID, msg.Content, nil)
 			}
@@ -49,7 +49,7 @@ func TestToolStepReplayKeepsCardsWithoutProse(t *testing.T) {
 			if !sawCard || !sawReset || !sawDone {
 				t.Fatalf("card=%v reset=%v done=%v", sawCard, sawReset, sawDone)
 			}
-			stored, err := srv.Sources.Workspace.SessionStore.GetMessage(t.Context(), sess.ID, msg.ID)
+			stored, err := srv.Admin.SessionAdmin.Transcript.TranscriptStore.GetMessage(t.Context(), sess.ID, msg.ID)
 			testutil.FailErr(t, "read recorded tool step", err)
 			if stored.Content != msg.Content {
 				t.Fatal("replay changed model history")

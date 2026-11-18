@@ -81,7 +81,7 @@ func TestWorkerReportAssemblesSummaryInputFromDurableChild(t *testing.T) {
 	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
 	store := sessionstore.NewSQL(database)
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
-	child, err := store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	child, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create child session", err)
 	host := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	runtime := New(database, nil, worker.WorkersConfig{})

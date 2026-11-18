@@ -13,7 +13,8 @@ import (
 )
 
 type custodyRepo struct {
-	ToolsRepository
+	Sessions
+	Evidence
 	sessions  map[string]*api.Session
 	committed map[string][]evidence.ProgramHTTPProvenance
 }
@@ -38,7 +39,7 @@ func TestWorkerCustodyIsSharedWithTheChat(t *testing.T) {
 		},
 		committed: map[string][]evidence.ProgramHTTPProvenance{},
 	}
-	m := &Tools{Sessions: repo}
+	m := &Tools{SessionStore: repo, EvidenceStore: repo}
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "out"), 0o755); err != nil {
 		testutil.FailErr(t, "create directory", err)

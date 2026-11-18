@@ -75,10 +75,10 @@ func TestTurnRequestDecidesAParkedRequestOnItsFirstHostTurn(t *testing.T) {
 func TestTurnRequestKeepsADecidedRequestAcrossHostTurns(t *testing.T) {
 	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "persist opening message", st.AppendMessages(t.Context(), sess.ID, api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "inspect the logs"}))
-	_, err = st.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{SessionID: sess.ID, OpeningMessageID: "u1", Trigger: store.TurnLoadTriggerTurn})
+	testutil.FailErr(t, "persist opening message", st.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "inspect the logs"}))
+	_, err = st.Turns.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{SessionID: sess.ID, OpeningMessageID: "u1", Trigger: store.TurnLoadTriggerTurn})
 	testutil.FailErr(t, "put receipt", err)
 	history := []api.Message{{ID: "u1", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "add a flag"}}
 	wake := promptinput.Input{HostSignal: &promptinput.HostSignal{Kind: api.MessageKindHostLoopWake}}
@@ -92,9 +92,9 @@ func TestResolvedWorkflowRequestDoesNotReplaceWorkerAssignment(t *testing.T) {
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	var asked []string
 	mgr.SetWorkflowDomains(workflowDomainFixture(requestWorkflowView{request: workflowfacts.ResolvedWorkflowRequest{Text: "run request"}, asked: &asked}))
-	root, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
+	root, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create root", err)
-	worker, err := st.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "security-reviewer"})
+	worker, err := st.Sessions.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "security-reviewer"})
 	testutil.FailErr(t, "create worker", err)
 	if request := mgr.Coordinator.Loading.ResolvedRequest(t.Context(), worker); request.Text != "" {
 		t.Fatalf("worker inherited coordinator request %+v", request)
@@ -123,9 +123,9 @@ func TestTurnOptimizationRunsWithoutWorkflowOptIn(t *testing.T) {
 	for _, unavailable := range []bool{false, true} {
 		st := storetest.New(t, "project-1")
 		mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-		sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
+		sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 		testutil.FailErr(t, "create session", err)
-		testutil.FailErr(t, "persist opening message", st.AppendMessages(t.Context(), sess.ID, api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "inspect the logs"}))
+		testutil.FailErr(t, "persist opening message", st.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "inspect the logs"}))
 		engine := &decidetest.Fake{Unavailable: unavailable}
 		mgr.Coordinator.Loading.SetDecider(engine)
 		mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
@@ -135,7 +135,7 @@ func TestTurnOptimizationRunsWithoutWorkflowOptIn(t *testing.T) {
 			t.Fatal("ordinary turn skipped optimization without a workflow declaration")
 		}
 		mgr.Coordinator.Loading.Finish(t.Context(), sess, sess.ID, tools.ToolContext{}, decision)
-		receipt, found, readErr := st.LatestTurnLoadReceipt(t.Context(), sess.ID)
+		receipt, found, readErr := st.Turns.LatestTurnLoadReceipt(t.Context(), sess.ID)
 		testutil.FailErr(t, "read turn decision", readErr)
 		if !found {
 			t.Fatal("decision receipt missing")
@@ -180,9 +180,9 @@ func (loadablePolicy) EvaluateInvoke(context.Context, *api.Session, string, map[
 func TestTurnOptimizationFailureClearsTheStaleSkill(t *testing.T) {
 	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "persist opening message", st.AppendMessages(t.Context(), sess.ID, api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "inspect the logs"}))
+	testutil.FailErr(t, "persist opening message", st.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "inspect the logs"}))
 	mgr.Coordinator.Loading.SetDecider(&decidetest.Fake{Err: errors.New("engine failed")})
 	ledger := turnload.NewLedger()
 	ledger.Restore(sess.ID, turnload.Standing{Skill: &turnload.SkillPreload{Name: "old", Body: "old"}}, nil)
@@ -193,7 +193,7 @@ func TestTurnOptimizationFailureClearsTheStaleSkill(t *testing.T) {
 		t.Fatal("failed engine skipped decision receipt")
 	}
 	mgr.Coordinator.Loading.Finish(t.Context(), sess, sess.ID, tools.ToolContext{}, decision)
-	receipt, found, err := st.LatestTurnLoadReceipt(t.Context(), sess.ID)
+	receipt, found, err := st.Turns.LatestTurnLoadReceipt(t.Context(), sess.ID)
 	testutil.FailErr(t, "read failed decision", err)
 	if !found || !receipt.Abstained || ledger.Preload(sess.ID) != nil {
 		t.Fatalf("failed decision left stale prompt selection: %+v", decision)
@@ -203,7 +203,7 @@ func TestTurnOptimizationFailureClearsTheStaleSkill(t *testing.T) {
 func TestWorkflowStartDecisionUsesItsBoundRequestOnce(t *testing.T) {
 	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 	request := workflowfacts.ResolvedWorkflowRequest{RunID: "new-run", OpeningMessageID: "start", Text: "Review the project security."}
 	wake := promptinput.Input{HostSignal: &promptinput.HostSignal{Kind: api.MessageKindHostLoopWake}}
@@ -219,8 +219,8 @@ func TestWorkflowStartDecisionUsesItsBoundRequestOnce(t *testing.T) {
 	}
 	testdbseed.InsertSessionWorkflowRun(t, st.DB(), "old-run", sess.ID, "complete")
 	testdbseed.InsertSessionWorkflowRun(t, st.DB(), "new-run", sess.ID, "running")
-	testutil.FailErr(t, "persist workflow opening", st.AppendMessages(t.Context(), sess.ID, history...))
-	_, err = st.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{SessionID: sess.ID, OpeningMessageID: "start", Trigger: store.TurnLoadTriggerTurn})
+	testutil.FailErr(t, "persist workflow opening", st.Transcript.AppendMessages(t.Context(), sess.ID, history...))
+	_, err = st.Turns.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{SessionID: sess.ID, OpeningMessageID: "start", Trigger: store.TurnLoadTriggerTurn})
 	testutil.FailErr(t, "record start decision", err)
 	if _, _, ok := mgr.Coordinator.Loading.Request(t.Context(), wake, history, "", request); ok {
 		t.Fatal("workflow continuation repeated its start decision")
@@ -268,7 +268,7 @@ func evidenceFileBytes(t *testing.T, m *Host, sess *api.Session) []byte {
 }
 
 func TestSourceRunEvidenceIsScreenedBeforeItIsPersisted(t *testing.T) {
-	mgr, sess, _ := verifyGateHarness(t, "")
+	mgr, sess, _, _ := verifyGateHarness(t, "")
 	mgr.Runner.Transcript.SetRedactor(evidenceScreenRedactor)
 	recordVerify(t, mgr, sess, "deploy --token "+evidenceBoundarySecret, 0)
 
@@ -280,7 +280,7 @@ func TestSourceRunEvidenceIsScreenedBeforeItIsPersisted(t *testing.T) {
 }
 
 func TestScreenedEvidenceStillMatchesTheDeclaredCommand(t *testing.T) {
-	mgr, sess, history := verifyGateHarness(t, "make test")
+	mgr, sess, history, _ := verifyGateHarness(t, "make test")
 	mgr.Runner.Transcript.SetRedactor(evidenceScreenRedactor)
 	recordVerify(t, mgr, sess, "make test", 0)
 
@@ -346,9 +346,9 @@ func TestConsumedStartupWakeKeepsWaitingUserTurnBusy(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	client := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "unexpected follow-up"}}}))
 	mgr := NewHost(sessionStore, Models{Client: client, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "start visible turn", sessionStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "start visible turn", sessionStore.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 	loopWorkflowFixture1 := &settlementWorkflowSource{active: &api.WorkflowRun{
 		ID: "run", Revision: 5, Status: api.WorkflowRunStatusRunning, CurrentPhase: "work",
 	}}
@@ -365,7 +365,7 @@ func TestConsumedStartupWakeKeepsWaitingUserTurnBusy(t *testing.T) {
 	finish()
 	loop.Turns.WaitForAsyncTurns(t.Context())
 	testutil.FailErr(t, "settle drained wakes", mgr.Runner.Settlement.Drain(ctx, sess.ID))
-	current, err := sessionStore.Get(ctx, sess.ID)
+	current, err := sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read waiting session", err)
 	if current.Status != api.SessionStatusBusy || !loop.Waits.IsSleeping(sess.ID) || len(client.AllRequests()) != 0 {
 		t.Fatalf("status=%s sleeping=%v prompts=%d", current.Status, loop.Waits.IsSleeping(sess.ID), len(client.AllRequests()))

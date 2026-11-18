@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,10 +20,11 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func managedScreeningFixture(t *testing.T) (*Runtime, *secretmatch.Matcher, *sessionstore.SQL, *credentialstore.Store) {
+func managedScreeningFixture(t *testing.T) (*Runtime, *secretmatch.Matcher, *sessionstore.Repositories, *credentialstore.Store) {
 	t.Helper()
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
@@ -62,14 +62,14 @@ func TestManagedSecretsAreScreenedBeforeTranscriptPersistenceAndPublication(t *t
 		t.Run(string(role), func(t *testing.T) {
 			msg := wire.Message{ID: string(role), Role: role, Content: "Public first\ntoken=" + raw + "\nPublic last"}
 			batch := []wire.Message{msg}
-			testutil.FailErr(t, "append raw message", store.AppendMessages(t.Context(), "root-1", batch...))
+			testutil.FailErr(t, "append raw message", store.Transcript.AppendMessages(t.Context(), "root-1", batch...))
 			assertManagedMessageScreened(t, batch[0], raw)
 			var content string
 			testutil.FailErr(t, "inspect actual durable bytes", database.QueryRowContext(t.Context(), "SELECT content FROM messages WHERE id = ?", msg.ID).Scan(&content))
 			if strings.Contains(content, raw) {
 				t.Fatal("raw managed value was persisted")
 			}
-			updated, err := store.UpdateMessage(t.Context(), "root-1", msg.ID, msg)
+			updated, err := store.Transcript.UpdateMessage(t.Context(), "root-1", msg.ID, msg)
 			testutil.FailErr(t, "replace raw message", err)
 			assertManagedMessageScreened(t, updated, raw)
 		})
@@ -117,7 +117,7 @@ func TestMarkingAProjectSecretRescreensExistingTaskHistory(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			b, matcher, store, _ := managedScreeningFixture(t)
 			raw := "orchard-retrospective-secret-91d4"
-			testutil.FailErr(t, "append before marking", store.AppendMessages(t.Context(), "root-1", wire.Message{ID: "old-tool", Role: wire.MessageRoleTool, Content: "token=" + raw}))
+			testutil.FailErr(t, "append before marking", store.Transcript.AppendMessages(t.Context(), "root-1", wire.Message{ID: "old-tool", Role: wire.MessageRoleTool, Content: "token=" + raw}))
 			requestCtx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			if cancelOnCommit {
@@ -136,7 +136,7 @@ func TestMarkingAProjectSecretRescreensExistingTaskHistory(t *testing.T) {
 				t.Fatal("fixture did not cancel the committed request")
 			}
 			for {
-				messages, err := store.GetMessages(t.Context(), "root-1")
+				messages, err := store.Transcript.GetMessages(t.Context(), "root-1")
 				testutil.FailErr(t, "read rescreened history", err)
 				if len(messages) == 1 && !strings.Contains(messages[0].Content, raw) {
 					assertManagedMessageScreened(t, messages[0], raw)
@@ -161,8 +161,8 @@ func TestRuntimeRedactorRebindingRetainsManagedScreening(t *testing.T) {
 		Scope: secretcap.ScopeProject, Origin: secretcap.OriginFileMarked, PersonID: testdbseed.OwnerID(t, store.DB()), Value: raw,
 	})
 	testutil.FailErr(t, "mark secret after redactor replacement", err)
-	testutil.FailErr(t, "persist through rebound screening", store.AppendMessages(t.Context(), "root-1", wire.Message{ID: "rebound-message", Role: wire.MessageRoleTool, Content: "observed " + raw}))
-	messages, err := store.GetMessages(t.Context(), "root-1")
+	testutil.FailErr(t, "persist through rebound screening", store.Transcript.AppendMessages(t.Context(), "root-1", wire.Message{ID: "rebound-message", Role: wire.MessageRoleTool, Content: "observed " + raw}))
+	messages, err := store.Transcript.GetMessages(t.Context(), "root-1")
 	testutil.FailErr(t, "read rebound screened bytes", err)
 	if len(messages) != 1 {
 		t.Fatalf("rebound messages = %d", len(messages))

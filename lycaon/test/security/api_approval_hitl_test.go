@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -27,7 +28,7 @@ import (
 type approvalHITLHarness struct {
 	ctx           context.Context
 	ownerCtx      context.Context
-	store         session.Store
+	store         *sessionstore.Repositories
 	projectDir    string
 	mgr           *session.Host
 	checkpointMgr hitl.CheckpointManager
@@ -167,7 +168,7 @@ func TestApprovalHITLRejectBlocksTool(t *testing.T) {
 		t.Fatalf("SessionApprovalDenied = %v err=%v", ok, err)
 	}
 
-	msgs, err := h.store.GetMessages(h.ctx, h.sess.ID)
+	msgs, err := h.store.Transcript.GetMessages(h.ctx, h.sess.ID)
 	testutil.FailErr(t, "h.store.GetMessages failed", err)
 	h.assertDeniedCommand(t, msgs)
 }
@@ -195,7 +196,7 @@ func TestApprovalHITLRejectViaHTTP(t *testing.T) {
 		t.Fatalf("SessionApprovalDenied = %v err=%v", ok, err)
 	}
 
-	msgs, err := h.store.GetMessages(h.ctx, h.sess.ID)
+	msgs, err := h.store.Transcript.GetMessages(h.ctx, h.sess.ID)
 	testutil.FailErr(t, "h.store.GetMessages failed", err)
 	h.assertDeniedCommand(t, msgs)
 }

@@ -105,10 +105,10 @@ func (d *roundEndDrains) wait(ctx context.Context) {
 // RoundEnd dispatches receipts the turn-end check left
 // queued because the round was still open.
 func (m *Service) RoundEnd(ctx context.Context, sessionID string) {
-	if m == nil || m.store == nil || m.Gate.InProgress(ctx, sessionID) {
+	if m == nil || (m.sessionStore == nil || m.submissionStore == nil) || m.Gate.InProgress(ctx, sessionID) {
 		return
 	}
-	queued, err := m.store.ListQueuedUserPromptSubmissions(ctx, sessionID)
+	queued, err := m.submissionStore.ListQueuedUserPromptSubmissions(ctx, sessionID)
 	if err != nil {
 		slog.ErrorContext(ctx, "read queued prompts at round end", "session_id", sessionID, "error", err)
 		return

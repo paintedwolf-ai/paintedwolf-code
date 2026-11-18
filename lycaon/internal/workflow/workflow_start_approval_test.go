@@ -3,17 +3,17 @@ package workflow
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
-	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/blueprintfile"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -27,7 +27,7 @@ func testWorkflowManager(t *testing.T) (*RunManager, string, string) {
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
 
 	sessStore := store.NewSQL(sqlDB)
-	sess, err := sessStore.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := sessStore.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)

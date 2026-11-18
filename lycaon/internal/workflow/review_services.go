@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -12,7 +13,7 @@ import (
 func (m *RunManager) buildReviewDomains(store *runstate.Repository) *workflowreview.Questions {
 	m.Coverage = &workflowreview.Coverage{Runs: store.Runs, Resolver: &m.Resolver}
 	questions := &workflowreview.Questions{Runs: store.Runs, Resolver: &m.Resolver, Coverage: m.Coverage}
-	m.Verdicts = &workflowreview.Verdicts{Runs: store.Runs, Records: store.Verdicts, Vars: m.Vars, Resolver: &m.Resolver, Sessions: m.Sessions, Coverage: m.Coverage, Questions: questions}
+	m.Verdicts = &workflowreview.Verdicts{Runs: store.Runs, Records: store.Verdicts, Vars: m.Vars, Resolver: &m.Resolver, TranscriptStore: m.TranscriptStore, Coverage: m.Coverage, Questions: questions}
 	m.Repairs = &ReviewRepairs{RunManager: m}
 	m.Assignments = &workflowreview.Assignments{
 		Runs: store.Runs, Records: store.Assignments, Resolver: &m.Resolver,

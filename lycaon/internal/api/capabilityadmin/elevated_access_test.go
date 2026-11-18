@@ -16,13 +16,14 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/project"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func elevatedTestHandler(t *testing.T) (*Handler, *wire.Session) {
+func elevatedTestHandler(t *testing.T) (*Handler, *wire.Session, sessionstore.SessionRepository) {
 	sessionFixture := storetest.New(t)
 
 	t.Helper()
@@ -32,10 +33,10 @@ func elevatedTestHandler(t *testing.T) (*Handler, *wire.Session) {
 	projects := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), projects, t.TempDir())
 	testutil.FailErr(t, "create project", err)
-	chat, err := sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
+	chat, err := sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create chat", err)
 	handler := New(&httpio.Responder{Logger: slog.Default()}, withHost(t, Deps{Projects: projects, Settings: &settings.Service{Approvals: approvals}, Gate: settings.NewRuleApprovalGate(approvals, settings.NoSources()), Store: sessions}))
-	return &handler, chat
+	return &handler, chat, sessions.Sessions
 }
 
 func addElevatedGrant(t *testing.T, s *Handler, chat *wire.Session, id string) {
@@ -47,7 +48,7 @@ func addElevatedGrant(t *testing.T, s *Handler, chat *wire.Session, id string) {
 }
 
 func TestElevatedAccessDisabledPolicyPreservesSavedAuthority(t *testing.T) {
-	s, chat := elevatedTestHandler(t)
+	s, chat, _ := elevatedTestHandler(t)
 	addElevatedGrant(t, s, chat, "grant_host")
 	if got := elevatedSummary(t, s, chat); !got.ApprovalsEnabled || got.Total != 1 {
 		t.Fatalf("enabled summary = %+v", got)
@@ -70,7 +71,7 @@ func TestElevatedAccessDisabledPolicyPreservesSavedAuthority(t *testing.T) {
 }
 
 func TestElevatedAccessSelectsOnlyApplicableLiveAuthority(t *testing.T) {
-	s, chat := elevatedTestHandler(t)
+	s, chat, _ := elevatedTestHandler(t)
 	addElevatedGrant(t, s, chat, "grant_live")
 	other := *chat
 	other.ID = "other-chat"
@@ -104,7 +105,7 @@ func TestElevatedAccessSelectsOnlyApplicableLiveAuthority(t *testing.T) {
 }
 
 func TestElevatedAccessRevokeHasNoBulkIDCeiling(t *testing.T) {
-	s, chat := elevatedTestHandler(t)
+	s, chat, _ := elevatedTestHandler(t)
 	for i := range 300 {
 		addElevatedGrant(t, s, chat, fmt.Sprintf("grant_%d", i))
 	}
@@ -124,7 +125,7 @@ func (failedElevatedLedger) ForgetChatGrant(context.Context, string) (bool, erro
 }
 
 func TestElevatedAccessDurableFailureRemainsRetryable(t *testing.T) {
-	s, chat := elevatedTestHandler(t)
+	s, chat, _ := elevatedTestHandler(t)
 	addElevatedGrant(t, s, chat, "grant_failed")
 	s.Grants.ChatGrants = failedElevatedLedger{}
 	result := revokeElevated(t, s, chat.ID)
@@ -163,7 +164,7 @@ func elevatedSummary(t *testing.T, s *Handler, chat *wire.Session) wire.Elevated
 }
 
 func TestElevatedAccessProjectRestoresApprovals(t *testing.T) {
-	s, chat := elevatedTestHandler(t)
+	s, chat, _ := elevatedTestHandler(t)
 	addElevatedGrant(t, s, chat, "grant_host")
 	off := true
 	testutil.FailErr(t, "disable device approvals", s.Access.Settings.Approvals.PutGlobal(settings.ApprovalConfig{NeverAsk: &off}))
@@ -179,7 +180,7 @@ func TestElevatedAccessProjectRestoresApprovals(t *testing.T) {
 }
 
 func TestElevatedAccessSharedScopesAndNoProject(t *testing.T) {
-	s, chat := elevatedTestHandler(t)
+	s, chat, _ := elevatedTestHandler(t)
 	for _, item := range []struct {
 		id      string
 		scope   hitl.ApprovalGrantScope
@@ -212,9 +213,9 @@ func TestElevatedAccessSharedScopesAndNoProject(t *testing.T) {
 }
 
 func TestElevatedAccessWorkerResolvesRoot(t *testing.T) {
-	s, chat := elevatedTestHandler(t)
+	s, chat, sessions := elevatedTestHandler(t)
 	addElevatedGrant(t, s, chat, "grant_root")
-	worker, err := s.Access.Store.CreateChild(t.Context(), chat, wire.SpawnChildRequest{AgentType: "coder"})
+	worker, err := sessions.CreateChild(t.Context(), chat, wire.SpawnChildRequest{AgentType: "coder"})
 	testutil.FailErr(t, "create worker", err)
 	router := chi.NewRouter()
 	router.Get("/v1/sessions/{id}/elevated-access", s.Access.HandleGetElevatedAccess)
@@ -231,14 +232,14 @@ func TestElevatedAccessWorkerResolvesRoot(t *testing.T) {
 }
 
 func TestElevatedAccessUsesChatsActiveOverlay(t *testing.T) {
-	s, primaryChat := elevatedTestHandler(t)
+	s, primaryChat, sessions := elevatedTestHandler(t)
 	off := true
 	testutil.FailErr(t, "disable device approvals", s.Access.Settings.Approvals.PutGlobal(settings.ApprovalConfig{NeverAsk: &off}))
 	root, err := s.Access.Projects.AttachRoot(t.Context(), primaryChat.ProjectID, project.AttachRootParams{Path: t.TempDir()})
 	testutil.FailErr(t, "attach secondary root", err)
 	on := false
 	testutil.FailErr(t, "restore secondary-root approvals", s.Access.Settings.Approvals.PutProject(root.Added.Path, settings.ApprovalConfig{NeverAsk: &on}))
-	secondaryChat, err := s.Access.Store.Create(t.Context(), wire.CreateSessionRequest{WorkspaceRootID: root.Added.ID}, primaryChat.ProjectID)
+	secondaryChat, err := sessions.Create(t.Context(), wire.CreateSessionRequest{WorkspaceRootID: root.Added.ID}, primaryChat.ProjectID)
 	testutil.FailErr(t, "create secondary-root chat", err)
 	addElevatedGrant(t, s, secondaryChat, "grant_secondary")
 	if got := elevatedSummary(t, s, secondaryChat); !got.ApprovalsEnabled || got.Total != 1 {

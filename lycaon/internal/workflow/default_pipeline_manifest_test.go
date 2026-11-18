@@ -121,12 +121,12 @@ func TestBugbashParallelStagesGate(t *testing.T) {
 }
 
 func TestBugbashApprovedBlueprintRunsImplementChildAndCompletes(t *testing.T) {
-	mgr, _, blueprintMgr, projectDir := testManager(t)
+	mgr, repositories, blueprintMgr, projectDir := testManager(t)
 	delivered := false
 	deps := conditions.TestRegistryDepsWithEvidence()
 	deps.DeliveryReported = func(context.Context, string, string, string) (bool, error) { return delivered, nil }
 	setTestRegistry(t, mgr, blueprintMgr, deps)
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, repositories)
 
 	parent, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.1.0")
 	testutil.FailErr(t, "start bugbash", err)
@@ -154,7 +154,7 @@ func TestBugbashApprovedBlueprintRunsImplementChildAndCompletes(t *testing.T) {
 	if child.WorkflowID != "implement" || child.BlueprintPath != parent.BlueprintPath {
 		t.Fatalf("child = workflow %q Blueprint %q want implement/%q", child.WorkflowID, child.BlueprintPath, parent.BlueprintPath)
 	}
-	msgs, err := mgr.Verdicts.Sessions.GetMessages(ctx, parent.SessionID)
+	msgs, err := mgr.TranscriptStore.GetMessages(ctx, parent.SessionID)
 	testutil.FailErr(t, "get Blueprint transcript while child runs", err)
 	blueprintRow, ok := findBlueprintTranscriptMessage(msgs, parent.BlueprintPath)
 	if !ok || blueprintRow.Blueprint == nil {
@@ -182,7 +182,7 @@ func TestBugbashApprovedBlueprintRunsImplementChildAndCompletes(t *testing.T) {
 	if parent.Status != api.WorkflowRunStatusComplete || parent.CurrentPhase != "done" {
 		t.Fatalf("parent = status %q phase %q want complete/done", parent.Status, parent.CurrentPhase)
 	}
-	msgs, err = mgr.Verdicts.Sessions.GetMessages(ctx, parent.SessionID)
+	msgs, err = mgr.TranscriptStore.GetMessages(ctx, parent.SessionID)
 	testutil.FailErr(t, "get completed Blueprint transcript", err)
 	blueprintRow, ok = findBlueprintTranscriptMessage(msgs, parent.BlueprintPath)
 	if !ok || blueprintRow.Blueprint == nil || blueprintRow.Blueprint.PhaseLabel != "Done" {

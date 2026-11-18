@@ -81,7 +81,7 @@ func TestWorkflowCatalogCompletionAuthorityInvariant(t *testing.T) {
 func seedCompletionInvariantRun(t *testing.T, h *Harness, dir string, manifest workflowdef.Manifest, phase string, invoked bool) *api.WorkflowRun {
 	t.Helper()
 	ctx := h.OwnerCtx(t, t.Context())
-	sess, err := h.Store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
+	sess, err := h.Store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create catalog session", err)
 	now := time.Now().UTC()
 	run := &api.WorkflowRun{ID: uuid.NewString(), SessionID: sess.ID, WorkflowID: manifest.ID, WorkflowVersion: manifest.Version, CurrentPhase: phase, Status: api.WorkflowRunStatusRunning, Revision: 1, CreatedAt: now, UpdatedAt: now}
@@ -99,7 +99,7 @@ func seedCompletionInvariantRun(t *testing.T, h *Harness, dir string, manifest w
 func assertCatalogSettlement(t *testing.T, h *Harness, run *api.WorkflowRun, blocked bool) {
 	t.Helper()
 	ctx := h.OwnerCtx(t, t.Context())
-	sess, err := h.Store.Get(ctx, run.SessionID)
+	sess, err := h.Store.Sessions.Get(ctx, run.SessionID)
 	testutil.FailErr(t, "read settlement project", err)
 	stream, unsubscribe, err := h.Events.Subscribe(ctx, events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe to settlement", err)

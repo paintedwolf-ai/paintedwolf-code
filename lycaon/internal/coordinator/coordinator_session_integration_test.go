@@ -76,7 +76,7 @@ func TestManagerPromptUsesCoordinatorAssembly(t *testing.T) {
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root}))
 	mgr.SetCoordinatorTurnFrameSource(&phaseStubCoordinator{phase: "plan", brief: "Coordinate."})
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "start"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
@@ -101,7 +101,7 @@ func TestManagerKickNudgeViaRuntime(t *testing.T) {
 	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root}))
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	mgr.Coordinator.Guidance.Emit(context.Background(), sess.ID, anchor.ComposeDone, anchor.Envelope{})
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {

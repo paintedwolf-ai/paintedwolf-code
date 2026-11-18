@@ -19,7 +19,7 @@ func TestScriptedParentNeverFallsBackForUnplannedChildren(t *testing.T) {
 	h := newScriptedHarness(t, map[string]string{"app.py": "baseline"})
 	controller := h.workers()
 	setup := Setup{Policy: WorkerPolicyScripted, Overlays: []Overlay{{Label: "Existing", Files: map[string]string{"app.py": "prepared"}}}}
-	evidence, err := Prepare(t.Context(), h.queue, h.sessions, h.parent, h.attached.Roots[0], setup, nil)
+	evidence, err := Prepare(t.Context(), h.queue, h.sessions.Sessions, h.parent, h.attached.Roots[0], h.sessions.Transcript, setup, nil)
 	testutil.FailErr(t, "prepare", err)
 	testutil.FailErr(t, "install", controller.Install(h.parent.ID, setup, evidence))
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"app.py"}}
@@ -98,7 +98,7 @@ func TestAnsweredDecisionDeliveryErrorDoesNotBecomeComplete(t *testing.T) {
 	job.ChildSessionID = bound.ChildSessionID
 	_, err = h.queue.Complete(t.Context(), job, result)
 	testutil.FailErr(t, "hold decision job", err)
-	testutil.FailErr(t, "answer decision", h.sessions.AppendMessages(t.Context(), bound.ChildSessionID, worker.DecisionAnswerMessage("first", "coordinator")))
+	testutil.FailErr(t, "answer decision", h.sessions.Transcript.AppendMessages(t.Context(), bound.ChildSessionID, worker.DecisionAnswerMessage("first", "coordinator")))
 	controller.verify = func(context.Context, *api.Session, *api.WorkerTask, string) (*tools.SourceRunCapture, error) {
 		return nil, errors.New("decision delivery verification failed")
 	}

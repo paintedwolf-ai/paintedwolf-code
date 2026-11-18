@@ -33,7 +33,7 @@ func ContractToolRuntime(t *testing.T) *toolhost.Runtime {
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: contractcheck.StockCatalog(t)})
 	contractcheck.FailErr(t, "toolhost.NewRuntime failed", err)
 	applyStockToolSchemas(t, rt)
-	wireContractProgramServices(t, rt, testdbfixture.Open(t, "exec-boot.db"), storetest.New(t, testdbseed.DefaultProjectID))
+	wireContractProgramServices(t, rt, testdbfixture.Open(t, "exec-boot.db"), storetest.New(t, testdbseed.DefaultProjectID).Sessions)
 	hints, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load hint registry", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))

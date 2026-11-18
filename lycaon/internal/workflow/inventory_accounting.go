@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
@@ -185,14 +185,14 @@ func (m InventoryAccounting) candidateInventory(ctx context.Context, run *api.Wo
 	if err != nil {
 		return empty, "", err
 	}
-	if repair == nil || repair.CandidateMessageID == "" || m.Sessions == nil {
+	if repair == nil || repair.CandidateMessageID == "" || m.TranscriptStore == nil {
 		return empty, "absent", nil
 	}
 	phase, ok := manifest.PhaseByID(run.CurrentPhase)
 	if !ok || phase.ReviewLoop == nil {
 		return empty, "absent", nil
 	}
-	messages, err := m.Sessions.GetMessages(ctx, run.SessionID)
+	messages, err := m.TranscriptStore.GetMessages(ctx, run.SessionID)
 	if err != nil {
 		return empty, "", err
 	}

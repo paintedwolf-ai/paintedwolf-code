@@ -4,8 +4,6 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolexecution"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -35,15 +33,17 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // recordRequestedLoad records a request_tools load the way the host does, as
 // a turn load receipt, so the next turn's restore offers the tool.
-func recordRequestedLoad(t *testing.T, st session.Store, sessionID, tool string) {
+func recordRequestedLoad(t *testing.T, st *store.Repositories, sessionID, tool string) {
 	t.Helper()
-	_, err := st.PutTurnLoadReceipt(context.Background(), store.TurnLoadReceipt{
+	_, err := st.Turns.PutTurnLoadReceipt(context.Background(), store.TurnLoadReceipt{
 		SessionID: sessionID,
 		Trigger:   store.TurnLoadTriggerRequest,
 		Standing:  `{"tools":[{"tool":"` + tool + `","source":"requested"}]}`,
@@ -110,7 +110,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	mgr.Profiles.SetPostureRegistry(postureRegistry)
 	prog := progress.NewMemoryStore()
 	mgr.SetProgressStore(prog)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	recordRequestedLoad(t, store, sess.ID, "command")
 	mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
@@ -144,7 +144,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 		t.Fatalf("prompt err = %v", err)
 	}
 
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	found := false
 	for _, m := range msgs {
@@ -233,7 +233,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	mgr.Profiles.SetPostureRegistry(postureRegistry)
 	prog := progress.NewMemoryStore()
 	mgr.SetProgressStore(prog)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	recordRequestedLoad(t, store, sess.ID, "command")
 	mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
@@ -276,7 +276,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 		t.Fatalf("SessionApprovalDenied = %v err=%v", denied, err)
 	}
 
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	wantDenied := outcomes.ApprovalOutcome(approvaloutcome.CodeApprovalDenied, nil)
 	foundDenied := false

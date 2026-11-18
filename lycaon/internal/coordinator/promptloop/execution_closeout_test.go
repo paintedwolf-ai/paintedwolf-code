@@ -27,10 +27,10 @@ import (
 func TestPromptLoopResponseAdmissionStopsBeforeAnotherRequest(t *testing.T) {
 	ctx := t.Context()
 	messages := storetest.New(t, "project")
-	session, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
+	session, err := messages.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "configure response allowance", messages.ConfigureModelLimit(ctx, session.ID, 1))
-	execution, err := messages.BeginTurn(ctx, store.TurnStart{SessionID: session.ID, ProjectID: session.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
+	testutil.FailErr(t, "configure response allowance", messages.Turns.ConfigureModelLimit(ctx, session.ID, 1))
+	execution, err := messages.Turns.BeginTurn(ctx, store.TurnStart{SessionID: session.ID, ProjectID: session.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
 	testutil.FailErr(t, "admit user turn", err)
 	client := &softStopSequenceLLM{completions: []*modelcall.Completion{
 		{ToolCalls: []api.ToolCall{{Name: "read", ID: "read", Args: map[string]any{"path": "a"}}}},
@@ -40,8 +40,8 @@ func TestPromptLoopResponseAdmissionStopsBeforeAnotherRequest(t *testing.T) {
 	deps.Model.LLM = client
 	deps.Context.Policy = softStopToolPolicy{}
 	deps.Context.Tools = toolstest.NewRegistry()
-	deps.Projection.AdmitModelResponse = messages.AdmitModelResponse
-	deps.Projection.SettleModelOutput = messages.SettleModelOutput
+	deps.Projection.AdmitModelResponse = messages.Turns.AdmitModelResponse
+	deps.Projection.SettleModelOutput = messages.Turns.SettleModelOutput
 	_, err = NewPromptLoopForTest(deps).Run(ctx, PromptRunInput{
 		SessionID: session.ID, Session: session, TurnID: execution.Turn.ID, AttemptID: execution.Attempt.ID,
 		History: []api.Message{{Role: api.MessageRoleUser, Content: "Read a."}}, ProfileID: "implement",
@@ -60,9 +60,9 @@ func TestForcedCloseoutRepairPreservesPersistedIterationIdentity(t *testing.T) {
 	db := testdbfixture.OpenPath(t, filepath.Join(directory, "store.db"))
 	testdbseed.InsertProjectRoot(t, db, testdbseed.DefaultProjectID, directory)
 	messages := store.NewSQL(db)
-	sess, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := messages.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	execution, err := messages.BeginTurn(ctx, store.TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
+	execution, err := messages.Turns.BeginTurn(ctx, store.TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
 	testutil.FailErr(t, "begin turn", err)
 	gateOpen := true
 	registry := toolstest.NewRegistry()
@@ -81,22 +81,22 @@ func TestForcedCloseoutRepairPreservesPersistedIterationIdentity(t *testing.T) {
 		},
 			ProjectRootCount: func(context.Context, *api.Session) int { return 1 }},
 		Projection: ProjectionDeps{
-			AppendMessages: messages.AppendMessages,
+			AppendMessages: messages.Transcript.AppendMessages,
 			UpdateMessage: func(ctx context.Context, sessionID, messageID string, message api.Message) error {
-				_, err := messages.UpdateMessage(ctx, sessionID, messageID, message)
+				_, err := messages.Transcript.UpdateMessage(ctx, sessionID, messageID, message)
 				return err
 			},
 			Streams: &testMessageStreams{project: func(ctx context.Context, sessionID string, message api.Message) error {
-				return messages.PatchLiveProjection(ctx, sessionID, message.ID, message.Content, message.ToolCalls)
+				return messages.Transcript.PatchLiveProjection(ctx, sessionID, message.ID, message.Content, message.ToolCalls)
 			}},
-			AppendDraftVersion: messages.AppendDraftVersion, CountDraftVersions: messages.CountDraftVersions,
+			AppendDraftVersion: messages.Transcript.AppendDraftVersion, CountDraftVersions: messages.Transcript.CountDraftVersions,
 		},
 	}
 	deps.Model.LLM = client
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Context.Tools = registry
 	deps.Context.PromptTurnSurface = func(string) string { return "implement_investigate" }
-	deps.Projection.SettleModelOutput = messages.SettleModelOutput
+	deps.Projection.SettleModelOutput = messages.Turns.SettleModelOutput
 	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 		if !gateOpen {
 			return nil, false
@@ -145,11 +145,11 @@ func TestMidTurnNoteAcrossARestartOnTheRealStore(t *testing.T) {
 	db := testdbfixture.OpenPath(t, filepath.Join(t.TempDir(), "store.db"))
 	testdbseed.InsertProjectRoot(t, db, testdbseed.DefaultProjectID, t.TempDir())
 	messages := store.NewSQL(db)
-	sess, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := messages.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	carrier := api.Message{ID: uuid.NewString(), Role: api.MessageRoleAssistant, Origin: api.MessageOriginModel, Content: "Starting now.",
 		ToolCalls: []api.ToolCall{{ID: "call-1", Name: "recall", Args: map[string]any{"path": "a.go"}}}}
-	testutil.FailErr(t, "append prompt and carrier", messages.AppendMessages(ctx, sess.ID, midTurnUser(), carrier))
+	testutil.FailErr(t, "append prompt and carrier", messages.Transcript.AppendMessages(ctx, sess.ID, midTurnUser(), carrier))
 
 	// Each incarnation holds nothing but what it reads back.
 	restart := func() (*midTurnHarness, []api.Message) {
@@ -166,9 +166,9 @@ func TestMidTurnNoteAcrossARestartOnTheRealStore(t *testing.T) {
 					h.order = append(h.order, "note")
 				}
 			}
-			return messages.AppendMessages(ctx, sessionID, msgs...)
+			return messages.Transcript.AppendMessages(ctx, sessionID, msgs...)
 		}
-		history, err := messages.GetMessages(ctx, sess.ID)
+		history, err := messages.Transcript.GetMessages(ctx, sess.ID)
 		testutil.FailErr(t, "reload", err)
 		return h, history
 	}
@@ -267,7 +267,7 @@ func (s *scriptedStepLLM) Stream(ctx context.Context, req modelcall.CompletionRe
 }
 
 type attemptHarness struct {
-	messages          *store.SQL
+	messages          *store.Repositories
 	sess              *api.Session
 	execution         store.TurnExecution
 	deps              PromptLoopDeps
@@ -282,17 +282,17 @@ func newAttemptHarness(t *testing.T, workerChild bool, maxIter int, steps []scri
 	db := testdbfixture.OpenPath(t, filepath.Join(directory, "store.db"))
 	testdbseed.InsertProjectRoot(t, db, testdbseed.DefaultProjectID, directory)
 	messages := store.NewSQL(db)
-	sess, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := messages.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	if workerChild {
-		parent, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		parent, err := messages.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		testutil.FailErr(t, "create parent session", err)
-		sess, err = messages.CreateChild(ctx, parent, api.SpawnChildRequest{
+		sess, err = messages.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{
 			AgentType: "implementer",
 		})
 		testutil.FailErr(t, "create worker child session", err)
 	}
-	execution, err := messages.BeginTurn(ctx, store.TurnStart{
+	execution, err := messages.Turns.BeginTurn(ctx, store.TurnStart{
 		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}",
 	})
 	testutil.FailErr(t, "begin turn", err)
@@ -322,22 +322,22 @@ func newAttemptHarness(t *testing.T, workerChild bool, maxIter int, steps []scri
 		},
 		Model: ModelDeps{LLM: client},
 		Projection: ProjectionDeps{
-			AppendMessages: messages.AppendMessages,
+			AppendMessages: messages.Transcript.AppendMessages,
 			UpdateMessage: func(ctx context.Context, sessionID, messageID string, message api.Message) error {
-				_, err := messages.UpdateMessage(ctx, sessionID, messageID, message)
+				_, err := messages.Transcript.UpdateMessage(ctx, sessionID, messageID, message)
 				return err
 			},
 			Streams: &testMessageStreams{project: func(ctx context.Context, sessionID string, message api.Message) error {
-				return messages.PatchLiveProjection(ctx, sessionID, message.ID, message.Content, message.ToolCalls)
+				return messages.Transcript.PatchLiveProjection(ctx, sessionID, message.ID, message.Content, message.ToolCalls)
 			}},
-			AppendDraftVersion:          messages.AppendDraftVersion,
-			CountDraftVersions:          messages.CountDraftVersions,
-			AdmitModelResponse:          messages.AdmitModelResponse,
-			SettledModelOutputIteration: messages.SettledModelOutputIteration,
+			AppendDraftVersion:          messages.Transcript.AppendDraftVersion,
+			CountDraftVersions:          messages.Transcript.CountDraftVersions,
+			AdmitModelResponse:          messages.Turns.AdmitModelResponse,
+			SettledModelOutputIteration: messages.Turns.SettledModelOutputIteration,
 			SettleModelOutput: func(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error) {
 				seenIterations[out.Iteration]++
 				settledIterations = append(settledIterations, out.Iteration)
-				return messages.SettleModelOutput(ctx, out)
+				return messages.Turns.SettleModelOutput(ctx, out)
 			},
 		},
 	}
@@ -364,7 +364,7 @@ func (h *attemptHarness) runAttempt(t *testing.T, prompt, profileID, workerJobID
 
 func (h *attemptHarness) assertStrictlyIncreasingIterations(t *testing.T, wantCount int) {
 	t.Helper()
-	rows, err := h.messages.GetMessages(t.Context(), h.sess.ID)
+	rows, err := h.messages.Transcript.GetMessages(t.Context(), h.sess.ID)
 	testutil.FailErr(t, "read settled fixture transcript", err)
 	for _, row := range rows {
 		if row.ToolResult != nil && row.ToolResult.Outcome == api.ToolResultOutcomeRejected {

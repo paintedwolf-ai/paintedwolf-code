@@ -26,13 +26,13 @@ type programEdits struct {
 // AppendProgramEffects adds a detached program's later file edits to the
 // stored result of the call that started it, and publishes the changed row.
 func (m *Service) AppendProgramEffects(ctx context.Context, sessionID, toolCallID string, edits []api.FileEditSnapshot, omitted int) {
-	if m == nil || m.store == nil || (len(edits) == 0 && omitted == 0) {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.turnStore == nil || m.people == nil) || (len(edits) == 0 && omitted == 0) {
 		return
 	}
 	late := lateEdits{edits: edits, omitted: omitted}
 	// The lookup and the hold are one step, so a row stored meanwhile finds the hold.
 	m.programEdits.mu.Lock()
-	messageID, err := m.store.ToolResultMessageID(ctx, sessionID, toolCallID)
+	messageID, err := m.transcriptStore.ToolResultMessageID(ctx, sessionID, toolCallID)
 	if errors.Is(err, store.ErrMessageNotFound) {
 		m.programEdits.hold(sessionID, toolCallID, late)
 	}
@@ -92,7 +92,7 @@ func (m *Service) applyHeldProgramEdits(ctx context.Context, sessionID string, s
 }
 
 func (m *Service) appendFileEdits(ctx context.Context, sessionID, messageID string, late lateEdits) error {
-	message, err := m.store.GetMessage(ctx, sessionID, messageID)
+	message, err := m.transcriptStore.GetMessage(ctx, sessionID, messageID)
 	if err != nil {
 		return err
 	}

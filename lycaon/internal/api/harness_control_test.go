@@ -55,7 +55,7 @@ func TestHarnessPreviewPublishesThroughProjectEventHub(t *testing.T) {
 	p, err := projects.Create(t.Context(), project.CreateParams{Draft: true, Name: "Preview fixture"})
 	testutil.FailErr(t, "register preview project", err)
 	sessions := sessionFixture
-	sess, err := sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
+	sess, err := sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create session", err)
 	hub := events.NewMemoryHub()
 	eventsCh, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: p.ID, Viewer: testutil.HostOwner()})

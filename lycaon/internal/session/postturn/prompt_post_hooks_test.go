@@ -57,7 +57,7 @@ func TestEveryPostTurnExitCommitsFeedbackWithTheEndedTurn(t *testing.T) {
 		"commit fails":    {calls: &postTurnCalls{takeErr: errors.New("store unavailable")}, grounded: true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			m := New(tc.calls, tc.calls)
+			m := New(tc.calls, tc.calls, tc.calls)
 			if tc.grounded {
 				m.SetGrounding(tc.calls)
 			}
@@ -78,7 +78,7 @@ func TestEveryPostTurnExitCommitsFeedbackWithTheEndedTurn(t *testing.T) {
 // A worker's turn has no next user message, and its feedback stays for its own loop.
 func TestWorkerPostTurnLeavesFeedbackStaged(t *testing.T) {
 	calls := &postTurnCalls{worker: true}
-	testutil.FailErr(t, "after", New(calls, calls).After(t.Context(), "worker", "implementer", nil))
+	testutil.FailErr(t, "after", New(calls, calls, calls).After(t.Context(), "worker", "implementer", nil))
 	if calls.takes != 0 {
 		t.Fatalf("feedback commits = %d, want 0", calls.takes)
 	}

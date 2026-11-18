@@ -24,7 +24,7 @@ func TestAuthorizationRuntimeSealsActualToolAndSpawnInventoryAndDetectsDrift(t *
 	database := testdbfixture.Open(t, "runtime-authorization.db")
 	root := t.TempDir()
 	testdbseed.InsertSessionWithRoot(t, database, "chat", testdbseed.DefaultProjectID, root)
-	sess, err := store.NewSQL(database).Get(t.Context(), "chat")
+	sess, err := store.NewSQL(database).Sessions.Get(t.Context(), "chat")
 	testutil.FailErr(t, "load authorization chat", err)
 	runtime := &Runtime{database: database}
 	roster := []string{"implementer"}

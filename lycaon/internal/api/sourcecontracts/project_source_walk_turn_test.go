@@ -12,15 +12,14 @@ import (
 )
 
 func TestSourceWalkResolvesTheChatsCurrentTurn(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
-	sess, err := srv.Sources.Workspace.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
+	sess, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)
-	idle, err := srv.Sources.Workspace.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
+	idle, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create idle session", err)
-	testutil.FailErr(t, "append prompts", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append prompts", srv.Admin.SessionAdmin.Transcript.TranscriptStore.AppendMessages(t.Context(), sess.ID,
 		wire.Message{ID: "prompt-1", Role: wire.MessageRoleUser, Content: "first"},
 		wire.Message{ID: "prompt-2", Role: wire.MessageRoleUser, Content: "second"},
 	))
@@ -59,13 +58,12 @@ func TestSourceWalkResolvesTheChatsCurrentTurn(t *testing.T) {
 // A chat baseline reads that chat's workspace, so another chat cannot supply it.
 
 func TestSourceWalkRejectsAChatBaselineReadThroughAnotherChat(t *testing.T) {
-	_, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	_, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
-	owner, err := srv.Sources.Workspace.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
+	owner, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create owner", err)
-	other, err := srv.Sources.Workspace.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
+	other, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create other", err)
 
 	for name, baseline := range map[string]string{

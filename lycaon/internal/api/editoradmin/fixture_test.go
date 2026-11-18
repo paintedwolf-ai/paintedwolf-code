@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/credentialstore"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/people/peoplestore"
@@ -26,7 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
@@ -47,7 +46,7 @@ type editorFixture struct {
 	background *taskgroup.Group
 	project    *project.Project
 	root       string
-	sessions   session.Store
+	sessions   *sessionstore.Repositories
 	owner      people.Person
 	promotions *promotionLog
 }
@@ -71,10 +70,7 @@ func (l *promotionLog) count() int {
 
 type fixtureOption func(*apitestdeps.Deps)
 
-func withSessions(sessions interface {
-	session.Store
-	DB() db.Handle
-}) fixtureOption {
+func withSessions(sessions *sessionstore.Repositories) fixtureOption {
 	return func(d *apitestdeps.Deps) { d.Store = sessions; d.Database = sessions.DB() }
 }
 
@@ -109,7 +105,7 @@ func newEditorFixture(t *testing.T, opts ...fixtureOption) *editorFixture {
 		MutationGate:    deps.MutationGate,
 		ProjectRegistry: deps.Projects,
 		SecretSpans:     secretspan.New(matcher),
-		SessionStore:    deps.Store,
+		SessionStore:    deps.Store.Sessions,
 		TryRunPromotion: promotions.record,
 	})
 	t.Cleanup(func() {

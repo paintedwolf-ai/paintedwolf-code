@@ -51,6 +51,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/sourcebrief"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/stopping"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/submissions"
 	"github.com/lycaon/lycaon/internal/session/submissionstate"
 	"github.com/lycaon/lycaon/internal/session/toolcontext"
@@ -131,41 +132,41 @@ func (m *Host) LoopbackProvenance() LoopbackProvenanceResolver {
 }
 
 // NewHost acquires the session domains and binds their shared resources.
-func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Host {
+func NewHost(store *sessionstore.Repositories, modelSources Models, registry tools.ToolRegistry) *Host {
 	client, svc, cfg, tracker := modelSources.Client, modelSources.Provider, modelSources.Limits, modelSources.Cost
 
 	turnAuthorization := authorization.New()
 	queueStore := queue.New()
-	gate := lifecycle.New(store)
+	gate := lifecycle.New(store.Sessions)
 	protection := protection.New()
-	recovery := recovery.New(store)
-	turnClocks := turnclock.New(store)
+	recovery := recovery.New(store.Sessions, store.Transcript, store.Submissions)
+	turnClocks := turnclock.New(store.Sessions, store.Turns)
 	m := &Host{
-		Coordinator: &coordinatorcontrol.Service{Scans: &coordinatorcontrol.Scans{Sessions: store}},
+		Coordinator: &coordinatorcontrol.Service{Scans: &coordinatorcontrol.Scans{Sessions: store.Sessions}},
 		Promotion:   promotionstate.New(),
-		Workspace:   sessionscope.New(store),
-		Catalog:     sessioncatalog.New(store),
+		Workspace:   sessionscope.New(store.Sessions),
+		Catalog:     sessioncatalog.New(store.Sessions),
 	}
 	var namers naming.Namers
 	if svc != nil && svc.Utility != nil {
 		namers = svc
 	}
 	m.Coordinator.ProgressClosure = progressclosure.New()
-	turnCloseouts := closeouts.New(store)
+	turnCloseouts := closeouts.New(store.Sessions)
 	turnExecution := execution.NewLifetime(gate)
-	turnStatus := execution.NewStatus(store)
-	turnTurns := execution.NewJournal(store)
-	namingService := naming.New(store, m.Workspace, namers, tracker)
-	turnSubmissionState := submissionstate.New(store, queueStore)
-	drafts := draftqueue.New(store, queueStore, turnSubmissionState.Publish)
-	turnTranscript := transcript.New(store, m.Workspace)
-	workerNotes := workeroutcomes.NewNotes(store, nil, nil, nil)
-	m.Verification = sessionverification.New(store, m.Workspace, turnTranscript)
-	m.Verification.Evidence = closeoutevidence.New(store)
+	turnStatus := execution.NewStatus(store.Sessions, store.Transcript)
+	turnTurns := execution.NewJournal(store.Turns)
+	namingService := naming.New(store.Sessions, store.Transcript, store.Evidence, m.Workspace, namers, tracker)
+	turnSubmissionState := submissionstate.New(store.Sessions, store.Transcript, store.Submissions, queueStore)
+	drafts := draftqueue.New(store.Sessions, store.Submissions, queueStore, turnSubmissionState.Publish)
+	turnTranscript := transcript.New(store.Sessions, store.Transcript, store.Turns, store.People, m.Workspace)
+	workerNotes := workeroutcomes.NewNotes(store.Sessions, store.Transcript, nil, nil, nil)
+	m.Verification = sessionverification.New(store.Sessions, store.Transcript, m.Workspace, turnTranscript)
+	m.Verification.Evidence = closeoutevidence.New(store.Sessions, store.Evidence)
 	workerCancel := workerresults.NewGracefulCancel()
-	workerCards := workerresults.NewCards(store, turnTranscript, nil, turnCloseouts)
-	research := researchwarm.New(store, gate, turnTranscript.Append)
-	turnCuration := curation.New(store, m.Workspace, gate, namingService, research)
+	workerCards := workerresults.NewCards(store.Transcript, turnTranscript, nil, turnCloseouts)
+	research := researchwarm.New(store.Sessions, gate, turnTranscript.Append)
+	turnCuration := curation.New(store.Sessions, m.Workspace, gate, namingService, research)
 	if svc != nil {
 		var policy curation.Policy
 		var providers curation.Providers
@@ -177,11 +178,11 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 		}
 		turnCuration.SetModelSources(policy, providers)
 	}
-	m.Coordinator.PolicyIndex = policyindex.New(store, m.Workspace)
-	m.SourceBriefs = sourcebrief.New(store, m.Workspace)
-	m.ViewContexts = viewcontext.New(store)
+	m.Coordinator.PolicyIndex = policyindex.New(store.Sessions, m.Workspace)
+	m.SourceBriefs = sourcebrief.New(store.Transcript, store.Turns, store.Evidence, m.Workspace)
+	m.ViewContexts = viewcontext.New(store.Transcript)
 	m.Limits = sessionlimits.New(cfg, m.Workspace)
-	turnSpend := spendguard.New(store, m.Limits, tracker)
+	turnSpend := spendguard.New(store.Sessions, m.Limits, tracker)
 	var router *llm.StaticModelRouter
 	if svc != nil {
 		router = svc.Router
@@ -190,16 +191,16 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	if svc != nil && svc.Registry != nil {
 		models = svc.Registry
 	}
-	m.Profiles = profiles.New(store, &m.Catalog, m.Workspace)
+	m.Profiles = profiles.New(store.Sessions, &m.Catalog, m.Workspace)
 	m.ToolPolicy = policyfacts.New(m.Profiles)
 	m.Coordinator.Feedback = policyfeedback.New()
-	workerState := workeroutcomes.NewState(workeroutcomes.StatePorts{Sessions: store, Verification: m.Verification, Workspace: m.Workspace, OverlayChanges: OverlayWorkspaceChangedPaths})
-	m.Coordinator.Loading = loading.New(store, m.Workspace, router, models, tracker, nil, m.Profiles.EffectiveSkillsForProfile, workerState.ForSession)
+	workerState := workeroutcomes.NewState(workeroutcomes.StatePorts{SessionStore: store.Sessions, TranscriptStore: store.Transcript, Verification: m.Verification, Workspace: m.Workspace, OverlayChanges: OverlayWorkspaceChangedPaths})
+	m.Coordinator.Loading = loading.New(store.Sessions, store.Compaction, store.Turns, m.Workspace, router, models, tracker, nil, m.Profiles.EffectiveSkillsForProfile, workerState.ForSession)
 	m.Coordinator.Loading.SetProfiles(m.Profiles.ForSession)
-	m.ToolPolicy.SetSources(store, m.Workspace, m.Coordinator.Feedback, m.Coordinator.Loading.Ledger)
-	turnHistory := history.New(store, gate, m.Workspace, m.Limits, router, m.Profiles.RecallAvailable)
-	m.Admission = turnadmission.New(store, gate, m.Workspace, turnTurns, queueStore)
-	m.Submissions = submissions.New(store, queueStore, gate, recovery, turnSpend, drafts, turnSubmissionState, &turnExecution.Prompt, m.Admission.RunLocked, turnTranscript.AppendContinuation, m.Admission.RoundComplete, turnTurns.HostTurnBlocked)
+	m.ToolPolicy.SetSources(store.Sessions, store.Evidence, m.Workspace, m.Coordinator.Feedback, m.Coordinator.Loading.Ledger)
+	turnHistory := history.New(store.Sessions, store.Transcript, store.Compaction, gate, m.Workspace, m.Limits, router, m.Profiles.RecallAvailable)
+	m.Admission = turnadmission.New(store.Sessions, store.Submissions, gate, m.Workspace, turnTurns, queueStore)
+	m.Submissions = submissions.New(store.Sessions, store.Submissions, store.People, queueStore, gate, recovery, turnSpend, drafts, turnSubmissionState, &turnExecution.Prompt, m.Admission.RunLocked, turnTranscript.AppendContinuation, m.Admission.RoundComplete, turnTurns.HostTurnBlocked)
 	if svc != nil {
 		var policy sessionlimits.ModelPolicySource
 		var windows llm.ContextLengthLookup
@@ -211,36 +212,36 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 		}
 		m.Limits.SetModelSources(policy, windows)
 	}
-	captures := checkpointcontrol.NewCapture(m.Workspace.DataDir, store, m.Workspace)
-	m.ToolContext = toolcontext.New(store, m.Workspace, m.Limits, m.Profiles, captures, turnExecution)
+	captures := checkpointcontrol.NewCapture(m.Workspace.DataDir, store.Sessions, store.Rewind, m.Workspace)
+	m.ToolContext = toolcontext.New(store.Sessions, store.Transcript, m.Workspace, m.Limits, m.Profiles, captures, turnExecution)
 
 	m.RewindRuntime = &rewindruntime.Service{Promotion: m.Promotion, Closeouts: turnCloseouts, ProgressClosure: m.Coordinator.ProgressClosure, History: turnHistory, Queue: queueStore, Drafts: drafts, Submissions: turnSubmissionState}
-	rewinds := checkpointcontrol.NewRewinds(store, captures, &turnExecution.Prompt, m.Workspace, nil, nil, nil, checkpointcontrol.Runtime{
+	rewinds := checkpointcontrol.NewRewinds(store.Sessions, store.Transcript, store.Rewind, captures, &turnExecution.Prompt, m.Workspace, nil, nil, nil, checkpointcontrol.Runtime{
 		WorkersInFlight: func(ctx context.Context, sess *api.Session) int {
 			return workerState.ForSession(ctx, sess).WorkersInFlight
 		},
 		ResetWorkers: m.RewindRuntime.ResetWorkers, ResetCoordinator: m.RewindRuntime.ResetCoordinator, ResetTurnLedgers: m.RewindRuntime.ResetTurnLedgers, ResetProgress: m.RewindRuntime.ResetProgress, ResetQueue: m.RewindRuntime.ResetQueue,
 	})
-	interruptions := execution.NewRecovery(store, turnTranscript, turnStatus, rewinds)
+	interruptions := execution.NewRecovery(store.Sessions, store.Turns, turnTranscript, turnStatus, rewinds)
 	m.Resources = resources.New(&resources.Work{Execution: turnExecution, Curation: turnCuration, History: turnHistory.Runner, Research: research}, &resources.TurnState{Capture: &captures.Capture, Streams: turnTranscript.Streams, ProgressClosure: m.Coordinator.ProgressClosure, Closeouts: turnCloseouts, Spend: turnSpend, Promotion: m.Promotion, History: turnHistory, Gate: gate, PolicyIndex: m.Coordinator.PolicyIndex, Protection: protection}, &resources.ToolState{}, &resources.Authority{}, queueStore)
-	m.Chats = chats.New(store, m.Coordinator.PolicyIndex, &turnExecution.Prompt, queueStore, m.Resources.Registry, chats.Lifecycle{Gate: gate, Captures: captures, Naming: namingService, Research: research, Protection: protection, Recovery: recovery, Rewinds: rewinds, Drafts: drafts})
-	m.Stops = stopping.New(store, gate, turnExecution, m.Chats, queueStore, drafts, interruptions, turnStatus)
+	m.Chats = chats.New(store.Sessions, m.Coordinator.PolicyIndex, &turnExecution.Prompt, queueStore, m.Resources.Registry, chats.Lifecycle{Gate: gate, Captures: captures, Naming: namingService, Research: research, Protection: protection, Recovery: recovery, Rewinds: rewinds, Drafts: drafts})
+	m.Stops = stopping.New(store.Sessions, store.Submissions, gate, turnExecution, m.Chats, queueStore, drafts, interruptions, turnStatus)
 	workerDigests := workeroutcomes.NewDigests()
-	workerCancellations := workeroutcomes.NewCancellations(workeroutcomes.CancellationPorts{Sessions: store, Execution: turnExecution, Stops: m.Stops, Graceful: workerCancel, Cards: workerCards})
-	workerDelivery := workeroutcomes.NewDeliveryPolicy(workeroutcomes.DeliveryPolicyPorts{Sessions: store, Profiles: m.Profiles, Facts: m.ToolPolicy, Feedback: m.Coordinator.Feedback})
-	workerResults := workeroutcomes.NewResults(workeroutcomes.ResultPorts{Sessions: store, Limits: m.Limits, Cancellations: workerCancellations, Digests: workerDigests})
-	workerSummaries := workeroutcomes.NewSummaries(workeroutcomes.SummaryPorts{Sessions: store, Limits: m.Limits, Verification: m.Verification, Resources: m.Chats, Delivery: workerDelivery, Cards: workerCards, Digests: workerDigests, InspectChanges: InspectOverlayChanges, OverlayStatus: ResolveWorkerSummaryStatus, OverlayPending: OverlayAwaitingPromote})
+	workerCancellations := workeroutcomes.NewCancellations(workeroutcomes.CancellationPorts{Sessions: store.Sessions, Execution: turnExecution, Stops: m.Stops, Graceful: workerCancel, Cards: workerCards})
+	workerDelivery := workeroutcomes.NewDeliveryPolicy(workeroutcomes.DeliveryPolicyPorts{Sessions: store.Sessions, Profiles: m.Profiles, Facts: m.ToolPolicy, Feedback: m.Coordinator.Feedback})
+	workerResults := workeroutcomes.NewResults(workeroutcomes.ResultPorts{Sessions: store.Sessions, Limits: m.Limits, Cancellations: workerCancellations, Digests: workerDigests})
+	workerSummaries := workeroutcomes.NewSummaries(workeroutcomes.SummaryPorts{SessionStore: store.Sessions, TranscriptStore: store.Transcript, EvidenceStore: store.Evidence, Limits: m.Limits, Verification: m.Verification, Resources: m.Chats, Delivery: workerDelivery, Cards: workerCards, Digests: workerDigests, InspectChanges: InspectOverlayChanges, OverlayStatus: ResolveWorkerSummaryStatus, OverlayPending: OverlayAwaitingPromote})
 	workerResults.SetSummaries(workerSummaries)
-	m.Coordinator.Guidance = guidancedelivery.New(store, turnTranscript, workerState, workerResults, m.Coordinator.ProgressClosure)
-	m.Processes = processcontrol.New(store, m.Verification, m.ToolPolicy, m.Coordinator.Guidance)
-	m.Workers = workerexecution.New(store, m.Workspace, gate, m.Coordinator.Guidance, m.Limits, router, workerexecution.PeerServices{Cancel: workerCancel, Cards: workerCards, Cancellations: workerCancellations, Delivery: workerDelivery, Summaries: workerSummaries, Results: workerResults, Digests: workerDigests, State: workerState, Notes: workerNotes, Workspaces: workerworkspace.New(store, m.Workspace, newBranchWorkspace)})
+	m.Coordinator.Guidance = guidancedelivery.New(store.Sessions, store.Transcript, turnTranscript, workerState, workerResults, m.Coordinator.ProgressClosure)
+	m.Processes = processcontrol.New(store.Sessions, m.Verification, m.ToolPolicy, m.Coordinator.Guidance)
+	m.Workers = workerexecution.New(store.Sessions, store.Evidence, m.Workspace, gate, m.Coordinator.Guidance, m.Limits, router, workerexecution.PeerServices{Cancel: workerCancel, Cards: workerCards, Cancellations: workerCancellations, Delivery: workerDelivery, Summaries: workerSummaries, Results: workerResults, Digests: workerDigests, State: workerState, Notes: workerNotes, Workspaces: workerworkspace.New(store.Sessions, m.Workspace, newBranchWorkspace)})
 	m.Verification.SetWorkspaceTrackers(m.Workers.Workspaces)
 	turnPreparation := preparation.New(turnHistory, m.Coordinator.Loading, m.Profiles, m.SourceBriefs, m.ViewContexts, m.ToolContext, m.Workers.Workspaces, m.Workers.State)
-	turnPostTurn := postturn.New(store, m.Coordinator.Guidance)
-	m.Coordinator.Batch = batchcontrol.New(store, workerState, m.Verification, m.Coordinator.Guidance)
-	turnSettlement := turnsettlement.New(store, gate, &turnExecution.Prompt, turnStatus, m.Workspace, m.Coordinator.Batch)
+	turnPostTurn := postturn.New(store.Sessions, store.Transcript, m.Coordinator.Guidance)
+	m.Coordinator.Batch = batchcontrol.New(store.Sessions, store.Transcript, workerState, m.Verification, m.Coordinator.Guidance)
+	turnSettlement := turnsettlement.New(store.Sessions, gate, &turnExecution.Prompt, turnStatus, m.Workspace, m.Coordinator.Batch)
 	m.Coordinator.Nudges = turnnudges.New(m.Coordinator.Loading.Ledger, turnSpend)
-	turnInstructions := instructions.New(store, turnTranscript, captures, m.Coordinator.Guidance.DeliverPending)
+	turnInstructions := instructions.New(store.Sessions, store.Transcript, turnTranscript, captures, m.Coordinator.Guidance.DeliverPending)
 	turnInstructions.SetWaitEnds(func(sessionID string) []string {
 		var texts []string
 		for _, ended := range m.Coordinator.Runtime.CoordinatorLoop().Deliveries.TakeEndedWaits(sessionID) {
@@ -248,16 +249,16 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 		}
 		return texts
 	})
-	m.Runner = turnexecution.New(store, svc, turnexecution.Components{Execution: turnExecution, Workspace: m.Workspace, Spend: turnSpend, Transcript: turnTranscript, Turns: turnTurns, Chats: m.Chats, SubmissionState: turnSubmissionState, Settlement: turnSettlement, Clocks: turnClocks, Closeouts: turnCloseouts, Guidance: m.Coordinator.Guidance, Curation: turnCuration, Status: turnStatus, Instructions: turnInstructions, Preparation: turnPreparation, Authorization: turnAuthorization, History: turnHistory, PostTurn: turnPostTurn})
-	m.Workers.Harness = workerharness.New(store, m.Profiles, m.ToolContext, m.Workers.Workspaces, m.Workspace, registry, m.Verification, OverlaySourceProofForWorkspaces(m.Workers.Workspaces))
+	m.Runner = turnexecution.New(store.Sessions, store.Turns, svc, turnexecution.Components{Execution: turnExecution, Workspace: m.Workspace, Spend: turnSpend, Transcript: turnTranscript, Turns: turnTurns, Chats: m.Chats, SubmissionState: turnSubmissionState, Settlement: turnSettlement, Clocks: turnClocks, Closeouts: turnCloseouts, Guidance: m.Coordinator.Guidance, Curation: turnCuration, Status: turnStatus, Instructions: turnInstructions, Preparation: turnPreparation, Authorization: turnAuthorization, History: turnHistory, PostTurn: turnPostTurn})
+	m.Workers.Harness = workerharness.New(store.Transcript, store.Evidence, m.Profiles, m.ToolContext, m.Workers.Workspaces, m.Workspace, registry, m.Verification, OverlaySourceProofForWorkspaces(m.Workers.Workspaces))
 	m.Admission.Bind(m.Runner, turnSettlement, m.Submissions)
-	m.Coordinator.Closeout = closeoutassembly.New(store, m.Workspace, workerState, m.Verification.Evidence)
+	m.Coordinator.Closeout = closeoutassembly.New(store.Sessions, store.Transcript, store.Evidence, m.Workspace, workerState, m.Verification.Evidence)
 	m.Coordinator.Closeout.SetSourceVerification(m.Verification)
-	m.ProjectControl = projectcontrol.New(store, m.Stops, turnStatus, m.Admission, m.Coordinator.Batch, turnInstructions, turnTranscript)
+	m.ProjectControl = projectcontrol.New(store.Sessions, store.Transcript, m.Stops, turnStatus, m.Admission, m.Coordinator.Batch, turnInstructions, turnTranscript)
 	m.ProjectControl.SetRootHistory(m.Workspace.RootHistory())
 	m.Profiles.SetPostureObserver(m.ProjectControl.ObserveSessionPosture)
 	m.Profiles.SetExternalObserver(m.ProjectControl.ObserveSessionCommandExternal)
-	m.Coordinator.Guards = turnguards.New(store, m.ToolPolicy, m.Verification, m.Coordinator.Feedback, workerState, m.Workers, m.Workspace, m.Coordinator.Batch, m.Coordinator.ProgressClosure, turnCloseouts, m.Profiles, m.Limits)
+	m.Coordinator.Guards = turnguards.New(store.Sessions, m.ToolPolicy, m.Verification, m.Coordinator.Feedback, workerState, m.Workers, m.Workspace, m.Coordinator.Batch, m.Coordinator.ProgressClosure, turnCloseouts, m.Profiles, m.Limits)
 	m.Coordinator.Loading.SetPolicy(m.Coordinator.Guards.Policy)
 	m.Resources.State.Settlement = turnSettlement
 	m.Resources.State.Batch = m.Coordinator.Batch

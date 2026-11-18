@@ -4,12 +4,12 @@
   "kind": "construction",
   "workstream": "http-composition",
   "disposition": "retain",
-  "reason": "This dependency record is consumed once by a route-family constructor. Runtime handlers retain selected dependencies. Nesting the construction fields would hide the composition graph without narrowing runtime capabilities.",
-  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
-  "ceiling": 20,
+  "reason": "Retain the 19-field construction record. New projects its session and rewind repositories into distinct route components; the bundle is not retained by runtime handlers. Project mutation, removal, source-watch, and authorization boundaries stay with their existing services. Host identity and operation registration contracts cover composed construction.",
+  "reviewed_commit": "14725b25ec62673da30a613e4982cd7f57f55aa7",
+  "ceiling": 19,
   "boundaries": {
     "lycaon/internal/api/operations_contract_test.go": "b12b3bbbfa9eceaee01e4c1d500f92c85076d87f55a07956bc24c83462d620ca",
-    "lycaon/internal/api/host_test.go": "8f850fa4b484e81f8c36332b9b428a4d384e89045bc313c32f0f10f23a322449"
+    "lycaon/internal/api/host_test.go": "c3d13d00bc35081635a64f2fa13a960877e2732389ada90b999fa7e82c2652d6"
   },
-  "reviewed_shape": "0979999a72aa8bb72442b1e201d5b834f9cdd9030b9d99375754b4783a0300aa"
+  "reviewed_shape": "a8fd9c5ac65b8986f90c104ce6c9140e44798c7664885c7a35e1c6921926e233"
 }

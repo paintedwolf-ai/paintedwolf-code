@@ -19,21 +19,22 @@ import (
 
 // Admission owns session start serialization and reviewed workflow activation.
 type Admission struct {
-	Runs        RunReader
-	Starts      StartRepository
-	Sessions    Sessions
-	Resolver    *workflowcatalog.Resolver
-	Events      *events.Publisher
-	Barrier     StartBarrier
-	Controls    *Commands
-	Cleanup     *Cleanup
-	Publication Publication
-	Plans       Plans
-	Approvals   Approvals
-	Phases      Phases
-	Requests    RequestAdmission
-	Feedback    FeedbackNotifications
-	guards      sync.Map
+	Runs         RunReader
+	Starts       StartRepository
+	SessionStore Sessions
+	TurnStore    Turns
+	Resolver     *workflowcatalog.Resolver
+	Events       *events.Publisher
+	Barrier      StartBarrier
+	Controls     *Commands
+	Cleanup      *Cleanup
+	Publication  Publication
+	Plans        Plans
+	Approvals    Approvals
+	Phases       Phases
+	Requests     RequestAdmission
+	Feedback     FeedbackNotifications
+	guards       sync.Map
 }
 
 func (m *Admission) Guard(sessionID string) *sync.Mutex {
@@ -66,10 +67,10 @@ func (m *Admission) HumanText(ctx context.Context, sessionID string, req api.Sta
 
 // beginStartingWorkflowActivity covers phase entry before the initial wake turn.
 func (m *Admission) beginStartingWorkflowActivity(ctx context.Context, sessionID string) func() {
-	if m == nil || m.Events == nil || m.Sessions == nil {
+	if m == nil || m.Events == nil || (m.SessionStore == nil || m.TurnStore == nil) {
 		return func() {}
 	}
-	sess, err := m.Sessions.Get(ctx, sessionID)
+	sess, err := m.SessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return func() {}
 	}
@@ -152,7 +153,7 @@ func (m *Admission) startAdmitted(ctx context.Context, sessionID string, req api
 	if workflowID == "" || version == "" {
 		return nil, workflowdef.ErrUnknownWorkflow
 	}
-	sess, err := m.Sessions.Get(ctx, sessionID)
+	sess, err := m.SessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}

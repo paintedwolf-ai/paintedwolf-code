@@ -24,8 +24,8 @@ func turnCalledUpdateProgress(turnTools []string) bool {
 // After runs post-turn hooks. Workers skip phase-exit, progress, and grounding.
 func (m *Service) After(ctx context.Context, sessionID, profileID string, turnTools []string) error {
 	isWorker := false
-	if m.store != nil {
-		if sess, err := m.store.Get(ctx, strings.TrimSpace(sessionID)); err == nil &&
+	if m.sessionStore != nil && m.transcriptStore != nil {
+		if sess, err := m.sessionStore.Get(ctx, strings.TrimSpace(sessionID)); err == nil &&
 			sess != nil && sess.IsWorkerChild() {
 			isWorker = true
 		}
@@ -72,8 +72,8 @@ func (m *Service) ProgressMissing(ctx context.Context, sessionID string, turnToo
 	if m == nil || m.progress == nil {
 		return
 	}
-	if m.store != nil {
-		if sess, err := m.store.Get(ctx, strings.TrimSpace(sessionID)); err == nil && sess != nil {
+	if m.sessionStore != nil && m.transcriptStore != nil {
+		if sess, err := m.sessionStore.Get(ctx, strings.TrimSpace(sessionID)); err == nil && sess != nil {
 			if sess.Posture == api.SessionPostureSpec || sess.IsWorkerChild() {
 				return
 			}

@@ -3,23 +3,22 @@ package workflow
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
-	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
-	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
-	workflowlifecycle "github.com/lycaon/lycaon/internal/workflow/lifecycle"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/people"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
+	workflowlifecycle "github.com/lycaon/lycaon/internal/workflow/lifecycle"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -33,7 +32,7 @@ func testRunStore(t *testing.T, sqlDB db.Handle) *runstate.Repository {
 	return s
 }
 
-func testManager(t *testing.T) (*RunManager, session.Store, *blueprint.Manager, string) {
+func testManager(t *testing.T) (*RunManager, *store.Repositories, *blueprint.Manager, string) {
 	t.Helper()
 	projectDir := t.TempDir()
 	sqlDB := testdbfixture.Open(t, "store.db")
@@ -99,16 +98,16 @@ func setTestRegistry(t *testing.T, mgr *RunManager, blueprintMgr *blueprint.Mana
 	mgr.SetConditionRegistry(reg)
 }
 
-func testManagerWithRegistry(t *testing.T) (*RunManager, session.Store, *blueprint.Manager, string) {
+func testManagerWithRegistry(t *testing.T) (*RunManager, *store.Repositories, *blueprint.Manager, string) {
 	t.Helper()
 	mgr, store, blueprintMgr, projectDir := testManager(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
 	return mgr, store, blueprintMgr, projectDir
 }
 
-func workflowCaller(t testing.TB, mgr *RunManager) context.Context {
+func workflowCaller(t testing.TB, repositories *store.Repositories) context.Context {
 	t.Helper()
-	owner, err := mgr.Policy.Sessions.(session.Store).HostOwner(context.Background())
+	owner, err := repositories.People.HostOwner(context.Background())
 	testutil.FailErr(t, "host owner", err)
 	return people.WithCaller(context.Background(), owner)
 }
@@ -230,9 +229,9 @@ func TestAdvanceWhilePaused(t *testing.T) {
 }
 
 func TestCompleteOnFinalAdvance(t *testing.T) {
-	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
+	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, repositories)
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)

@@ -29,7 +29,7 @@ func (m *Service) Schedule(ctx context.Context, sess *api.Session) {
 
 // runBackgroundCompaction writes durable views from canonical history.
 func (m *Service) runBackgroundCompaction(ctx context.Context, sessionID string) {
-	if m == nil || m.Compactor == nil || m.store == nil {
+	if m == nil || m.Compactor == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.compactionStore == nil) {
 		return
 	}
 	sc, ok := m.Compactor.(*compaction.SimpleCompactor)
@@ -50,7 +50,7 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 	if !admitted {
 		return false, false
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return false, false
 	}
@@ -126,12 +126,12 @@ func (m *Service) loadCompactionPage(ctx context.Context, sess *api.Session) ([]
 	var base []api.Message
 	var coveredThroughOrd, sourceSeq int64
 	var coveredThroughID string
-	view, ok, err := m.store.GetCompactionView(ctx, sess.ID)
+	view, ok, err := m.compactionStore.GetCompactionView(ctx, sess.ID)
 	if err != nil {
 		return nil, 0, "", 0, false, err
 	}
 	if ok && view.Generation == sess.CompactionGeneration {
-		current, currentErr := m.store.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq)
+		current, currentErr := m.compactionStore.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq)
 		if currentErr != nil {
 			return nil, 0, "", 0, false, currentErr
 		}
@@ -157,7 +157,7 @@ func (m *Service) loadCompactionPage(ctx context.Context, sess *api.Session) ([]
 	if len(base) > 0 {
 		// Recheck after reading the suffix: its newer rows would otherwise mask
 		// an edit to the compacted prefix made in between.
-		current, err := m.store.CompactionViewCurrent(ctx, sess.ID, coveredThroughOrd, coveredThroughID, sourceSeq)
+		current, err := m.compactionStore.CompactionViewCurrent(ctx, sess.ID, coveredThroughOrd, coveredThroughID, sourceSeq)
 		if err != nil {
 			return nil, 0, "", 0, false, err
 		}
@@ -215,12 +215,12 @@ func (m *Service) writeCompactionView(ctx context.Context, sess *api.Session, or
 	}
 
 	if view.Continuation == nil {
-		if prior, ok, err := m.store.GetCompactionView(ctx, sess.ID); err == nil && ok {
+		if prior, ok, err := m.compactionStore.GetCompactionView(ctx, sess.ID); err == nil && ok {
 			view.Continuation = prior.Continuation
 		}
 	}
 
-	if err := m.store.PutCompactionView(ctx, sess.ID, view); err != nil {
+	if err := m.compactionStore.PutCompactionView(ctx, sess.ID, view); err != nil {
 		return err
 	}
 	slog.DebugContext(ctx, "compaction generation applied", "session_id", sess.ID, "generation", generation,
@@ -258,15 +258,15 @@ func (m *Service) sessionInfo(ctx context.Context, sess *api.Session, originals 
 		Posture:              sess.Posture,
 		CompactionGeneration: sess.CompactionGeneration,
 		RecallAvailable:      m.recallAvailable(ctx, sess),
-		ChunkProjections:     m.store,
-		Attempts:             m.store,
+		ChunkProjections:     m.compactionStore,
+		Attempts:             m.compactionStore,
 		Model:                sess.Model,
 		ProviderID:           sess.ProviderID,
 		WorkingSetStartOrd:   activeWorkingSetStart(originals, activeTurnAllocation(m.compactionConfig(ctx, sess)), m.cutoffs.heldWorkingSet(sess.ID)),
 	}
 	info.ProviderID, info.Model = m.Model(ctx, sess)
-	if prior, ok, err := m.store.GetCompactionView(ctx, sess.ID); err == nil && ok {
-		current, err := m.store.CompactionViewCurrent(ctx, sess.ID, prior.CoveredThroughOrd, prior.CoveredThroughID, prior.SourceSeq)
+	if prior, ok, err := m.compactionStore.GetCompactionView(ctx, sess.ID); err == nil && ok {
+		current, err := m.compactionStore.CompactionViewCurrent(ctx, sess.ID, prior.CoveredThroughOrd, prior.CoveredThroughID, prior.SourceSeq)
 		if err == nil && current {
 			info.PriorContinuation = prior.Continuation
 		}
@@ -300,7 +300,7 @@ func (m *Service) Model(ctx context.Context, sess *api.Session) (string, string)
 // SessionContext returns debug context stats for a session, measured against the
 // compacted view the model actually sees.
 func (m *Service) SessionContext(ctx context.Context, sessionID string) (api.SessionContextResponse, error) {
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return api.SessionContextResponse{}, err
 	}

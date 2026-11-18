@@ -65,7 +65,7 @@ func TestTurnDeliversEveryQueuedKickAndDropsNoticesForFinishedRounds(t *testing.
 	})
 
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
 	for _, job := range []string{"job-finished", "job-running"} {
@@ -100,9 +100,9 @@ func TestWorkerParentDeliveryPreservesFrozenDecision(t *testing.T) {
 	sessionStore := store.NewSQL(database)
 	mgr := session.NewHost(sessionStore, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
-	parent, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	parent, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	child, err := sessionStore.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := sessionStore.Sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 	rule := &oar.Rule{SpecVersion: "1.0", ID: "CHANGED_POLICY", Kind: oar.KindPolicy, Anchor: oar.AnchorWorkerReportCheck, Effect: oar.EffectBlock, Enforcement: "enforce", OnError: "fail_closed", OnFire: []oar.OnFireAction{oar.OnFireIncrementCounter}, Copy: oar.Copy{What: "Changed after queue commit"}}
 	pipeline := oar.NewGuardPipeline(oar.NewRuleSet([]*oar.Rule{rule}), nil, oar.NewCounterStore())
@@ -121,7 +121,7 @@ func TestWorkerParentDeliveryPreservesFrozenDecision(t *testing.T) {
 	if n := pipeline.Counters().Get(child.ID, rule.Qualified(), oar.CounterFire); n != 0 {
 		t.Fatalf("parent generated %d new policy occurrences", n)
 	}
-	messages, err := sessionStore.GetMessages(t.Context(), parent.ID)
+	messages, err := sessionStore.Transcript.GetMessages(t.Context(), parent.ID)
 	testutil.FailErr(t, "read parent projection", err)
 	found := false
 	for _, message := range messages {
@@ -141,15 +141,15 @@ func TestAppendWorkerSummaryDoesNotEchoEnvelopeInAssistantProse(t *testing.T) {
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
 	enqueueJSON := `{"agent_type":"implementer","job_id":"` + jobID + `","status":"enqueued"}`
 	tr := guidance.ComposeToolResult(enqueueJSON, guidance.ToolResultFacts{}, nil)
 	guidance.ApplyTaskDispatchMetadata("task", tr, &api.WorkerDispatch{WorkerID: jobID, AgentType: "implementer"})
-	if err := store.AppendMessages(ctx, parent.ID, api.Message{
+	if err := store.Transcript.AppendMessages(ctx, parent.ID, api.Message{
 		ID:         "tool-1",
 		Role:       api.MessageRoleTool,
 		Content:    enqueueJSON,
@@ -165,7 +165,7 @@ func TestAppendWorkerSummaryDoesNotEchoEnvelopeInAssistantProse(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "AppendWorkerSummary", err)
 	}
-	msgs, err := store.GetMessages(ctx, parent.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	for _, msg := range msgs {
 		if msg.Role != api.MessageRoleAssistant || msg.WorkerSummary == nil {
@@ -199,15 +199,15 @@ func TestAppendWorkerSummaryProjectsEnvelopeToModel(t *testing.T) {
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "security-reviewer"})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "security-reviewer"})
 	testutil.FailErr(t, "create child session", err)
 	jobID := "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 	enqueueJSON := `{"agent_type":"security-reviewer","job_id":"` + jobID + `","status":"enqueued"}`
 	tr := guidance.ComposeToolResult(enqueueJSON, guidance.ToolResultFacts{}, nil)
 	guidance.ApplyTaskDispatchMetadata("task", tr, &api.WorkerDispatch{WorkerID: jobID, AgentType: "security-reviewer"})
-	if err := store.AppendMessages(ctx, parent.ID, api.Message{
+	if err := store.Transcript.AppendMessages(ctx, parent.ID, api.Message{
 		ID:         "tool-1",
 		Role:       api.MessageRoleTool,
 		Content:    enqueueJSON,
@@ -224,7 +224,7 @@ func TestAppendWorkerSummaryProjectsEnvelopeToModel(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "AppendWorkerSummary", err)
 	}
-	msgs, err := store.GetMessages(ctx, parent.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 
 	projected := transcript.Project(msgs)
@@ -256,7 +256,7 @@ func TestTwoUserStoppedBackgroundCommandsBetweenTurnsDeliverBothToNextTurn(t *te
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	now := time.Now().UTC()
@@ -313,9 +313,9 @@ func TestAbortPreservesUnconsumedProcessFinishedKickWithoutAutoStartingTurn(t *t
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "set busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "set busy", st.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
 	mgr.Processes.HandleCommandCompletion(ctx, bgprocess.Completion{
@@ -332,7 +332,7 @@ func TestAbortPreservesUnconsumedProcessFinishedKickWithoutAutoStartingTurn(t *t
 	if got := len(rec.AllRequests()); got != 0 {
 		t.Fatalf("abort auto-started %d LLM requests, want 0", got)
 	}
-	afterAbort, err := st.Get(ctx, sess.ID)
+	afterAbort, err := st.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session after abort", err)
 	if afterAbort.Status != api.SessionStatusIdle {
 		t.Fatalf("session status after abort = %q, want idle", afterAbort.Status)

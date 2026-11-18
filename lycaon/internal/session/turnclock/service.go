@@ -14,19 +14,25 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	sessiontree.Reader
-	LatestTurnClock(context.Context, string) (store.TurnClock, bool, error)
-	PutTurnClock(context.Context, store.TurnClock) error
+type Sessions interface {
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Turns interface {
+	LatestTurnClock(ctx context.Context, sessionID string) (store.TurnClock, bool, error)
+	PutTurnClock(ctx context.Context, clock store.TurnClock) error
 }
 
 type Service struct {
-	store     Store
-	locks     promptstate.MutexRegistry
-	Publisher *events.Publisher
+	sessionStore Sessions
+	turnStore    Turns
+	locks        promptstate.MutexRegistry
+	Publisher    *events.Publisher
 }
 
-func New(store Store) *Service { return &Service{store: store} }
+func New(sessionStore Sessions, turnStore Turns) *Service {
+	return &Service{sessionStore: sessionStore, turnStore: turnStore}
+}
 
 // Begin starts the root's clock for one execution and returns its stop
 // func. A new root user turn resets the clock; continuations accrue to it. Only
@@ -35,7 +41,7 @@ func (m *Service) Begin(ctx context.Context, sessionID string, newUserTurn bool)
 	if m == nil {
 		return func() {}
 	}
-	root := sessiontree.RootID(ctx, m.store, sessionID)
+	root := sessiontree.RootID(ctx, m.sessionStore, sessionID)
 	opens := newUserTurn && root == sessionID
 	if opens {
 		progress.OpenTurn(root)
@@ -59,7 +65,7 @@ func (m *Service) Anchor(ctx context.Context, sessionID, openingMessageID string
 	if m == nil || strings.TrimSpace(openingMessageID) == "" {
 		return
 	}
-	root := sessiontree.RootID(ctx, m.store, sessionID)
+	root := sessiontree.RootID(ctx, m.sessionStore, sessionID)
 	if root != sessionID {
 		return
 	}
@@ -80,7 +86,7 @@ func (m *Service) Wait(ctx context.Context, sessionID string) func() {
 	if m == nil || strings.TrimSpace(sessionID) == "" {
 		return func() {}
 	}
-	root := sessiontree.RootID(ctx, m.store, sessionID)
+	root := sessiontree.RootID(ctx, m.sessionStore, sessionID)
 	progress.WaitStarted(root)
 	return func() { progress.WaitFinished(root) }
 }
@@ -100,7 +106,7 @@ func (m *Service) publishTurnClock(ctx context.Context, root string) {
 // persistTurnClock writes the root's current clock. Reading it under the lock
 // keeps a stale snapshot from landing last.
 func (m *Service) persistTurnClock(ctx context.Context, root string) {
-	if m == nil || m.store == nil || root == "" {
+	if m == nil || (m.sessionStore == nil || m.turnStore == nil) || root == "" {
 		return
 	}
 	lock := m.locks.Acquire(root)
@@ -118,20 +124,20 @@ func (m *Service) persistTurnClock(ctx context.Context, root string) {
 		RunningAt:        optionalTime(clock.RunningAt),
 		SettledAt:        optionalTime(clock.SettledAt),
 	}
-	if err := m.store.PutTurnClock(ctx, durable); err != nil {
+	if err := m.turnStore.PutTurnClock(ctx, durable); err != nil {
 		slog.WarnContext(ctx, "persist turn clock", "session_id", root, "error", err)
 	}
 }
 
 // restoreTurnClock seeds an unclocked root from its newest durable clock.
 func (m *Service) restoreTurnClock(ctx context.Context, root string) {
-	if m == nil || m.store == nil || root == "" {
+	if m == nil || (m.sessionStore == nil || m.turnStore == nil) || root == "" {
 		return
 	}
 	if current := progress.Clock(root); current.OpeningMessageID != "" || current.Running() || current.ActiveMs > 0 {
 		return
 	}
-	durable, ok, err := m.store.LatestTurnClock(ctx, root)
+	durable, ok, err := m.turnStore.LatestTurnClock(ctx, root)
 	if err != nil {
 		slog.WarnContext(ctx, "restore turn clock", "session_id", root, "error", err)
 		return

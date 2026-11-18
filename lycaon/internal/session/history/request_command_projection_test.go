@@ -73,7 +73,8 @@ func TestCommandProjectionRequiresCompleteMatchingReceipts(t *testing.T) {
 func TestFittingLargeCompletedSourceLeavesRoomForContinuation(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	rows := largeRecordedCommand()
-	svc := &Service{store: storetest.New(t, testdbseed.DefaultProjectID), recallAvailable: func(context.Context, *api.Session) bool { return true }}
+	sessionRepositories := storetest.New(t, testdbseed.DefaultProjectID)
+	svc := &Service{sessionStore: sessionRepositories.Sessions, transcriptStore: sessionRepositories.Transcript, compactionStore: sessionRepositories.Compaction, recallAvailable: func(context.Context, *api.Session) bool { return true }}
 	cfg := compaction.DefaultCompactionConfig()
 	cfg.ModelContextWindow = 8192
 	cfg.HardCeilingTokens = 6000

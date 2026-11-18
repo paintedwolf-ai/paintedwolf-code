@@ -16,7 +16,7 @@ func TestHandleRecallLoadsPreservedBodyBeyondIndexedExcerpt(t *testing.T) {
 	st := store.NewSQL(f.db)
 	st.SetDataDir(f.dataDir)
 	body := []string{"first line", "historical retry delay: 7119", "last line"}
-	testutil.FailErr(t, "store observation", st.UpsertEvidenceRecord(t.Context(), workerSession, evidence.Record{
+	testutil.FailErr(t, "store observation", st.Evidence.UpsertEvidenceRecord(t.Context(), workerSession, evidence.Record{
 		Handle: "read#1", Kind: "read", Path: "settings.json", Body: body,
 	}))
 	f.seed(t, evidenceRow("observed", workerSession, "read#1", "settings.json", "first line"))
@@ -38,7 +38,7 @@ func TestRecallBodyBoundsAndStorageFailure(t *testing.T) {
 	st := store.NewSQL(f.db)
 	st.SetDataDir(f.dataDir)
 	body := strings.Split(strings.Repeat("line\n", recall.BodyMaxLines+1), "\n")
-	testutil.FailErr(t, "store observation", st.UpsertEvidenceRecord(t.Context(), workerSession, evidence.Record{
+	testutil.FailErr(t, "store observation", st.Evidence.UpsertEvidenceRecord(t.Context(), workerSession, evidence.Record{
 		Handle: "read#1", Kind: "read", Body: body,
 	}))
 	f.seed(t, evidenceRow("observed", workerSession, "read#1", "", "line"))

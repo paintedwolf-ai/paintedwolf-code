@@ -28,22 +28,22 @@ func TestTurnSourceBriefIsFixedWhenTheTurnOpens(t *testing.T) {
 
 	ctx := t.Context()
 	st := newSQLTestStore(t)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	first := appendUserPrompt(t, st, sess.ID, "first")
 	second := appendUserPrompt(t, st, sess.ID, "second")
 
-	none, err := st.TurnSourceBriefs(ctx, sess.ID)
+	none, err := st.Turns.TurnSourceBriefs(ctx, sess.ID)
 	testutil.FailErr(t, "list before any brief", err)
 	if len(none) != 0 {
 		t.Fatalf("briefs before any write = %v", none)
 	}
-	testutil.FailErr(t, "put second brief", st.PutTurnSourceBrief(ctx, sess.ID, second, briefWithRows(t, `{"other_files":2}`, 0)))
-	testutil.FailErr(t, "rewrite second brief", st.PutTurnSourceBrief(ctx, sess.ID, second, briefWithRows(t, `{"other_files":9}`, 0)))
-	testutil.FailErr(t, "put brief for no turn", st.PutTurnSourceBrief(ctx, sess.ID, "not-a-turn", briefWithRows(t, `{"other_files":1}`, 0)))
-	testutil.FailErr(t, "put empty brief", st.PutTurnSourceBrief(ctx, sess.ID, first, briefWithRows(t, " ", 0)))
+	testutil.FailErr(t, "put second brief", st.Turns.PutTurnSourceBrief(ctx, sess.ID, second, briefWithRows(t, `{"other_files":2}`, 0)))
+	testutil.FailErr(t, "rewrite second brief", st.Turns.PutTurnSourceBrief(ctx, sess.ID, second, briefWithRows(t, `{"other_files":9}`, 0)))
+	testutil.FailErr(t, "put brief for no turn", st.Turns.PutTurnSourceBrief(ctx, sess.ID, "not-a-turn", briefWithRows(t, `{"other_files":1}`, 0)))
+	testutil.FailErr(t, "put empty brief", st.Turns.PutTurnSourceBrief(ctx, sess.ID, first, briefWithRows(t, " ", 0)))
 
-	got, err := st.TurnSourceBriefs(ctx, sess.ID)
+	got, err := st.Turns.TurnSourceBriefs(ctx, sess.ID)
 	testutil.FailErr(t, "list briefs", err)
 	if len(got) != 1 || got[second] != `{"other_files":2}` {
 		t.Fatalf("briefs = %v, want only the second turn's first write", got)
@@ -57,17 +57,17 @@ func TestTurnSourceBriefMintsCitableRecords(t *testing.T) {
 
 	ctx := t.Context()
 	st := newSQLTestStore(t)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	first := appendUserPrompt(t, st, sess.ID, "first")
 	second := appendUserPrompt(t, st, sess.ID, "second")
 
-	testutil.FailErr(t, "put first brief", st.PutTurnSourceBrief(ctx, sess.ID, first, briefWithRows(t, `{"other_files":1}`, 2)))
-	testutil.FailErr(t, "rewrite first brief", st.PutTurnSourceBrief(ctx, sess.ID, first, briefWithRows(t, `{"other_files":2}`, 5)))
-	testutil.FailErr(t, "put brief for no turn", st.PutTurnSourceBrief(ctx, sess.ID, "not-a-turn", briefWithRows(t, `{"other_files":3}`, 5)))
-	testutil.FailErr(t, "put second brief", st.PutTurnSourceBrief(ctx, sess.ID, second, briefWithRows(t, `{"other_files":4}`, 1)))
+	testutil.FailErr(t, "put first brief", st.Turns.PutTurnSourceBrief(ctx, sess.ID, first, briefWithRows(t, `{"other_files":1}`, 2)))
+	testutil.FailErr(t, "rewrite first brief", st.Turns.PutTurnSourceBrief(ctx, sess.ID, first, briefWithRows(t, `{"other_files":2}`, 5)))
+	testutil.FailErr(t, "put brief for no turn", st.Turns.PutTurnSourceBrief(ctx, sess.ID, "not-a-turn", briefWithRows(t, `{"other_files":3}`, 5)))
+	testutil.FailErr(t, "put second brief", st.Turns.PutTurnSourceBrief(ctx, sess.ID, second, briefWithRows(t, `{"other_files":4}`, 1)))
 
-	ledger, err := st.LoadLedger(ctx, sess.ID)
+	ledger, err := st.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "load ledger", err)
 	if len(ledger.Handles) != 3 {
 		t.Fatalf("handles = %v, want one per recorded row", evidence.HandlesSorted(ledger))
@@ -95,19 +95,19 @@ func TestTurnSourceBriefMintFailureRecordsNothing(t *testing.T) {
 
 	ctx := t.Context()
 	st := newSQLTestStore(t)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	opening := appendUserPrompt(t, st, sess.ID, "first")
 	mintErr := errors.New("mint failed")
-	err = st.PutTurnSourceBrief(ctx, sess.ID, opening, func(int) (string, []evidence.Record, error) {
+	err = st.Turns.PutTurnSourceBrief(ctx, sess.ID, opening, func(int) (string, []evidence.Record, error) {
 		return "", nil, mintErr
 	})
 	if !errors.Is(err, mintErr) {
 		t.Fatalf("err = %v, want %v", err, mintErr)
 	}
-	briefs, err := st.TurnSourceBriefs(ctx, sess.ID)
+	briefs, err := st.Turns.TurnSourceBriefs(ctx, sess.ID)
 	testutil.FailErr(t, "list briefs", err)
-	ledger, err := st.LoadLedger(ctx, sess.ID)
+	ledger, err := st.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "load ledger", err)
 	if len(briefs) != 0 || len(ledger.Handles) != 0 {
 		t.Fatalf("briefs = %v handles = %v, want neither", briefs, evidence.HandlesSorted(ledger))

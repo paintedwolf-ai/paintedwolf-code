@@ -177,12 +177,12 @@ func TestListToolsForPromptCoordinatorCeiling(t *testing.T) {
 func TestTranscriptPageProjectsToolStepWithoutChangingModelHistory(t *testing.T) {
 	st := storetest.New(t, "project")
 	mgr := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	step := api.Message{ID: "step", Role: api.MessageRoleAssistant, Content: "internal tool explanation",
 		ToolCalls: []api.ToolCall{{ID: "call", Name: "wait"}}, Visibility: api.MessageVisibilityTranscript}
 	note := api.Message{ID: "note", Role: api.MessageRoleAssistant, Content: "The CLI implementation is ready.", Visibility: api.MessageVisibilityTranscript}
-	testutil.FailErr(t, "append step and progress note", st.AppendMessages(t.Context(), sess.ID, step, note))
+	testutil.FailErr(t, "append step and progress note", st.Transcript.AppendMessages(t.Context(), sess.ID, step, note))
 	page, err := mgr.Runner.Transcript.GetTranscriptPage(t.Context(), sess.ID, api.TranscriptPageQuery{})
 	testutil.FailErr(t, "read transcript", err)
 	if len(page.Messages) != 2 || page.Messages[0].Content != "" || len(page.Messages[0].ToolCalls) != 1 || page.Messages[1].Content != note.Content {
@@ -198,12 +198,12 @@ func TestTranscriptPageProjectsToolStepWithoutChangingModelHistory(t *testing.T)
 func TestSessionUntrustedContentFreshIsClean(t *testing.T) {
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create", err)
-	if store.SessionUntrustedContent(sess.ID) {
+	if store.Evidence.SessionUntrustedContent(sess.ID) {
 		t.Fatal("fresh session must not be untrusted")
 	}
-	got, err := store.Get(ctx, sess.ID)
+	got, err := store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get", err)
 	if got.UntrustedContent {
 		t.Fatal("Get wire field must be false for fresh session")
@@ -213,47 +213,47 @@ func TestSessionUntrustedContentFreshIsClean(t *testing.T) {
 func TestSessionUntrustedContentWebAndMCP(t *testing.T) {
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create", err)
 
-	if err := store.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
+	if err := store.Evidence.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
 		Handle: "read#1", Kind: "file", Shape: evidence.ShapeFileRegion, SourceTool: "read",
 	}); err != nil {
 		testutil.FailErr(t, "upsert read", err)
 	}
-	if store.SessionUntrustedContent(sess.ID) {
+	if store.Evidence.SessionUntrustedContent(sess.ID) {
 		t.Fatal("read must not mark untrusted")
 	}
 
-	if err := store.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
+	if err := store.Evidence.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
 		Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, SourceTool: "fetch_url",
 		URL: "https://example.com/a",
 	}); err != nil {
 		testutil.FailErr(t, "upsert fetch_url", err)
 	}
-	if !store.SessionUntrustedContent(sess.ID) {
+	if !store.Evidence.SessionUntrustedContent(sess.ID) {
 		t.Fatal("fetch_url must mark untrusted")
 	}
 
-	sess2, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess2, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create 2", err)
-	if err := store.UpsertEvidenceRecord(ctx, sess2.ID, evidence.Record{
+	if err := store.Evidence.UpsertEvidenceRecord(ctx, sess2.ID, evidence.Record{
 		Handle: "mcp#1", Kind: "mcp", Shape: evidence.ShapeOpaque, SourceTool: "mcp_docs_get",
 	}); err != nil {
 		testutil.FailErr(t, "upsert mcp", err)
 	}
-	if !store.SessionUntrustedContent(sess2.ID) {
+	if !store.Evidence.SessionUntrustedContent(sess2.ID) {
 		t.Fatal("any MCP tool must mark untrusted")
 	}
 
-	sess3, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess3, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create 3", err)
-	if err := store.UpsertEvidenceRecord(ctx, sess3.ID, evidence.Record{
+	if err := store.Evidence.UpsertEvidenceRecord(ctx, sess3.ID, evidence.Record{
 		Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, SourceTool: "web_search",
 	}); err != nil {
 		testutil.FailErr(t, "upsert web_search", err)
 	}
-	if !store.SessionUntrustedContent(sess3.ID) {
+	if !store.Evidence.SessionUntrustedContent(sess3.ID) {
 		t.Fatal("web_search must mark untrusted")
 	}
 }
@@ -262,9 +262,9 @@ func TestSessionUntrustedContentSpawnInheritance(t *testing.T) {
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	if err := store.UpsertEvidenceRecord(ctx, parent.ID, evidence.Record{
+	if err := store.Evidence.UpsertEvidenceRecord(ctx, parent.ID, evidence.Record{
 		Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, SourceTool: "fetch_url",
 		URL: "https://example.com",
 	}); err != nil {
@@ -276,15 +276,15 @@ func TestSessionUntrustedContentSpawnInheritance(t *testing.T) {
 	if !child.UntrustedContent {
 		t.Fatal("spawned child must be born untrusted when parent is")
 	}
-	if !store.SessionUntrustedContent(child.ID) {
+	if !store.Evidence.SessionUntrustedContent(child.ID) {
 		t.Fatal("child SessionUntrustedContent must be true after inherit seed")
 	}
 
-	clean, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	clean, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create clean parent", err)
 	cleanChild, err := mgr.Workers.SpawnChild(ctx, clean.ID, api.SpawnChildRequest{AgentType: "implementer", Prompt: "do work"})
 	testutil.FailErr(t, "SpawnChild clean", err)
-	if cleanChild.UntrustedContent || store.SessionUntrustedContent(cleanChild.ID) {
+	if cleanChild.UntrustedContent || store.Evidence.SessionUntrustedContent(cleanChild.ID) {
 		t.Fatal("child of trusted parent must stay clean until its own untrusted ingest")
 	}
 }
@@ -293,13 +293,13 @@ func TestMergeWorkerUntrustedIntoParent(t *testing.T) {
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: orchestration.ProfileWebResearcher})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: orchestration.ProfileWebResearcher})
 	testutil.FailErr(t, "create child", err)
 
 	childURL := "https://docs.example.com/page"
-	if err := store.UpsertEvidenceRecord(ctx, child.ID, evidence.Record{
+	if err := store.Evidence.UpsertEvidenceRecord(ctx, child.ID, evidence.Record{
 		Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, SourceTool: "fetch_url",
 		URL: childURL, Fidelity: evidence.FidelityStructured,
 	}); err != nil {
@@ -314,10 +314,10 @@ func TestMergeWorkerUntrustedIntoParent(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "AppendWorkerSummary", err)
 	}
-	if !store.SessionUntrustedContent(parent.ID) {
+	if !store.Evidence.SessionUntrustedContent(parent.ID) {
 		t.Fatal("web-researcher summary ingest must mark parent untrusted")
 	}
-	parentEv, err := store.LoadLedger(ctx, parent.ID)
+	parentEv, err := store.Evidence.LoadLedger(ctx, parent.ID)
 	testutil.FailErr(t, "LoadLedger parent", err)
 	urls := evidence.ObservedURLsSorted(parentEv)
 	found := false
@@ -336,11 +336,11 @@ func TestMergeWorkerUntrustedIntoParentUsesChildEvidenceNotAgentName(t *testing.
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "custom-all-tools"})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "custom-all-tools"})
 	testutil.FailErr(t, "create child", err)
-	if err := store.UpsertEvidenceRecord(ctx, child.ID, evidence.Record{
+	if err := store.Evidence.UpsertEvidenceRecord(ctx, child.ID, evidence.Record{
 		Handle: "web#custom", Kind: "web", Shape: evidence.ShapeURL, SourceTool: "fetch_url",
 		URL: "https://example.com/custom", Fidelity: evidence.FidelityStructured,
 	}); err != nil {
@@ -352,20 +352,20 @@ func TestMergeWorkerUntrustedIntoParentUsesChildEvidenceNotAgentName(t *testing.
 	}); err != nil {
 		testutil.FailErr(t, "AppendWorkerSummary", err)
 	}
-	if !store.SessionUntrustedContent(parent.ID) {
+	if !store.Evidence.SessionUntrustedContent(parent.ID) {
 		t.Fatal("custom worker with untrusted evidence must mark parent untrusted")
 	}
 
-	cleanParent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	cleanParent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create clean parent", err)
-	cleanChild, err := store.CreateChild(ctx, cleanParent, api.SpawnChildRequest{AgentType: orchestration.ProfileWebResearcher})
+	cleanChild, err := store.Sessions.CreateChild(ctx, cleanParent, api.SpawnChildRequest{AgentType: orchestration.ProfileWebResearcher})
 	testutil.FailErr(t, "create clean child", err)
 	if _, err := mgr.Workers.Summaries.Append(ctx, cleanParent.ID, workeroutcomes.SummaryInput{
 		Summary: "done", JobID: "job-clean", ChildSessionID: cleanChild.ID, AgentType: orchestration.ProfileWebResearcher,
 	}); err != nil {
 		testutil.FailErr(t, "AppendWorkerSummary clean", err)
 	}
-	if store.SessionUntrustedContent(cleanParent.ID) {
+	if store.Evidence.SessionUntrustedContent(cleanParent.ID) {
 		t.Fatal("agent name without child evidence must not mark parent untrusted")
 	}
 }
@@ -375,20 +375,20 @@ func TestSessionUntrustedContentSQLRebuild(t *testing.T) {
 	hot := store.NewSQL(sqlDB)
 	ctx := context.Background()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := hot.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := hot.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create", err)
 
-	if err := hot.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
+	if err := hot.Evidence.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
 		Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, SourceTool: "web_search",
 	}); err != nil {
 		testutil.FailErr(t, "upsert", err)
 	}
 	// Cold cache path: new store handle over same DB rebuilds from rows.
 	cold := store.NewSQL(sqlDB)
-	if !cold.SessionUntrustedContent(sess.ID) {
+	if !cold.Evidence.SessionUntrustedContent(sess.ID) {
 		t.Fatal("SQL rebuild-from-records must report untrusted")
 	}
-	got, err := cold.Get(ctx, sess.ID)
+	got, err := cold.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get", err)
 	if !got.UntrustedContent {
 		t.Fatal("Get must hydrate untrusted_content after rebuild")

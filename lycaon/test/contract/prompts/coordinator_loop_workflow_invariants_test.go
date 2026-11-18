@@ -2,7 +2,6 @@ package contract
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -15,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
@@ -68,7 +68,7 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 			t.Run(key+"/"+phase.ID, func(t *testing.T) {
 				dir := t.TempDir()
 				testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-				sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+				sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 				contractcheck.FailErr(t, "create session in store", err)
 				run, err := wfMgr.Starts.Start(ctx, sess.ID, wire.StartWorkflowRunRequest{
 					WorkflowID:      m.ID,
@@ -80,7 +80,7 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 				run.CurrentPhase = phase.ID
 				run.Status = wire.WorkflowRunStatusRunning
 				vars, err := workflowphases.ApplyPhaseOnEnter(ctx, workflowphases.PhaseEnterRequest{
-					Sessions: store, SessionID: sess.ID, Manifest: m, PhaseID: phase.ID,
+					Sessions: store.Sessions, SessionID: sess.ID, Manifest: m, PhaseID: phase.ID,
 				})
 				contractcheck.FailErr(t, "workflowphases.ApplyPhaseOnEnter failed", err)
 				if err := wfMgr.Store.State.CommitState(ctx, run, dir, vars); err != nil {

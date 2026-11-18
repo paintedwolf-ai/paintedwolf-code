@@ -3,9 +3,9 @@ package store
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -19,7 +19,7 @@ func TestAppendMessagesBatchSharesTimestampAndPreservesOrder(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	// The batch uses automatic timestamps.
@@ -28,9 +28,9 @@ func TestAppendMessagesBatchSharesTimestampAndPreservesOrder(t *testing.T) {
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "c1", Name: "edit"}}},
 		{Role: api.MessageRoleTool, Content: "ok", ToolResult: &api.ToolResult{Outcome: api.ToolResultOutcomeCompleted}},
 	}
-	testutil.FailErr(t, "append batch", store.AppendMessages(ctx, sess.ID, batch...))
+	testutil.FailErr(t, "append batch", store.Transcript.AppendMessages(ctx, sess.ID, batch...))
 
-	got, err := store.GetMessages(ctx, sess.ID)
+	got, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	if len(got) != len(batch) {
 		t.Fatalf("got %d messages, want %d", len(got), len(batch))
@@ -60,11 +60,11 @@ func TestAppendMessagesRejectsExistingIDSQL(t *testing.T) {
 	st := NewSQL(sqlDB)
 	ctx := context.Background()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	msg := api.Message{ID: "same-id", Role: api.MessageRoleUser, Content: "first"}
-	testutil.FailErr(t, "first append", st.AppendMessages(ctx, sess.ID, msg))
-	err = st.AppendMessages(ctx, sess.ID, api.Message{ID: "same-id", Role: api.MessageRoleUser, Content: "again"})
+	testutil.FailErr(t, "first append", st.Transcript.AppendMessages(ctx, sess.ID, msg))
+	err = st.Transcript.AppendMessages(ctx, sess.ID, api.Message{ID: "same-id", Role: api.MessageRoleUser, Content: "again"})
 	if err == nil || !errors.Is(err, ErrDuplicateMessageID) {
 		t.Fatalf("second append = %v want ErrDuplicateMessageID", err)
 	}

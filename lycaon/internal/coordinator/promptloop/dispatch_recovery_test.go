@@ -2,7 +2,6 @@ package promptloop_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -18,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -73,7 +73,7 @@ func TestLoopSummarizeParallelCappedInOneTurn(t *testing.T) {
 		deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
 		loop := promptloop.NewPromptLoopForTest(deps)
 		ctx := t.Context()
-		sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		testutil.FailErr(t, "create session", err)
 		_, err = loop.Run(ctx, promptloop.PromptRunInput{
 			SessionID: sess.ID,
@@ -94,7 +94,7 @@ func TestLoopSummarizeParallelCappedInOneTurn(t *testing.T) {
 
 func TestPartialDispatchRepairsFailedPeerWhileAcceptedWorkerRuns(t *testing.T) {
 	storage := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := storage.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := storage.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create coordinator", err)
 	reg := tools.NewDefaultRegistry()
 	accepted := map[string]int{}
@@ -105,7 +105,7 @@ func TestPartialDispatchRepairsFailedPeerWhileAcceptedWorkerRuns(t *testing.T) {
 		return "queued " + goal, nil
 	}))
 	wakes := loopwake.NewLoopEngine()
-	wakes.SetDeps(loopwake.LoopDeps{GetSession: storage.Get, WorkerCycleIdle: func(context.Context, *api.Session, string) (bool, error) { return false, nil }})
+	wakes.SetDeps(loopwake.LoopDeps{GetSession: storage.Sessions.Get, WorkerCycleIdle: func(context.Context, *api.Session, string) (bool, error) { return false, nil }})
 	t.Cleanup(func() { wakes.ForgetSession(context.Background(), sess.ID) })
 	testutil.FailErr(t, "register wait", loopwake.RegisterWaitTool(reg, wakes.Subscriptions, loopwake.WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}))
 	backend, ui, repaired := taskCallArgs("implementer", "backend"), taskCallArgs("implementer", "ui"), taskCallArgs("implementer", "ui")

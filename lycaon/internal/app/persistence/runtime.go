@@ -3,13 +3,12 @@ package persistence
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/startupprotocol"
 	"log/slog"
 	"path/filepath"
 	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/backup"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/git"
@@ -18,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/startupprotocol"
 	"github.com/lycaon/lycaon/internal/version"
 	"github.com/lycaon/lycaon/internal/webindex"
 )
@@ -32,7 +32,7 @@ type Runtime struct {
 	Path         string
 	Directory    string
 	Claim        *hostlock.Claim
-	Sessions     *store.SQL
+	Sessions     *store.Repositories
 	Projects     *project.SQLRegistry
 	SourceLedger *sourceledger.Store
 	WebIndex     *webindex.Store

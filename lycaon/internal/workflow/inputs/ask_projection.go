@@ -9,7 +9,7 @@ import (
 
 // ReconcileCoordinatorAskProjection restores ask transcript projections.
 func (m *Asks) ReconcileCoordinatorAskProjection(ctx context.Context, sessionID string, vars map[string]any) {
-	if m == nil || m.Sessions == nil {
+	if m == nil || (m.SessionStore == nil || m.TranscriptStore == nil) {
 		return
 	}
 	ask, ok := runstate.CoordinatorAskFromVars(vars)
@@ -27,7 +27,7 @@ func (m *Asks) ReconcileCoordinatorAskProjection(ctx context.Context, sessionID 
 	}
 	_, card := runstate.BuildFeedbackAnnouncement(run, ask.ID, fb, vars, runstate.AnnouncementMessageID(run.ID, ask.ID))
 	if card != nil {
-		msgs, messagesErr := m.Sessions.GetMessages(ctx, sessionID)
+		msgs, messagesErr := m.TranscriptStore.GetMessages(ctx, sessionID)
 		if messagesErr == nil {
 			found := false
 			for _, msg := range msgs {

@@ -60,9 +60,9 @@ func TestParallelWorkerRecordFindingSiblingInjectWiring(t *testing.T) {
 	_, err = h.Workers.Queue.Enqueue(ctx, taskB)
 	testutil.FailErr(t, "enqueue b", err)
 
-	childA, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "leg a"})
+	childA, err := h.Store.Sessions.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "leg a"})
 	testutil.FailErr(t, "create child a", err)
-	childB, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "leg b"})
+	childB, err := h.Store.Sessions.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "leg b"})
 	testutil.FailErr(t, "create child b", err)
 	testutil.FailErr(t, "link a", h.Workers.Queue.SetChildSessionID(ctx, taskA.ID, childA.ID))
 	testutil.FailErr(t, "link b", h.Workers.Queue.SetChildSessionID(ctx, taskB.ID, childB.ID))
@@ -72,7 +72,7 @@ func TestParallelWorkerRecordFindingSiblingInjectWiring(t *testing.T) {
 	testutil.FailErr(t, "write resolver", os.WriteFile(
 		filepath.Join(configDir, "resolve.go"), []byte("package config\n"), 0o644,
 	))
-	testutil.FailErr(t, "store finding evidence", h.Store.UpsertEvidenceRecord(ctx, childA.ID, evidence.Record{
+	testutil.FailErr(t, "store finding evidence", h.Store.Evidence.UpsertEvidenceRecord(ctx, childA.ID, evidence.Record{
 		Handle: "read#1", Kind: "read", Shape: "file_region", Fidelity: "structured",
 		SourceTool: "read", Path: "internal/config/resolve.go",
 		LineRanges: []evidence.LineRange{{Start: 1, End: 1}}, Body: []string{"package config"},

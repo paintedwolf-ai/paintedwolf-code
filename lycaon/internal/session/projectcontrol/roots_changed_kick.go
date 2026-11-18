@@ -45,10 +45,10 @@ func (m *Service) EnqueueRootsChangedKick(ctx context.Context, projectID string,
 		}
 	}
 	change, changed := m.rootHistory.Record(projectID, before, after)
-	if !changed || m.store == nil || m.anchors == nil {
+	if !changed || (m.sessionStore == nil) || m.anchors == nil {
 		return
 	}
-	sessions, err := m.store.List(ctx)
+	sessions, err := m.sessionStore.List(ctx)
 	if err != nil {
 		return
 	}
@@ -225,10 +225,10 @@ func (m *Service) ObserveSessionCommandExternal(ctx context.Context, sessionID s
 // coalesce against the session's pre-change baseline, and reverting to the
 // same outside-folder write behavior drops the pending notice.
 func (m *Service) EnqueuePostureChangedKick(ctx context.Context, projectID string, before, after gate.Posture) {
-	if m == nil || m.store == nil || m.anchors == nil || before == after {
+	if m == nil || (m.sessionStore == nil) || m.anchors == nil || before == after {
 		return
 	}
-	sessions, err := m.store.List(ctx)
+	sessions, err := m.sessionStore.List(ctx)
 	if err != nil {
 		return
 	}

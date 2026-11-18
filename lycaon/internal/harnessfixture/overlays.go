@@ -16,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
@@ -136,11 +136,11 @@ func validateFiles(files map[string]string) error {
 // poller cannot claim these jobs; their ordinary overlay lifecycle remains intact.
 type VerifyWorker func(context.Context, *api.Session, *api.WorkerTask, string) (*tools.SourceRunCapture, error)
 
-func Prepare(ctx context.Context, queue worker.WorkerQueue, sessions session.Store, parent *api.Session, root project.Root, setup Setup, verify VerifyWorker) (Evidence, error) {
+func Prepare(ctx context.Context, queue worker.WorkerQueue, sessions sessionstore.SessionRepository, parent *api.Session, root project.Root, transcript sessionstore.TranscriptRepository, setup Setup, verify VerifyWorker) (Evidence, error) {
 	if err := setup.Validate(); err != nil {
 		return Evidence{}, err
 	}
-	messages, err := sessions.GetMessages(ctx, parent.ID)
+	messages, err := transcript.GetMessages(ctx, parent.ID)
 	if err != nil {
 		return Evidence{}, err
 	}
@@ -170,7 +170,7 @@ func Prepare(ctx context.Context, queue worker.WorkerQueue, sessions session.Sto
 	return evidence, replaceFiles(root.Path, setup.IntegrationFiles)
 }
 
-func prepareOverlay(ctx context.Context, queue worker.WorkerQueue, sessions session.Store, parent *api.Session, root project.Root, overlay Overlay, verify VerifyWorker) (PreparedOverlay, error) {
+func prepareOverlay(ctx context.Context, queue worker.WorkerQueue, sessions sessionstore.SessionRepository, parent *api.Session, root project.Root, overlay Overlay, verify VerifyWorker) (PreparedOverlay, error) {
 	id := uuid.NewString()
 	paths := sortedPaths(overlay.Files)
 	child, err := enqueueFixtureWorker(ctx, queue, sessions, parent, root, overlay, id, paths)
@@ -293,7 +293,7 @@ func replaceFiles(root string, files map[string]string) error {
 	return nil
 }
 
-func enqueueFixtureWorker(ctx context.Context, queue worker.WorkerQueue, sessions session.Store, parent *api.Session, root project.Root, overlay Overlay, id string, paths []string) (*api.Session, error) {
+func enqueueFixtureWorker(ctx context.Context, queue worker.WorkerQueue, sessions sessionstore.SessionRepository, parent *api.Session, root project.Root, overlay Overlay, id string, paths []string) (*api.Session, error) {
 	_, err := queue.Enqueue(ctx, api.WorkerTask{
 		ID: id, ProjectID: parent.ProjectID, ParentSessionID: parent.ID,
 		WorkspaceRootID: root.ID, WorkspacePath: root.Path, AgentType: "implementer",

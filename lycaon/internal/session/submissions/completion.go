@@ -38,10 +38,10 @@ func (m *Service) finishSubmission(ctx context.Context, row *store.PromptSubmiss
 		resultJSON = string(encoded)
 	}
 	hostCtx := context.WithoutCancel(ctx)
-	err := m.store.FinishPromptSubmission(hostCtx, row.ID, row.ClaimToken, status, resultJSON, failure)
+	err := m.submissionStore.FinishPromptSubmission(hostCtx, row.ID, row.ClaimToken, status, resultJSON, failure)
 	if err != nil {
 		// Stop may settle the same claim before the provider unwinds.
-		current, readErr := m.store.GetPromptSubmission(hostCtx, row.ID)
+		current, readErr := m.submissionStore.GetPromptSubmission(hostCtx, row.ID)
 		if readErr == nil && current != nil && row.ClaimToken != "" &&
 			current.ClaimToken == row.ClaimToken && current.Status == store.PromptSubmissionInterrupted {
 			return lifecycle.ErrStopping

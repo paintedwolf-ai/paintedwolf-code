@@ -158,7 +158,7 @@ func TestRootDetachDirectAPIStopsIdleAndArchivedBackgroundCommandsUnderDetachedR
 	archivedSess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 	now := time.Now().UTC()
-	testutil.FailErr(t, "archive session", h.Store.UpdateSession(ctx, archivedSess.ID, func(s *wire.Session) {
+	testutil.FailErr(t, "archive session", h.Store.Sessions.UpdateSession(ctx, archivedSess.ID, func(s *wire.Session) {
 		s.ArchivedAt = &now
 	}))
 

@@ -16,18 +16,22 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	Get(context.Context, string) (*api.Session, error)
-	GetPromptSubmission(context.Context, string) (*store.PromptSubmission, error)
-	SessionTreeMembers(context.Context, string) ([]store.SessionTreeMember, error)
-	InterruptRunningPromptSubmissionsBySession(context.Context, string) error
-	InterruptPromptSubmissionsBySession(context.Context, string) error
-	SetSessionStatus(context.Context, string, api.SessionStatus) error
+type Sessions interface {
+	Get(ctx context.Context, id string) (*api.Session, error)
+	SessionTreeMembers(ctx context.Context, rootID string) ([]store.SessionTreeMember, error)
+	SetSessionStatus(ctx context.Context, id string, status api.SessionStatus) error
+}
+
+type Submissions interface {
+	GetPromptSubmission(ctx context.Context, id string) (*store.PromptSubmission, error)
+	InterruptPromptSubmissionsBySession(ctx context.Context, sessionID string) error
+	InterruptRunningPromptSubmissionsBySession(ctx context.Context, sessionID string) error
 }
 
 // Service drains stopped runtimes before recording workflow and idle boundaries.
 type Service struct {
-	store                Store
+	sessionStore         Sessions
+	submissionStore      Submissions
 	gate                 *lifecycle.State
 	execution            *execution.Lifetime
 	chats                *chats.Service
@@ -44,9 +48,9 @@ type Service struct {
 	workerReleaseTimeout time.Duration
 }
 
-func New(store Store, gate *lifecycle.State, execution *execution.Lifetime, chats *chats.Service, queue *queue.Store, drafts *draftqueue.Service, interruptions *execution.Recovery, status *execution.Status) *Service {
+func New(sessionStore Sessions, submissionStore Submissions, gate *lifecycle.State, execution *execution.Lifetime, chats *chats.Service, queue *queue.Store, drafts *draftqueue.Service, interruptions *execution.Recovery, status *execution.Status) *Service {
 	return &Service{
-		store:                store,
+		sessionStore: sessionStore, submissionStore: submissionStore,
 		gate:                 gate,
 		execution:            execution,
 		chats:                chats,

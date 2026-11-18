@@ -132,10 +132,10 @@ func (m *Service) LookupSkills(ctx context.Context, tctx tools.ToolContext, need
 // toolSession is the session a decision tool call runs in, or nil when the
 // call has none the store knows.
 func (m *Service) toolSession(ctx context.Context, tctx tools.ToolContext) *api.Session {
-	if m == nil || m.store == nil || strings.TrimSpace(tctx.Identity.SessionID) == "" {
+	if m == nil || (m.sessionStore == nil || m.compactionStore == nil || m.turnStore == nil) || strings.TrimSpace(tctx.Identity.SessionID) == "" {
 		return nil
 	}
-	sess, err := m.store.Get(ctx, tctx.Identity.SessionID)
+	sess, err := m.sessionStore.Get(ctx, tctx.Identity.SessionID)
 	if err != nil {
 		return nil
 	}
@@ -171,7 +171,7 @@ func (m *Service) beginDeciding(ctx context.Context, sess *api.Session, sessionI
 // recordTurnLoad writes one receipt under the session's current turn and
 // publishes it to the transcript.
 func (m *Service) recordTurnLoad(ctx context.Context, sess *api.Session, sessionID string, receipt store.TurnLoadReceipt) {
-	if m == nil || m.store == nil || sess == nil {
+	if m == nil || (m.sessionStore == nil || m.compactionStore == nil || m.turnStore == nil) || sess == nil {
 		return
 	}
 	receipt.SessionID = sessionID
@@ -182,7 +182,7 @@ func (m *Service) recordTurnLoad(ctx context.Context, sess *api.Session, session
 		receipt.Standing = marshalJSON(m.Ledger.Standing(sessionID))
 	}
 	receipt.CreatedAt = time.Now().UTC()
-	stored, err := m.store.PutTurnLoadReceipt(ctx, receipt)
+	stored, err := m.turnStore.PutTurnLoadReceipt(ctx, receipt)
 	if err != nil {
 		turnLoadLog.Warn("turn load receipt not recorded", "session_id", sessionID, "trigger", receipt.Trigger, "error", err)
 		return

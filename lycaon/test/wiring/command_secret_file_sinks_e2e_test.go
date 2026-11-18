@@ -85,7 +85,7 @@ func (r *secretSinkRun) file(t *testing.T, path string) string {
 
 func (r *secretSinkRun) logResults(t *testing.T) {
 	t.Helper()
-	messages, err := r.h.Store.GetMessages(t.Context(), r.session)
+	messages, err := r.h.Store.Transcript.GetMessages(t.Context(), r.session)
 	testutil.FailErr(t, "messages", err)
 	for _, message := range messages {
 		if message.Role == wire.MessageRoleTool {
@@ -100,7 +100,7 @@ type programOutcome struct{ state, stopCode string }
 // the supplied value reached the transcript in any form.
 func (r *secretSinkRun) outcomes(t *testing.T) []programOutcome {
 	t.Helper()
-	messages, err := r.h.Store.GetMessages(t.Context(), r.session)
+	messages, err := r.h.Store.Transcript.GetMessages(t.Context(), r.session)
 	testutil.FailErr(t, "messages", err)
 	for _, message := range messages {
 		if strings.Contains(message.Content, sinkSentinel) {

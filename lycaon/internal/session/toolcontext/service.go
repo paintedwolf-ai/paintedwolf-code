@@ -2,9 +2,9 @@ package toolcontext
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/messageview"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
@@ -18,9 +18,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	Get(context.Context, string) (*api.Session, error)
-	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
+type Sessions interface {
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Transcript interface {
+	ReadSourceTurn(ctx context.Context, id string, number int) (messageview.SourceTurn, error)
 }
 type Projects interface {
 	Get(context.Context, string) (*project.Project, error)
@@ -28,7 +31,8 @@ type Projects interface {
 
 // Service binds invocation context to structured session and source facts.
 type Service struct {
-	store           Store
+	sessionStore    Sessions
+	transcriptStore Transcript
 	workspace       *sessionscope.Service
 	limits          *limits.Service
 	profiles        *profiles.Service
@@ -48,8 +52,8 @@ type Service struct {
 	dataDir         string
 }
 
-func New(store Store, workspace *sessionscope.Service, limits *limits.Service, profiles *profiles.Service, captures *checkpointcontrol.Capture, execution *execution.Lifetime) *Service {
-	return &Service{store: store, workspace: workspace, limits: limits, profiles: profiles, captures: captures, execution: execution}
+func New(sessionStore Sessions, transcriptStore Transcript, workspace *sessionscope.Service, limits *limits.Service, profiles *profiles.Service, captures *checkpointcontrol.Capture, execution *execution.Lifetime) *Service {
+	return &Service{sessionStore: sessionStore, transcriptStore: transcriptStore, workspace: workspace, limits: limits, profiles: profiles, captures: captures, execution: execution}
 }
 func (m *Service) SetProjects(projects Projects) { m.projects = projects }
 

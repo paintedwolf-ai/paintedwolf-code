@@ -18,23 +18,23 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Service, *store.SQL) {
+func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Service, *store.Repositories) {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	data := storetest.New(t, testdbseed.DefaultProjectID)
-	workspace := sessionscope.New(data)
-	m := New(data, lifecycle.New(data), workspace, limits.New(settings.DefaultSessionLimits(), workspace), nil, func(context.Context, *api.Session) bool { return false })
+	workspace := sessionscope.New(data.Sessions)
+	m := New(data.Sessions, data.Transcript, data.Compaction, lifecycle.New(data.Sessions), workspace, limits.New(settings.DefaultSessionLimits(), workspace), nil, func(context.Context, *api.Session) bool { return false })
 	m.SetDataDir(t.TempDir())
 	m.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "Continue from compacted context."}))
 	t.Cleanup(m.Wait)
 	return m, data
 }
-func appliedView(t *testing.T, m *Service, data Store, id string) []api.Message {
+func appliedView(t *testing.T, m *Service, sessionStore Sessions, transcriptStore Transcript, compactionStore Compaction, id string) []api.Message {
 	t.Helper()
 	ctx := context.Background()
-	sess, err := data.Get(ctx, id)
+	sess, err := sessionStore.Get(ctx, id)
 	testutil.FailErr(t, "get session", err)
-	rows, err := data.GetMessages(ctx, id)
+	rows, err := transcriptStore.GetMessages(ctx, id)
 	testutil.FailErr(t, "get messages", err)
 	return m.ApplyView(ctx, sess, rows)
 }

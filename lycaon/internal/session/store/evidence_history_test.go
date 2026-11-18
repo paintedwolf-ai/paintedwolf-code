@@ -18,21 +18,17 @@ func TestMergeReceiptsSurviveFileObservationAndStoreReload(t *testing.T) {
 
 	ctx := context.Background()
 	dir := t.TempDir()
-	var store interface {
-		Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-		CommitEvidenceToolResult(context.Context, string, string, string, map[string]any, string) (string, string, error)
-		LoadLedger(context.Context, string) (evidence.Ledger, error)
-	}
+	var store *Repositories
 
 	db := testdbfixture.OpenPath(t, filepath.Join(dir, "ledger.db"))
 	testdbseed.InsertProjectRoot(t, db, testdbseed.DefaultProjectID, dir)
 	store = NewSQL(db)
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	commit := func(tool, path, body string) string {
 		t.Helper()
-		handle, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, tool, map[string]any{"path": path}, body)
+		handle, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, tool, map[string]any{"path": path}, body)
 		testutil.FailErr(t, "record observation", err)
 		if handle == "" {
 			t.Fatalf("%s did not produce evidence", tool)
@@ -46,10 +42,11 @@ func TestMergeReceiptsSurviveFileObservationAndStoreReload(t *testing.T) {
 	read := commit("read", "data/og_cards.yaml", `{"path":"data/og_cards.yaml","content":"1|<<<<<<< HEAD","offset":1,"end_line":1}`)
 	write := commit("write", "data/og_cards.yaml", `{"ok":true}`)
 	gitCommit := commit("git_commit", "", `{"available":true,"hash":"dfc9c6bb","paths":["data/og_cards.yaml"]}`)
-	if sqlStore, ok := store.(*SQL); ok {
-		store = NewSQL(sqlStore.db)
+	{
+		sqlStore := store
+		store = NewSQL(sqlStore.core.db)
 	}
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "reload ledger", err)
 	for _, handle := range []string{merge, status, conflict, gitCommit} {
 		rec, ok := evidence.ResolveHandle(ev, handle)
@@ -77,17 +74,17 @@ func TestHistoricalEvidenceRetainsUntrustedExposureAfterReload(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, db, testdbseed.DefaultProjectID, dir)
 	store := NewSQL(db)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "record external observation", store.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, SourceTool: "fetch_url", URL: "https://example.org/source"}))
-	untrusted, err := store.SessionUntrustedContentResult(ctx, sess.ID)
+	testutil.FailErr(t, "record external observation", store.Evidence.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, SourceTool: "fetch_url", URL: "https://example.org/source"}))
+	untrusted, err := store.Evidence.SessionUntrustedContentResult(ctx, sess.ID)
 	testutil.FailErr(t, "read initial exposure", err)
 	if !untrusted {
 		t.Fatal("retrieval did not record untrusted-content exposure")
 	}
-	testutil.FailErr(t, "replace path binding", markSuperseded(ctx, store.queries, sess.ID, "web#1", "read#1"))
+	testutil.FailErr(t, "replace path binding", markSuperseded(ctx, store.core.queries, sess.ID, "web#1", "read#1"))
 	loaded := NewSQL(db)
-	untrusted, err = loaded.SessionUntrustedContentResult(ctx, sess.ID)
+	untrusted, err = loaded.Evidence.SessionUntrustedContentResult(ctx, sess.ID)
 	testutil.FailErr(t, "reload exposure", err)
 	if !untrusted {
 		t.Fatal("supersession erased historical untrusted-content exposure")

@@ -3,7 +3,7 @@ package property
 import (
 	"context"
 
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
 	"pgregory.net/rapid"
 )
@@ -15,9 +15,9 @@ func failErr(t *rapid.T, step string, err error) {
 	}
 }
 
-func mustFindMessage(t *rapid.T, ctx context.Context, store session.Store, sessionID, id string) api.Message {
+func mustFindMessage(t *rapid.T, ctx context.Context, store *sessionstore.Repositories, sessionID, id string) api.Message {
 	t.Helper()
-	msgs, err := store.GetMessages(ctx, sessionID)
+	msgs, err := store.Transcript.GetMessages(ctx, sessionID)
 	failErr(t, "get messages", err)
 	for _, m := range msgs {
 		if m.ID == id {

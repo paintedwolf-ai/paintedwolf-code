@@ -26,18 +26,18 @@ func TestProgramCustodyKeepsRootIdentityOutsideSessionFolder(t *testing.T) {
 	otherID := testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "vendor", other)
 	sessions := NewSQL(database)
 	sessions.SetDataDir(base)
-	sess, err := sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	const url = "https://downloads.example/payload.tar"
-	handle, err := sessions.CommitProgramHTTPProvenance(t.Context(), sess.ID, session, evidence.ProgramHTTPProvenance{
+	handle, err := sessions.Evidence.CommitProgramHTTPProvenance(t.Context(), sess.ID, session, evidence.ProgramHTTPProvenance{
 		ProgramID:    "program:custody",
 		ObservedURLs: []string{url},
 		CustodyPaths: []string{"@vendor/payload.tar"},
 	})
 	testutil.FailErr(t, "commit program custody", err)
 
-	ledger, err := sessions.LoadLedger(t.Context(), sess.ID)
+	ledger, err := sessions.Evidence.LoadLedger(t.Context(), sess.ID)
 	testutil.FailErr(t, "load ledger", err)
 	rec, ok := evidence.ResolveHandle(ledger, handle)
 	if !ok {
@@ -48,7 +48,7 @@ func TestProgramCustodyKeepsRootIdentityOutsideSessionFolder(t *testing.T) {
 	}
 
 	for _, spelling := range []string{"@vendor/payload.tar", filepath.Join(other, "payload.tar")} {
-		urls, err := sessions.ExternalCustodyURLsForPaths(t.Context(), sess.ID, session, []string{spelling})
+		urls, err := sessions.Evidence.ExternalCustodyURLsForPaths(t.Context(), sess.ID, session, []string{spelling})
 		testutil.FailErr(t, "custody lookup", err)
 		if len(urls) != 1 || urls[0] != url {
 			t.Fatalf("custody for %q = %v, want [%s]", spelling, urls, url)
@@ -56,7 +56,7 @@ func TestProgramCustodyKeepsRootIdentityOutsideSessionFolder(t *testing.T) {
 	}
 	// The same relative path in the session folder is a different file.
 	for _, spelling := range []string{"payload.tar", filepath.Join(session, "payload.tar")} {
-		urls, err := sessions.ExternalCustodyURLsForPaths(t.Context(), sess.ID, session, []string{spelling})
+		urls, err := sessions.Evidence.ExternalCustodyURLsForPaths(t.Context(), sess.ID, session, []string{spelling})
 		testutil.FailErr(t, "session-folder custody lookup", err)
 		if len(urls) != 0 {
 			t.Fatalf("custody for %q = %v, want none", spelling, urls)
@@ -67,9 +67,9 @@ func TestProgramCustodyKeepsRootIdentityOutsideSessionFolder(t *testing.T) {
 	read := func(token string) evidence.Record {
 		t.Helper()
 		body := `{"path":"` + token + `","content":"1|bytes\n","offset":1,"end_line":1}`
-		h, _, err := sessions.CommitEvidenceToolResult(t.Context(), sess.ID, session, "read", map[string]any{"path": token}, body)
+		h, _, err := sessions.Evidence.CommitEvidenceToolResult(t.Context(), sess.ID, session, "read", map[string]any{"path": token}, body)
 		testutil.FailErr(t, "read "+token, err)
-		ledger, err := sessions.LoadLedger(t.Context(), sess.ID)
+		ledger, err := sessions.Evidence.LoadLedger(t.Context(), sess.ID)
 		testutil.FailErr(t, "load ledger after read", err)
 		rec, ok := evidence.ResolveHandle(ledger, h)
 		if !ok {

@@ -12,7 +12,8 @@ import (
 )
 
 // CommitDeliveredSource persists a confirmed source delivery and its evidence.
-func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, observation evidence.DeliveredSourceObservation) (string, error) {
+func (r *sqlEvidence) CommitDeliveredSource(ctx context.Context, sessionID string, observation evidence.DeliveredSourceObservation) (string, error) {
+	s := r.core
 	rec := observation.Record()
 	if rec.SourceDelivery == nil {
 		return "", fmt.Errorf("confirmed source delivery required")
@@ -79,7 +80,7 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
-	bumpUntrusted(s.sqlCore, sessionID, rec)
-	bumpSecretExposure(s.sqlCore, sessionID, rec)
+	bumpUntrusted(s, sessionID, rec)
+	bumpSecretExposure(s, sessionID, rec)
 	return rec.Handle, nil
 }

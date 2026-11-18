@@ -5,17 +5,17 @@ package workflow
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
-	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -37,7 +37,7 @@ func TestPlanImplementPhaseInvokesImplementChild(t *testing.T) {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create session", err)
 
 	parent, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request"})
@@ -46,7 +46,7 @@ func TestPlanImplementPhaseInvokesImplementChild(t *testing.T) {
 	seedValidPlanContent(t, blueprintMgr, parent.BlueprintPath)
 	parent, err = advancePlanToApprovePhase(ctx, mgr, parent)
 	testutil.FailErr(t, "advancePlanToApprovePhase", err)
-	parent, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, mgr), parent.ID, dir)
+	parent, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, sessStore), parent.ID, dir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 
 	parentRow, err := wfStore.Runs.Get(ctx, parent.ID)
@@ -129,7 +129,7 @@ func TestInvokeChildRejectsGrandchildDepth(t *testing.T) {
 
 	dir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create session", err)
 
 	parentID := "parent-run"
@@ -158,7 +158,7 @@ func TestInvokeChildRejectsGrandchildDepth(t *testing.T) {
 }
 
 func TestChildCompleteAutoFinishesParentPlan(t *testing.T) {
-	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
+	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
 	deps := conditions.TestRegistryDepsWithEvidence()
 	deps.DeliveryReported = func(context.Context, string, string, string) (bool, error) { return true, nil }
 	setTestRegistry(t, mgr, blueprintMgr, deps)
@@ -170,7 +170,7 @@ func TestChildCompleteAutoFinishesParentPlan(t *testing.T) {
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
 	run, err = advancePlanToApprovePhase(ctx, mgr, run)
 	testutil.FailErr(t, "advancePlanToApprovePhase", err)
-	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, mgr), run.ID, projectDir)
+	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, repositories), run.ID, projectDir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	parentID := run.ID
 
@@ -213,7 +213,7 @@ func TestChildCompleteAutoFinishesParentPlan(t *testing.T) {
 }
 
 func TestExitChildRunResumesParent(t *testing.T) {
-	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
+	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
 	ctx := context.Background()
 
@@ -223,7 +223,7 @@ func TestExitChildRunResumesParent(t *testing.T) {
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
 	run, err = advancePlanToApprovePhase(ctx, mgr, run)
 	testutil.FailErr(t, "advancePlanToApprovePhase", err)
-	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, mgr), run.ID, projectDir)
+	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, repositories), run.ID, projectDir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	parentID := run.ID
 	child, err := mgr.Store.Runs.ActiveBySession(ctx, "sess-1")
@@ -256,7 +256,7 @@ func TestExitCatalogRunSpawnsAmbientImplement(t *testing.T) {
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create session", err)
 
 	run, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request"})

@@ -10,13 +10,19 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	Get(context.Context, string) (*api.Session, error)
-	UpdateSession(context.Context, string, func(*api.Session)) error
-	UpdateTitleIfUnset(context.Context, string, string) (bool, error)
-	MutationEventsOutboxed() bool
-	LastTurnMessageContent(context.Context, string) (string, error)
-	SessionUntrustedContent(string) bool
+type Sessions interface {
+	SessionEventsOutboxed() bool
+	Get(ctx context.Context, id string) (*api.Session, error)
+	UpdateSession(ctx context.Context, id string, fn func(*api.Session)) error
+	UpdateTitleIfUnset(ctx context.Context, id, title string) (bool, error)
+}
+
+type Transcript interface {
+	LastTurnMessageContent(ctx context.Context, sessionID string) (string, error)
+}
+
+type Evidence interface {
+	SessionUntrustedContent(sessionID string) bool
 }
 
 type Projects interface {
@@ -36,23 +42,25 @@ type Presence interface {
 }
 
 type Service struct {
-	store     Store
-	roots     Roots
-	projects  Projects
-	namers    Namers
-	cost      cost.CostTracker
-	publisher *events.Publisher
-	presence  Presence
+	sessionStore    Sessions
+	transcriptStore Transcript
+	evidenceStore   Evidence
+	roots           Roots
+	projects        Projects
+	namers          Namers
+	cost            cost.CostTracker
+	publisher       *events.Publisher
+	presence        Presence
 }
 
-func New(store Store, roots Roots, namers Namers, tracker cost.CostTracker) *Service {
-	return &Service{store: store, roots: roots, namers: namers, cost: tracker}
+func New(sessionStore Sessions, transcriptStore Transcript, evidenceStore Evidence, roots Roots, namers Namers, tracker cost.CostTracker) *Service {
+	return &Service{sessionStore: sessionStore, transcriptStore: transcriptStore, evidenceStore: evidenceStore, roots: roots, namers: namers, cost: tracker}
 }
 func (s *Service) SetProjects(projects Projects)            { s.projects = projects }
 func (s *Service) SetPublisher(publisher *events.Publisher) { s.publisher = publisher }
 func (s *Service) SetPresence(presence Presence)            { s.presence = presence }
 func (s *Service) lastMessage(ctx context.Context, sessionID string) string {
-	content, err := s.store.LastTurnMessageContent(ctx, sessionID)
+	content, err := s.transcriptStore.LastTurnMessageContent(ctx, sessionID)
 	if err != nil {
 		return ""
 	}

@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/messageview"
@@ -15,18 +14,18 @@ func TestCompactionAttemptSurvivesStoreReopen(t *testing.T) {
 	database := testdbfixture.Open(t, "attempt.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st := NewSQL(database)
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	want := messageview.CompactionAttempt{Revision: "exact-revision", Reason: "insufficient_savings"}
-	testutil.FailErr(t, "save no-op", st.PutCompactionAttempt(t.Context(), sess.ID, want))
-	got, found, err := NewSQL(database).GetCompactionAttempt(t.Context(), sess.ID)
+	testutil.FailErr(t, "save no-op", st.Compaction.PutCompactionAttempt(t.Context(), sess.ID, want))
+	got, found, err := NewSQL(database).Compaction.GetCompactionAttempt(t.Context(), sess.ID)
 	testutil.FailErr(t, "reload no-op", err)
 	if !found || got != want {
 		t.Fatalf("memo lost: %+v found=%v", got, found)
 	}
 	want.Revision = "new-revision"
-	testutil.FailErr(t, "replace no-op", st.PutCompactionAttempt(t.Context(), sess.ID, want))
-	got, _, err = st.GetCompactionAttempt(t.Context(), sess.ID)
+	testutil.FailErr(t, "replace no-op", st.Compaction.PutCompactionAttempt(t.Context(), sess.ID, want))
+	got, _, err = st.Compaction.GetCompactionAttempt(t.Context(), sess.ID)
 	testutil.FailErr(t, "read replacement", err)
 	if got != want {
 		t.Fatal("memo did not advance")
@@ -35,35 +34,32 @@ func TestCompactionAttemptSurvivesStoreReopen(t *testing.T) {
 
 func TestCompactionPublicationRejectsStaleSourceAtomically(t *testing.T) {
 
-	var st interface {
-		compactionMutationStore
-		Get(ctx context.Context, id string) (*api.Session, error)
-	}
+	var st *Repositories
 
 	database := testdbfixture.Open(t, "publication.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st = NewSQL(database)
 
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append", st.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: api.MessageRoleAssistant, Content: "earlier"}))
-	rows, err := st.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "append", st.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: api.MessageRoleAssistant, Content: "earlier"}))
+	rows, err := st.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read source", err)
 	row := rows[len(rows)-1]
 	view := CompactionView{Generation: 1, CoveredThroughOrd: row.Ord, CoveredThroughID: row.ID, SourceSeq: row.Seq, Messages: []api.Message{{Content: "summary"}}}
-	testutil.FailErr(t, "publish view", st.PutCompactionView(t.Context(), sess.ID, view))
-	current, err := st.Get(t.Context(), sess.ID)
+	testutil.FailErr(t, "publish view", st.Compaction.PutCompactionView(t.Context(), sess.ID, view))
+	current, err := st.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read generation", err)
 	if current.CompactionGeneration != 1 {
 		t.Fatal("view published without generation")
 	}
-	_, err = st.UpdateMessage(t.Context(), sess.ID, row.ID, api.Message{Role: api.MessageRoleAssistant, Content: "corrected"})
+	_, err = st.Transcript.UpdateMessage(t.Context(), sess.ID, row.ID, api.Message{Role: api.MessageRoleAssistant, Content: "corrected"})
 	testutil.FailErr(t, "mutate source", err)
 	view.Generation = 2
-	if err := st.PutCompactionView(t.Context(), sess.ID, view); err == nil {
+	if err := st.Compaction.PutCompactionView(t.Context(), sess.ID, view); err == nil {
 		t.Fatal("stale summary published")
 	}
-	current, err = st.Get(t.Context(), sess.ID)
+	current, err = st.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read generation after rejection", err)
 	if current.CompactionGeneration == 2 {
 		t.Fatal("failed publication advanced generation")

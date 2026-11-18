@@ -19,7 +19,6 @@ func TestProjectSourceSeenListsALookAndMarkUnseenWithdrawsIt(t *testing.T) {
 	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 
 	testutil.FailErr(t, "record outside change", ledger.Record(t.Context(), sourceledger.RecordInput{
@@ -91,7 +90,6 @@ func TestProjectSourceSeenPagesEveryLookOnce(t *testing.T) {
 	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	base := "/v1/projects/" + p.ID + "/source/seen"
 	serve := func(method, target string, body []byte) *httptest.ResponseRecorder {
 		t.Helper()

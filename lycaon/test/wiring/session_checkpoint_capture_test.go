@@ -59,14 +59,14 @@ func TestPromptSealsARewindAnchorInAProductionBuild(t *testing.T) {
 		testutil.FailErr(t, "second prompt", err)
 	}
 
-	msgs, err := h.Store.GetMessages(ctx, sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	anchors := visibleUserMessageIDs(t, msgs)
 	if len(anchors) != 2 {
 		t.Fatalf("visible user messages = %d, want 2", len(anchors))
 	}
 	for _, anchorID := range anchors {
-		man := readCheckpointManifest(t, h.testDir, projectDir, sess.ID, anchorID, h.Store)
+		man := readCheckpointManifest(t, h.testDir, projectDir, sess.ID, anchorID, h.Store.Rewind)
 		if man.AnchorMessageID != anchorID {
 			t.Fatalf("manifest anchor = %q, want %q", man.AnchorMessageID, anchorID)
 		}

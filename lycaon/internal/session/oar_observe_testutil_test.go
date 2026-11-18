@@ -118,7 +118,7 @@ func TestRunTurnPanicInBusyWindowSelfHeals(t *testing.T) {
 		t.Fatal("Prompt returned no error; want the panic surfaced as a turn error, not swallowed")
 	}
 
-	got, getErr := fix.Store.Get(ctx, fix.Sess.ID)
+	got, getErr := fix.Store.Sessions.Get(ctx, fix.Sess.ID)
 	testutil.FailErr(t, "Get", getErr)
 	if got.Status != api.SessionStatusIdle {
 		t.Fatalf("status = %s want idle; a panic in the busy window must not leave the session stuck busy", got.Status)

@@ -70,7 +70,7 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 
 	// AGENTS.md follows the project trust switch.
 	projectID := session.RegisterProjectContextForTest(t, mgr, store.DB(), projectDir)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, projectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, projectID)
 	testutil.FailErr(t, "create session", err)
 	sess.WorkspacePath = projectDir
 	mgr.Coordinator.PolicyIndex.Warm(t.Context(), sess)

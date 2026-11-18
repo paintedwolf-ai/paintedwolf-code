@@ -43,7 +43,7 @@ func TestEnqueueRootsChangedKickExtendsPendingNoticeBeforeNextTurn(t *testing.T)
 		{ID: "sess-1", ProjectID: created.ID, WorkspaceRootID: created.Roots[0].ID, Status: api.SessionStatusIdle},
 		{ID: "other", ProjectID: "other-project", Status: api.SessionStatusIdle},
 	}}
-	svc := New(sessions, nil, nil, nil, nil, nil, nil)
+	svc := New(sessions, nil, nil, nil, nil, nil, nil, nil)
 	svc.SetAnchors(bus)
 	svc.SetRootHistory(&history)
 
@@ -149,7 +149,7 @@ func TestEnqueuePostureChangedKickCoalescesAndDropsNoOp(t *testing.T) {
 		{ID: "sess-1", ProjectID: "proj-1", Status: api.SessionStatusIdle},
 		{ID: "other", ProjectID: "proj-2", Status: api.SessionStatusIdle},
 	}}
-	svc := New(sessions, nil, nil, nil, nil, nil, nil)
+	svc := New(sessions, nil, nil, nil, nil, nil, nil, nil)
 	svc.SetAnchors(bus)
 
 	// Moving between light and balanced does not alter outside-folder write review.
@@ -230,7 +230,7 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 		Status:          api.SessionStatusIdle,
 	}
 	sessions := &detachSessions{sessions: []*api.Session{sess}}
-	svc := New(sessions, nil, nil, nil, nil, nil, nil)
+	svc := New(sessions, nil, nil, nil, nil, nil, nil, nil)
 	svc.SetAnchors(bus)
 
 	workspace := sessionscope.New(nil)
@@ -326,7 +326,7 @@ func newRootsKickHarness(t *testing.T, projectID, rootID string) (*Service, *kic
 	sessions := &detachSessions{sessions: []*api.Session{
 		{ID: "sess-1", ProjectID: projectID, WorkspaceRootID: rootID, Status: api.SessionStatusIdle},
 	}}
-	svc := New(sessions, nil, nil, nil, nil, nil, nil)
+	svc := New(sessions, nil, nil, nil, nil, nil, nil, nil)
 	svc.SetAnchors(bus)
 	svc.SetRootHistory(&history)
 	return svc, kicks, &history

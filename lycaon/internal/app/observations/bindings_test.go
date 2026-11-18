@@ -52,7 +52,7 @@ func TestObserverReleaseDrainsActiveCallback(t *testing.T) {
 func TestObserverReleaseRefusesAlreadyCopiedCallback(t *testing.T) {
 	var work workscope.Group
 	var calls atomic.Int32
-	copied := ownedObserver(&work, func(context.Context, repochange.Event) { calls.Add(1) })
+	copied := scopedObserver(&work, func(context.Context, repochange.Event) { calls.Add(1) })
 	copied(t.Context(), repochange.Event{})
 	work.Stop()
 	testutil.FailErr(t, "drain observer owner", work.Wait(t.Context()))

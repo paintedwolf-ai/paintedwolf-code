@@ -236,7 +236,7 @@ func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T)
 // or in its guidance.
 func (s *commandProgramSession) resultNames(t *testing.T, code string) bool {
 	t.Helper()
-	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
+	msgs, err := s.h.Store.Transcript.GetMessages(t.Context(), s.session)
 	testutil.FailErr(t, "read transcript", err)
 	for _, raw := range msgs {
 		msg := messageview.RedactMessage(raw)

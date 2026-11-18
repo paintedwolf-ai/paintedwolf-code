@@ -10,7 +10,7 @@ import (
 )
 
 // New opens a store with one attached root for each requested project.
-func New(t *testing.T, projectIDs ...string) *store.SQL {
+func New(t *testing.T, projectIDs ...string) *store.Repositories {
 	t.Helper()
 	database := testdbfixture.Open(t, "sessions.db")
 	for _, id := range projectIDs {

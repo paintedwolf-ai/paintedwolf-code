@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 	"time"
 
@@ -19,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -61,11 +61,11 @@ func lastSessionEvent(t *testing.T, published []api.SessionEvent) api.SessionEve
 }
 
 // observePendingPrompts wires a publisher that reads session state from mgr.
-func observePendingPrompts(t *testing.T, mgr *Host, st *store.SQL) (*events.MemoryHub, *api.Session, <-chan api.EventEnvelope) {
+func observePendingPrompts(t *testing.T, mgr *Host, st *store.Repositories) (*events.MemoryHub, *api.Session, <-chan api.EventEnvelope) {
 	t.Helper()
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, SessionState: mgr.Runner.SubmissionState})
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	ch, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe to session events", err)
@@ -187,7 +187,7 @@ func TestAbandonedPromptFailsAndStopsPending(t *testing.T) {
 	testutil.FailErr(t, "admit prompt", err)
 	testutil.FailErr(t, "abandon submission", mgr.Submissions.AbandonPromptSubmission(ctx, row.ID, errors.New("attachments unavailable")))
 
-	stored, err := st.GetPromptSubmission(ctx, row.ID)
+	stored, err := st.Submissions.GetPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "read receipt", err)
 	if stored.Status != store.PromptSubmissionFailed {
 		t.Fatalf("receipt status = %s, want failed so recovery does not run it later", stored.Status)
@@ -239,7 +239,7 @@ func TestDraftItemsPendUnlessHeldForEditing(t *testing.T) {
 func TestQueuedPromptDispatchesWhenRoundCompletesAfterTurnEndCheck(t *testing.T) {
 	ctx := context.Background()
 	mgr, st := newTestManager(t)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	dir := t.TempDir()
 	testdbseed.BindSessionWorkspace(t, st.DB(), sess.ID, dir)
@@ -306,7 +306,7 @@ func TestQueuedReceiptClaimDoesNotDeadlockSessionSeenPublication(t *testing.T) {
 	st := store.NewSQL(database)
 	st.SetEventOutbox(eventoutbox.New(database, events.NewMemoryHub()))
 	manager := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	row, _, err := manager.Submissions.AdmitPrompt(t.Context(), sess.ID, uuid.NewString(), "queued", promptinput.Input{Text: "queued"})
 	testutil.FailErr(t, "admit queued prompt", err)
@@ -317,7 +317,7 @@ func TestQueuedReceiptClaimDoesNotDeadlockSessionSeenPublication(t *testing.T) {
 	defer cancel()
 	seen := make(chan error, 1)
 	go func() {
-		seen <- st.UpdateSession(ctx, sess.ID, func(s *api.Session) { now := time.Now(); s.SeenAt = &now })
+		seen <- st.Sessions.UpdateSession(ctx, sess.ID, func(s *api.Session) { now := time.Now(); s.SeenAt = &now })
 	}()
 	select {
 	case <-pending.writerHeld:
@@ -326,7 +326,7 @@ func TestQueuedReceiptClaimDoesNotDeadlockSessionSeenPublication(t *testing.T) {
 	}
 	_, taken, claimErr := manager.Resources.Queue.TakeNextTurn(sess.ID, func(items []api.QueueItem) error {
 		close(pending.queueHeld)
-		_, claimed, err := st.ClaimPromptSubmission(ctx, items[0].ID)
+		_, claimed, err := st.Submissions.ClaimPromptSubmission(ctx, items[0].ID)
 		if err == nil && !claimed {
 			t.Error("queued receipt was not claimed")
 		}

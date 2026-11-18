@@ -45,11 +45,11 @@ func (m *Service) scheduleSynthesis(ctx context.Context, sc *compaction.SimpleCo
 }
 
 func (m *Service) publishSynthesis(ctx context.Context, info compaction.SessionInfo, snapshot store.CompactionView, enriched *messageview.Continuation) error {
-	current, err := m.store.CompactionViewCurrent(ctx, info.ID, snapshot.CoveredThroughOrd, snapshot.CoveredThroughID, snapshot.SourceSeq)
+	current, err := m.compactionStore.CompactionViewCurrent(ctx, info.ID, snapshot.CoveredThroughOrd, snapshot.CoveredThroughID, snapshot.SourceSeq)
 	if err != nil || !current {
 		return err
 	}
-	sess, err := m.store.Get(ctx, info.ID)
+	sess, err := m.sessionStore.Get(ctx, info.ID)
 	if err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func (m *Service) publishSynthesis(ctx context.Context, info compaction.SessionI
 	if provider != info.ProviderID || model != info.Model {
 		return nil
 	}
-	view, ok, err := m.store.GetCompactionView(ctx, info.ID)
+	view, ok, err := m.compactionStore.GetCompactionView(ctx, info.ID)
 	if err != nil || !ok || view.Continuation == nil {
 		return err
 	}
@@ -110,5 +110,5 @@ func (m *Service) publishSynthesis(ctx context.Context, info compaction.SessionI
 	view.Continuation = &accepted
 	view.Generation = sess.CompactionGeneration + 1
 	view.TokensAfter = compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(messages))
-	return m.store.PutCompactionView(ctx, info.ID, *view)
+	return m.compactionStore.PutCompactionView(ctx, info.ID, *view)
 }

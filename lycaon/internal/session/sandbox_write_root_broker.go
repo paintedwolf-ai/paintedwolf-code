@@ -1,13 +1,9 @@
 package session
 
 import (
-	"github.com/lycaon/lycaon/internal/toolapproval"
-	"github.com/lycaon/lycaon/internal/tools/native/command"
-
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -17,15 +13,18 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/settings"
-
+	"github.com/lycaon/lycaon/internal/toolapproval"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // WriteRootCheckpointBroker resolves write-root approval plans.
 type WriteRootCheckpointBroker struct {
 	Checkpoints hitl.CheckpointManager
-	Store       Store
+	Store       sessiontree.Reader
 	Runtime     *approvalstate.SandboxPathGrantRuntime
 	// ReadRuntime holds chat read-path leases, a separate namespace from
 	// write roots: a grant in one never covers the other.

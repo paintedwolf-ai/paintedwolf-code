@@ -197,7 +197,7 @@ func TestApplyPromptUserTurnPropagatesFeedbackFailure(t *testing.T) {
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	workflowFixture1 := &recordingWorkflowView{feedbackErr: wantErr}
 	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 
 	_, err = mgr.Runner.Instructions.Apply(ctx, sess.ID, promptinput.Input{Text: "answer"})

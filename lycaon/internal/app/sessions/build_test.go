@@ -329,7 +329,7 @@ func newWiredSkillHost(t *testing.T) (*toolhost.Runtime, string) {
 	root := configlayout.FindModuleRoot()
 	mgr.SetEffectiveCatalogDeps(root, cat, nil)
 	mgr.Catalog.SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create probe session", err)
 	extpacks.SetActive(cat)
 	t.Cleanup(extpacks.ClearActive)

@@ -62,7 +62,7 @@ func TestWorkflowCloseoutCannotPromiseUncommittedAdvancement(t *testing.T) {
 			if current.CurrentPhase != "plan" || current.Status == api.WorkflowRunStatusComplete || current.Status == api.WorkflowRunStatusFailed {
 				t.Fatalf("closeout_blocked altered or failed workflow: %+v", current)
 			}
-			messages, readErr := h.Store.GetMessages(ctx, sess.ID)
+			messages, readErr := h.Store.Transcript.GetMessages(ctx, sess.ID)
 			testutil.FailErr(t, "read transcript", readErr)
 			var hostNoticeFound bool
 			for _, msg := range messages {
@@ -130,7 +130,7 @@ func TestWorkflowCloseoutCannotPromiseUncommittedAdvancement(t *testing.T) {
 			if calls.Load() <= beforeResumeCalls {
 				t.Fatal("resumed prompt made no model calls")
 			}
-			resumedMessages, readErr := h.Store.GetMessages(ctx, sess.ID)
+			resumedMessages, readErr := h.Store.Transcript.GetMessages(ctx, sess.ID)
 			testutil.FailErr(t, "read resumed transcript", readErr)
 			var sawOpenGateContext bool
 			for _, msg := range resumedMessages {

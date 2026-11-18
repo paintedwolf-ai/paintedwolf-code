@@ -18,25 +18,25 @@ const sessionRecoveryPageSize = 256
 // boot means the engine went away under a live turn, so they settle as
 // interrupted.
 func (m *Recovery) RecoverOrphanedTurns(ctx context.Context) error {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil) {
 		return nil
 	}
 	if err := m.transcript.RepairPendingOutputs(ctx); err != nil {
 		return err
 	}
-	if _, err := m.store.RecoverTurns(ctx); err != nil {
+	if _, err := m.turnStore.RecoverTurns(ctx); err != nil {
 		return err
 	}
-	if _, err := m.store.SettleAbandonedTurnClocks(ctx); err != nil {
+	if _, err := m.turnStore.SettleAbandonedTurnClocks(ctx); err != nil {
 		return err
 	}
 	for {
-		sessionIDs, err := m.store.ListBusySessionIDs(ctx, sessionRecoveryPageSize)
+		sessionIDs, err := m.sessionStore.ListBusySessionIDs(ctx, sessionRecoveryPageSize)
 		if err != nil {
 			return err
 		}
 		for _, sessionID := range sessionIDs {
-			if err := m.store.SetSessionStatus(ctx, sessionID, api.SessionStatusIdle); err != nil {
+			if err := m.sessionStore.SetSessionStatus(ctx, sessionID, api.SessionStatusIdle); err != nil {
 				return err
 			}
 			m.status.PublishIdle(ctx, sessionID, api.SessionIdleDispositionInterrupted)
@@ -50,24 +50,24 @@ func (m *Recovery) RecoverOrphanedTurns(ctx context.Context) error {
 // RecoverOrphanedTurnsForSession repairs projections and fences one session after a panic.
 func (m *Recovery) RecoverOrphanedTurnsForSession(ctx context.Context, sessionID string) error {
 	sessionID = strings.TrimSpace(sessionID)
-	if m == nil || m.store == nil || sessionID == "" {
+	if m == nil || (m.sessionStore == nil) || sessionID == "" {
 		return nil
 	}
 	// Global repair visits only unacknowledged projections.
 	if err := m.transcript.RepairPendingOutputs(ctx); err != nil {
 		return err
 	}
-	if _, err := m.store.RecoverTurnsForSession(ctx, sessionID); err != nil {
+	if _, err := m.turnStore.RecoverTurnsForSession(ctx, sessionID); err != nil {
 		return err
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return err
 	}
 	if sess.Status != api.SessionStatusBusy {
 		return nil
 	}
-	if err := m.store.SetSessionStatus(ctx, sessionID, api.SessionStatusIdle); err != nil {
+	if err := m.sessionStore.SetSessionStatus(ctx, sessionID, api.SessionStatusIdle); err != nil {
 		return err
 	}
 	m.status.PublishIdle(ctx, sessionID, api.SessionIdleDispositionInterrupted)
@@ -77,7 +77,7 @@ func (m *Recovery) RecoverOrphanedTurnsForSession(ctx context.Context, sessionID
 // RecoverInterruptedToolResults appends a tool-result for each interrupted
 // invocation that has no matching transcript row.
 func (m *Recovery) RecoverInterruptedToolResults(ctx context.Context) error {
-	if m == nil || m.store == nil || m.invocations == nil {
+	if m == nil || (m.sessionStore == nil) || m.invocations == nil {
 		return nil
 	}
 	lister, ok := m.invocations.(invocation.ProjectionRecoveryRecorder)

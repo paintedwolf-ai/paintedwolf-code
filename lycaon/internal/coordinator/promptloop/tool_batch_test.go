@@ -23,12 +23,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func commitEvidenceFromStore(store *store.SQL) func(context.Context, string, *api.Session, string, map[string]any, string, string) (string, string, error) {
+func commitEvidenceFromStore(store *store.Repositories) func(context.Context, string, *api.Session, string, map[string]any, string, string) (string, string, error) {
 	return func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
 		if sess == nil {
 			return "", content, nil
 		}
-		return store.CommitVisualEvidenceToolResult(ctx, sessionID, sess.WorkspacePath, toolName, args, content, artifactID)
+		return store.Evidence.CommitVisualEvidenceToolResult(ctx, sessionID, sess.WorkspacePath, toolName, args, content, artifactID)
 	}
 }
 
@@ -87,7 +87,7 @@ func TestLoopRunsConcurrentTools(t *testing.T) {
 		deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
 		loop := promptloop.NewPromptLoopForTest(deps)
 		ctx := context.Background()
-		sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		testutil.FailErr(t, "create session", err)
 		_, err = loop.Run(ctx, promptloop.PromptRunInput{
 			SessionID: sess.ID,
@@ -126,7 +126,7 @@ func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
 			deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
 			loop := promptloop.NewPromptLoopForTest(deps)
 			ctx := context.Background()
-			sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			_, err = loop.Run(ctx, promptloop.PromptRunInput{
 				SessionID:  sess.ID,
@@ -140,7 +140,7 @@ func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
 			})
 			testutil.FailErr(t, "loop.Run", err)
 
-			msgs, err := store.GetMessages(ctx, sess.ID)
+			msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 			testutil.FailErr(t, "get messages", err)
 			got := map[string]string{}
 			for _, m := range msgs {
@@ -186,7 +186,7 @@ func TestLoopParallelWorkerReadsCommitInCallOrder(t *testing.T) {
 		deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
 		loop := promptloop.NewPromptLoopForTest(deps)
 		ctx := context.Background()
-		sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		testutil.FailErr(t, "create session", err)
 		sess.ParentSessionID = "coordinator-parent" // mark as a worker child so handles are tagged
 		_, err = loop.Run(ctx, promptloop.PromptRunInput{
@@ -197,7 +197,7 @@ func TestLoopParallelWorkerReadsCommitInCallOrder(t *testing.T) {
 		})
 		testutil.FailErr(t, "loop.Run", err)
 
-		msgs, err := store.GetMessages(ctx, sess.ID)
+		msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 		testutil.FailErr(t, "get messages", err)
 		type toolRow struct {
 			ts     time.Time
@@ -280,7 +280,7 @@ func TestLoopMixedBatchSerializesWriteAfterParallelReads(t *testing.T) {
 		deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
 		loop := promptloop.NewPromptLoopForTest(deps)
 		ctx := context.Background()
-		sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		testutil.FailErr(t, "create session", err)
 		_, err = loop.Run(ctx, promptloop.PromptRunInput{
 			SessionID: sess.ID,
@@ -324,7 +324,7 @@ func TestLoopDropsEmptyArgPhantomTaskBeforeExecution(t *testing.T) {
 	deps.Context.Policy = &recordingToolPolicy{}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID,
@@ -336,7 +336,7 @@ func TestLoopDropsEmptyArgPhantomTaskBeforeExecution(t *testing.T) {
 	if got := atomic.LoadInt32(&taskInvocations); got != 1 {
 		t.Fatalf("task invocations = %d want 1 (phantom empty-arg call dropped)", got)
 	}
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	for _, msg := range msgs {
 		if msg.Role != api.MessageRoleTool {
@@ -386,15 +386,15 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 				note("append")
 			}
 		}
-		return sessionStore.AppendMessages(ctx, sessionID, msgs...)
+		return sessionStore.Transcript.AppendMessages(ctx, sessionID, msgs...)
 	}
 	deps.Tools.CommitEvidenceToolResult = func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
 		note("evidence")
-		return sessionStore.CommitVisualEvidenceToolResult(ctx, sessionID, sess.WorkspacePath, toolName, args, content, artifactID)
+		return sessionStore.Evidence.CommitVisualEvidenceToolResult(ctx, sessionID, sess.WorkspacePath, toolName, args, content, artifactID)
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID:  sess.ID,
@@ -440,7 +440,7 @@ func TestLoopPublishesParallelResultAsEachFinishes(t *testing.T) {
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(sessionStore)
 	deps.Projection.AppendMessages = func(ctx context.Context, sessionID string, msgs ...api.Message) error {
-		err := sessionStore.AppendMessages(ctx, sessionID, msgs...)
+		err := sessionStore.Transcript.AppendMessages(ctx, sessionID, msgs...)
 		for _, msg := range msgs {
 			if msg.Role == api.MessageRoleTool && msg.ToolResult != nil &&
 				msg.ToolResult.ToolCallID == "tc-fast" {
@@ -451,7 +451,7 @@ func TestLoopPublishesParallelResultAsEachFinishes(t *testing.T) {
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	sess.ParentSessionID = "coordinator-parent"
 	done := make(chan error, 1)

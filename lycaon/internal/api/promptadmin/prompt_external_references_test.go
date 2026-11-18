@@ -123,7 +123,7 @@ func TestPromptAdmissionWithExternalReferencesGrantsAccessAndPerceivesImages(t *
 
 func TestPromptGrantRollbackPreservesAnotherSubmission(t *testing.T) {
 	handler, _, _, sess := newPromptAttachmentRecoveryFixture(t)
-	handler.Submission.Store = handler.Attachments.Store
+	handler.Submission.SessionQueries = handler.Attachments.SessionQueries
 	handler.Submission.GrantedPaths = grantedpath.NewRuntime()
 	path := filepath.Join(canonPath(t, t.TempDir()), "notes.txt")
 	parts := []wire.MessageContentPart{{Path: path, ReferenceKind: wire.MessageReferenceKindExternalFile}}

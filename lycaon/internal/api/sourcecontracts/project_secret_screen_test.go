@@ -37,7 +37,7 @@ func TestMarkedSecretScreenTracksProjectLifecycleWithoutAChat(t *testing.T) {
 	})
 	testutil.FailErr(t, "rotate back to retained value", err)
 	contractfixture.AssertProjectSecretScreen(t, f, wire.SecretSpanState("tracked"), secret.Reference)
-	_, err = f.Srv.Sources.Workspace.ManagedSecrets.RevokeProject(t.Context(), f.Project.ID, secret.Reference, contractfixture.FixtureOwner(t, f))
+	_, err = f.Srv.Sources.Workspace.ManagedSecrets.RevokeProject(t.Context(), f.Project.ID, secret.Reference, f.PersonID)
 	testutil.FailErr(t, "revoke marked value", err)
 	contractfixture.AssertProjectSecretScreen(t, f, wire.SecretSpanState("retired"), "")
 }
@@ -56,7 +56,7 @@ func TestChatSecretScreensTrackedForPeopleUntilRevoked(t *testing.T) {
 	})
 	testutil.FailErr(t, "put chat secret", err)
 	contractfixture.AssertProjectSecretScreen(t, f, wire.SecretSpanState("tracked"), Put.Metadata.Reference)
-	_, err = f.Srv.Sources.Workspace.ManagedSecrets.RevokeProject(t.Context(), f.Project.ID, Put.Metadata.Reference, contractfixture.FixtureOwner(t, f))
+	_, err = f.Srv.Sources.Workspace.ManagedSecrets.RevokeProject(t.Context(), f.Project.ID, Put.Metadata.Reference, f.PersonID)
 	testutil.FailErr(t, "revoke from settings", err)
 	contractfixture.AssertProjectSecretScreen(t, f, wire.SecretSpanState("retired"), "")
 }

@@ -2,14 +2,14 @@ package inputs
 
 import (
 	"context"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
-	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"strings"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -35,7 +35,7 @@ func (m *Requests) AcceptsEmptyRequest(ctx context.Context, sessionID string) bo
 
 // Empty-submit preflight resolves the default without creating a run.
 func (m *Requests) acceptsEmptyAmbientRequest(ctx context.Context, sessionID string) bool {
-	sess, err := m.Sessions.Get(ctx, sessionID)
+	sess, err := m.SessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil || sess.IsWorkerChild() {
 		return false
 	}
@@ -153,7 +153,7 @@ func (m *Requests) ResumeResolvedRequestPhase(ctx context.Context, run *api.Work
 	if err != nil {
 		return false, err
 	}
-	sess, err := m.Sessions.Get(ctx, run.SessionID)
+	sess, err := m.SessionStore.Get(ctx, run.SessionID)
 	if err != nil {
 		return false, err
 	}
@@ -179,7 +179,8 @@ func (m *Requests) NotifyAccepted(ctx context.Context, sessionID, text string) {
 type Requests struct {
 	Approvals         RequestApprovals
 	Runs              runstate.RunsRepository
-	Sessions          Sessions
+	SessionStore      Sessions
+	TranscriptStore   Transcript
 	Resolver          *workflowcatalog.Resolver
 	Vars              *runstate.Variables
 	Ambient           Ambient
@@ -210,7 +211,7 @@ func (m *Requests) ResolveWorkflowRequest(ctx context.Context, answererID, sessi
 		vars = runstate.SetRequestState(vars, manifest.Request, runstate.RequestStatusResolved, response, "answer", sequence, phaseWasActive)
 		if !phaseWasActive {
 			var err error
-			sess, err := m.Sessions.Get(ctx, sessionID)
+			sess, err := m.SessionStore.Get(ctx, sessionID)
 			if err != nil {
 				return nil, false, err
 			}
@@ -241,7 +242,7 @@ func (m *Requests) ResolveWorkflowRequest(ctx context.Context, answererID, sessi
 		m.Publication.PublishSession(ctx, stamped)
 		return stamped, nil
 	}
-	sess, err := m.Sessions.Get(ctx, sessionID)
+	sess, err := m.SessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}

@@ -13,7 +13,7 @@ import (
 func TestComputeRunUIChoiceTransitions(t *testing.T) {
 	mgr, sessStore, _ := choiceTransitionsTestMgr(t)
 	ctx := context.Background()
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	run, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "choice-transitions-fixture", WorkflowVersion: "1.0.0",
@@ -61,7 +61,7 @@ func TestComputeRunUIChoiceTransitionsOmitsCoordinatorOnly(t *testing.T) {
 		}, {ID: "done", ActivityLabel: "Done", Terminal: true, CompleteWhen: "orchestration_complete"}},
 	})
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{workflowdef.ManifestKey(m.ID, m.Version): m})
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	run, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: m.ID, WorkflowVersion: m.Version,

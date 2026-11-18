@@ -16,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newRunManagerForEvents(t *testing.T, name string) (*RunManager, *events.MemoryHub, *store.SQL, db.Handle) {
+func newRunManagerForEvents(t *testing.T, name string) (*RunManager, *events.MemoryHub, *store.Repositories, db.Handle) {
 	t.Helper()
 	sqlDB := testdbfixture.Open(t, name)
 
@@ -34,7 +34,7 @@ func TestAmbientStartPublishesTheEnrichedRun(t *testing.T) {
 
 	ctx := context.Background()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	subCtx, cancel := context.WithCancel(ctx)

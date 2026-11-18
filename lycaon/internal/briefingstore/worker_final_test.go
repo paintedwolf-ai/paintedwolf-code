@@ -24,9 +24,9 @@ func TestWorkerFinalReadIsTheRoundsOwnNewestOutput(t *testing.T) {
 	database := testdbfixture.Open(t, "briefing-worker-final.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	sessions := store.NewSQL(database)
-	parent, err := sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	parent, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	child, err := sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	child, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create child", err)
 	for _, job := range []string{roundJob, laterRoundJob, otherJob} {
 		_, err := database.ExecContext(t.Context(), `INSERT INTO worker_jobs (id, project_id, child_session_id, agent_type, status, prompt, brief, created_at)
@@ -34,14 +34,14 @@ func TestWorkerFinalReadIsTheRoundsOwnNewestOutput(t *testing.T) {
 		testutil.FailErr(t, "insert worker job", err)
 	}
 	thinking := func(text string) *api.ModelReasoning { return &api.ModelReasoning{Text: text} }
-	testutil.FailErr(t, "append child", sessions.AppendMessages(t.Context(), child.ID,
+	testutil.FailErr(t, "append child", sessions.Transcript.AppendMessages(t.Context(), child.ID,
 		api.Message{ID: "early", Role: api.MessageRoleAssistant, Content: "start", WorkerID: roundJob, ModelReasoning: thinking("first look")},
 		api.Message{ID: "final", Role: api.MessageRoleAssistant, Content: "stopping", WorkerID: roundJob, ModelReasoning: thinking("next: rerun the parser tests")},
 		api.Message{ID: "tool-after", Role: api.MessageRoleUser, Content: "tool output", WorkerID: roundJob},
 		api.Message{ID: "later-round", Role: api.MessageRoleAssistant, Content: "later", WorkerID: laterRoundJob, ModelReasoning: thinking("later round")},
 		api.Message{ID: "other-job", Role: api.MessageRoleAssistant, Content: "other", WorkerID: otherJob, ModelReasoning: thinking("other job")},
 	))
-	testutil.FailErr(t, "append parent", sessions.AppendMessages(t.Context(), parent.ID,
+	testutil.FailErr(t, "append parent", sessions.Transcript.AppendMessages(t.Context(), parent.ID,
 		api.Message{ID: "parent-row", Role: api.MessageRoleAssistant, Content: "coordinating", WorkerID: roundJob, ModelReasoning: thinking("parent")},
 	))
 

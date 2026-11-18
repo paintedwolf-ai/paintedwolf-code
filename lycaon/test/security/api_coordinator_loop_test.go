@@ -206,11 +206,11 @@ func collectCoordinatorWakeFacts(ctx context.Context, h *wiring.Harness, session
 	if admissionErr != nil {
 		facts.AdmissionError = admissionErr.Error()
 	}
-	sess, err := h.Store.Get(ctx, sessionID)
+	sess, err := h.Store.Sessions.Get(ctx, sessionID)
 	if readOK("session", err) && sess != nil {
 		facts.SessionStatus = &sess.Status
 	}
-	submission, err := h.Store.GetPromptSubmission(ctx, submissionID)
+	submission, err := h.Store.Submissions.GetPromptSubmission(ctx, submissionID)
 	if readOK("submission", err) && submission != nil {
 		facts.SubmissionStatus = &submission.Status
 		facts.SubmissionErrorCode = submission.ErrorCode
@@ -242,7 +242,7 @@ func collectCoordinatorWakeFacts(ctx context.Context, h *wiring.Harness, session
 		facts.HostObligationHeld = &held
 	}
 	facts.Escalated = h.Sessions.Manager.Coordinator.Loop.Escalated(sessionID)
-	messages, err := h.Store.GetMessages(ctx, sessionID)
+	messages, err := h.Store.Transcript.GetMessages(ctx, sessionID)
 	if readOK("transcript", err) {
 		facts.TranscriptRoles = make([]wire.MessageRole, 0, len(messages))
 		facts.Messages = make([]coordinatorWakeMessage, 0, len(messages))
@@ -285,25 +285,25 @@ func TestCoordinatorWakeFacts(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithoutCoordinatorLoop())
 	ctx := t.Context()
 	project := createProjectHTTP(t, h.Server, t.TempDir())
-	sess, err := h.Store.Create(h.OwnerCtx(t, ctx), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, project.ID)
+	sess, err := h.Store.Sessions.Create(h.OwnerCtx(t, ctx), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, project.ID)
 	testutil.FailErr(t, "create diagnostic session", err)
-	receipt, _, err := h.Store.PutPromptSubmission(ctx, store.PromptSubmission{
+	receipt, _, err := h.Store.Submissions.PutPromptSubmission(ctx, store.PromptSubmission{
 		ID: uuid.NewString(), SessionID: sess.ID, ProjectID: sess.ProjectID,
 		Origin: store.PromptSubmissionOriginLoopWake, InputJSON: `{}`, InputDigest: "diagnostic",
 	})
 	testutil.FailErr(t, "create receipt", err)
-	receipt, claimed, err := h.Store.ClaimPromptSubmission(ctx, receipt.ID)
+	receipt, claimed, err := h.Store.Submissions.ClaimPromptSubmission(ctx, receipt.ID)
 	testutil.FailErr(t, "claim receipt", err)
 	if !claimed {
 		t.Fatal("receipt was not claimed")
 	}
-	testutil.FailErr(t, "fail receipt", h.Store.FinishPromptSubmission(ctx, receipt.ID, receipt.ClaimToken,
+	testutil.FailErr(t, "fail receipt", h.Store.Submissions.FinishPromptSubmission(ctx, receipt.ID, receipt.ClaimToken,
 		store.PromptSubmissionFailed, "", store.PromptSubmissionFailure{Code: "fixture_failed", Message: "private diagnostic input"}))
-	execution, err := h.Store.BeginTurn(ctx, store.TurnStart{
+	execution, err := h.Store.Turns.BeginTurn(ctx, store.TurnStart{
 		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: `{}`,
 	})
 	testutil.FailErr(t, "begin turn", err)
-	_, err = h.Store.FinishTurn(ctx, execution.Turn.ID, execution.Attempt.ID, store.TurnStatusInterrupted, "", "", "private diagnostic input")
+	_, err = h.Store.Turns.FinishTurn(ctx, execution.Turn.ID, execution.Attempt.ID, store.TurnStatusInterrupted, "", "", "private diagnostic input")
 	testutil.FailErr(t, "interrupt turn", err)
 	run := &wire.WorkflowRun{ID: uuid.NewString(), SessionID: sess.ID, ProjectID: sess.ProjectID,
 		WorkflowID: "plan", WorkflowVersion: "1.0.0", Status: wire.WorkflowRunStatusRunning, CurrentPhase: "research"}
@@ -325,7 +325,7 @@ func TestCoordinatorWakeFacts(t *testing.T) {
 	roles := make([]wire.MessageRole, 0, len(transcript))
 	for _, msg := range transcript {
 		roles = append(roles, msg.Role)
-		testutil.FailErr(t, "append transcript", h.Store.AppendMessages(ctx, sess.ID, msg))
+		testutil.FailErr(t, "append transcript", h.Store.Transcript.AppendMessages(ctx, sess.ID, msg))
 	}
 	expectedRuns := []coordinatorWakeRun{{ID: run.ID, WorkflowID: "plan", Status: wire.WorkflowRunStatusRunning, CurrentPhase: "research"}}
 	expectedMessages := []coordinatorWakeMessage{

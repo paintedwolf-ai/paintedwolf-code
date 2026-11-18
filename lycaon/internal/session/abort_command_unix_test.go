@@ -38,9 +38,9 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	mgr.SetBackgroundRegistry(reg)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark busy", st.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	programs := programtest.New(t, programtest.Options{Session: sess.ID, Background: reg})
 	pidFile := filepath.Join(programs.Dir, "job.pid")
@@ -70,7 +70,7 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 		t.Fatalf("turn result = %q, %v; want the cancelled command", turn.output, turn.err)
 	}
 	testutil.WaitFor(t, "the job exits", func() bool { return !osprocess.Alive(job) })
-	got, err := st.Get(ctx, sess.ID)
+	got, err := st.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session", err)
 	if got.Status != api.SessionStatusIdle {
 		t.Fatalf("status = %q, want idle", got.Status)
@@ -85,14 +85,14 @@ func TestAbortStopsWithoutATurnThatNeverReleases(t *testing.T) {
 	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Stops.SetTurnReleaseTimeout(100 * time.Millisecond)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark busy", st.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	stuck := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 	stuck.Lock()
 	testutil.FailErr(t, "abort", mgr.Stops.Abort(ctx, sess.ID, "user stopped"))
-	got, err := st.Get(ctx, sess.ID)
+	got, err := st.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session", err)
 	if got.Status != api.SessionStatusIdle {
 		t.Fatalf("status = %q, want idle", got.Status)
