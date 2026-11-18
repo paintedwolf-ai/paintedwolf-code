@@ -154,6 +154,14 @@ func TestFailClosedBrokerStartup(t *testing.T) {
 	if !yes || deg.Reason == "" {
 		t.Fatalf("degraded state missing: yes=%v deg=%+v", yes, deg)
 	}
+
+	confinetest.StartBroker(t)
+	if _, degraded := confine.EgressDegradedState(); degraded {
+		t.Fatal("broker recovery retained the startup failure")
+	}
+	lease, err := confine.BindAction(c, confine.EgressCommand{ToolCallID: "recovery-test"})
+	testutil.FailErr(t, "bind recovered egress broker", err)
+	lease.Close(t.Context())
 }
 
 func TestDirectIPRequestSelectsDirectMode(t *testing.T) {
