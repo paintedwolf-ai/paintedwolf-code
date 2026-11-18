@@ -5,6 +5,11 @@ ON CONFLICT(session_id, anchor) DO UPDATE
 SET id = excluded.id, anchor_identity = excluded.anchor_identity, kind = excluded.kind, hidden = 0, created_ts = excluded.created_ts
 WHERE excluded.anchor_identity != '' AND source_chat_locations.anchor_identity != excluded.anchor_identity;
 
+-- name: GetSourceChatLocationByAnchor :one
+SELECT id, session_id, anchor, anchor_identity, kind, hidden, created_ts
+FROM source_chat_locations
+WHERE session_id = sqlc.arg(session_id) AND anchor = sqlc.arg(anchor);
+
 -- name: ListSourceChatLocations :many
 SELECT l.id, l.session_id, l.anchor, l.anchor_identity, l.kind, l.hidden, l.created_ts
 FROM source_chat_locations l

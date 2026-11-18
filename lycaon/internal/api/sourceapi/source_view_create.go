@@ -63,6 +63,9 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 	var locations chatLocationProjection
 	if request.Tree != nil {
 		locations, err = s.Trees.chatLocations(r.Context(), scope, p, request.Tree.Intent.ChatID)
+		if err == nil {
+			err = validateDisclosureRoots(p, locations.roots, request.Tree.Intent.Disclosures)
+		}
 		if err != nil {
 			s.writeSourceViewError(w, r, err)
 			return true
@@ -93,7 +96,8 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 		return true
 	}
 	// The preparation pin protects accepted-state construction.
-	if _, err := s.sourceViewProject(r.Context(), p, view); err != nil {
+	viewProject, err := s.sourceViewProject(r.Context(), p, view)
+	if err != nil {
 		if created {
 			view.cancel()
 			s.sourceViewRegistry().registry.Release(scope, view.id)
@@ -107,7 +111,7 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 		if view.navigation.tree != nil {
 			s.Trees.prepareTreeView(view, release)
 		} else {
-			s.ComparisonViews.prepareComparisonView(view, p, release)
+			s.ComparisonViews.prepareComparisonView(view, viewProject, release)
 		}
 	} else {
 		release()
@@ -173,7 +177,7 @@ func validateSourceViewCreate(p *project.Project, request wire.SourceViewCreate)
 		return rejectedSourceIntent(err.Error())
 	}
 	if source := request.Comparison.Source.Current; source != nil {
-		if err := validateSourceTreeAddress(p, wire.SourceTreeAddress{RootID: source.RootID, Path: source.Path}); err != nil {
+		if err := validateSourceTreeAddress(project.WithOutside(p), wire.SourceTreeAddress{RootID: source.RootID, Path: source.Path}); err != nil {
 			return err
 		}
 		if source.DecodeAs != "" && source.DecodeAs != "utf-16le" && source.DecodeAs != "utf-16be" {
@@ -181,6 +185,22 @@ func validateSourceViewCreate(p *project.Project, request wire.SourceViewCreate)
 		}
 	}
 	return validateSourceComparisonIntent(request.Comparison.Intent)
+}
+
+func validateDisclosureRoots(p *project.Project, outside []sourcetree.Root, disclosures []wire.SourceTreeDisclosure) error {
+	roots := make(map[string]bool, len(p.Roots)+len(outside))
+	for _, root := range p.Roots {
+		roots[root.ID] = true
+	}
+	for _, root := range outside {
+		roots[root.ID] = true
+	}
+	for _, disclosure := range disclosures {
+		if !roots[disclosure.Address.RootID] {
+			return sourcetree.ErrUnknownRoot
+		}
+	}
+	return nil
 }
 
 func validateSourceTreeAddress(p *project.Project, address wire.SourceTreeAddress) error {

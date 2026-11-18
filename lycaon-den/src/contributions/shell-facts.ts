@@ -30,6 +30,7 @@ export type ShellFactState = {
   /** A stage and the conversation share the window as a split. */
   splitLive: boolean;
   filesStageActive: boolean;
+  outsideFilePickerAvailable: boolean;
   /** The Files navigator is hidden in this window. */
   filesTreeCollapsed: boolean;
   fileSummariesOn: boolean;
@@ -82,6 +83,7 @@ const FACT_BINDERS: Record<
   conversation_collapsed: (s) => s.conversationCollapsed,
   split_live: (s) => s.splitLive,
   files_stage_active: (s) => s.filesStageActive,
+  outside_file_picker_available: (s) => s.outsideFilePickerAvailable,
   files_tree_collapsed: (s) => s.filesTreeCollapsed,
   file_summaries_on: (s) => s.fileSummariesOn,
   file_summaries_known: (s) => s.fileSummariesKnown,

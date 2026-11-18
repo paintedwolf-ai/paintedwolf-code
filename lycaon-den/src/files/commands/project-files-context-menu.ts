@@ -79,7 +79,6 @@ export type FilesContextMenuActions = {
   addToChat: (rootId: string, path: string, isDir: boolean) => void;
   explainFile?: (rootId: string, path: string) => void;
   openInTarget?: (target: FilesContextTarget) => LocalPathTarget | null;
-  /** Hides a chat location from the chat's Files section; it revokes nothing. */
   manageLocationAccess?: () => void;
   hideChatLocation?: (locationId: string) => void;
   collapseAllFolders: (scope?: { rootId: string; dir: string }) => void;

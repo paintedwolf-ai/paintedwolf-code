@@ -36,6 +36,32 @@ func (q *Queries) GetSourceChatLocation(ctx context.Context, arg GetSourceChatLo
 	return i, err
 }
 
+const getSourceChatLocationByAnchor = `-- name: GetSourceChatLocationByAnchor :one
+SELECT id, session_id, anchor, anchor_identity, kind, hidden, created_ts
+FROM source_chat_locations
+WHERE session_id = ?1 AND anchor = ?2
+`
+
+type GetSourceChatLocationByAnchorParams struct {
+	SessionID string `json:"session_id"`
+	Anchor    string `json:"anchor"`
+}
+
+func (q *Queries) GetSourceChatLocationByAnchor(ctx context.Context, arg GetSourceChatLocationByAnchorParams) (SourceChatLocations, error) {
+	row := q.db.QueryRowContext(ctx, getSourceChatLocationByAnchor, arg.SessionID, arg.Anchor)
+	var i SourceChatLocations
+	err := row.Scan(
+		&i.ID,
+		&i.SessionID,
+		&i.Anchor,
+		&i.AnchorIdentity,
+		&i.Kind,
+		&i.Hidden,
+		&i.CreatedTs,
+	)
+	return i, err
+}
+
 const insertSourceChatLocation = `-- name: InsertSourceChatLocation :exec
 INSERT INTO source_chat_locations (id, session_id, anchor, anchor_identity, kind, hidden, created_ts)
 VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)

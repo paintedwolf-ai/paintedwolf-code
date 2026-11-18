@@ -278,8 +278,9 @@ var facts = map[string]FactSpec{
 	"context_collapsed":      {Plane: PlaneShell},
 	"conversation_collapsed": {Plane: PlaneShell},
 	// A stage and the conversation share the window as a split.
-	"split_live":         {Plane: PlaneShell},
-	"files_stage_active": {Plane: PlaneShell},
+	"split_live":                    {Plane: PlaneShell},
+	"files_stage_active":            {Plane: PlaneShell},
+	"outside_file_picker_available": {Plane: PlaneShell},
 	// The Files navigator is hidden in this window.
 	"files_tree_collapsed": {Plane: PlaneShell},
 	// File summaries are on, and whether their setting has loaded at all.

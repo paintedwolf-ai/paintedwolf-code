@@ -281,10 +281,18 @@ func (s *Workspace) HandleGetProjectSourceRaw(w http.ResponseWriter, r *http.Req
 		s.writeSourceReadError(w, r, err)
 		return
 	}
-	result, err := projectsource.ReadProjectSourceRaw(p, projectsource.SourceReadRequest{
+	req := projectsource.SourceReadRequest{
 		Path:   strings.TrimSpace(q.Get("path")),
 		RootID: strings.TrimSpace(q.Get("root_id")),
-	})
+	}
+	if branchRoot == "" {
+		p, err = outsideaccess.Admit(r.Context(), s.SourceLedger, p, req.RootID, req.Path)
+		if err != nil {
+			s.writeSourceReadError(w, r, err)
+			return
+		}
+	}
+	result, err := projectsource.ReadProjectSourceRaw(p, req)
 	if err != nil {
 		s.writeSourceReadError(w, r, err)
 		return

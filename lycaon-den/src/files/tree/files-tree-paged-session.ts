@@ -19,7 +19,9 @@ export class FilesTreeSession extends SourceViewSession<"tree"> {
   }
 
   protected override saveAcceptedIntent(state: SourceTreeView): Promise<void> {
-    return saveFilesTreeIntent(state.workspace_id, state.intent_revision, state.intent.disclosures ?? []);
+    const projectRoots = new Set(state.roots.map(root => root.id));
+    const disclosures = state.intent.disclosures?.filter(rule => projectRoots.has(rule.address.root_id)) ?? [];
+    return saveFilesTreeIntent(state.workspace_id, state.intent_revision, disclosures);
   }
 
   /** Prefix proofs preserve pages whose coordinates remain unchanged. */
