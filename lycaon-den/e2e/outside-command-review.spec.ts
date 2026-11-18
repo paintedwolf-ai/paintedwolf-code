@@ -85,13 +85,13 @@ webE2e("outside command changes reach chat Files and Review with explicit covera
       content: "## Progress\n- [ ] Copy the project note\n- [ ] Check observation of the second folder\n",
     }));
     const copy = await driver.invoke("command", {
-      command: `external cp ${file} ${quotePath(changedPath)}`,
+      command: `external -- cp ${file} ${quotePath(changedPath)}`,
       capability_request: { write_root: observed },
     });
     await allowOutsideCommand(request, sessionId, copy);
 
     const chmod = await driver.invoke("command", {
-      command: `external chmod 000 ${quotePath(unreadable)}`,
+      command: `external -- chmod 000 ${quotePath(unreadable)}`,
       capability_request: { write_root: unreadable },
     });
     const gap = await allowOutsideCommand(request, sessionId, chmod);
