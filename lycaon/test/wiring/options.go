@@ -1,9 +1,10 @@
 package wiring
 
 import (
+	"time"
+
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
-	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -14,7 +15,7 @@ type options struct {
 	llmClient               modelcall.LLMClient
 	decider                 decide.Decider
 	recording               bool
-	autoCompleteDelegation  bool
+	autoCompleteLegs        bool
 	replaceManifests        map[string]workflowdef.Manifest
 	useBundledScanners      bool
 	coordinatorLoopDisabled bool
@@ -22,7 +23,7 @@ type options struct {
 	secretMatcher           *secretmatch.Matcher
 	mcpConnector            mcp.SessionConnector
 	installedPackDirs       []string
-	globalApprovalPosture   gate.Posture
+	changeDebounce          time.Duration
 }
 
 // A scripted model calls surface tools outright, so the default decider
@@ -42,10 +43,6 @@ func WithDecider(d decide.Decider) Option {
 
 // Option configures BuildForTest.
 type Option func(*options)
-
-func withGlobalApprovalPosture(posture gate.Posture) Option {
-	return func(o *options) { o.globalApprovalPosture = posture }
-}
 
 // Packs are installed into the isolated extension cache before app construction.
 func WithInstalledPack(dirs ...string) Option {
@@ -94,10 +91,10 @@ func WithManifestRegistry(manifests map[string]workflowdef.Manifest) Option {
 	}
 }
 
-// WithAutoCompleteDelegation records dispatched leg outcomes automatically.
-func WithAutoCompleteDelegation() Option {
+// WithAutoCompleteLegs records dispatched leg outcomes automatically.
+func WithAutoCompleteLegs() Option {
 	return func(o *options) {
-		o.autoCompleteDelegation = true
+		o.autoCompleteLegs = true
 	}
 }
 
@@ -112,5 +109,14 @@ func WithBundledScanners() Option {
 func WithoutCoordinatorLoop() Option {
 	return func(o *options) {
 		o.coordinatorLoopDisabled = true
+	}
+}
+
+// WithChangeDebounce sets the process coalesce window for worktree changes
+// while the host runs. A test that waits for every change to be delivered
+// settles in about this window instead of the production one.
+func WithChangeDebounce(delay time.Duration) Option {
+	return func(o *options) {
+		o.changeDebounce = delay
 	}
 }

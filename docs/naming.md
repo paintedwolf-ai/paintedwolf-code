@@ -60,7 +60,7 @@ Do **not** put the engine name (**Lycaon**) in Extensions chrome or journey copy
 
 | Rule | Meaning |
 |------|---------|
-| **One name** | `delegate_dispatch` everywhere — not a second id in rules with a prefix map |
+| **One name** | `instruct_worker` everywhere — not a second id in rules with a prefix map |
 | **Rename in place** | Change the registry, handler, and YAML together — never add a second name for the same concept |
 | **Fail closed** | Contract tests reject forbidden ids in `config/` and rule YAML |
 | **No metaphors** | No ethology ids in product surface (`den`, `rally`, `call`, `scout`, `scribe`, `critic` as tool/API names) |

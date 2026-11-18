@@ -6,7 +6,8 @@ import { createAppStore } from "../../store/app-state.ts";
 import { bindAppConnection } from "../../platform/connection/app-connection.ts";
 import { connectionServicesFixture } from "../../test/connection-services-fixture.ts";
 import {
-  applySessionBootstrapChrome,
+  applySessionBootstrapAuxiliaryChrome,
+  installSessionBootstrapChrome,
   ensureSessionChrome,
   resetSessionChromeHydrationForTests,
   SESSION_CHROME_HYDRATION_CAP,
@@ -154,7 +155,8 @@ describe("ensureSessionChrome", () => {
         },
       ],
     };
-    applySessionBootstrapChrome(store, bootstrap);
+    installSessionBootstrapChrome(store, bootstrap, bootstrap.session);
+    applySessionBootstrapAuxiliaryChrome(store, bootstrap, bootstrap.session);
     const getSessionProgress = vi.fn();
 
     await ensureSessionChrome(
@@ -223,7 +225,10 @@ describe("ensureSessionChrome", () => {
         },
       });
 
-      expect(() => applySessionBootstrapChrome(store, bootstrap)).not.toThrow();
+      expect(() => {
+        installSessionBootstrapChrome(store, bootstrap, bootstrap.session);
+        applySessionBootstrapAuxiliaryChrome(store, bootstrap, bootstrap.session);
+      }).not.toThrow();
       expect(store.state.currentSession?.id).toBe("session-aux-err");
       expect([...services.notices.index().values()].flat()).toHaveLength(1);
 

@@ -41,8 +41,8 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 		t.Fatalf("spec workflow lost its reading posture: posture=%s tools=%v", specSession.Posture, toolNames(rec.LastRequest().Tools))
 	}
 	for _, tool := range rec.LastRequest().Tools {
-		if tool.Name == "delegate_dispatch" {
-			t.Fatalf("spec prompt must not send delegate_dispatch: %v", toolNames(rec.LastRequest().Tools))
+		if tool.Name == "task" {
+			t.Fatalf("spec prompt must not send task: %v", toolNames(rec.LastRequest().Tools))
 		}
 	}
 
@@ -131,8 +131,8 @@ func TestPromptLoopParitySpecPosture(t *testing.T) {
 		testutil.FailErr(t, "fix.Mgr.Prompt failed", err)
 	}
 	for _, tool := range rec.LastRequest().Tools {
-		if tool.Name == "delegate_dispatch" {
-			t.Fatalf("spec prompt must omit delegate_dispatch, got %d tools", len(rec.LastRequest().Tools))
+		if tool.Name == "task" {
+			t.Fatalf("spec prompt must omit task, got %d tools", len(rec.LastRequest().Tools))
 		}
 	}
 }
@@ -189,8 +189,8 @@ func TestWorkerChildPromptUsesToolPolicy(t *testing.T) {
 	testutil.FailErr(t, "fix.Mgr.Profiles.ResolvePromptToolProfile failed", err)
 	listed := fix.Mgr.Coordinator.Guards.Policy().ListForPrompt(ctx, child, profile)
 	for _, meta := range listed {
-		if meta.Name == "delegate_dispatch" {
-			t.Fatal("worker child must not list delegate_dispatch")
+		if meta.Name == "task" {
+			t.Fatal("worker child must not list task")
 		}
 	}
 	names := make([]string, 0, len(listed))

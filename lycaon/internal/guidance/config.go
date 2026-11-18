@@ -2,10 +2,11 @@
 package guidance
 
 import (
-	"github.com/lycaon/lycaon/internal/oarcore"
 	"maps"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/oarcore"
 
 	"gopkg.in/yaml.v3"
 )

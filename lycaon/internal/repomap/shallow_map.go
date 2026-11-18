@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 
+	"github.com/lycaon/lycaon/internal/bundledhint"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
@@ -126,50 +126,11 @@ func shallowImmediateCount(ctx context.Context, abs, parentRel string, opts Opti
 	return n
 }
 
-func buildShallowInventoryMap(
-	ctx context.Context,
-	snap *Snapshot,
-	scopeRel string,
-	opts Options,
-	entries []InventoryEntry,
-) (*Snapshot, error) {
-	children := make([]*Node, 0, 64)
-	for _, item := range entries {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		rel := filepath.ToSlash(strings.TrimPrefix(filepath.Clean(item.Path), "./"))
-		if rel == "" || rel == "." || !inventoryDirectChild(rel, scopeRel) {
-			continue
-		}
-		if opts.PathIncluded != nil && !opts.PathIncluded(rel, item.IsDir) {
-			continue
-		}
-		node := &Node{Path: rel, Type: "file", Bytes: item.Size, Files: 1}
-		if item.IsDir {
-			node.Type = "dir"
-			node.Bytes = 0
-			node.Files = 1
-			node.ZoomIn = true
-		}
-		children = append(children, node)
-	}
-	sort.Slice(children, func(i, j int) bool { return children[i].Path < children[j].Path })
-	snap.View = "map"
-	snap.FilesScanned = len(children)
-	snap.SourceFiles = len(children)
-	snap.Tree = &Node{
-		Path: scopeRel, Type: "dir", Files: len(children), Children: children, ZoomIn: true,
-	}
-	snap.Diagnostics = shallowMapDiagnostics(ctx, len(children))
-	return snap, nil
-}
-
 // shallowMapDiagnostics states emptiness outright, or the drill-down affordance.
 func shallowMapDiagnostics(ctx context.Context, entryCount int) *Diagnostics {
 	if entryCount == 0 {
 		return &Diagnostics{
-			Hint:     envelopeHint(ctx, noFilesHintCode),
+			Hint:     bundledhint.Message(ctx, noFilesHintCode, nil),
 			HintCode: noFilesHintCode,
 		}
 	}
@@ -177,16 +138,4 @@ func shallowMapDiagnostics(ctx context.Context, entryCount int) *Diagnostics {
 		Hint: "Shallow directory map of " + strconv.Itoa(entryCount) +
 			" top-level entries. Scope to a listed directory for detail.",
 	}
-}
-
-func inventoryDirectChild(rel, scope string) bool {
-	scope = strings.Trim(strings.TrimSpace(filepath.ToSlash(scope)), "/")
-	if scope == "" || scope == "." {
-		return !strings.Contains(rel, "/")
-	}
-	prefix := scope + "/"
-	if !strings.HasPrefix(rel, prefix) {
-		return false
-	}
-	return !strings.Contains(strings.TrimPrefix(rel, prefix), "/")
 }

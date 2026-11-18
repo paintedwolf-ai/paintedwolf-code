@@ -95,7 +95,6 @@ func TestSQLStoreProgressIsScopedToWorkerJob(t *testing.T) {
 
 	testutil.FailErr(t, "set first progress", store.SetProgress(t.Context(), first.ID, workerprogress.Snapshot{
 		ToolLoopsUsed: 12,
-		MaxToolLoops:  24,
 		ToolCallsUsed: 45,
 	}))
 
@@ -110,12 +109,7 @@ func TestSQLStoreProgressIsScopedToWorkerJob(t *testing.T) {
 	if gotFirst.ToolLoopsUsed != 12 || gotFirst.ToolCallsUsed != 45 {
 		t.Fatalf("first progress = %+v", gotFirst)
 	}
-	// A round checkpoint never writes the ceiling, so it cannot undo a grant.
-	if gotFirst.MaxToolLoops != secondBefore.MaxToolLoops {
-		t.Fatalf("first ceiling = %d want unchanged %d", gotFirst.MaxToolLoops, secondBefore.MaxToolLoops)
-	}
 	if gotSecond.ToolLoopsUsed != secondBefore.ToolLoopsUsed ||
-		gotSecond.MaxToolLoops != secondBefore.MaxToolLoops ||
 		gotSecond.ToolCallsUsed != secondBefore.ToolCallsUsed {
 		t.Fatalf("second progress changed = %+v", gotSecond)
 	}

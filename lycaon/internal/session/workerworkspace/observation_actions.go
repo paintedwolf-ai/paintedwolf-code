@@ -97,19 +97,6 @@ func (o *WorkspaceObservationOps) ObserveReadWithFacts(
 	return tr.RecordServerFSObservation(ev), true
 }
 
-// ObserveReadPath records a path observation when structured read-time content digest facts
-// are not provided, preserving explicit unknown digest / partial attribution evidence.
-func (o *WorkspaceObservationOps) ObserveReadPath(
-	jobID, childSessionID, workspacePath, branchRoot string,
-	roots []projectroot.RootRef,
-	rawPath string,
-) (observation.SourceObservation, bool) {
-	return o.ObserveReadWithFacts(jobID, childSessionID, workspacePath, branchRoot, roots, tools.WorkerFileObservationFacts{
-		RelPath:  rawPath,
-		Complete: false,
-	})
-}
-
 // RecordUpperWriteWithFacts records a worker-initiated upper write using structured write facts,
 // pinning the path as LayerPrivate without re-reading the file from disk.
 func (o *WorkspaceObservationOps) RecordUpperWriteWithFacts(
@@ -198,34 +185,6 @@ func (o *WorkspaceObservationOps) BindVerificationReceipt(
 		if checkID != "" {
 			st.Bindings[checkID] = binding
 		}
-	}
-	return binding, true
-}
-
-// BindCheck binds a verification check receipt on the workspace tracker matching key.
-func (o *WorkspaceObservationOps) BindCheck(
-	key, checkID, checkpointID string,
-	scopeRoots []string,
-) (observation.VerificationBinding, bool) {
-	if o == nil || o.svc == nil {
-		return observation.VerificationBinding{}, false
-	}
-	o.svc.obsMu.Lock()
-	defer o.svc.obsMu.Unlock()
-	st := lookupStateLocked(&o.svc.WorkspaceTrackerRegistry, key)
-	if st == nil || st.Tracker == nil {
-		return observation.VerificationBinding{}, false
-	}
-	checkID = strings.TrimSpace(checkID)
-	checkpointID = strings.TrimSpace(checkpointID)
-	binding := st.Tracker.BindVerificationReceipt(checkID, checkpointID, scopeRoots)
-	if checkpointID != "" {
-		st.CheckpointID = checkpointID
-	}
-	st.LatestBinding = binding
-	st.HasBinding = true
-	if checkID != "" {
-		st.Bindings[checkID] = binding
 	}
 	return binding, true
 }

@@ -5,12 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/scan/obligation"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -148,7 +148,7 @@ func TestCommitPromotionRollsBackMergeWhenObligationInsertFails(t *testing.T) {
 	testutil.FailErr(t, "seed conflicting scan", execWorkerSQL(t, store, `
 		INSERT INTO code_scans(id, canonical_path, categories_json, status, created_at, reuse_key)
 		VALUES ('scan-1', ?, '[]', 'pending', ?, 'scan-1')
-	`, projectDir, db.FormatTime(time.Now().UTC())))
+	`, projectDir, timelayout.Format(time.Now().UTC())))
 
 	err := store.CommitPromotion(t.Context(), "job-1", token, PromotionCommit{Plan: testObligationPlan("job-1", projectDir)})
 	if err == nil {
@@ -276,7 +276,7 @@ func seedWorkerReservation(t *testing.T, store *SQLStore, jobID, sessionID strin
 		UPDATE worker_jobs SET parent_session_id = ? WHERE id = ?`, sessionID, jobID))
 	testutil.FailErr(t, "insert worker reservation", execWorkerSQL(t, store, `
 		INSERT INTO call_reservations(path, agent, session_id, created_at)
-		VALUES (?, ?, ?, ?)`, "src/main.go", jobID, sessionID, db.FormatTime(time.Now().UTC())))
+		VALUES (?, ?, ?, ?)`, "src/main.go", jobID, sessionID, timelayout.Format(time.Now().UTC())))
 }
 
 func assertReservationCount(t *testing.T, store *SQLStore, sessionID string, want int) {

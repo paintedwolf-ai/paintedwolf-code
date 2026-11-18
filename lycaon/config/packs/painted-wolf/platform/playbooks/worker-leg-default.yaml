@@ -1,5 +1,5 @@
 id: worker-leg-default
-description: "Baseline leg discipline for all workers"
+description: "Baseline discipline for all workers"
 triggers:
   topology_patterns: ["*"]
   phase_ids: ["*"]

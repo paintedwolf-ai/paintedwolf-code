@@ -3,6 +3,7 @@ package bgprocess
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/captureprojection"
@@ -113,7 +114,7 @@ func (r *Registry) State(sessionID, handle string) (known, running bool) {
 	}
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
-	proc := r.jobs.sessions[trim(sessionID)][trim(handle)]
+	proc := r.jobs.sessions[strings.TrimSpace(sessionID)][strings.TrimSpace(handle)]
 	if proc == nil {
 		return false, false
 	}
@@ -132,13 +133,13 @@ func (r *Registry) HasRunningHandles(sessionID string, handles []string) bool {
 	}
 	wanted := make(map[string]struct{}, len(handles))
 	for _, handle := range handles {
-		if handle = trim(handle); handle != "" {
+		if handle = strings.TrimSpace(handle); handle != "" {
 			wanted[handle] = struct{}{}
 		}
 	}
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
-	for handle, proc := range r.jobs.ownedProcessesLocked(trim(sessionID)) {
+	for handle, proc := range r.jobs.ownedProcessesLocked(strings.TrimSpace(sessionID)) {
 		if len(wanted) > 0 {
 			if _, ok := wanted[handle]; !ok {
 				continue
@@ -262,7 +263,7 @@ func (r *Output) List(ctx context.Context, sessionID string) []api.BackgroundPro
 	if r == nil {
 		return nil
 	}
-	sessionID = trim(sessionID)
+	sessionID = strings.TrimSpace(sessionID)
 	r.jobs.mu.Lock()
 	procs := r.jobs.sessions[sessionID]
 	if len(procs) == 0 {
@@ -317,7 +318,7 @@ func (r *Registry) HasPipelineHandles(sessionID string) bool {
 	}
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
-	for _, proc := range r.jobs.sessions[trim(sessionID)] {
+	for _, proc := range r.jobs.sessions[strings.TrimSpace(sessionID)] {
 		if (proc.kind == processKindPipeline || proc.kind == processKindProgram) && !proc.silent {
 			return true
 		}
@@ -332,7 +333,7 @@ func (r *Registry) HasPTYHandles(sessionID string) bool {
 	}
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
-	for _, proc := range r.jobs.sessions[trim(sessionID)] {
+	for _, proc := range r.jobs.sessions[strings.TrimSpace(sessionID)] {
 		if proc.kind == processKindPTY && proc.pty != nil && !proc.silent {
 			return true
 		}
@@ -348,7 +349,7 @@ func (r *Registry) ActiveJobs(sessionID string) []JobSnapshot {
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
 	var out []JobSnapshot
-	for _, proc := range r.jobs.sessions[trim(sessionID)] {
+	for _, proc := range r.jobs.sessions[strings.TrimSpace(sessionID)] {
 		if !proc.running || (proc.kind != processKindPipeline && proc.kind != processKindProgram) || proc.silent {
 			continue
 		}
@@ -378,7 +379,7 @@ func (r *Registry) LookupByLineage(lineageID string) (LineageJob, bool) {
 	if r == nil || r.jobs == nil {
 		return LineageJob{}, false
 	}
-	lineageID = trim(lineageID)
+	lineageID = strings.TrimSpace(lineageID)
 	if lineageID == "" {
 		return LineageJob{}, false
 	}
@@ -416,7 +417,7 @@ func (r *Registry) CountLivePTYs(sessionID string) int {
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
 	n := 0
-	for _, proc := range r.jobs.ownedProcessesLocked(trim(sessionID)) {
+	for _, proc := range r.jobs.ownedProcessesLocked(strings.TrimSpace(sessionID)) {
 		if (proc.running || proc.pendingDrainLocked()) && proc.kind == processKindPTY {
 			n++
 		}

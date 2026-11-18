@@ -7,16 +7,19 @@ tools:
   summarize: sticky
   recall: sticky
   pack_board: sticky
-  delegate_dispatch: sticky
+  read_findings: sticky
+  read_review: sticky
+  plan_from_blueprint: sticky
   update_progress: sticky
   task: sticky
   worker_cancel: sticky
   answer_decision: sticky
-  extend_worker_budget: sticky
-  decline_worker_budget: sticky
+  instruct_worker: sticky
+  worker_history: sticky
   promote_overlay: sticky
   reject_overlay: sticky
   preview_overlay: sticky
+  shelve_overlay: sticky
   workflow_compose: sticky
   workflow_compose_from_template: sticky
   workflow_catalog_summaries: sticky
@@ -63,9 +66,7 @@ tools:
   terminal_read: sticky
   terminal_snapshot: sticky
   terminal_close: sticky
-# A worker asks for rounds; the coordinator grants with extend_worker_budget.
 deny_tools:
-  - request_budget
 read_scope: coordinator_product_read
 write_scope: coordinator_orchestration
 wait_conditions: [next_worker_done, all_workers_idle, overlay_promote_pending, scan_done, process_done, http_ready, port_ready]

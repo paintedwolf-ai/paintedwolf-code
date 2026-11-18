@@ -1,12 +1,14 @@
 package sourceapi
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/pagedview"
@@ -61,7 +63,7 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 		s.Workspace.writeSourceWorkspaceMismatch(w, request.Tree.WorkspaceID, p.WorkspaceID())
 		return true
 	}
-	canonical, err := sourceViewCanonical(request)
+	canonical, err := json.Marshal(request)
 	if err != nil {
 		s.writeSourceViewError(w, r, err)
 		return true

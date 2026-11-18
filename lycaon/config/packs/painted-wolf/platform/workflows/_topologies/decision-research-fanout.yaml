@@ -1,6 +1,5 @@
 id: decision-research-fanout
 pattern: fan_out
-iteration_cap: 8
 task: Parallel read-only codebase research for a design decision
 criterion: Prefer the option best supported by codebase evidence with the smallest long-term surface area and integration risk
 fan_out:

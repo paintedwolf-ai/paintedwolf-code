@@ -5,11 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -18,8 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/pkg/api"
-	"slices"
-	"strings"
 )
 
 type evidenceBindingFixture struct {
@@ -32,17 +31,21 @@ func buildEvidenceFixture(t *testing.T) evidenceBindingFixture {
 	t.Helper()
 	database := testdbfixture.Open(t, "workflow-evidence.db")
 	testdbseed.InsertSessionWithRoot(t, database, "session", testdbseed.DefaultProjectID, t.TempDir())
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, seedErr := database.ExecContext(t.Context(), `
+		INSERT INTO workflow_runs (
+			id, session_id, project_id, workflow_id, workflow_version,
+			status, revision, current_phase, created_at, updated_at
+		) VALUES ('run-evidence-1', 'session', ?, 'test-workflow', '1.0.0', 'running', 1, 'test-phase', ?, ?)
+	`, testdbseed.DefaultProjectID, now, now)
+	testutil.FailErr(t, "insert workflow run", seedErr)
 	deps := Dependencies{
 		Database: database, DataDir: t.TempDir(), Sessions: store.NewSQL(database),
-		DelegationStore: delegation.NewSQLStore(database), AuthzRecorder: authzcontext.SQLRecorder(database),
+		AuthzRecorder: authzcontext.SQLRecorder(database),
 	}
-	run, err := deps.DelegationStore.Create(t.Context(), api.Delegation{
-		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: t.TempDir(), Task: "verify", Strategy: api.HuntStrategyFileBased,
-	}, "session", []api.Leg{{Title: "verify"}})
-	testutil.FailErr(t, "create evidence delegation", err)
 	runtime, err := Build(t.Context(), deps, nil)
 	testutil.FailErr(t, "build evidence runtime", err)
-	return evidenceBindingFixture{runtime: runtime, deps: deps, runID: run.ID}
+	return evidenceBindingFixture{runtime: runtime, deps: deps, runID: "run-evidence-1"}
 }
 
 func TestBuildEvidenceSharesProjectHistoryAndSearchAttribution(t *testing.T) {
@@ -77,8 +80,8 @@ func TestBuildEvidenceSharesProjectHistoryAndSearchAttribution(t *testing.T) {
 
 func TestBuildEvidenceResolutionFailsBeforePublishing(t *testing.T) {
 	f := buildEvidenceFixture(t)
-	if _, err := f.runtime.Inspector.ProjectDir(t.Context(), "absent"); !errors.Is(err, delegation.ErrDelegationNotFound) {
-		t.Fatalf("missing delegation resolution = %v", err)
+	if _, err := f.runtime.Inspector.ProjectDir(t.Context(), "absent"); !errors.Is(err, store.ErrSessionNotFound) {
+		t.Fatalf("missing run resolution = %v", err)
 	}
 	if _, err := f.runtime.Manager.Verdicts.EvidenceProjectDir(t.Context(), "absent"); !errors.Is(err, store.ErrSessionNotFound) {
 		t.Fatalf("missing session resolution = %v", err)
@@ -86,7 +89,7 @@ func TestBuildEvidenceResolutionFailsBeforePublishing(t *testing.T) {
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
 	if _, err := f.runtime.Inspector.ProjectDir(canceled, f.runID); !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled delegation resolution = %v", err)
+		t.Fatalf("canceled run resolution = %v", err)
 	}
 	if _, err := f.runtime.Manager.Verdicts.EvidenceProjectDir(canceled, "session"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled session resolution = %v", err)
@@ -102,11 +105,11 @@ func TestBuildEvidenceResolutionFailsBeforePublishing(t *testing.T) {
 	if _, err := runtime.Manager.Verdicts.EvidenceProjectDir(t.Context(), "session"); err == nil {
 		t.Fatal("verdict evidence ignored the blocked project directory")
 	}
-	f.deps.Sessions, f.deps.DelegationStore = nil, nil
+	f.deps.Sessions = nil
 	runtime, err = Build(t.Context(), f.deps, nil)
 	testutil.FailErr(t, "build runtime without project lookup services", err)
 	if dir, err := runtime.Inspector.ProjectDir(t.Context(), f.runID); dir != "" || err != nil {
-		t.Fatalf("absent delegation lookup = %q, %v", dir, err)
+		t.Fatalf("absent run lookup = %q, %v", dir, err)
 	}
 	if dir, err := runtime.Manager.Verdicts.EvidenceProjectDir(t.Context(), "session"); dir != "" || err != nil {
 		t.Fatalf("absent session lookup = %q, %v", dir, err)

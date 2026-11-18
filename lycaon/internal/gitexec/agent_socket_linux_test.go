@@ -10,10 +10,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/lycaon/lycaon/internal/linuxbus"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func agentFixtureBus(t *testing.T) string {
@@ -25,16 +25,15 @@ func agentFixtureBus(t *testing.T) string {
 		t.Fatalf("start private bus: %v", err)
 	}
 	t.Cleanup(func() { _ = command.Process.Kill(); _ = command.Wait() })
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the private bus socket accepts a connection", func() bool {
 		connection, err := linuxbus.Connect(t.Context(), path)
-		if err == nil {
-			_ = connection.Close()
-			return path
+		if err != nil {
+			return false
 		}
-		time.Sleep(time.Millisecond)
-	}
-	t.Fatal("private bus socket did not appear")
-	return ""
+		_ = connection.Close()
+		return true
+	})
+	return path
 }
 
 type agentEnvironmentFixture struct {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import type { BriefingRecord } from "../api/types.ts";
 import type { BriefingsClient } from "../api/http-capabilities/briefings.ts";
@@ -30,14 +30,23 @@ function client(get: BriefingsClient["getBriefingRecord"]): BriefingsClient {
 describe("BriefingEvidencePage", () => {
   it("lays out summary, evidence, limits, sources and generation", async () => {
     render(() => <BriefingEvidencePage projectId="p" recordId={record.record_id} client={client(async () => record)} />);
-    await waitFor(() => expect(screen.getByText("SUPPLIED_INTENT")).toBeTruthy());
-    for (const heading of [briefingCopy.evidence.summary, briefingCopy.evidence.used, briefingCopy.evidence.coverage, briefingCopy.evidence.sources, briefingCopy.evidence.generation]) {
-      expect(screen.getByRole("heading", { name: heading })).toBeTruthy();
-    }
-    expect(screen.getByText(/no immutable revision/)).toBeTruthy();
-    expect(screen.getByText("message:u1")).toBeTruthy();
-    expect(screen.getByText(briefingCopy.evidence.unavailableSection)).toBeTruthy();
-    expect(screen.getByText(briefingCopy.evidence.method.mixed)).toBeTruthy();
+    const page = await screen.findByTestId("briefing-evidence-page");
+    await waitFor(() => expect(page.textContent).toContain("SUPPLIED_INTENT"));
+    const copy = briefingCopy.evidence;
+    const order: string[] = [copy.summary, copy.used, copy.coverage, copy.sources, copy.generation];
+    const headings = within(page).getAllByRole("heading").map((heading) => heading.textContent ?? "");
+    expect(headings.filter((heading) => order.includes(heading))).toEqual(order);
+
+    // What the summary used is listed as evidence; what it could not use is a stated limit, not an item.
+    const items = [...page.querySelectorAll<HTMLElement>("[data-inclusion]")];
+    expect(items.map((item) => item.dataset.inclusion)).toEqual(["included"]);
+    expect(items[0]?.textContent).toContain("SUPPLIED_INTENT");
+    expect(items[0]?.textContent).not.toContain("no immutable revision");
+    expect(page.textContent).toContain("message:u1");
+    expect(page.textContent).toContain("no immutable revision");
+    expect(page.textContent).toContain(record.sections[0]!.result!.text);
+    expect(page.textContent).toContain(copy.unavailableSection);
+    expect(page.textContent).toContain(copy.method.mixed);
   });
 
   it("says when a record no longer exists", async () => {
@@ -45,7 +54,8 @@ describe("BriefingEvidencePage", () => {
       throw new LycaonApiError("gone", 404, "briefing_record_not_found");
     });
     render(() => <BriefingEvidencePage projectId="p" recordId="gone" client={missing} />);
-    await waitFor(() => expect(screen.getByText(briefingCopy.evidence.expired)).toBeTruthy());
+    await screen.findByText(briefingCopy.evidence.expired);
+    expect(screen.queryByText("SUPPLIED_INTENT")).toBeNull();
   });
 
   it("remembers bounded return anchors and focuses the caller on Back", async () => {

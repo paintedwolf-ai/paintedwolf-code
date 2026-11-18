@@ -1,0 +1,23 @@
+spec_version: "1.0"
+id: REVIEW_OF_NO_CHANGES
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - task
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "REVIEW_OF_NO_CHANGES"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:task
+message: That result changed nothing, so there is nothing to review.
+what: That result changed nothing, so there is nothing to review.
+cause: 'The result''s round published no changes for a reviewer to read.'
+why: A reviewer reads a sealed set of changes; a result without changes is its report alone.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code REVIEW_OF_NO_CHANGES; do not retry the same call
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      session_role: coordinator
+      tool: task

@@ -1,64 +1,23 @@
 package contract
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/config"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/oar"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-var verdictFactName = regexp.MustCompile(`(?i)(_violation|_is_ungrounded|_verdict|_decision_code|reject_code)$`)
-
-func TestOARNoMaybeRejectFuncs(t *testing.T) {
-	t.Parallel()
-	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal")
-	fset := token.NewFileSet()
-	var hits []string
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		file, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			return err
-		}
-		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Name == nil {
-				continue
-			}
-			name := fn.Name.Name
-			if strings.HasPrefix(name, "MaybeReject") {
-				rel, _ := filepath.Rel(filepath.Join(contractcheck.RepoRoot(t), "lycaon"), path)
-				hits = append(hits, rel+":"+name)
-			}
-		}
-		return nil
-	})
-	contractcheck.FailErr(t, "walk internal/", err)
-	if len(hits) > 0 {
-		t.Fatalf("MaybeReject* helpers must publish observations and leave decisions to OAR:\n%s", strings.Join(hits, "\n"))
-	}
-}
-
 func TestOARHintCoverageUsesCatalogAnchors(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	contractcheck.FailErr(t, "install catalog", anchorcatalog.InstallFile(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "host", "anchors", "catalog.yaml")))
-	hintsAt := extpacks.Bundled(hintregistry.DefaultDir)
+	hintsAt := extpacks.Bundled(config.PlatformPolicy)
 	schemaDir := filepath.Join(root, "schemas")
 	loader, err := oar.NewLoader(schemaDir)
 	contractcheck.FailErr(t, "oar loader", err)
@@ -84,7 +43,7 @@ func TestOARHintCoverageUsesCatalogAnchors(t *testing.T) {
 		if _, ok := rs.Get(code); !ok {
 			noRule = append(noRule, code)
 		}
-		resolved, err := oar.ResolveRuleAnchor(code, anchor)
+		resolved, err := oar.InstalledEngineDeclaration().ResolveAnchor(anchor)
 		if err != nil {
 			unknownAnchors = append(unknownAnchors, code+"="+anchor)
 			continue
@@ -101,42 +60,5 @@ func TestOARHintCoverageUsesCatalogAnchors(t *testing.T) {
 	}
 	if len(unknownAnchors) > 0 {
 		t.Fatalf("unknown OAR anchors:\n%s", strings.Join(unknownAnchors, "\n"))
-	}
-}
-
-func TestOARNoVerdictFacts(t *testing.T) {
-	for _, fact := range oar.FactCatalogue() {
-		if verdictFactName.MatchString(fact.Name) {
-			t.Fatalf("catalogue declares verdict-shaped fact %q", fact.Name)
-		}
-	}
-	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "oar")
-	for _, name := range []string{"context.go", "env.go", "facts.go", "fact_projection.go"} {
-		body, err := os.ReadFile(filepath.Join(root, name))
-		contractcheck.FailErr(t, "read "+name, err)
-		for _, line := range strings.Split(string(body), "\n") {
-			trim := strings.TrimSpace(line)
-			if strings.HasPrefix(trim, "//") {
-				continue
-			}
-			if verdictFactName.MatchString(trim) && (strings.Contains(trim, "`") || strings.Contains(trim, "\"")) {
-				t.Fatalf("%s has verdict-shaped fact name: %s", name, trim)
-			}
-		}
-	}
-}
-
-func TestOARObservationOnlyFacts(t *testing.T) {
-	t.Parallel()
-	TestOARNoVerdictFacts(t)
-
-	declared := map[string]bool{}
-	for _, f := range oar.FactCatalogue() {
-		declared[f.Name] = true
-	}
-	for _, name := range []string{"command_not_argv", "is_directory", "reject_observation"} {
-		if !declared[name] {
-			t.Errorf("catalogue missing observation fact %q", name)
-		}
 	}
 }

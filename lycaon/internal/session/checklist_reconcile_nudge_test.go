@@ -3,12 +3,13 @@ package session
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/pkg/api"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/pkg/api"
 
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -24,7 +25,7 @@ import (
 )
 
 func pendingReconcileNudge(mgr *Host, rootID string) (string, bool) {
-	id := mgr.Coordinator.Runtime.Kicks().TakePendingKickID(rootID)
+	id := mgr.Coordinator.Runtime.Kicks().TakePendingKickIDUnless(rootID, nil)
 	return id, anchor.SameInform(id, anchor.ProgressStale)
 }
 

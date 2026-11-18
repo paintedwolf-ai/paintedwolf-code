@@ -23,7 +23,7 @@ func TestStartPlanHTTPMatchesOpenAPI(t *testing.T) {
 	srv := h.Server
 	sess := createSessionHTTP(t, srv, t.TempDir())
 
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(planStartBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(planStartBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -42,7 +42,7 @@ func TestCoordinatorProposesRunBeforeHumanStart(t *testing.T) {
 
 	_, err := toolReg.Run(ctx, "state_start", map[string]any{
 		"workflow_id": "plan", "workflow_version": "1.0.1",
-	}, securityToolContext(sess.ID, sess.WorkspacePath, "coordinator"))
+	}, SecurityToolContext(sess.ID, sess.WorkspacePath, "coordinator"))
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WORKFLOW_START_REQUIRES_HUMAN_APPROVAL" {
 		t.Fatalf("state_start without approval err = %v, want WORKFLOW_START_REQUIRES_HUMAN_APPROVAL reject", err)
@@ -56,7 +56,7 @@ func TestCoordinatorProposesRunBeforeHumanStart(t *testing.T) {
 		t.Fatalf("workflow_id = %q", run.WorkflowID)
 	}
 
-	req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/coordinator-context", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/coordinator-context", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -84,7 +84,7 @@ func TestWorkflowComposeE2E(t *testing.T) {
 	manifestYAML, err := os.ReadFile(manifestPath)
 	testutil.FailErr(t, "read file", err)
 
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose", strings.NewReader(string(manifestYAML)))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose", strings.NewReader(string(manifestYAML)))
 	req.Header.Set("Content-Type", "application/yaml")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -102,7 +102,7 @@ func TestWorkflowComposeE2E(t *testing.T) {
 		t.Fatal("expected coordinator_brief")
 	}
 
-	req = authedRequest(t, http.MethodGet, "/v1/workflows?session_id="+sess.ID, nil)
+	req = AuthedRequest(t, http.MethodGet, "/v1/workflows?session_id="+sess.ID, nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -125,7 +125,7 @@ func TestWorkflowComposeE2E(t *testing.T) {
 	}
 
 	startBody := `{"workflow_id":"hotfix-session","workflow_version":"1.0.0"}`
-	req = authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req = AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -142,7 +142,7 @@ func TestWorkflowComposeE2E(t *testing.T) {
 
 	revised := string(manifestYAML)
 	revised = strings.Replace(revised, "initial_posture: spec", "initial_posture: spec\n# revised", 1)
-	req = authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose", strings.NewReader(revised))
+	req = AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose", strings.NewReader(revised))
 	req.Header.Set("Content-Type", "application/yaml")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -159,7 +159,7 @@ phases:
     activity_label: Running
     complete_when: plan_stub_valid
 `
-	req = authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose", strings.NewReader(badAgent))
+	req = AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose", strings.NewReader(badAgent))
 	req.Header.Set("Content-Type", "application/yaml")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -195,7 +195,7 @@ phases:
     complete_when: gates_satisfied
     gates: [child_run_complete]
 `
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose?dry_run=true", strings.NewReader(manifest))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose?dry_run=true", strings.NewReader(manifest))
 	req.Header.Set("Content-Type", "application/yaml")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -203,7 +203,7 @@ phases:
 		t.Fatalf("dry_run compose status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	req = authedRequest(t, http.MethodGet, "/v1/workflows?session_id="+sess.ID, nil)
+	req = AuthedRequest(t, http.MethodGet, "/v1/workflows?session_id="+sess.ID, nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

@@ -32,7 +32,11 @@ type Cards struct {
 	messages   MessageReader
 	transcript TranscriptWriter
 	queue      TaskLookup
+	names      workercompletion.WorkerNames
 }
+
+// SetWorkerNames names the worker a held job's round belongs to.
+func (m *Cards) SetWorkerNames(names workercompletion.WorkerNames) { m.names = names }
 
 func NewCards(messages MessageReader, transcript TranscriptWriter, queue TaskLookup, closeouts CloseoutRecovery) *Cards {
 	return &Cards{messages: messages, transcript: transcript, queue: queue, closeouts: closeouts}
@@ -171,20 +175,25 @@ func (m *Cards) Project(ctx context.Context, parentID, jobID string, ws *api.Wor
 	if err := validateWorkerSummary(jobID, ws); err != nil {
 		return err
 	}
+	var task *api.WorkerTask
+	if m.queue != nil {
+		if found, ok := m.queue.Get(jobID); ok && found != nil {
+			task = found
+			populateSummaryRoundWire(ws, task)
+		}
+	}
 	msgs, err := m.messages.GetMessages(ctx, parentID)
 	if err != nil {
 		return err
 	}
 	if _, ok := EnqueuedTaskToolMessageForJob(msgs, jobID); !ok {
 		in := WorkerDispatchRowInput{JobID: jobID, AgentType: ws.AgentType}
-		if m.queue != nil {
-			if task, found := m.queue.Get(jobID); found && task != nil {
-				in.AgentType = task.AgentType
-				in.Brief = task.Brief
-				in.ChildSessionID = task.ChildSessionID
-				// Terminal delivery retries until the original tool response is persisted.
-				in.ToolCallID = task.SourceToolCallID
-			}
+		if task != nil {
+			in.AgentType = task.AgentType
+			in.Brief = task.Brief
+			in.ChildSessionID = task.ChildSessionID
+			// Terminal delivery retries until the original tool response is persisted.
+			in.ToolCallID = task.SourceToolCallID
 		}
 		if err := m.Ensure(ctx, parentID, in); err != nil {
 			return err
@@ -245,10 +254,31 @@ func validateWorkerSummary(jobID string, ws *api.WorkerSummaryMeta) error {
 	if !ok {
 		return fmt.Errorf("worker summary envelope invalid")
 	}
-	if env.JobID != ws.WorkerID || env.ChildSessionID != ws.ChildSessionID || env.AgentType != ws.AgentType || workercompletion.NormalizeWorkerCompletionState(env.State) != workercompletion.NormalizeWorkerCompletionState(string(ws.Status)) {
+	if env.AgentType != ws.AgentType || workercompletion.NormalizeWorkerCompletionState(env.State) != workercompletion.NormalizeWorkerCompletionState(string(ws.Status)) {
 		return fmt.Errorf("worker summary envelope identity mismatch")
 	}
 	return nil
+}
+
+func populateSummaryRoundWire(ws *api.WorkerSummaryMeta, task *api.WorkerTask) {
+	if ws == nil || task == nil {
+		return
+	}
+	if ws.WorkerRecordID == "" {
+		ws.WorkerRecordID = task.WorkerRecordID
+	}
+	if ws.WorkerName == "" {
+		ws.WorkerName = task.WorkerName
+	}
+	if ws.Round == 0 && task.Round > 0 {
+		ws.Round = task.Round
+	}
+	if ws.ResultHandle == "" {
+		ws.ResultHandle = task.ResultHandle
+	}
+	if ws.ReviewOf == "" {
+		ws.ReviewOf = task.ReviewOf
+	}
 }
 
 // EnqueuedTaskToolMessageForJob finds a job's canonical dispatch row.
@@ -259,7 +289,7 @@ func EnqueuedTaskToolMessageForJob(msgs []api.Message, jobID string) (*api.Messa
 	}
 	for i := range msgs {
 		msg := &msgs[i]
-		if !isCanonicalTaskDispatchRow(msg) {
+		if !isRoundDispatchRow(msg) {
 			continue
 		}
 		if strings.TrimSpace(msg.ToolResult.Dispatch.WorkerID) == jobID {
@@ -287,17 +317,14 @@ func assistantOwnsToolCall(msgs []api.Message, toolCallID string) bool {
 	return false
 }
 
-func isCanonicalTaskDispatchRow(msg *api.Message) bool {
+// isRoundDispatchRow reports a tool result that started a worker round: a
+// task dispatch, or an instruction that admitted a new round.
+func isRoundDispatchRow(msg *api.Message) bool {
 	if msg == nil || msg.Role != api.MessageRoleTool || msg.ToolResult == nil || msg.ToolResult.Dispatch == nil {
 		return false
 	}
 	if strings.TrimSpace(msg.ToolResult.Dispatch.WorkerID) == "" {
 		return false
 	}
-	switch strings.TrimSpace(strings.ToLower(msg.ToolResult.Tool)) {
-	case "task", "delegate_dispatch":
-		return true
-	default:
-		return false
-	}
+	return guidance.StartsWorkerRound(msg.ToolResult.Tool)
 }

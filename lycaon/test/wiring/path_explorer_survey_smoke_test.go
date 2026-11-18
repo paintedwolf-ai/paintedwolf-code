@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -71,13 +70,13 @@ func TestPathExplorerSurveyUsesNativeFindAndGrep(t *testing.T) {
 	testutil.FailErr(t, "worker defaults", worker.ApplyEnqueueDefaults(
 		&task, project.ProjectScope{ProjectID: parent.ProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig(),
 	))
-	_, err = h.Delegations.Queue.Enqueue(ctx, task)
+	_, err = h.Workers.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue worker", err)
-	claimed, err := h.Delegations.Queue.ClaimNext(ctx, worker.ClaimRequest{
+	claimed, err := h.Workers.Queue.ClaimNext(ctx, worker.ClaimRequest{
 		ProjectID: parent.ProjectID, ExecutionTarget: api.ExecutionTargetLocal, ClaimedBy: "path-explorer-test",
 	})
 	testutil.FailErr(t, "claim worker", err)
-	exec := wiringWorkerExecutor(h)
+	exec := WiringWorkerExecutor(h)
 	result, err := exec.Execute(ctx, *claimed, worker.RunContextForTask(*claimed, dir))
 	testutil.FailErr(t, "worker Execute", err)
 	if result.Status != string(api.WorkerStatusComplete) {
@@ -88,7 +87,7 @@ func TestPathExplorerSurveyUsesNativeFindAndGrep(t *testing.T) {
 	if len(invoked) != 3 || invoked[0] != "command" || invoked[1] != "command" || invoked[2] != "complete_leg" {
 		t.Fatalf("survey calls=%v", invoked)
 	}
-	stored, ok := h.Delegations.Queue.Get(task.ID)
+	stored, ok := h.Workers.Queue.Get(task.ID)
 	if !ok || stored == nil || stored.ChildSessionID == "" {
 		t.Fatal("worker child session missing")
 	}
@@ -122,7 +121,7 @@ func (m *pathExplorerSurveyMock) invokedTools() []string {
 }
 
 func (m *pathExplorerSurveyMock) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
-	if schemaHasTool(req.Tools, "command") && !schemaHasTool(req.Tools, "task") {
+	if SchemaHasTool(req.Tools, "command") && !SchemaHasTool(req.Tools, "task") {
 		n := m.workerTurn.Add(1)
 		switch n {
 		case 1:
@@ -166,15 +165,6 @@ func (m *pathExplorerSurveyMock) Stream(ctx context.Context, req modelcall.Compl
 	}
 	close(ch)
 	return ch, nil
-}
-
-func schemaHasTool(metas []tools.ToolMeta, name string) bool {
-	for _, meta := range metas {
-		if meta.Name == name {
-			return true
-		}
-	}
-	return false
 }
 
 func containsString(items []string, want string) bool {

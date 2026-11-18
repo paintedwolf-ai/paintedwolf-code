@@ -51,8 +51,8 @@ func TestStartBugbashViaOrchestrator(t *testing.T) {
 	}
 
 	var w *httptest.ResponseRecorder
-	testutil.WaitFor(t, func() bool {
-		req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, h.srv, run.ID, nil))
+	testutil.WaitFor(t, "the run advances", func() bool {
+		req := AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, h.srv, run.ID, nil))
 		w = httptest.NewRecorder()
 		h.srv.ServeHTTP(w, req)
 		return !strings.Contains(w.Body.String(), "workflow_revision_conflict")
@@ -77,7 +77,7 @@ func TestPipelineWorkflowSSEOnPhaseChange(t *testing.T) {
 
 	// The run passes through triage without pausing there, so the subscription
 	// is the record of the transition; drain it while the pipeline runs.
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the workflow event reports triage", func() bool {
 		select {
 		case envelope, ok := <-ch:
 			if !ok {
@@ -104,7 +104,7 @@ func TestProductCatalogHidesNonVisibleBundledWorkflows(t *testing.T) {
 	projectDir := t.TempDir()
 	h := newOrchestrationPipelineServer(t, projectDir)
 
-	req := authedRequest(t, http.MethodGet, "/v1/workflows", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/workflows", nil)
 	w := httptest.NewRecorder()
 	h.srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

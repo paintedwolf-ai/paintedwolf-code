@@ -92,10 +92,9 @@ func TestExecutorSettledJoinReviewsItsOwnAction(t *testing.T) {
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
-	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: rt})
+	exec.Approvals.SetToolApprovalCoalesce(rt)
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	args := map[string]any{"path": "a.txt", "content": "x"}
 	tc := tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},

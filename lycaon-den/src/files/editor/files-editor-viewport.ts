@@ -1,4 +1,4 @@
-import { filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
 import { acquireEditorViewport } from "../../components/source/editor/editor-viewport-pool.ts";
 import { setEditorScrollTop } from "../../components/source/editor/editor-scroll-position.ts";
 import {
@@ -51,11 +51,8 @@ import {
 import { filesGutterContextExtension } from "./files-gutter-context.ts";
 import { hunkPlaybackExtension } from "../walk/hunk-playback.ts";
 import { JUMP_CURSOR_LINE_THRESHOLD } from "../history/jump-history.ts";
-import {
-  applyFilesBufferDraft,
-  clearFilesBufferReveal,
-  markFilesBufferTyping,
-} from "../documents/project-files-buffers.ts";
+import { applyFilesBufferDraft, markFilesBufferTyping } from "../documents/project-files-buffer-io.ts";
+import { clearFilesBufferReveal } from "../documents/project-files-buffers.ts";
 import { projectFilesState, type FileBuffer } from "../documents/files-buffer-state.ts";
 import type { FilesEditorScope } from "../components/files-scope.ts";
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -277,8 +278,8 @@ func (r *SQLRegistry) CreatePromotion(
 		StagePath:       stagePath,
 		ReservationPath: reservationPath,
 		InitGit:         boolToInt64(initGit),
-		CreatedAt:       db.FormatTime(now),
-		UpdatedAt:       db.FormatTime(now),
+		CreatedAt:       timelayout.Format(now),
+		UpdatedAt:       timelayout.Format(now),
 	}); err != nil {
 		if db.IsUniqueConstraint(err) {
 			return nil, ErrPromotionConflict
@@ -348,7 +349,7 @@ func (r *SQLRegistry) AdvancePromotion(
 		SourceSha256:   strings.TrimSpace(sourceSHA256),
 		ManifestSha256: strings.TrimSpace(manifestSHA256),
 		LastError:      strings.TrimSpace(lastError),
-		UpdatedAt:      db.FormatTime(time.Now().UTC()),
+		UpdatedAt:      timelayout.Format(time.Now().UTC()),
 		ProjectID:      projectID,
 		Phase_2:        string(from),
 	})
@@ -430,7 +431,7 @@ func (r *SQLRegistry) CommitPromotion(ctx context.Context, projectID string) (*P
 		Phase:          string(PromotionCommitted),
 		SourceSha256:   promotion.SourceSHA256,
 		ManifestSha256: promotion.ManifestSHA256,
-		UpdatedAt:      db.FormatTime(time.Now().UTC()),
+		UpdatedAt:      timelayout.Format(time.Now().UTC()),
 		ProjectID:      projectID,
 		Phase_2:        string(PromotionInstalled),
 	})

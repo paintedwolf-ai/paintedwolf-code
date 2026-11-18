@@ -27,6 +27,10 @@
 
 .den-worker-transcript-section:nth-child(4) .den-worker-transcript-section-summary { top: calc(3 * var(--worker-header-h) - 3px); }
 
+.den-worker-transcript-section:nth-child(5) .den-worker-transcript-section-summary { top: calc(4 * var(--worker-header-h) - 4px); }
+
+.den-worker-transcript-section:nth-child(6) .den-worker-transcript-section-summary { top: calc(5 * var(--worker-header-h) - 5px); }
+
 .den-worker-transcript-section:nth-last-child(1) .den-worker-transcript-section-summary { bottom: 0; }
 
 .den-worker-transcript-section:nth-last-child(2) .den-worker-transcript-section-summary { bottom: calc(var(--worker-header-h) - 1px); }
@@ -34,6 +38,10 @@
 .den-worker-transcript-section:nth-last-child(3) .den-worker-transcript-section-summary { bottom: calc(2 * var(--worker-header-h) - 2px); }
 
 .den-worker-transcript-section:nth-last-child(4) .den-worker-transcript-section-summary { bottom: calc(3 * var(--worker-header-h) - 3px); }
+
+.den-worker-transcript-section:nth-last-child(5) .den-worker-transcript-section-summary { bottom: calc(4 * var(--worker-header-h) - 4px); }
+
+.den-worker-transcript-section:nth-last-child(6) .den-worker-transcript-section-summary { bottom: calc(5 * var(--worker-header-h) - 5px); }
 
 /* The last body fills the reading area under the full header stack, so every section
    can scroll up into its slot and the drawer ends with all headers stacked. */
@@ -57,6 +65,14 @@
 
 .den-worker-transcript-pane:has(> .den-worker-transcript-section:nth-child(4)) {
   --worker-sticky-stack: calc(4 * var(--worker-header-h) - 3px);
+}
+
+.den-worker-transcript-pane:has(> .den-worker-transcript-section:nth-child(5)) {
+  --worker-sticky-stack: calc(5 * var(--worker-header-h) - 4px);
+}
+
+.den-worker-transcript-pane:has(> .den-worker-transcript-section:nth-child(6)) {
+  --worker-sticky-stack: calc(6 * var(--worker-header-h) - 5px);
 }
 
 .den-worker-transcript-section-status--working svg {

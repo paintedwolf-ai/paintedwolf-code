@@ -31,7 +31,7 @@ func TestRewindResetsCoordinatorBatchAtTheNewBoundary(t *testing.T) {
 
 	ctx := h.OwnerCtx(t, context.Background())
 	projectDir := t.TempDir()
-	writeTestProjectApprovalsAllowWrite(t, projectDir)
+	WriteTestProjectApprovalsAllowWrite(t, projectDir)
 
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, projectDir)
 	testutil.FailErr(t, "create session", err)
@@ -82,7 +82,7 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 
 	ctx := h.OwnerCtx(t, context.Background())
 	projectDir := t.TempDir()
-	writeTestProjectApprovalsAllowWrite(t, projectDir)
+	WriteTestProjectApprovalsAllowWrite(t, projectDir)
 
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, projectDir)
 	testutil.FailErr(t, "create session", err)
@@ -142,7 +142,7 @@ func TestRewindPastAWorkerDispatchLeavesNoGhostState(t *testing.T) {
 	h := BuildForTest(t)
 	ctx := h.OwnerCtx(t, context.Background())
 	projectDir := t.TempDir()
-	writeTestProjectApprovalsAllowWrite(t, projectDir)
+	WriteTestProjectApprovalsAllowWrite(t, projectDir)
 
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
@@ -154,7 +154,7 @@ func TestRewindPastAWorkerDispatchLeavesNoGhostState(t *testing.T) {
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mustMessages(t, h, ctx, sess.ID))[0]
 
-	jobID, err := h.Delegations.Queue.Enqueue(ctx, api.WorkerTask{
+	jobID, err := h.Workers.Queue.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: sess.ID,
 		ProjectID:       sess.ProjectID,
 		WorkspacePath:   projectDir,

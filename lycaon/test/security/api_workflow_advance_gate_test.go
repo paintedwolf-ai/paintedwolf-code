@@ -24,7 +24,7 @@ func TestAdvanceUnregisteredCompleteWhenRejected(t *testing.T) {
 	h, sess := buildWorkflowHarnessWithManifest(t, manifest)
 	srv := h.Server
 	run := startHarnessRun(t, h, sess.ID, "unreg", "1.0.0")
-	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
+	req := AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusConflict {
@@ -41,7 +41,7 @@ func TestAdvancePlanStubGateBlockedWithoutFixture(t *testing.T) {
 	srv := h.Server
 	sess := createSessionHTTP(t, srv, projectDir)
 	startBody := planStartBody
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -53,7 +53,7 @@ func TestAdvancePlanStubGateBlockedWithoutFixture(t *testing.T) {
 		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
 	run = advancePlanToExpandHTTP(t, h, run)
-	req = authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
+	req = AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusConflict {
@@ -74,7 +74,7 @@ func TestAdvancePlanStubGateAllowsAfterFixture(t *testing.T) {
 	blueprintMgr := h.Workflows.Blueprints
 	sess := createSessionHTTP(t, srv, projectDir)
 	startBody := planStartBody
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -85,9 +85,9 @@ func TestAdvancePlanStubGateAllowsAfterFixture(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil {
 		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
-	seedPlanStub(t, blueprintMgr, run.ProjectID, run.BlueprintPath)
+	SeedPlanStub(t, blueprintMgr, run.ProjectID, run.BlueprintPath)
 	run = advancePlanToExpandHTTP(t, h, run)
-	req = authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
+	req = AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

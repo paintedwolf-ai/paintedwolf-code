@@ -41,10 +41,9 @@ func (m *ApprovalAuthority) SetApprovalAuthorityInstaller(installer ApprovalAuth
 	}
 }
 
-// ApprovalResolver says who settles an approval: the deciding person, or a
-// named standing policy rule. Its constructors are the whole vocabulary.
+// ApprovalResolver says how the deciding person settles an approval. Its
+// constructors are the whole vocabulary.
 type ApprovalResolver struct {
-	policy *authzledger.PolicyIdentity
 	// proof is the deciding person's signed presence, required to release
 	// values they hold.
 	proof *presence.Proof
@@ -56,29 +55,6 @@ func HumanApproval() ApprovalResolver { return ApprovalResolver{} }
 // AttestedApproval resolves as the deciding person with their verified
 // presence, which a plan releasing held values requires.
 func AttestedApproval(proof presence.Proof) ApprovalResolver { return ApprovalResolver{proof: &proof} }
-
-// PolicyApproval resolves under the named standing policy rule, with no person.
-func PolicyApproval(policy authzledger.PolicyIdentity) ApprovalResolver {
-	return ApprovalResolver{policy: &policy}
-}
-
-func (r ApprovalResolver) validate() error {
-	if r.policy != nil && !r.policy.Complete() {
-		return fmt.Errorf("%w: a policy resolution names its pack, unit, and rule", ErrApprovalResolverInvalid)
-	}
-	if r.policy != nil && r.proof != nil {
-		return fmt.Errorf("%w: a policy resolution carries no presence", ErrApprovalResolverInvalid)
-	}
-	return nil
-}
-
-// approvalResolution names who settles the checkpoint; a person resolution needs the deciding person.
-func approvalResolution(ctx context.Context, resolver ApprovalResolver) (Resolution, error) {
-	if resolver.policy != nil {
-		return policyResolution(*resolver.policy), nil
-	}
-	return personResolution(ctx)
-}
 
 // grantedBy stamps each grant the option installs with its approver, so the
 // grant names them after the checkpoint's chat is gone.
@@ -106,9 +82,6 @@ func (m *ApprovalAuthority) ResolveApprovalOption(ctx context.Context, sessionID
 // ResolveApprovalOptionBy installs authority before committing the checkpoint as the given resolver.
 func (m *ApprovalAuthority) ResolveApprovalOptionBy(ctx context.Context, sessionID, checkpointID, optionID string, resolver ApprovalResolver) (*CheckpointResponse, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if err := resolver.validate(); err != nil {
 		return nil, err
 	}
 	if m.sessions.admission != nil {
@@ -162,7 +135,7 @@ func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, s
 	if m.authorityInstaller == nil {
 		return nil, fmt.Errorf("approval authority installer is not configured")
 	}
-	resolution, err := approvalResolution(ctx, resolver)
+	resolution, err := personResolution(ctx)
 	if err != nil {
 		return nil, err
 	}

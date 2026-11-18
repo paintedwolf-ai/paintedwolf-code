@@ -13,7 +13,10 @@ import (
 
 func TestShapeRegistryRegistersAllShapes(t *testing.T) {
 	reg := evidence.DefaultShapeRegistry()
-	for _, id := range evidence.ShapeIDs() {
+	for _, id := range []string{
+		evidence.ShapeFileRegion, evidence.ShapeURL, evidence.ShapeCommand, evidence.ShapeArtifact, evidence.ShapeOpaque,
+		evidence.ShapeStructuredEvent, evidence.ShapeVisual, evidence.ShapeSurfaceSnapshot, evidence.ShapePageGeometry,
+	} {
 		if _, ok := reg.Lookup(id); !ok {
 			t.Fatalf("missing shape %q in registry", id)
 		}
@@ -244,7 +247,7 @@ func TestVerificationAndOverlayOutcomesProduceCitableReceipts(t *testing.T) {
 // never a file observation.
 func TestDispatchToolsRecordTaskEvidence(t *testing.T) {
 	t.Parallel()
-	for _, tool := range []string{"task", "delegate_dispatch"} {
+	for _, tool := range []string{"task"} {
 		rec := evidence.BuildEvidenceRecord("", tool, map[string]any{"path": "ignored.go"}, `{"job_id":"w1","status":"enqueued"}`)
 		if rec.Kind != evidence.KindTask || rec.Shape != evidence.ShapeStructuredEvent || rec.Survey || rec.Path != "" {
 			t.Fatalf("%s record = %+v", tool, rec)

@@ -74,7 +74,7 @@ func TestCoordinatorPromptRejectsOffSurfaceDelegate(t *testing.T) {
 	mock := &sequentialLLMClient{completions: []*modelcall.Completion{
 		{ToolCalls: []wire.ToolCall{{
 			ID:   "call_delegate",
-			Name: "delegate_dispatch",
+			Name: "plan_from_blueprint",
 			Args: map[string]any{},
 		}}},
 		{Content: "cannot delegate yet"},
@@ -87,7 +87,7 @@ func TestCoordinatorPromptRejectsOffSurfaceDelegate(t *testing.T) {
 	ctx := t.Context()
 
 	startBody := planStartBody
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -98,7 +98,7 @@ func TestCoordinatorPromptRejectsOffSurfaceDelegate(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil {
 		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
-	seedPlanStub(t, blueprintMgr, run.ProjectID, run.BlueprintPath)
+	SeedPlanStub(t, blueprintMgr, run.ProjectID, run.BlueprintPath)
 
 	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "delegate now"); err != nil {
 		testutil.FailErr(t, "run coordinator prompt", err)
@@ -109,7 +109,7 @@ func TestCoordinatorPromptRejectsOffSurfaceDelegate(t *testing.T) {
 	seenRejection := false
 	for _, msg := range msgs {
 		if result := msg.ToolResult; result != nil && result.ToolCallID == "call_delegate" {
-			if result.Tool != "delegate_dispatch" || result.Outcome != wire.ToolResultOutcomeRejected || !slices.Contains(result.Codes, "SPEC_POSTURE_DELEGATION_FORBIDDEN") {
+			if result.Tool != "plan_from_blueprint" || result.Outcome != wire.ToolResultOutcomeRejected || !slices.Contains(result.Codes, "SPEC_POSTURE_DELEGATION_FORBIDDEN") {
 				t.Fatalf("off-surface delegate result = %+v", result)
 			}
 			seenRejection = true
@@ -141,7 +141,7 @@ func TestCoordinatorPromptSuccessWorkflowGateBanner(t *testing.T) {
 	ctx := t.Context()
 
 	startBody := planStartBody
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

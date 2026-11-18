@@ -4,6 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/evidence"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
@@ -16,11 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"net/http"
-	"net/http/httptest"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 func TestCurationFocusCacheKeyExcludesTask(t *testing.T) {
@@ -128,7 +129,7 @@ func TestCurationTaskHintFromContext(t *testing.T) {
 	if got := curationctx.TaskHint(ctx); got != "audit altitude" {
 		t.Fatalf("hint = %q", got)
 	}
-	f := SearchFocus(ctx, "find", "*.go")
+	f := curationFocus(ctx, "find", "matches", "*.go")
 	if !strings.Contains(f.PromptFocus(), "audit altitude") {
 		t.Fatalf("prompt focus = %q", f.PromptFocus())
 	}

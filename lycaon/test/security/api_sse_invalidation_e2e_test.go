@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -28,8 +29,8 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	base := httpSrv.URL
 
 	projectDir := t.TempDir()
-	project := createAPIProjectAtPath(t, base, projectDir)
-	sess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	project := CreateAPIProjectAtPath(t, base, projectDir)
+	sess := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 
 	subCtx, subCancel := context.WithCancel(t.Context())
@@ -62,7 +63,7 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	// Workflow event.
 	exitAmbientRunHTTP(t, h.Server, sess.ID)
 	hub.waitFor(t, wire.EventTopicWorkflow) // drain ambient exit envelope
-	run := journeyPostJSON[wire.WorkflowRun](t, base,
+	run := JourneyPostJSON[wire.WorkflowRun](t, base,
 		"/v1/sessions/"+sess.ID+"/workflow-runs",
 		`{"workflow_id":"plan","workflow_version":"1.0.1"}`, http.StatusCreated)
 
@@ -72,7 +73,7 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	assertField(t, wfEnv, "status", "")
 
 	// Provider events.
-	_ = openAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil,
+	_ = OpenAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil,
 		`{"id":"sse-test","base_url":"https://x.example/v1","models":[{"id":"m1"}]}`, http.StatusCreated)
 	createdEnv := hub.waitFor(t, wire.EventTopicProviders)
 	assertField(t, createdEnv, "provider_id", "sse-test")
@@ -84,13 +85,13 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	assertField(t, provEnv, "action", "updated")
 
 	// Model policy event.
-	policyProvider, _ := seedTestProvider(t, base, false)
+	policyProvider, _ := SeedTestProvider(t, base, false)
 	policy := wire.ModelPolicy{
-		Coordinator: &wire.ModelRefDTO{ProviderID: policyProvider, Model: testProviderModel},
-		Lite:        &wire.ModelRefDTO{ProviderID: policyProvider, Model: testProviderModel},
+		Coordinator: &wire.ModelRefDTO{ProviderID: policyProvider, Model: TestProviderModel},
+		Lite:        &wire.ModelRefDTO{ProviderID: policyProvider, Model: TestProviderModel},
 		AgentPool: wire.AgentPoolDTO{
 			Selection: "round_robin",
-			Models:    []wire.ModelRefDTO{{ProviderID: policyProvider, Model: testProviderModel}},
+			Models:    []wire.ModelRefDTO{{ProviderID: policyProvider, Model: TestProviderModel}},
 		},
 	}
 	policyBody, err := json.Marshal(policy)
@@ -109,7 +110,7 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	assertField(t, setEnv, "action", "updated")
 
 	// Queue event.
-	queue := openAPIGetJSON[wire.QueueDraft](t, base, "/v1/sessions/{id}/queue", map[string]string{"id": sess.ID}, http.StatusOK)
+	queue := OpenAPIGetJSON[wire.QueueDraft](t, base, "/v1/sessions/{id}/queue", map[string]string{"id": sess.ID}, http.StatusOK)
 	hold := true
 	queueBody, err := json.Marshal(wire.QueueMutateRequest{Op: "hold", Hold: &hold, ExpectedRevision: queue.Revision})
 	testutil.FailErr(t, "encode queue hold", err)
@@ -188,27 +189,20 @@ func (h *projectHub) waitFor(t *testing.T, topic wire.EventTopic) wire.EventEnve
 	h.mu.Unlock()
 
 	for {
-		select {
-		case env, ok := <-h.ch:
-			if !ok {
-				t.Fatalf("event stream closed before topic %q arrived", topic)
-			}
-			if env.Topic == topic {
-				return env
-			}
-			h.mu.Lock()
-			h.queued = append(h.queued, env)
-			h.mu.Unlock()
-		case <-t.Context().Done():
-			t.Fatalf("timeout waiting for topic %q (queued topics: %v)", topic, h.queuedTopics())
+		env := testutil.Receive(t, fmt.Sprintf("an event on topic %q", topic), h.ch)
+		if env.Topic == topic {
+			return env
 		}
+		h.mu.Lock()
+		h.queued = append(h.queued, env)
+		h.mu.Unlock()
 	}
 }
 
 // waitForField skips earlier envelopes that lack the requested field.
 func (h *projectHub) waitForField(t *testing.T, topic wire.EventTopic, field string) wire.EventEnvelope {
 	t.Helper()
-	for t.Context().Err() == nil {
+	for {
 		env := h.waitFor(t, topic)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
@@ -218,15 +212,13 @@ func (h *projectHub) waitForField(t *testing.T, topic wire.EventTopic, field str
 			return env
 		}
 	}
-	t.Fatalf("timeout waiting for topic %q field %q", topic, field)
-	return wire.EventEnvelope{}
 }
 
 // waitForWorkflowRunID selects one run's workflow envelope.
 func (h *projectHub) waitForWorkflowRunID(t *testing.T, runID string) wire.EventEnvelope {
 	t.Helper()
 	runID = strings.TrimSpace(runID)
-	for t.Context().Err() == nil {
+	for {
 		env := h.waitFor(t, wire.EventTopicWorkflow)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
@@ -236,28 +228,21 @@ func (h *projectHub) waitForWorkflowRunID(t *testing.T, runID string) wire.Event
 			return env
 		}
 	}
-	t.Fatalf("timeout waiting for workflow_run_id %q", runID)
-	return wire.EventEnvelope{}
 }
 
 // waitForSettingsArea selects one settings area.
 func (h *projectHub) waitForSettingsArea(t *testing.T, area string) wire.EventEnvelope {
 	t.Helper()
-	var seen []string
-	for t.Context().Err() == nil {
+	for {
 		env := h.waitFor(t, wire.EventTopicSettings)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
 			t.Fatalf("settings data not an object: %v", err)
 		}
-		got := strings.TrimSpace(stringField(raw, "area"))
-		if got == area {
+		if strings.TrimSpace(stringField(raw, "area")) == area {
 			return env
 		}
-		seen = append(seen, got)
 	}
-	t.Fatalf("timeout waiting for settings area %q (saw: %v)", area, seen)
-	return wire.EventEnvelope{}
 }
 
 func stringField(raw map[string]any, key string) string {
@@ -267,16 +252,6 @@ func stringField(raw map[string]any, key string) string {
 	}
 	s, _ := v.(string)
 	return s
-}
-
-func (h *projectHub) queuedTopics() []wire.EventTopic {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	out := make([]wire.EventTopic, 0, len(h.queued))
-	for _, env := range h.queued {
-		out = append(out, env.Topic)
-	}
-	return out
 }
 
 // assertField requires a field and optionally its value.

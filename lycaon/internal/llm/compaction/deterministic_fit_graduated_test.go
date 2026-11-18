@@ -39,7 +39,7 @@ func TestDeterministicFitDropsOnlyWhatIsNeeded(t *testing.T) {
 
 	// Budget that requires shedding roughly ten rows.
 	budget := total - perRow*10
-	out := DeterministicFit(fitCfg(), msgs, budget)
+	out := DeterministicFitWithReserve(fitCfg(), msgs, budget, 0)
 
 	if got := EstimateMessagesTokens(out); got > budget {
 		t.Fatalf("fit returned %d tokens over budget %d", got, budget)
@@ -65,7 +65,7 @@ func TestDeterministicFitHonorsBudgetAndFloorAcrossScales(t *testing.T) {
 	total := EstimateMessagesTokens(msgs)
 	for _, frac := range []int{95, 75, 50, 25, 10, 2} {
 		budget := total * frac / 100
-		out := DeterministicFit(fitCfg(), msgs, budget)
+		out := DeterministicFitWithReserve(fitCfg(), msgs, budget, 0)
 		got := EstimateMessagesTokens(out)
 		retained := len(out) - countTrimNotices(out)
 		if got > budget && retained > fitCfg().KeepRecentMessages {
@@ -102,7 +102,7 @@ func TestDeterministicFitKeepsRetainedWindowStableWhileGrowing(t *testing.T) {
 		msgs[i].Content = fitDistinctBody(i)
 	}
 
-	base := DeterministicFit(cfg, msgs, budget)
+	base := DeterministicFitWithReserve(cfg, msgs, budget, 0)
 	baseHead := firstRetained(base)
 	moves := 0
 	grown := msgs
@@ -113,7 +113,7 @@ func TestDeterministicFitKeepsRetainedWindowStableWhileGrowing(t *testing.T) {
 		}, ContextMessage{
 			Role: string(api.MessageRoleTool), Content: fitDistinctBody(1001 + turn*2),
 		})
-		got := firstRetained(DeterministicFit(cfg, grown, budget))
+		got := firstRetained(DeterministicFitWithReserve(cfg, grown, budget, 0))
 		if got != baseHead {
 			moves++
 			baseHead = got
@@ -132,7 +132,7 @@ func TestDeterministicFitMonotonicInBudget(t *testing.T) {
 	total := EstimateMessagesTokens(msgs)
 	prev := len(msgs) + 1
 	for frac := 100; frac >= 10; frac -= 10 {
-		out := DeterministicFit(fitCfg(), msgs, total*frac/100)
+		out := DeterministicFitWithReserve(fitCfg(), msgs, total*frac/100, 0)
 		if len(out) > prev {
 			t.Fatalf("frac %d%% kept %d rows, more than the looser budget's %d", frac, len(out), prev)
 		}
@@ -148,7 +148,7 @@ func TestDeterministicFitPreservesCheckpointHead(t *testing.T) {
 		{Role: string(api.MessageRoleAssistant), Content: "summary of prior work"},
 	}, fitRows(100)...)
 
-	out := DeterministicFit(fitCfg(), msgs, EstimateMessagesTokens(msgs)/4)
+	out := DeterministicFitWithReserve(fitCfg(), msgs, EstimateMessagesTokens(msgs)/4, 0)
 	if len(out) < 2 {
 		t.Fatalf("fit returned %d rows", len(out))
 	}
@@ -163,7 +163,7 @@ func TestDeterministicFitPreservesCheckpointHead(t *testing.T) {
 // An already-fitting history is returned untouched.
 func TestDeterministicFitNoopWhenUnderBudget(t *testing.T) {
 	msgs := fitRows(20)
-	out := DeterministicFit(fitCfg(), msgs, EstimateMessagesTokens(msgs)+1000)
+	out := DeterministicFitWithReserve(fitCfg(), msgs, EstimateMessagesTokens(msgs)+1000, 0)
 	if len(out) != len(msgs) {
 		t.Fatalf("kept %d of %d rows while under budget", len(out), len(msgs))
 	}
@@ -176,7 +176,7 @@ func TestDeterministicFitStripsLeadingToolRows(t *testing.T) {
 	for i := 40; i < 45; i++ {
 		msgs[i].Role = string(api.MessageRoleTool)
 	}
-	out := DeterministicFit(fitCfg(), msgs, EstimateMessagesTokens(msgs)/2)
+	out := DeterministicFitWithReserve(fitCfg(), msgs, EstimateMessagesTokens(msgs)/2, 0)
 	if len(out) > 0 && out[0].Role == string(api.MessageRoleTool) {
 		t.Fatal("fit left a leading tool row")
 	}
@@ -186,7 +186,7 @@ func TestDeterministicFitStripsLeadingToolRows(t *testing.T) {
 // KeepRecentMessages rather than emptying the history.
 func TestDeterministicFitFloorsAtKeepRecent(t *testing.T) {
 	msgs := fitRows(200)
-	out := DeterministicFit(fitCfg(), msgs, 1)
+	out := DeterministicFitWithReserve(fitCfg(), msgs, 1, 0)
 	if len(out) == 0 {
 		t.Fatal("fit emptied the history")
 	}
@@ -246,7 +246,7 @@ func TestDeterministicFitLeavesNoInterleavedOrphan(t *testing.T) {
 	rows[32].Role, rows[32].ToolCallID = string(api.MessageRoleTool), "p2"
 	perRow := EstimateMessagesTokens(rows[:1])
 	cfg := CompactionConfig{KeepRecentMessages: 2}
-	out := DeterministicFit(cfg, rows, EstimateMessagesTokens(rows)-30*perRow)
+	out := DeterministicFitWithReserve(cfg, rows, EstimateMessagesTokens(rows)-30*perRow, 0)
 	calls := map[string]bool{}
 	for _, row := range out {
 		for _, call := range row.ToolCalls {

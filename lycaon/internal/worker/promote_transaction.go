@@ -22,14 +22,11 @@ type promoteTransaction struct {
 	afterCommit func() error
 }
 
-// promoteTransactionEffects holds the seams a crash-ordering contract observes.
-type promoteTransactionEffects = checkpoint.TransactionConfig
-
 func beginPromoteTransaction(dataDir, jobID string, plans []promoteMutation) (*promoteTransaction, error) {
-	return beginPromoteTransactionWith(dataDir, jobID, plans, promoteTransactionEffects{})
+	return beginPromoteTransactionWith(dataDir, jobID, plans, checkpoint.TransactionConfig{})
 }
 
-func beginPromoteTransactionWith(dataDir, jobID string, plans []promoteMutation, effects promoteTransactionEffects) (*promoteTransaction, error) {
+func beginPromoteTransactionWith(dataDir, jobID string, plans []promoteMutation, effects checkpoint.TransactionConfig) (*promoteTransaction, error) {
 	effects.Dir, effects.ID = promoteTransactionDir(dataDir, jobID), promoteTransactionID(jobID)
 	if err := os.MkdirAll(filepath.Dir(effects.Dir), 0o700); err != nil {
 		return nil, fmt.Errorf("create promote transaction directory: %w", err)

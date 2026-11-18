@@ -1,7 +1,7 @@
 import type { ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
 import { resolveProjectFile, relativeUnderRoot, type ResolveProjectRoot } from "../../api/project-path.ts";
 import { fileVersionFromSnapshot } from "../../files/history/file-version.ts";
-import { openFilesBuffer } from "../../files/documents/project-files-buffers.ts";
+import { openFilesBuffer } from "../../files/documents/project-files-buffer-lifecycle.ts";
 import { previewDiffBufferJobId } from "../../files/review/review-model.ts";
 import { openReviewLens } from "../../files/review/review-pane.ts";
 import { diffsPageCopy, type DiffsAddress } from "../../files/review/diffs-address.ts";

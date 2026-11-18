@@ -14,7 +14,7 @@ func TestSessionQueueGetOpenAPI(t *testing.T) {
 	dir := t.TempDir()
 	sess := createSessionHTTP(t, h.Server, dir)
 
-	req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/queue", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/queue", nil)
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -28,7 +28,7 @@ func TestSessionQueueMutateOpenAPI(t *testing.T) {
 	dir := t.TempDir()
 	sess := createSessionHTTP(t, h.Server, dir)
 
-	req := authedRequest(t, http.MethodPatch, "/v1/sessions/"+sess.ID+"/queue",
+	req := AuthedRequest(t, http.MethodPatch, "/v1/sessions/"+sess.ID+"/queue",
 		strings.NewReader(`{"op":"hold","hold":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -44,7 +44,7 @@ func TestSessionQueueUnknownOpRejected(t *testing.T) {
 	dir := t.TempDir()
 	sess := createSessionHTTP(t, h.Server, dir)
 
-	req := authedRequest(t, http.MethodPatch, "/v1/sessions/"+sess.ID+"/queue",
+	req := AuthedRequest(t, http.MethodPatch, "/v1/sessions/"+sess.ID+"/queue",
 		strings.NewReader(`{"op":"nonsense"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

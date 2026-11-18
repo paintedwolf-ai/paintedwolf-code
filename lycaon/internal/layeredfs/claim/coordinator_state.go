@@ -248,22 +248,6 @@ func (c *Coordinator) recordRecoveryRequired(viewID string, snap WorkspaceStateS
 	return snap
 }
 
-// LoadOrUpgradeRetainedView loads a Format-v2 or Format-v1 metadata file and returns its
-// reconstructed ClaimedView state without converting legacy materialized views into live mounts.
-func (c *Coordinator) LoadOrUpgradeRetainedView(metaPath string) (*ClaimedView, bool, error) {
-	meta, upgraded, err := LoadViewMetadata(metaPath)
-	if err != nil {
-		return nil, false, err
-	}
-	snap := buildReadySnapshot(meta)
-	cv := &ClaimedView{
-		Identity: meta.Identity,
-		Metadata: meta,
-		State:    snap,
-	}
-	return cv, upgraded, nil
-}
-
 func checkStageBoundary(ctx context.Context, fault FaultHook, stage ClaimStage) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -290,9 +274,6 @@ func collectPreparedRootPaths(roots []adapter.PreparedRoot) []string {
 	}
 	return out
 }
-
-// ClassifyFailureReason returns the typed reason a claim or preparation error carries.
-func ClassifyFailureReason(err error) adapter.ReasonCode { return classifyClaimReason(err) }
 
 func classifyClaimReason(err error) adapter.ReasonCode {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

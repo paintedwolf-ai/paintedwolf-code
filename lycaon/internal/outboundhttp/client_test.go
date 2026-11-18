@@ -11,6 +11,8 @@ import (
 	"net/netip"
 	"net/url"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -197,23 +199,35 @@ func TestDoTruncatesALongerBodyWhenAsked(t *testing.T) {
 }
 
 func TestDoUsesOneNetworkTimeoutAcrossRedirects(t *testing.T) {
+	// The first hop is charged the whole budget; a budget per hop would let the second through.
+	var mu sync.Mutex
+	clock := time.Unix(0, 0)
+	var second atomic.Bool
 	server := httptest.NewUnstartedServer(nil)
 	server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(45 * time.Millisecond)
 		if r.URL.Path == "/first" {
+			mu.Lock()
+			clock = clock.Add(time.Minute)
+			mu.Unlock()
 			http.Redirect(w, r, server.URL+"/second", http.StatusFound)
 			return
 		}
+		second.Store(true)
 		_, _ = w.Write([]byte("ready"))
 	})
 	server.Start()
 	t.Cleanup(server.Close)
-	_, err := Do(context.Background(), Request{
+	_, err := Do(t.Context(), Request{
 		URL: server.URL + "/first", Redirects: RedirectSafe,
-		Timeout: 70 * time.Millisecond, AllowAddress: allowLoopback,
+		Timeout: time.Minute, AllowAddress: allowLoopback,
+		clock: func() time.Time {
+			mu.Lock()
+			defer mu.Unlock()
+			return clock
+		},
 	})
-	if err == nil {
-		t.Fatal("redirect chain exceeded the total timeout")
+	if !errors.Is(err, context.DeadlineExceeded) || second.Load() {
+		t.Fatalf("redirect after the budget was spent: err=%v second hop reached=%v", err, second.Load())
 	}
 }
 
@@ -247,8 +261,12 @@ func TestDoRejectsHostControlledHeadersBeforeDial(t *testing.T) {
 }
 
 func TestDoPopulatesTiming(t *testing.T) {
+	var mu sync.Mutex
+	clock := time.Unix(0, 0)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(5 * time.Millisecond)
+		mu.Lock()
+		clock = clock.Add(5 * time.Millisecond)
+		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("hello timing"))
 	}))
@@ -256,6 +274,11 @@ func TestDoPopulatesTiming(t *testing.T) {
 
 	response, err := Do(t.Context(), Request{
 		URL: server.URL, AllowAddress: allowLoopback,
+		clock: func() time.Time {
+			mu.Lock()
+			defer mu.Unlock()
+			return clock
+		},
 	})
 	if err != nil {
 		t.Fatalf("Do: %v", err)
@@ -263,8 +286,8 @@ func TestDoPopulatesTiming(t *testing.T) {
 	if response.Timing == nil {
 		t.Fatal("response.Timing is nil")
 	}
-	if response.Timing.Total <= 0 {
-		t.Errorf("expected positive total duration, got %d", response.Timing.Total)
+	if response.Timing.Total != 5 || response.DurationMS != 5 {
+		t.Errorf("timing = total %d duration %d, want the 5 ms the hop was charged", response.Timing.Total, response.DurationMS)
 	}
 }
 

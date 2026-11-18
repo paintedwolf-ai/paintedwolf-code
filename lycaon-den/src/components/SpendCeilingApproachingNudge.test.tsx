@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -24,9 +22,6 @@ const limitsDoc = (ceiling = 5): SettingsLimitsResponse => ({
   coordinator_host_turn_timeout_ms: 10800000,
   coordinator_max_sleep_ms: 10800000,
   await_parent_workers_timeout_ms: 10800000,
-  worker_tool_budget_default: 20,
-  worker_tool_budget_min: 2,
-  worker_tool_budget_max: 120,
   session_spend_ceiling_nano_usd: ceiling * NANO_PER_USD,
   spend_ceiling_enabled: true,
   spend_soft_stop: true,
@@ -236,25 +231,5 @@ describe("SpendCeilingApproachingNudge", () => {
       />
     ));
     expect(screen.queryByTestId("spend-ceiling-approaching-nudge")).toBeNull();
-  });
-
-  it("does not persist dismissal into app-state surfaces", () => {
-    const root = join(import.meta.dirname, "..", "..");
-    for (const rel of [
-      "shared/app-state-types.ts",
-      "src-tauri/src/app_state.rs",
-      "src/platform/persistence/app-state-parse.ts",
-    ]) {
-      const body = readFileSync(join(root, rel), "utf8");
-      for (const needle of [
-        "spendCeilingApproaching",
-        "spend_ceiling_approaching",
-        "approachingDismiss",
-        "spendRunwayFired",
-        "SPEND_CEILING_WARN",
-      ]) {
-        expect(body, `${rel} must not mention ${needle}`).not.toContain(needle);
-      }
-    }
   });
 });

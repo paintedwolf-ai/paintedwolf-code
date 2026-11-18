@@ -12,8 +12,8 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -90,26 +90,26 @@ func TestCostSummaryWorkerSplitAfterDelegation(t *testing.T) {
 	parent := createSessionHTTP(t, srv, dir)
 
 	postPromptAndWaitIdle(t, srv, parent.ID, "plan the work")
+	h.SeedProgress(t, ctx, parent.ID)
 
-	r, err := h.Delegations.Manager.Init(ctx, parent.ID, wire.CreateDelegationRequest{
-		ProjectID: testdbseed.DefaultProjectID,
-		Task:      "implement feature",
-		Strategy:  wire.HuntStrategyFileBased,
-	})
-	testutil.FailErr(t, "h.Delegations.Manager.Init failed", err)
-	if _, err := h.Delegations.Manager.DispatchLeg(ctx, r.ID, r.Legs[0].ID, ""); err != nil {
-		testutil.FailErr(t, "h.Delegations.Manager.DispatchLeg failed", err)
-	}
+	_, err := h.ToolRegistry.Run(
+		ctx,
+		"task",
+		wiring.TaskToolArgs(orchestration.ProfileRepoResearcher, "inspect feature"),
+		h.CoordinatorToolContext(t, ctx, &parent, dir),
+	)
+	testutil.FailErr(t, "task tool failed", err)
 
-	testutil.WaitFor(t, func() bool {
-		st, err := h.Delegations.Manager.GetStatus(ctx, r.ID)
-		if err != nil || st == nil {
+	testutil.WaitFor(t, "the worker job completes and its outcome is delivered", func() bool {
+		jobs, err := h.Workers.Queue.ListBySession(ctx, parent.ProjectID, parent.ID, wire.WorkerStatusComplete)
+		if err != nil || len(jobs) != 1 {
 			return false
 		}
-		return st.Phase == wire.DelegationPhaseDone
+		pending, err := h.Workers.Queue.ListPendingOutcomes(ctx)
+		return err == nil && len(pending) == 0
 	})
 
-	req := authedRequest(t, http.MethodGet, "/v1/cost/summary?session_id="+parent.ID, nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/cost/summary?session_id="+parent.ID, nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -141,7 +141,7 @@ func TestCostSSEIncludesBreakdown(t *testing.T) {
 	}
 
 	var got wire.CostEvent
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the cost event carries the breakdown", func() bool {
 		select {
 		case envelope, ok := <-ch:
 			if !ok || envelope.Topic != wire.EventTopicCost {

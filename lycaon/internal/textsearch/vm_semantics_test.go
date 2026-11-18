@@ -59,7 +59,7 @@ func TestRegexDialectsCancelAndReleaseSessionAdmission(t *testing.T) {
 		session, err := program.Session(ctx, limits)
 		if err != nil {
 			cancel()
-			t.Fatal(err)
+			testutil.FailErr(t, "program.Session failed", err)
 		}
 		if err = session.ReserveMemory(1024); err != nil {
 			testutil.FailErr(t, "session.ReserveMemory failed", err)
@@ -79,7 +79,7 @@ func TestRecordDecodeAdmissionPrecedesAllocation(t *testing.T) {
 	vm := matcher.engine.(vmEngine)
 	vm.limits.MemoryBytes = 1024
 	_, _, err = vm.first(t.Context(), make([]byte, 1024))
-	if budgetResource(t, err) != "evaluation_memory_bytes" {
-		t.Fatal(err)
+	if resource := budgetResource(t, err); resource != "evaluation_memory_bytes" {
+		t.Fatalf("exhausted %s, want evaluation_memory_bytes: %v", resource, err)
 	}
 }

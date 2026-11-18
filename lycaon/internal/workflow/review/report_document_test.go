@@ -3,6 +3,7 @@ package review
 import (
 	"context"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"slices"
 	"strings"
 	"testing"
@@ -31,8 +32,8 @@ func surveyPhases() (workflowdef.ReviewLoopDef, workflowdef.ReviewLoopDef) {
 	return claims, challenge
 }
 
-func phaseVerdict(phase string, def workflowdef.ReviewLoopDef, member, claims string) workflowpresentation.PhaseVerdict {
-	return workflowpresentation.PhaseVerdict{Phase: phase, Def: def, Record: evidence.Record{Artifacts: map[string]any{
+func phaseVerdict(phase string, def workflowdef.ReviewLoopDef, member, claims string) runstate.PhaseVerdict {
+	return runstate.PhaseVerdict{Phase: phase, Def: def, Record: evidence.Record{Artifacts: map[string]any{
 		"verdict": strings.Split(def.VerdictSchema["verdict"], "|")[0], member: claims,
 	}}}
 }
@@ -41,7 +42,7 @@ func phaseVerdict(phase string, def workflowdef.ReviewLoopDef, member, claims st
 // it settles its class, and a claim the reconciling phase leaves out stays open.
 func TestReconcileClaims_OriginTitlesLaterPhasesSettle(t *testing.T) {
 	claimsDef, challengeDef := surveyPhases()
-	got := workflowpresentation.ReconcileClaims([]workflowpresentation.PhaseVerdict{
+	got := workflowpresentation.ReconcileClaims([]runstate.PhaseVerdict{
 		phaseVerdict("claims", claimsDef, "claims", `[
 			{"id":"a","title":"API fails closed","status":"claimed","statement":"s","answers":{"reachable":"not_reachable"}},
 			{"id":"b","title":"Parser overflows","status":"claimed","statement":"s","scan_group_ids":["group:1"]},

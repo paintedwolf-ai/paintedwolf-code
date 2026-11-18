@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/netip"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -337,7 +338,7 @@ func (s *listenerSweeper) sweepOnce(ctx context.Context) bool {
 				rootSessionID: owner,
 			}
 			if proc.facts.Action != nil {
-				if lid := trim(proc.facts.Action.LineageID()); lid != "" {
+				if lid := strings.TrimSpace(proc.facts.Action.LineageID()); lid != "" {
 					lineageToHandle[lid] = handle
 				}
 			}
@@ -370,9 +371,9 @@ func (s *listenerSweeper) sweepOnce(ctx context.Context) bool {
 		if !obs.Addr.IsValid() || obs.Addr.Port() == 0 {
 			continue
 		}
-		handle := trim(obs.Handle)
+		handle := strings.TrimSpace(obs.Handle)
 		if handle == "" && obs.LineageID != "" {
-			handle = lineageToHandle[trim(obs.LineageID)]
+			handle = lineageToHandle[strings.TrimSpace(obs.LineageID)]
 		}
 		if handle == "" && obs.PID > 0 {
 			handle = pidToHandle[obs.PID]

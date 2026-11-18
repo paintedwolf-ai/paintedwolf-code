@@ -1,10 +1,10 @@
 package sourceledger
 
 import (
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -18,7 +18,7 @@ func TestSavedTextAttributionNamesThePublishingEffect(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, sqlDB, "p1")
 	_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
-		VALUES ('r1', 'p1', '/tmp/source-ledger-test', 'source-ledger-test', 1, ?, 'attached')`, db.FormatTime(time.Now().UTC()))
+		VALUES ('r1', 'p1', '/tmp/source-ledger-test', 'source-ledger-test', 1, ?, 'attached')`, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert root", err)
 	store, ctx := New(sqlDB, t.TempDir()), t.Context()
 	location := RecordLocation{RootID: "r1", Path: "a.txt"}

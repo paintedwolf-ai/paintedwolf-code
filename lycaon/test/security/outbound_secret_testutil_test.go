@@ -15,7 +15,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	internalapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/egress"
@@ -107,7 +106,7 @@ func enableBraveSearchOnly(t *testing.T, srv *internalapi.Server) {
 
 func putJSON(t *testing.T, srv *internalapi.Server, method, path, body string) {
 	t.Helper()
-	req := authedRequest(t, method, path, strings.NewReader(body))
+	req := AuthedRequest(t, method, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -123,7 +122,7 @@ func enableMCPProvider(t *testing.T, srv *internalapi.Server, id string) {
 		Enabled: &enabled,
 	})
 	testutil.FailErr(t, "marshal mcp enable", err)
-	req := authedRequest(t, http.MethodPatch, "/v1/mcp/providers/"+id, bytes.NewReader(body))
+	req := AuthedRequest(t, http.MethodPatch, "/v1/mcp/providers/"+id, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -170,24 +169,16 @@ func awaitOutboundPrompt(t *testing.T, h *wiring.Harness, sessionID string, done
 
 func waitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string) wire.CheckpointEvent {
 	t.Helper()
-	ev, ok := tryWaitOnePendingApproval(t, h, sessionID)
-	if !ok {
-		t.Fatal("timed out waiting for tool_approval checkpoint")
-	}
-	return ev
-}
-
-func tryWaitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string) (wire.CheckpointEvent, bool) {
-	t.Helper()
 	var ev wire.CheckpointEvent
-	for t.Context().Err() == nil {
-		pending, err := h.Sessions.Checkpoints.ListPending(context.Background(), sessionID, nil)
-		if err == nil && len(pending) == 1 && pending[0].Kind == wire.CheckpointKindToolApproval {
-			return pending[0], true
+	testutil.WaitFor(t, "one tool approval is pending", func() bool {
+		pending, err := h.Sessions.Checkpoints.ListPending(t.Context(), sessionID, nil)
+		if err != nil || len(pending) != 1 || pending[0].Kind != wire.CheckpointKindToolApproval {
+			return false
 		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	return ev, false
+		ev = pending[0]
+		return true
+	})
+	return ev
 }
 
 func dumpSessionFloorDebug(t *testing.T, h *wiring.Harness, sessionID string, promptErr error) {
@@ -221,7 +212,7 @@ func resolveApproval(t *testing.T, srv *internalapi.Server, sessionID, checkpoin
 
 func resolveCheckpointHTTP(t *testing.T, srv *internalapi.Server, sessionID, checkpointID, body string) {
 	t.Helper()
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sessionID+"/checkpoints/"+checkpointID, strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sessionID+"/checkpoints/"+checkpointID, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

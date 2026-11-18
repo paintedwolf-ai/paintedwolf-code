@@ -88,8 +88,9 @@ prepare_runtime() {
   if [[ -d "$ROOT/lycaon-den/src-tauri/binaries" && ! -e "$SNAPSHOT_DIR/lycaon-den/src-tauri/binaries" && ! -L "$SNAPSHOT_DIR/lycaon-den/src-tauri/binaries" ]]; then
     ln -s "$ROOT/lycaon-den/src-tauri/binaries" "$SNAPSHOT_DIR/lycaon-den/src-tauri/binaries"
   fi
-  if [[ -f "$ROOT/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md" && ! -e "$SNAPSHOT_DIR/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md" && ! -L "$SNAPSHOT_DIR/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md" ]]; then
-    ln -s "$ROOT/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md" "$SNAPSHOT_DIR/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md"
+  local notices=lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md
+  if [[ -f "$ROOT/$notices" && ! -e "$SNAPSHOT_DIR/$notices" && ! -L "$SNAPSHOT_DIR/$notices" ]]; then
+    cp "$ROOT/$notices" "$SNAPSHOT_DIR/$notices"
   fi
   if [[ -d "$ROOT/lycaon-den/src-tauri/engine-root/gitengine" ]]; then
     local engine_root="$SNAPSHOT_DIR/lycaon-den/src-tauri/engine-root" staged
@@ -140,6 +141,7 @@ FIXTURE_REFRESHES=(
   "UPDATE_CITATION_GROUNDING_PARITY_GOLDENS=lycaon/test/fixtures/citation-grounding-parity"
   "UPDATE_CORPUS_BASELINE=lycaon/internal/oar/testdata/corpus_baseline.json"
   "UPDATE_RUST_HOST_WIRE_FIXTURES=lycaon-den/src-tauri/tests/host_wire_fixtures.json"
+  "UPDATE_HOST_CORPUS=lycaon-den/src/api/testdata/host-corpus.json"
 )
 
 # Refreshes preserve checkout edits made after capture and omit snapshot deletions.

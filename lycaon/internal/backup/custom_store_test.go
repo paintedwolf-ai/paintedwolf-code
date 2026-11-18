@@ -14,9 +14,8 @@ import (
 
 func TestRecoveryRestoreInstallsConfiguredDatabaseAndRetainsItsJournals(t *testing.T) {
 	source := testdbfixture.Open(t, "store.db")
-	sourceRoot, err := db.Directory(t.Context(), source)
-	testutil.FailErr(t, "resolve source directory", err)
-	_, err = source.ExecContext(t.Context(), `INSERT INTO store_meta(key,value) VALUES('restore-probe','archive')`)
+	sourceRoot := source.DataDir()
+	_, err := source.ExecContext(t.Context(), `INSERT INTO store_meta(key,value) VALUES('restore-probe','archive')`)
 	testutil.FailErr(t, "seed archived value", err)
 	archive := filepath.Join(t.TempDir(), "backup.zip")
 	_, err = backup.Create(t.Context(), backup.CreateOpts{ConfigDir: sourceRoot, DBPath: filepath.Join(sourceRoot, "store.db"), SQLDB: source, SchemaUserVersion: db.SchemaVersion}, archive)

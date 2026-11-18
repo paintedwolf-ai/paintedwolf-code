@@ -1,5 +1,9 @@
 import type { WorkerTask } from "../../api/types.ts";
-import { workerAgentLabel, type WorkerDrawerFocus } from "../../chat/worker/workers-model.ts";
+import {
+  findSessionWorker,
+  workerAgentLabel,
+  type WorkerDrawerFocus,
+} from "../../chat/worker/workers-model.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { ContextDrawer } from "../shell/ContextDrawer.tsx";
 import { WorkerTranscript } from "./WorkerTranscript.tsx";
@@ -18,7 +22,11 @@ type Props = {
 // Worker selection belongs to the Workers tab.
 export function WorkersDrawer(props: Props) {
   const selected = () =>
-    props.workers.find((w) => w.id === props.selectedId) ?? null;
+    findSessionWorker(
+      props.workers,
+      props.selectedId,
+      props.appStore.state.workers,
+    ) ?? null;
 
   return (
     <ContextDrawer

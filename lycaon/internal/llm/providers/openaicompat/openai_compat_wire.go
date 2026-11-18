@@ -124,6 +124,8 @@ type chatCompletionStreamChunkWire struct {
 		FinishReason openai.FinishReason `json:"finish_reason"`
 	} `json:"choices"`
 	Usage *Usage `json:"usage,omitempty"`
+	// Error is set when the provider fails after the stream has started.
+	Error json.RawMessage `json:"error,omitempty"`
 }
 
 // toolChoiceNone keeps tool definitions while forbidding a call.

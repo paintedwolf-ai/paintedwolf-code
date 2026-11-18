@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 )
 
@@ -20,7 +21,7 @@ func RevokeBlueprintApprovalsForSession(ctx context.Context, tx *sql.Tx, session
 		UPDATE blueprint_approvals
 		SET status = 'revoked', revoked_at = ?, revoked_cause = ?
 		WHERE session_id = ? AND status = 'approved'`,
-		FormatTime(now.UTC()), BlueprintGrantCauseSessionDeleted, sessionID)
+		timelayout.Format(now.UTC()), BlueprintGrantCauseSessionDeleted, sessionID)
 	if err != nil {
 		return 0, fmt.Errorf("revoke blueprint approvals for session: %w", err)
 	}
@@ -34,7 +35,7 @@ func revokeOrphanBlueprintGrants(ctx context.Context, sqlDB Handle, now time.Tim
 		UPDATE blueprint_approvals
 		SET status = 'revoked', revoked_at = ?, revoked_cause = ?
 		WHERE status = 'approved' AND session_id NOT IN (SELECT id FROM sessions)`,
-		FormatTime(now.UTC()), BlueprintGrantCauseSessionDeleted)
+		timelayout.Format(now.UTC()), BlueprintGrantCauseSessionDeleted)
 	if err != nil {
 		return 0, fmt.Errorf("revoke orphan blueprint grants: %w", err)
 	}

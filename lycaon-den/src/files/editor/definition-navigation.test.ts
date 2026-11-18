@@ -12,7 +12,7 @@ const { openBuffer, pushJump, getView, markPending, clearPending } = vi.hoisted(
   openBuffer: vi.fn(() => "destination"), pushJump: vi.fn(), getView: vi.fn(),
   markPending: vi.fn(), clearPending: vi.fn(),
 }));
-vi.mock("../documents/project-files-buffers.ts", () => ({ openFilesBuffer: openBuffer }));
+vi.mock("../documents/project-files-buffer-lifecycle.ts", () => ({ openFilesBuffer: openBuffer }));
 vi.mock("../components/project-files-jump-bridge.ts", () => ({ pushProjectJump: pushJump }));
 vi.mock("./files-editor-host.ts", () => ({ getFilesEditorView: getView }));
 vi.mock("../../components/source/editor/codemirror-theme.ts", () => ({
@@ -90,5 +90,30 @@ describe("definition navigation request lifetime", () => {
     window.dispatchEvent(afterDispose);
     expect(afterDispose.defaultPrevented).toBe(false);
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("definition jump history", () => {
+  it("records the origin before opening the destination, then the destination", async () => {
+    const subject = navigation(vi.fn(async () => ({ candidates: [candidate("target.ts")], truncated: false })));
+    try {
+      await subject.runGoToDefinition();
+      expect(pushJump).toHaveBeenCalledTimes(2);
+      const [origin, destination] = pushJump.mock.invocationCallOrder;
+      const opened = openBuffer.mock.invocationCallOrder[0]!;
+      expect(origin).toBeLessThan(opened);
+      // Jump back from the destination returns to the origin, so the destination sits at the stack tip.
+      expect(destination).toBeGreaterThan(opened);
+    } finally { subject.dispose(); }
+  });
+
+  it("keeps a miss in the editor: a notice and no navigation", async () => {
+    const subject = navigation(vi.fn(async () => ({ candidates: [], truncated: false })));
+    try {
+      await subject.runGoToDefinition();
+      expect(subject.definitionNotice()).not.toBeNull();
+      expect(openBuffer).not.toHaveBeenCalled();
+      expect(pushJump).not.toHaveBeenCalled();
+    } finally { subject.dispose(); }
   });
 });

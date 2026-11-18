@@ -3,6 +3,7 @@ package sourcesnapshot
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
@@ -19,7 +20,7 @@ func TestCollectionThenReclamationKeepsPublication_AC_DB_01_AC_DB_02_AC_DB_03(t 
 	if !ok {
 		t.Fatalf("store handle is %T", s.db)
 	}
-	old := db.FormatTime(time.Now().Add(-2 * Retention))
+	old := timelayout.Format(time.Now().Add(-2 * Retention))
 	seedChunk(t, s, "held-chunk", 500)
 	seedManifest(t, s, "held", "held-chunk")
 	seedSnapshot(t, s, "held", old, "held")

@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
-
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // Detached goroutines need their own panic recovery.
@@ -75,12 +72,11 @@ func TestGoDetachedOutlivesRequestAndStopsWithServer(t *testing.T) {
 func TestServicesDrainOnlyAfterStop(t *testing.T) {
 	s := &Group{}
 	closed := make(chan struct{})
-	s.GoService(func(ctx context.Context) {
+	s.GoService(context.Background(), func(ctx context.Context) {
 		<-ctx.Done()
 		close(closed)
 	})
-	idle, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	idle := t.Context()
 	s.Wait(idle)
 	if idle.Err() != nil {
 		t.Fatal("an idle wait blocked on a running service")
@@ -92,4 +88,19 @@ func TestServicesDrainOnlyAfterStop(t *testing.T) {
 	default:
 		t.Fatal("wait after stop returned before the service finished")
 	}
+}
+
+// A service bound to a parent ends with it, without a Stop.
+func TestServiceEndsWithItsParent(t *testing.T) {
+	s := &Group{}
+	parent, cancel := context.WithCancel(context.Background())
+	ended := make(chan struct{})
+	s.GoService(parent, func(ctx context.Context) {
+		<-ctx.Done()
+		close(ended)
+	})
+	cancel()
+	testutil.AwaitClosed(t, "service end after its parent", ended)
+	s.Stop()
+	s.Wait(context.Background())
 }

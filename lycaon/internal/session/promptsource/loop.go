@@ -49,6 +49,8 @@ type Loop struct {
 	Turns        *execution.Journal
 	Workers      workeroutcomes.CycleLedger
 	Workflow     *loopwake.WorkflowDomains
+	// WorkerNames names the worker whose round a job runs.
+	WorkerNames func(ctx context.Context, jobID string) (string, bool, error)
 }
 
 func (m *Loop) Build() loopwake.LoopDeps {
@@ -111,6 +113,16 @@ func (m *Loop) Build() loopwake.LoopDeps {
 				return m.Runtime.Kicks().HasQueuedKick(sessionID, kickID)
 			},
 			WorkflowObligationsOpen: m.Guidance.WorkflowObligationsOpen,
+			WorkerName: func(ctx context.Context, jobID string) string {
+				if m == nil || m.WorkerNames == nil {
+					return ""
+				}
+				name, ok, err := m.WorkerNames(ctx, jobID)
+				if err != nil || !ok {
+					return ""
+				}
+				return name
+			},
 			HostWakeOverlayPromoteDue: func(ctx context.Context, sessionID string) bool {
 				if m == nil {
 					return false

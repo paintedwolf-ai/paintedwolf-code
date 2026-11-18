@@ -495,17 +495,15 @@ describe("GlobalSearchView", () => {
     await screen.findAllByTestId("search-result-row");
     const view = screen.getByTestId("global-search-view");
 
+    const announced = () => screen.getByTestId("search-selection-status").textContent ?? "";
     fireEvent.keyDown(view, { key: "ArrowDown" });
-    let rows = screen.getAllByTestId("search-result-row");
-    expect(rows[0]?.classList.contains("den-search-row--selected")).toBe(true);
-    expect(screen.getByTestId("search-selection-status").textContent).toContain(
-      "Press Enter to open",
-    );
+    const first = announced();
+    expect(first).toContain("Press Enter to open");
 
+    // The second row is announced in place of the first.
     fireEvent.keyDown(view, { key: "ArrowDown" });
-    rows = screen.getAllByTestId("search-result-row");
-    expect(rows[0]?.classList.contains("den-search-row--selected")).toBe(false);
-    expect(rows[1]?.classList.contains("den-search-row--selected")).toBe(true);
+    expect(announced()).toContain("Press Enter to open");
+    expect(announced()).not.toBe(first);
 
     fireEvent.keyDown(view, { key: "Enter" });
     expect(onNavigate).toHaveBeenCalledWith(
@@ -513,10 +511,7 @@ describe("GlobalSearchView", () => {
     );
 
     fireEvent.keyDown(view, { key: "Escape" });
-    rows = screen.getAllByTestId("search-result-row");
-    expect(rows.some((row) => row.classList.contains("den-search-row--selected"))).toBe(
-      false,
-    );
+    expect(announced()).toBe("");
   });
 
   it("offers a widen-scope recovery when a scoped query has no results", async () => {

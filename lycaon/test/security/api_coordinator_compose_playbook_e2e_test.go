@@ -18,7 +18,7 @@ func TestCoordinatorComposeTemplateThenStartRun(t *testing.T) {
 	sess := createSessionHTTP(t, srv, t.TempDir())
 
 	body := `{"template_id":"hotfix-template","params":{"workflow_id":"hotfix-session"}}`
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose-from-template", strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose-from-template", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -33,7 +33,7 @@ func TestCoordinatorComposeTemplateThenStartRun(t *testing.T) {
 		t.Fatal("expected coordinator_brief in compose response")
 	}
 
-	req = authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/coordinator-context", nil)
+	req = AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/coordinator-context", nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -51,7 +51,7 @@ func TestCoordinatorComposeTemplateThenStartRun(t *testing.T) {
 	}
 
 	startBody := `{"workflow_id":"hotfix-session","workflow_version":"1.0.0"}`
-	req = authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req = AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -59,7 +59,7 @@ func TestCoordinatorComposeTemplateThenStartRun(t *testing.T) {
 		t.Fatalf("start run status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	req = authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/coordinator-context", nil)
+	req = AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/coordinator-context", nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -82,7 +82,7 @@ func TestCoordinatorDryRunComposeBeforeUpsert(t *testing.T) {
 	sess := createSessionHTTP(t, srv, t.TempDir())
 
 	body := `{"template_id":"hotfix-template","params":{"workflow_id":"dry-run-session"}}`
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose-from-template?dry_run=true", strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose-from-template?dry_run=true", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -90,7 +90,7 @@ func TestCoordinatorDryRunComposeBeforeUpsert(t *testing.T) {
 		t.Fatalf("dry_run compose status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	req = authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/coordinator-context", nil)
+	req = AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/coordinator-context", nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -104,7 +104,7 @@ func TestCoordinatorDryRunComposeBeforeUpsert(t *testing.T) {
 		t.Fatal("dry_run should not persist compose draft")
 	}
 
-	req = authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose-from-template", strings.NewReader(body))
+	req = AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose-from-template", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -113,7 +113,7 @@ func TestCoordinatorDryRunComposeBeforeUpsert(t *testing.T) {
 	}
 
 	startBody := `{"workflow_id":"dry-run-session","workflow_version":"1.0.0"}`
-	req = authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req = AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

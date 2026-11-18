@@ -100,6 +100,17 @@ export function drawsWindowControls(): boolean {
   return tauriPlatform() === "linux";
 }
 
+/** How a window edge's controls reach the screen: the OS overlays its own, or the shell draws them. */
+export type WindowEdgeChrome = "native" | "drawn";
+
+/** The controls one window edge carries over the shell's own surface, if any. */
+export function windowEdgeChrome(side: WindowChromeSide): WindowEdgeChrome | null {
+  const platform = tauriPlatform();
+  if (platform === "linux") return windowChromeControls(side).length > 0 ? "drawn" : null;
+  if (platform === "macos") return side === "left" ? "native" : null;
+  return null;
+}
+
 export function setWindowChromeLayoutForTests(
   next: (Omit<WindowChromeLayout, "actions"> & { actions?: TitlebarActions }) | null,
 ): void {

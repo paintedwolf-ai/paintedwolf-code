@@ -22,22 +22,3 @@ func TestParseCommand(t *testing.T) {
 		}
 	}
 }
-
-func TestRemainder(t *testing.T) {
-	cases := []struct {
-		text string
-		want string
-	}{
-		{"/options", ""},
-		{"/options   ", ""},
-		{"/options pick postgres", "pick postgres"},
-		{"  /options   pick postgres  ", "pick postgres"},
-		{"hello", ""},
-		{"/", ""},
-	}
-	for _, tc := range cases {
-		if got := Remainder(tc.text); got != tc.want {
-			t.Fatalf("Remainder(%q) = %q want %q", tc.text, got, tc.want)
-		}
-	}
-}

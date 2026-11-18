@@ -13,7 +13,7 @@ func TestSessionFindingsOpenAPI(t *testing.T) {
 	dir := t.TempDir()
 	sess := createSessionHTTP(t, h.Server, dir)
 
-	req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/findings", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/findings", nil)
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

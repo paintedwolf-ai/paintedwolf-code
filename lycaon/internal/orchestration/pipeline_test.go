@@ -5,10 +5,8 @@ import (
 	"slices"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -18,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -43,18 +40,14 @@ var _ orchestration.Orchestrator = (*orchestration.OrchestratorImpl)(nil)
 
 func TestPipelineTopologyLegAgentTypes(t *testing.T) {
 	ctx := context.Background()
-	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	queue := worker.NewInMemoryQueue(10)
-	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 
 	reg := orchestration.NewMemoryAgentRegistryForTest()
-	rec := &recordingDelegation{inner: delMgr, store: delStore}
+	rec := &recordingWorkers{TopologyWorkers: orchestration.NewMemoryTopologyWorkers()}
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
-		Delegation: rec,
-		Store:      delStore,
-		Agents:     reg,
+		Workers: rec,
+		Agents:  reg,
 	})
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
@@ -78,40 +71,36 @@ func TestPipelineTopologyLegAgentTypes(t *testing.T) {
 		Input:     map[string]any{"project_dir": projectDir, "project_id": testdbseed.DefaultProjectID},
 	})
 	testutil.FailErr(t, "orch.Run failed", err)
-	if len(rec.legs) != 2 {
-		t.Fatalf("recorded legs = %d want 2", len(rec.legs))
+	if len(rec.units) != 2 {
+		t.Fatalf("recorded units = %d want 2", len(rec.units))
 	}
 	want := map[string]string{
 		"research": orchestration.ProfileRepoResearcher,
 		"plan":     orchestration.ProfileCoordinator,
 	}
 	for stage, wantAgent := range want {
-		leg, ok := rec.legs[stage]
+		unit, ok := rec.units[stage]
 		if !ok {
-			t.Fatalf("missing leg for stage %q", stage)
+			t.Fatalf("missing unit for stage %q", stage)
 		}
-		if leg.AgentType != wantAgent {
-			t.Fatalf("stage %q agent = %q want %q", stage, leg.AgentType, wantAgent)
+		if unit.AgentType != wantAgent {
+			t.Fatalf("stage %q agent = %q want %q", stage, unit.AgentType, wantAgent)
 		}
-		if leg.Title != stage {
-			t.Fatalf("stage %q title = %q", stage, leg.Title)
+		if unit.WorkID != stage {
+			t.Fatalf("stage %q work_id = %q", stage, unit.WorkID)
 		}
 	}
 }
 
 func TestPipelineUnknownProfileFailsRun(t *testing.T) {
 	ctx := context.Background()
-	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	queue := worker.NewInMemoryQueue(10)
-	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 
 	reg := orchestration.NewMemoryAgentRegistryForTest()
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
-		Delegation: delMgr,
-		Store:      delStore,
-		Agents:     reg,
+		Workers: orchestration.NewMemoryTopologyWorkers(),
+		Agents:  reg,
 	})
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
@@ -138,23 +127,22 @@ func TestPipelineUnknownProfileFailsRun(t *testing.T) {
 	}
 }
 
-func newPipelineIntegrationOrchestrator(t *testing.T) (*orchestration.OrchestratorImpl, *recordingDelegation, *session.Host, *store.Memory) {
+func newPipelineIntegrationOrchestrator(t *testing.T) (*orchestration.OrchestratorImpl, *recordingWorkers, *session.Host, *store.Memory) {
 	t.Helper()
 	mockCfg, err := llm.LoadMockConfig()
 	testutil.FailErr(t, "llm.LoadMockConfig failed", err)
 
-	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	queue := worker.NewInMemoryQueue(10)
-	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
-	rec := &recordingDelegation{inner: delMgr, store: delStore, order: make([]string, 0, 8)}
+	rec := &recordingWorkers{
+		TopologyWorkers: orchestration.NewMemoryTopologyWorkers(),
+		order:           make([]string, 0, 8),
+	}
 
 	reg := loadAgentRegistryFromConfig(t)
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
-		Delegation: rec,
-		Store:      delStore,
-		Agents:     reg,
+		Workers: rec,
+		Agents:  reg,
 	})
 	return orch, rec, sessMgr, sessStore
 }
@@ -209,7 +197,7 @@ func TestPipelineReviewTestUnlockAfterImplement(t *testing.T) {
 		Topology:  *spec,
 		Input:     map[string]any{"project_dir": projectDir, "project_id": testdbseed.DefaultProjectID},
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "orch.Run failed", err)
 	}
 
 	implementIdx := indexOf(rec.order, "implement")
@@ -255,61 +243,107 @@ func TestPipelineFullDefaultPipelineMockRun(t *testing.T) {
 	}
 }
 
-type recordingDelegation struct {
-	inner        orchestration.PipelineDelegation
-	store        orchestration.PipelineDelegationStore
+type recordingWorkers struct {
+	orchestration.TopologyWorkers
 	mu           sync.Mutex
-	legs         map[string]api.Leg
+	units        map[string]orchestration.TopologyUnit
 	order        []string
-	dispatchAt   map[string]time.Time
 	failStage    string
+	failStages   map[string]bool
 	dispatched   chan<- struct{}
 	holdOutcomes <-chan struct{}
 	settled      chan<- struct{}
 	holdReturns  <-chan struct{}
+	barrierSet   map[string]bool
+	barrierReady chan struct{}
+	barrierSeen  int
 }
 
-func (r *recordingDelegation) DispatchLeg(ctx context.Context, delegationID, legID, sourceToolCallID string) (*api.Leg, error) {
-	leg, err := r.store.GetLeg(ctx, delegationID, legID)
+func (r *recordingWorkers) DispatchUnit(ctx context.Context, batchID, unitID string) (*orchestration.TopologyUnit, error) {
+	unit, err := r.GetUnit(ctx, batchID, unitID)
 	if err != nil {
 		return nil, err
 	}
+	var waitBarrier <-chan struct{}
 	r.mu.Lock()
-	if r.legs == nil {
-		r.legs = make(map[string]api.Leg)
+	if r.units == nil {
+		r.units = make(map[string]orchestration.TopologyUnit)
 	}
-	r.legs[leg.Title] = *leg
-	r.order = append(r.order, leg.Title)
-	if r.dispatchAt == nil {
-		r.dispatchAt = make(map[string]time.Time)
+	r.units[unit.WorkID] = *unit
+	r.order = append(r.order, unit.WorkID)
+	if len(r.barrierSet) > 0 && r.barrierSet[unit.WorkID] {
+		if r.barrierReady == nil {
+			r.barrierReady = make(chan struct{})
+		}
+		r.barrierSeen++
+		if r.barrierSeen == len(r.barrierSet) {
+			close(r.barrierReady)
+		}
+		waitBarrier = r.barrierReady
 	}
-	r.dispatchAt[leg.Title] = time.Now()
 	r.mu.Unlock()
-	updated, err := r.inner.DispatchLeg(ctx, delegationID, legID, sourceToolCallID)
-	if err != nil {
-		return nil, err
-	}
+
 	if r.dispatched != nil {
 		r.dispatched <- struct{}{}
 	}
+	if waitBarrier != nil {
+		select {
+		case <-waitBarrier:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	if r.holdOutcomes != nil {
+		if _, err := r.TopologyWorkers.DispatchUnit(ctx, batchID, unitID); err != nil {
+			return nil, err
+		}
 		select {
 		case <-r.holdOutcomes:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
-	}
-	if recorder, ok := r.inner.(interface {
-		RecordOutcome(context.Context, string, string, string, api.WorkerResult) error
-	}); ok {
-		status := "complete"
-		if leg.Title == r.failStage {
-			status = "failed"
+		if setter, ok := r.TopologyWorkers.(interface {
+			SettleUnit(string, string, api.WorkerResult) (*orchestration.TopologyUnit, error)
+		}); ok {
+			status := "complete"
+			if r.shouldFail(unit.WorkID) {
+				status = "failed"
+			}
+			settled, sErr := setter.SettleUnit(batchID, unitID, api.WorkerResult{Status: status, Summary: unit.WorkID + " done"})
+			if sErr != nil {
+				return nil, sErr
+			}
+			return r.afterSettle(ctx, settled)
 		}
-		if err := recorder.RecordOutcome(ctx, delegationID, legID, updated.WorkerID, api.WorkerResult{Status: status, Summary: leg.Title + " done"}); err != nil {
-			return nil, err
-		}
+		return r.GetUnit(ctx, batchID, unitID)
 	}
+
+	settler, ok := r.TopologyWorkers.(orchestration.TopologyDirectSettler)
+	if !ok {
+		return r.TopologyWorkers.DispatchUnit(ctx, batchID, unitID)
+	}
+	status := "complete"
+	if r.shouldFail(unit.WorkID) {
+		status = "failed"
+	}
+	updated, err := settler.DispatchSettled(ctx, batchID, unitID, api.WorkerResult{
+		Status:  status,
+		Summary: unit.WorkID + " done",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return r.afterSettle(ctx, updated)
+}
+
+func (r *recordingWorkers) shouldFail(workID string) bool {
+	if workID == r.failStage {
+		return true
+	}
+	return r.failStages[workID]
+}
+
+func (r *recordingWorkers) afterSettle(ctx context.Context, updated *orchestration.TopologyUnit) (*orchestration.TopologyUnit, error) {
 	if r.settled != nil {
 		r.settled <- struct{}{}
 	}
@@ -321,10 +355,6 @@ func (r *recordingDelegation) DispatchLeg(ctx context.Context, delegationID, leg
 		}
 	}
 	return updated, nil
-}
-
-func (r *recordingDelegation) Abort(ctx context.Context, delegationID, reason string) error {
-	return r.inner.Abort(ctx, delegationID, reason)
 }
 
 func indexOf(items []string, target string) int {

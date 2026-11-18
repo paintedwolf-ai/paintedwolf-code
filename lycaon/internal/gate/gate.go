@@ -2,9 +2,6 @@ package gate
 
 import "github.com/lycaon/lycaon/pkg/api"
 
-// All returns every gate in citation-priority order, which ranks a card's reasons.
-func All() []api.ApprovalGate { return api.AllApprovalGateValues() }
-
 // IsKnown reports whether g is in the closed gate vocabulary.
 func IsKnown(g api.ApprovalGate) bool {
 	for _, candidate := range api.AllApprovalGateValues() {

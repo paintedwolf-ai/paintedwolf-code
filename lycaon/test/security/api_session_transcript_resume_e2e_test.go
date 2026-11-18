@@ -17,7 +17,7 @@ func TestSessionEmptyTranscriptHasActiveAmbientRunHTTP(t *testing.T) {
 	dir := t.TempDir()
 	sess := createSessionHTTP(t, h.Server, dir)
 
-	req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/workflow-runs/active", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/workflow-runs/active", nil)
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -54,7 +54,7 @@ func TestSessionTranscriptWorkflowRunIdHTTP(t *testing.T) {
 		testutil.FailErr(t, "AppendMessages", err)
 	}
 
-	getRun := authedRequest(t, http.MethodGet, "/v1/workflow-runs/"+runID, nil)
+	getRun := AuthedRequest(t, http.MethodGet, "/v1/workflow-runs/"+runID, nil)
 	wRun := httptest.NewRecorder()
 	h.Server.ServeHTTP(wRun, getRun)
 	if wRun.Code != http.StatusOK {
@@ -62,7 +62,7 @@ func TestSessionTranscriptWorkflowRunIdHTTP(t *testing.T) {
 	}
 	AssertResponseMatchesOpenAPI(t, wRun, http.MethodGet, "/v1/workflow-runs/{id}", map[string]string{"id": runID})
 
-	listReq := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/messages", nil)
+	listReq := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/messages", nil)
 	wMsgs := httptest.NewRecorder()
 	h.Server.ServeHTTP(wMsgs, listReq)
 	if wMsgs.Code != http.StatusOK {

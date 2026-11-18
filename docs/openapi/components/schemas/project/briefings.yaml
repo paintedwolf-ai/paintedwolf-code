@@ -65,11 +65,13 @@ components:
     WorkerResultBriefingTarget:
       x-go-generate: true
       type: object
-      required: [worker_id, result_revision]
+      required: [result_handle]
       additionalProperties: false
       properties:
-        worker_id: {type: string, format: uuid}
-        result_revision: {type: string, description: The worker's completion time; a rerun is a new revision.}
+        result_handle:
+          type: string
+          format: uuid
+          description: Settled worker round result handle.
     BriefingRequest:
       x-go-generate: true
       type: object

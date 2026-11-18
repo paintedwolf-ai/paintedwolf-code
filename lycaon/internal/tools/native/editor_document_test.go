@@ -2,7 +2,6 @@ package native
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -20,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // fakeEditorDocuments is the open-document view a test controls: which
@@ -194,68 +192,6 @@ func openDoc(id, text string, dirty bool) *tools.EditorDocumentText {
 	return &tools.EditorDocumentText{ID: id, Revision: 4, Text: text, SHA256: strings.Repeat("d", 64), Dirty: dirty}
 }
 
-func readContent(t *testing.T, out string) surveytools.ReadResponse {
-	t.Helper()
-	var resp surveytools.ReadResponse
-	testutil.FailErr(t, "decode read", json.Unmarshal([]byte(out), &resp))
-	return resp
-}
-
-// A file the person has open reads as their document, and the receipt says
-// the text is their unsaved draft rather than a recorded state.
-func TestReadServesTheOpenDocument(t *testing.T) {
-	dir := t.TempDir()
-	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.go"), []byte("package disk\n"), 0o644))
-	docs := &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{"r1/a.go": openDoc("doc-a", "package draft\n", true)}}
-	read := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
-	out, err := read.Run(context.Background(), map[string]any{"path": "a.go"}, editorCtx(dir, docs))
-	testutil.FailErr(t, "read", err)
-	if resp := readContent(t, out); resp.Content != "     1: package draft" {
-		t.Fatalf("content = %q, want the editor draft", resp.Content)
-	}
-	source := receiptSource(t, out)
-	editor, _ := source["editor"].(map[string]any)
-	if editor == nil || editor["dirty"] != true || editor["revision"] != float64(4) {
-		t.Fatalf("editor stamp = %v", source)
-	}
-	if source["recorded"] != false || source["note"] != sourceview.EditorDraftNote {
-		t.Fatalf("draft stamp = %v, want unrecorded with the editor note", source)
-	}
-}
-
-// A clean document is the file; the receipt still says the editor served it.
-func TestReadStampsACleanDocumentAsEditorServed(t *testing.T) {
-	dir := t.TempDir()
-	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.go"), []byte("package a\n"), 0o644))
-	docs := &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{"r1/a.go": openDoc("doc-a", "package a\n", false)}}
-	read := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
-	out, err := read.Run(context.Background(), map[string]any{"path": "a.go"}, editorCtx(dir, docs))
-	testutil.FailErr(t, "read", err)
-	source := receiptSource(t, out)
-	editor, _ := source["editor"].(map[string]any)
-	if editor == nil || editor["dirty"] != false || source["note"] == sourceview.EditorDraftNote {
-		t.Fatalf("clean document stamp = %v", source)
-	}
-}
-
-// Ranged and symbol reads serve the same text as a whole read.
-func TestReadRangesServeTheOpenDocument(t *testing.T) {
-	dir := t.TempDir()
-	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("disk one\ndisk two\n"), 0o644))
-	docs := &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{"r1/a.txt": openDoc("doc-a", "draft one\ndraft two\n", true)}}
-	read := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
-	out, err := read.Run(context.Background(), map[string]any{
-		"path": "a.txt", "ranges": []any{map[string]any{"offset": 2, "limit": 1}},
-	}, editorCtx(dir, docs))
-	testutil.FailErr(t, "read ranges", err)
-	if !strings.Contains(out, "draft two") || strings.Contains(out, "disk two") {
-		t.Fatalf("ranged read = %s", out)
-	}
-	if editor, _ := receiptSource(t, out)["editor"].(map[string]any); editor == nil {
-		t.Fatalf("ranged read lost the editor stamp: %s", out)
-	}
-}
-
 // An edit to an open file lands in the document, not on disk, and the
 // receipt states where it went.
 func TestWriteLandsInTheOpenDocument(t *testing.T) {
@@ -371,8 +307,7 @@ func TestWritesLandInTheOpenDocument(t *testing.T) {
 
 	docs.docs["r1/a.txt"].Text = "one\ntwo\n"
 	docs.docs["r1/a.txt"].Revision++
-	_, err = (&surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}).Run(t.Context(), map[string]any{"path": "a.txt"}, tctx)
-	testutil.FailErr(t, "read the changed document", err)
+	docs.RememberAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, *docs.docs["r1/a.txt"])
 	replace := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err = replace.Run(context.Background(), map[string]any{
 		"path": "a.txt", "content": "one\nTWO\n",
@@ -399,62 +334,6 @@ func TestWriteToAClosedPathIsAFileWrite(t *testing.T) {
 	testutil.FailErr(t, "read disk", err)
 	if string(raw) != "fresh\n" || len(docs.applied) != 0 || strings.Contains(out, "editor document") {
 		t.Fatalf("closed-path write: disk=%q applies=%d out=%q", raw, len(docs.applied), out)
-	}
-}
-
-// A worker on its private branch never sees the person's documents: its
-// tree is a copy, and the documents belong to the project tree.
-func TestWorkerBranchReadsTheFile(t *testing.T) {
-	dir := t.TempDir()
-	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("disk\n"), 0o644))
-	docs := &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{"r1/a.txt": openDoc("doc-a", "draft\n", true)}}
-	tctx := editorCtx(dir, docs)
-	tctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
-	read := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
-	out, err := read.Run(context.Background(), map[string]any{"path": "a.txt"}, tctx)
-	testutil.FailErr(t, "read", err)
-	if resp := readContent(t, out); resp.Content != "     1: disk" {
-		t.Fatalf("worker read = %q, want the file", resp.Content)
-	}
-}
-
-// A search reads the person's unsaved text for files they have open, and
-// says how many it served that way.
-func TestGrepSearchesOpenDrafts(t *testing.T) {
-	dir := t.TempDir()
-	testutil.FailErr(t, "write a", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("disk needle\n"), 0o644))
-	testutil.FailErr(t, "write b", os.WriteFile(filepath.Join(dir, "b.txt"), []byte("nothing here\n"), 0o644))
-	docs := &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{
-		"r1/a.txt": openDoc("doc-a", "draft only\n", true),
-		"r1/b.txt": openDoc("doc-b", "draft needle\n", true),
-	}}
-	grep := &surveytools.GrepTool{Boundary: nativefixture.Boundary(t)}
-	out, err := grep.Run(context.Background(), map[string]any{"pattern": "needle"}, editorCtx(dir, docs))
-	testutil.FailErr(t, "grep", err)
-	matches := nativefixture.GrepMatches(t, out)
-	if len(matches) != 1 || matches[0]["path"] != "b.txt" {
-		t.Fatalf("matches = %v, want only the draft hit in b.txt", matches)
-	}
-	var resp struct {
-		FilesFromEditor int `json:"files_from_editor"`
-	}
-	testutil.FailErr(t, "decode grep", json.Unmarshal([]byte(nativefixture.SurveyContent(t, out)), &resp))
-	if resp.FilesFromEditor != 2 {
-		t.Fatalf("files_from_editor = %d, want 2", resp.FilesFromEditor)
-	}
-}
-
-// A document lookup that fails falls back to the file and says nothing
-// about the editor; the fallback is still a true reading of the file.
-func TestDraftLookupFailureSearchesTheFile(t *testing.T) {
-	dir := t.TempDir()
-	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("disk needle\n"), 0o644))
-	docs := &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{}, dirtyErr: errors.New("store closed")}
-	grep := &surveytools.GrepTool{Boundary: nativefixture.Boundary(t)}
-	out, err := grep.Run(context.Background(), map[string]any{"pattern": "needle"}, editorCtx(dir, docs))
-	testutil.FailErr(t, "grep", err)
-	if matches := nativefixture.GrepMatches(t, out); len(matches) != 1 {
-		t.Fatalf("matches = %v, want the file hit", matches)
 	}
 }
 
@@ -521,7 +400,7 @@ func (f *fakeEditorDocuments) PreviewAgentEdits(_ context.Context, _ string, edi
 	return out, nil
 }
 
-func TestMutationRequiresASuccessfulRead(t *testing.T) {
+func TestMutationRequiresARememberedRead(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FailErr(t, "seed disk", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("base\n"), 0o644))
 	docs := &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{"r1/a.txt": openDoc("doc-a", "base\n", false)}}
@@ -538,14 +417,8 @@ func TestMutationRequiresASuccessfulRead(t *testing.T) {
 		}
 	}
 	assertReadRequired()
-	read := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
-	if _, err := read.Run(t.Context(), map[string]any{"path": "a.txt", "offset": 100}, tctx); err == nil {
-		t.Fatal("invalid read succeeded")
-	}
-	assertReadRequired()
-	_, err := read.Run(t.Context(), map[string]any{"path": "a.txt"}, tctx)
-	testutil.FailErr(t, "read document", err)
-	_, err = write.Run(t.Context(), args, tctx)
+	docs.RememberAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, *docs.docs["r1/a.txt"])
+	_, err := write.Run(t.Context(), args, tctx)
 	testutil.FailErr(t, "write from delivered read", err)
 }
 

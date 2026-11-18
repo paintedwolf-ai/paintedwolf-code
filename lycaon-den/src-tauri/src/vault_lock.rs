@@ -94,18 +94,6 @@ pub(crate) fn confirmation_refusal() -> Option<&'static str> {
     linux::status().confirmation_refusal()
 }
 
-#[tauri::command]
-pub(crate) fn vault_lock_status() -> serde_json::Value {
-    #[cfg(target_os = "linux")]
-    {
-        serde_json::to_value(linux::status()).unwrap_or(serde_json::Value::Null)
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        serde_json::Value::Null
-    }
-}
-
 /// Registers the step-away observers.
 pub fn setup(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]

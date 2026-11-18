@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"reflect"
 	"testing"
 	"time"
@@ -139,8 +140,8 @@ func seedSummarySession(t *testing.T, sqlDB db.Handle, memory *Memory, sess api.
 			archived_at, pin_rank, created_at, activity_at, updated_at
 		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, sess.ID, sess.ProjectID, sess.Title, sess.Posture, sess.Status, parent,
-		nullableSummaryTime(sess.ArchivedAt), sess.PinRank, db.FormatTime(sess.CreatedAt),
-		db.FormatTime(sess.ActivityAt), db.FormatTime(sess.UpdatedAt))
+		nullableSummaryTime(sess.ArchivedAt), sess.PinRank, timelayout.Format(sess.CreatedAt),
+		timelayout.Format(sess.ActivityAt), timelayout.Format(sess.UpdatedAt))
 	testutil.FailErr(t, "insert session summary fixture", err)
 	copy := sess
 	memory.sessions[sess.ID] = &copy
@@ -150,7 +151,7 @@ func nullableSummaryTime(value *time.Time) any {
 	if value == nil {
 		return nil
 	}
-	return db.FormatTime(*value)
+	return timelayout.Format(*value)
 }
 
 func assertSummaryPagesMatch(t *testing.T, sqlStore *SQL, memory *Memory, q SummaryQuery) {

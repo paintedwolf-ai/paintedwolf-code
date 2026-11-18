@@ -40,17 +40,12 @@ type WorkflowRuns interface {
 	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
 }
 
-type Delegations interface {
-	DelegationBySessionID(string) (string, bool)
-	ListLegs(context.Context, string) ([]api.Leg, error)
-}
 type Service struct {
 	store              Sessions
 	workspace          Workspace
 	state              State
 	evidence           Evidence
 	workflows          *WorkflowDomains
-	delegations        Delegations
 	synthesisCurator   llm.Curator
 	prompts            prompts.PromptTemplateEngine
 	sourceVerification SourceVerification
@@ -60,5 +55,4 @@ func New(store Sessions, workspace Workspace, state State, evidence Evidence) *S
 	return &Service{store: store, workspace: workspace, state: state, evidence: evidence}
 }
 func (s *Service) SetWorkflow(workflows *WorkflowDomains)          { s.workflows = workflows }
-func (s *Service) SetDelegations(delegations Delegations)          { s.delegations = delegations }
 func (s *Service) SetPrompts(prompts prompts.PromptTemplateEngine) { s.prompts = prompts }

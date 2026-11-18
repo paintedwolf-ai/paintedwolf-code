@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -37,7 +38,7 @@ func TestRealServerPromptRoutes(t *testing.T) {
 	}
 
 	var messageID string
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the prompt turn ends with an assistant message", func() bool {
 		getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sessionID, nil)
 		contractcheck.FailErr(t, "http.NewRequest failed", err)
 		api.WithTestAuth(getReq)
@@ -70,14 +71,8 @@ func TestRealServerPromptRoutes(t *testing.T) {
 				break
 			}
 		}
-		if messageID != "" && sess.Status == wire.SessionStatusIdle {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if messageID == "" {
-		t.Fatal("expected assistant message after prompt turn")
-	}
+		return messageID != "" && sess.Status == wire.SessionStatusIdle
+	})
 	streamPath := "/v1/sessions/" + sessionID + "/stream?message=" + messageID
 
 	streamReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, streamPath, nil)

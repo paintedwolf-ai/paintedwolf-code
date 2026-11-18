@@ -1,0 +1,31 @@
+spec_version: "1.0"
+id: REVIEW_OF_NOT_ADMITTED
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - task
+requires_facts: [paintedwolf.merge_status, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.worker]
+when: paintedwolf.rejection_code == "REVIEW_OF_NOT_ADMITTED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:task
+message: The changes in that result were already settled, so there is nothing left to review.
+what: 'The changes in that result from worker `{{ paintedwolf.worker }}` were already {{ paintedwolf.merge_status }}; there is nothing left to review.'
+cause: A review reads changes the coordinator has not yet landed or rejected.
+why: Landed changes are part of the source and rejected ones are gone; a reviewer reads a result still awaiting a decision.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code REVIEW_OF_NOT_ADMITTED; review the worker's current result instead
+x-paintedwolf-scenarios:
+  - id: merged
+    vars:
+      session_role: coordinator
+      worker: parser-fix
+      tool: task
+      merge_status: merged
+  - id: rejected
+    vars:
+      session_role: coordinator
+      worker: parser-fix
+      tool: task
+      merge_status: rejected

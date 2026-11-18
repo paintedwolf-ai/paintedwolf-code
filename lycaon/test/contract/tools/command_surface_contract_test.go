@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/hintregistry"
+
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolschema"
@@ -35,8 +37,10 @@ func TestCommandEnabledToolProfilesRenderCommandSurface(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(configRoot, "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir", err)
-	hints, err := prompts.LoadHintCodeRows()
-	contractcheck.FailErr(t, "LoadHintCodeRows", err)
+	entries, err := hintregistry.ListEffective()
+	contractcheck.FailErr(t, "list hint registry", err)
+	hints, err := prompts.LoadHintCodeRowsFromEntries(entries)
+	contractcheck.FailErr(t, "LoadHintCodeRowsFromEntries", err)
 
 	for _, profile := range commandEnabledToolProfiles(t) {
 		t.Run(profile.ID, func(t *testing.T) {

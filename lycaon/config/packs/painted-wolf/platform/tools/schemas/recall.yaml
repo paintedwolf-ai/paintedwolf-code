@@ -10,9 +10,9 @@ schema:
       minLength: 1
       description: >-
         Exact handle lookup: handle:read#3. Free terms are ANDed; AND, OR, NOT and
-        parentheses are supported. Filters: agent:scout, leg:<id>, session:<id>,
-        tool:read, after:2026-08-01, before:2026-08-02, kind:evidence, path:src/*.go,
-        url:<url>, untrusted:true, verified:false, run:<id>.
+        parentheses are supported. Filters: worker:<name>, agent:scout, leg:<id>,
+        session:<id>, tool:read, after:2026-08-01, before:2026-08-02, kind:evidence,
+        path:src/*.go, url:<url>, untrusted:true, verified:false, run:<id>.
     history:
       type: object
       description: >-

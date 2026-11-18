@@ -27,7 +27,6 @@ type row struct {
 	sessionID string
 	facet     string
 	data      json.RawMessage
-	attempts  int
 }
 
 // DeliveredEvent is the committed lifecycle edge that reached the local hub.
@@ -55,10 +54,6 @@ type Outbox struct {
 // idleSweep is the delivery sweep every host runs without a wake.
 const idleSweep = time.Second
 
-// maxDeliveryAttempts bounds retries of one row, so a row that can never
-// deliver drops instead of blocking every later row.
-const maxDeliveryAttempts = 5
-
 func New(database db.Handle, hub events.EventHub) *Outbox {
 	return &Outbox{db: database, hub: hub, wake: make(chan struct{}, 1)}
 }
@@ -80,7 +75,6 @@ func (o *Outbox) EnqueueTx(ctx context.Context, tx *sql.Tx, topic api.EventTopic
 	if strings.TrimSpace(string(topic)) == "" {
 		return fmt.Errorf("event outbox: enqueue requires a topic")
 	}
-	// An invalid scope would block the queue head until maxDeliveryAttempts.
 	if err := events.ValidatePublishScope(topic, key); err != nil {
 		return fmt.Errorf("event outbox: %w", err)
 	}
@@ -157,8 +151,8 @@ func (o *Outbox) Start(parent context.Context) {
 	}
 	ctx, cancel := context.WithCancel(parent)
 	o.cancel = cancel
-	o.lifecycleMu.Unlock()
 	o.wg.Add(1)
+	o.lifecycleMu.Unlock()
 	go o.run(ctx)
 	o.Notify()
 }
@@ -184,88 +178,45 @@ func (o *Outbox) run(ctx context.Context) {
 	}
 }
 
-// drain publishes in id order and deletes only what it published. The order is
-// the delivery guarantee: a crash between the two republishes the row, so a
-// subscriber may see one event twice and never misses one.
+// A crash after publish and before deletion can replay the same event ID.
 func (o *Outbox) drain(ctx context.Context) error {
 	for {
-		entry, ok, rowErr := o.next(ctx)
-		if !ok {
-			return rowErr
+		entry, ok, err := o.next(ctx)
+		if err != nil || !ok {
+			return err
 		}
-		if rowErr != nil {
-			// A malformed row counts toward the same delivery cap.
-			dropped, err := o.recordDeliveryFailure(ctx, entry, rowErr)
-			if err != nil {
-				return err
-			}
-			if dropped {
-				continue
-			}
-			return rowErr
-		}
-		var data any = json.RawMessage(entry.data)
 		key := events.PublishKey{Project: entry.projectID, Session: entry.sessionID, Facet: entry.facet, EventID: entry.eventID, EntityRevision: entry.revision}
-		if pubErr := o.hub.Publish(ctx, entry.topic, key, data); pubErr != nil {
-			dropped, err := o.recordDeliveryFailure(ctx, entry, pubErr)
-			if err != nil {
+		if entry.topic == "" || !json.Valid(entry.data) || events.ValidatePublishScope(entry.topic, key) != nil {
+			if err := o.remove(ctx, entry.id); err != nil {
 				return err
 			}
-			if dropped {
-				continue
-			}
-			return pubErr
+			slog.ErrorContext(ctx, "discarded malformed event outbox row", "id", entry.id, "event_id", entry.eventID)
+			continue
+		}
+		if err := o.hub.Publish(ctx, entry.topic, key, entry.data); err != nil {
+			_, recordErr := o.db.ExecContext(ctx,
+				`UPDATE event_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?`, err.Error(), entry.id)
+			return errors.Join(err, recordErr)
 		}
 		if o.OnDelivered != nil {
 			o.OnDelivered(ctx, DeliveredEvent{Topic: entry.topic, Data: entry.data})
 		}
-		if _, err := o.db.ExecContext(ctx, `DELETE FROM event_outbox WHERE id = ?`, entry.id); err != nil {
+		if err := o.remove(ctx, entry.id); err != nil {
 			return err
 		}
 	}
 }
 
-// recordDeliveryFailure counts one failed attempt at entry and reports whether
-// it exceeded maxDeliveryAttempts. A row under the cap stays for the next
-// sweep, so only a row that never stops failing is dropped.
-//
-// The explicit transaction is required: Handle routes bare QueryRowContext
-// calls to the read-only pool, where UPDATE ... RETURNING cannot run.
-func (o *Outbox) recordDeliveryFailure(ctx context.Context, entry row, cause error) (dropped bool, err error) {
-	tx, err := o.db.BeginTx(ctx, nil)
-	if err != nil {
-		return false, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	var attempts int
-	if err := tx.QueryRowContext(ctx,
-		`UPDATE event_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ? RETURNING attempts`,
-		cause.Error(), entry.id,
-	).Scan(&attempts); err != nil {
-		return false, err
-	}
-	if attempts < maxDeliveryAttempts {
-		return false, tx.Commit()
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM event_outbox WHERE id = ?`, entry.id); err != nil {
-		return false, err
-	}
-	if err := tx.Commit(); err != nil {
-		return false, err
-	}
-	slog.ErrorContext(ctx, "event outbox: dropping row after repeated delivery failures",
-		"id", entry.id, "event_id", entry.eventID, "topic", entry.topic,
-		"project_id", entry.projectID, "session_id", entry.sessionID, "facet", entry.facet,
-		"attempts", attempts, "err", cause)
-	return true, nil
+func (o *Outbox) remove(ctx context.Context, id int64) error {
+	_, err := o.db.ExecContext(ctx, `DELETE FROM event_outbox WHERE id = ?`, id)
+	return err
 }
 
 func (o *Outbox) next(ctx context.Context) (row, bool, error) {
 	var entry row
 	var topic, data string
-	err := o.db.QueryRowContext(ctx, `SELECT id, event_id, topic, project_id, COALESCE(session_id, ''), COALESCE(facet, ''), entity_revision, data_json, attempts FROM event_outbox ORDER BY id LIMIT 1`).
-		Scan(&entry.id, &entry.eventID, &topic, &entry.projectID, &entry.sessionID, &entry.facet, &entry.revision, &data, &entry.attempts)
+	err := o.db.QueryRowContext(ctx, `SELECT id, event_id, topic, project_id, COALESCE(session_id, ''), COALESCE(facet, ''), entity_revision, data_json FROM event_outbox ORDER BY id LIMIT 1`).
+		Scan(&entry.id, &entry.eventID, &topic, &entry.projectID, &entry.sessionID, &entry.facet, &entry.revision, &data)
 	if errors.Is(err, sql.ErrNoRows) {
 		return row{}, false, nil
 	}
@@ -274,10 +225,6 @@ func (o *Outbox) next(ctx context.Context) (row, bool, error) {
 	}
 	entry.topic = api.EventTopic(topic)
 	entry.data = json.RawMessage(data)
-	if entry.topic == "" {
-		// Keep the id so drain can charge the failure to this row.
-		return entry, true, fmt.Errorf("outbox row %d has empty topic", entry.id)
-	}
 	return entry, true, nil
 }
 

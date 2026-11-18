@@ -11,13 +11,13 @@ import (
 
 func (e *turnContextAssembler) appendWorkerLegInject(ctx context.Context, sess *api.Session, rendered string, turn *TurnAssemblyScratch) ([]api.Message, error) {
 	deps := e.deps
-	legCtx, err := deps.WorkerContext.BuildWorkerPromptContext(ctx, sess.ID, sess)
+	legCtx, err := deps.Workers.Leg.BuildWorkerPromptContext(ctx, sess.ID, sess)
 	if err != nil {
 		return nil, err
 	}
 	legCtx.Checklist = FilterChecklistDedup(legCtx.Checklist, ExtractProcessBullets(rendered))
-	if deps.SiblingNoteDelivery != nil {
-		page, err := deps.SiblingNoteDelivery.PrepareSiblingNotes(ctx, sess.ID, siblingNoteInjectCap)
+	if deps.Deliveries.SiblingNotes != nil {
+		page, err := deps.Deliveries.SiblingNotes.PrepareSiblingNotes(ctx, sess.ID, siblingNoteInjectCap)
 		if err != nil {
 			return nil, err
 		}
@@ -98,7 +98,7 @@ func renderPeerNotesData(notes []inject.SiblingNote) string {
 			line = fmt.Sprintf("finding %d: %s", note.ID, line)
 		}
 		if note.HasBody {
-			line += " [detail: pack_board finding_id]"
+			line += " [detail: read_findings finding_id]"
 		}
 		if agent := strings.TrimSpace(note.Agent); agent != "" {
 			line = agent + ": " + line

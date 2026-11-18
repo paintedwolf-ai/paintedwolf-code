@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -212,7 +213,7 @@ func nullTime(t *time.Time) sql.NullString {
 	if t == nil {
 		return sql.NullString{}
 	}
-	return db.NullString(db.FormatTime(t.UTC()))
+	return db.NullString(timelayout.Format(t.UTC()))
 }
 
 func parseNullTime(value sql.NullString) (*time.Time, error) {

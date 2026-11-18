@@ -46,7 +46,7 @@ func TestPromptSealsARewindAnchorInAProductionBuild(t *testing.T) {
 
 	ctx := context.Background()
 	projectDir := t.TempDir()
-	writeTestProjectApprovalsAllowWrite(t, projectDir)
+	WriteTestProjectApprovalsAllowWrite(t, projectDir)
 
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, projectDir)
 	testutil.FailErr(t, "create session", err)

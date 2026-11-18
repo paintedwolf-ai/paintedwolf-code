@@ -462,7 +462,7 @@ func TestCodeExecutorIndexNarrowsCandidatesBeforeOpening(t *testing.T) {
 	query := sourcecatalog.LiteralQuery{FileScope: sourcecatalog.FileScope{Audience: sourcecatalog.AgentAudience}, IncludeKey: "code-pruning-fixture", Require: litprefilter.AnyOf("unique_needle_token"), Open: func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
 		return os.Open(filepath.Join(root, filepath.FromSlash(entry.Path)))
 	}}
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the literal index is warm", func() bool {
 		return !catalog.Literals.IndexLiteralCandidates(t.Context(), reader, query, entries).Warming
 	})
 	report, err := NewCodeExecutor(decide.Reranker{}).Run(context.Background(), PlanLeg{Code: &CodePlanLeg{

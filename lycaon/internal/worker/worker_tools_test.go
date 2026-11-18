@@ -1,0 +1,776 @@
+package worker
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/prompts"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
+	"github.com/lycaon/lycaon/internal/testbaseline"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
+	"github.com/lycaon/lycaon/internal/workerrecords"
+	"github.com/lycaon/lycaon/pkg/api"
+)
+
+type workerToolsFixture struct {
+	db        *db.Store
+	queue     *SQLQueue
+	records   *workerrecords.Store
+	decisions sessiondecisions.Store
+	reg       *tools.DefaultRegistry
+	coord     workerrecords.Actor
+	workerID  string
+	root      string
+	ops       *workerops.Service
+}
+
+func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
+	t.Helper()
+	database := testdbfixture.Open(t, "store.db")
+	testdbseed.InsertSession(t, database, "coord", testdbseed.DefaultProjectID)
+	now := timelayout.Format(time.Now().UTC())
+	_, err := database.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
+		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
+	testutil.FailErr(t, "insert child", err)
+	f := &workerToolsFixture{
+		db: database, queue: NewSQLQueue(database, 1), records: workerrecords.New(database),
+		decisions: sessiondecisions.NewSQL(database), reg: tools.NewDefaultRegistry(),
+		coord: workerrecords.Actor{SessionID: "coord", Role: workerrecords.RoleCoordinator, PrincipalID: "coord"},
+		root:  t.TempDir(),
+	}
+	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", f.root)
+	w, err := f.records.CreateWorker(t.Context(), f.coord, workerrecords.Op{ID: "create"}, workerrecords.WorkerSpec{
+		Name: "surveyor", AgentType: "repo-researcher", ScopeMode: "read", ChildSessionID: "child",
+	})
+	testutil.FailErr(t, "create worker", err)
+	f.workerID = w.WorkerID
+	f.ops = &workerops.Service{
+		Reader:     workerops.Reader{Records: f.records, Jobs: f.queue, Decisions: f.decisions},
+		Agents:     prompts.AgentMutationCapable,
+		WakeParked: func(context.Context, string) error { return nil },
+		Release:    f.queue.ReleaseAdmitted,
+	}
+	testutil.FailErr(t, "register", RegisterWorkerTools(f.reg, WorkerToolDeps{Ops: f.ops, Queue: f.queue, Plan: plantest.New(t, plantest.Deps(f.records))}))
+	return f
+}
+
+// deliver runs one round on jobID to a complete report.
+func (f *workerToolsFixture) deliver(t *testing.T, jobID string) { f.deliverWith(t, jobID, "") }
+
+// deliverWith delivers a round whose changes published checkpoint; a
+// non-empty checkpoint leaves its changes pending.
+func (f *workerToolsFixture) deliverWith(t *testing.T, jobID, checkpoint string) {
+	t.Helper()
+	testutil.FailErr(t, "insert job", f.queue.store.InsertTask(t.Context(), api.WorkerTask{
+		ID: jobID, ProjectID: testdbseed.DefaultProjectID, ParentSessionID: "coord", ChildSessionID: "child",
+		AgentType: "repo-researcher", Status: api.WorkerStatusRunning, ExecutionTarget: api.ExecutionTargetLocal,
+		Prompt: "survey", Brief: "survey",
+	}))
+	_, err := f.records.AdmitRound(t.Context(), f.coord, workerrecords.Op{ID: "admit-" + jobID}, f.workerID, workerrecords.RoundSpec{JobID: jobID, ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	report, _ := json.Marshal(api.WorkerResult{Status: "complete", CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}})
+	now := timelayout.Format(time.Now().UTC())
+	_, err = f.db.ExecContext(t.Context(), `UPDATE worker_jobs SET status = 'complete', result_json = ?, completed_at = ? WHERE id = ?`, string(report), now, jobID)
+	testutil.FailErr(t, "complete job", err)
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES (?, ?, 'complete', ?)`, "result-"+jobID, jobID, now)
+	testutil.FailErr(t, "insert result", err)
+	if checkpoint != "" {
+		_, err = f.db.ExecContext(t.Context(), `UPDATE worker_jobs SET merge_status = 'pending' WHERE id = ?`, jobID)
+		testutil.FailErr(t, "pending changes", err)
+	}
+	n, err := db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{
+		SettledAt: db.NullString(now), CheckpointID: checkpoint, JobID: jobID,
+	})
+	testutil.FailErr(t, "settle", err)
+	if n != 1 {
+		t.Fatalf("settle %s touched %d rounds", jobID, n)
+	}
+}
+
+func (f *workerToolsFixture) run(t *testing.T, tool, call string, args map[string]any) (string, error) {
+	t.Helper()
+	out, _, err := f.runOut(t, tool, call, args)
+	return out, err
+}
+
+func (f *workerToolsFixture) runOut(t *testing.T, tool, call string, args map[string]any) (string, *tools.ToolInvocationOut, error) {
+	t.Helper()
+	effects := &tools.ToolInvocationOut{}
+	out, err := f.reg.Run(t.Context(), tool, args, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "coord", ProjectID: testdbseed.DefaultProjectID, ToolCallID: call},
+		Source:   tools.InvocationSource{ActiveRootID: "root-id", Roots: []projectroot.RootRef{{ID: "root-id", Path: f.root, IsPrimary: true}}},
+		Effects:  tools.InvocationEffects{Out: effects},
+	})
+	return out, effects, err
+}
+
+// One instruction turns the delivered surveyor into the implementer on the
+// same child session, and its result is where the new round completes; the
+// model sees the worker, not the job. Replaying the call enqueues nothing new.
+func TestInstructWorkerStartsTheNextRoundOnce(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	f.deliver(t, "job-1")
+	args := map[string]any{"worker": "surveyor", "instructions": "implement the fix you found", "agent_type": "implementer"}
+	out, effects, err := f.runOut(t, InstructWorkerTool, "call-1", args)
+	testutil.FailErr(t, "instruct", err)
+	var receipt map[string]any
+	testutil.FailErr(t, "decode", json.Unmarshal([]byte(out), &receipt))
+	if receipt["outcome"] != string(workerops.OutcomeStarted) || receipt["round"] != float64(2) || receipt["accounted"] != "result-job-1" || receipt["job_id"] != nil {
+		t.Fatalf("receipt = %s", out)
+	}
+	if effects.Dispatch == nil || effects.Dispatch.ChildSessionID != "child" || effects.Dispatch.AgentType != "implementer" {
+		t.Fatalf("dispatch = %+v", effects.Dispatch)
+	}
+	job, ok := f.queue.Get(effects.Dispatch.WorkerID)
+	if !ok || job.ChildSessionID != "child" || job.AgentType != "implementer" || job.EffectiveScope().Mode != api.TaskScopeModeWrite || job.Prompt != "implement the fix you found" {
+		t.Fatalf("job = %+v", job)
+	}
+	again, err := f.run(t, InstructWorkerTool, "call-1", args)
+	testutil.FailErr(t, "replay", err)
+	if again != out {
+		t.Fatalf("replay = %s, first = %s", again, out)
+	}
+	if n := countJobs(t, f.db); n != 2 {
+		t.Fatalf("jobs = %d, want 2", n)
+	}
+}
+
+func countJobs(t *testing.T, database *db.Store) int {
+	t.Helper()
+	var n int
+	testutil.FailErr(t, "count", database.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM worker_jobs`).Scan(&n))
+	return n
+}
+
+func TestWorkerToolRejections(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	_, err := f.run(t, InstructWorkerTool, "call-1", map[string]any{"worker": "nobody", "instructions": "go"})
+	wantReject(t, err, "WORKER_NAME_UNKNOWN")
+	f.deliver(t, "job-1")
+	_, err = f.run(t, InstructWorkerTool, "call-2", map[string]any{"worker": "surveyor", "instructions": "go", "agent_type": "no-such-agent"})
+	wantReject(t, err, "WORKER_TYPE_UNAVAILABLE")
+	_, err = f.run(t, ShelveOverlayTool, "call-3", map[string]any{"overlay_id": "result-job-1", "reason": "later"})
+	wantReject(t, err, "RESULT_CHANGES_NOT_ADMITTED")
+	_, err = f.run(t, ShelveOverlayTool, "call-4", map[string]any{"overlay_id": "result-missing", "reason": "later"})
+	wantReject(t, err, "RESULT_HANDLE_UNKNOWN")
+
+	_, err = f.run(t, InstructWorkerTool, "call-5", map[string]any{"worker": "surveyor", "instructions": "keep going"})
+	testutil.FailErr(t, "start round", err)
+	job := latestJob(t, f.db)
+	testutil.FailErr(t, "put decision", f.decisions.Put(t.Context(), api.WorkerDecisionRequest{ChildSessionID: "child", WorkerID: job, Question: "which?"}))
+	_, err = f.run(t, InstructWorkerTool, "call-6", map[string]any{"worker": "surveyor", "instructions": "also this"})
+	wantReject(t, err, "INSTRUCT_WORKER_ASKING")
+	// The card's next step answers the question it names.
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Data["worker"] != "surveyor" || reject.Data["job_id"] != nil {
+		t.Fatalf("refusal data = %v, want the worker and no job", reject.Data)
+	}
+}
+
+func latestJob(t *testing.T, database *db.Store) string {
+	t.Helper()
+	var id string
+	testutil.FailErr(t, "latest job", database.QueryRowContext(t.Context(), `SELECT job_id FROM worker_rounds ORDER BY ordinal DESC LIMIT 1`).Scan(&id))
+	return id
+}
+
+func wantReject(t *testing.T, err error, code string) {
+	t.Helper()
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != code {
+		t.Fatalf("err = %v, want %s", err, code)
+	}
+}
+
+func TestWorkerHistoryReadsRoundsAndMessages(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	f.deliver(t, "job-1")
+	_, err := f.run(t, InstructWorkerTool, "call-1", map[string]any{"worker": "surveyor", "instructions": "look at the encoder"})
+	testutil.FailErr(t, "instruct", err)
+	out, err := f.run(t, WorkerHistoryTool, "call-2", map[string]any{"worker": "surveyor"})
+	testutil.FailErr(t, "history", err)
+	var page struct {
+		State    string           `json:"state"`
+		Rounds   []map[string]any `json:"rounds"`
+		Messages []map[string]any `json:"messages"`
+	}
+	testutil.FailErr(t, "decode", json.Unmarshal([]byte(out), &page))
+	if page.State != "working" || len(page.Rounds) != 2 || page.Rounds[0]["overlay_id"] != "result-job-1" ||
+		len(page.Messages) != 1 || page.Messages[0]["text"] != "look at the encoder" || page.Messages[0]["from"] != "coordinator" {
+		t.Fatalf("history = %s", out)
+	}
+}
+
+// The job's result and its round's settlement commit together: a finished
+// instruction round leaves the worker delivered, a failed one failed.
+func TestJobOutcomeSettlesItsRound(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		end   func(t *testing.T, f *workerToolsFixture, claimed *api.WorkerTask)
+		state string
+	}{
+		{"complete", func(t *testing.T, f *workerToolsFixture, claimed *api.WorkerTask) {
+			won, err := f.queue.Complete(t.Context(), claimed, api.WorkerResult{Status: "complete", CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}})
+			if err != nil || !won {
+				t.Fatalf("complete: won=%v err=%v", won, err)
+			}
+		}, "delivered"},
+		{"failed", func(t *testing.T, f *workerToolsFixture, claimed *api.WorkerTask) {
+			won, err := f.queue.Fail(t.Context(), claimed, errors.New("provider gone"))
+			if err != nil || !won {
+				t.Fatalf("fail: won=%v err=%v", won, err)
+			}
+		}, "failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newWorkerToolsFixture(t)
+			f.deliver(t, "job-1")
+			_, err := f.run(t, InstructWorkerTool, "call-1", map[string]any{"worker": "surveyor", "instructions": "check the encoder"})
+			testutil.FailErr(t, "instruct", err)
+			claimed, err := f.queue.ClaimNext(t.Context(), ClaimRequest{ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
+			testutil.FailErr(t, "claim", err)
+			if claimed == nil || claimed.ID != latestJob(t, f.db) {
+				t.Fatalf("claimed %+v", claimed)
+			}
+			tc.end(t, f, claimed)
+			out, err := f.run(t, WorkerHistoryTool, "call-2", map[string]any{"worker": "surveyor"})
+			testutil.FailErr(t, "history", err)
+			var page struct {
+				State string `json:"state"`
+			}
+			testutil.FailErr(t, "decode", json.Unmarshal([]byte(out), &page))
+			if page.State != tc.state {
+				t.Fatalf("state = %s, want %s (%s)", page.State, tc.state, out)
+			}
+		})
+	}
+}
+
+// Rejecting a result's changes records the rejection and accounts for it in
+// the transaction that rejects them; a stacked result orphaned with it loses
+// its changes without being accounted for.
+func TestRejectionDisposesTheResult(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	f.deliverWith(t, "job-1", "checkpoint-1")
+	testutil.FailErr(t, "reject", f.queue.store.SetMergeStatuses(t.Context(), []MergeStatusUpdate{{JobID: "job-1", Status: api.WorkerMergeStatusRejected}}))
+	ds, err := f.records.Dispositions(t.Context(), f.coord, f.workerID)
+	testutil.FailErr(t, "dispositions", err)
+	if len(ds) != 1 || ds[0].ChangeState != workerrecords.ChangeRejected || ds[0].AccountedAt == "" {
+		t.Fatalf("dispositions = %+v", ds)
+	}
+	out, err := f.run(t, WorkerHistoryTool, "call-1", map[string]any{"worker": "surveyor"})
+	testutil.FailErr(t, "history", err)
+	var page struct {
+		State string `json:"state"`
+	}
+	testutil.FailErr(t, "decode", json.Unmarshal([]byte(out), &page))
+	if page.State != "idle" {
+		t.Fatalf("after rejection: %s", out)
+	}
+}
+
+// Shelved changes ask for no promotion: they leave the pending list that
+// gates closing the batch and selects the promotion surface.
+func TestShelvedChangesLeavePendingPromotion(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	testutil.FailErr(t, "insert job", f.queue.store.InsertTask(t.Context(), api.WorkerTask{
+		ID: "job-1", ProjectID: testdbseed.DefaultProjectID, ParentSessionID: "coord", ChildSessionID: "child",
+		AgentType: "implementer", Status: api.WorkerStatusRunning, ExecutionTarget: api.ExecutionTargetLocal,
+		Prompt: "fix", Brief: "fix", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}, OverlayID: "job-1",
+	}))
+	root := filepath.Join(testbaseline.DataDir(t, f.db), "worker-branches", "job-1")
+	bound, err := f.queue.store.SetWorkerWorkspace(t.Context(), "job-1", root, testbaseline.Durable(t, f.db, "job-1", t.TempDir()))
+	if err != nil || !bound {
+		t.Fatalf("bind workspace: bound=%v err=%v", bound, err)
+	}
+	_, err = f.records.AdmitRound(t.Context(), f.coord, workerrecords.Op{ID: "admit"}, f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	now := timelayout.Format(time.Now().UTC())
+	report, _ := json.Marshal(api.WorkerResult{Status: "complete", CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}})
+	_, err = f.db.ExecContext(t.Context(), `UPDATE worker_jobs SET status = 'complete', merge_status = 'pending', result_json = ?, completed_at = ? WHERE id = 'job-1'`, string(report), now)
+	testutil.FailErr(t, "complete", err)
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES ('result-job-1', 'job-1', 'complete', ?)`, now)
+	testutil.FailErr(t, "result", err)
+	n, err := db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{
+		SettledAt: db.NullString(now), CheckpointID: "checkpoint-1", JobID: "job-1",
+	})
+	testutil.FailErr(t, "settle", err)
+	if n != 1 {
+		t.Fatalf("settle job-1 touched %d rounds", n)
+	}
+
+	pending, err := f.queue.ListPendingOverlayPromote(t.Context(), "coord")
+	testutil.FailErr(t, "pending before", err)
+	if len(pending) != 1 {
+		t.Fatalf("pending before shelving = %d", len(pending))
+	}
+	_, err = f.run(t, ShelveOverlayTool, "call-1", map[string]any{"overlay_id": "result-job-1", "reason": "waits for the API freeze"})
+	testutil.FailErr(t, "shelve", err)
+	pending, err = f.queue.ListPendingOverlayPromote(t.Context(), "coord")
+	testutil.FailErr(t, "pending after", err)
+	if len(pending) != 0 {
+		t.Fatalf("shelved changes still pending: %+v", pending)
+	}
+}
+
+// A consumer waits on its producer worker's latest round: sending the
+// producer back holds the consumer until the new round delivers.
+func TestPrerequisiteFollowsTheProducersLatestRound(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	f.deliver(t, "job-1")
+	testutil.FailErr(t, "insert consumer", f.queue.store.InsertTask(t.Context(), api.WorkerTask{
+		ID: "job-c", ProjectID: testdbseed.DefaultProjectID, ParentSessionID: "coord",
+		AgentType: "repo-researcher", Status: api.WorkerStatusPending, ExecutionTarget: api.ExecutionTargetLocal,
+		Prompt: "use the survey", Brief: "use the survey", AfterWorkers: []string{"job-1"},
+	}))
+	next := func() string {
+		t.Helper()
+		row, err := db.New(f.db).NextPendingWorkerJob(t.Context(), db.NextPendingWorkerJobParams{ExecutionTarget: "local", ProjectID: ""})
+		if db.IsNoRows(err) {
+			return ""
+		}
+		testutil.FailErr(t, "next pending", err)
+		return row.ID
+	}
+	if got := next(); got != "job-c" {
+		t.Fatalf("consumer of a delivered producer not runnable: next = %q", got)
+	}
+	_, err := f.run(t, InstructWorkerTool, "call-1", map[string]any{"worker": "surveyor", "instructions": "recheck the encoder"})
+	testutil.FailErr(t, "send back", err)
+	round2 := latestJob(t, f.db)
+	if got := next(); got != round2 {
+		t.Fatalf("consumer ran while its producer works: next = %q", got)
+	}
+	if _, err := f.queue.ClaimWorkerBranch(t.Context(), "job-c"); !errors.Is(err, ErrWorkerPrerequisitesPending) {
+		t.Fatalf("branch claim while the producer works: err = %v", err)
+	}
+	claimed, err := f.queue.ClaimNext(t.Context(), ClaimRequest{ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
+	testutil.FailErr(t, "claim producer", err)
+	won, err := f.queue.Complete(t.Context(), claimed, api.WorkerResult{Status: "complete", CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}})
+	if err != nil || !won {
+		t.Fatalf("complete producer: won=%v err=%v", won, err)
+	}
+	if got := next(); got != "job-c" {
+		t.Fatalf("consumer still held after its producer delivered again: next = %q", got)
+	}
+	if _, err := f.queue.ClaimWorkerBranch(t.Context(), "job-c"); err != nil {
+		t.Fatalf("branch claim after the producer delivered again: %v", err)
+	}
+}
+
+// task starts a worker: a named record with the job as its first round,
+// bound to the child session the job spawns. A replay starts nothing new and
+// a name in use is refused before anything is enqueued.
+func TestTaskStartsANamedWorker(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	testutil.FailErr(t, "register task", RegisterTaskTool(f.reg, TaskToolDeps{
+		Queue: f.queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: DefaultWorkersConfig(), WorkerRecords: f.records, Reviews: f.ops,
+		Plan: plantest.New(t, plantest.Deps(f.records)),
+	}))
+	args := map[string]any{"agent_type": "repo-researcher", "name": "scout", "scope": map[string]any{"mode": "read"},
+		"brief": map[string]any{"goal": "Map the parser", "done_when": []any{"Entry points listed"}}}
+	out, effects, err := f.runOut(t, "task", "call-1", args)
+	testutil.FailErr(t, "task", err)
+	var started struct {
+		Worker string `json:"worker"`
+		JobID  string `json:"-"`
+	}
+	testutil.FailErr(t, "decode", json.Unmarshal([]byte(out), &started))
+	if started.Worker != "scout" || strings.Contains(out, "job_id") || effects.Dispatch == nil {
+		t.Fatalf("task output = %s", out)
+	}
+	started.JobID = effects.Dispatch.WorkerID
+	again, err := f.run(t, "task", "call-1", args)
+	testutil.FailErr(t, "replay", err)
+	if again != out || countJobs(t, f.db) != 1 {
+		t.Fatalf("replay = %s (jobs %d)", again, countJobs(t, f.db))
+	}
+	w, err := f.records.Resolve(t.Context(), f.coord, "scout")
+	testutil.FailErr(t, "resolve", err)
+	rounds, err := f.records.Rounds(t.Context(), f.coord, w.ID)
+	testutil.FailErr(t, "rounds", err)
+	if len(rounds) != 1 || rounds[0].JobID != started.JobID || w.ScopeMode != "read" ||
+		!strings.Contains(w.Brief, "Map the parser") || !strings.Contains(w.Brief, "Entry points listed") {
+		t.Fatalf("worker = %+v rounds = %+v", w, rounds)
+	}
+
+	now := timelayout.Format(time.Now().UTC())
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
+		VALUES ('scout-child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
+	testutil.FailErr(t, "insert child", err)
+	testutil.FailErr(t, "spawn child", f.queue.store.SetChildSessionID(t.Context(), started.JobID, "scout-child"))
+	w, err = f.records.Resolve(t.Context(), f.coord, "scout")
+	testutil.FailErr(t, "resolve again", err)
+	if w.ChildSessionID != "scout-child" {
+		t.Fatalf("worker child = %q", w.ChildSessionID)
+	}
+
+	_, err = f.run(t, "task", "call-2", args)
+	wantReject(t, err, TaskWorkerNameTakenCode)
+	if countJobs(t, f.db) != 1 {
+		t.Fatal("a refused name enqueued a job")
+	}
+}
+
+// A question is answered by naming the asking worker, in free text when it
+// offered no options; a worker that is not asking has nothing to answer.
+func TestAnswerDecisionByWorkerName(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	resolver := &answerStubResolver{decisions: f.decisions}
+	answers := &AnswerDecisionService{Queue: f.queue, Decisions: f.decisions, Resolver: resolver, Shown: &shownOnce{taken: map[string]bool{}, hidden: map[string]bool{}}}
+	testutil.FailErr(t, "register", RegisterAnswerDecisionTool(f.reg, AnswerDecisionToolDeps{Answer: answers, Workers: f.ops}))
+	f.deliver(t, "job-1")
+	_, err := f.run(t, "answer_decision", "call-0", map[string]any{"worker": "surveyor", "answer": "utf-8"})
+	wantReject(t, err, DecisionNotFoundCode)
+
+	_, err = f.run(t, InstructWorkerTool, "call-1", map[string]any{"worker": "surveyor", "instructions": "check the encoder"})
+	testutil.FailErr(t, "instruct", err)
+	job := latestJob(t, f.db)
+	testutil.FailErr(t, "ask", f.decisions.Put(t.Context(), api.WorkerDecisionRequest{ChildSessionID: "child", WorkerID: job, Question: "Which encoding does the caller expect?"}))
+	out, err := f.run(t, "answer_decision", "call-2", map[string]any{"worker": "surveyor", "answer": "UTF-8 without a byte-order mark"})
+	testutil.FailErr(t, "answer", err)
+	if !strings.Contains(out, `"worker":"surveyor"`) || len(resolver.appended) != 1 || !strings.Contains(resolver.appended[0].Content, "UTF-8 without a byte-order mark") {
+		t.Fatalf("answer = %s, appended = %+v", out, resolver.appended)
+	}
+}
+
+// Stopping names the worker: a working round is stopped, and a worker with
+// nothing running is refused.
+func TestWorkerCancelByName(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	testutil.FailErr(t, "register", RegisterWorkerCancelTool(f.reg, CancelToolDeps{Cancel: &CancelService{Queue: f.queue}, Workers: f.ops}))
+	f.deliver(t, "job-1")
+	_, err := f.run(t, "worker_cancel", "call-0", map[string]any{"worker": "surveyor"})
+	wantReject(t, err, "WORKER_CANCEL_NOT_RUNNING")
+}
+
+// Landing a worker's later round lands its earlier rounds' pending changes
+// with it, since the worker's lane carried them forward; an earlier round
+// already rejected stays rejected.
+func TestLandingDisposesEarlierRoundsByAncestry(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	f.deliverWith(t, "job-1", "checkpoint-1")
+	testutil.FailErr(t, "reject first", f.queue.store.SetMergeStatuses(t.Context(), []MergeStatusUpdate{{JobID: "job-1", Status: api.WorkerMergeStatusRejected}}))
+	f.deliverWith(t, "job-2", "checkpoint-2")
+	f.deliverWith(t, "job-3", "checkpoint-3")
+	_, err := f.run(t, ShelveOverlayTool, "call-shelve", map[string]any{"overlay_id": "result-job-2", "reason": "later"})
+	testutil.FailErr(t, "shelve second", err)
+	f.deliverWith(t, "job-4", "checkpoint-4")
+
+	root := filepath.Join(testbaseline.DataDir(t, f.db), "worker-branches", "lane.1")
+	bound, err := f.queue.store.SetWorkerWorkspace(t.Context(), "job-4", root, testbaseline.Durable(t, f.db, "job-4", t.TempDir()))
+	if err != nil || !bound {
+		t.Fatalf("bind workspace: bound=%v err=%v", bound, err)
+	}
+	token, ok, err := f.queue.store.BeginMergeApply(t.Context(), "job-4")
+	if err != nil || !ok {
+		t.Fatalf("begin apply: ok=%v err=%v", ok, err)
+	}
+	testutil.FailErr(t, "land", f.queue.store.CommitPromotion(t.Context(), "job-4", token, PromotionCommit{}))
+
+	ds, err := f.records.Dispositions(t.Context(), f.coord, f.workerID)
+	testutil.FailErr(t, "dispositions", err)
+	states := map[string]string{}
+	for _, d := range ds {
+		states[d.ResultID] = d.ChangeState
+	}
+	want := map[string]string{
+		"result-job-1": workerrecords.ChangeRejected, "result-job-2": workerrecords.ChangeLanded,
+		"result-job-3": workerrecords.ChangeLanded, "result-job-4": workerrecords.ChangeLanded,
+	}
+	for id, state := range want {
+		if states[id] != state {
+			t.Fatalf("dispositions = %v, want %v", states, want)
+		}
+	}
+	for _, job := range []string{"job-2", "job-3"} {
+		task, ok := f.queue.Get(job)
+		if !ok || task.MergeStatus != api.WorkerMergeStatusMerged {
+			t.Fatalf("%s merge status = %+v", job, task)
+		}
+	}
+}
+
+type reconstructible struct{}
+
+func (reconstructible) VerifyCheckpointReconstructible(context.Context, string) (checkpoint.Manifest, error) {
+	return checkpoint.Manifest{}, nil
+}
+
+// A stacked task starts its lane on the base job's settled result; a base
+// with no settled result, or no store to confirm its checkpoint, is refused.
+func TestStackedLaneStartsOnTheBaseResult(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	f.deliverWith(t, "job-1", "checkpoint-1")
+	lanes := &WorkerLanes{Records: f.records}
+	stacked := func(base string) *api.WorkerTask {
+		return &api.WorkerTask{ID: "job-2", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, BaseOverlayID: base}}
+	}
+	if a, err := lanes.assignment(t.Context(), stacked(""), workerrecords.Round{}); err != nil || a.BaseResultID != "" || !a.Write {
+		t.Fatalf("unstacked = %+v, %v", a, err)
+	}
+	if _, err := lanes.assignment(t.Context(), stacked("job-1"), workerrecords.Round{}); !errors.Is(err, ErrStackedBaseUnavailable) {
+		t.Fatalf("without a checkpoint store: %v", err)
+	}
+	lanes.Checkpoints = reconstructible{}
+	a, err := lanes.assignment(t.Context(), stacked("job-1"), workerrecords.Round{})
+	testutil.FailErr(t, "stacked", err)
+	if a.BaseResultID != "result-job-1" {
+		t.Fatalf("stacked = %+v", a)
+	}
+	if _, err := lanes.assignment(t.Context(), stacked("job-unknown"), workerrecords.Round{}); !errors.Is(err, ErrStackedBaseUnavailable) {
+		t.Fatalf("unknown base: %v", err)
+	}
+}
+
+// settleRound completes a running job and settles its round, changing nothing.
+func (f *workerToolsFixture) settleRound(t *testing.T, workerID, jobID string) {
+	t.Helper()
+	report, _ := json.Marshal(api.WorkerResult{Status: "complete", CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}})
+	now := timelayout.Format(time.Now().UTC())
+	_, err := f.db.ExecContext(t.Context(), `UPDATE worker_jobs SET status = 'complete', result_json = ?, completed_at = ? WHERE id = ?`, string(report), now, jobID)
+	testutil.FailErr(t, "complete job", err)
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES (?, ?, 'complete', ?)`, "result-"+jobID, jobID, now)
+	testutil.FailErr(t, "insert result", err)
+	n, err := db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(now), JobID: jobID})
+	if err == nil && n != 1 {
+		t.Fatalf("settle %s touched %d rounds", jobID, n)
+	}
+	testutil.FailErr(t, "settle", err)
+}
+
+// A review binds the exact result it names and accounts for it; only a
+// delivered result with changes can be reviewed, and the reviewer's later
+// rounds keep that subject while its agent stays sealed.
+func TestTaskStartsAReviewerOnASealedResult(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	var accounted []string
+	f.ops.Accounted = func(_ string, jobs []string) { accounted = append(accounted, jobs...) }
+	testutil.FailErr(t, "register task", RegisterTaskTool(f.reg, TaskToolDeps{
+		Queue: f.queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: DefaultWorkersConfig(),
+		WorkerRecords: f.records, Reviews: f.ops, Plan: plantest.New(t, plantest.Deps(f.records)),
+	}))
+	review := func(call, handle string, extra map[string]any) error {
+		args := map[string]any{"agent_type": "repo-researcher", "name": "checker-" + call, "scope": map[string]any{"mode": "read"},
+			"review_of": handle, "brief": map[string]any{"goal": "Review the change", "done_when": []any{"Findings reported"}}}
+		for k, v := range extra {
+			args[k] = v
+		}
+		_, err := f.run(t, "task", call, args)
+		return err
+	}
+
+	f.deliver(t, "job-0")
+	wantReject(t, review("no-changes", "result-job-0", nil), ReviewOfNoChangesCode)
+	f.deliverWith(t, "job-1", "cp-1")
+	wantReject(t, review("unknown", "result-missing", nil), "RESULT_HANDLE_UNKNOWN")
+	wantReject(t, review("write", "result-job-1", map[string]any{"agent_type": "implementer", "scope": map[string]any{"mode": "write"}}), "TOOL_ARGS_INVALID")
+	wantReject(t, review("stacked", "result-job-1", map[string]any{"scope": map[string]any{"mode": "read", "base_overlay_id": "result-job-1"}}), "TOOL_ARGS_INVALID")
+	if n := countJobs(t, f.db); n != 2 {
+		t.Fatalf("a refused review enqueued work: %d jobs", n)
+	}
+
+	testutil.FailErr(t, "review", review("ok", "result-job-1", nil))
+	reviewer, err := f.records.Resolve(t.Context(), f.coord, "checker-ok")
+	testutil.FailErr(t, "resolve reviewer", err)
+	rounds, err := f.records.Rounds(t.Context(), f.coord, reviewer.ID)
+	testutil.FailErr(t, "reviewer rounds", err)
+	subject, ok := rounds[0].Subject()
+	if !ok || subject != (workerrecords.ReviewSubject{ResultID: "result-job-1", WorkerID: f.workerID, JobID: "job-1", CheckpointID: "cp-1"}) {
+		t.Fatalf("subject = %+v ok=%v", subject, ok)
+	}
+	ds, err := f.records.Dispositions(t.Context(), f.coord, f.workerID)
+	testutil.FailErr(t, "dispositions", err)
+	reviewedAccounted := false
+	for _, d := range ds {
+		reviewedAccounted = reviewedAccounted || (d.ResultID == "result-job-1" && d.AccountedAt != "")
+	}
+	if !reviewedAccounted || len(accounted) != 1 || accounted[0] != "job-1" {
+		t.Fatalf("review did not account for its subject: %+v %v", ds, accounted)
+	}
+
+	// The reviewer's next round reads the same result; its agent is sealed.
+	now := timelayout.Format(time.Now().UTC())
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
+		VALUES ('checker-child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
+	testutil.FailErr(t, "insert reviewer child", err)
+	testutil.FailErr(t, "spawn reviewer child", f.queue.store.SetChildSessionID(t.Context(), rounds[0].JobID, "checker-child"))
+	f.settleRound(t, reviewer.ID, rounds[0].JobID)
+	_, err = f.run(t, InstructWorkerTool, "again", map[string]any{"worker": "checker-ok", "instructions": "check the tests too"})
+	testutil.FailErr(t, "instruct reviewer", err)
+	rounds, err = f.records.Rounds(t.Context(), f.coord, reviewer.ID)
+	testutil.FailErr(t, "reviewer rounds", err)
+	if next, ok := rounds[len(rounds)-1].Subject(); len(rounds) != 2 || !ok || next != subject {
+		t.Fatalf("second round subject = %+v", rounds)
+	}
+	f.settleRound(t, reviewer.ID, rounds[1].JobID)
+	_, err = f.run(t, InstructWorkerTool, "become", map[string]any{"worker": "checker-ok", "instructions": "fix it", "agent_type": "implementer"})
+	wantReject(t, err, "INSTRUCT_WORKER_AGENT_SEALED")
+
+	// A result stays reviewable while its worker makes the next one.
+	testutil.FailErr(t, "insert job", f.queue.store.InsertTask(t.Context(), api.WorkerTask{
+		ID: "job-2", ProjectID: testdbseed.DefaultProjectID, ParentSessionID: "coord", ChildSessionID: "child",
+		AgentType: "repo-researcher", Status: api.WorkerStatusRunning, ExecutionTarget: api.ExecutionTargetLocal, Prompt: "more", Brief: "more",
+	}))
+	_, err = f.records.AdmitRound(t.Context(), f.coord, workerrecords.Op{ID: "admit-job-2"}, f.workerID, workerrecords.RoundSpec{JobID: "job-2", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	testutil.FailErr(t, "review while working", review("working", "result-job-1", nil))
+
+	// Rejected changes leave nothing to review.
+	_, err = f.db.ExecContext(t.Context(), `UPDATE worker_result_dispositions SET change_state = 'rejected', change_operation_id = 'reject-1', changed_at = ? WHERE result_id = 'result-job-1'`, timelayout.Format(time.Now().UTC()))
+	testutil.FailErr(t, "reject result", err)
+	err = review("rejected", "result-job-1", nil)
+	wantReject(t, err, ReviewOfNotAdmittedCode)
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Data["merge_status"] != "rejected" || reject.Data["worker"] != "surveyor" {
+		t.Fatalf("refusal data = %+v", reject)
+	}
+}
+
+func TestWorkerHistoryToolPagesBeforeRoundAndBeforePreservingUnread(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	childActor := workerrecords.Actor{SessionID: "child", Role: workerrecords.RoleWorker, PrincipalID: "child"}
+	f.deliver(t, "job-01")
+	for i := 2; i <= 25; i++ {
+		jobID := fmt.Sprintf("job-%02d", i)
+		_, err := f.run(t, InstructWorkerTool, fmt.Sprintf("inst-%02d", i), map[string]any{
+			"worker": "surveyor", "instructions": fmt.Sprintf("round %02d", i),
+		})
+		testutil.FailErr(t, "instruct", err)
+		created := latestJob(t, f.db)
+		_ = jobID
+		report, _ := json.Marshal(api.WorkerResult{Status: "complete", CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}})
+		now := timelayout.Format(time.Now().UTC())
+		_, err = f.db.ExecContext(t.Context(), `UPDATE worker_jobs SET status = 'complete', result_json = ?, completed_at = ? WHERE id = ?`, string(report), now, created)
+		testutil.FailErr(t, "complete job", err)
+		_, err = f.db.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES (?, ?, 'complete', ?)`, "result-"+created, created, now)
+		testutil.FailErr(t, "insert result", err)
+		_, err = db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{
+			SettledAt: db.NullString(now), JobID: created,
+		})
+		testutil.FailErr(t, "settle round", err)
+	}
+	_, err := f.run(t, InstructWorkerTool, "inst-26", map[string]any{
+		"worker": "surveyor", "instructions": "round 26",
+	})
+	testutil.FailErr(t, "instruct 26", err)
+	for i := range 30 {
+		_, err := f.records.AppendMessage(t.Context(), childActor, workerrecords.Op{ID: fmt.Sprintf("wmsg-%02d", i)}, f.workerID, workerrecords.MessageSpec{
+			Body: fmt.Sprintf("msg-%02d %s", i, strings.Repeat("z", 700)),
+		})
+		testutil.FailErr(t, "worker msg", err)
+	}
+
+	out1, err := f.run(t, WorkerHistoryTool, "hist-1", map[string]any{"worker": "surveyor"})
+	testutil.FailErr(t, "worker_history p1", err)
+	var p1 struct {
+		Rounds      []map[string]any `json:"rounds"`
+		Messages    []map[string]any `json:"messages"`
+		Before      int64            `json:"before"`
+		BeforeRound int64            `json:"before_round"`
+	}
+	testutil.FailErr(t, "decode p1", json.Unmarshal([]byte(out1), &p1))
+	if len(p1.Rounds) != workerops.MaxHistoryRounds || p1.BeforeRound != 7 || p1.Before == 0 {
+		t.Fatalf("p1 = rounds:%d before_round:%d before:%d", len(p1.Rounds), p1.BeforeRound, p1.Before)
+	}
+
+	out2, err := f.run(t, WorkerHistoryTool, "hist-2", map[string]any{
+		"worker": "surveyor", "before_round": float64(p1.BeforeRound), "before": float64(p1.Before),
+	})
+	testutil.FailErr(t, "worker_history p2", err)
+	var p2 struct {
+		Rounds      []map[string]any `json:"rounds"`
+		Messages    []map[string]any `json:"messages"`
+		BeforeRound int64            `json:"before_round"`
+	}
+	testutil.FailErr(t, "decode p2", json.Unmarshal([]byte(out2), &p2))
+	if len(p2.Rounds) != 6 || p2.BeforeRound != 0 || len(p2.Messages) == 0 {
+		t.Fatalf("p2 = rounds:%d before_round:%d msgs:%d", len(p2.Rounds), p2.BeforeRound, len(p2.Messages))
+	}
+
+	if _, err := f.run(t, WorkerHistoryTool, "hist-bad", map[string]any{"worker": "surveyor", "before_round": float64(0)}); err == nil {
+		t.Fatal("expected rejection on non-positive before_round")
+	}
+
+	unread, err := f.records.OpenPageBounded(t.Context(), f.coord, f.workerID, 0, 5, workerrecords.MaxHistoryPageBytes)
+	testutil.FailErr(t, "unread page", err)
+	if len(unread.Messages) != 5 {
+		t.Fatalf("worker_history cleared unread messages: got %d", len(unread.Messages))
+	}
+}
+
+func TestInstructWorkerComposesAssignmentPrompt(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	f.deliver(t, "job-1")
+
+	reg := tools.NewDefaultRegistry()
+	failNext := true
+	testutil.FailErr(t, "register", RegisterWorkerTools(reg, WorkerToolDeps{
+		Ops:   f.ops,
+		Queue: f.queue,
+		Plan:  plantest.New(t, plantest.Deps(f.records)),
+		ComposePrompt: func(_ context.Context, _ tools.ToolContext, agent string, charter api.WorkerTaskCharter, task *api.WorkerTask) (string, error) {
+			if failNext {
+				return "", errors.New("prompt renderer unavailable")
+			}
+			return fmt.Sprintf("[%s] %s :: %s", agent, charter.Goal, task.Prompt), nil
+		},
+	}))
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "coord", ProjectID: testdbseed.DefaultProjectID, ToolCallID: "call-fail"},
+		Source:   tools.InvocationSource{ActiveRootID: "root-id", Roots: []projectroot.RootRef{{ID: "root-id", Path: f.root, IsPrimary: true}}},
+		Effects:  tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+	}
+	if _, err := reg.Run(t.Context(), InstructWorkerTool, map[string]any{"worker": "surveyor", "instructions": "check retries"}, tctx); err == nil {
+		t.Fatal("expected compose failure to abort instruct_worker")
+	}
+	if n := countJobs(t, f.db); n != 1 {
+		t.Fatalf("failed compose enqueued a job: count=%d", n)
+	}
+
+	failNext = false
+	effects := &tools.ToolInvocationOut{}
+	tctx.Identity.ToolCallID = "call-ok"
+	tctx.Effects.Out = effects
+	_, err := reg.Run(t.Context(), InstructWorkerTool, map[string]any{"worker": "surveyor", "instructions": "check retries"}, tctx)
+	testutil.FailErr(t, "instruct with composed prompt", err)
+	job, ok := f.queue.Get(effects.Dispatch.WorkerID)
+	if !ok || !strings.Contains(job.Prompt, "[repo-researcher]") || !strings.Contains(job.Prompt, "check retries") {
+		t.Fatalf("composed job prompt = %+v", job)
+	}
+}
+
+func TestLookupByResultResolvesSettledRoundJob(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	f.deliver(t, "job-1")
+	resHandle := "result-job-1"
+
+	var nilCore *sqlQueueCore
+	if got, ok := nilCore.LookupByResult(t.Context(), resHandle); ok || got != nil {
+		t.Fatalf("nil core LookupByResult = (%+v, %v), want (nil, false)", got, ok)
+	}
+	if got, ok := f.queue.LookupByResult(t.Context(), "res-missing"); ok || got != nil {
+		t.Fatalf("missing handle LookupByResult = (%+v, %v), want (nil, false)", got, ok)
+	}
+	got, ok := f.queue.LookupByResult(t.Context(), " "+resHandle+" ")
+	if !ok || got == nil || got.ID != "job-1" {
+		t.Fatalf("LookupByResult(%q) = (%+v, %v), want job-1", resHandle, got, ok)
+	}
+}

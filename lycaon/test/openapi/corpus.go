@@ -14,14 +14,15 @@ import (
 const HostCorpusPath = "lycaon-den/src/api/testdata/host-corpus.json"
 
 // HostCorpusRefresh is the command that rewrites the corpus.
-const HostCorpusRefresh = "UPDATE_HOST_CORPUS=1 ./task test:digest -- ./test/security/ -run TestAPIConformance"
+const HostCorpusRefresh = "UPDATE_HOST_CORPUS=1 ./task test:digest -- ./test/security/sweeps -run TestAPIConformance"
 
 // HostCorpus is what the conformance sweep observed the host answer and
 // publish.
 type HostCorpus struct {
 	Generated string `json:"generated"`
-	// Exchanges holds each operation's first validated success, then the
-	// first answer of each error code.
+	// Exchanges holds each operation's first validated success, followed for
+	// a read by its last when that differs, then the first answer of each
+	// error code.
 	Exchanges []CorpusExchange `json:"exchanges"`
 	// Events is every envelope the host published, in delivery order.
 	Events []wire.EventEnvelope `json:"events"`

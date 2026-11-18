@@ -21,12 +21,12 @@ import (
 func TestApprovePlanHTTPRejectsWhenNotReady(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithoutCoordinatorLoop())
 	srv := h.Server
-	proj := createProjectHTTP(t, srv, t.TempDir())
-	sess := createSessionForProjectHTTP(t, srv, proj.ID, wire.SessionPostureBuild)
+	proj := CreateProjectHTTP(t, srv, t.TempDir())
+	sess := CreateSessionForProjectHTTP(t, srv, proj.ID, wire.SessionPostureBuild)
 	ctx := context.Background()
 
 	startBody := planStartBody
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -52,7 +52,7 @@ func TestApprovePlanHTTPRejectsWhenNotReady(t *testing.T) {
 	plan, err := h.Workflows.Blueprints.Get(ctx, run.ProjectID, run.BlueprintPath)
 	testutil.FailErr(t, "Get plan before reject", err)
 	approveURL := "/v1/projects/" + url.PathEscape(proj.ID) + "/blueprints/" + url.PathEscape(plan.ID) + "/approve"
-	req = authedRequest(t, http.MethodPost, approveURL, strings.NewReader(blueprintApprovalJSON(t, run, plan.Content)))
+	req = AuthedRequest(t, http.MethodPost, approveURL, strings.NewReader(blueprintApprovalJSON(t, run, plan.Content)))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -84,11 +84,11 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	limits := &approvalWakeLimits{}
 	h.Sessions.Manager.Limits.SetProvider(limits)
 	srv := h.Server
-	proj := createProjectHTTP(t, srv, h.ProjectDir(t, "approval-wake"))
-	sess := createSessionForProjectHTTP(t, srv, proj.ID, wire.SessionPostureBuild)
+	proj := CreateProjectHTTP(t, srv, h.ProjectDir(t, "approval-wake"))
+	sess := CreateSessionForProjectHTTP(t, srv, proj.ID, wire.SessionPostureBuild)
 	ctx := context.Background()
 
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(planStartBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(planStartBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -103,7 +103,7 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 
 	run = completePlanIntakeHTTP(t, h, run.ID)
 	run = completePlanDepthAtNoneHTTP(t, h, run.ID, "research")
-	seedPlanStub(t, h.Workflows.Blueprints, run.ProjectID, run.BlueprintPath)
+	SeedPlanStub(t, h.Workflows.Blueprints, run.ProjectID, run.BlueprintPath)
 	run = advancePlanRunHTTP(t, srv, run.ID)
 	if run.CurrentPhase == "review" {
 		run = completePlanDepthAtNoneHTTP(t, h, run.ID, "review")
@@ -137,16 +137,16 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	plan, err := h.Workflows.Blueprints.Get(ctx, current.ProjectID, current.BlueprintPath)
 	testutil.FailErr(t, "Get plan before approve", err)
 	approveURL := "/v1/projects/" + url.PathEscape(proj.ID) + "/blueprints/" + url.PathEscape(plan.ID) + "/approve"
-	req = authedRequest(t, http.MethodPost, approveURL, strings.NewReader(blueprintApprovalJSON(t, *current, plan.Content)))
+	req = AuthedRequest(t, http.MethodPost, approveURL, strings.NewReader(blueprintApprovalJSON(t, *current, plan.Content)))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("approve status = %d body = %s", w.Code, w.Body.String())
 	}
-	testutil.WaitFor(t, sawApprovalAdvance.Load)
+	testutil.WaitFor(t, "the approval advance is seen", sawApprovalAdvance.Load)
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the coordinator sends another request", func() bool {
 		return len(h.Recording.AllRequests()) > requestCountBeforeApproval
 	})
 	h.Sessions.Manager.Coordinator.WaitForTurns(ctx)

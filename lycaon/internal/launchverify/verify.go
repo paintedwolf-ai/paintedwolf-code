@@ -209,13 +209,6 @@ func (v Verifier) verifyChainExecutable(pid int, role string, chain Chain) error
 	return v.verifyExecutableAgainst(pid, role, manifest, wantInode)
 }
 
-// VerifyExecutable hashes the image pid is running, through the exe link
-// opened as a descriptor, and compares it with the manifest's entry for the
-// role's installed path.
-func (v Verifier) VerifyExecutable(pid int, role string) error {
-	return v.verifyExecutableAgainst(pid, role, v.Manifest, nil)
-}
-
 func (v Verifier) verifyExecutableAgainst(pid int, role string, manifest *pkgmanifest.Manifest, wantInode *fileFacts) error {
 	if v.StorePolicy != nil && (!cleanAbsolute(v.InstallRoot) || manifest == nil || manifest.InstallRoot != v.InstallRoot) {
 		return refuse(CodeManifestUnreadable, role, pid, "selected manifest does not match its installation root")

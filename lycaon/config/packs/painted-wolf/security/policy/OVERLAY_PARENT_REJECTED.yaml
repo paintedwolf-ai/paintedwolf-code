@@ -8,10 +8,10 @@ what: Overlay {{ paintedwolf.overlay_id }} was orphaned because its base {{ pain
   was rejected.
 cause: The host settled the dependent overlay as orphaned.
 why: This terminal overlay cannot be promoted or used as the base of another worker.
-fix: Preserve any useful retained report. If its remaining work is still wanted, dispatch a fresh task against
-  the current primary or another live base after checking the intended scope. Do not retry promotion or rejection
+fix: Preserve any useful retained findings. If its remaining work is still wanted, instruct an eligible waiting worker or start a new worker against
+  current primary or another live base after checking the intended scope. Do not retry promotion or rejection
   of this orphaned overlay.
-instead: Account for the orphaned child and re-dispatch only work still required
+instead: Account for the orphaned child and re-run only work still required
 scenarios:
 - id: default
   vars:

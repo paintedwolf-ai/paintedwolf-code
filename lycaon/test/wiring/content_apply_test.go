@@ -2,12 +2,13 @@ package wiring
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
@@ -72,8 +73,8 @@ func TestContentApplyEmittedWhenPolicyOn(t *testing.T) {
 		done <- err
 	}()
 	var checkpointID string
-	testutil.WaitFor(t, func() bool {
-		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
+	testutil.WaitFor(t, "the content apply card is pending", func() bool {
+		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, PtrKind(wire.CheckpointKindContentApply))
 		if err == nil && len(pending) == 1 {
 			checkpointID = pending[0].ID
 			return true
@@ -149,8 +150,8 @@ func TestContentApplyRejectStructuredError(t *testing.T) {
 		done <- err
 	}()
 	var checkpointID string
-	testutil.WaitFor(t, func() bool {
-		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
+	testutil.WaitFor(t, "the content apply card is pending", func() bool {
+		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, PtrKind(wire.CheckpointKindContentApply))
 		if err == nil && len(pending) == 1 {
 			checkpointID = pending[0].ID
 			return true
@@ -220,8 +221,8 @@ func TestContentApplyHoldsEveryContentMutatingTool(t *testing.T) {
 			}()
 
 			var checkpointID string
-			testutil.WaitFor(t, func() bool {
-				pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
+			testutil.WaitFor(t, "the content apply card is pending", func() bool {
+				pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, PtrKind(wire.CheckpointKindContentApply))
 				if err == nil && len(pending) == 1 {
 					checkpointID = pending[0].ID
 					return true
@@ -274,10 +275,6 @@ func TestContentApplyPassesThroughNonAuthoringTools(t *testing.T) {
 			t.Fatalf("%s = %q want passthrough", tool, after)
 		}
 	}
-}
-
-func ptrKind(k wire.CheckpointKind) *wire.CheckpointKind {
-	return &k
 }
 
 func mustReviewStore(t *testing.T, configRoot string) *settings.ReviewStore {
