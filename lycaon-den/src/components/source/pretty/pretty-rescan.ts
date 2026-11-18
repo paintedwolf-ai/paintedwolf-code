@@ -10,7 +10,7 @@ import {
   type Transaction,
 } from "@codemirror/state";
 import { Decoration, type DecorationSet } from "@codemirror/view";
-import { BlockFact, changedFactEvents, FactEvent, FactStore, NO_EVENTS } from "./pretty-block-facts.ts";
+import { BlockFact, FactEvent, FactStore, invalidateBlockFacts, NO_EVENTS } from "./pretty-block-facts.ts";
 import { planHasLayout } from "./pretty-fenced.ts";
 import { prettyPlanFor, prettyTargetFor } from "./pretty-recognition.ts";
 import { PrettyScanner } from "./pretty-scan.ts";
@@ -331,22 +331,18 @@ function rescan(prev: PrettyLayoutState, job: Rescan): PrettyLayoutState {
   const end = converged;
   let visits = scanner.visits + (job.spent ?? 0);
   if (job.edit && prev.facts.size) {
-    const diff = changedFactEvents(prev.events, events, job.edit.changes, from, Math.min(end, reached + 1));
-    visits += diff.visits;
-    if (diff.from <= diff.to) {
-      let first = Infinity;
-      const facts = job.facts.update({
-        filterFrom: diff.from, filterTo: diff.to,
-        filter: (open, close) => {
-          if (open > diff.to || close < diff.from) return true;
-          first = Math.min(first, open);
-          return false;
-        },
+    const invalid = invalidateBlockFacts(job.facts, prev.events, events, job.edit.changes, from, Math.min(end, reached + 1));
+    visits += invalid.visits;
+    if (Number.isFinite(invalid.opening)) {
+      // Checkpoints inside an invalid group already carry its block decision.
+      return rescan(prev, {
+        ...job,
+        edit: undefined,
+        facts: invalid.facts,
+        spent: visits,
+        restart: Math.min(job.restart, invalid.opening),
+        compareFrom: Math.max(compareFrom, invalid.through + 1),
       });
-      if (Number.isFinite(first)) {
-        return rescan(prev, { ...job, edit: undefined, facts, spent: visits,
-          restart: Math.min(job.restart, first), compareFrom: Math.max(compareFrom, diff.to + 1) });
-      }
     }
   }
   if (visits > visitLimit(doc)) return limited(prev, "work", state);

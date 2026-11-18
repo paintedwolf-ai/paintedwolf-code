@@ -60,37 +60,49 @@ export class FactStore implements PrettyBlockFacts {
   }
 }
 
-
-/** Compare event positions in the edited document. A deleted boundary never matches a survivor. */
-export function changedFactEvents(
+/** Locate differences among surviving events in new document coordinates. */
+export function invalidateBlockFacts(
+  known: RangeSet<BlockFact>,
   previous: RangeSet<FactEvent>,
   fresh: readonly Range<FactEvent>[],
   changes: ChangeDesc,
   from: number,
   end: number,
-): { from: number; to: number; visits: number } {
+) {
   const inverse = changes.invertedDesc;
-  const oldFrom = inverse.mapPos(from, -1);
   const oldEnd = end > changes.newLength ? changes.length + 1 : inverse.mapPos(end, 1);
-  const old: number[] = [];
-  for (const cursor = previous.iter(oldFrom); cursor.value && cursor.from < oldEnd; cursor.next()) {
-    const kind = cursor.value.kind;
-    const before = kind === PROTECTED_END;
-    const side = before ? -1 : 1;
-    const pos = changes.mapPos(cursor.from, side, before ? MapMode.TrackBefore : MapMode.TrackAfter);
-    old.push(pos === null ? changes.mapPos(cursor.from, side) * 256 + kind + 128 : pos * 256 + kind);
-  }
-  const events = fresh.map(range => range.from * 256 + range.value.kind);
-  let first = 0, a = old.length, b = events.length;
-  while (first < a && first < b && old[first] === events[first]) first++;
-  while (a > first && b > first && old[a - 1] === events[b - 1]) { a--; b--; }
-  let low = Infinity, high = -1;
-  const include = (value: number) => {
-    const pos = Math.floor(value / 256);
+  const old = previous.iter(inverse.mapPos(from, -1));
+  let low = Infinity, high = -1, visits = fresh.length;
+  const changed = (pos: number) => {
     low = Math.min(low, pos);
     high = Math.max(high, pos);
   };
-  for (let i = first; i < a; i++) include(old[i]!);
-  for (let i = first; i < b; i++) include(events[i]!);
-  return { from: low, to: high, visits: old.length + events.length };
+  let i = 0;
+  while (old.value && old.from < oldEnd) {
+    visits++;
+    const before = old.value.kind === PROTECTED_END;
+    const side = before ? -1 : 1;
+    const mapped = changes.mapPos(old.from, side, before ? MapMode.TrackBefore : MapMode.TrackAfter);
+    if (mapped === null) {
+      changed(changes.mapPos(old.from, side));
+    } else {
+      while (i < fresh.length && fresh[i]!.from < mapped) changed(fresh[i++]!.from);
+      const next = fresh[i];
+      if (next?.from === mapped && next.value === old.value) i++;
+      else changed(mapped);
+    }
+    old.next();
+  }
+  while (i < fresh.length) changed(fresh[i++]!.from);
+
+  let opening = Infinity;
+  const facts = low <= high ? known.update({
+    filterFrom: low, filterTo: high,
+    filter: (open, close) => {
+      if (open > high || close < low) return true;
+      opening = Math.min(opening, open);
+      return false;
+    },
+  }) : known;
+  return { facts, opening, through: high, visits };
 }
