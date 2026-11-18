@@ -1,3 +1,4 @@
+{#- OpenAI Chat Completions: tool results are ordered role 'tool' messages, each named by its call. -#}
 {# Tool-value formatting derives from the Google Gemma 4 canonical template. #}
 {%- macro format_parameters(properties, required, filter_keys=false) -%}
     {%- set standard_keys = ['description', 'type', 'properties', 'required', 'nullable'] -%}
@@ -163,9 +164,6 @@
     {{- '<tool_response|>' -}}
 {%- endmacro -%}
 
-{%- if enable_thinking | default(false) -%}
-    {{- raise_exception('gemma4-code-v1 does not enable thinking') -}}
-{%- endif -%}
 {{- bos_token -}}
 {%- set history = messages -%}
 {%- if tools or (messages and messages[0]['role'] in ['system', 'developer']) -%}
@@ -182,7 +180,7 @@
     {%- endfor -%}
     {{- '<turn|>\n' -}}
 {%- endif -%}
-{%- set state = namespace(open_model=false) -%}
+{%- set state = namespace(open_model=false, calls=[]) -%}
 {%- for message in history -%}
     {%- set role = message['role'] -%}
     {%- set following = history[loop.index]['role'] if not loop.last else none -%}
@@ -198,11 +196,23 @@
         {%- if not state.open_model -%}{{- '<|turn>model\n' -}}{%- endif -%}
         {%- set state.open_model = true -%}
         {%- if role == 'tool' -%}
-            {%- if not message.get('name') -%}
-                {{- raise_exception('tool result requires its tool name') -}}
+            {%- set result = namespace(tool=message.get('name')) -%}
+            {%- for call in state.calls -%}
+                {%- if call['id'] == message.get('tool_call_id') -%}
+                    {%- if result.tool and result.tool != call['function']['name'] -%}
+                        {{- raise_exception('tool result names a different tool than its call') -}}
+                    {%- endif -%}
+                    {%- set result.tool = call['function']['name'] -%}
+                {%- endif -%}
+            {%- endfor -%}
+            {%- if not result.tool -%}
+                {{- raise_exception('tool result requires its tool name or its call') -}}
             {%- endif -%}
-            {{- format_tool_response_block(message['name'], message['content']) -}}
+            {{- format_tool_response_block(result.tool, message['content']) -}}
         {%- else -%}
+            {%- if message.get('tool_calls') -%}
+                {%- set state.calls = message['tool_calls'] -%}
+            {%- endif -%}
             {{- message['content'] -}}
             {%- for call in (message.get('tool_calls') or []) -%}
                 {%- set function = call['function'] -%}

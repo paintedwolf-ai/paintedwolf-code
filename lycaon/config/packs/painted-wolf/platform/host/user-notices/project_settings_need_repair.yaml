@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: This project's settings file needs fixing first
+message: >-
+  This project's limits.yaml, verify.yaml, or review.yaml could not be read, so
+  saving here would replace it. The project's settings name the file and the
+  problem.
+suggested_action: >-
+  Fix the file under .paintedwolf/, then change the settings again.
+scenarios:
+  - id: default

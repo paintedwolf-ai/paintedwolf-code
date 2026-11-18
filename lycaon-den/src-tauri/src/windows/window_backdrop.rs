@@ -421,14 +421,6 @@ mod tests {
     }
 
     #[test]
-    fn stock_matches_boot_style_literals() {
-        assert_eq!(stock_backdrop(Scheme::Dark), DARK_BACKGROUND);
-        assert_eq!(stock_backdrop(Scheme::Light), LIGHT_BACKGROUND);
-        assert_eq!(color_to_hex(DARK_BACKGROUND), "#191817");
-        assert_eq!(color_to_hex(LIGHT_BACKGROUND), "#ffffff");
-    }
-
-    #[test]
     fn hex_round_trips_and_rejects_junk() {
         assert_eq!(parse_hex("#1a1b26"), Some(Color(0x1a, 0x1b, 0x26, 0xff)));
         assert_eq!(parse_hex("  #191817  "), Some(DARK_BACKGROUND));

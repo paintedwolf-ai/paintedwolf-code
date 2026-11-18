@@ -1,15 +1,3 @@
-let pendingOpenWorklog = false;
-
-export function requestOpenWorklog(): void {
-  pendingOpenWorklog = true;
-}
-
-export function consumeOpenWorklog(): boolean {
-  const value = pendingOpenWorklog;
-  pendingOpenWorklog = false;
-  return value;
-}
-
 export type OpenInSearchRequest = {
   originProjectId: string;
   query: string;

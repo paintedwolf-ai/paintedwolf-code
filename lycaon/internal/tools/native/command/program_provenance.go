@@ -194,10 +194,9 @@ func (r *programRun) beginOpTracker() *opProvenanceTracker {
 }
 
 func (r *programRun) wrapProducerStreams(ctx context.Context, tracker *opProvenanceTracker, outClass, errClass outputStreamClass, streams commandprogram.Streams) (commandprogram.Streams, func()) {
-	outCounter := &countingStreamWriter{w: nonNilWriter(streams.Output)}
-	errCounter := &countingStreamWriter{w: nonNilWriter(streams.Error)}
-	streams.Output = outCounter
-	streams.Error = errCounter
+	var outCounter, errCounter *countingStreamWriter
+	streams.Output, outCounter = countProducerStream(streams.Output)
+	streams.Error, errCounter = countProducerStream(streams.Error)
 	return streams, func() {
 		r.finishOpTracker(ctx, tracker, outClass, outCounter.bytes.Load() > 0, errClass, errCounter.bytes.Load() > 0)
 	}

@@ -72,13 +72,9 @@ margin: 0 0 8px;
 
 @utility den-checkpoint-decision-chicklet {
 display: flex;
-  align-self: flex-start;
   align-items: center;
   gap: 6px;
   box-sizing: border-box;
-  width: var(--den-transcript-card-width, 100%);
-  max-width: 100%;
-  min-width: 0;
   min-height: var(--den-transcript-card-row-h);
   padding: 0 var(--den-transcript-card-inset-x);
   border-radius: var(--den-radius);

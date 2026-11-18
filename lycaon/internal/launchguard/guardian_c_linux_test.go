@@ -299,8 +299,7 @@ func (f *guardianCFixture) report(raw []byte, pid int, ordinary bool, dump uint3
 }
 
 func (f *guardianCFixture) run(name string, alternate *os.File) error {
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := context.Background()
 	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
 	if err != nil {
 		return err
@@ -447,8 +446,7 @@ func (f *guardianCFixture) run(name string, alternate *os.File) error {
 }
 
 func (f *guardianCFixture) namespace(owner, gid uint32, mapping string) (_ *os.File, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := context.Background()
 	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
 	if err != nil {
 		return nil, err

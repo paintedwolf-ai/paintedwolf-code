@@ -20,7 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session"
-	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
+	"github.com/lycaon/lycaon/internal/session/decisions/decisionstest"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/verification"
@@ -289,13 +289,12 @@ func TestAppendWorkerSummaryCarriesStructuredDecisionRequest(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	decisions := sessiondecisions.NewMemory()
-	mgr.SetDecisionStore(decisions)
-
 	parent, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
+	decisions := decisionstest.New(t, decisionstest.Job{ID: "job-dec", Child: child.ID})
+	mgr.SetDecisionStore(decisions)
 
 	testutil.FailErr(t, "seed task row", store.AppendMessages(ctx, parent.ID,
 		api.Message{ID: "a1", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "tc1", Name: "task"}}},

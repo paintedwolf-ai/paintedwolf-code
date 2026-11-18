@@ -261,9 +261,7 @@ func TestMountTimeoutSnapshotFixture(t *testing.T) {
 	testutil.FailErr(t, "open owned timeout mount descriptor", err)
 	id, inode, err := mountDescriptorIdentity(fd)
 	_ = unix.Close(fd)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "read owned timeout mount identity", err)
 	if present.MountID != id || present.Inode != inode || present.LateFileType != unix.S_IFREG || present.LateFileErrno != 0 ||
 		present.Flags&unix.ST_NOEXEC == 0 || present.NamespaceInode == 0 || present.EndNS < present.BeginNS || len(present.Rows) != 2 {
 		t.Fatalf("snapshot lost actual owned namespace/mount/file facts: %+v", present)

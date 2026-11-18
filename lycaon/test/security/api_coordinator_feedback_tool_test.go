@@ -29,7 +29,7 @@ func TestCoordinatorToolReturnsManifestPrompt(t *testing.T) {
 	if _, err := workflowMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "feedback-tool-e2e", WorkflowVersion: "1.0.0",
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "workflowMgr.Starts.StartHuman failed", err)
 	}
 	out, err := toolReg.Run(ctx, "workflow_user_feedback", map[string]any{}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{Agent: "coordinator",

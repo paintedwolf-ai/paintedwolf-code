@@ -35,7 +35,7 @@ func TestSourceViewNotificationsAnnounceOnlyObservableChanges(t *testing.T) {
 	ready := func() *wire.SourceTreeView {
 		t.Helper()
 		var state *wire.SourceTreeView
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "the source view tree settles", func() bool {
 			state = readSourceViewResponse(t, callSourceViewHandler(t, server.Views.HandleGetSourceView, project.ID, created.ID, nil), http.StatusOK).Tree
 			return state.State == "ready"
 		})

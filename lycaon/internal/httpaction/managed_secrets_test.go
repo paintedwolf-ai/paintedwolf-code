@@ -516,7 +516,7 @@ func TestRefusalBeforeContinueDispatchesHeadersOnly(t *testing.T) {
 
 	// The server saw the header secret and never the body secret.
 	var wireReceived string
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the server receives the request head", func() bool {
 		wireReceived = serverWire.Load().(string)
 		return wireReceived != ""
 	})

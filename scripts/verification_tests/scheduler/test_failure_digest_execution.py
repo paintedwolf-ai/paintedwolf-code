@@ -128,8 +128,18 @@ class DigestBounds(unittest.TestCase):
             self.assertEqual(found["p/quiet"]["lines"], ["FAIL p/quiet unknown shape"])
 
     def test_many_failed_test_names_report_their_overflow(self):
-        record = {"failed": [f"Test{i}" for i in range(5)], "tests": {}, "package": [], "build": []}
+        record = {"failed": [f"Test{i}" for i in range(5)], "tests": {}, "pending": [], "package": [], "build": []}
         self.assertEqual(digest.go_diagnostics(record)[0], ["Tests: Test0, Test1, Test2 (+2 more)"])
+
+    def test_waits_a_hung_package_printed_lead_its_diagnostics(self):
+        with tempfile.TemporaryDirectory() as temp:
+            raw = Path(temp) / "go.json"
+            raw.write_text("\n".join(json.dumps({"Action": "output", "Package": "p", "Test": test, "Output": line})
+                                     for test, line in (("TestHung", "pending wait: TestHung: the job ends\n"),
+                                                        ("TestHung", "pending wait: TestHung: the job ends\n"),
+                                                        ("TestOther", "goroutine 7 [chan receive]:\n"))) + "\n")
+            record = digest.go_records(raw, ["p"])["p"]
+        self.assertEqual(digest.go_diagnostics(record)[0], ["Waiting: TestHung: the job ends"])
 
     def test_unreadable_events_fall_back_to_the_recorded_output(self):
         with tempfile.TemporaryDirectory() as temp:

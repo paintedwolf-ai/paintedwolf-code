@@ -55,7 +55,7 @@ func TestBuildForTestBackgroundWorkersCompleteJob(t *testing.T) {
 	)
 	testutil.FailErr(t, "task tool failed", err)
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the worker job completes and its outcome is delivered", func() bool {
 		jobs, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusComplete)
 		if err != nil || len(jobs) != 1 {
 			return false

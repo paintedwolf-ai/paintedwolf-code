@@ -124,7 +124,7 @@ func TestSQLStorePersistenceAcrossReopen(t *testing.T) {
 		Role:    api.MessageRoleUser,
 		Content: "hello",
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 	testutil.FailErr(t, "close database for reopen", sqlDB.Close())
 

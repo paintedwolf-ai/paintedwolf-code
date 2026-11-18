@@ -46,10 +46,7 @@ func TestUnixGuardKillsGroupAfterLeaderIsReaped(t *testing.T) {
 
 	guard.kill(cmd)
 
-	if err := waitForProcessGone(t.Context(), grandchild); err != nil {
-		_ = syscall.Kill(grandchild, syscall.SIGKILL)
-		testutil.FailErr(t, "descendant outlived guard kill", err)
-	}
+	waitForProcessGone(t, grandchild)
 }
 
 func TestReapedSessionReuseNeverSignalsStandInProcess(t *testing.T) {
@@ -165,7 +162,7 @@ func TestReapedSessionReuseNeverSignalsStandInProcess(t *testing.T) {
 
 		<-stage0Reaped
 		// Wait until stage 0 has marked itself reaped under g0.mu.
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "the guard reaps the session", func() bool {
 			g0.mu.Lock()
 			defer g0.mu.Unlock()
 			return g0.reaped
@@ -236,20 +233,13 @@ func TestRunPipelineTimeoutKillsDescendants(t *testing.T) {
 	go func() {
 		defer close(done)
 		_, _ = RunPipeline(context.Background(), []Stage{{Name: "sh", Args: []string{"-c", script}}},
-			ExecOpts{Launch: HostLaunch("exec test"), Dir: dir, Timeout: testutil.Timeout(500 * time.Millisecond)})
+			ExecOpts{Launch: HostLaunch("exec test"), Dir: dir, Timeout: 500 * time.Millisecond})
 	}()
 
 	grandchild := waitForPIDFile(t, pidFile)
-	select {
-	case <-done:
-	case <-t.Context().Done():
-		_ = syscall.Kill(grandchild, syscall.SIGKILL)
-		t.Fatal("RunPipeline did not return after its timeout")
-	}
-	if err := waitForProcessGone(t.Context(), grandchild); err != nil {
-		_ = syscall.Kill(grandchild, syscall.SIGKILL)
-		testutil.FailErr(t, "descendant outlived pipeline timeout", err)
-	}
+	t.Cleanup(func() { _ = syscall.Kill(grandchild, syscall.SIGKILL) })
+	testutil.AwaitClosed(t, "the pipeline returns at its timeout", done)
+	waitForProcessGone(t, grandchild)
 }
 
 // An escaped descendant cannot hold the caller past the wait deadline.
@@ -315,25 +305,19 @@ func TestExecDetachHelperProcess(t *testing.T) {
 
 func waitForPIDFile(t *testing.T, path string) int {
 	t.Helper()
-	for t.Context().Err() == nil {
+	var pid int
+	testutil.WaitFor(t, "the descendant reports its pid at "+path, func() bool {
 		raw, err := os.ReadFile(path)
-		if err == nil {
-			if pid, convErr := strconv.Atoi(strings.TrimSpace(string(raw))); convErr == nil && pid > 0 {
-				return pid
-			}
+		if err != nil {
+			return false
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("descendant never reported its pid at %s", path)
-	return 0
+		pid, err = strconv.Atoi(strings.TrimSpace(string(raw)))
+		return err == nil && pid > 0
+	})
+	return pid
 }
 
-func waitForProcessGone(ctx context.Context, pid int) error {
-	for ctx.Err() == nil {
-		if !osprocess.Alive(pid) {
-			return nil
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	return fmt.Errorf("process %d still running: %w", pid, ctx.Err())
+func waitForProcessGone(t testing.TB, pid int) {
+	t.Helper()
+	testutil.WaitFor(t, fmt.Sprintf("process %d exits", pid), func() bool { return !osprocess.Alive(pid) })
 }

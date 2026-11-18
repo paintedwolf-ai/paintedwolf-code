@@ -24,7 +24,6 @@ func TestDrainPendingDoesNotBurnBudgetWhenPromptActive(t *testing.T) {
 	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
-		time.Sleep(50 * time.Millisecond)
 		return &promptresult.Result{}, nil
 	}
 	engine.SetDeps(deps)
@@ -174,7 +173,7 @@ func TestWakeQueuedDuringPromptExecutionDrainsOnRelease(t *testing.T) {
 		t.Fatal("a wake during execution must wait for the turn")
 	}
 	finishExecution()
-	testutil.WaitFor(t, func() bool { return prompts.Load() == 1 })
+	testutil.WaitFor(t, "the queued wake runs one prompt", func() bool { return prompts.Load() == 1 })
 	if _, ok := engine.Nudges.Pending("s1"); ok {
 		t.Fatal("the released turn must drain the parked wake")
 	}

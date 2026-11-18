@@ -2,12 +2,13 @@ package oar
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/prompts"
 )
 
 // authorCheckPaths writes a rule (and optionally fixtures) into a temp pack and
@@ -247,4 +248,19 @@ func setupAuthorCheckRenderer(t *testing.T) {
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(
 		prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	t.Cleanup(func() { guidance.SetGuidanceRenderer(nil) })
+}
+
+func TestCheckRuleFiles_ValueOutsideTheFactVocabularyIsConditionInvalid(t *testing.T) {
+	bad := strings.NewReplacer(
+		"requires_facts: [paintedwolf.session_posture]", "requires_facts: [paintedwolf.scope_mode]",
+		`when: paintedwolf.session_posture == "spec"`, `when: paintedwolf.scope_mode == "wirte"`,
+	).Replace(authorCheckRule)
+	policy := authorCheckPaths(t, bad, nil)
+	got, err := CheckRuleFiles(context.Background(), []string{policy}, authorCheckOpts(t))
+	if err != nil {
+		t.Fatalf("CheckRuleFiles: %v", err)
+	}
+	if len(got) != 1 || got[0].Code != RuleCheckConditionInvalid || !strings.Contains(got[0].Detail, "wirte") {
+		t.Fatalf("a condition that can never match passed the author check: %+v", got)
+	}
 }

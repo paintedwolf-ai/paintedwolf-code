@@ -41,7 +41,7 @@ func TestApprovalHITLSSEPendingAndResolved(t *testing.T) {
 
 func assertCheckpointSSE(t *testing.T, ch <-chan wire.EventEnvelope, checkpointID string, status wire.CheckpointStatus) {
 	t.Helper()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the checkpoint event arrives", func() bool {
 		select {
 		case envelope, ok := <-ch:
 			if !ok {

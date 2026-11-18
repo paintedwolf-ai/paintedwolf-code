@@ -167,7 +167,7 @@ func TestSupervisionSettlesTheTree(t *testing.T) {
 			if reaps < max(1, tc.minReaps) {
 				t.Fatalf("reaps=%d, want >= %d", reaps, max(1, tc.minReaps))
 			}
-			testutil.FailErr(t, "descendant survived settlement", waitForProcessGone(t.Context(), pids[0]))
+			waitForProcessGone(t, pids[0])
 		})
 	}
 }
