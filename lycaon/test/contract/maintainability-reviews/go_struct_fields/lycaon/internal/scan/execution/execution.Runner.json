@@ -1,0 +1,16 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/scan/execution/execution.Runner",
+  "kind": "runtime_service",
+  "workstream": "scan-persistence-components",
+  "disposition": "retain",
+  "reason": "Retain one execution runner for claim renewal, source-bound execution, cancellation, and terminal delivery. Its persistence dependencies are separate and completion is published after commit.",
+  "reviewed_commit": "3437d9cc94c52e9be89f24a2832b7d363834ba30",
+  "ceiling": 29,
+  "boundaries": {
+    "lycaon/internal/scan/execution/runner_completion_test.go": "22c611b82f62c4a6f8949fbed1fcf5336e0d5b95bd4dd077890df415b903ebcb",
+    "lycaon/internal/scan/execution/runner_snapshot_test.go": "3f8afac4abe392835844f7e79576719ac16e2e773d806def4dd40524f7613127",
+    "lycaon/internal/scan/execution/runner_scheduling_recovery_test.go": "5ff2462b5740d9a128e39677256a311cbb1c250224546fc7e584696ebf0054c2"
+  },
+  "reviewed_shape": "55326d8450686ff8b6f2b5a48e077fde869b8d16e4d6db00339d82899b7edf1f"
+}
