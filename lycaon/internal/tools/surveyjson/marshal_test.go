@@ -1,34 +1,27 @@
 package surveyjson
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
-func TestMarshalDoesNotEscapeHTML(t *testing.T) {
-	raw, err := Marshal(map[string]string{"content": "<foo> & bar"})
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
+// Model context reads source text exactly: HTML characters stay literal and
+// no trailing newline separates concatenated envelopes.
+func TestMarshalKeepsHTMLLiteralAndTrimmed(t *testing.T) {
+	type response struct {
+		Content string `json:"content"`
 	}
-	s := string(raw)
-	if strings.Contains(s, `\u003c`) || strings.Contains(s, `\u0026`) {
-		t.Fatalf("unexpected unicode escapes: %s", s)
-	}
-	if !strings.Contains(s, "<foo>") || !strings.Contains(s, "& bar") {
-		t.Fatalf("want literal < and &: %s", s)
-	}
-}
-
-func TestMarshalIndentDoesNotEscapeHTML(t *testing.T) {
-	raw, err := MarshalIndent(map[string]string{"content": "<foo> & bar"}, "", "  ")
-	if err != nil {
-		t.Fatalf("MarshalIndent: %v", err)
-	}
-	s := string(raw)
-	if strings.Contains(s, `\u003c`) || strings.Contains(s, `\u0026`) {
-		t.Fatalf("unexpected unicode escapes: %s", s)
-	}
-	if !strings.Contains(s, "<foo>") || !strings.Contains(s, "& bar") {
-		t.Fatalf("want literal < and &: %s", s)
+	in := response{Content: "<div> & </div>"}
+	for name, tc := range map[string]struct {
+		marshal func() ([]byte, error)
+		want    string
+	}{
+		"marshal":        {func() ([]byte, error) { return Marshal(in) }, `{"content":"<div> & </div>"}`},
+		"marshal indent": {func() ([]byte, error) { return MarshalIndent(in, "", "  ") }, "{\n  \"content\": \"<div> & </div>\"\n}"},
+	} {
+		raw, err := tc.marshal()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if string(raw) != tc.want {
+			t.Fatalf("%s = %q, want %q", name, raw, tc.want)
+		}
 	}
 }

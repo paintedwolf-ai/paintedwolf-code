@@ -78,7 +78,7 @@ Import direction forbids `prompts` → `tools` hub (cycle via `guidance`). Share
 | Read pagination caps | [`tools/readcaps`](../lycaon/internal/tools/readcaps) | `prompts`, `llm/compaction`, `spawn`, `coordinator/promptloop`, `tools/native` (+ `survey`, `sourceview`) |
 | Survey receipt shape / clamp | [`tools/surveyreceipt`](../lycaon/internal/tools/surveyreceipt) | `coordinator/promptloop`, `session/workercompletion`, `tools/native` (+ `survey`, `sourceview`, `terminal`, `toolkit`), `tools/safecmd` |
 
-`summarize` declares `same_tool` batching and `late` order; `wait` declares `terminal` order. The executor groups and orders from that generation, not tool-name conditions. Contract: [`TestPromptsUseCompiledToolContracts`](../lycaon/test/contract/tools/toolcontract_leaf_contract_test.go).
+`summarize` declares `same_tool` batching and `late` order; `wait` declares `terminal` order. The executor groups and orders from that generation, not tool-name conditions. Contract: [`TestCompiledOrderAndLifecycle`](../lycaon/internal/toolcontract/contract_test.go).
 
 `tools` ↔ `conditions` is a second cycle with the same shape — `tools` → `guidance` → `conditions` — and the same resolution. The `tools` hub and the `tool_is_write` rule condition both read `toolcontract.MutatesContent`. Contract: [`TestContentMutationFactHasOneSource`](../lycaon/test/contract/tools/tool_content_axis_contract_test.go).
 
@@ -323,8 +323,6 @@ Scan integration tests live in [`scan/integration`](../lycaon/internal/scan/inte
 | Triangle | `internal/prompts` → `internal/tools` **hub** | `tools/readcaps`, `tools/surveyreceipt`, `toolcontract` |
 
 The rest are the extension-catalog edges described above — `extpacks` may not import `contribution`, `catalogview`, or `extensionstate`; `contribution` stays pure but for `filekind` and `theme`; `catalogview` may not import `extensionstate` or `usernotice` — plus a generated rule per loader hub forbidding the reverse edge into `catalogview`. A new rule is added to `layeringRules()` (or the hub loop beside it), not to this table.
-
-Tool-contract leaf guards: [`TestPromptsUseCompiledToolContracts`](../lycaon/test/contract/tools/toolcontract_leaf_contract_test.go) and [`TestToolsHubUsesCompiledToolContracts`](../lycaon/test/contract/tools/toolcontract_leaf_contract_test.go) keep prompt projection and registration on the compiled generation.
 
 Coordinator wake resources in `coordinator/loopwake` are composed by `LoopEngine`. `Waits` owns sleep state and timer cleanup; `WaitSubscriptions` owns durable condition admission and settlement; `WaitDeliveries` owns resumed-turn delivery. `Nudges` owns pending queues and deduplication, `HostTurns` owns asynchronous turns and the prompt lane, and `Admission` owns execution tokens and loop budgets. Worker-cycle decisions, host wake policy, prompt observations, and session facts have separate narrow peers. Session cleanup drains turns before releasing the domains that hold session state.
 

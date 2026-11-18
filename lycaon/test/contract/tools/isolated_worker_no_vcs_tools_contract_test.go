@@ -92,16 +92,26 @@ func TestSomeNonIsolatedProfileKeepsEveryGitTool(t *testing.T) {
 		"history and revision recovery are unreachable", gitTools)
 }
 
-// source_history keeps implementer change history available in isolation.
+// source_history keeps change history available to every isolated profile that
+// may write anywhere in the source tree. A profile whose writes are confined by
+// write globs (a plan writer) edits no source and runs without it by design.
 func TestIsolatedImplementerKeepsSourceHistory(t *testing.T) {
 	t.Parallel()
-	profile, ok := toolProfilesByID(t)["implement"]
-	if !ok {
-		t.Fatal("missing tool profile \"implement\"")
+	profiles := toolProfilesByID(t)
+	isolated := isolatedLegProfiles(t)
+	checked := 0
+	for _, profileID := range sortedProfileIDs(isolated) {
+		profile, ok := profiles[profileID]
+		if !ok || !prompts.ToolProfileMutationCapable(profile) || len(profile.WriteGlobs) > 0 {
+			continue
+		}
+		checked++
+		if !profile.ToolAllowed("source_history") {
+			t.Errorf("%s runs isolated on profile %q without source_history", isolated[profileID], profileID)
+		}
 	}
-	if !profile.ToolAllowed("source_history") {
-		t.Error("implement has no history tool at all: git cannot answer on its " +
-			"branch copy and source_history is not granted")
+	if checked == 0 {
+		t.Fatal("no isolated profile writes the source tree")
 	}
 }
 
