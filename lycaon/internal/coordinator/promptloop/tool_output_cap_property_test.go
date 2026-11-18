@@ -96,7 +96,7 @@ func capPropertyViolation(tool, content string, got toolResultProjection, hostDi
 	case code != "" && len(body) > limit:
 		return code + " delivered " + strconv.Itoa(len(body)) + " bytes past the cap"
 	case code == "TOOL_OUTPUT_TRUNCATED" && !spillHolds(hostDir, content):
-		return "truncated without spilling the whole result"
+		return "truncated without spilling the whole result; spill files: " + spillFiles(hostDir)
 	}
 	return ""
 }
@@ -108,15 +108,32 @@ func capPropertyOutput(size int) string {
 	return out[:size]
 }
 
-// spillHolds reports whether a spill file under hostDir holds content.
+// spillFiles lists the files under hostDir with their sizes.
+func spillFiles(hostDir string) string {
+	var out []string
+	_ = filepath.WalkDir(hostDir, func(path string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			if info, statErr := d.Info(); statErr == nil {
+				rel, _ := filepath.Rel(hostDir, path)
+				out = append(out, rel+"="+strconv.FormatInt(info.Size(), 10))
+			}
+		}
+		return nil
+	})
+	return strings.Join(out, ", ")
+}
+
+// spillHolds reports whether a spill file under hostDir holds content whole,
+// as written or in the line-addressable rendering the spill prefers.
 func spillHolds(hostDir, content string) bool {
+	rendered := tooloutput.LineAddressableToolJSON(content)
 	found := false
 	_ = filepath.WalkDir(hostDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || found {
 			return nil
 		}
 		raw, readErr := os.ReadFile(path)
-		found = readErr == nil && string(raw) == content
+		found = readErr == nil && (string(raw) == content || string(raw) == rendered)
 		return nil
 	})
 	return found

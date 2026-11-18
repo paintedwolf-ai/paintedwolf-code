@@ -599,7 +599,7 @@ func sessionEnqueueWorker(ctx context.Context, s *conformanceSweep, chat string)
 	if len(s.fixture.project.Roots) == 0 {
 		return "", errors.New("the fixture project has no root")
 	}
-	return s.host.Delegations.Queue.Enqueue(ctx, wire.WorkerTask{
+	return s.host.Workers.Queue.Enqueue(ctx, wire.WorkerTask{
 		Prompt: "conformance", Brief: "conformance", ParentSessionID: chat, ProjectID: s.fixture.project.ID,
 		WorkspaceRootID: s.fixture.project.Roots[0].ID, WorkspacePath: s.fixture.projectDir, AgentType: "implementer",
 		Scope: &wire.TaskScope{Mode: wire.TaskScopeModeRead},
@@ -613,7 +613,7 @@ func sessionSettledWorker(ctx context.Context, s *conformanceSweep, chat string)
 	if err != nil {
 		return "", err
 	}
-	return id, s.host.Delegations.Queue.Cancel(ctx, id, nil)
+	return id, s.host.Workers.Queue.Cancel(ctx, id, nil)
 }
 
 func sessionSeedWorkers(ctx context.Context, s *conformanceSweep) error {

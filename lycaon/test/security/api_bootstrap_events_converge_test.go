@@ -50,7 +50,7 @@ func TestBootstrapPlusEventsConverges(t *testing.T) {
 	srv := httptest.NewServer(h.Server)
 	t.Cleanup(srv.Close)
 	dir := h.ProjectDir(t, "converge")
-	project := createTestProjectHTTP(t, h.Server, dir)
+	project := CreateTestProjectHTTP(t, h.Server, dir)
 	checkpoints, ok := h.Sessions.Checkpoints.(*hitl.Checkpoints)
 	if !ok {
 		t.Fatalf("checkpoint manager is %T, want *hitl.Checkpoints", h.Sessions.Checkpoints)
@@ -62,8 +62,8 @@ func TestBootstrapPlusEventsConverges(t *testing.T) {
 		early := world.subscribe(world.currentCursor())
 		defer early.close()
 		chats := [2]string{
-			createSessionForProjectHTTP(t, h.Server, project.ID, wire.SessionPostureBuild).ID,
-			createSessionForProjectHTTP(t, h.Server, project.ID, wire.SessionPostureBuild).ID,
+			CreateSessionForProjectHTTP(t, h.Server, project.ID, wire.SessionPostureBuild).ID,
+			CreateSessionForProjectHTTP(t, h.Server, project.ID, wire.SessionPostureBuild).ID,
 		}
 		run := &convergeRun{world: world, chats: chats}
 		steps := rapid.IntRange(1, 24).Draw(rt, "steps")
@@ -187,7 +187,7 @@ func (r *convergeRun) step(rt *rapid.T) {
 			&hitl.ContentApplyResolve{Decision: wire.ContentApplyReject})
 		testutil.FailErr(t, "resolve checkpoint", err)
 	case kind == "worker":
-		id, err := r.world.h.Delegations.Queue.Enqueue(ctx, wire.WorkerTask{
+		id, err := r.world.h.Workers.Queue.Enqueue(ctx, wire.WorkerTask{
 			Prompt: "converge", Brief: "converge", ParentSessionID: chat, ProjectID: r.world.project.ID,
 			WorkspaceRootID: r.world.project.Roots[0].ID, WorkspacePath: r.world.dir, AgentType: "implementer",
 			Scope: &wire.TaskScope{Mode: wire.TaskScopeModeRead},
@@ -197,7 +197,7 @@ func (r *convergeRun) step(rt *rapid.T) {
 	case kind == "cancel" && len(r.workers[chat]) > 0:
 		id := r.workers[chat][0]
 		r.workers[chat] = r.workers[chat][1:]
-		testutil.FailErr(t, "cancel worker", r.world.h.Delegations.Queue.Cancel(ctx, id, nil))
+		testutil.FailErr(t, "cancel worker", r.world.h.Workers.Queue.Cancel(ctx, id, nil))
 	default:
 		msg := wire.Message{ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Origin: wire.MessageOriginModel, Content: "appended " + uuid.NewString()}
 		testutil.FailErr(t, "append message", r.world.h.Sessions.Store.AppendMessages(ctx, chat, msg))
@@ -292,7 +292,7 @@ func (s convergeState) diff(folded convergeState) string {
 // debounced event was delivered.
 func (w *convergeWorld) settle() {
 	w.h.Server.WaitForBackground(w.t.Context())
-	testutil.WaitFor(w.t, func() bool { return w.outboxRows() == 0 })
+	testutil.WaitFor(w.t, "outbox drained", func() bool { return w.outboxRows() == 0 })
 	w.h.MemoryHub().FlushDebounced()
 }
 
@@ -307,7 +307,7 @@ func (w *convergeWorld) currentCursor() string {
 }
 
 func (w *convergeWorld) bootstrap(chat string) wire.SessionBootstrap {
-	req := authedRequest(w.t, http.MethodGet, "/v1/sessions/"+chat+"/bootstrap", nil)
+	req := AuthedRequest(w.t, http.MethodGet, "/v1/sessions/"+chat+"/bootstrap", nil)
 	rec := httptest.NewRecorder()
 	w.h.Server.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
