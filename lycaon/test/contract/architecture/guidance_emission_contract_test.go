@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/testutil/guidancetest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/guidancescan"
 )
@@ -64,7 +65,7 @@ func TestRecoverableHintCodesRenderFullRejectBlock(t *testing.T) {
 
 	for code, entry := range cfg.HintCodes {
 		// OAR hints are never evaluated and carry no scenarios.
-		if guidance.CopyOnlyEmit(entry.Emit) || entry.Kind == "hint" {
+		if guidancetest.CopyOnlyEmit(entry.Emit) || entry.Kind == "hint" {
 			continue
 		}
 		if entry.Severity == "info" && !strings.HasPrefix(entry.Emit, "guard:") && !strings.HasPrefix(entry.Emit, "rule:") {

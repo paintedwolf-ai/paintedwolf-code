@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/guidancetest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,8 +16,8 @@ func TestStressCommandQueryStreamsLargeInputWithoutRetainingIt(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "guidance.LoadHintConfigStock failed", err)
-	if err = guidance.ValidateHintConfig(hints); err != nil {
-		testutil.FailErr(t, "guidance.ValidateHintConfig failed", err)
+	if err = guidancetest.ValidateHints(hints); err != nil {
+		testutil.FailErr(t, "guidancetest.ValidateHints failed", err)
 	}
 	env.Runtime.Executor.Rejections.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 	memory := observedProgramMemory(t, env)
