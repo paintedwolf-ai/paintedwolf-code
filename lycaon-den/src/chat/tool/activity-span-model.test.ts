@@ -1,14 +1,11 @@
 import { sourceTextHash, fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
 import { describe, expect, it } from "vitest";
 import {
-  activitySpanFailureCount,
-  activitySpanHint,
-  activitySpanStatus,
   omitIndexWarmingFromTranscript,
   projectActivitySpans,
 } from "./activity-span-model.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
-import type { ActivitySpanEntry, RawTranscriptItem, TranscriptItem } from "../transcript/projection/transcript-item-model.ts";
+import type { RawTranscriptItem, TranscriptItem } from "../transcript/projection/transcript-item-model.ts";
 
 function part(
   id: string,
@@ -41,10 +38,6 @@ function spanOf(items: readonly RawTranscriptItem[]) {
   expect(projected).toHaveLength(1);
   expect(projected[0]?.kind).toBe("activity_span");
   return projected[0] as Extract<TranscriptItem, { kind: "activity_span" }>;
-}
-
-function toolEntry(partView: ToolPartView): ActivitySpanEntry {
-  return { kind: "tool", part: partView };
 }
 
 function turnLoadItem(key: string, anchorMessageId: string): RawTranscriptItem {
@@ -593,31 +586,6 @@ describe("index warming activity", () => {
     ]);
     expect(omitted).toHaveLength(1);
     expect(omitted[0]?.kind).toBe("tool");
-  });
-});
-
-describe("activity span summary", () => {
-  it("reports status from running and newest settled calls", () => {
-    const entries = (...statuses: ToolPartView["status"][]) =>
-      statuses.map((status, index) =>
-        toolEntry(part(`r${index}`, "read", `${index}.go`, { status })),
-      );
-
-    expect(activitySpanStatus(entries("completed", "error"))).toBe("error");
-    expect(activitySpanStatus(entries("error", "completed"))).toBe("completed");
-    expect(activitySpanStatus(entries("completed", "running"))).toBe("running");
-    expect(activitySpanFailureCount(entries("error", "completed", "error"))).toBe(2);
-  });
-
-  it("puts a failed call first in the collapsed hint", () => {
-    const hint = activitySpanHint(
-      [
-        toolEntry(part("r1", "read", "a.go")),
-        toolEntry(part("r2", "read", "missing.go", { status: "error" })),
-      ],
-      "investigating",
-    );
-    expect(hint).toBe("missing.go, +1");
   });
 });
 

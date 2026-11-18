@@ -110,7 +110,7 @@ Activity-span principles:
 - retain stable constituent ids and expansion state;
 - show zero-net-change rather than erase the activity;
 - keep worker branches separate because their paths resolve in different workspaces;
-- keep active status, the current context hint, and failures visible while details remain collapsed.
+- show the current status and context while details remain collapsed. In quiet mode a completed span leads with completed work when it names an action in its hint. The failure count appears on spans that end in error and in verbose mode. Expanded spans keep every member row and its status.
 
 A large set of file folds may receive a manifest group. That is presentation over the same rows, not a new source of change history.
 

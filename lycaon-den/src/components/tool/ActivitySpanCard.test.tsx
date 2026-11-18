@@ -119,27 +119,6 @@ describe("ActivitySpanCard status and failures", () => {
     ).toBe("running");
   });
 
-  it("keeps a recovered failure on the collapsed summary", () => {
-    const { container } = render(() => (
-      <ActivitySpanCard
-        label="read"
-        entries={[
-          withStatus(parts[0]!, "error"),
-          withStatus(parts[1]!, "completed"),
-        ]}
-        layout="chat"
-      />
-    ));
-    const span = container.querySelector('[data-testid="activity-span-card"]');
-    expect(span?.getAttribute("data-status")).toBe("done");
-    expect(
-      container.querySelector('[data-testid="activity-span-failed"]')?.textContent,
-    ).toBe("1 failed");
-    expect(disclosureToggle(span).getAttribute("aria-label")).toBe(
-      "Read, done, 2 actions, 1 failed",
-    );
-  });
-
   it("omits the failure chip when nothing failed", () => {
     const { container } = render(() => (
       <ActivitySpanCard label="read" entries={entries} layout="chat" />

@@ -16,16 +16,13 @@ import {
   createActivitySpanAccordion,
   ActivitySpanAccordionProvider,
 } from "../../chat/tool/activity-span-accordion.ts";
-import {
-  activitySpanFailureCount,
-  activitySpanHint,
-  activitySpanStatus,
-} from "../../chat/tool/activity-span-model.ts";
+import { activitySpanSummary } from "../../chat/tool/activity-span-summary.ts";
 import { commandActivityGroups } from "../../chat/tool/command-activity-model.ts";
 import type { ActivitySpanEntry } from "../../chat/transcript/projection/transcript-item-model.ts";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
 import { bindFindRevealHost } from "../../find/use-findable-view.ts";
 import { formatSentenceCase } from "../../format/format-sentence-case.ts";
+import { verboseModePref } from "../../settings/system/debug-prefs.ts";
 import { IndexWarmingChicklet } from "../transcript/IndexWarmingChicklet.tsx";
 import { TurnLoadCard } from "./TurnLoadCard.tsx";
 import { VirtualCardList } from "../primitives/VirtualCardList.tsx";
@@ -201,16 +198,15 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
       setProcessRevision((n) => n + 1);
     }, () => ({ sessionId: props.sessionId, statusOnly: true })),
   );
-  // Process events refresh status and failure counts.
-  const statusAttr = () => {
+  const summary = createMemo(() => {
     processRevision();
-    const status = props.running || activitySpanStatus(props.entries, props.sessionId) === "running" ? "running" : activitySpanStatus(entries().length ? entries() : props.entries, props.sessionId);
-    return status === "completed" ? "done" : status;
-  };
-  const failed = () => {
-    processRevision();
-    return activitySpanFailureCount(entries(), props.sessionId);
-  };
+    return activitySpanSummary(entries(), {
+      label: props.label,
+      sessionId: props.sessionId,
+      running: props.running,
+      verboseMode: verboseModePref(),
+    });
+  });
 
   const detail = createMemo(() => {
     const groups = commandActivityGroups(entries());
@@ -218,7 +214,7 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
     const directory = commandActivityDirectory(entries());
     return groups.length > 1
       ? directory ? `${directory} · ${path}` : path
-      : directory || activitySpanHint(entries(), props.label, props.sessionId) || path;
+      : directory || summary().hint || path;
   });
   const singletonToolKey = () => {
     const entry = entries()[0];
@@ -245,27 +241,27 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
       data-tool={props.label}
       data-count={count()}
       data-layout={props.layout}
-      data-status={statusAttr()}
+      data-status={summary().status}
     >
       <TranscriptDisclosureToggle
         disclosure={disclosure}
         onClick={handleSummaryClick}
-        aria-label={`${label()}, ${statusAttr()}, ${count()} ${count() === 1 ? "action" : "actions"}${
-          failed() > 0 ? `, ${failed()} failed` : ""
+        aria-label={`${label()}, ${summary().status}, ${count()} ${count() === 1 ? "action" : "actions"}${
+          summary().failureCount > 0 ? `, ${summary().failureCount} failed` : ""
         }`}
       >
         <span class="den-activity-span-chicklet">
           <span class="den-activity-span-chip">
             <span
               class="den-tool-part-status-dot"
-              data-status={statusAttr()}
+              data-status={summary().status}
               aria-hidden="true"
             />
             <span class="den-activity-span-name">{label()}</span>
             <Show when={count() > 1}>
               <span class="den-activity-span-count">×{count()}</span>
             </Show>
-            <ActivityFailureChip failed={failed()} />
+            <ActivityFailureChip failed={summary().failureCount} />
           </span>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
           <span class="den-activity-span-hint" data-tip={detail()} data-tip-when-clipped="">{detail()}</span>
