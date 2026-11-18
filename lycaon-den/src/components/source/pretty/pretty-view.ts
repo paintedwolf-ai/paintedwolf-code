@@ -102,7 +102,7 @@ export function prettyIndentDecoration(columns: number): Decoration {
   const clamped = Math.max(1, Math.min(PRETTY_MAX_INDENT_COLUMNS, Math.round(columns)));
   let mark = indentMarks[clamped];
   if (!mark) {
-    mark = Decoration.mark({ class: `${LINE_CLASS} ${LINE_CLASS}-${clamped}` });
+    mark = Decoration.mark({ prettyIndent: clamped, class: `${LINE_CLASS} ${LINE_CLASS}-${clamped}` });
     indentMarks[clamped] = mark;
   }
   return mark;
