@@ -149,8 +149,7 @@ func TestTurnOptimizationRunsWithoutWorkflowOptIn(t *testing.T) {
 	}
 }
 
-// noFolderLoadable lists the tools the investigate surface can load before a folder is
-// attached, which is where these sessions run.
+// noFolderLoadable returns deferred tools for an investigate frame with no roots.
 func noFolderLoadable(t *testing.T) []string {
 	t.Helper()
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_investigate"}, 0)
