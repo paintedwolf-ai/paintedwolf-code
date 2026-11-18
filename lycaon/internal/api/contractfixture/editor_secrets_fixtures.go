@@ -66,7 +66,7 @@ var FileWithSecret = "export const staging = {\n  relay: \"" + RelayToken + "\",
 
 func FixtureOwner(t *testing.T, f SecretSpanFixture) string {
 	t.Helper()
-	owner, err := f.Srv.Sources.Workspace.SessionStore.HostOwner(t.Context())
+	owner, err := f.Srv.Sources.Workspace.SessionStore.People.HostOwner(t.Context())
 	testutil.FailErr(t, "read host owner", err)
 	return owner.ID
 }

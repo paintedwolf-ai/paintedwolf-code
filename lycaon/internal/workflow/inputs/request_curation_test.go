@@ -2,7 +2,6 @@ package inputs_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/naming"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -90,7 +90,7 @@ func TestWorkflowRequestsCurateRootChatAfterAdmission(t *testing.T) {
 				}
 			}
 			curator.Runner.Curation.Wait(t.Context())
-			got, err := sessions.Get(t.Context(), "sess-1")
+			got, err := sessions.Sessions.Get(t.Context(), "sess-1")
 			testutil.FailErr(t, "get named session", err)
 			want := naming.NameSession(t.Context(), nil, text)
 			if surface == "manual title" {

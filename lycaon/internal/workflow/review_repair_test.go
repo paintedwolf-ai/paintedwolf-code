@@ -34,7 +34,7 @@ func persistReviewResponse(t *testing.T, mgr *RunManager, session string, msg ap
 	assistant := api.Message{ID: msg.ToolResult.AssistantMessageID, Role: api.MessageRoleAssistant, CreatedAt: time.Now().UTC(), ToolCalls: []api.ToolCall{{ID: msg.ToolResult.ToolCallID, Name: "submit_verdict"}}}
 	msg.CreatedAt = assistant.CreatedAt.Add(time.Millisecond)
 	msg.Role = api.MessageRoleTool
-	testutil.FailErr(t, "persist review response", mgr.Sessions.AppendMessages(t.Context(), session, assistant, msg))
+	testutil.FailErr(t, "persist review response", mgr.Sessions.Transcript.AppendMessages(t.Context(), session, assistant, msg))
 }
 
 func TestReviewRepairBlocksOnceAndResumeRetainsWork(t *testing.T) {

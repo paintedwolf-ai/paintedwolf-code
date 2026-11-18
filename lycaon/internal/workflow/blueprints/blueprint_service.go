@@ -3,9 +3,11 @@ package blueprints
 import (
 	"context"
 	"errors"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/blueprintfile"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	"github.com/lycaon/lycaon/internal/workflow/inputs"
 	"github.com/lycaon/lycaon/internal/workflow/lifecycle"
@@ -13,14 +15,13 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 type Service struct {
 	Runs        runstate.RunsRepository
 	Bindings    runstate.BlueprintsRepository
 	Vars        *runstate.Variables
-	Sessions    session.Store
+	Sessions    *sessionstore.Repositories
 	Creator     workflowblueprintfiles.Creator
 	Getter      workflowblueprintfiles.Getter
 	Scaffold    *inputs.Scaffold
@@ -94,7 +95,7 @@ func (m *Service) blueprintTitleFromSession(ctx context.Context, sessionID strin
 	if m == nil || m.Sessions == nil || sessionID == "" {
 		return ""
 	}
-	msgs, err := m.Sessions.GetMessages(ctx, sessionID)
+	msgs, err := m.Sessions.Transcript.GetMessages(ctx, sessionID)
 	if err != nil || len(msgs) == 0 {
 		return ""
 	}

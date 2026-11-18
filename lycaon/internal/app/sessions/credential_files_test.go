@@ -145,9 +145,9 @@ func TestCredentialDeliveryPersistsExposureWithoutHarvest(t *testing.T) {
 	testutil.FailErr(t, "deliver credential read without harvesting", files.Delivered(t.Context(), read))
 	// A fresh reader must recover exposure from durable evidence, not a warm cache.
 	reopened := store.NewSQL(database)
-	exposed, err := reopened.SessionSecretExposure(t.Context(), "reader")
+	exposed, err := reopened.Evidence.SessionSecretExposure(t.Context(), "reader")
 	testutil.FailErr(t, "recover credential exposure", err)
-	other, err := reopened.SessionSecretExposure(t.Context(), "other")
+	other, err := reopened.Evidence.SessionSecretExposure(t.Context(), "other")
 	testutil.FailErr(t, "read unrelated chat exposure", err)
 	if !exposed || other {
 		t.Fatalf("exposure crossed chat identity: reader=%v other=%v", exposed, other)

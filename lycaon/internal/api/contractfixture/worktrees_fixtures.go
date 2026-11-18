@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -23,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -140,7 +140,7 @@ func PostWorktreeJSON(t *testing.T, srv *hostapi.Server, path string, body any) 
 }
 
 type PutFailStore struct {
-	session.Store
+	*store.Repositories
 	FailPut bool
 }
 

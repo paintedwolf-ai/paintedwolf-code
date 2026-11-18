@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
@@ -33,7 +34,7 @@ func TestReloadHistoryReassemblesDiet(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -61,7 +62,7 @@ func TestReloadHistoryReassemblesDiet(t *testing.T) {
 			},
 		)
 	}
-	testutil.FailErr(t, "append messages", store.AppendMessages(ctx, sess.ID, msgs...))
+	testutil.FailErr(t, "append messages", store.Transcript.AppendMessages(ctx, sess.ID, msgs...))
 
 	assembled, err := mgr.Runner.History.Reload(ctx, sess.ID, sess, "")
 	testutil.FailErr(t, "reloadAssembledHistory", err)
@@ -87,13 +88,13 @@ func TestReloadHistoryDoesNotWriteStore(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	big := strings.Repeat("canonical-tool-body\n", 600)
-	testutil.FailErr(t, "append", store.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "append", store.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
 		api.Message{
 			ID:        "a1",
@@ -147,7 +148,7 @@ func TestReloadHistoryDoesNotWriteStore(t *testing.T) {
 		},
 	))
 
-	before, err := store.GetMessages(ctx, sess.ID)
+	before, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages before", err)
 	beforeLens := make([]int, len(before))
 	for i, m := range before {
@@ -160,7 +161,7 @@ func TestReloadHistoryDoesNotWriteStore(t *testing.T) {
 		t.Fatal("expected assembled projection")
 	}
 
-	after, err := store.GetMessages(ctx, sess.ID)
+	after, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after", err)
 	if len(after) != len(before) {
 		t.Fatalf("store message count changed: before=%d after=%d", len(before), len(after))
@@ -284,14 +285,14 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 		Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser,
 		TrustTier: api.ContentTrustTierTrusted,
 	}
-	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(ctx, sessionID, anchor))
+	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Transcript.AppendMessages(ctx, sessionID, anchor))
 
 	pathA := filepath.Join(dir, "a.txt")
 	pathB := filepath.Join(dir, "b.txt")
 	testutil.FailErr(t, "seed a", os.WriteFile(pathA, []byte("before-a"), 0o640))
 	testutil.FailErr(t, "seed b", os.WriteFile(pathB, []byte("before-b"), 0o640))
 
-	cpStore := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
+	cpStore := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind)
 	_, err := cpStore.Open(t.Context(), sessionID, anchor.ID)
 	testutil.FailErr(t, "open checkpoint", err)
 	testutil.FailErr(t, "capture a", cpStore.CapturePreImage(t.Context(), sessionID, anchor.ID, "a.txt", ""))
@@ -337,7 +338,7 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 		t.Fatal("a rolled-back rewind must leave the transcript intact")
 	}
 
-	op, err := mgr.Coordinator.Context.Sessions.(Store).GetRewindOperation(ctx, operationID)
+	op, err := mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind.GetRewindOperation(ctx, operationID)
 	testutil.FailErr(t, "get rewind operation", err)
 	if op == nil || op.Status != "rolled_back" {
 		t.Fatalf("rewind operation status = %+v, want rolled_back", op)

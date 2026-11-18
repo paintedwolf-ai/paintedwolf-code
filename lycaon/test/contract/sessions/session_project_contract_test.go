@@ -29,7 +29,7 @@ func TestSessionCreateNoFolderUsesDraftScratchWorkspace(t *testing.T) {
 	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
 	rootID, wantScratch := testdbseed.InsertDraftScratchRoot(t, sqlDB, testdbseed.DefaultProjectID)
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		ProjectID: testdbseed.DefaultProjectID,
 		Posture:   api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
@@ -45,7 +45,7 @@ func TestSessionCreateNoFolderUsesDraftScratchWorkspace(t *testing.T) {
 		t.Fatalf("scratch workspace not created: %v", statErr)
 	}
 
-	got, err := store.Get(ctx, sess.ID)
+	got, err := store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session", err)
 	if !strings.HasPrefix(got.WorkspacePath, wantScratch) {
 		t.Fatalf("GET workspace_path = %q want prefix %q", got.WorkspacePath, wantScratch)
@@ -62,7 +62,7 @@ func TestSessionCreateMultiRootResolvesWorkspaceRootID(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, primary)
 	secondaryID := testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, secondary)
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		ProjectID:       testdbseed.DefaultProjectID,
 		WorkspaceRootID: secondaryID,
 		Posture:         api.SessionPostureBuild,
@@ -75,7 +75,7 @@ func TestSessionCreateMultiRootResolvesWorkspaceRootID(t *testing.T) {
 		t.Fatalf("workspace_path = %q want %q", sess.WorkspacePath, secondary)
 	}
 
-	got, err := store.Get(ctx, sess.ID)
+	got, err := store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session", err)
 	if got.WorkspacePath != secondary {
 		t.Fatalf("GET workspace_path = %q want %q", got.WorkspacePath, secondary)
@@ -90,7 +90,7 @@ func TestSessionCreateDefaultsPrimaryRoot(t *testing.T) {
 	dir := t.TempDir()
 	rootID := testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		ProjectID: testdbseed.DefaultProjectID,
 		Posture:   api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)

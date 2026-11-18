@@ -62,7 +62,7 @@ func (denialInvariantProvenance) HeldByOther(context.Context, string, string, ui
 type denialInvariantStores struct {
 	listen, loopback *approvalstate.SandboxPortGrantRuntime
 	write, read      *approvalstate.SandboxPathGrantRuntime
-	store            Store
+	store            *sessionstore.Repositories
 	invokingSession  string
 	checkpoints      *denialInvariantCheckpoints
 	host             *Host
@@ -280,9 +280,9 @@ func TestSandboxWorkerDenialRenewsFromRootDirection(t *testing.T) {
 	for _, tc := range denialInvariantCases(t) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := newDenialInvariantStores(t)
-			parent, err := s.store.Get(s.ctx, denialInvariantChat)
+			parent, err := s.store.Sessions.Get(s.ctx, denialInvariantChat)
 			testutil.FailErr(t, "read root", err)
-			child, err := s.store.CreateChild(s.ctx, parent, api.SpawnChildRequest{AgentType: "investigator", Prompt: "Review the operation."})
+			child, err := s.store.Sessions.CreateChild(s.ctx, parent, api.SpawnChildRequest{AgentType: "investigator", Prompt: "Review the operation."})
 			testutil.FailErr(t, "create worker", err)
 			s.invokingSession = child.ID
 			_, err = tc.request(s.ctx, s, "worker-denied")

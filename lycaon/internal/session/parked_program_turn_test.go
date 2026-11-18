@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -18,6 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
+	awaitstore "github.com/lycaon/lycaon/internal/await"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 // User input interrupts a parked command; the user's turn opens with the
@@ -28,12 +29,12 @@ func TestUserTurnOpensWithTheInterruptedParkedProgram(t *testing.T) {
 	mgr := NewHost(sessionStore, Models{Client: llm.NewMockProvider(testMockConfig(t)), Limits: settings.DefaultSessionLimits()}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	database := testdbfixture.Open(t, "waits.db")
 	testdbseed.InsertSession(t, database, sess.ID, testdbseed.DefaultProjectID)
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
-	loop.Subscriptions.SetWaitStore(&awaitstore.Store{DB: database})
+	loop.Subscriptions.SetWaitStore(&awaitstore.*sessionstore.Repositories{DB: database})
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), sess.ID) })
 
 	const partial = `{"program_id":"program-1","state":"interrupted","status":130,"stdout":"start\n"}`

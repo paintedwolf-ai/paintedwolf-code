@@ -86,7 +86,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		return fmt.Errorf("parse tools: %w", err)
 	}
 	if err := workflowstatetools.RegisterStateTools(b.execution.Host.Registry, workflowstatetools.StateToolDeps{Runs: b.workflows.Store.Runs, Vars: b.workflows.Manager.Phases.Vars, Journal: b.workflows.Manager.Phases.Journal, Resolver: &b.workflows.Manager.Resolver, Starts: b.workflows.Manager.Starts, Controls: b.workflows.Manager.Controls, Scaffold: b.workflows.Manager.Blueprints.Scaffold,
-		Sessions: b.storage.Sessions,
+		Sessions: b.storage.Sessions.Sessions,
 	}); err != nil {
 		return fmt.Errorf("state tools: %w", err)
 	}
@@ -143,7 +143,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		Reports: worker.ChangeReportDeps{
 			SourceRuns: b.sessions.Manager.Verification.WorkerSourceRuns,
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {
-				return b.storage.Sessions.GetMessages(ctx, childSessionID)
+				return b.storage.Sessions.Transcript.GetMessages(ctx, childSessionID)
 			},
 		},
 	}
@@ -278,7 +278,7 @@ func (b *serveBuilder) wireMCP() error {
 			}
 			if err := b.execution.Host.Commands.SetProgramServices(toolhost.ProgramServices{
 				Recorder: recorder, Blobs: blobstore.Store{Root: b.storage.Directory}, Projector: captureProjector,
-				Progress: b.sessions.Manager.Coordinator.Guards, Sessions: b.storage.Sessions,
+				Progress: b.sessions.Manager.Coordinator.Guards, Sessions: b.storage.Sessions.Sessions,
 				SourceRuns: b.sessions.Manager.Verification, ExternalHidden: programSettings.ExternalHidden(),
 			}); err != nil {
 				return err

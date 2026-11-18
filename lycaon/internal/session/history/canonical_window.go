@@ -45,7 +45,7 @@ func (m *Service) readCanonicalTail(ctx context.Context, sessionID string, bound
 	needExchange := true
 	stopped, truncated := false, false
 	for !stopped && !truncated {
-		page, err := m.store.ReadMessageWindow(ctx, sessionID, messageview.MessageWindow{
+		page, err := m.transcriptStore.ReadMessageWindow(ctx, sessionID, messageview.MessageWindow{
 			BeforeOrd: beforeOrd,
 			Limit:     UncompactedLimit,
 		})
@@ -104,7 +104,7 @@ func (m *Service) readBoundedSuffix(ctx context.Context, sessionID string, after
 	for len(out) < bounds.maxRows {
 		remaining := bounds.maxRows - len(out)
 		pageLimit := min(UncompactedLimit, remaining) + 1
-		page, err := m.store.ReadMessageWindow(ctx, sessionID, messageview.MessageWindow{
+		page, err := m.transcriptStore.ReadMessageWindow(ctx, sessionID, messageview.MessageWindow{
 			After:    true,
 			AfterOrd: cursor,
 			Limit:    pageLimit,
@@ -153,7 +153,7 @@ func (m *Service) restoreCanonicalTail(ctx context.Context, sess *api.Session, v
 	if tail[0].Ord > view.Continuation.ThroughOrd {
 		return nil, false, nil
 	}
-	tail, err = withCurrentRequest(ctx, m.store, sess, tail)
+	tail, err = withCurrentRequest(ctx, m.sessionStore, m.transcriptStore, m.compactionStore, sess, tail)
 	if err != nil {
 		return nil, false, err
 	}

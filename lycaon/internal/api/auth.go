@@ -65,7 +65,7 @@ func (s *Server) requireClientAuth(next http.Handler) http.Handler {
 // to. The device credential belongs to the host owner.
 func (s *Server) bindCaller(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		owner, err := s.sessionStore.HostOwner(r.Context())
+		owner, err := s.sessionStore.People.HostOwner(r.Context())
 		if err != nil {
 			s.responses.InternalError(w, r, err)
 			return

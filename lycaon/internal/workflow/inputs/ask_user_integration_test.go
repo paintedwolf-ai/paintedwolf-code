@@ -6,8 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
-	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"slices"
 	"strings"
 	"testing"
@@ -24,8 +22,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -100,7 +100,7 @@ func setupAskUserIntegration(t *testing.T) *askUserFixture {
 
 	dir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	sess, err := store.Create(context.Background(), wire.CreateSessionRequest{
+	sess, err := store.Sessions.Create(context.Background(), wire.CreateSessionRequest{
 		Posture: wire.SessionPostureSpec,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -141,7 +141,7 @@ func TestAskUserTextResolveAndKick(t *testing.T) {
 	if !fx.pending {
 		t.Fatal("expected OnFeedbackPending")
 	}
-	testutil.FailErr(t, "AppendMessages", fx.wfMgr.Policy.Sessions.(session.Store).AppendMessages(ctx, fx.sess.ID, wire.Message{
+	testutil.FailErr(t, "AppendMessages", fx.wfMgr.Policy.Sessions.(*store.Repositories).Transcript.AppendMessages(ctx, fx.sess.ID, wire.Message{
 		ID:      "msg-ask-text",
 		Role:    wire.MessageRoleTool,
 		Content: out,
@@ -163,7 +163,7 @@ func TestAskUserTextResolveAndKick(t *testing.T) {
 	if _, still := vars["last_user_ask_response"]; still {
 		t.Fatal("last_user_ask_response latch must not be stamped")
 	}
-	msgs, err := fx.wfMgr.Policy.Sessions.(session.Store).GetMessages(ctx, fx.sess.ID)
+	msgs, err := fx.wfMgr.Policy.Sessions.(*store.Repositories).Transcript.GetMessages(ctx, fx.sess.ID)
 	testutil.FailErr(t, "GetMessages after", err)
 	var answered bool
 	for _, m := range msgs {
@@ -224,7 +224,7 @@ func TestAskUserSecretNeverPersistsTheRawResponse(t *testing.T) {
 	var pending map[string]any
 	testutil.FailErr(t, "decode pending", json.Unmarshal([]byte(out), &pending))
 	phaseID, _ := pending["phase_id"].(string)
-	testutil.FailErr(t, "append ask tool row", fx.wfMgr.Policy.Sessions.(session.Store).AppendMessages(ctx, fx.sess.ID, wire.Message{
+	testutil.FailErr(t, "append ask tool row", fx.wfMgr.Policy.Sessions.(*store.Repositories).Transcript.AppendMessages(ctx, fx.sess.ID, wire.Message{
 		ID: "msg-ask-secret", Role: wire.MessageRoleTool, Content: out,
 		ToolResult: &wire.ToolResult{Tool: "ask_user", ToolCallID: "call_secret", Content: out},
 	}))
@@ -241,7 +241,7 @@ func TestAskUserSecretNeverPersistsTheRawResponse(t *testing.T) {
 	if strings.Contains(string(encodedVars), raw) || !strings.Contains(string(encodedVars), reference) {
 		t.Fatalf("workflow vars leaked or lost the reference: %s", encodedVars)
 	}
-	msgs, err := fx.wfMgr.Policy.Sessions.(session.Store).GetMessages(ctx, fx.sess.ID)
+	msgs, err := fx.wfMgr.Policy.Sessions.(*store.Repositories).Transcript.GetMessages(ctx, fx.sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	encodedMessages, err := json.Marshal(msgs)
 	testutil.FailErr(t, "encode messages", err)
@@ -346,7 +346,7 @@ func TestAskUserCardOrdFollowsToolRow(t *testing.T) {
 	phaseID, _ := body["phase_id"].(string)
 
 	// The prompt loop commits the tool row after the tool returns, then announces.
-	testutil.FailErr(t, "AppendMessages", fx.wfMgr.Policy.Sessions.(session.Store).AppendMessages(ctx, fx.sess.ID, wire.Message{
+	testutil.FailErr(t, "AppendMessages", fx.wfMgr.Policy.Sessions.(*store.Repositories).Transcript.AppendMessages(ctx, fx.sess.ID, wire.Message{
 		ID:      "msg-ask-ord",
 		Role:    wire.MessageRoleTool,
 		Content: out,
@@ -375,7 +375,7 @@ func TestAskUserCardOrdFollowsToolRow(t *testing.T) {
 // askUserOrdPair reads the tool and card positions for one question.
 func askUserOrdPair(t *testing.T, fx *askUserFixture, ctx context.Context, phaseID, toolCallID string) (toolOrd, cardOrd int64) {
 	t.Helper()
-	msgs, err := fx.wfMgr.Policy.Sessions.(session.Store).GetMessages(ctx, fx.sess.ID)
+	msgs, err := fx.wfMgr.Policy.Sessions.(*store.Repositories).Transcript.GetMessages(ctx, fx.sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	for _, m := range msgs {
 		if m.ToolResult != nil && m.ToolResult.ToolCallID == toolCallID {

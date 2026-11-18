@@ -31,7 +31,7 @@ import (
 
 // receiptRecorder records admitted receipt ids. Host turns mint their own operation id.
 type receiptRecorder struct {
-	*store.SQL
+	*store.Repositories
 	mu  sync.Mutex
 	ids []string
 }
@@ -273,12 +273,12 @@ func TestProgressMissingSkipsWorkerChild(t *testing.T) {
 	mgr := newPostHookManager(t)
 	sessionStore := storetest.New(t, "proj-1")
 	ctx := t.Context()
-	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "proj-1")
+	parent, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "proj-1")
 	testutil.FailErr(t, "Create parent", err)
-	child, err := sessionStore.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := sessionStore.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild", err)
 	mgr.Coordinator.Context.Sessions = sessionStore
-	mgr.Runner.PostTurn = postturn.New(sessionStore, mgr.Coordinator.Guidance)
+	mgr.Runner.PostTurn = postturn.New(sessionStore.Sessions, sessionStore.Transcript, mgr.Coordinator.Guidance)
 	mgr.SetProgressStore(progress.NewMemoryStore())
 
 	mgr.Runner.PostTurn.ProgressMissing(ctx, child.ID, []string{"task"})
@@ -296,10 +296,10 @@ func TestProgressMissingSkipsWorkerChild(t *testing.T) {
 func TestProgressMissingSkipsSpecWorkflowArtifacts(t *testing.T) {
 	mgr := newPostHookManager(t)
 	sessionStore := storetest.New(t, "proj-1")
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureSpec}, "proj-1")
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureSpec}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
 	mgr.Coordinator.Context.Sessions = sessionStore
-	mgr.Runner.PostTurn = postturn.New(sessionStore, mgr.Coordinator.Guidance)
+	mgr.Runner.PostTurn = postturn.New(sessionStore.Sessions, sessionStore.Transcript, mgr.Coordinator.Guidance)
 	mgr.SetProgressStore(progress.NewMemoryStore())
 
 	mgr.Runner.PostTurn.ProgressMissing(t.Context(), sess.ID, []string{"write"})
@@ -311,10 +311,10 @@ func TestProgressMissingSkipsSpecWorkflowArtifacts(t *testing.T) {
 func TestWorkflowPhaseExitNudgesAfterUnrelatedToolArc(t *testing.T) {
 	mgr := newPostHookManager(t)
 	sessionStore := storetest.New(t, "proj-1")
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
 	mgr.Coordinator.Context.Sessions = sessionStore
-	mgr.Runner.PostTurn = postturn.New(sessionStore, mgr.Coordinator.Guidance)
+	mgr.Runner.PostTurn = postturn.New(sessionStore.Sessions, sessionStore.Transcript, mgr.Coordinator.Guidance)
 	mgr.SetCoordinatorTurnFrameSource(postHookWorkflowContext{wf: feedback.WorkflowEvaluationContext{
 		WorkflowID:         "example",
 		CurrentPhase:       "intake",
@@ -336,10 +336,10 @@ func TestWorkflowPhaseExitNudgesAfterUnrelatedToolArc(t *testing.T) {
 func TestWorkflowPhaseExitAllowsAnotherAsk(t *testing.T) {
 	mgr := newPostHookManager(t)
 	sessionStore := storetest.New(t, "proj-1")
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
 	mgr.Coordinator.Context.Sessions = sessionStore
-	mgr.Runner.PostTurn = postturn.New(sessionStore, mgr.Coordinator.Guidance)
+	mgr.Runner.PostTurn = postturn.New(sessionStore.Sessions, sessionStore.Transcript, mgr.Coordinator.Guidance)
 	mgr.SetCoordinatorTurnFrameSource(postHookWorkflowContext{wf: feedback.WorkflowEvaluationContext{
 		WorkflowID:         "example",
 		CurrentPhase:       "intake",

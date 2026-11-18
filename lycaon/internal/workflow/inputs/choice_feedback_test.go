@@ -49,7 +49,7 @@ func TestResolveMultiChoiceAdvancesAndStampsAnswer(t *testing.T) {
 		t.Fatalf("phase = %q want done (gate user_decision:pick,blue should match via membership)", run.CurrentPhase)
 	}
 
-	msgs, err := store.GetMessages(ctx, "sess-1")
+	msgs, err := store.Transcript.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "GetMessages", err)
 	fb := feedbackMessages(msgs)
 	if len(fb) != 1 || fb[0].WorkflowFeedback == nil {

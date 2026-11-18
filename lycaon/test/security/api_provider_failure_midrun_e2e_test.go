@@ -154,7 +154,7 @@ func waitSessionIdle(t *testing.T, h *wiring.Harness, sessionID string) {
 // Recovery retains both the tool call and its result.
 func assertProgressToolRoundSurvived(t *testing.T, h *wiring.Harness, sessionID string) {
 	t.Helper()
-	msgs, err := h.Store.GetMessages(context.Background(), sessionID)
+	msgs, err := h.Store.Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "GetMessages", err)
 
 	callID := ""

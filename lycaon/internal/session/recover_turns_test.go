@@ -31,16 +31,16 @@ func TestRecoverOrphanedTurnsClearsStuckBusy(t *testing.T) {
 	hub := events.NewMemoryHub()
 	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub})
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
-	testutil.FailErr(t, "busy", sessionStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "busy", sessionStore.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	ch, unsub, err := hub.Subscribe(ctx, events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "Subscribe", err)
 	t.Cleanup(unsub)
 
 	testutil.FailErr(t, "RecoverOrphanedTurns", mgr.Stops.Recovery.RecoverOrphanedTurns(ctx))
-	got, err := sessionStore.Get(ctx, sess.ID)
+	got, err := sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "Get", err)
 	if got.Status != api.SessionStatusIdle {
 		t.Fatalf("status = %s want idle", got.Status)
@@ -87,15 +87,15 @@ func TestRecoverInterruptedToolResultsAppendsMissingToolRows(t *testing.T) {
 	recorder := invocation.NewSQLRecorder(database)
 	mgr.SetInvocationRecorder(recorder)
 
-	sess, err := sqlStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sqlStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
-	testutil.FailErr(t, "busy", sqlStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "busy", sqlStore.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	contract, ok := toolcontract.Lookup("command")
 	if !ok {
 		t.Fatal("command contract is not declared")
 	}
-	testutil.FailErr(t, "append draft", sqlStore.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "append draft", sqlStore.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		ID: "asst-1", Role: api.MessageRoleAssistant, Kind: api.MessageKindDraft,
 		Content:   "working",
 		ToolCalls: []api.ToolCall{{ID: "call-cmd", Name: "command"}},
@@ -114,12 +114,12 @@ func TestRecoverInterruptedToolResultsAppendsMissingToolRows(t *testing.T) {
 	testutil.FailErr(t, "RecoverInterruptedToolResults", mgr.Stops.Recovery.RecoverInterruptedToolResults(ctx))
 	testutil.FailErr(t, "RecoverInterruptedToolResults replay", mgr.Stops.Recovery.RecoverInterruptedToolResults(ctx))
 
-	got, err := sqlStore.Get(ctx, sess.ID)
+	got, err := sqlStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "Get", err)
 	if got.Status != api.SessionStatusIdle {
 		t.Fatalf("status = %s want idle", got.Status)
 	}
-	msgs, err := sqlStore.GetMessages(ctx, sess.ID)
+	msgs, err := sqlStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	found := 0
 	for _, msg := range msgs {
@@ -162,7 +162,7 @@ func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	recorder := &reviewCheckpointRecorder{}
 	mgr.SetSourceLedger(recorder, tools.SourceHistory{}, nil, nil, recorder, nil)
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -176,11 +176,11 @@ func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 	}
 	first := message("user-1", api.MessageOriginUser, api.MessageVisibilityTranscript, "")
 	mgr.Runner.Instructions.ReviewCheckpoint(ctx, sess.ID, first)
-	testutil.FailErr(t, "append first user turn", sessions.AppendMessages(ctx, sess.ID, first))
+	testutil.FailErr(t, "append first user turn", sessions.Transcript.AppendMessages(ctx, sess.ID, first))
 
 	hostKick := message("host-kick", api.MessageOriginHost, api.MessageVisibilityInternal, api.MessageKindHostKick)
 	mgr.Runner.Instructions.ReviewCheckpoint(ctx, sess.ID, hostKick)
-	testutil.FailErr(t, "append host kick", sessions.AppendMessages(ctx, sess.ID, hostKick))
+	testutil.FailErr(t, "append host kick", sessions.Transcript.AppendMessages(ctx, sess.ID, hostKick))
 
 	second := message("user-2", api.MessageOriginUser, api.MessageVisibilityTranscript, "")
 	mgr.Runner.Instructions.ReviewCheckpoint(ctx, sess.ID, second)

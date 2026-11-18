@@ -1,13 +1,14 @@
 package presentation_test
 
 import (
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 func topologyReportTestManifest() workflowdef.Manifest {
@@ -43,6 +44,6 @@ func seedTopologyCompletion(t *testing.T, mgr *workflow.RunManager, run *api.Wor
 	if edit != nil {
 		edit(&msg)
 	}
-	testutil.FailErr(t, "persist phase completion", mgr.Verdicts.Sessions.AppendMessages(t.Context(), run.SessionID, msg))
+	testutil.FailErr(t, "persist phase completion", mgr.Verdicts.Sessions.Transcript.AppendMessages(t.Context(), run.SessionID, msg))
 	return msg.ID
 }

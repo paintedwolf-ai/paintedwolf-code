@@ -33,7 +33,7 @@ func TestDeclaredIntakeStartAnnouncesChoiceCard(t *testing.T) {
 	run, err := startRun(ctx, mgr, "sess-1", "intake-announce", "1.0.0")
 	testutil.FailErr(t, "startRun", err)
 
-	msgs, err := store.GetMessages(ctx, "sess-1")
+	msgs, err := store.Transcript.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "GetMessages", err)
 	feedback := feedbackMessages(msgs)
 	if len(feedback) != 1 {
@@ -92,7 +92,7 @@ func TestDeclaredMultiKeyIntakeSequentialCards(t *testing.T) {
 	run, err := startRun(ctx, mgr, "sess-1", "intake-multi", "1.0.0")
 	testutil.FailErr(t, "startRun", err)
 
-	msgs, err := store.GetMessages(ctx, "sess-1")
+	msgs, err := store.Transcript.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "GetMessages", err)
 	feedback := feedbackMessages(msgs)
 	if len(feedback) != 1 || feedback[0].WorkflowFeedback == nil || feedback[0].WorkflowFeedback.PhaseID != "change_size" {
@@ -105,7 +105,7 @@ func TestDeclaredMultiKeyIntakeSequentialCards(t *testing.T) {
 		t.Fatalf("phase after first key = %q want intake", run.CurrentPhase)
 	}
 
-	msgs, err = store.GetMessages(ctx, "sess-1")
+	msgs, err = store.Transcript.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "GetMessages after first", err)
 	feedback = feedbackMessages(msgs)
 	if len(feedback) != 2 {

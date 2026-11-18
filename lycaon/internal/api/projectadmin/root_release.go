@@ -92,7 +92,7 @@ func rootPathsOf(p *project.Project) []string {
 }
 
 func (s *Roots) removeRootCheckpoints(ctx context.Context, projectID, root string) error {
-	if err := s.Store.DropRootCheckpoints(ctx, projectID, enginepaths.ProjectKey(root)); err != nil {
+	if err := s.Store.Rewind.DropRootCheckpoints(ctx, projectID, enginepaths.ProjectKey(root)); err != nil {
 		return err
 	}
 	held, err := s.attachedRootPaths(ctx)

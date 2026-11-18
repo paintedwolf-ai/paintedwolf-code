@@ -265,11 +265,11 @@ type DecisionResolver interface {
 
 // SQLDecisionResolver resolves decisions in one database transaction.
 type SQLDecisionResolver struct {
-	messages *sessionstore.SQL
+	messages *sessionstore.Repositories
 	queue    *SQLQueue
 }
 
-func NewSQLDecisionResolver(messages *sessionstore.SQL, queue *SQLQueue) *SQLDecisionResolver {
+func NewSQLDecisionResolver(messages *sessionstore.Repositories, queue *SQLQueue) *SQLDecisionResolver {
 	return &SQLDecisionResolver{messages: messages, queue: queue}
 }
 
@@ -283,7 +283,7 @@ func (r *SQLDecisionResolver) Resolve(ctx context.Context, expected api.WorkerDe
 func (r *SQLDecisionResolver) resolve(ctx context.Context, expected api.WorkerDecisionRequest, message api.Message) error {
 	childSessionID := strings.TrimSpace(expected.ChildSessionID)
 	jobID := strings.TrimSpace(expected.WorkerID)
-	err := r.messages.AppendMessagesWith(ctx, childSessionID, func(tx *sql.Tx) error {
+	err := r.messages.Transcript.AppendMessagesWith(ctx, childSessionID, func(tx *sql.Tx) error {
 		queries := db.New(tx)
 		row, err := queries.GetWorkerDecision(ctx, childSessionID)
 		if db.IsNoRows(err) {

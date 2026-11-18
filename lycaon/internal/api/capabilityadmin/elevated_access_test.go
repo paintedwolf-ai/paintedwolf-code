@@ -32,7 +32,7 @@ func elevatedTestHandler(t *testing.T) (*Handler, *wire.Session) {
 	projects := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), projects, t.TempDir())
 	testutil.FailErr(t, "create project", err)
-	chat, err := sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
+	chat, err := sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create chat", err)
 	handler := New(&httpio.Responder{Logger: slog.Default()}, withHost(t, Deps{Projects: projects, Settings: &settings.Service{Approvals: approvals}, Gate: settings.NewRuleApprovalGate(approvals, settings.NoSources()), Store: sessions}))
 	return &handler, chat
@@ -214,7 +214,7 @@ func TestElevatedAccessSharedScopesAndNoProject(t *testing.T) {
 func TestElevatedAccessWorkerResolvesRoot(t *testing.T) {
 	s, chat := elevatedTestHandler(t)
 	addElevatedGrant(t, s, chat, "grant_root")
-	worker, err := s.Access.Store.CreateChild(t.Context(), chat, wire.SpawnChildRequest{AgentType: "coder"})
+	worker, err := s.Access.Store.Sessions.CreateChild(t.Context(), chat, wire.SpawnChildRequest{AgentType: "coder"})
 	testutil.FailErr(t, "create worker", err)
 	router := chi.NewRouter()
 	router.Get("/v1/sessions/{id}/elevated-access", s.Access.HandleGetElevatedAccess)
@@ -238,7 +238,7 @@ func TestElevatedAccessUsesChatsActiveOverlay(t *testing.T) {
 	testutil.FailErr(t, "attach secondary root", err)
 	on := false
 	testutil.FailErr(t, "restore secondary-root approvals", s.Access.Settings.Approvals.PutProject(root.Added.Path, settings.ApprovalConfig{NeverAsk: &on}))
-	secondaryChat, err := s.Access.Store.Create(t.Context(), wire.CreateSessionRequest{WorkspaceRootID: root.Added.ID}, primaryChat.ProjectID)
+	secondaryChat, err := s.Access.Store.Sessions.Create(t.Context(), wire.CreateSessionRequest{WorkspaceRootID: root.Added.ID}, primaryChat.ProjectID)
 	testutil.FailErr(t, "create secondary-root chat", err)
 	addElevatedGrant(t, s, secondaryChat, "grant_secondary")
 	if got := elevatedSummary(t, s, secondaryChat); !got.ApprovalsEnabled || got.Total != 1 {

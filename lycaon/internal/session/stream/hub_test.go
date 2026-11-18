@@ -17,9 +17,9 @@ func TestScheduleLiveProjectionSurvivesCallerContextCancellation(t *testing.T) {
 	mgr := New(nil)
 	sessionStore := storetest.New(t, "proj-1")
 	ctx := context.Background()
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, "proj-1")
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
-	testutil.FailErr(t, "AppendMessages", sessionStore.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "AppendMessages", sessionStore.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		ID:   "msg-live",
 		Role: api.MessageRoleAssistant,
 	}))
@@ -31,7 +31,7 @@ func TestScheduleLiveProjectionSurvivesCallerContextCancellation(t *testing.T) {
 	cancel()
 
 	testutil.WaitFor(t, "the live projection is stored", func() bool {
-		msg, err := sessionStore.GetMessage(context.Background(), sess.ID, "msg-live")
+		msg, err := sessionStore.Transcript.GetMessage(context.Background(), sess.ID, "msg-live")
 		return err == nil && msg.Content == "partial before stop"
 	})
 }

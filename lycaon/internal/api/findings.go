@@ -14,7 +14,7 @@ import (
 
 func (s *Conversation) handleSessionFindings(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	sess, err := s.sessionStore.Get(r.Context(), id)
+	sess, err := s.sessionStore.Sessions.Get(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "session not found")
@@ -23,7 +23,7 @@ func (s *Conversation) handleSessionFindings(w http.ResponseWriter, r *http.Requ
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	root := sessiontree.RootID(r.Context(), s.sessionStore, sess.ID)
+	root := sessiontree.RootID(r.Context(), s.sessionStore.Sessions, sess.ID)
 	rows, err := s.sessions.Workers.Notes.ListFindings(r.Context(), root, findings.DefaultListCap)
 	if err != nil {
 		s.responses.InternalError(w, r, err)

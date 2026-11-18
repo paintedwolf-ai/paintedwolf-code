@@ -14,8 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 )
 
@@ -51,7 +51,7 @@ type Deps struct {
 	LLMService     *llm.Service
 	ManagedSecrets *secretcap.Service
 	Projects       project.Registry
-	Store          session.Store
+	Store          *sessionstore.Repositories
 	Settings       *settings.Service
 }
 
@@ -71,7 +71,7 @@ type Access struct {
 	Inventory *Inventory
 	Projects  project.Registry
 	Settings  *settings.Service
-	Store     session.Store
+	Store     *sessionstore.Repositories
 	responses *httpio.Responder
 }
 
@@ -80,7 +80,7 @@ type CheckpointActions struct {
 	Events         events.ReplayHub
 	ManagedSecrets *secretcap.Service
 	Projects       project.Registry
-	Store          session.Store
+	Store          *sessionstore.Repositories
 	options        hitl.ApprovalOptionResolver
 	presence       *hitl.VaultPresence
 	responses      *httpio.Responder
@@ -126,7 +126,7 @@ type Inventory struct {
 	Listen            *approvalstate.SandboxPortGrantRuntime
 	Loopback          *approvalstate.SandboxPortGrantRuntime
 	Sockets           *approvalstate.SocketCapabilityRuntime
-	Store             session.Store
+	Store             *sessionstore.Repositories
 	WriteRoots        *approvalstate.SandboxPathGrantRuntime
 	responses         *httpio.Responder
 }

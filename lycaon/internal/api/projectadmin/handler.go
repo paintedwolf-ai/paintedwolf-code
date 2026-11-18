@@ -22,6 +22,7 @@ import (
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspace"
@@ -41,7 +42,7 @@ type Deps struct {
 	Registry       project.Registry
 	ProjectRules   *rules.ProjectRulesOverlay
 	ScanCadence    *scancadence.Service
-	Store          session.Store
+	Store          *sessionstore.Repositories
 	Sessions       *session.Host
 	Settings       *settings.Service
 	// WorkerBranchRoot holds host-only worker storage.
@@ -70,7 +71,7 @@ type Projects struct {
 	Roots           *Roots
 	Sessions        *session.Host
 	Settings        *settings.Service
-	Store           session.Store
+	Store           *sessionstore.Repositories
 	Verification    *Verification
 	responses       *httpio.Responder
 	sourceWorkspace *sourceapi.Workspace
@@ -117,7 +118,7 @@ type Roots struct {
 	ScanCadence     *scancadence.Service
 	Sessions        *session.Host
 	Settings        *settings.Service
-	Store           session.Store
+	Store           *sessionstore.Repositories
 	Verification    *Verification
 	background      *taskgroup.Group
 	responses       *httpio.Responder

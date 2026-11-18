@@ -16,11 +16,11 @@ func TestSourceWalkResolvesTheChatsCurrentTurn(t *testing.T) {
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
 	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
-	sess, err := srv.Sources.Workspace.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
+	sess, err := srv.Sources.Workspace.SessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)
-	idle, err := srv.Sources.Workspace.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
+	idle, err := srv.Sources.Workspace.SessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create idle session", err)
-	testutil.FailErr(t, "append prompts", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append prompts", srv.Sources.Workspace.SessionStore.Transcript.AppendMessages(t.Context(), sess.ID,
 		wire.Message{ID: "prompt-1", Role: wire.MessageRoleUser, Content: "first"},
 		wire.Message{ID: "prompt-2", Role: wire.MessageRoleUser, Content: "second"},
 	))
@@ -63,9 +63,9 @@ func TestSourceWalkRejectsAChatBaselineReadThroughAnotherChat(t *testing.T) {
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
 	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
-	owner, err := srv.Sources.Workspace.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
+	owner, err := srv.Sources.Workspace.SessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create owner", err)
-	other, err := srv.Sources.Workspace.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
+	other, err := srv.Sources.Workspace.SessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create other", err)
 
 	for name, baseline := range map[string]string{

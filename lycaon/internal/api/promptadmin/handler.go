@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/promptattach"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/visual"
 )
 
@@ -21,7 +22,7 @@ type Deps struct {
 	HintConfig     *guidance.HintConfig
 	ManagedSecrets *secretcap.Service
 	Projects       project.Registry
-	Store          session.Store
+	Store          *sessionstore.Repositories
 	Sessions       *session.Host
 	VisualStore    visual.Store
 	Sources        *sourceapi.Handler
@@ -44,7 +45,7 @@ type Attachments struct {
 	DataDir    string
 	Projects   project.Registry
 	Sessions   *session.Host
-	Store      session.Store
+	Store      *sessionstore.Repositories
 	Submission *Submission
 	Video      promptattach.VideoDecoder
 	responses  *httpio.Responder
@@ -53,7 +54,7 @@ type Attachments struct {
 type Content struct {
 	HintConfig *guidance.HintConfig
 	Sessions   *session.Host
-	Store      session.Store
+	Store      *sessionstore.Repositories
 	responses  *httpio.Responder
 }
 
@@ -61,14 +62,14 @@ type Execution struct {
 	Attachments    *Attachments
 	EventPublisher *events.Publisher
 	Sessions       *session.Host
-	Store          session.Store
+	Store          *sessionstore.Repositories
 	background     *taskgroup.Group
 	responses      *httpio.Responder
 }
 
 type Queue struct {
 	Sessions   *session.Host
-	Store      session.Store
+	Store      *sessionstore.Repositories
 	background *taskgroup.Group
 	responses  *httpio.Responder
 }
@@ -76,7 +77,7 @@ type Queue struct {
 type References struct {
 	Caps         promptattach.Caps
 	Projects     project.Registry
-	Store        session.Store
+	Store        *sessionstore.Repositories
 	VisualStore  visual.Store
 	sourceEditor *editoradmin.Handler
 }
@@ -89,7 +90,7 @@ type Submission struct {
 	ManagedSecrets *secretcap.Service
 	References     *References
 	Sessions       *session.Host
-	Store          session.Store
+	Store          *sessionstore.Repositories
 	GrantedPaths   *grantedpath.Runtime
 	Video          promptattach.VideoDecoder
 	VisualStore    visual.Store

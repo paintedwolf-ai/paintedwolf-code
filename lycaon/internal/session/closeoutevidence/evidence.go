@@ -12,7 +12,7 @@ import (
 )
 
 func (c *Service) LoadLedger(ctx context.Context, sessionID string) (evidence.Ledger, error) {
-	return c.store.LoadLedger(ctx, sessionID)
+	return c.evidenceStore.LoadLedger(ctx, sessionID)
 }
 
 func (c *Service) WorkerLegs(ctx context.Context, parentSessionID string, since time.Time) ([]guidance.EvidenceLeg, error) {
@@ -31,10 +31,10 @@ func (c *Service) WorkerLegs(ctx context.Context, parentSessionID string, since 
 
 // Tasks uses workflow ownership when present and intent time otherwise.
 func (m *Service) Tasks(ctx context.Context, sessionID string, since time.Time) ([]api.WorkerTask, error) {
-	if m == nil || m.workers == nil || m.store == nil {
+	if m == nil || m.workers == nil || (m.sessionStore == nil || m.evidenceStore == nil) {
 		return nil, nil
 	}
-	parent, err := m.store.Get(ctx, sessionID)
+	parent, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}

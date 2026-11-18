@@ -20,7 +20,7 @@ func TestSessionSeenOffersPreparationAfterSuccessfulLookup(t *testing.T) {
 	apitestdeps.Fill(t, &deps)
 	proj, err := project.CreateWithRoot(t.Context(), deps.Projects, t.TempDir())
 	testutil.FailErr(t, "create preparation project", err)
-	sess, err := deps.Store.CreateWithStatus(t.Context(), api.CreateSessionRequest{ProjectID: proj.ID}, proj.ID, api.SessionStatusIdle)
+	sess, err := deps.Store.Sessions.CreateWithStatus(t.Context(), api.CreateSessionRequest{ProjectID: proj.ID}, proj.ID, api.SessionStatusIdle)
 	testutil.FailErr(t, "create preparation chat", err)
 	offered := make(chan string, 1)
 	preparation := contextpreparation.New(func(ctx context.Context, id string) (contextpreparation.Candidate, error) {

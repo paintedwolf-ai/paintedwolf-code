@@ -1,13 +1,13 @@
 package upgradefixture
 
 import (
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -26,7 +26,7 @@ func TestWorkerFixtureReconstructsAfterOriginalWorkspaceRemoval(t *testing.T) {
 	attached, err := projects.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: root}}})
 	testutil.FailErr(t, "attach fixture project", err)
 	sessions := store.NewSQL(database)
-	parent, err := sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: attached.Roots[0].ID}, attached.ID)
+	parent, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: attached.Roots[0].ID}, attached.ID)
 	testutil.FailErr(t, "create fixture session", err)
 	queue := worker.NewSQLQueue(database, 2)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)

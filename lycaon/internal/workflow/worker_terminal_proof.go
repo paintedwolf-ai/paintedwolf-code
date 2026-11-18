@@ -2,10 +2,10 @@ package workflow
 
 import (
 	"context"
-	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"strings"
 
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -97,7 +97,7 @@ func (m *Fanout) recordWorkerTerminalProof(ctx context.Context, active *api.Work
 				return nil, false, err
 			}
 			vars = SetWorkerCycleEvalVars(vars, completingJobID, status)
-			vars = workflowreview.StampFanoutExecuteOutput(ctx, m.Sessions, sessionID, vars)
+			vars = workflowreview.StampFanoutExecuteOutput(ctx, m.Sessions.Transcript, sessionID, vars)
 			mutated = true
 			clearWorkerCycle = true
 		}

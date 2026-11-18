@@ -17,7 +17,7 @@ import (
 func TestUserSourceChatAffiliationNamesTheChatAndOnlyAnActiveTurn(t *testing.T) {
 	ctx := t.Context()
 	sessions := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := sessions.Create(ctx, wire.CreateSessionRequest{
+	sess, err := sessions.Sessions.Create(ctx, wire.CreateSessionRequest{
 		Posture: wire.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -35,16 +35,16 @@ func TestUserSourceChatAffiliationNamesTheChatAndOnlyAnActiveTurn(t *testing.T) 
 	}
 
 	assertAffiliation("idle before a prompt", sess.ID, 0)
-	testutil.FailErr(t, "mark busy before prompt", sessions.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy))
+	testutil.FailErr(t, "mark busy before prompt", sessions.Sessions.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy))
 	assertAffiliation("busy before a prompt", sess.ID, 0)
-	testutil.FailErr(t, "append user prompt", sessions.AppendMessages(ctx, sess.ID, wire.Message{
+	testutil.FailErr(t, "append user prompt", sessions.Transcript.AppendMessages(ctx, sess.ID, wire.Message{
 		ID: "user-1", Role: wire.MessageRoleUser, Content: "inspect this",
 		Origin: wire.MessageOriginUser, Authority: wire.ContentAuthorityUser,
 		TrustTier: wire.ContentTrustTierTrusted, Visibility: wire.MessageVisibilityTranscript,
 		CreatedAt: time.Now().UTC(),
 	}))
 	assertAffiliation("active turn", sess.ID, 1)
-	testutil.FailErr(t, "settle turn", sessions.SetSessionStatus(ctx, sess.ID, wire.SessionStatusIdle))
+	testutil.FailErr(t, "settle turn", sessions.Sessions.SetSessionStatus(ctx, sess.ID, wire.SessionStatusIdle))
 	assertAffiliation("idle after turn", sess.ID, 0)
 
 	// A chat the host cannot place leaves the change unaffiliated rather than refusing it.

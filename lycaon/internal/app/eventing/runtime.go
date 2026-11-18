@@ -3,6 +3,9 @@ package eventing
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
@@ -12,8 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/pkg/api"
-	"log/slog"
-	"strings"
 )
 
 type ResourceLifetime interface {
@@ -41,7 +42,7 @@ func (b *Runtime) latestWorker(ctx context.Context, child string) (*api.WorkerTa
 	}
 	return b.workers.GetLatestByChildSessionID(ctx, child)
 }
-func Build(ctx context.Context, database *db.Store, sessions *store.SQL, projects *project.SQLRegistry, power *hostpower.Controller, states events.SessionStateSource, pending store.PromptPendingSource, listing ProjectSessions, resources ResourceLifetime, preparation PreparationObserver) (*Runtime, error) {
+func Build(ctx context.Context, database *db.Store, sessions *store.Repositories, projects *project.SQLRegistry, power *hostpower.Controller, states events.SessionStateSource, pending store.PromptPendingSource, listing ProjectSessions, resources ResourceLifetime, preparation PreparationObserver) (*Runtime, error) {
 	b := &Runtime{}
 
 	b.Hub = events.WrapDebugHub(events.NewMemoryHub())
@@ -63,15 +64,15 @@ func Build(ctx context.Context, database *db.Store, sessions *store.SQL, project
 	b.Publisher = &events.Publisher{
 		Hub:               b.Hub,
 		Lookup:            eventLookup,
-		Untrusted:         sessions,
-		UserTurns:         sessions,
+		Untrusted:         sessions.Evidence,
+		UserTurns:         sessions.Transcript,
 		ActivityObserver:  power,
 		TurnClockObserver: power,
 		SessionProject: func(ctx context.Context, sessionID string) (string, bool) {
 			if sessions == nil {
 				return "", false
 			}
-			sess, err := sessions.Get(ctx, sessionID)
+			sess, err := sessions.Sessions.Get(ctx, sessionID)
 			if err != nil || sess == nil || strings.TrimSpace(sess.ProjectID) == "" {
 				return "", false
 			}
@@ -95,7 +96,7 @@ func Build(ctx context.Context, database *db.Store, sessions *store.SQL, project
 			if sessions == nil {
 				return "", false
 			}
-			sess, err := sessions.Get(ctx, sessionID)
+			sess, err := sessions.Sessions.Get(ctx, sessionID)
 			if err != nil || sess == nil {
 				return "", false
 			}

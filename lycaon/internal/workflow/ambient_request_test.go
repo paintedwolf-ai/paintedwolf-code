@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/hostctx"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -77,7 +77,7 @@ func TestEnsureSessionWorkflowConcurrentRequestsShareRun(t *testing.T) {
 }
 
 type workflowSessionReadStub struct {
-	session.Store
+	*sessionstore.Repositories
 	sess *api.Session
 	err  error
 }
@@ -101,7 +101,7 @@ func TestEnsureSessionWorkflowWorkersAndReadFailures(t *testing.T) {
 	failedSessions := workflowSessionReadStub{Store: sessions, err: failure}
 	mgr.Policy.Sessions = failedSessions
 	mgr.Ambient.Sessions = failedSessions
-	mgr.Requests.Sessions = failedSessions
+	mgr.Requests.SessionStore, mgr.Requests.TranscriptStore = failedSessions, failedSessions
 	_, _, _, err = mgr.Requests.PrepareUserRequest(t.Context(), "sess-1", "follow up")
 	if !errors.Is(err, failure) {
 		t.Fatalf("prepare error = %v, want session read failure", err)

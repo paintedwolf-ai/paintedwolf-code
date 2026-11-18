@@ -34,6 +34,7 @@ import (
 	"github.com/lycaon/lycaon/internal/people/personactions"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -80,7 +81,7 @@ type Server struct {
 	recovery       *recoveryState
 	restorePending atomic.Bool
 	Search         searchadmin.Handler
-	sessionStore   session.Store
+	sessionStore   *sessionstore.Repositories
 	personActions  *personactions.Store
 	sessions       *session.Host
 	fileBriefings  *filebriefing.Service

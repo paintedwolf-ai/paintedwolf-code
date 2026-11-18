@@ -67,14 +67,14 @@ func TestUserTurnOrdinalSQLMatchesGoPredicate(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 
-	sqlSess, err := sqlStore.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sqlSess, err := sqlStore.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create sql session", err)
-	memSess, err := sessionStore.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	memSess, err := sessionStore.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create memory session", err)
 
 	transcript := turnOrdinalTranscript()
-	contractcheck.FailErr(t, "append sql messages", sqlStore.AppendMessages(ctx, sqlSess.ID, transcript...))
-	contractcheck.FailErr(t, "append memory messages", sessionStore.AppendMessages(ctx, memSess.ID, transcript...))
+	contractcheck.FailErr(t, "append sql messages", sqlStore.Transcript.AppendMessages(ctx, sqlSess.ID, transcript...))
+	contractcheck.FailErr(t, "append memory messages", sessionStore.Transcript.AppendMessages(ctx, memSess.ID, transcript...))
 
 	want := 0
 	for _, msg := range transcript {
@@ -86,14 +86,14 @@ func TestUserTurnOrdinalSQLMatchesGoPredicate(t *testing.T) {
 		t.Fatalf("fixture drifted: user intents = %d, want 3 user turns", want)
 	}
 
-	gotSQLSource, err := sqlStore.ReadSourceTurn(ctx, sqlSess.ID, 0)
+	gotSQLSource, err := sqlStore.Transcript.ReadSourceTurn(ctx, sqlSess.ID, 0)
 	gotSQL := gotSQLSource.Number
 	contractcheck.FailErr(t, "sql user turn ordinal", err)
 	if gotSQL != want {
 		t.Fatalf("SQL CountSessionUserTurns = %d, user intents = %d", gotSQL, want)
 	}
 
-	gotMemSource, err := sessionStore.ReadSourceTurn(ctx, memSess.ID, 0)
+	gotMemSource, err := sessionStore.Transcript.ReadSourceTurn(ctx, memSess.ID, 0)
 	gotMem := gotMemSource.Number
 	contractcheck.FailErr(t, "memory user turn ordinal", err)
 	if gotMem != want {
@@ -101,7 +101,7 @@ func TestUserTurnOrdinalSQLMatchesGoPredicate(t *testing.T) {
 	}
 
 	// The same number reaches the wire, which is what a turn scope cites back.
-	hydrated, err := sqlStore.Get(ctx, sqlSess.ID)
+	hydrated, err := sqlStore.Sessions.Get(ctx, sqlSess.ID)
 	contractcheck.FailErr(t, "get sql session", err)
 	if hydrated.CurrentTurn != want {
 		t.Fatalf("Session.current_turn = %d, want %d", hydrated.CurrentTurn, want)

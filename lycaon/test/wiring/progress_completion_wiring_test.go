@@ -28,7 +28,7 @@ func TestProgressCompletionAppendsTranscriptMessage(t *testing.T) {
 	}
 
 	completions := func() []wire.Message {
-		msgs, err := h.Store.GetMessages(ctx, sess.ID)
+		msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 		testutil.FailErr(t, "GetMessages", err)
 		var out []wire.Message
 		for _, m := range msgs {

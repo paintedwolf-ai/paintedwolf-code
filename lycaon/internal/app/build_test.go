@@ -3,8 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/app/configuration"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -14,7 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
-
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/persistence"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
@@ -29,6 +27,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerrecords"
@@ -218,7 +217,7 @@ func closeBuiltHostWithArmedWait(t *testing.T) weak.Pointer[session.Host] {
 	testutil.FailErr(t, "build with armed wait", err)
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, projectDir)
-	sess, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := app.Sessions.Store.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create waiting session", err)
 	host := app.Sessions.Manager
 	waits := host.Coordinator.Runtime.CoordinatorLoop().Waits
@@ -315,7 +314,7 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 	}
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, store, testdbseed.DefaultProjectID, projectDir)
-	child, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{
+	child, err := app.Sessions.Store.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create child session", err)
@@ -372,11 +371,11 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 		t.Fatal("expected no pending approval on fresh session")
 	}
 
-	parentSess, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{
+	parentSess, err := app.Sessions.Store.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent session", err)
-	workerChild, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{
+	workerChild, err := app.Sessions.Store.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create worker child", err)

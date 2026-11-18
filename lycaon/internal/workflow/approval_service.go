@@ -3,17 +3,18 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 type Approvals struct {
@@ -22,7 +23,7 @@ type Approvals struct {
 	Records                 runstate.BlueprintsRepository
 	Vars                    *runstate.Variables
 	Resolver                *catalog.Resolver
-	Sessions                session.Store
+	Sessions                *sessionstore.Repositories
 	Getter                  workflowblueprintfiles.Getter
 	Registry                *conditions.ConditionRegistry
 	Phases                  *workflowphases.Service
@@ -252,7 +253,7 @@ func (m *Approvals) InheritedApprovalSnapshot(
 	if err != nil || parent == nil {
 		return view
 	}
-	sess, err := m.Sessions.Get(ctx, child.SessionID)
+	sess, err := m.Sessions.Sessions.Get(ctx, child.SessionID)
 	if err != nil || sess == nil {
 		return view
 	}
@@ -291,7 +292,7 @@ func (m *Approvals) AutoApproveOnPhase(ctx context.Context, run *api.WorkflowRun
 	}
 	projectDir := ""
 	if m != nil && m.Sessions != nil && run != nil {
-		if sess, err := m.Sessions.Get(ctx, run.SessionID); err == nil && sess != nil {
+		if sess, err := m.Sessions.Sessions.Get(ctx, run.SessionID); err == nil && sess != nil {
 			projectDir = sess.WorkspacePath
 		}
 	}

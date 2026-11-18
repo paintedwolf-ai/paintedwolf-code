@@ -174,7 +174,7 @@ func TestPromptObservationAcknowledgesOnlyDeliveredFrames(t *testing.T) {
 					}
 					return history, nil
 				}
-				sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
+				sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 				testutil.FailErr(t, "create session", err)
 				_, err = NewPromptLoopForTest(deps).Run(t.Context(), PromptRunInput{
 					SessionID: sess.ID, Session: sess, ProfileID: "coordinator", HostTurn: hostTurn,

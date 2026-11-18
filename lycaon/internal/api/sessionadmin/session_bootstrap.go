@@ -21,7 +21,7 @@ func (s *Bootstrap) HandleSessionBootstrap(w http.ResponseWriter, r *http.Reques
 	if s.Events != nil {
 		eventCursor = s.Events.CurrentCursor()
 	}
-	sess, err := s.Store.Get(r.Context(), id)
+	sess, err := s.Store.Sessions.Get(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")
@@ -39,7 +39,7 @@ func (s *Bootstrap) HandleSessionBootstrap(w http.ResponseWriter, r *http.Reques
 	if transcript.Messages == nil {
 		transcript.Messages = []wire.Message{}
 	}
-	root := sessiontree.RootID(r.Context(), s.Store, id)
+	root := sessiontree.RootID(r.Context(), s.Store.Sessions, id)
 	progressContent := ""
 	if s.ProgressStore != nil {
 		progressContent = s.ProgressStore.Get(r.Context(), root)

@@ -20,7 +20,7 @@ import (
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcecomparison"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -48,7 +48,7 @@ type Deps struct {
 	ProjectRegistry project.Registry
 	ScanCadence     *scancadence.Service
 	SecretSpans     *secretspan.Screener
-	SessionStore    session.Store
+	SessionStore    *sessionstore.Repositories
 	// SourceInventory tracks workspace drift; nil leaves inventory to callers.
 	SourceInventory InventoryService
 	SourceLedger    *sourceledger.Store
@@ -78,7 +78,7 @@ type Handler struct {
 
 type Analysis struct {
 	ProjectRegistry project.Registry
-	SessionStore    session.Store
+	SessionStore    *sessionstore.Repositories
 	Workspace       *Workspace
 	responses       *httpio.Responder
 	sourceIndexes   *projectsource.SourceIndexCache
@@ -103,7 +103,7 @@ type Comparisons struct {
 	ProjectRegistry project.Registry
 	Review          *Review
 	SecretSpans     *secretspan.Screener
-	SessionStore    session.Store
+	SessionStore    *sessionstore.Repositories
 	SourceLedger    *sourceledger.Store
 	Views           *Views
 	Workspace       *Workspace
@@ -116,7 +116,7 @@ type History struct {
 	Comparisons     *Comparisons
 	ProjectRegistry project.Registry
 	Review          *Review
-	SessionStore    session.Store
+	SessionStore    *sessionstore.Repositories
 	SourceLedger    *sourceledger.Store
 	VisualStore     visual.Store
 	Watch           *Watch
@@ -134,7 +134,7 @@ type Mutations struct {
 	Git             *gitadmin.Handler
 	MutationGate    *project.MutationGate
 	ProjectRegistry project.Registry
-	SessionStore    session.Store
+	SessionStore    *sessionstore.Repositories
 	SourceLedger    *sourceledger.Store
 	SourceMutations *projectsource.SourceMutationService
 	Workspace       *Workspace
@@ -152,7 +152,7 @@ type Review struct {
 	Comparisons     *Comparisons
 	Git             *gitadmin.Handler
 	ProjectRegistry project.Registry
-	SessionStore    session.Store
+	SessionStore    *sessionstore.Repositories
 	SourceLedger    *sourceledger.Store
 	// ArrivalAnchorTimeBound caps the ancestry checks behind one lineage page;
 	// zero leaves the request context as the only bound.
@@ -177,7 +177,7 @@ type Views struct {
 	Comparisons     *Comparisons
 	Events          events.ReplayHub
 	ProjectRegistry project.Registry
-	SessionStore    session.Store
+	SessionStore    *sessionstore.Repositories
 	Trees           *Trees
 	Workspace       *Workspace
 	background      *taskgroup.Group
@@ -208,7 +208,7 @@ type Workspace struct {
 	MutationGate    *project.MutationGate
 	ProjectRegistry project.Registry
 	SecretSpans     *secretspan.Screener
-	SessionStore    session.Store
+	SessionStore    *sessionstore.Repositories
 	SourceLedger    *sourceledger.Store
 	Watch           *Watch
 	Workers         worker.WorkerQueue

@@ -3,14 +3,15 @@ package observations
 import (
 	"context"
 	"errors"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"time"
 )
 
 var errProgressStoreRequired = errors.New("progress transcript store not configured")
@@ -34,7 +35,7 @@ func activeRunIDFromWorkflow(runs runstate.RunsRepository) ActiveRunID {
 // appendProgressTranscript stamps the active run and persists. written is false when there is no run.
 func appendProgressTranscript(
 	ctx context.Context,
-	store *store.SQL,
+	store *store.Repositories,
 	eventPub *events.Publisher,
 	activeRun ActiveRunID,
 	progressStore progress.RunScopedStore,

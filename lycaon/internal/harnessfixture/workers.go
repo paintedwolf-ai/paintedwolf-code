@@ -14,8 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/session"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -78,7 +78,7 @@ type dispatchPlan struct {
 // Workers uses scripts for registered sessions and the live executor otherwise.
 type Workers struct {
 	root      string
-	sessions  session.Store
+	sessions  *sessionstore.Repositories
 	queue     worker.WorkerQueue
 	verify    VerifyWorker
 	read      ReadWorker
@@ -87,7 +87,7 @@ type Workers struct {
 	locks     sync.Map
 }
 
-func NewWorkers(root string, sessions session.Store, queue worker.WorkerQueue, verify VerifyWorker, read ReadWorker, decisions sessiondecisions.Store, fallback worker.WorkerExecutor) (*Workers, error) {
+func NewWorkers(root string, sessions *sessionstore.Repositories, queue worker.WorkerQueue, verify VerifyWorker, read ReadWorker, decisions sessiondecisions.Store, fallback worker.WorkerExecutor) (*Workers, error) {
 	if !configdir.IsHarnessChannel() || sessions == nil || queue == nil || verify == nil || read == nil || decisions == nil || fallback == nil {
 		return nil, fmt.Errorf("scripted workers require an isolated harness and worker services")
 	}
@@ -255,14 +255,14 @@ func (w *Workers) executionError(task api.WorkerTask, err error) error {
 }
 
 func (w *Workers) bindChild(ctx context.Context, task api.WorkerTask) (*api.Session, error) {
-	parent, err := w.sessions.Get(ctx, task.ParentSessionID)
+	parent, err := w.sessions.Sessions.Get(ctx, task.ParentSessionID)
 	if err != nil {
 		return nil, err
 	}
 	if parent == nil {
 		return nil, fmt.Errorf("scripted dispatch parent %s not found", task.ParentSessionID)
 	}
-	child, err := w.sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: task.AgentType, Prompt: task.Prompt, Files: task.Files, WorkerJobID: task.ID})
+	child, err := w.sessions.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: task.AgentType, Prompt: task.Prompt, Files: task.Files, WorkerJobID: task.ID})
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +273,7 @@ func (w *Workers) bindChild(ctx context.Context, task api.WorkerTask) (*api.Sess
 }
 
 func (w *Workers) runStage(ctx context.Context, task api.WorkerTask, run worker.WorkerRunContext, plan childPlan) (api.WorkerResult, error) {
-	child, err := w.sessions.Get(ctx, task.ChildSessionID)
+	child, err := w.sessions.Sessions.Get(ctx, task.ChildSessionID)
 	if err != nil {
 		return api.WorkerResult{}, err
 	}
@@ -370,7 +370,7 @@ func (w *Workers) executeStage(ctx context.Context, child *api.Session, task api
 }
 
 func (w *Workers) answeredOption(ctx context.Context, childID string) (string, bool, error) {
-	messages, err := w.sessions.GetMessages(ctx, childID)
+	messages, err := w.sessions.Transcript.GetMessages(ctx, childID)
 	if err != nil {
 		return "", false, err
 	}

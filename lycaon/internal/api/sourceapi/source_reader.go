@@ -34,7 +34,7 @@ func readerTextSide(path, text string) wire.SourceComparisonSide {
 }
 
 func (s *Comparisons) readChatFileEdit(ctx context.Context, sessionID string, ref wire.FileEditReference) (wire.FileEditSnapshot, error) {
-	msg, err := s.SessionStore.GetMessage(ctx, sessionID, ref.MessageID)
+	msg, err := s.SessionStore.Transcript.GetMessage(ctx, sessionID, ref.MessageID)
 	if err != nil {
 		return wire.FileEditSnapshot{}, err
 	}

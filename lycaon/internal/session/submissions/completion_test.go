@@ -51,7 +51,7 @@ func TestStoppedReceiptWinsLateCompletion(t *testing.T) {
 				testutil.FailErr(t, "stop session receipts", st.InterruptRunningPromptSubmissionsBySession(t.Context(), sess.ID))
 				before, err := st.GetPromptSubmission(t.Context(), row.ID)
 				testutil.FailErr(t, "read stopped receipt", err)
-				service := &Service{store: st, SubmissionState: &submissionstate.Service{}}
+				service := &Service{sessionStore: st, submissionStore: st, people: st, SubmissionState: &submissionstate.Service{}}
 				if err := service.finishSubmission(t.Context(), claimed, nil, runErr); !errors.Is(err, lifecycle.ErrStopping) {
 					t.Fatalf("late finish = %v, want a stop", err)
 				}
@@ -87,13 +87,13 @@ func TestCompletionPreservesUnconfirmedFailure(t *testing.T) {
 	failure := errors.New("write failed")
 	for _, current := range []*store.PromptSubmission{nil, {Status: store.PromptSubmissionRunning, ClaimToken: "claim"}, {Status: store.PromptSubmissionComplete, ClaimToken: "claim"}} {
 		st := completionFailureStore{finishErr: failure, row: current}
-		service := &Service{store: st, SubmissionState: &submissionstate.Service{}}
+		service := &Service{sessionStore: st, submissionStore: st, people: st, SubmissionState: &submissionstate.Service{}}
 		if err := service.finishSubmission(t.Context(), &store.PromptSubmission{ID: "id", ClaimToken: "claim"}, nil, nil); !errors.Is(err, failure) {
 			t.Fatalf("lost completion failure: %v", err)
 		}
 	}
 	st := completionFailureStore{finishErr: failure, readErr: errors.New("read failed"), row: &store.PromptSubmission{Status: store.PromptSubmissionInterrupted, ClaimToken: "claim"}}
-	service := &Service{store: st, SubmissionState: &submissionstate.Service{}}
+	service := &Service{sessionStore: st, submissionStore: st, people: st, SubmissionState: &submissionstate.Service{}}
 	if err := service.finishSubmission(t.Context(), &store.PromptSubmission{ID: "id", ClaimToken: "claim"}, nil, nil); !errors.Is(err, failure) {
 		t.Fatalf("unreadable receipt masked completion failure: %v", err)
 	}

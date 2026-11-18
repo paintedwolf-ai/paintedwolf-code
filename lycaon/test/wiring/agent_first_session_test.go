@@ -33,7 +33,7 @@ func TestFirstPromptAttachesDefaultWorkflow(t *testing.T) {
 	if run == nil || !runstate.IsAmbientRun(run) {
 		t.Fatalf("first prompt must attach the default workflow, got %+v", run)
 	}
-	sess, err = h.Store.Get(ctx, sess.ID)
+	sess, err = h.Store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read session posture after attachment", err)
 	if sess.Posture != wire.SessionPostureBuild {
 		t.Fatalf("default workflow posture = %q, want build", sess.Posture)

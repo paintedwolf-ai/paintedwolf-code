@@ -22,11 +22,6 @@ type CycleLedger interface {
 	Get(string) (*api.WorkerTask, bool)
 }
 
-type SessionMessages interface {
-	Get(context.Context, string) (*api.Session, error)
-	GetMessages(context.Context, string) ([]api.Message, error)
-}
-
 type WorkflowVars interface {
 	ScaffoldVarsForSession(context.Context, string) (map[string]any, error)
 }
@@ -46,15 +41,16 @@ type WorkspacePath interface {
 }
 
 type State struct {
-	workers        CycleLedger
-	sessions       SessionMessages
-	workflows      WorkflowVars
-	progress       ProgressReader
-	reconciliation ProgressReconciliationReader
-	verification   VerificationFacts
-	workspace      WorkspacePath
-	overlayChanges func(context.Context, *api.WorkerTask, []projectroot.RootRef) []string
-	delivered      DeliveredWorkers
+	workers         CycleLedger
+	sessionStore    Sessions
+	transcriptStore Transcript
+	workflows       WorkflowVars
+	progress        ProgressReader
+	reconciliation  ProgressReconciliationReader
+	verification    VerificationFacts
+	workspace       WorkspacePath
+	overlayChanges  func(context.Context, *api.WorkerTask, []projectroot.RootRef) []string
+	delivered       DeliveredWorkers
 }
 
 // DeliveredWorkers counts a coordinator session's workers whose result awaits
@@ -65,17 +61,18 @@ type DeliveredWorkers func(ctx context.Context, sessionID string) (int, error)
 func (m *State) SetDeliveredWorkers(count DeliveredWorkers) { m.delivered = count }
 
 type StatePorts struct {
-	Workers        CycleLedger
-	Sessions       SessionMessages
-	Workflows      WorkflowVars
-	Progress       ProgressReader
-	Verification   VerificationFacts
-	Workspace      WorkspacePath
-	OverlayChanges func(context.Context, *api.WorkerTask, []projectroot.RootRef) []string
+	Workers         CycleLedger
+	SessionStore    Sessions
+	TranscriptStore Transcript
+	Workflows       WorkflowVars
+	Progress        ProgressReader
+	Verification    VerificationFacts
+	Workspace       WorkspacePath
+	OverlayChanges  func(context.Context, *api.WorkerTask, []projectroot.RootRef) []string
 }
 
 func NewState(ports StatePorts) *State {
-	return &State{workers: ports.Workers, sessions: ports.Sessions, workflows: ports.Workflows, progress: ports.Progress, verification: ports.Verification, workspace: ports.Workspace, overlayChanges: ports.OverlayChanges}
+	return &State{workers: ports.Workers, sessionStore: ports.SessionStore, transcriptStore: ports.TranscriptStore, workflows: ports.Workflows, progress: ports.Progress, verification: ports.Verification, workspace: ports.Workspace, overlayChanges: ports.OverlayChanges}
 }
 func (m *State) SetWorkers(workers CycleLedger)      { m.workers = workers }
 func (m *State) SetWorkflows(workflows WorkflowVars) { m.workflows = workflows }
@@ -291,7 +288,7 @@ func (m *State) ForSession(ctx context.Context, sess *api.Session) surface.Imple
 	}
 	progressContent := ""
 	if m.progress != nil {
-		rootID := sessiontree.RootID(ctx, m.sessions, sess.ID)
+		rootID := sessiontree.RootID(ctx, m.sessionStore, sess.ID)
 		if snapshot, err := m.progress.Snapshot(ctx, rootID); err == nil {
 			if m.reconciliation != nil {
 				snapshot.Reconciliation = m.reconciliation.Reconciliation(rootID)
@@ -303,8 +300,8 @@ func (m *State) ForSession(ctx context.Context, sess *api.Session) surface.Imple
 	}
 	state.ProgressOpenCount = progress.OpenStepCount(progressContent)
 	state.ProgressMissing = progress.ProgressMissing(progressContent)
-	if m.sessions != nil {
-		msgs, err := m.sessions.GetMessages(ctx, sess.ID)
+	if m.sessionStore != nil && m.transcriptStore != nil {
+		msgs, err := m.transcriptStore.GetMessages(ctx, sess.ID)
 		if err == nil {
 			verifyRequired, verifyPassed, verifyRepair, verifyUnverified := false, false, false, false
 			if m.verification != nil {

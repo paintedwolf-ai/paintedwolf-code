@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
+	"testing"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"strings"
-	"testing"
 )
 
 func TestSecretResolutionRetainsOnlyReferenceAndRollsBackFailedCapture(t *testing.T) {
@@ -49,7 +50,7 @@ func TestSecretResolutionRetainsOnlyReferenceAndRollsBackFailedCapture(t *testin
 			if readErr != nil {
 				t.Fatalf("read retained workflow variables: %v", readErr)
 			}
-			msgs, readErr := store.GetMessages(ctx, "sess-1")
+			msgs, readErr := store.Transcript.GetMessages(ctx, "sess-1")
 			if readErr != nil {
 				t.Fatalf("read retained transcript: %v", readErr)
 			}

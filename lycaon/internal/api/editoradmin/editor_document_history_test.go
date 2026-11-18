@@ -18,7 +18,7 @@ import (
 )
 
 // failingSessions cannot read any chat.
-type failingSessions struct{ *sessionstore.SQL }
+type failingSessions struct{ *sessionstore.Repositories }
 
 func (failingSessions) Get(context.Context, string) (*wire.Session, error) {
 	return nil, errors.New("session store offline")
@@ -26,10 +26,10 @@ func (failingSessions) Get(context.Context, string) (*wire.Session, error) {
 
 func TestChangeHistoryPagesNewestFirstAndRevertsARestore(t *testing.T) {
 	f := newEditorFixture(t)
-	chat, err := f.sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, f.project.ID)
+	chat, err := f.sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, f.project.ID)
 	testutil.FailErr(t, "create chat", err)
-	testutil.FailErr(t, "mark chat busy", f.sessions.SetSessionStatus(t.Context(), chat.ID, wire.SessionStatusBusy))
-	testutil.FailErr(t, "start chat turn", f.sessions.AppendMessages(t.Context(), chat.ID, wire.Message{
+	testutil.FailErr(t, "mark chat busy", f.sessions.Sessions.SetSessionStatus(t.Context(), chat.ID, wire.SessionStatusBusy))
+	testutil.FailErr(t, "start chat turn", f.sessions.Transcript.AppendMessages(t.Context(), chat.ID, wire.Message{
 		ID: "user-1", Role: wire.MessageRoleUser, Content: "edit the file",
 		Origin: wire.MessageOriginUser, Authority: wire.ContentAuthorityUser,
 		TrustTier: wire.ContentTrustTierTrusted, Visibility: wire.MessageVisibilityTranscript,

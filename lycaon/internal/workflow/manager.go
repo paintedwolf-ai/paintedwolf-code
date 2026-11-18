@@ -2,7 +2,15 @@ package workflow
 
 import (
 	"context"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/events"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/visual"
 	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	workflowlifecycle "github.com/lycaon/lycaon/internal/workflow/lifecycle"
@@ -12,14 +20,6 @@ import (
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
-	"strings"
-
-	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/visual"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 // RunManager composes workflow services against the persistence domains.
@@ -51,42 +51,42 @@ type RunManager struct {
 	Store        *runstate.Repository
 	Vars         *runstate.Variables
 	Journal      *runstate.Journal
-	Sessions     session.Store
+	Sessions     *sessionstore.Repositories
 	Resolver     workflowcatalog.Resolver
 	Obligations  *Obligations
 }
 
 // NewManager creates a workflow run manager.
-func NewManager(store *runstate.Repository, sessions session.Store, manifests *workflowdef.Registry, pub *events.Publisher) *RunManager {
+func NewManager(store *runstate.Repository, sessions *sessionstore.Repositories, manifests *workflowdef.Registry, pub *events.Publisher) *RunManager {
 	if manifests == nil {
 		manifests = workflowdef.NewRegistry(nil)
 	}
-	vars := runstate.NewVariables(store.Runs, store.State, sessions)
+	vars := runstate.NewVariables(store.Runs, store.State, sessions.Sessions)
 	gates := workflowgates.FailClosedGateEvaluator{}
 	manager := &RunManager{
 		Store:    store,
 		Vars:     vars,
 		Sessions: sessions,
-		Resolver: workflowcatalog.Resolver{Overlay: manifests, Sessions: sessions, Runs: store.Runs},
+		Resolver: workflowcatalog.Resolver{Overlay: manifests, Sessions: sessions.Sessions, Runs: store.Runs},
 	}
-	manager.Publication = &workflowpublication.Runs{Events: pub, Sessions: sessions, Transactions: store.Transactions}
-	manager.Transcript = &workflowpublication.Messages{Sessions: sessions, Events: pub, Runs: store.Runs}
+	manager.Publication = &workflowpublication.Runs{Events: pub, Sessions: sessions.Sessions, Transactions: store.Transactions}
+	manager.Transcript = &workflowpublication.Messages{SessionStore: sessions.Sessions, TranscriptStore: sessions.Transcript, Events: pub, Runs: store.Runs}
 	manager.Batch = &runstate.Batches{Runs: store.Runs, Vars: vars}
 
 	journal := &runstate.Journal{Commands: store.Commands, Vars: store.Runs, Directories: &manager.Resolver}
 	manager.Journal = journal
 	cleanup := &workflowlifecycle.Cleanup{Intents: store.Teardowns, Runs: store.Runs, Resolver: &manager.Resolver}
 	manager.Controls = &workflowlifecycle.Commands{Runs: store.Runs, Trees: store.Commands, Vars: vars, Journal: journal, Resolver: &manager.Resolver, Cleanup: cleanup}
-	manager.Starts = &workflowlifecycle.Admission{Runs: store.Runs, Starts: store.Starts, Sessions: sessions, Resolver: &manager.Resolver, Events: pub, Controls: manager.Controls, Cleanup: cleanup}
+	manager.Starts = &workflowlifecycle.Admission{Runs: store.Runs, Starts: store.Starts, SessionStore: sessions.Sessions, TurnStore: sessions.Turns, Resolver: &manager.Resolver, Events: pub, Controls: manager.Controls, Cleanup: cleanup}
 	manager.Controls.Admission = manager.Starts
 	manager.Controls.Publication = manager.Publication
 	manager.Starts.Publication = manager.Publication
-	manager.Recovery = &workflowlifecycle.Recovery{Runs: store.Runs, Sessions: sessions, Resolver: &manager.Resolver, Journal: journal, Cleanup: cleanup}
+	manager.Recovery = &workflowlifecycle.Recovery{Runs: store.Runs, SessionStore: sessions.Sessions, TurnStore: sessions.Turns, Resolver: &manager.Resolver, Journal: journal, Cleanup: cleanup}
 
 	manager.Obligations = &Obligations{Runs: store.Runs, Vars: vars, Resolver: &manager.Resolver}
 	questions := manager.buildReviewDomains(store)
 	entries := &workflowphases.Entries{Obligations: manager.Obligations}
-	manager.Phases = &workflowphases.Service{Runs: store.Runs, Vars: vars, Journal: journal, Resolver: &manager.Resolver, Sessions: sessions, Gates: gates, Registry: nil, Publication: manager.Publication, Entries: entries}
+	manager.Phases = &workflowphases.Service{Runs: store.Runs, Vars: vars, Journal: journal, Resolver: &manager.Resolver, Sessions: sessions.Sessions, Gates: gates, Registry: nil, Publication: manager.Publication, Entries: entries}
 	manager.Obligations.Phases = manager.Phases
 	manager.Verdicts.Phases = manager.Phases
 	manager.Starts.Phases = manager.Phases
@@ -95,11 +95,11 @@ func NewManager(store *runstate.Repository, sessions session.Store, manifests *w
 	scaffold := &workflowinputs.Scaffold{}
 	manager.Blueprints = &workflowblueprints.Service{Runs: store.Runs, Bindings: store.Blueprints, Vars: vars, Sessions: sessions, Scaffold: scaffold, Starts: manager.Starts, Controls: manager.Controls, Phases: manager.Phases, Publication: manager.Publication, Transcript: manager.Transcript}
 	manager.Approvals = &Approvals{Runs: store.Runs, State: store.State, Records: store.Blueprints, Vars: vars, Resolver: &manager.Resolver, Sessions: sessions, Phases: manager.Phases}
-	cards := &workflowinputs.Cards{Sessions: sessions, Transcript: manager.Transcript}
-	manager.Requests = &workflowinputs.Requests{Runs: store.Runs, Sessions: sessions, Resolver: &manager.Resolver, Vars: vars, Phases: manager.Phases, Publication: manager.Publication, Cards: cards, Approvals: manager.Approvals}
+	cards := &workflowinputs.Cards{SessionStore: sessions.Sessions, TranscriptStore: sessions.Transcript, Transcript: manager.Transcript}
+	manager.Requests = &workflowinputs.Requests{Runs: store.Runs, SessionStore: sessions.Sessions, TranscriptStore: sessions.Transcript, Resolver: &manager.Resolver, Vars: vars, Phases: manager.Phases, Publication: manager.Publication, Cards: cards, Approvals: manager.Approvals}
 	manager.Feedback = &workflowinputs.Feedback{Runs: store.Runs, Resolver: &manager.Resolver, Vars: vars, Phases: manager.Phases, Cards: cards, Requests: manager.Requests, Controls: manager.Controls, Publication: manager.Publication}
 	manager.Requests.Feedback = manager.Feedback
-	manager.Asks = &workflowinputs.Asks{Runs: store.Runs, Sessions: sessions, Vars: vars, Publication: manager.Publication, Cards: cards, Approvals: manager.Approvals, Feedback: manager.Feedback, Phases: manager.Phases}
+	manager.Asks = &workflowinputs.Asks{Runs: store.Runs, SessionStore: sessions.Sessions, TranscriptStore: sessions.Transcript, Vars: vars, Publication: manager.Publication, Cards: cards, Approvals: manager.Approvals, Feedback: manager.Feedback, Phases: manager.Phases}
 	manager.Slash = &workflowinputs.SlashCommands{Runs: store.Runs, Resolver: &manager.Resolver, Starts: manager.Starts, Controls: manager.Controls, Transcript: manager.Transcript}
 	manager.Starts.Plans = manager.Blueprints
 	manager.Starts.Approvals = manager.Approvals
@@ -130,8 +130,8 @@ func NewManager(store *runstate.Repository, sessions session.Store, manifests *w
 	manager.Phases.Feedback = manager.Feedback
 	entries.Blueprints = manager.Blueprints
 
-	manager.Policy = &workflowruntime.SessionPolicy{Runs: store.Runs, Resolver: &manager.Resolver, Sessions: sessions, Registry: nil, Gates: gates, Approvals: manager.Approvals}
-	manager.Snapshots = &workflowruntime.Snapshots{Sessions: sessions, Registry: nil, Approvals: manager.Approvals, Coverage: manager.Coverage, Verdicts: manager.Verdicts}
+	manager.Policy = &workflowruntime.SessionPolicy{Runs: store.Runs, Resolver: &manager.Resolver, Sessions: sessions.Sessions, Registry: nil, Gates: gates, Approvals: manager.Approvals}
+	manager.Snapshots = &workflowruntime.Snapshots{Sessions: sessions.Sessions, Registry: nil, Approvals: manager.Approvals, Coverage: manager.Coverage, Verdicts: manager.Verdicts}
 	manager.Presentation = &workflowpresentation.Runs{Reader: store.Runs, Resolver: &manager.Resolver, Asks: manager.Asks, Scaffold: scaffold, Obligations: manager.Obligations, Choices: manager.Phases}
 	manager.Fanout.Policy = manager.Policy
 	manager.Publication.Projector = manager.Presentation

@@ -79,7 +79,7 @@ func (s *Comparisons) loadChatComparison(ctx context.Context, projectID, session
 	if sessionID == "" {
 		return wire.SourceComparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "A chat comparison requires a session."}
 	}
-	session, err := s.SessionStore.Get(ctx, sessionID)
+	session, err := s.SessionStore.Sessions.Get(ctx, sessionID)
 	if err == nil && (session == nil || session.ProjectID != projectID) {
 		// A chat outside this project is absent from it.
 		err = store.ErrSessionNotFound

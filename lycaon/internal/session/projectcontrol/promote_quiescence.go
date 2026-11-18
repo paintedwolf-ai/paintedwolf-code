@@ -25,10 +25,10 @@ func (m *Service) ProjectPromoteQuiescent(ctx context.Context, projectID string)
 	if deps.HasAny() {
 		return false, nil
 	}
-	if m.store == nil {
+	if m.sessionStore == nil || m.transcriptStore == nil {
 		return true, nil
 	}
-	sessions, err := m.store.List(ctx)
+	sessions, err := m.sessionStore.List(ctx)
 	if err != nil {
 		return false, err
 	}

@@ -1,7 +1,6 @@
 package session
 
 import (
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,12 +23,13 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type scratchFixture struct {
 	mgr    *Host
-	store  *store.SQL
+	store  *store.Repositories
 	root   *api.Session
 	worker *api.Session
 	dir    func(sessionID string) string
@@ -42,9 +42,9 @@ func newScratchFixture(t *testing.T) scratchFixture {
 	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetScratchFolders(scratch.New(stateRoot))
-	root, err := sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	root, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create root session", err)
-	worker, err := sessions.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: "implementer"})
+	worker, err := sessions.Sessions.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create worker session", err)
 	canonicalRoot := fspath.CanonicalPath(stateRoot)
 	return scratchFixture{
@@ -99,7 +99,7 @@ func TestDeletingAChatRemovesScratchForItsWholeTree(t *testing.T) {
 	f := newScratchFixture(t)
 	f.toolContext(t, f.root)
 	f.toolContext(t, f.worker)
-	other, err := f.store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	other, err := f.store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create unrelated session", err)
 	f.toolContext(t, other)
 
@@ -154,7 +154,7 @@ func TestToolContextUserTurnTracksSessionCurrentTurn(t *testing.T) {
 	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	if err != nil {
@@ -176,7 +176,7 @@ func TestToolContextUserTurnTracksSessionCurrentTurn(t *testing.T) {
 		if tctx.Host.MaxToolSpillBytes != mgr.Limits.Effective(ctx, sess).MaxToolSpillBytes {
 			t.Fatal("tool recovery reads must use the session's spill retention bound")
 		}
-		hydrated, err := sessions.Get(ctx, sess.ID)
+		hydrated, err := sessions.Sessions.Get(ctx, sess.ID)
 		if err != nil {
 			t.Fatalf("%s: get session: %v", step, err)
 		}
@@ -188,21 +188,21 @@ func TestToolContextUserTurnTracksSessionCurrentTurn(t *testing.T) {
 
 	assertTurn("before any prompt", 0)
 
-	if err := sessions.AppendMessages(ctx, sess.ID,
+	if err := sessions.Transcript.AppendMessages(ctx, sess.ID,
 		userTurnMessage(api.MessageRoleUser, api.MessageVisibilityTranscript)); err != nil {
 		t.Fatalf("append first user turn: %v", err)
 	}
 	assertTurn("first user turn", 1)
 
 	// A host kick and the assistant's own reply are not new turns.
-	if err := sessions.AppendMessages(ctx, sess.ID,
+	if err := sessions.Transcript.AppendMessages(ctx, sess.ID,
 		userTurnMessage(api.MessageRoleUser, api.MessageVisibilityInternal),
 		userTurnMessage(api.MessageRoleAssistant, api.MessageVisibilityTranscript)); err != nil {
 		t.Fatalf("append host rows: %v", err)
 	}
 	assertTurn("after a host kick", 1)
 
-	if err := sessions.AppendMessages(ctx, sess.ID,
+	if err := sessions.Transcript.AppendMessages(ctx, sess.ID,
 		userTurnMessage(api.MessageRoleUser, api.MessageVisibilityTranscript)); err != nil {
 		t.Fatalf("append second user turn: %v", err)
 	}
@@ -252,7 +252,7 @@ func (r *turnClockRecorder) ObserveTurnClock(event api.TurnClock) {
 
 func TestPromptStartsWithFreshTurnClock(t *testing.T) {
 	mgr, sessions := newTestManager(t)
-	root, err := sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	root, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create root", err)
 	t.Cleanup(func() { progress.ForgetClock(root.ID) })
 	observer := &turnClockRecorder{}
@@ -275,7 +275,7 @@ func TestPromptStartsWithFreshTurnClock(t *testing.T) {
 		if !anchor.Running || anchor.OpeningMessageID == "" {
 			t.Fatalf("anchored clock = %+v, want running and naming its prompt", anchor)
 		}
-		opening, err := sessions.GetMessage(t.Context(), root.ID, anchor.OpeningMessageID)
+		opening, err := sessions.Transcript.GetMessage(t.Context(), root.ID, anchor.OpeningMessageID)
 		testutil.FailErr(t, "opening message", err)
 		if opening.Role != api.MessageRoleUser || opening.Content != "hello" {
 			t.Fatalf("opening message = %+v, want the prompt", opening)
@@ -285,7 +285,7 @@ func TestPromptStartsWithFreshTurnClock(t *testing.T) {
 			t.Fatalf("completed prompt clock = %+v, want paused and settled for the same turn", finish)
 		}
 
-		durable, ok, err := sessions.LatestTurnClock(t.Context(), root.ID)
+		durable, ok, err := sessions.Turns.LatestTurnClock(t.Context(), root.ID)
 		testutil.FailErr(t, "latest durable clock", err)
 		if !ok || durable.OpeningMessageID != anchor.OpeningMessageID || durable.RunningAt != nil || durable.SettledAt == nil {
 			t.Fatalf("durable clock = %+v, want the settled turn", durable)
@@ -299,7 +299,7 @@ func TestPromptStartsWithFreshTurnClock(t *testing.T) {
 func TestTurnClockRestoresFromTheStoreAfterRestart(t *testing.T) {
 	mgr, sessions := newTestManager(t)
 	ctx := t.Context()
-	root, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	root, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create root", err)
 	t.Cleanup(func() { progress.ForgetClock(root.ID) })
 	_, err = mgr.Submissions.Prompt(ctx, root.ID, "hello")
@@ -326,24 +326,24 @@ func TestTurnClockRestoresFromTheStoreAfterRestart(t *testing.T) {
 func TestEvaluateVerdictGroundingHostAssemblesMissingCitations(t *testing.T) {
 	ctx := t.Context()
 	st := storetest.New(t, "project-1")
-	parent, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
+	parent, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create parent", err)
 	_, err = st.DB().ExecContext(ctx, `INSERT INTO worker_jobs (id, project_id, parent_session_id, agent_type, prompt, brief, created_at) VALUES ('job-1', ?, ?, 'skeptic', 'challenge the claims', '', ?)`, parent.ProjectID, parent.ID, time.Now().UTC().Format(time.RFC3339Nano))
 	testutil.FailErr(t, "record worker dispatch", err)
-	child, err := st.CreateChild(ctx, parent, api.SpawnChildRequest{
+	child, err := st.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{
 		AgentType: "skeptic", Prompt: "challenge the claims", WorkerJobID: "job-1",
 	})
 	testutil.FailErr(t, "create child", err)
 	_, err = st.DB().ExecContext(ctx, `UPDATE worker_jobs SET child_session_id = ? WHERE id = 'job-1'`, child.ID)
 	testutil.FailErr(t, "bind worker session", err)
-	testutil.FailErr(t, "record reviewer evidence", st.UpsertEvidenceRecord(ctx, child.ID, evidence.Record{
+	testutil.FailErr(t, "record reviewer evidence", st.Evidence.UpsertEvidenceRecord(ctx, child.ID, evidence.Record{
 		Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "auth/session.go",
 	}))
 	envelope := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{
 		JobID: "job-1", ChildSessionID: child.ID, AgentType: "skeptic", State: "complete",
 		Report: workercompletion.WorkerCompletionReport{LegStatus: "complete", Brief: "Challenged the claims."},
 	})
-	testutil.FailErr(t, "append worker closeout", st.AppendMessages(ctx, parent.ID,
+	testutil.FailErr(t, "append worker closeout", st.Transcript.AppendMessages(ctx, parent.ID,
 		api.Message{Role: api.MessageRoleUser, Content: "review this"},
 		api.Message{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{
 			WorkerID: "job-1", LegID: "leg-skeptic", ChildSessionID: child.ID,
@@ -375,7 +375,7 @@ func TestEvaluateVerdictGroundingHostAssemblesMissingCitations(t *testing.T) {
 func TestEvaluateVerdictGroundingRejectsInventedCitation(t *testing.T) {
 	ctx := t.Context()
 	st := storetest.New(t, "project-1")
-	parent, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
+	parent, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create parent", err)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 

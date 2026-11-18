@@ -49,7 +49,7 @@ func (m *Service) ScreenText(ctx context.Context, text string) string {
 }
 
 func (m *Service) SecretContext(ctx context.Context, sessionID string) context.Context {
-	if sess, err := m.store.Get(ctx, sessionID); err == nil {
+	if sess, err := m.sessionStore.Get(ctx, sessionID); err == nil {
 		attr := secretmatch.AskAttributionFrom(ctx)
 		attr.ProjectID = sess.ProjectID
 		attr.SessionID = sessionID

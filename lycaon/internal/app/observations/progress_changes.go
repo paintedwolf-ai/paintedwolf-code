@@ -15,7 +15,7 @@ import (
 // newProgressChangeEmitter persists coalesced nonterminal changes.
 // ChangedAt dates the row at the write, not the flush.
 func newProgressChangeEmitter(
-	store *store.SQL,
+	store *store.Repositories,
 	eventPub *events.Publisher,
 	activeRun ActiveRunID,
 	progressStore progress.RunScopedStore,

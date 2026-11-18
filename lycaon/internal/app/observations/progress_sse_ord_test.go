@@ -46,7 +46,7 @@ func TestProgressUpdateSSECarriesMintedOrd(t *testing.T) {
 
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	sess, err := store.Get(context.Background(), sessionID)
+	sess, err := store.Sessions.Get(context.Background(), sessionID)
 	testutil.FailErr(t, "store.Get", err)
 	ch, unsub, err := hub.Subscribe(context.Background(), events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "hub.Subscribe", err)
@@ -88,7 +88,7 @@ func TestProgressCompleteSSECarriesMintedOrd(t *testing.T) {
 
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	sess, err := store.Get(context.Background(), sessionID)
+	sess, err := store.Sessions.Get(context.Background(), sessionID)
 	testutil.FailErr(t, "store.Get", err)
 	ch, unsub, err := hub.Subscribe(context.Background(), events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "hub.Subscribe", err)

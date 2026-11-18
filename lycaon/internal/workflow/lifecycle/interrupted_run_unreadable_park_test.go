@@ -3,11 +3,11 @@ package lifecycle_test
 import (
 	"context"
 	"errors"
-	workflowlifecycle "github.com/lycaon/lycaon/internal/workflow/lifecycle"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflowlifecycle "github.com/lycaon/lycaon/internal/workflow/lifecycle"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,7 +26,7 @@ func (s scaffoldVarsFailingStore) GetScaffoldVars(context.Context, string) (map[
 func TestReconcileLeavesRunIntactWhenParkIsUnreadable(t *testing.T) {
 	mgr, store, _, projectDir := testManager(t)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Recovery.Busy = func(context.Context, string) bool { return false }
 
@@ -51,7 +51,7 @@ func TestReconcileLeavesRunIntactWhenParkIsUnreadable(t *testing.T) {
 func TestReconcileStillInterruptsWhenParkIsReadableAndAbsent(t *testing.T) {
 	mgr, store, _, projectDir := testManager(t)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Recovery.Busy = func(context.Context, string) bool { return false }
 

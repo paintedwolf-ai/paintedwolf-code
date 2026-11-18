@@ -36,7 +36,7 @@ import (
 type CheckpointDependencies struct {
 	Database        *db.Store
 	Directory       string
-	Sessions        *store.SQL
+	Sessions        *store.Repositories
 	EventsOutbox    *eventoutbox.Outbox
 	EventPublisher  *events.Publisher
 	Security        *security.Runtime
@@ -99,12 +99,12 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	}
 	wireCredentialObservations(r.Manager, deps.Security.Fingerprinter, deps.Security.Matcher, deps.Security.Harvest)
 	deps.Execution.Host.Executor.Secrets.SetSecretExposureSource(func(c context.Context, chatSessionID string) (bool, error) {
-		return deps.Sessions.SessionSecretExposure(c, chatSessionID)
+		return deps.Sessions.Evidence.SessionSecretExposure(c, chatSessionID)
 	})
 	deps.Execution.Host.Executor.Secrets.SetUntrustedIngestionSource(func(c context.Context, chatSessionID string) (bool, error) {
-		return deps.Sessions.SessionUntrustedContentResult(c, chatSessionID)
+		return deps.Sessions.Evidence.SessionUntrustedContentResult(c, chatSessionID)
 	})
-	deps.Execution.Host.Executor.Network.SetSessionHostLedger(deps.Sessions)
+	deps.Execution.Host.Executor.Network.SetSessionHostLedger(deps.Sessions.Evidence)
 
 	sensitiveDests, err := approvals.LoadMergedConsequenceBandPaths(deps.Directory)
 	if err != nil {

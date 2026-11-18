@@ -23,32 +23,29 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type LoopRepository interface {
-	Get(context.Context, string) (*api.Session, error)
-	GetMessages(context.Context, string) ([]api.Message, error)
-}
 type Grounding interface{ IsEscalated(string) bool }
 type ActiveRuns interface {
 	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
 }
 type Loop struct {
-	ActiveRuns   ActiveRuns
-	Admission    *turnadmission.Service
-	Events       *events.Publisher
-	Frame        inject.CoordinatorTurnFrameSource
-	Grounding    Grounding
-	Guidance     *guidancedelivery.Service
-	Limits       *sessionlimits.Service
-	Processes    *processcontrol.Service
-	Runtime      *coordinator.Runtime
-	ScanInFlight func(context.Context, string) bool
-	Sessions     LoopRepository
-	Settlement   *turnsettlement.Service
-	State        *workeroutcomes.State
-	Submissions  *submissions.Service
-	Turns        *execution.Journal
-	Workers      workeroutcomes.CycleLedger
-	Workflow     *loopwake.WorkflowDomains
+	ActiveRuns      ActiveRuns
+	Admission       *turnadmission.Service
+	Events          *events.Publisher
+	Frame           inject.CoordinatorTurnFrameSource
+	Grounding       Grounding
+	Guidance        *guidancedelivery.Service
+	Limits          *sessionlimits.Service
+	Processes       *processcontrol.Service
+	Runtime         *coordinator.Runtime
+	ScanInFlight    func(context.Context, string) bool
+	SessionStore    Sessions
+	TranscriptStore Transcript
+	Settlement      *turnsettlement.Service
+	State           *workeroutcomes.State
+	Submissions     *submissions.Service
+	Turns           *execution.Journal
+	Workers         workeroutcomes.CycleLedger
+	Workflow        *loopwake.WorkflowDomains
 	// WorkerNames names the worker whose round a job runs.
 	WorkerNames func(ctx context.Context, jobID string) (string, bool, error)
 }
@@ -60,7 +57,7 @@ func (m *Loop) Build() loopwake.LoopDeps {
 		},
 		RunWaitResume: m.Submissions.WaitResume,
 		GetSession: func(ctx context.Context, sessionID string) (*api.Session, error) {
-			return m.Sessions.Get(ctx, sessionID)
+			return m.SessionStore.Get(ctx, sessionID)
 		},
 		Limits:         m.Limits.Effective,
 		WorkflowSource: m.Workflow,
@@ -80,13 +77,13 @@ func (m *Loop) Build() loopwake.LoopDeps {
 				if m == nil {
 					return nil, nil
 				}
-				return m.Sessions.GetMessages(ctx, sessionID)
+				return m.TranscriptStore.GetMessages(ctx, sessionID)
 			},
 			GetSession: func(ctx context.Context, sessionID string) (*api.Session, error) {
 				if m == nil {
 					return nil, nil
 				}
-				return m.Sessions.Get(ctx, sessionID)
+				return m.SessionStore.Get(ctx, sessionID)
 			},
 			ImplementSessionState: func(ctx context.Context, sess *api.Session) surface.ImplementSessionState {
 				if m == nil || sess == nil {
@@ -127,7 +124,7 @@ func (m *Loop) Build() loopwake.LoopDeps {
 				if m == nil {
 					return false
 				}
-				sess, err := m.Sessions.Get(ctx, sessionID)
+				sess, err := m.SessionStore.Get(ctx, sessionID)
 				if err != nil || sess == nil {
 					return false
 				}
@@ -174,7 +171,7 @@ func (m *Loop) PublishWaitLease(ctx context.Context, sessionID string, lease loo
 	}
 	// Terminal events outlive the turn that armed them.
 	ctx = context.WithoutCancel(ctx)
-	sess, err := m.Sessions.Get(ctx, sessionID)
+	sess, err := m.SessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return
 	}

@@ -41,7 +41,7 @@ type Results struct {
 	decisions      WorkerDecisions
 	workflowSource ActiveWorkflow
 	digests        *Digests
-	sessions       SessionReader
+	sessions       Sessions
 	limits         SessionLimits
 	workerNames    workercompletion.WorkerNames
 	resultNotices  ResultNotices
@@ -59,7 +59,7 @@ type ResultPorts struct {
 	Decisions      WorkerDecisions
 	WorkflowSource ActiveWorkflow
 	Digests        *Digests
-	Sessions       SessionReader
+	Sessions       Sessions
 	Limits         SessionLimits
 }
 

@@ -58,7 +58,7 @@ func TestInspectionDeliveryDoesNotRequireSelectedCheck(t *testing.T) {
 	if string(body) != "Updated operating instructions.\n" {
 		t.Fatalf("delivered material = %q", body)
 	}
-	messages, err := h.Store.GetMessages(ctx, sess.ID)
+	messages, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read transcript", err)
 	completed := false
 	for _, msg := range messages {

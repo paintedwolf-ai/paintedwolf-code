@@ -71,7 +71,7 @@ func TestAPIErrorContractsMatrix(t *testing.T) {
 	runAPIErrorRows(t, base, apiErrorSourceMutationRows(fixture))
 	runAPIErrorRows(t, base, apiErrorProjectStateRows(fixture))
 	// Empty prompts are valid when an active workflow declares a request.
-	requestless, err := h.Store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: project.ID}, project.ID)
+	requestless, err := h.Store.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: project.ID}, project.ID)
 	testutil.FailErr(t, "create session without a workflow request", err)
 	manifest, err := h.Workflows.Manager.Resolver.Overlay.Get("implement", "1.0.0")
 	testutil.FailErr(t, "load empty-prompt fixture workflow", err)

@@ -30,7 +30,7 @@ func (s *Handler) resolveWorktreeScope(w http.ResponseWriter, r *http.Request, s
 	if !ok {
 		return worktreeScope{}, false
 	}
-	binding, bound, err := s.SessionStore.GetWorktreeBinding(r.Context(), sessionID)
+	binding, bound, err := s.SessionStore.Sessions.GetWorktreeBinding(r.Context(), sessionID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return worktreeScope{}, false

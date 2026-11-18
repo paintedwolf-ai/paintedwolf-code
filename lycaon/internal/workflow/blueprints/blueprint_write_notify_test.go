@@ -52,7 +52,7 @@ func TestNotifyBlueprintPathWrittenAdvancesExpand(t *testing.T) {
 	mgr, sessStore, blueprintMgr, _ := testManager(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.RegistryDeps{})
 	ctx := context.Background()
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)
@@ -79,7 +79,7 @@ func TestNotifyRetargetsProvisionalPathOnce(t *testing.T) {
 	mgr, sessStore, blueprintMgr, _ := testManager(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.RegistryDeps{})
 	ctx := workflowCaller(t, mgr)
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)

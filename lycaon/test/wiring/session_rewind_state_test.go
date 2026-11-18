@@ -44,7 +44,7 @@ func TestRewindResetsCoordinatorBatchAtTheNewBoundary(t *testing.T) {
 		testutil.FailErr(t, "second prompt", err)
 	}
 
-	msgs, err := h.Store.GetMessages(ctx, sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	anchors := visibleUserMessageIDs(t, msgs)
 	if len(anchors) != 2 {
@@ -93,7 +93,7 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 			testutil.FailErr(t, "prompt "+prompt, err)
 		}
 	}
-	msgs, err := h.Store.GetMessages(ctx, sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	anchors := visibleUserMessageIDs(t, msgs)
 	WaitForSessionIdleGate(t, h, ctx, sess.ID)
@@ -102,7 +102,7 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 		testutil.FailErr(t, "rewind to the first ask", err)
 	}
 
-	after, err := h.Store.GetMessages(ctx, sess.ID)
+	after, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages after rewind", err)
 	if len(visibleUserMessageIDs(t, after)) != 0 {
 		t.Fatalf("visible asks remain after rewinding to the first one: %d", len(visibleUserMessageIDs(t, after)))
@@ -124,7 +124,7 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 
 func implementState(t *testing.T, h *Harness, ctx context.Context, sessionID string) surface.ImplementSessionState {
 	t.Helper()
-	sess, err := h.Store.Get(ctx, sessionID)
+	sess, err := h.Store.Sessions.Get(ctx, sessionID)
 	testutil.FailErr(t, "get session", err)
 	return h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 }
@@ -194,7 +194,7 @@ func TestRewindPastAWorkerDispatchLeavesNoGhostState(t *testing.T) {
 
 func mustMessages(t *testing.T, h *Harness, ctx context.Context, sessionID string) []api.Message {
 	t.Helper()
-	msgs, err := h.Store.GetMessages(ctx, sessionID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "get messages", err)
 	return msgs
 }

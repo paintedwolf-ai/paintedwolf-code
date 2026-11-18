@@ -12,7 +12,7 @@ import (
 )
 
 func (m *Service) NavigationRefs(ctx context.Context, sessionID string, msgs []api.Message) {
-	if m == nil || m.store == nil || m.projects == nil || len(msgs) == 0 {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.turnStore == nil || m.people == nil) || m.projects == nil || len(msgs) == 0 {
 		return
 	}
 	needsProject := false
@@ -25,7 +25,7 @@ func (m *Service) NavigationRefs(ctx context.Context, sessionID string, msgs []a
 	if !needsProject {
 		return
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil || strings.TrimSpace(sess.ProjectID) == "" {
 		return
 	}

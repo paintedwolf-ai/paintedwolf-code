@@ -37,7 +37,7 @@ func TestRecentSiblingNotesExcludesOwnAndAdvancesCursor(t *testing.T) {
 		t.Fatalf("append own finding: %v", err)
 	}
 
-	m := NewNotes(nil, store, &stubSiblingQueue{byChild: map[string]string{"child-self": "job-self"}}, nil)
+	m := NewNotes(nil, nil, store, &stubSiblingQueue{byChild: map[string]string{"child-self": "job-self"}}, nil)
 
 	ctx := workercontext.WithJob(context.Background(), "job-self")
 	notes, cursor, err := m.RecentSiblingNotes(ctx, "child-self", 0, 5)

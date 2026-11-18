@@ -25,7 +25,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Host, *store.SQL) {
+func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Host, *store.Repositories) {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	store := storetest.New(t, testdbseed.DefaultProjectID)
@@ -37,12 +37,12 @@ func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Host,
 }
 
 // Overlay the persisted compaction view on canonical messages.
-func appliedView(t *testing.T, mgr *Host, store Store, sessID string) []api.Message {
+func appliedView(t *testing.T, mgr *Host, store *store.Repositories, sessID string) []api.Message {
 	t.Helper()
 	ctx := context.Background()
-	sess, err := store.Get(ctx, sessID)
+	sess, err := store.Sessions.Get(ctx, sessID)
 	testutil.FailErr(t, "store.Get", err)
-	msgs, err := store.GetMessages(ctx, sessID)
+	msgs, err := store.Transcript.GetMessages(ctx, sessID)
 	testutil.FailErr(t, "store.GetMessages", err)
 	return mgr.Runner.History.ApplyView(ctx, sess, msgs)
 }
@@ -57,13 +57,13 @@ func TestHugePasteCompaction(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
 	log := strings.Repeat("ERROR: build failed line\n", 8000) // ~200k tokens
-	if err := store.AppendMessages(ctx, sess.ID,
+	if err := store.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "log", Role: api.MessageRoleUser, Content: log},
 		api.Message{ID: "ack", Role: api.MessageRoleAssistant, Content: "seen"},
 	); err != nil {
@@ -76,7 +76,7 @@ func TestHugePasteCompaction(t *testing.T) {
 
 	// The transcript stays canonical: GetMessages returns the originals untouched,
 	// so Den renders the real text and FTS indexes it.
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	for _, m := range msgs {
 		if m.ID == "log" {
@@ -117,7 +117,7 @@ func TestLongSessionCompaction(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
@@ -135,7 +135,7 @@ func TestLongSessionCompaction(t *testing.T) {
 			Content: block,
 		})
 	}
-	if err := store.AppendMessages(ctx, sess.ID, seed...); err != nil {
+	if err := store.Transcript.AppendMessages(ctx, sess.ID, seed...); err != nil {
 		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 
@@ -144,7 +144,7 @@ func TestLongSessionCompaction(t *testing.T) {
 	mgr.Runner.History.Wait()
 
 	// Canonical history is not collapsed — the 40 seeded messages remain in the store.
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	if len(msgs) < 40 {
 		t.Fatalf("canonical history shrank to %d messages; compaction must not mutate messages", len(msgs))
@@ -154,7 +154,7 @@ func TestLongSessionCompaction(t *testing.T) {
 	if est > cfg.TargetTokens {
 		t.Fatalf("compacted view estimated tokens = %d, want <= %d", est, cfg.TargetTokens)
 	}
-	sess, err = store.Get(ctx, sess.ID)
+	sess, err = store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "store.Get failed", err)
 	if sess.CompactionGeneration == 0 {
 		t.Fatal("expected session compaction generation bump")
@@ -173,7 +173,7 @@ func TestCompactionViewSplicesNewMessages(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
 	block := strings.Repeat("word ", 120)
@@ -185,13 +185,13 @@ func TestCompactionViewSplicesNewMessages(t *testing.T) {
 		}
 		seed = append(seed, api.Message{ID: fmt.Sprintf("seed%d", i), Role: role, Content: block})
 	}
-	testutil.FailErr(t, "store.AppendMessages failed", store.AppendMessages(ctx, sess.ID, seed...))
+	testutil.FailErr(t, "store.AppendMessages failed", store.Transcript.AppendMessages(ctx, sess.ID, seed...))
 
 	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "continue")
 	testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	mgr.Runner.History.Wait()
 
-	sess, err = store.Get(ctx, sess.ID)
+	sess, err = store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "store.Get failed", err)
 	if sess.CompactionGeneration == 0 {
 		t.Fatal("expected a compaction view to be written")
@@ -199,7 +199,7 @@ func TestCompactionViewSplicesNewMessages(t *testing.T) {
 
 	// A message appended after the snapshot must be spliced onto the applied view.
 	marker := "post-compaction marker message"
-	testutil.FailErr(t, "store.AppendMessages marker", store.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "store.AppendMessages marker", store.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "marker", Role: api.MessageRoleUser, Content: marker}))
 
 	view := appliedView(t, mgr, store, sess.ID)
@@ -219,16 +219,16 @@ func TestPromptHistorySeeksAfterCompactionWatermark(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	oartest.InstallCloseoutPolicy(t, mgr)
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append covered messages", sessionStore.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "append covered messages", sessionStore.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "covered-user", Role: api.MessageRoleUser, Content: "old request"},
 		api.Message{ID: "covered-answer", Role: api.MessageRoleAssistant, Content: "old answer"},
 	))
-	covered, err := sessionStore.GetMessages(ctx, sess.ID)
+	covered, err := sessionStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "load covered messages", err)
 	watermark := covered[len(covered)-1].Ord
-	testutil.FailErr(t, "put compaction view", sessionStore.PutCompactionView(ctx, sess.ID, store.CompactionView{
+	testutil.FailErr(t, "put compaction view", sessionStore.Compaction.PutCompactionView(ctx, sess.ID, store.CompactionView{
 		Generation:        1,
 		CoveredThroughOrd: watermark,
 		CoveredThroughID:  covered[len(covered)-1].ID,
@@ -237,13 +237,13 @@ func TestPromptHistorySeeksAfterCompactionWatermark(t *testing.T) {
 			ID: "summary", Role: api.MessageRoleAssistant, Content: "old request summarized",
 		}},
 	}))
-	testutil.FailErr(t, "advance compaction generation", sessionStore.UpdateSession(ctx, sess.ID, func(current *api.Session) {
+	testutil.FailErr(t, "advance compaction generation", sessionStore.Sessions.UpdateSession(ctx, sess.ID, func(current *api.Session) {
 		current.CompactionGeneration = 1
 	}))
-	testutil.FailErr(t, "append uncovered message", sessionStore.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "append uncovered message", sessionStore.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "new-user", Role: api.MessageRoleUser, Content: "new request"},
 	))
-	sess, err = sessionStore.Get(ctx, sess.ID)
+	sess, err = sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "reload session", err)
 
 	suffix, err := mgr.Runner.History.Load(ctx, sess)
@@ -256,7 +256,7 @@ func TestPromptHistorySeeksAfterCompactionWatermark(t *testing.T) {
 		t.Fatalf("assembled history = %+v, want summary plus new-user", assembled)
 	}
 	covered[0].Content = "edited old request"
-	_, err = sessionStore.UpdateMessage(ctx, sess.ID, covered[0].ID, covered[0])
+	_, err = sessionStore.Transcript.UpdateMessage(ctx, sess.ID, covered[0].ID, covered[0])
 	testutil.FailErr(t, "edit covered message", err)
 	canonical, err := mgr.Runner.History.Load(ctx, sess)
 	testutil.FailErr(t, "load after covered edit", err)
@@ -266,7 +266,7 @@ func TestPromptHistorySeeksAfterCompactionWatermark(t *testing.T) {
 }
 
 type promptHistoryReadProbe struct {
-	Store
+	*store.Repositories
 	fullReads int
 }
 
@@ -278,15 +278,15 @@ func (p *promptHistoryReadProbe) GetMessages(context.Context, string) ([]api.Mes
 func TestPromptHistoryOverflowNeverLoadsFullTranscript(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create long session", err)
 	rows := make([]api.Message, 1200)
 	for i := range rows {
 		rows[i] = api.Message{ID: fmt.Sprintf("row-%d", i), Role: api.MessageRoleAssistant, Content: "recorded observation"}
 	}
 	rows[17] = api.Message{ID: "active-request", Role: api.MessageRoleUser, Content: "Keep the active human instruction verbatim"}
-	testutil.FailErr(t, "append long history", sessionStore.AppendMessages(t.Context(), sess.ID, rows...))
-	sess, err = sessionStore.Get(t.Context(), sess.ID)
+	testutil.FailErr(t, "append long history", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, rows...))
+	sess, err = sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read active turn identity", err)
 	probe := &promptHistoryReadProbe{Store: sessionStore}
 	mgr := NewHost(probe, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
@@ -315,7 +315,7 @@ func TestNoCompactionBetweenTargetAndTrigger(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
@@ -329,7 +329,7 @@ func TestNoCompactionBetweenTargetAndTrigger(t *testing.T) {
 		}
 		seed = append(seed, api.Message{ID: fmt.Sprintf("m%d", i), Role: role, Content: block})
 	}
-	if err := store.AppendMessages(ctx, sess.ID, seed...); err != nil {
+	if err := store.Transcript.AppendMessages(ctx, sess.ID, seed...); err != nil {
 		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 
@@ -339,7 +339,7 @@ func TestNoCompactionBetweenTargetAndTrigger(t *testing.T) {
 	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "continue")
 	testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	for _, m := range msgs {
 		if m.CompactionCheckpoint {
@@ -349,7 +349,7 @@ func TestNoCompactionBetweenTargetAndTrigger(t *testing.T) {
 			t.Fatalf("history below trigger must not chunk-compact %s", m.ID)
 		}
 	}
-	sess, err = store.Get(ctx, sess.ID)
+	sess, err = store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "store.Get failed", err)
 	if sess.CompactionGeneration != 0 {
 		t.Fatal("compaction generation must stay 0 below trigger")
@@ -361,11 +361,11 @@ func TestWorkerSpawnDoesNotGrowParentMessages(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	parent, err := store.Create(ctx, api.CreateSessionRequest{
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	if err := store.AppendMessages(ctx, parent.ID, api.Message{
+	if err := store.Transcript.AppendMessages(ctx, parent.ID, api.Message{
 		ID: "u0", Role: api.MessageRoleUser, Content: "start",
 	}); err != nil {
 		testutil.FailErr(t, "store.AppendMessages failed", err)
@@ -381,7 +381,7 @@ func TestWorkerSpawnDoesNotGrowParentMessages(t *testing.T) {
 		if child.ParentSessionID != parent.ID {
 			t.Fatalf("child parent = %q, want %q", child.ParentSessionID, parent.ID)
 		}
-		if err := store.AppendMessages(ctx, child.ID,
+		if err := store.Transcript.AppendMessages(ctx, child.ID,
 			api.Message{ID: fmt.Sprintf("tool1-%d", i), Role: api.MessageRoleTool, Content: transcript},
 			api.Message{ID: fmt.Sprintf("tool2-%d", i), Role: api.MessageRoleTool, Content: transcript},
 			api.Message{ID: fmt.Sprintf("a1-%d", i), Role: api.MessageRoleAssistant, Content: "done details " + transcript},
@@ -396,12 +396,12 @@ func TestWorkerSpawnDoesNotGrowParentMessages(t *testing.T) {
 		}
 	}
 
-	msgs, err := store.GetMessages(ctx, parent.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	if len(msgs) > 20 {
 		t.Fatalf("parent messages = %d, want <= 20 (summaries only)", len(msgs))
 	}
-	childMsgs, err := store.GetMessages(ctx, parent.ID)
+	childMsgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	for _, m := range childMsgs {
 		if strings.Contains(m.Content, "tool output line") {
@@ -422,12 +422,12 @@ func TestForceCompactHTTP(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	content := strings.Repeat("x\n", 4000)
-	testutil.FailErr(t, "append historical detail and current request", store.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "append historical detail and current request", store.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "big", Role: api.MessageRoleAssistant, Content: content},
 		api.Message{ID: "current", Role: api.MessageRoleUser, Content: "Continue the task"},
 	))
@@ -445,14 +445,14 @@ func TestCompactOversizedSplitReadsInSession(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
 	readA := strings.Repeat("a", 34000)
 	readB := strings.Repeat("b", 34000)
-	if err := store.AppendMessages(ctx, sess.ID,
+	if err := store.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "physics feel flat"},
 		api.Message{ID: "a1", Role: api.MessageRoleAssistant, Content: "Let me survey the repo."},
 		api.Message{ID: "t1", Role: api.MessageRoleTool, Content: `{"entries":[]}`},
@@ -469,7 +469,7 @@ func TestCompactOversizedSplitReadsInSession(t *testing.T) {
 	mgr.Runner.History.Wait()
 
 	// Canonical reads are untouched in the store — full bytes stay searchable.
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	for _, m := range msgs {
 		if (m.ID == "t2" && m.Content != readA) || (m.ID == "t3" && m.Content != readB) {
@@ -520,14 +520,14 @@ func TestCompactOversizedPreservesBoundedReadPagesInSession(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
 	readPage := fmt.Sprintf(`{"mode":"content","path":"game.py","content":%q,"total_lines":454,"truncated":true,"receipt":{"tool":"read"}}`,
 		strings.Repeat("1|line of python code here\n", 400))
-	if err := store.AppendMessages(ctx, sess.ID,
+	if err := store.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "run the game"},
 		api.Message{ID: "a1", Role: api.MessageRoleAssistant, Content: "Let me read the sources."},
 		api.Message{ID: "t1", Role: api.MessageRoleTool, Content: readPage},
@@ -561,7 +561,7 @@ func TestWorkerChildSessionDietsOversizedToolResultsInView(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	parent, err := store.Create(ctx, api.CreateSessionRequest{
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent session", err)
@@ -573,7 +573,7 @@ func TestWorkerChildSessionDietsOversizedToolResultsInView(t *testing.T) {
 
 	readA := strings.Repeat("a", 34000)
 	readB := strings.Repeat("b", 34000)
-	if err := store.AppendMessages(ctx, child.ID,
+	if err := store.Transcript.AppendMessages(ctx, child.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "fix crash"},
 		api.Message{ID: "a1", Role: api.MessageRoleAssistant, Content: "survey"},
 		api.Message{ID: "t1", Role: api.MessageRoleTool, Content: readA},
@@ -589,7 +589,7 @@ func TestWorkerChildSessionDietsOversizedToolResultsInView(t *testing.T) {
 	mgr.Runner.History.Wait()
 
 	// Canonical rows stay full-fidelity in the store.
-	msgs, err := store.GetMessages(ctx, child.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, child.ID)
 	testutil.FailErr(t, "store.GetMessages", err)
 	for _, m := range msgs {
 		if m.ID == "t1" && m.Content != readA {

@@ -16,7 +16,7 @@ var programLimitBounds = httpio.MustPageLimit(20, 1, 100)
 
 func (s *Transcript) HandleGetCommandProgramReceipt(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	if _, err := s.Store.Get(r.Context(), sessionID); err != nil {
+	if _, err := s.Store.Sessions.Get(r.Context(), sessionID); err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")
 			return

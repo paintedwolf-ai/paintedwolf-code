@@ -38,9 +38,9 @@ func TestRuntimeRunPromptDelegatesToLoop(t *testing.T) {
 					EvaluateCloseoutBlock: func(context.Context, *api.Session, *oar.GuardContext) (*oar.Decision, error) { return nil, nil },
 				},
 				Projection: promptloop.ProjectionDeps{
-					AppendMessages: store.AppendMessages,
+					AppendMessages: store.Transcript.AppendMessages,
 					UpdateMessage: func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
-						_, err := store.UpdateMessage(ctx, sessionID, messageID, msg)
+						_, err := store.Transcript.UpdateMessage(ctx, sessionID, messageID, msg)
 						return err
 					},
 				},
@@ -48,7 +48,7 @@ func TestRuntimeRunPromptDelegatesToLoop(t *testing.T) {
 		},
 	})
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	result, err := rt.RunPrompt(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID,

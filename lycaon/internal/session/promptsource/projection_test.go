@@ -18,7 +18,7 @@ import (
 )
 
 type projectionStore struct {
-	*store.SQL
+	*store.Repositories
 	appendErr error
 }
 
@@ -53,17 +53,17 @@ func TestProjectionAppendSettlesTranscriptBeforeReviewAccounting(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sessionStore := storetest.New(t, "project-1")
-			session, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
+			session, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 			testutil.FailErr(t, "create projection session", err)
 			source := projectionStore{SQL: sessionStore, appendErr: tc.storageErr}
-			projection := &Projection{Sessions: sessionStore, Transcript: transcript.New(source, nil)}
+			projection := &Projection{TranscriptStore: sessionStore.Transcript, TurnStore: sessionStore.Turns, Transcript: transcript.New(source, source, source, source, nil)}
 			var accounted []string
 			if !tc.withoutReviews {
 				projection.Reviews = reviewAccounting(func(ctx context.Context, id string, message api.Message) error {
 					if id != session.ID {
 						t.Fatalf("accounting session = %q", id)
 					}
-					durable, err := sessionStore.GetMessages(ctx, id)
+					durable, err := sessionStore.Transcript.GetMessages(ctx, id)
 					testutil.FailErr(t, "read committed batch", err)
 					if len(durable) != 2 || durable[0].ID != "first" || durable[1].ID != "second" {
 						t.Fatalf("accounting saw incomplete transcript: %+v", durable)
@@ -87,7 +87,7 @@ func TestProjectionAppendSettlesTranscriptBeforeReviewAccounting(t *testing.T) {
 			if !slices.Equal(accounted, tc.wantAccounted) {
 				t.Fatalf("accounted = %v, want %v", accounted, tc.wantAccounted)
 			}
-			durable, err := sessionStore.GetMessages(t.Context(), session.ID)
+			durable, err := sessionStore.Transcript.GetMessages(t.Context(), session.ID)
 			testutil.FailErr(t, "read final transcript", err)
 			expectedRows := 2
 			if tc.storageErr != nil {
@@ -102,13 +102,13 @@ func TestProjectionAppendSettlesTranscriptBeforeReviewAccounting(t *testing.T) {
 
 func TestModelBuildWiresContextOverflowAndTokenObservationCallbacks(t *testing.T) {
 	sessionStore := storetest.New(t, "project-1")
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append message", sessionStore.AppendMessages(t.Context(), sess.ID, api.Message{
+	testutil.FailErr(t, "append message", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{
 		ID: "m1", Role: api.MessageRoleUser, Content: "hello",
 	}))
 	lim := sessionlimits.New(settings.DefaultSessionLimits(), nil)
-	hist := history.New(sessionStore, &lifecycle.State{}, nil, lim, nil, nil)
+	hist := history.New(sessionStore.Sessions, sessionStore.Transcript, sessionStore.Compaction, &lifecycle.State{}, nil, lim, nil, nil)
 	m := &Model{History: hist, Limits: lim}
 	deps := m.Build()
 
@@ -125,14 +125,14 @@ func TestModelBuildWiresContextOverflowAndTokenObservationCallbacks(t *testing.T
 func TestProjectionBuildForwardsSettledModelOutputIteration(t *testing.T) {
 	ctx := t.Context()
 	sessionStore := storetest.New(t, "project-1")
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, "project-1")
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
-	turn, err := sessionStore.BeginTurn(ctx, store.TurnStart{
+	turn, err := sessionStore.Turns.BeginTurn(ctx, store.TurnStart{
 		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}",
 	})
 	testutil.FailErr(t, "begin turn", err)
 
-	projection := &Projection{Sessions: projectionStore{SQL: sessionStore}, Transcript: transcript.New(sessionStore, nil)}
+	projection := &Projection{TranscriptStore: projectionStore{SQL: sessionStore}, TurnStore: projectionStore{SQL: sessionStore}, Transcript: transcript.New(sessionStore.Sessions, sessionStore.Transcript, sessionStore.Turns, sessionStore.People, nil)}
 	deps := projection.Build()
 	iter, err := deps.SettledModelOutputIteration(ctx, turn.Attempt.ID)
 	testutil.FailErr(t, "initial settled iteration", err)

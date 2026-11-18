@@ -57,7 +57,7 @@ func NewCheckpointHandlerFixture(t *testing.T) (*api.Server, *hitl.Checkpoints, 
 	testutil.FailErr(t, "reg.Create failed", err)
 
 	store := store.NewSQL(sqlDB)
-	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{
+	sess, err := store.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		Posture:   wire.SessionPostureBuild,
 		ProjectID: p.ID,
 	}, p.ID)

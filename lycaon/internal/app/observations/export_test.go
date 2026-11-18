@@ -10,7 +10,7 @@ import (
 
 func emitProgressCompletion(
 	ctx context.Context,
-	store *store.SQL,
+	store *store.Repositories,
 	eventPub *events.Publisher,
 	progressStore progress.RunScopedStore,
 	activeRun ActiveRunID,

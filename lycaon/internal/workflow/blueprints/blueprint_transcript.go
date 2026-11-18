@@ -172,7 +172,7 @@ func (m *Service) syncBlueprintTranscript(
 	meta := buildBlueprintTranscriptMeta(active, blueprint, awaiting, changedWarning)
 	metaCopy := meta
 
-	msgs, err := m.Sessions.GetMessages(ctx, active.SessionID)
+	msgs, err := m.Sessions.Transcript.GetMessages(ctx, active.SessionID)
 	if err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func (m *Service) syncBlueprintTranscript(
 		patch.Content = blueprint.Content
 		patch.Blueprint = &metaCopy
 		patch.Kind = api.MessageKindBlueprint
-		if _, err := m.Sessions.UpdateMessage(ctx, active.SessionID, existing.ID, patch); err != nil {
+		if _, err := m.Sessions.Transcript.UpdateMessage(ctx, active.SessionID, existing.ID, patch); err != nil {
 			return err
 		}
 		m.Transcript.PublishPatch(ctx, active.SessionID, patch)

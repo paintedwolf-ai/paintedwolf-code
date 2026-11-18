@@ -75,7 +75,7 @@ func (s *Workers) handleWorkerHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.sessionStore != nil {
-		sess, err := s.sessionStore.Get(r.Context(), sessionID)
+		sess, err := s.sessionStore.Sessions.Get(r.Context(), sessionID)
 		if err == nil && (sess == nil || sess.ProjectID != projectID) {
 			err = store.ErrSessionNotFound
 		}

@@ -6,14 +6,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
-	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -298,7 +298,7 @@ func (m *Verdicts) missingReviewAgents(ctx context.Context, run *api.WorkflowRun
 		if m.Sessions == nil {
 			return append([]string(nil), required...)
 		}
-		history, err := m.Sessions.GetMessages(ctx, run.SessionID)
+		history, err := m.Sessions.Transcript.GetMessages(ctx, run.SessionID)
 		if err != nil {
 			return append([]string(nil), required...)
 		}

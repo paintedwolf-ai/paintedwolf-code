@@ -7,7 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
@@ -15,7 +15,7 @@ type Dependencies struct {
 	EditorDocuments  *editordoc.Service
 	Briefings        Services
 	ProjectRegistry  project.Registry
-	SessionStore     session.Store
+	SessionStore     *sessionstore.Repositories
 	SourceLedger     *sourceledger.Store
 	WorkerBranchRoot func(context.Context, string, string) (string, func())
 }
@@ -23,7 +23,7 @@ type Handler struct {
 	EditorDocuments  *editordoc.Service
 	FileBriefings    *filebriefing.Service
 	ProjectRegistry  project.Registry
-	SessionStore     session.Store
+	SessionStore     *sessionstore.Repositories
 	SourceLedger     *sourceledger.Store
 	workerBranchRoot func(context.Context, string, string) (string, func())
 	responses        *httpio.Responder

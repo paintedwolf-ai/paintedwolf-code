@@ -20,7 +20,7 @@ func TestChatContentPagesSearchAndRevision(t *testing.T) {
 	sess := contractfixture.CreateSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
 	body := strings.Repeat("🌲 Needle\n", 5000)
 	msg := wire.Message{ID: "retained", Role: wire.MessageRoleTool, ToolResult: &wire.ToolResult{ToolCallID: "call", Tool: "read", Content: body}}
-	testutil.FailErr(t, "append retained result", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), sess.ID, msg))
+	testutil.FailErr(t, "append retained result", srv.Sources.Workspace.SessionStore.Transcript.AppendMessages(t.Context(), sess.ID, msg))
 	ref := messageview.ContentReference("tool_output", "call", body)
 	query := url.Values{"field": {"tool_output"}, "tool_call_id": {"call"}, "sha256": {ref.SHA256}, "limit": {"1023"}}
 	path := "/v1/sessions/" + sess.ID + "/messages/retained/content"
@@ -96,7 +96,7 @@ func TestChatContentRowsReachExactEndAndLocateUnicode(t *testing.T) {
 	sess := contractfixture.CreateSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
 	body := strings.Repeat("🌲 complete words\n", 150) + "last line"
 	msg := wire.Message{ID: "lines", Role: wire.MessageRoleTool, ToolResult: &wire.ToolResult{ToolCallID: "call", Tool: "read", Content: body}}
-	testutil.FailErr(t, "append line result", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), sess.ID, msg))
+	testutil.FailErr(t, "append line result", srv.Sources.Workspace.SessionStore.Transcript.AppendMessages(t.Context(), sess.ID, msg))
 	ref := messageview.ContentReference("tool_output", "call", body)
 	query := url.Values{"field": {"tool_output"}, "tool_call_id": {"call"}, "sha256": {ref.SHA256}}
 	read := func() wire.ChatContentPage {

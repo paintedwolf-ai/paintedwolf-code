@@ -3,7 +3,6 @@ package promptloop_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -17,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -36,7 +36,7 @@ func TestWorkerTerminalTurnRecordsOnlyAcceptedStructuredCompletion(t *testing.T)
 	for _, status := range []string{"complete", "partial", "blocked", "prose"} {
 		t.Run(status, func(t *testing.T) {
 			sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-			sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create worker session", err)
 			sess.ParentSessionID, sess.AgentType = "parent", "implementer"
 			args := map[string]any{"leg_status": status, "brief": "bounded work"}
@@ -79,7 +79,7 @@ func TestWorkerTerminalTurnRecordsOnlyAcceptedStructuredCompletion(t *testing.T)
 			if len(client.requests) != 1 || len(client.requests[0].Tools) != 1 || client.requests[0].Tools[0].Name != workertools.CompleteLegTool {
 				t.Fatal("terminal tool surface is not complete_leg only")
 			}
-			messages, err := sessionStore.GetMessages(t.Context(), sess.ID)
+			messages, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 			testutil.FailErr(t, "read terminal transcript", err)
 			report, _, recorded := workercompletion.LastCompleteLegReport(messages)
 			if recorded != (status != "prose") || (recorded && report.LegStatus != status) {
@@ -94,7 +94,7 @@ func TestProseCompletionRequiresUsablePayload(t *testing.T) {
 		for _, content := range []string{"", " \n", "The turn limit prevented reading the file."} {
 			t.Run(proseCompletionCaseName(forced, content), func(t *testing.T) {
 				messages := storetest.New(t, "project")
-				sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
+				sess, err := messages.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 				testutil.FailErr(t, "create session", err)
 				calls := 0
 				registry := toolstest.NewRegistry()
@@ -155,7 +155,7 @@ func proseCompletionCaseName(forced bool, content string) string {
 
 func TestProseCompletionRecoversFromBookkeepingToolCallAttempt(t *testing.T) {
 	messages := storetest.New(t, "project")
-	sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
+	sess, err := messages.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	client := &sequentialLLMClient{completions: []*modelcall.Completion{
 		{

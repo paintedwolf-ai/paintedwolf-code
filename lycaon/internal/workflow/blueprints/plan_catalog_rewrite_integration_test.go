@@ -4,18 +4,18 @@ package blueprints_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -64,7 +64,7 @@ func TestPlanResearchDepthNoneReachesExecutionSubroutine(t *testing.T) {
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create session", err)
 
 	parent, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request"})

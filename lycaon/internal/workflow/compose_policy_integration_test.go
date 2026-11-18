@@ -109,7 +109,7 @@ func TestComposeTemplateThenStartRun(t *testing.T) {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := sessionStore.Create(context.Background(), wire.CreateSessionRequest{
+	sess, err := sessionStore.Sessions.Create(context.Background(), wire.CreateSessionRequest{
 		Posture: wire.SessionPostureSpec,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "sessionStore.Create failed", err)

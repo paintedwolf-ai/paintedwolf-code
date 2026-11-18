@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/profiles"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -40,7 +41,7 @@ func TestOverCapTurnMarksTheCheckpointTruncated(t *testing.T) {
 		mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", rel)
 	}
 
-	man, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store)).Load(t.Context(), sessionID, anchor)
+	man, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind).Load(t.Context(), sessionID, anchor)
 	testutil.FailErr(t, "load manifest", err)
 	if len(man.Paths) != sessioncheckpoint.MaxPaths {
 		t.Fatalf("captured %d paths, want the cap %d", len(man.Paths), sessioncheckpoint.MaxPaths)
@@ -110,7 +111,7 @@ postures:
 }
 
 type feedbackReadFailureStore struct {
-	Store
+	*sessionstore.Repositories
 	failRead bool
 }
 
@@ -126,7 +127,7 @@ func TestPolicyFeedbackRetriesRenderingAndPersistenceWithoutLoss(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	storage := &feedbackReadFailureStore{Store: sessionStore}
 	mgr := NewHost(storage, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	decision := &oar.Decision{Effect: oar.EffectNudge, Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "frozen observation"}}
 	testutil.FailErr(t, "queue before renderer", mgr.Coordinator.Guidance.DeliverAdvisories(t.Context(), sess.ID, oar.AnchorCoordinatorPostTurn, decision))
@@ -145,7 +146,7 @@ func TestPolicyFeedbackRetriesRenderingAndPersistenceWithoutLoss(t *testing.T) {
 	}
 	messages, err := mgr.Coordinator.Guidance.TakePolicy(t.Context(), sess.ID)
 	testutil.FailErr(t, "retry persisted feedback", err)
-	stored, err := sessionStore.GetMessages(t.Context(), sess.ID)
+	stored, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read transcript", err)
 	if len(messages) != 1 || len(stored) != 1 || messages[0].ID != lease.ID {
 		t.Fatalf("retry duplicated feedback: returned=%d stored=%d", len(messages), len(stored))
@@ -198,7 +199,7 @@ func TestPolicyAdvisoryPersistenceUsesScreenedBytesAndAcknowledgesOnce(t *testin
 		}
 		return msg, true
 	})
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for _, id := range []string{"first", "second"} {
 		decision := &oar.Decision{Effect: oar.EffectNudge, Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "private-fixture"}, Data: map[string]any{"subject": map[string]any{"kind": "task", "id": id}, "observation": "private-fixture"}}
@@ -209,7 +210,7 @@ func TestPolicyAdvisoryPersistenceUsesScreenedBytesAndAcknowledgesOnce(t *testin
 	if len(messages) != 1 || strings.Contains(messages[0].Content, "private-fixture") || !strings.Contains(messages[0].Content, "second") {
 		t.Fatalf("delivery lost screening or subjects: %#v", messages)
 	}
-	stored, err := sessionStore.GetMessage(t.Context(), sess.ID, messages[0].ID)
+	stored, err := sessionStore.Transcript.GetMessage(t.Context(), sess.ID, messages[0].ID)
 	testutil.FailErr(t, "read stored feedback", err)
 	if stored.Content != messages[0].Content {
 		t.Fatal("model received different bytes from history")

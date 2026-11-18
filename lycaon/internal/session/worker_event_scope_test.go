@@ -65,14 +65,14 @@ func TestWorkerWritePublishesBoardByProjectIdentity(t *testing.T) {
 
 func TestStopWorkerRuntimePreservesParentAndSibling(t *testing.T) {
 	mgr, _ := newTestManager(t)
-	parent, err := mgr.Coordinator.Context.Sessions.(Store).Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := mgr.Coordinator.Context.Sessions.(*store.Repositories).Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create worker parent", err)
-	child, err := mgr.Coordinator.Context.Sessions.(Store).CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := mgr.Coordinator.Context.Sessions.(*store.Repositories).Sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create target worker", err)
-	sibling, err := mgr.Coordinator.Context.Sessions.(Store).CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "code-reviewer"})
+	sibling, err := mgr.Coordinator.Context.Sessions.(*store.Repositories).Sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "code-reviewer"})
 	testutil.FailErr(t, "create sibling worker", err)
 	for _, id := range []string{parent.ID, child.ID, sibling.ID} {
-		testutil.FailErr(t, "mark active runtime", mgr.Coordinator.Context.Sessions.(Store).SetSessionStatus(t.Context(), id, api.SessionStatusBusy))
+		testutil.FailErr(t, "mark active runtime", mgr.Coordinator.Context.Sessions.(*store.Repositories).Sessions.SetSessionStatus(t.Context(), id, api.SessionStatusBusy))
 	}
 	released := []string{}
 	testutil.FailErr(t, "register process cleanup", mgr.Resources.RegisterCleanup("fixture-processes", 20, func(_ context.Context, id string) error {
@@ -90,7 +90,7 @@ func TestStopWorkerRuntimePreservesParentAndSibling(t *testing.T) {
 		t.Fatalf("released resources=%v", released)
 	}
 	for _, id := range []string{parent.ID, child.ID, sibling.ID} {
-		got, err := mgr.Coordinator.Context.Sessions.(Store).Get(t.Context(), id)
+		got, err := mgr.Coordinator.Context.Sessions.(*store.Repositories).Sessions.Get(t.Context(), id)
 		testutil.FailErr(t, "inspect retained session", err)
 		want := api.SessionStatusBusy
 		if id == child.ID {
@@ -119,7 +119,7 @@ func TestWorkflowDeliveryRequiresAcceptedCurrentPhaseCloseout(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mgr, sess, _ := verifyGateHarness(t, "")
-			database := mgr.Coordinator.Context.Sessions.(*store.SQL).DB()
+			database := mgr.Coordinator.Context.Sessions.(*store.Repositories).DB()
 			testdbseed.InsertSessionWorkflowRun(t, database, "run", sess.ID, "running")
 			testdbseed.InsertSessionWorkflowRun(t, database, "old-run", sess.ID, "complete")
 			ready, err := mgr.Runner.Transcript.DeliveredWorkflowPhase(t.Context(), sess.ID, "run", "work")
@@ -150,7 +150,7 @@ func TestWorkflowDeliveryRequiresAcceptedCurrentPhaseCloseout(t *testing.T) {
 			if tc.toolCall {
 				msg.ToolCalls = []api.ToolCall{{ID: "call", Name: "read"}}
 			}
-			testutil.FailErr(t, "append closeout", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(t.Context(), sess.ID, msg))
+			testutil.FailErr(t, "append closeout", mgr.Coordinator.Context.Sessions.(*store.Repositories).Transcript.AppendMessages(t.Context(), sess.ID, msg))
 			ready, err = mgr.Runner.Transcript.DeliveredWorkflowPhase(t.Context(), sess.ID, "run", "work")
 			testutil.FailErr(t, "read reported delivery state", err)
 			if ready != tc.want {
@@ -371,7 +371,7 @@ func TestStopAndDeleteLifecycleForBackgroundAndAwaitedCommands(t *testing.T) {
 	t.Cleanup(func() { _ = reg.Lifecycle.Close(context.Background()) })
 	mgr.SetBackgroundRegistry(reg)
 
-	parent, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent session", err)
 
 	exe, err := os.Executable()
@@ -394,7 +394,7 @@ func TestStopAndDeleteLifecycleForBackgroundAndAwaitedCommands(t *testing.T) {
 	listenURL := awaitFixtureHTTPServer(t, reg, parent.ID, serverHandle)
 
 	// Simulate a subsequent turn with an unpromoted awaited command, then abort the turn.
-	testutil.FailErr(t, "mark parent busy", st.SetSessionStatus(ctx, parent.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark parent busy", st.Sessions.SetSessionStatus(ctx, parent.ID, api.SessionStatusBusy))
 	awaitedHandle, err := reg.StartPipeline(ctx, bgprocess.PipelineSpec{
 		SessionID: parent.ID, ProjectID: parent.ProjectID, Runner: runner, Mode: bgprocess.JobModeAwaited,
 		OriginTool: "command",
@@ -447,9 +447,9 @@ func TestStopAndDeleteLifecycleForBackgroundAndAwaitedCommands(t *testing.T) {
 	}
 
 	// Verify both worker cancellation and worker completion stop worker background commands.
-	cancelWorker, err := st.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	cancelWorker, err := st.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create cancel worker", err)
-	completeWorker, err := st.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	completeWorker, err := st.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create complete worker", err)
 
 	cancelWorkerHandle, err := reg.StartPipeline(ctx, bgprocess.PipelineSpec{

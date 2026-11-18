@@ -43,7 +43,7 @@ func (s *HarnessPreparation) handleHarnessModelLimit(w http.ResponseWriter, r *h
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "Response allowance requires a root session")
 		return
 	}
-	if err := s.sessionStore.ConfigureModelLimit(r.Context(), request.SessionID, request.Limit); err != nil {
+	if err := s.sessionStore.Turns.ConfigureModelLimit(r.Context(), request.SessionID, request.Limit); err != nil {
 		s.harnessRequestRejected(w, r, "the model limit could not be configured", err)
 		return
 	}

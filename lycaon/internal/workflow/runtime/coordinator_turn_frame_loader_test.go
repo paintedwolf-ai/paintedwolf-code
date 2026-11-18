@@ -1,9 +1,6 @@
 package runtime_test
 
 import (
-	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
-	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
-
 	"context"
 	"encoding/json"
 	"errors"
@@ -27,6 +24,8 @@ import (
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
+	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -49,7 +48,7 @@ func setupCoordinatorTurnFrameLoader(t *testing.T) (*workflowruntime.Coordinator
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(context.Background(), wire.CreateSessionRequest{
+	sess, err := store.Sessions.Create(context.Background(), wire.CreateSessionRequest{
 		Posture: wire.SessionPostureSpec,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)

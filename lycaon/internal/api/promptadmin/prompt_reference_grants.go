@@ -12,7 +12,7 @@ import (
 
 // Each submission owns its grants so a refused admission can revoke only its own access.
 func (s *Submission) grantPromptReferences(ctx context.Context, sessionID, operationID string, parts []wire.MessageContentPart) ([]string, error) {
-	root := sessiontree.RootID(ctx, s.Store, sessionID)
+	root := sessiontree.RootID(ctx, s.Store.Sessions, sessionID)
 	if root == "" {
 		root = sessionID
 	}

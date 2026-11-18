@@ -12,9 +12,9 @@ import (
 // A reference names its list and a zero-based place in it; anything else finds nothing.
 func TestReadChatFileEditResolvesEachListFromZero(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "store result", sessionStore.AppendMessages(t.Context(), sess.ID, wire.Message{
+	testutil.FailErr(t, "store result", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, wire.Message{
 		ID: "m1", Role: wire.MessageRoleTool,
 		ToolResult: &wire.ToolResult{
 			ToolCallID:       "c1",

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -15,7 +15,7 @@ const fanoutExecuteOutputStage = "fan_out"
 
 type ReviewEvidence struct {
 	Vars            *runstate.Variables
-	Sessions        session.Store
+	Sessions        *sessionstore.Repositories
 	EvidenceDigests []EvidenceDigestSource
 }
 type fanoutMessageReader interface {
@@ -43,7 +43,7 @@ func (m *ReviewEvidence) StampEvidence(ctx context.Context, run *api.WorkflowRun
 		return nil
 	}
 	_, err := m.Vars.Stamp(ctx, run.ID, func(ctx context.Context, run *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
-		vars = StampFanoutExecuteOutput(ctx, m.Sessions, run.SessionID, vars)
+		vars = StampFanoutExecuteOutput(ctx, m.Sessions.Transcript, run.SessionID, vars)
 		if digest := compileReviewLoopDigest(ctx, m, run); digest != "" {
 			vars = runstate.SetHostVar(vars, "evidence_digest", digest)
 		}
@@ -67,7 +67,7 @@ func compileReviewLoopDigest(ctx context.Context, m *ReviewEvidence, run *api.Wo
 		}
 	}
 	if m.Sessions != nil {
-		msgs, err := m.Sessions.GetMessages(ctx, run.SessionID)
+		msgs, err := m.Sessions.Transcript.GetMessages(ctx, run.SessionID)
 		if err == nil {
 			if cites := formatWorkerCitationDigest(msgs); cites != "" {
 				blocks = append(blocks, cites)

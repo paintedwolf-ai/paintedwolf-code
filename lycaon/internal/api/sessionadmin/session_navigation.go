@@ -29,7 +29,7 @@ func (s *Navigation) HandleResolveMessageNavigation(w http.ResponseWriter, r *ht
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	sessionID := chi.URLParam(r, "id")
-	if _, err := s.Store.Get(ctx, sessionID); err != nil {
+	if _, err := s.Store.Sessions.Get(ctx, sessionID); err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")
 			return

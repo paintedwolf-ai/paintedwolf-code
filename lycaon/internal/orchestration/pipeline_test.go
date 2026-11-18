@@ -129,7 +129,7 @@ func TestPipelineUnknownProfileFailsRun(t *testing.T) {
 	}
 }
 
-func newPipelineIntegrationOrchestrator(t *testing.T) (*orchestration.OrchestratorImpl, *recordingWorkers, *session.Host, *store.SQL) {
+func newPipelineIntegrationOrchestrator(t *testing.T) (*orchestration.OrchestratorImpl, *recordingWorkers, *session.Host, *store.Repositories) {
 	t.Helper()
 	mockCfg, err := llm.LoadMockConfig()
 	testutil.FailErr(t, "llm.LoadMockConfig failed", err)

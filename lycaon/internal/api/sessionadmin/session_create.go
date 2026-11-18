@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
-	"github.com/lycaon/lycaon/internal/session"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -107,7 +106,7 @@ func (s *Lifecycle) createPreparingSession(ctx context.Context, req wire.CreateS
 		}
 		req.WorkspaceRootID = rootID
 	}
-	sess, err := s.Store.CreateWithStatus(ctx, req, projectID, wire.SessionStatusPreparing)
+	sess, err := s.Store.Sessions.CreateWithStatus(ctx, req, projectID, wire.SessionStatusPreparing)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +162,7 @@ func (s *Lifecycle) prepareCreatedSession(parent context.Context, req wire.Creat
 			notice := wire.NewSessionHostError(wire.NoticeCodeSessionPreparationFailed)
 			hostError = &notice
 		}
-		updateErr := s.Store.SetSessionStatusEvent(ctx, sess.ID, status, hostError)
+		updateErr := s.Store.Sessions.SetSessionStatusEvent(ctx, sess.ID, status, hostError)
 		if updateErr != nil {
 			slog.ErrorContext(ctx, "finish session preparation", "session_id", sess.ID, "err", updateErr)
 			return
@@ -225,7 +224,7 @@ func (s *Lifecycle) MaterializeSession(
 	}
 	projectview.PublishTouch(s.Projects, s.Events, ctx, projectID)
 
-	sess, err := s.Store.Create(ctx, req, projectID)
+	sess, err := s.Store.Sessions.Create(ctx, req, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +235,7 @@ func (s *Lifecycle) MaterializeSession(
 	}()
 	s.SessionView.HydrateSessionWorkspace(ctx, sess)
 	if path := strings.TrimSpace(sess.WorkspacePath); path != "" {
-		if err := s.Store.UpdateSession(ctx, sess.ID, func(st *wire.Session) {
+		if err := s.Store.Sessions.UpdateSession(ctx, sess.ID, func(st *wire.Session) {
 			st.WorkspacePath = path
 			st.WorkspaceRootID = strings.TrimSpace(sess.WorkspaceRootID)
 		}); err != nil {
@@ -248,7 +247,7 @@ func (s *Lifecycle) MaterializeSession(
 
 func (s *Lifecycle) DiscardMaterializedSession(ctx context.Context, sessionID string) {
 	cleanupCtx := context.WithoutCancel(ctx)
-	if err := s.Store.Delete(cleanupCtx, sessionID); err != nil {
+	if err := s.Store.Sessions.Delete(cleanupCtx, sessionID); err != nil {
 		slog.WarnContext(cleanupCtx, "discard incomplete session", "session_id", sessionID, "err", err)
 	}
 }
@@ -293,8 +292,8 @@ func (s *Lifecycle) PublishSessionCreated(ctx context.Context, sess *wire.Sessio
 	})
 }
 
-func sessionMutationEventsOutboxed(store session.Store) bool {
-	return store != nil && store.MutationEventsOutboxed()
+func sessionMutationEventsOutboxed(store *sessionstore.Repositories) bool {
+	return store != nil && store.Sessions.SessionEventsOutboxed()
 }
 
 func (s *Lifecycle) WriteSessionCreationError(w http.ResponseWriter, r *http.Request, err error) {

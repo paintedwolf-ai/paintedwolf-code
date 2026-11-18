@@ -17,9 +17,9 @@ func prepareRequestHistory(ctx context.Context, service *Service, sess *api.Sess
 	if service != nil {
 		recall = service.recallAvailable
 	}
-	if service != nil && service.store != nil && sess != nil {
+	if service != nil && (service.sessionStore != nil && service.transcriptStore != nil && service.compactionStore != nil) && sess != nil {
 		var err error
-		history, err = withCurrentRequest(ctx, service.store, sess, history)
+		history, err = withCurrentRequest(ctx, service.sessionStore, service.transcriptStore, service.compactionStore, sess, history)
 		if err != nil {
 			return nil, req, err
 		}

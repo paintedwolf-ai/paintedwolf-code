@@ -30,9 +30,9 @@ func TestAppendWorkerSummaryAndTags(t *testing.T) {
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 	long := strings.Repeat("x", 5000)
 	if _, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
@@ -58,9 +58,9 @@ func TestAppendWorkerSummaryOverBudgetRetainsPolicyFeedback(t *testing.T) {
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	mgr.SetOARPipeline(sessionTestOARPipeline(t), oar.NewRenderer(nil, nil))
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "security-reviewer"})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "security-reviewer"})
 	testutil.FailErr(t, "create child", err)
 	max := mgr.Workers.WorkerSummaryFinalizeOpts(ctx, parent).MaxChars
 	if max <= 0 {
@@ -78,7 +78,7 @@ func TestAppendWorkerSummaryOverBudgetRetainsPolicyFeedback(t *testing.T) {
 	if status != "partial" {
 		t.Fatalf("status = %q want partial from measured budget", status)
 	}
-	msgs, err := store.GetMessages(ctx, parent.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) != 2 || msgs[1].WorkerSummary == nil || msgs[1].WorkerSummary.Status != "partial" {
 		t.Fatalf("msgs = %+v want task call/result with partial worker_summary", msgs)
@@ -103,16 +103,16 @@ func TestAppendWorkerSummaryEmptyStatusPartial(t *testing.T) {
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	mgr.SetOARPipeline(sessionTestOARPipeline(t), oar.NewRenderer(nil, nil))
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 	if _, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		JobID: "job-empty", ChildSessionID: child.ID, AgentType: "implementer",
 	}); err != nil {
 		testutil.FailErr(t, "mgr.AppendWorkerSummary failed", err)
 	}
-	msgs, err := store.GetMessages(ctx, parent.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	if len(msgs) != 2 || msgs[1].WorkerSummary == nil || msgs[1].WorkerSummary.Status != "partial" {
 		t.Fatalf("msgs = %+v want task call/result with partial worker_summary", msgs)
@@ -139,9 +139,9 @@ func TestAppendWorkerSummaryWriteWorkerOpenStatus(t *testing.T) {
 	q := workertest.OnDatabase(t, database, 4)
 	mgr.SetWorkerQueue(q)
 	primary, overlay, scope := overlaySourceFixture(t, database)
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 	jobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
@@ -170,7 +170,7 @@ func TestAppendWorkerSummaryWriteWorkerOpenStatus(t *testing.T) {
 	if status != "open" {
 		t.Fatalf("status = %q want open", status)
 	}
-	msgs, err := store.GetMessages(ctx, parent.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	var summary *api.WorkerSummaryMeta
 	for _, msg := range msgs {
@@ -196,9 +196,9 @@ func TestAppendWorkerSummaryUnmetEvidenceKeepsDeliveredWork(t *testing.T) {
 	q := workertest.OnDatabase(t, database, 4)
 	mgr.SetWorkerQueue(q)
 	primary, overlay, scope := overlaySourceFixture(t, sessionStore.DB())
-	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := sessionStore.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := sessionStore.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 	jobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
@@ -227,7 +227,7 @@ func TestAppendWorkerSummaryUnmetEvidenceKeepsDeliveredWork(t *testing.T) {
 	if status != "open" {
 		t.Fatalf("status = %q want open", status)
 	}
-	msgs, err := sessionStore.GetMessages(ctx, parent.ID)
+	msgs, err := sessionStore.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	var summary *api.WorkerSummaryMeta
 	for _, msg := range msgs {
@@ -256,9 +256,9 @@ func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 	q := workertest.OnDatabase(t, database, 4)
 	mgr.SetWorkerQueue(q)
 	primary, overlay, scope := overlaySourceFixture(t, sessionStore.DB())
-	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := sessionStore.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := sessionStore.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild", err)
 	jobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
@@ -276,7 +276,7 @@ func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
 	bindWorkerFixture(t, sessionStore.DB(), jobID, overlay, primary, api.WorkerMergeStatusPending)
 	revision, digest := sourceledger.VerificationState(ctx, ledger.Inventory, overlay)
-	testutil.FailErr(t, "AppendMessages", sessionStore.AppendMessages(ctx, child.ID, api.Message{
+	testutil.FailErr(t, "AppendMessages", sessionStore.Transcript.AppendMessages(ctx, child.ID, api.Message{
 		Role: api.MessageRoleTool, WorkerID: jobID,
 		ToolResult: &api.ToolResult{
 			Content: `{"outcome":"passed"}`,
@@ -306,7 +306,7 @@ func TestAppendWorkerSummaryRejectsInvalidState(t *testing.T) {
 	ctx := context.Background()
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(sessionStore, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 
 	_, err = mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
@@ -321,11 +321,11 @@ func TestAppendWorkerSummaryParentEnvelopeOmitsHostLedger(t *testing.T) {
 	ctx := context.Background()
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(sessionStore, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	child, err := sessionStore.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "security-reviewer"})
+	child, err := sessionStore.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "security-reviewer"})
 	testutil.FailErr(t, "create child", err)
-	testutil.FailErr(t, "seed child receipt", sessionStore.AppendMessages(ctx, child.ID, api.Message{
+	testutil.FailErr(t, "seed child receipt", sessionStore.Transcript.AppendMessages(ctx, child.ID, api.Message{
 		Role: api.MessageRoleTool,
 		ToolResult: &api.ToolResult{
 			Outcome: api.ToolResultOutcomeCompleted,
@@ -353,7 +353,7 @@ func TestAppendWorkerSummaryParentEnvelopeOmitsHostLedger(t *testing.T) {
 		Status: "complete",
 	})
 	testutil.FailErr(t, "AppendWorkerSummary", err)
-	msgs, err := sessionStore.GetMessages(ctx, parent.ID)
+	msgs, err := sessionStore.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	var envelope string
 	for _, m := range msgs {

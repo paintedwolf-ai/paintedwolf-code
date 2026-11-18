@@ -76,7 +76,7 @@ func (m *Service) measureReproducedSource(ctx context.Context, sess *api.Session
 	if err != nil || len(roots) == 0 {
 		return reproducedsource.Result{}
 	}
-	touched := touchedpaths.List(ctx, sess.ProjectID, sess.ID, sess.WorkspaceRootID, roots, m.store, m.authorship, touchedpaths.MaxCandidates)
+	touched := touchedpaths.List(ctx, sess.ProjectID, sess.ID, sess.WorkspaceRootID, roots, m.evidenceStore, m.authorship, touchedpaths.MaxCandidates)
 	if len(touched) == 0 {
 		return reproducedsource.Result{}
 	}

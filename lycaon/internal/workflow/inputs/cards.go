@@ -3,10 +3,10 @@ package inputs
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -43,7 +43,7 @@ func (m *Cards) PersistCoordinatorAskAnswer(ctx context.Context, sessionID strin
 }
 
 func (m *Cards) PersistAskUserAnswerForToolCall(ctx context.Context, sessionID, toolCallID string, body AskUserAnswerBody) {
-	if m == nil || m.Sessions == nil {
+	if m == nil || (m.SessionStore == nil || m.TranscriptStore == nil) {
 		return
 	}
 	raw, err := json.Marshal(body)
@@ -51,7 +51,7 @@ func (m *Cards) PersistAskUserAnswerForToolCall(ctx context.Context, sessionID, 
 		return
 	}
 	content := string(raw)
-	msgs, err := m.Sessions.GetMessages(ctx, sessionID)
+	msgs, err := m.TranscriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return
 	}
@@ -75,7 +75,7 @@ func (m *Cards) PersistAskUserAnswerForToolCall(ctx context.Context, sessionID, 
 		tr.Content = content
 		tr.Tool = "ask_user"
 		updated.ToolResult = &tr
-		if _, err := m.Sessions.UpdateMessage(ctx, sessionID, updated.ID, updated); err != nil {
+		if _, err := m.TranscriptStore.UpdateMessage(ctx, sessionID, updated.ID, updated); err != nil {
 			return
 		}
 		m.Transcript.PublishPatch(ctx, sessionID, updated)
@@ -96,7 +96,7 @@ func answeredAskOffMenu(ask runstate.CoordinatorAsk) bool {
 }
 
 func (m *Cards) AppendAnnouncement(ctx context.Context, sessionID string, msg *api.Message) {
-	if m == nil || m.Sessions == nil || msg == nil {
+	if m == nil || (m.SessionStore == nil || m.TranscriptStore == nil) || msg == nil {
 		return
 	}
 	if err := m.Transcript.Append(ctx, sessionID, *msg); err != nil {
@@ -105,10 +105,10 @@ func (m *Cards) AppendAnnouncement(ctx context.Context, sessionID string, msg *a
 	}
 }
 func (m *Cards) StampFeedbackAnswer(ctx context.Context, sessionID, runID, phaseID, answer, answererID string) {
-	if m == nil || m.Sessions == nil || strings.TrimSpace(answer) == "" {
+	if m == nil || (m.SessionStore == nil || m.TranscriptStore == nil) || strings.TrimSpace(answer) == "" {
 		return
 	}
-	msgs, err := m.Sessions.GetMessages(ctx, sessionID)
+	msgs, err := m.TranscriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return
 	}
@@ -128,7 +128,7 @@ func (m *Cards) StampFeedbackAnswer(ctx context.Context, sessionID, runID, phase
 			metaCopy.ResolvedByPersonID = id
 		}
 		updated.WorkflowFeedback = &metaCopy
-		if _, err := m.Sessions.UpdateMessage(ctx, sessionID, updated.ID, updated); err != nil {
+		if _, err := m.TranscriptStore.UpdateMessage(ctx, sessionID, updated.ID, updated); err != nil {
 			return
 		}
 		m.Transcript.PublishPatch(ctx, sessionID, updated)
@@ -137,6 +137,7 @@ func (m *Cards) StampFeedbackAnswer(ctx context.Context, sessionID, runID, phase
 }
 
 type Cards struct {
-	Sessions   Sessions
-	Transcript *publication.Messages
+	SessionStore    Sessions
+	TranscriptStore Transcript
+	Transcript      *publication.Messages
 }

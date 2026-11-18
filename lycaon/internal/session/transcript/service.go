@@ -12,26 +12,35 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	PatchMessageNavigation(context.Context, string, string, string, []api.NavigationReference, []api.NavigationReference) (api.Message, error)
-	ListPendingModelOutputProjections(context.Context) ([]store.PendingModelOutputProjection, error)
-	MarkModelOutputProjected(context.Context, string) error
-	people.OwnerSource
-	stream.ProjectionStore
-	Get(context.Context, string) (*api.Session, error)
-	AppendMessages(context.Context, string, ...api.Message) error
-	GetMessage(context.Context, string, string) (api.Message, error)
-	ToolResultMessageID(context.Context, string, string) (string, error)
-	GetMessages(context.Context, string) ([]api.Message, error)
-	GetTranscriptPage(context.Context, string, api.TranscriptPageQuery) (api.SessionTranscriptPage, error)
-	ListTurnLoadReceiptsForTurns(context.Context, []string) ([]store.TurnLoadReceipt, error)
-	GetWorkerJobMessages(context.Context, string, string) ([]api.Message, error)
-	UpdateMessage(context.Context, string, string, api.Message) (api.Message, error)
-	MutationEventsOutboxed() bool
-	SessionTreeIDs(context.Context, string) ([]string, error)
-	MaxMessageScreenGenerationInTree(context.Context, string) (uint64, error)
-	MessageIDsBelowScreenGeneration(context.Context, string, uint64) ([]string, error)
-	StampMessageScreenGeneration(context.Context, string, string, uint64) error
+type Sessions interface {
+	Get(ctx context.Context, id string) (*api.Session, error)
+	SessionTreeIDs(ctx context.Context, rootSessionID string) ([]string, error)
+}
+
+type Transcript interface {
+	AppendMessages(ctx context.Context, id string, msgs ...api.Message) error
+	GetMessage(ctx context.Context, sessionID, messageID string) (api.Message, error)
+	GetMessages(ctx context.Context, id string) ([]api.Message, error)
+	GetTranscriptPage(ctx context.Context, id string, q api.TranscriptPageQuery) (api.SessionTranscriptPage, error)
+	GetWorkerJobMessages(ctx context.Context, sessionID, workerJobID string) ([]api.Message, error)
+	MaxMessageScreenGenerationInTree(ctx context.Context, rootSessionID string) (uint64, error)
+	MessageIDsBelowScreenGeneration(ctx context.Context, sessionID string, generation uint64) ([]string, error)
+	MessageEventsOutboxed() bool
+	PatchLiveProjection(ctx context.Context, sessionID, messageID, content string, toolCalls []api.ToolCall) error
+	PatchMessageNavigation(ctx context.Context, sessionID, messageID, contentHash string, expected, refs []api.NavigationReference) (api.Message, error)
+	StampMessageScreenGeneration(ctx context.Context, sessionID, messageID string, generation uint64) error
+	ToolResultMessageID(ctx context.Context, sessionID, toolCallID string) (string, error)
+	UpdateMessage(ctx context.Context, sessionID, messageID string, msg api.Message) (api.Message, error)
+}
+
+type Turns interface {
+	ListPendingModelOutputProjections(ctx context.Context) ([]store.PendingModelOutputProjection, error)
+	ListTurnLoadReceiptsForTurns(ctx context.Context, openingMessageIDs []string) ([]store.TurnLoadReceipt, error)
+	MarkModelOutputProjected(ctx context.Context, outputID string) error
+}
+
+type People interface {
+	HostOwner(context.Context) (people.Person, error)
 }
 
 type Projects interface {
@@ -62,7 +71,10 @@ type Redactor func(context.Context, api.Message) (api.Message, bool)
 
 // Service owns durable transcript writes and their screened projections.
 type Service struct {
-	store                   Store
+	sessionStore            Sessions
+	transcriptStore         Transcript
+	turnStore               Turns
+	people                  People
 	projects                Projects
 	Workspace               Workspace
 	workerQueue             Workers
@@ -75,8 +87,8 @@ type Service struct {
 	programEdits            programEdits
 }
 
-func New(store Store, workspace Workspace) *Service {
-	return &Service{store: store, Workspace: workspace, Streams: stream.New(store)}
+func New(sessionStore Sessions, transcriptStore Transcript, turnStore Turns, people People, workspace Workspace) *Service {
+	return &Service{sessionStore: sessionStore, transcriptStore: transcriptStore, turnStore: turnStore, people: people, Workspace: workspace, Streams: stream.New(transcriptStore)}
 }
 func (m *Service) SetProjects(projects Projects)            { m.projects = projects }
 func (m *Service) SetWorkers(workers Workers)               { m.workerQueue = workers }
@@ -91,7 +103,7 @@ func (m *Service) Redact(ctx context.Context, message api.Message) (api.Message,
 }
 
 func (m *Service) GetWorkerJobMessages(ctx context.Context, sessionID, jobID string) ([]api.Message, error) {
-	messages, err := m.store.GetWorkerJobMessages(ctx, sessionID, jobID)
+	messages, err := m.transcriptStore.GetWorkerJobMessages(ctx, sessionID, jobID)
 	if err != nil {
 		return nil, err
 	}

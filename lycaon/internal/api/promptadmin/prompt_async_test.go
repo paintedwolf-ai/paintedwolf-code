@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	workflowrunstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -16,10 +15,11 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/usernotice"
+	workflowrunstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -226,14 +226,14 @@ func TestPromptActionsStayOffOtherSurfaces(t *testing.T) {
 	}
 }
 
-type unreadableTranscript struct{ session.Store }
+type unreadableTranscript struct{ *sessionstore.Repositories }
 
 func (unreadableTranscript) GetMessages(context.Context, string) ([]wire.Message, error) {
 	return nil, errors.New("transcript read failed")
 }
 
 type readableTranscript struct {
-	session.Store
+	*sessionstore.Repositories
 	msgs []wire.Message
 }
 

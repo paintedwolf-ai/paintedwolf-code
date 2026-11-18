@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
@@ -31,7 +32,7 @@ type Deps struct {
 	ProgressStore  progress.Store
 	Projects       project.Registry
 	ProjectRules   *rules.ProjectRulesOverlay
-	Store          session.Store
+	Store          *sessionstore.Repositories
 	Sessions       *session.Host
 	Workers        worker.WorkerQueue
 	Workflows      *workflow.RunManager
@@ -59,7 +60,7 @@ type Bootstrap struct {
 	ProgressStore  progress.Store
 	SessionView    *sessionview.Projector
 	Sessions       *session.Host
-	Store          session.Store
+	Store          *sessionstore.Repositories
 	Workers        worker.WorkerQueue
 	responses      *httpio.Responder
 }
@@ -74,7 +75,7 @@ type Lifecycle struct {
 	SessionView     *sessionview.Projector
 	Sessions        *session.Host
 	Settings        *settings.Service
-	Store           session.Store
+	Store           *sessionstore.Repositories
 	Workflows       *workflow.RunManager
 	background      *taskgroup.Group
 	responses       *httpio.Responder
@@ -84,7 +85,7 @@ type Lifecycle struct {
 
 type Navigation struct {
 	Sessions        *session.Host
-	Store           session.Store
+	Store           *sessionstore.Repositories
 	Workers         worker.WorkerQueue
 	responses       *httpio.Responder
 	sourceWorkspace *sourceapi.Workspace
@@ -105,7 +106,7 @@ type Transcript struct {
 	Invocations invocation.Recorder
 	Projects    project.Registry
 	Sessions    *session.Host
-	Store       session.Store
+	Store       *sessionstore.Repositories
 	responses   *httpio.Responder
 }
 

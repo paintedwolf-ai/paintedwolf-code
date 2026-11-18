@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -14,8 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"time"
 )
 
 // ErrSubworkflowDepthExceeded is returned when a child run attempts to invoke another workflow.
@@ -29,7 +30,7 @@ var ErrChildRunActive = errors.New("child workflow run already active")
 type Children struct {
 	Runs              runstate.RunsRepository
 	Starts            runstate.StartsRepository
-	Sessions          session.Store
+	Sessions          *sessionstore.Repositories
 	Resolver          *catalog.Resolver
 	Vars              *runstate.Variables
 	Journal           *runstate.Journal
@@ -72,7 +73,7 @@ func (m *Children) InvokeChild(ctx context.Context, parentRunID string, spec wor
 	if parent.Status != api.WorkflowRunStatusRunning {
 		return nil, &runstate.NotRunnableError{RunID: parent.ID, Status: parent.Status, Reason: "parent not running"}
 	}
-	sess, err := m.Sessions.Get(ctx, parent.SessionID)
+	sess, err := m.Sessions.Sessions.Get(ctx, parent.SessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +103,7 @@ func (m *Children) InvokeChild(ctx context.Context, parentRunID string, spec wor
 		BlueprintPath:   blueprintPath,
 	}
 	vars, err := workflowphases.ApplyPhaseOnEnter(ctx, workflowphases.PhaseEnterRequest{
-		Sessions: m.Sessions, SessionID: parent.SessionID, Manifest: childManifest,
+		Sessions: m.Sessions.Sessions, SessionID: parent.SessionID, Manifest: childManifest,
 		PhaseID: childRun.CurrentPhase, BlueprintPath: childRun.BlueprintPath, Registry: m.Registry,
 		ReviewSpawnFilter: m.ReviewSpawnFilter,
 	})

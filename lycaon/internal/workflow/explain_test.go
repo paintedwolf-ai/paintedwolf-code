@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -84,7 +84,7 @@ func TestPhaseEntryWithoutExplainWritesNoNote(t *testing.T) {
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"obligationtest@1.0.0": obligationTestManifest()})
 	_, err := startRun(context.Background(), mgr, "sess-1", "obligationtest", "1.0.0")
 	testutil.FailErr(t, "start run", err)
-	msgs, err := sessStore.GetMessages(context.Background(), "sess-1")
+	msgs, err := sessStore.Transcript.GetMessages(context.Background(), "sess-1")
 	testutil.FailErr(t, "GetMessages", err)
 	for _, msg := range msgs {
 		if api.IsWorkflowExplainMessage(msg) {
@@ -93,9 +93,9 @@ func TestPhaseEntryWithoutExplainWritesNoNote(t *testing.T) {
 	}
 }
 
-func onlyExplainNote(t *testing.T, sessStore session.Store) api.Message {
+func onlyExplainNote(t *testing.T, sessStore *sessionstore.Repositories) api.Message {
 	t.Helper()
-	msgs, err := sessStore.GetMessages(context.Background(), "sess-1")
+	msgs, err := sessStore.Transcript.GetMessages(context.Background(), "sess-1")
 	testutil.FailErr(t, "GetMessages", err)
 	var notes []api.Message
 	for _, msg := range msgs {

@@ -67,7 +67,7 @@ func testHandleCommandRefusalWakesWithDigest(t *testing.T, offered []string) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Processes.ToolPolicy = newPostToolGuidanceManager(t).ToolPolicy
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create waiting session", err)
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	reports := make(chan anchor.Envelope, 1)
@@ -205,9 +205,9 @@ func TestMixedPathRecoveryKeepsTerminalPathsOutsideRequestedGrants(t *testing.T)
 func TestCommandCompletionWakesWorkerProcessWait(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create waiting worker session", err)
-	testutil.FailErr(t, "mark worker session", sessionStore.UpdateSession(t.Context(), sess.ID, func(s *api.Session) {
+	testutil.FailErr(t, "mark worker session", sessionStore.Sessions.UpdateSession(t.Context(), sess.ID, func(s *api.Session) {
 		s.ParentSessionID = "parent"
 	}))
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
@@ -298,7 +298,7 @@ func TestInterruptedToolProjectionRetainsIdentityAcrossRecoveryPaths(t *testing.
 			manager := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 			recorder := invocation.NewSQLRecorder(database)
 			manager.SetInvocationRecorder(recorder)
-			sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+			sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create interrupted session", err)
 			for _, tool := range []string{"read", "command", "http_request"} {
 				seedInterruptedTool(t, st, recorder, sess.ID, tool)
@@ -313,20 +313,20 @@ func TestInterruptedToolProjectionRetainsIdentityAcrossRecoveryPaths(t *testing.
 				}
 				testutil.FailErr(t, "recover tool projections", err)
 			}
-			messages, err := st.GetMessages(t.Context(), sess.ID)
+			messages, err := st.Transcript.GetMessages(t.Context(), sess.ID)
 			testutil.FailErr(t, "read recovered transcript", err)
 			assertRecoveredToolIdentities(t, messages)
 		})
 	}
 }
 
-func seedInterruptedTool(t *testing.T, st *store.SQL, recorder *invocation.SQLRecorder, sessionID, tool string) {
+func seedInterruptedTool(t *testing.T, st *store.Repositories, recorder *invocation.SQLRecorder, sessionID, tool string) {
 	t.Helper()
 	contract, ok := toolcontract.Lookup(tool)
 	if !ok {
 		t.Fatalf("missing tool contract %s", tool)
 	}
-	testutil.FailErr(t, "append tool request", st.AppendMessages(t.Context(), sessionID, api.Message{
+	testutil.FailErr(t, "append tool request", st.Transcript.AppendMessages(t.Context(), sessionID, api.Message{
 		ID: "assistant-" + tool, Role: api.MessageRoleAssistant,
 		ToolCalls: []api.ToolCall{{ID: "call-" + tool, Name: tool}},
 	}))

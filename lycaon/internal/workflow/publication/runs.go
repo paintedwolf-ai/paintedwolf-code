@@ -2,15 +2,12 @@ package publication
 
 import (
 	"context"
+
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type SessionReader interface {
-	Get(context.Context, string) (*api.Session, error)
-}
 type RunProjector interface {
 	AttachRunUI(context.Context, *api.WorkflowRun) error
 }
@@ -18,7 +15,7 @@ type RunProjector interface {
 // Runs projects committed workflow revisions into the host event stream.
 type Runs struct {
 	Events              *events.Publisher
-	Sessions            SessionReader
+	Sessions            Sessions
 	Transactions        runstate.TransactionsRepository
 	Projector           RunProjector
 	OnPhaseAutoAdvanced func(context.Context, string, string, string, string)
@@ -47,7 +44,7 @@ func (m *Runs) PublishSession(ctx context.Context, run *api.WorkflowRun) {
 	}
 	key := run.ProjectID
 	if key == "" {
-		if sess, err := m.Sessions.Get(ctx, run.SessionID); err == nil && sess != nil {
+		if sess, err := m.SessionStore.Get(ctx, run.SessionID); err == nil && sess != nil {
 			key = sess.ProjectID
 		}
 	}
@@ -96,7 +93,7 @@ func (m *Runs) PublishPhaseAdvanced(ctx context.Context, run *api.WorkflowRun, p
 	}
 	key := run.ProjectID
 	if key == "" {
-		if sess, err := m.Sessions.Get(ctx, run.SessionID); err == nil && sess != nil {
+		if sess, err := m.SessionStore.Get(ctx, run.SessionID); err == nil && sess != nil {
 			key = sess.ProjectID
 		}
 	}

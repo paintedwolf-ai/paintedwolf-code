@@ -192,7 +192,7 @@ func (s *Handler) activeRootIDFromSession(ctx context.Context, sessionID string)
 	if sessionID == "" {
 		return ""
 	}
-	sess, err := s.SessionStore.Get(ctx, sessionID)
+	sess, err := s.SessionStore.Sessions.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return ""
 	}

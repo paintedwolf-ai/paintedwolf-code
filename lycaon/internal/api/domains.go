@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
@@ -32,6 +31,7 @@ import (
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/decisions"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/visual"
@@ -59,14 +59,14 @@ type Activity struct {
 	projectRegistry     project.Registry
 	responses           *httpio.Responder
 	scheduleSourceWatch func(context.Context, string)
-	sessionStore        session.Store
+	sessionStore        *sessionstore.Repositories
 	settingsSvc         *settings.Service
 }
 
 type Artifacts struct {
 	projectRegistry project.Registry
 	responses       *httpio.Responder
-	sessionStore    session.Store
+	sessionStore    *sessionstore.Repositories
 	visualStore     visual.Store
 }
 
@@ -75,7 +75,7 @@ type Conversation struct {
 	preview       *preview.Controller
 	progressStore progress.Store
 	responses     *httpio.Responder
-	sessionStore  session.Store
+	sessionStore  *sessionstore.Repositories
 	sessions      *session.Host
 }
 
@@ -97,7 +97,7 @@ type HarnessControl struct {
 	requireClientAuth  func(http.Handler) http.Handler
 	responses          *httpio.Responder
 	router             chi.Router
-	sessionStore       session.Store
+	sessionStore       *sessionstore.Repositories
 	sessions           *session.Host
 	visualStore        visual.Store
 }
@@ -111,7 +111,7 @@ type HarnessPreparation struct {
 	llmSvc          *llm.Service
 	projectRegistry project.Registry
 	responses       *httpio.Responder
-	sessionStore    session.Store
+	sessionStore    *sessionstore.Repositories
 	sessions        *session.Host
 	workers         worker.WorkerQueue
 }
@@ -148,7 +148,7 @@ type Workers struct {
 	board           *board.SnapshotBuilder
 	projectRegistry project.Registry
 	responses       *httpio.Responder
-	sessionStore    session.Store
+	sessionStore    *sessionstore.Repositories
 	workerCancel    *worker.CancelService
 	workerOps       *workerops.Service
 	workers         worker.WorkerQueue

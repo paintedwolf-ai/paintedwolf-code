@@ -90,7 +90,7 @@ func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 
 func assertFollowUpAskResult(t *testing.T, h *Harness, sessionID, status, response string) {
 	t.Helper()
-	messages, err := h.Store.GetMessages(t.Context(), sessionID)
+	messages, err := h.Store.Transcript.GetMessages(t.Context(), sessionID)
 	testutil.FailErr(t, "load question result", err)
 	for _, message := range messages {
 		result := message.ToolResult
@@ -112,7 +112,7 @@ func assertFollowUpAskResult(t *testing.T, h *Harness, sessionID, status, respon
 
 func assertFollowUpAskCard(t *testing.T, h *Harness, sessionID, runID, phaseID string) {
 	t.Helper()
-	messages, err := h.Store.GetMessages(t.Context(), sessionID)
+	messages, err := h.Store.Transcript.GetMessages(t.Context(), sessionID)
 	testutil.FailErr(t, "load question card", err)
 	for _, message := range messages {
 		if card := message.WorkflowFeedback; card != nil && card.PhaseID == phaseID {

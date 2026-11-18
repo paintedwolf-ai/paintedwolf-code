@@ -3,7 +3,6 @@ package sourcebrief
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"slices"
 	"testing"
 	"time"
@@ -17,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -251,7 +251,7 @@ func TestBuildWindowKeepsProjectWideEffects(t *testing.T) {
 		record(sourcebranch.ID("job-1"), api.SourceChangeOriginAgent, "job-1", "base\n", "worker\n")
 		checkpoint(2)
 
-		service := New(briefWindowStore{turn: 2}, briefRootList(briefRoots()))
+		service := New(briefWindowStore{turn: 2}, briefWindowStore{turn: 2}, briefWindowStore{turn: 2}, briefRootList(briefRoots()))
 		service.SetSources(tools.SourceHistory{Files: ledger.History, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Checkpoints)
 		brief := service.Build(t.Context(), &api.Session{ID: "s1", ProjectID: "p1"})
 		if len(brief.Files)+brief.OtherFiles != 1 || brief.Truncated {

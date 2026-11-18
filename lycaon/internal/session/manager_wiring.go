@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/pkg/api"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 // SetInvocationRecorder wires durable invocation receipts.
@@ -144,7 +145,7 @@ func (m *Host) SetGateRepeatLedger(ledger *approvalstate.GateRepeatLedger) {
 }
 
 // SetVisualStore wires the session-tree visual artifact store.
-func (m *Host) SetVisualStore(store visual.Store) {
+func (m *Host) SetVisualStore(store visual.*sessionstore.Repositories) {
 	if m == nil {
 		return
 	}

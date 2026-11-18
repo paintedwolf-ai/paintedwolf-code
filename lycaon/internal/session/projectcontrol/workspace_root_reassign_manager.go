@@ -12,7 +12,7 @@ import (
 
 // ReassignSessionsAfterRootDetach retargets open sessions when a folder root is removed.
 func (m *Service) ReassignSessionsAfterRootDetach(ctx context.Context, projectID, detachedRootID string, after []projectroot.RootRef) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return
 	}
 	projectID = strings.TrimSpace(projectID)
@@ -36,19 +36,19 @@ func (m *Service) ReassignSessionsAfterRootDetach(ctx context.Context, projectID
 	if r, err := projectroot.PrimaryRoot(after); err == nil {
 		replacement = r.ID
 	}
-	_ = m.store.ReassignSessionsWorkspaceRoot(ctx, projectID, detachedRootID, replacement)
+	_ = m.sessionStore.ReassignSessionsWorkspaceRoot(ctx, projectID, detachedRootID, replacement)
 }
 
 // InvalidateSessionWorkspacePaths clears hydrated workspace paths.
 func (m *Service) InvalidateSessionWorkspacePaths(ctx context.Context, projectID string) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return
 	}
 	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
 		return
 	}
-	sessions, err := m.store.List(ctx)
+	sessions, err := m.sessionStore.List(ctx)
 	if err != nil {
 		return
 	}
@@ -56,7 +56,7 @@ func (m *Service) InvalidateSessionWorkspacePaths(ctx context.Context, projectID
 		if sess == nil || sess.ProjectID != projectID {
 			continue
 		}
-		_ = m.store.UpdateSession(ctx, sess.ID, func(s *api.Session) {
+		_ = m.sessionStore.UpdateSession(ctx, sess.ID, func(s *api.Session) {
 			s.WorkspacePath = ""
 		})
 	}

@@ -40,7 +40,7 @@ func TestTerminalSendInputRedactedInPersistedTranscript(t *testing.T) {
 	}
 
 	// Durable model history retains the input.
-	storeMsgs, err := h.Store.GetMessages(ctx, sess.ID)
+	storeMsgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "Store.GetMessages", err)
 	foundStore := false
 	for _, m := range storeMsgs {

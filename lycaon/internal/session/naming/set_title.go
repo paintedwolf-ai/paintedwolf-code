@@ -13,7 +13,7 @@ import (
 
 // SetTitle overwrites the display title and publishes SessionEvent.
 func (m *Service) SetTitle(ctx context.Context, id, rawTitle string) (*wire.Session, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.evidenceStore == nil) {
 		return nil, fmt.Errorf("session manager not configured")
 	}
 	id = strings.TrimSpace(id)
@@ -24,12 +24,12 @@ func (m *Service) SetTitle(ctx context.Context, id, rawTitle string) (*wire.Sess
 	if err != nil {
 		return nil, err
 	}
-	if err := m.store.UpdateSession(ctx, id, func(sess *wire.Session) {
+	if err := m.sessionStore.UpdateSession(ctx, id, func(sess *wire.Session) {
 		sess.Title = title
 	}); err != nil {
 		return nil, err
 	}
-	sess, err := m.store.Get(ctx, id)
+	sess, err := m.sessionStore.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}

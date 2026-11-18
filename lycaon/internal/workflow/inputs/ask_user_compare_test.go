@@ -3,14 +3,13 @@
 package inputs_test
 
 import (
-	session "github.com/lycaon/lycaon/internal/session"
-
 	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/orchestration"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
@@ -53,7 +52,7 @@ func TestAskUserComparePreference(t *testing.T) {
 	var body map[string]any
 	testutil.FailErr(t, "unmarshal", json.Unmarshal([]byte(out), &body))
 	phaseID, _ := body["phase_id"].(string)
-	testutil.FailErr(t, "AppendMessages", fx.wfMgr.Policy.Sessions.(session.Store).AppendMessages(ctx, fx.sess.ID, wire.Message{
+	testutil.FailErr(t, "AppendMessages", fx.wfMgr.Policy.Sessions.(*sessionstore.Repositories).Transcript.AppendMessages(ctx, fx.sess.ID, wire.Message{
 		ID:      "msg-ask-compare",
 		Role:    wire.MessageRoleTool,
 		Content: out,
@@ -64,7 +63,7 @@ func TestAskUserComparePreference(t *testing.T) {
 		},
 	}))
 
-	msgs, err := fx.wfMgr.Policy.Sessions.(session.Store).GetMessages(ctx, fx.sess.ID)
+	msgs, err := fx.wfMgr.Policy.Sessions.(*sessionstore.Repositories).Transcript.GetMessages(ctx, fx.sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	var found bool
 	for _, m := range msgs {
@@ -98,7 +97,7 @@ func TestAskUserComparePreference(t *testing.T) {
 		t.Fatal("last_user_ask_response latch must not be stamped")
 	}
 
-	msgs, err = fx.wfMgr.Policy.Sessions.(session.Store).GetMessages(ctx, fx.sess.ID)
+	msgs, err = fx.wfMgr.Policy.Sessions.(*sessionstore.Repositories).Transcript.GetMessages(ctx, fx.sess.ID)
 	testutil.FailErr(t, "GetMessages after", err)
 	var answered bool
 	for _, m := range msgs {
@@ -164,7 +163,7 @@ func TestAskUserCompareOtherEscape(t *testing.T) {
 	if _, still := vars["last_user_ask_response"]; still {
 		t.Fatal("last_user_ask_response latch must not be stamped")
 	}
-	msgs, err := fx.wfMgr.Policy.Sessions.(session.Store).GetMessages(ctx, fx.sess.ID)
+	msgs, err := fx.wfMgr.Policy.Sessions.(*sessionstore.Repositories).Transcript.GetMessages(ctx, fx.sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	var card *wire.WorkflowFeedbackMeta
 	for _, m := range msgs {
@@ -216,7 +215,7 @@ func TestAskUserCompareResolvesEvidenceHandles(t *testing.T) {
 		Agent:      orchestration.ProfileCoordinator,
 		ToolCallID: "call_handles"}})
 	testutil.FailErr(t, "ask_user by handle", err)
-	msgs, err := fx.wfMgr.Policy.Sessions.(session.Store).GetMessages(ctx, fx.sess.ID)
+	msgs, err := fx.wfMgr.Policy.Sessions.(*sessionstore.Repositories).Transcript.GetMessages(ctx, fx.sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	for _, m := range msgs {
 		if fb := m.WorkflowFeedback; fb != nil && len(fb.ArtifactIDs) == 2 {

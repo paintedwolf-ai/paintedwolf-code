@@ -18,7 +18,7 @@ import (
 
 func (s *Conversation) streamReplayMessage(w http.ResponseWriter, r *http.Request, sessionID, messageID string) (wire.Message, bool) {
 	// The transcript owns message membership, including removals by rewind.
-	msg, err := s.sessionStore.GetMessage(r.Context(), sessionID, messageID)
+	msg, err := s.sessionStore.Transcript.GetMessage(r.Context(), sessionID, messageID)
 	if errors.Is(err, store.ErrMessageNotFound) || errors.Is(err, store.ErrSessionNotFound) {
 		s.responses.Fail(w, wire.ApiErrorCodeMessageNotFound, "stream content not found")
 		return wire.Message{}, false

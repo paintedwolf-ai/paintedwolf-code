@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 // Deps are the Git routes' dependencies, fixed at construction.
@@ -24,7 +25,7 @@ type Deps struct {
 	LLMService      *llm.Service
 	ProjectRegistry project.Registry
 	RepoSetCache    *git.RepoSetCache
-	SessionStore    session.Store
+	SessionStore    *sessionstore.Repositories
 	Sessions        *session.Host
 	DataDir         string
 }

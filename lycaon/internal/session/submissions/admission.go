@@ -38,7 +38,7 @@ func (m *Service) admitPrompt(
 	requestIdentity any,
 	in promptinput.Input,
 ) (*store.PromptSubmission, bool, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.submissionStore == nil || m.people == nil) {
 		return nil, false, fmt.Errorf("prompt manager unavailable")
 	}
 	parsed, err := uuid.Parse(strings.TrimSpace(operationID))
@@ -46,7 +46,7 @@ func (m *Service) admitPrompt(
 		return nil, false, fmt.Errorf("operation_id must be a UUID")
 	}
 	operationID = parsed.String()
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -55,7 +55,7 @@ func (m *Service) admitPrompt(
 		return nil, false, err
 	}
 	// Existing receipts retain their identity even if the ceiling changed later.
-	if existing, readErr := m.store.GetPromptSubmission(ctx, operationID); readErr == nil {
+	if existing, readErr := m.submissionStore.GetPromptSubmission(ctx, operationID); readErr == nil {
 		if existing.SessionID != sessionID || existing.InputDigest != digest {
 			return nil, false, &store.PromptSubmissionConflictError{ID: operationID}
 		}
@@ -90,7 +90,7 @@ func (m *Service) admitPrompt(
 	}
 	submittedBy := ""
 	if origin == store.PromptSubmissionOriginUser {
-		sender, err := people.Acting(ctx, m.store)
+		sender, err := people.Acting(ctx, m.people)
 		if err != nil {
 			return nil, false, err
 		}
@@ -100,7 +100,7 @@ func (m *Service) admitPrompt(
 	var created bool
 	err = m.Gate.WithSessionTreeAdmission(ctx, sessionID, func() error {
 		var putErr error
-		row, created, putErr = m.store.PutPromptSubmission(ctx, store.PromptSubmission{
+		row, created, putErr = m.submissionStore.PutPromptSubmission(ctx, store.PromptSubmission{
 			ID:                operationID,
 			SessionID:         sessionID,
 			ProjectID:         sess.ProjectID,
@@ -117,14 +117,14 @@ func (m *Service) admitPrompt(
 
 // ReplayPromptSubmission checks an operation before request preparation.
 func (m *Service) ReplayPromptSubmission(ctx context.Context, sessionID, operationID string, requestIdentity any) (*store.PromptSubmission, bool, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.submissionStore == nil || m.people == nil) {
 		return nil, false, fmt.Errorf("prompt manager unavailable")
 	}
 	digest, err := Digest(sessionID, operationID, requestIdentity)
 	if err != nil {
 		return nil, false, err
 	}
-	row, err := m.store.GetPromptSubmission(ctx, operationID)
+	row, err := m.submissionStore.GetPromptSubmission(ctx, operationID)
 	if errors.Is(err, store.ErrPromptSubmissionNotFound) {
 		return nil, false, nil
 	}
@@ -186,10 +186,10 @@ func (m *Service) LockDispatch(ctx context.Context, sessionID string) (context.C
 
 // RunPromptSubmission dispatches one admitted receipt in admission order.
 func (m *Service) RunPromptSubmission(ctx context.Context, submissionID string) (*promptresult.Result, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.submissionStore == nil || m.people == nil) {
 		return nil, fmt.Errorf("prompt manager unavailable")
 	}
-	row, err := m.store.GetPromptSubmission(ctx, submissionID)
+	row, err := m.submissionStore.GetPromptSubmission(ctx, submissionID)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +225,7 @@ func (m *Service) RunPromptSubmission(ctx context.Context, submissionID string) 
 
 // DrainPromptSubmissions resumes queued receipts in admission order.
 func (m *Service) DrainPromptSubmissions(ctx context.Context, sessionID string) error {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.submissionStore == nil || m.people == nil) {
 		return fmt.Errorf("prompt manager unavailable")
 	}
 	ctx, unlock := m.LockDispatch(ctx, sessionID)
@@ -238,7 +238,7 @@ func (m *Service) dispatchPromptSubmissions(ctx context.Context, sessionID, targ
 	ctx = context.WithValue(ctx, promptSubmissionDispatchLoopContextKey{}, true)
 	var targetFailure error
 	for {
-		queued, err := m.store.ListQueuedUserPromptSubmissions(ctx, sessionID)
+		queued, err := m.submissionStore.ListQueuedUserPromptSubmissions(ctx, sessionID)
 		if err != nil {
 			return nil, err
 		}
@@ -249,7 +249,7 @@ func (m *Service) dispatchPromptSubmissions(ctx context.Context, sessionID, targ
 			if targetFailure != nil {
 				return nil, targetFailure
 			}
-			row, getErr := m.store.GetPromptSubmission(ctx, targetID)
+			row, getErr := m.submissionStore.GetPromptSubmission(ctx, targetID)
 			if getErr != nil {
 				return nil, getErr
 			}
@@ -288,7 +288,7 @@ func (m *Service) dispatchPromptSubmissions(ctx context.Context, sessionID, targ
 			if head.ID == targetID {
 				targetFailure = runErr
 			}
-			stored, getErr := m.store.GetPromptSubmission(ctx, head.ID)
+			stored, getErr := m.submissionStore.GetPromptSubmission(ctx, head.ID)
 			if getErr != nil {
 				return nil, errors.Join(runErr, getErr)
 			}
@@ -307,7 +307,7 @@ func (m *Service) waitingPromptSubmissionResult(ctx context.Context, targetID st
 	if targetID == "" {
 		return nil, nil
 	}
-	row, err := m.store.GetPromptSubmission(ctx, targetID)
+	row, err := m.submissionStore.GetPromptSubmission(ctx, targetID)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +356,7 @@ func (m *Service) runOrderedPromptSubmission(ctx context.Context, row *store.Pro
 
 // RunClaimedLocked releases the held session lock on every return path.
 func (m *Service) RunClaimedLocked(ctx context.Context, submissionID string, lock *promptstate.Lock) (*promptresult.Result, error) {
-	row, claimed, err := m.store.ClaimPromptSubmission(ctx, submissionID)
+	row, claimed, err := m.submissionStore.ClaimPromptSubmission(ctx, submissionID)
 	if err != nil {
 		lock.Unlock()
 		return nil, err
@@ -368,7 +368,7 @@ func (m *Service) RunClaimedLocked(ctx context.Context, submissionID string, loc
 	var in promptinput.Input
 	if err := json.Unmarshal([]byte(row.InputJSON), &in); err != nil {
 		lock.Unlock()
-		finishErr := m.store.FinishPromptSubmission(context.WithoutCancel(ctx), row.ID, row.ClaimToken, store.PromptSubmissionFailed, "", store.PromptSubmissionFailure{Message: "stored prompt input is invalid: " + err.Error()})
+		finishErr := m.submissionStore.FinishPromptSubmission(context.WithoutCancel(ctx), row.ID, row.ClaimToken, store.PromptSubmissionFailed, "", store.PromptSubmissionFailure{Message: "stored prompt input is invalid: " + err.Error()})
 		if finishErr != nil {
 			return nil, errors.Join(err, finishErr)
 		}
@@ -409,10 +409,10 @@ func (m *Service) publishClosedWithoutTurn(ctx context.Context, row *store.Promp
 
 // AbandonPromptSubmission fails only unclaimed receipts.
 func (m *Service) AbandonPromptSubmission(ctx context.Context, submissionID string, cause error) error {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.submissionStore == nil || m.people == nil) {
 		return fmt.Errorf("prompt manager unavailable")
 	}
-	row, claimed, err := m.store.ClaimPromptSubmission(ctx, submissionID)
+	row, claimed, err := m.submissionStore.ClaimPromptSubmission(ctx, submissionID)
 	if err != nil || !claimed {
 		return err
 	}
@@ -421,7 +421,7 @@ func (m *Service) AbandonPromptSubmission(ctx context.Context, submissionID stri
 		failure.Code = string(code)
 	}
 	hostCtx := context.WithoutCancel(ctx)
-	if err := m.store.FinishPromptSubmission(hostCtx, row.ID, row.ClaimToken, store.PromptSubmissionFailed, "", failure); err != nil {
+	if err := m.submissionStore.FinishPromptSubmission(hostCtx, row.ID, row.ClaimToken, store.PromptSubmissionFailed, "", failure); err != nil {
 		return err
 	}
 	m.publishClosedWithoutTurn(hostCtx, row)
@@ -430,14 +430,14 @@ func (m *Service) AbandonPromptSubmission(ctx context.Context, submissionID stri
 
 // failUndecodableSubmission prevents recovery from retrying invalid stored input.
 func (m *Service) failUndecodableSubmission(ctx context.Context, submissionID string, decodeErr error) error {
-	row, claimed, err := m.store.ClaimPromptSubmission(ctx, submissionID)
+	row, claimed, err := m.submissionStore.ClaimPromptSubmission(ctx, submissionID)
 	if err != nil {
 		return errors.Join(decodeErr, err)
 	}
 	if !claimed {
 		return decodeErr
 	}
-	finishErr := m.store.FinishPromptSubmission(context.WithoutCancel(ctx), row.ID, row.ClaimToken, store.PromptSubmissionFailed, "", store.PromptSubmissionFailure{Message: "stored prompt input is invalid: " + decodeErr.Error()})
+	finishErr := m.submissionStore.FinishPromptSubmission(context.WithoutCancel(ctx), row.ID, row.ClaimToken, store.PromptSubmissionFailed, "", store.PromptSubmissionFailure{Message: "stored prompt input is invalid: " + decodeErr.Error()})
 	if finishErr == nil {
 		m.publishClosedWithoutTurn(context.WithoutCancel(ctx), row)
 	}
@@ -446,15 +446,15 @@ func (m *Service) failUndecodableSubmission(ctx context.Context, submissionID st
 
 // RecoverPromptSubmissions resolves work interrupted by host exit.
 func (m *Service) RecoverPromptSubmissions(ctx context.Context) ([]string, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.submissionStore == nil || m.people == nil) {
 		return nil, fmt.Errorf("prompt manager unavailable")
 	}
-	return m.store.RecoverPromptSubmissions(ctx)
+	return m.submissionStore.RecoverPromptSubmissions(ctx)
 }
 
 func (m *Service) GetPromptSubmission(ctx context.Context, id string) (*store.PromptSubmission, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.submissionStore == nil || m.people == nil) {
 		return nil, fmt.Errorf("prompt manager unavailable")
 	}
-	return m.store.GetPromptSubmission(ctx, id)
+	return m.submissionStore.GetPromptSubmission(ctx, id)
 }

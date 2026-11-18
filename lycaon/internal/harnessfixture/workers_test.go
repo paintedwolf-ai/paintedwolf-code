@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/project"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -58,7 +58,7 @@ type scriptedHarness struct {
 	root      string
 	projects  *project.SQLRegistry
 	attached  *project.Project
-	sessions  *store.SQL
+	sessions  *store.Repositories
 	parent    *api.Session
 	queue     *worker.SQLQueue
 	manager   *workspace.Manager
@@ -85,7 +85,7 @@ func newScriptedHarness(t *testing.T, files map[string]string) *scriptedHarness 
 	testutil.FailErr(t, "attach project", err)
 	h.attached = attached
 	h.sessions = store.NewSQL(database)
-	parent, err := h.sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: attached.Roots[0].ID}, attached.ID)
+	parent, err := h.sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: attached.Roots[0].ID}, attached.ID)
 	testutil.FailErr(t, "create parent", err)
 	h.parent = parent
 	h.queue = worker.NewSQLQueue(database, 8)
@@ -216,7 +216,7 @@ func TestScriptedDispatchIsKeyedByDeclaredScopeAndSettlesOffPlanWork(t *testing.
 	if !ok || bound.ChildSessionID == "" {
 		t.Fatal("dispatch did not bind a child session")
 	}
-	child, err := h.sessions.Get(t.Context(), bound.ChildSessionID)
+	child, err := h.sessions.Sessions.Get(t.Context(), bound.ChildSessionID)
 	testutil.FailErr(t, "load child", err)
 	if child.ParentSessionID != h.parent.ID {
 		t.Fatal("child belongs to another parent")
@@ -291,7 +291,7 @@ func TestScriptedDecisionSuspendsThenDeliversTheAnsweredOutcome(t *testing.T) {
 	if result.Status != string(api.WorkerSummaryStatusNeedsDecision) {
 		t.Fatal("replayed execution lost its pending decision")
 	}
-	testutil.FailErr(t, "answer", h.sessions.AppendMessages(t.Context(), bound.ChildSessionID, worker.DecisionAnswerMessage("three", "coordinator")))
+	testutil.FailErr(t, "answer", h.sessions.Transcript.AppendMessages(t.Context(), bound.ChildSessionID, worker.DecisionAnswerMessage("three", "coordinator")))
 	result, err = h.workers().Execute(t.Context(), *claimed, worker.WorkerRunContext{ProjectDir: h.root})
 	testutil.FailErr(t, "deliver answered outcome", err)
 	if result.Status != "complete" {

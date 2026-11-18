@@ -3,11 +3,12 @@ package loading
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 type requestReceipts struct {
@@ -36,7 +37,7 @@ func TestTurnRequestRetainsResolvedWorkflowAndRecordedDecision(t *testing.T) {
 		{name: "unrecorded", want: true}, {name: "request only", rows: []store.TurnLoadReceipt{{Trigger: store.TurnLoadTriggerRequest}}, want: true}, {name: "recorded", rows: []store.TurnLoadReceipt{{Trigger: store.TurnLoadTriggerTurn}}}, {name: "unreadable", err: errors.New("database unavailable")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := &Service{store: requestReceipts{rows: tc.rows, err: tc.err}}
+			s := &Service{sessionStore: requestReceipts{rows: tc.rows, err: tc.err}, compactionStore: requestReceipts{rows: tc.rows, err: tc.err}, turnStore: requestReceipts{rows: tc.rows, err: tc.err}}
 			opening, text, ok := s.Request(t.Context(), promptinput.Input{}, history, "", resolved)
 			if ok != tc.want {
 				t.Fatalf("request decided=%v", ok)

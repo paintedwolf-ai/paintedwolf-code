@@ -115,8 +115,13 @@ func (s *Repositories) SetDataDir(dir string) {
 	}
 }
 
-// MutationEventsOutboxed reports whether transcript mutations publish observer events.
-func (s *sqlTranscript) MutationEventsOutboxed() bool {
+// SessionEventsOutboxed reports atomic lifecycle observer publication.
+func (s *sqlSessions) SessionEventsOutboxed() bool {
+	return s != nil && s.core != nil && s.core.outbox != nil
+}
+
+// MessageEventsOutboxed reports atomic transcript observer publication.
+func (s *sqlTranscript) MessageEventsOutboxed() bool {
 	return s != nil && s.core != nil && s.core.outbox != nil
 }
 

@@ -34,7 +34,7 @@ var sessionListPages = pagecursor.For[store.SummaryCursor]("session_list")
 
 // ListProjectSessions pages a project's chat sessions.
 func (m *Service) ListProjectSessions(ctx context.Context, q store.SummaryQuery) (wire.SessionListPage, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return wire.SessionListPage{}, fmt.Errorf("session manager not configured")
 	}
 	if q.Cursor != "" {
@@ -44,7 +44,7 @@ func (m *Service) ListProjectSessions(ctx context.Context, q store.SummaryQuery)
 		}
 		q.After = &cursor
 	}
-	result, err := m.store.ListProjectSummaries(ctx, q)
+	result, err := m.sessionStore.ListProjectSummaries(ctx, q)
 	if err != nil {
 		return wire.SessionListPage{}, err
 	}
@@ -79,7 +79,7 @@ func sessionListScope(q store.SummaryQuery) string {
 // SetArchived changes session list membership.
 func (m *Service) SetArchived(ctx context.Context, id string, archived bool) (*wire.Session, error) {
 	return m.changeLifecycle(ctx, id, func(id string) error {
-		return m.store.UpdateSession(ctx, id, func(sess *wire.Session) {
+		return m.sessionStore.UpdateSession(ctx, id, func(sess *wire.Session) {
 			if !archived {
 				sess.ArchivedAt = nil
 			} else if sess.ArchivedAt == nil {
@@ -94,29 +94,29 @@ func (m *Service) SetArchived(ctx context.Context, id string, archived bool) (*w
 func (m *Service) SetPinned(ctx context.Context, id string, pinned bool) (*wire.Session, error) {
 	return m.changeLifecycle(ctx, id, func(id string) error {
 		if pinned {
-			return m.store.PinSession(ctx, id)
+			return m.sessionStore.PinSession(ctx, id)
 		}
-		return m.store.UnpinSession(ctx, id)
+		return m.sessionStore.UnpinSession(ctx, id)
 	})
 }
 
 // MovePinned places a pinned chat at a 1-based position in its project's pinned order.
 func (m *Service) MovePinned(ctx context.Context, id string, position int) (*wire.Session, error) {
 	return m.changeLifecycle(ctx, id, func(id string) error {
-		return m.store.MovePinnedSession(ctx, id, position)
+		return m.sessionStore.MovePinnedSession(ctx, id, position)
 	})
 }
 
 // changeLifecycle applies one chat lifecycle write and publishes the result.
 func (m *Service) changeLifecycle(ctx context.Context, id string, write func(id string) error) (*wire.Session, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return nil, fmt.Errorf("session manager not configured")
 	}
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, store.ErrSessionNotFound
 	}
-	current, err := m.store.Get(ctx, id)
+	current, err := m.sessionStore.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (m *Service) changeLifecycle(ctx context.Context, id string, write func(id 
 	if err := write(id); err != nil {
 		return nil, err
 	}
-	sess, err := m.store.Get(ctx, id)
+	sess, err := m.sessionStore.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (m *Service) changeLifecycle(ctx context.Context, id string, write func(id 
 
 // Delete disposes live children before removing session history.
 func (m *Service) Delete(ctx context.Context, id string) error {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return fmt.Errorf("session manager not configured")
 	}
 	id = strings.TrimSpace(id)
@@ -148,7 +148,7 @@ func (m *Service) Delete(ctx context.Context, id string) error {
 		return ErrSessionBusy
 	}
 	defer lock.Unlock()
-	sess, err := m.store.Get(ctx, id)
+	sess, err := m.sessionStore.Get(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func (m *Service) Delete(ctx context.Context, id string) error {
 	if sess.Status == wire.SessionStatusBusy {
 		return ErrSessionBusy
 	}
-	if _, bound, err := m.store.GetWorktreeBinding(ctx, id); err != nil {
+	if _, bound, err := m.sessionStore.GetWorktreeBinding(ctx, id); err != nil {
 		return err
 	} else if bound {
 		return ErrSessionWorktreeBound
@@ -179,11 +179,11 @@ func (m *Service) Delete(ctx context.Context, id string) error {
 	if errors.Is(checkpointErr, checkpointcontrol.ErrCheckpointRootUnset) {
 		checkpointErr = nil
 	}
-	tree, err := m.store.SessionTreeIDs(ctx, id)
+	tree, err := m.sessionStore.SessionTreeIDs(ctx, id)
 	if err != nil {
 		return err
 	}
-	if err := m.store.Delete(ctx, id); err != nil {
+	if err := m.sessionStore.Delete(ctx, id); err != nil {
 		return err
 	}
 	if m.resources != nil {
@@ -224,7 +224,7 @@ func (m *Service) publishSessionDeleted(ctx context.Context, sess *wire.Session)
 	if m == nil || m.events == nil || m.events.Hub == nil || sess == nil {
 		return
 	}
-	if m.store.MutationEventsOutboxed() {
+	if m.sessionStore.SessionEventsOutboxed() {
 		return
 	}
 	key := events.PublishKey{
@@ -241,16 +241,16 @@ func (m *Service) publishSessionDeleted(ctx context.Context, sess *wire.Session)
 
 // UnarchiveOnPrompt restores a prompted session to the working set.
 func (m *Service) UnarchiveOnPrompt(ctx context.Context, sess *wire.Session) error {
-	if m == nil || m.store == nil || sess == nil || sess.ArchivedAt == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) || sess == nil || sess.ArchivedAt == nil {
 		return nil
 	}
-	if err := m.store.UpdateSession(ctx, sess.ID, func(s *wire.Session) {
+	if err := m.sessionStore.UpdateSession(ctx, sess.ID, func(s *wire.Session) {
 		s.ArchivedAt = nil
 	}); err != nil {
 		return err
 	}
 	sess.ArchivedAt = nil
-	if fresh, err := m.store.Get(ctx, sess.ID); err == nil {
+	if fresh, err := m.sessionStore.Get(ctx, sess.ID); err == nil {
 		m.publishSessionLifecycle(ctx, fresh)
 	}
 	return nil
@@ -261,7 +261,7 @@ func (m *Service) publishSessionLifecycle(ctx context.Context, sess *wire.Sessio
 	if m == nil || m.events == nil || m.events.Hub == nil || sess == nil {
 		return
 	}
-	if m.store.MutationEventsOutboxed() {
+	if m.sessionStore.SessionEventsOutboxed() {
 		return
 	}
 	ev := wire.SessionEvent{

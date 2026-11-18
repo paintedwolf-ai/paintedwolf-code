@@ -14,23 +14,33 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	messageview.ChunkProjectionStore
-	messageview.CompactionAttemptStore
-	Get(context.Context, string) (*api.Session, error)
-	GetMessages(context.Context, string) ([]api.Message, error)
-	GetMessage(context.Context, string, string) (api.Message, error)
-	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
-	ReadMessageWindow(context.Context, string, messageview.MessageWindow) ([]api.Message, error)
-	GetCompactionView(context.Context, string) (*store.CompactionView, bool, error)
-	CompactionViewCurrent(context.Context, string, int64, string, int64) (bool, error)
-	GetTranscriptPage(context.Context, string, api.TranscriptPageQuery) (api.SessionTranscriptPage, error)
-	PutCompactionView(context.Context, string, store.CompactionView) error
+type Sessions interface {
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Transcript interface {
+	GetMessage(ctx context.Context, sessionID, messageID string) (api.Message, error)
+	GetMessages(ctx context.Context, id string) ([]api.Message, error)
+	GetTranscriptPage(ctx context.Context, id string, q api.TranscriptPageQuery) (api.SessionTranscriptPage, error)
+	ReadMessageWindow(ctx context.Context, id string, window messageview.MessageWindow) ([]api.Message, error)
+	ReadSourceTurn(ctx context.Context, id string, number int) (messageview.SourceTurn, error)
+}
+
+type Compaction interface {
+	CompactionViewCurrent(ctx context.Context, sessionID string, coveredThroughOrd int64, coveredThroughID string, sourceSeq int64) (bool, error)
+	GetChunkProjection(ctx context.Context, sessionID, messageID string) (messageview.ChunkProjection, bool, error)
+	GetCompactionAttempt(ctx context.Context, sessionID string) (messageview.CompactionAttempt, bool, error)
+	GetCompactionView(ctx context.Context, sessionID string) (*store.CompactionView, bool, error)
+	PutChunkProjection(ctx context.Context, sessionID, messageID string, projection messageview.ChunkProjection) error
+	PutCompactionAttempt(ctx context.Context, sessionID string, attempt messageview.CompactionAttempt) error
+	PutCompactionView(ctx context.Context, sessionID string, view store.CompactionView) error
 }
 
 // Service owns bounded history projection and durable compaction scheduling.
 type Service struct {
-	store           Store
+	sessionStore    Sessions
+	transcriptStore Transcript
+	compactionStore Compaction
 	Gate            *lifecycle.State
 	Workspace       *sessionscope.Service
 	Limits          *limits.Service
@@ -43,8 +53,8 @@ type Service struct {
 	recallAvailable func(context.Context, *api.Session) bool
 }
 
-func New(store Store, gate *lifecycle.State, workspace *sessionscope.Service, limits *limits.Service, router *llm.StaticModelRouter, recall func(context.Context, *api.Session) bool) *Service {
-	return &Service{store: store, Gate: gate, Workspace: workspace, Limits: limits, router: router, Runner: NewRunner(), recallAvailable: recall}
+func New(sessionStore Sessions, transcriptStore Transcript, compactionStore Compaction, gate *lifecycle.State, workspace *sessionscope.Service, limits *limits.Service, router *llm.StaticModelRouter, recall func(context.Context, *api.Session) bool) *Service {
+	return &Service{sessionStore: sessionStore, transcriptStore: transcriptStore, compactionStore: compactionStore, Gate: gate, Workspace: workspace, Limits: limits, router: router, Runner: NewRunner(), recallAvailable: recall}
 }
 func (m *Service) SetCompactor(compactor compaction.ContextCompactor) {
 	m.Compactor = compactor

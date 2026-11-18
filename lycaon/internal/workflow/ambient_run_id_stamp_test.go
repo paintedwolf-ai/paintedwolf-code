@@ -26,7 +26,7 @@ func TestAmbientRunStampsRowsAtCreation(t *testing.T) {
 	mgr := NewManager(workflowpersistence.New(sqlDB), store, reg, nil)
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "store.Create failed", err)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
@@ -40,7 +40,7 @@ func TestAmbientRunStampsRowsAtCreation(t *testing.T) {
 		testutil.FailErr(t, "StampAndAppendMessages failed", err)
 	}
 
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var stamped bool
 	for _, m := range msgs {

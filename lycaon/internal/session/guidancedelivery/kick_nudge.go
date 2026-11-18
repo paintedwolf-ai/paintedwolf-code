@@ -174,14 +174,14 @@ func (m *Service) TakePhase(ctx context.Context, sessionID string) ([]api.Messag
 
 func (m *Service) renderContext(ctx context.Context, sessionID string) kick.CoordinatorKickRenderContext {
 	var rc kick.CoordinatorKickRenderContext
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return rc
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return rc
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return rc
 	}
@@ -189,7 +189,7 @@ func (m *Service) renderContext(ctx context.Context, sessionID string) kick.Coor
 	rc.BatchPhase = state.BatchPhase
 	rc.BatchSeq = state.BatchSeq
 	rc.PendingOverlays = len(state.PendingOverlayIDs)
-	msgs, msgErr := m.store.GetMessages(ctx, sessionID)
+	msgs, msgErr := m.transcriptStore.GetMessages(ctx, sessionID)
 	if msgErr == nil {
 		rc.PartialWorkers = len(surface.PartialWorkerSummaryJobIDs(msgs))
 	}
@@ -227,7 +227,7 @@ func (m *Service) closureState(ctx context.Context, sessionID string) (open int,
 	if m == nil || m.progress == nil {
 		return 0, false
 	}
-	root := sessiontree.RootID(ctx, m.store, sessionID)
+	root := sessiontree.RootID(ctx, m.sessionStore, sessionID)
 	if _, armed = m.closure.Baseline(root); !armed {
 		return 0, false
 	}
@@ -248,7 +248,7 @@ func (m *Service) WorkflowObligationsOpen(ctx context.Context, sessionID string)
 	if err != nil || run == nil || run.Status != api.WorkflowRunStatusRunning {
 		return false
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return false
 	}

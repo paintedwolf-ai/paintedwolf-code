@@ -13,7 +13,7 @@ import (
 
 // RetireForProjectDelete deletes every project chat, including worktree-bound ones.
 func (m *Service) RetireForProjectDelete(ctx context.Context, projectID string, progress func(int, int)) error {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return fmt.Errorf("session manager not configured")
 	}
 	projectID = strings.TrimSpace(projectID)
@@ -21,7 +21,7 @@ func (m *Service) RetireForProjectDelete(ctx context.Context, projectID string, 
 		return fmt.Errorf("project_id required")
 	}
 	ctx = bgprocess.WithTerminationReason(ctx, bgprocess.TerminationProjectDeleted)
-	plan, err := planProjectRetirement(ctx, m.store, projectID)
+	plan, err := planProjectRetirement(ctx, m.sessionStore, m.transcriptStore, projectID)
 	if err != nil {
 		return err
 	}
@@ -37,7 +37,7 @@ func (m *Service) RetireForProjectDelete(ctx context.Context, projectID string, 
 			return err
 		}
 	}
-	if m.events != nil && !m.store.MutationEventsOutboxed() {
+	if m.events != nil && !m.sessionStore.SessionEventsOutboxed() {
 		m.events.PublishAttention(ctx)
 	}
 	return nil
@@ -52,9 +52,9 @@ func (m *Service) retireSessionForProjectDelete(
 ) error {
 	sess, tree := root.session, root.tree
 	var deleted []*wire.Session
-	if !m.store.MutationEventsOutboxed() {
+	if !m.sessionStore.SessionEventsOutboxed() {
 		for _, id := range tree {
-			session, err := m.store.Get(ctx, id)
+			session, err := m.sessionStore.Get(ctx, id)
 			if errors.Is(err, store.ErrSessionNotFound) {
 				// Already gone since planning; nothing is left to announce.
 				continue
@@ -81,14 +81,14 @@ func (m *Service) retireSessionForProjectDelete(
 		}
 		retired()
 	}
-	if err := m.store.Delete(ctx, sess.ID); err != nil && !errors.Is(err, store.ErrSessionNotFound) {
+	if err := m.sessionStore.Delete(ctx, sess.ID); err != nil && !errors.Is(err, store.ErrSessionNotFound) {
 		return err
 	}
 	m.removeScratch(ctx, tree)
 	for _, id := range tree {
 		m.Gate.Forget(id)
 	}
-	if m.events != nil && !m.store.MutationEventsOutboxed() {
+	if m.events != nil && !m.sessionStore.SessionEventsOutboxed() {
 		for _, gone := range deleted {
 			m.publishSessionDeleted(ctx, gone)
 		}

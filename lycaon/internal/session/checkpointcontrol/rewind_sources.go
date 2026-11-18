@@ -15,7 +15,7 @@ func (m *Rewinds) SetSourceRewinds(service *sourcerewind.Service) { m.sourceRewi
 func (m *Rewinds) SourceRewinds() *sourcerewind.Service           { return m.sourceRewinds }
 
 func (m *Rewinds) rewindProject(ctx context.Context, sessionID string) (*project.Project, error) {
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func (m *Rewinds) prepareSourceRewindJournal(ctx context.Context, cp *sessionche
 	if err != nil {
 		return nil, err
 	}
-	if err := sessioncheckpoint.CheckCoverage(ctx, m.store, p, sessiontree.RootID(ctx, m.store, sessionID), anchors, source); err != nil {
+	if err := sessioncheckpoint.CheckCoverage(ctx, m.rewindStore, p, sessiontree.RootID(ctx, m.sessionStore, sessionID), anchors, source); err != nil {
 		return nil, err
 	}
 	person, err := people.Deciding(ctx)

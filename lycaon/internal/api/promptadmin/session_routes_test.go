@@ -30,7 +30,7 @@ func newSessionRoutes(t *testing.T) sessionRoutes {
 	apitestdeps.Fill(t, &deps)
 	p, err := project.CreateWithRoot(t.Context(), deps.Projects, t.TempDir())
 	testutil.FailErr(t, "create project", err)
-	sess, err := deps.Store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
+	sess, err := deps.Store.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)
 
 	responses := &httpio.Responder{Logger: slog.Default()}

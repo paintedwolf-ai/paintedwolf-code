@@ -22,21 +22,22 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	List(context.Context) ([]*api.Session, error)
-	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-	Get(context.Context, string) (*api.Session, error)
-	ListProjectSummaries(context.Context, store.SummaryQuery) (store.SummaryPage, error)
-	HasActiveProjectSessions(context.Context, string, time.Time) (bool, error)
-	UpdateSession(context.Context, string, func(*api.Session)) error
-	PinSession(context.Context, string) error
-	UnpinSession(context.Context, string) error
-	MovePinnedSession(context.Context, string, int) error
-	GetWorktreeBinding(context.Context, string) (*store.WorktreeBinding, bool, error)
-	SessionTreeIDs(context.Context, string) ([]string, error)
-	Delete(context.Context, string) error
-	MutationEventsOutboxed() bool
+type Sessions interface {
+	SessionEventsOutboxed() bool
+	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
+	Delete(ctx context.Context, id string) error
+	Get(ctx context.Context, id string) (*api.Session, error)
+	GetWorktreeBinding(ctx context.Context, sessionID string) (*store.WorktreeBinding, bool, error)
+	HasActiveProjectSessions(ctx context.Context, projectID string, activeSince time.Time) (bool, error)
+	List(ctx context.Context) ([]*api.Session, error)
+	ListProjectSummaries(ctx context.Context, q store.SummaryQuery) (store.SummaryPage, error)
+	MovePinnedSession(ctx context.Context, id string, position int) error
+	PinSession(ctx context.Context, id string) error
+	SessionTreeIDs(ctx context.Context, rootSessionID string) ([]string, error)
+	UnpinSession(ctx context.Context, id string) error
+	UpdateSession(ctx context.Context, id string, fn func(*api.Session)) error
 }
+
 type Policy interface {
 	Warm(context.Context, *api.Session)
 }
@@ -55,19 +56,19 @@ type Service struct {
 	Rewinds    *checkpointcontrol.Rewinds
 	Drafts     *draftqueue.Service
 
-	store     Store
-	policy    Policy
-	prompt    *promptstate.MutexRegistry
-	queue     *queue.Store
-	resources *resourcelifecycle.Registry
-	workers   Workers
-	scratch   *scratch.Folders
-	events    *events.Publisher
-	processes *bgprocess.Registry
+	sessionStore Sessions
+	policy       Policy
+	prompt       *promptstate.MutexRegistry
+	queue        *queue.Store
+	resources    *resourcelifecycle.Registry
+	workers      Workers
+	scratch      *scratch.Folders
+	events       *events.Publisher
+	processes    *bgprocess.Registry
 }
 
-func New(store Store, policy Policy, prompt *promptstate.MutexRegistry, queue *queue.Store, resources *resourcelifecycle.Registry, l Lifecycle) *Service {
-	return &Service{store: store, policy: policy, prompt: prompt, queue: queue, resources: resources, Gate: l.Gate, Captures: l.Captures, Naming: l.Naming, Research: l.Research, Protection: l.Protection, Recovery: l.Recovery, Rewinds: l.Rewinds, Drafts: l.Drafts}
+func New(sessionStore Sessions, policy Policy, prompt *promptstate.MutexRegistry, queue *queue.Store, resources *resourcelifecycle.Registry, l Lifecycle) *Service {
+	return &Service{sessionStore: sessionStore, policy: policy, prompt: prompt, queue: queue, resources: resources, Gate: l.Gate, Captures: l.Captures, Naming: l.Naming, Research: l.Research, Protection: l.Protection, Recovery: l.Recovery, Rewinds: l.Rewinds, Drafts: l.Drafts}
 }
 
 func (m *Service) SetWorkers(workers Workers)                 { m.workers = workers }

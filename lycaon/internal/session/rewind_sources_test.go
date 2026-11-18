@@ -16,19 +16,20 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
-	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 func appendRewindAsk(t *testing.T, mgr *Host, sessionID string) string {
 	t.Helper()
 	id := uuid.NewString()
-	testutil.FailErr(t, "append ask", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(t.Context(), sessionID, api.Message{ID: id, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "change files"}))
+	testutil.FailErr(t, "append ask", mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Transcript.AppendMessages(t.Context(), sessionID, api.Message{ID: id, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "change files"}))
 	return id
 }
 
@@ -48,7 +49,7 @@ func TestSourceRewindRestoresEntireSuffixAndRecordsUserVersions(t *testing.T) {
 	}
 	p, err := rewindFixtureProject(t, mgr, ctx, id)
 	testutil.FailErr(t, "project", err)
-	ledger := mgr.ToolContext.SourceLedger.(*sourceledger.Store)
+	ledger := mgr.ToolContext.SourceLedger.(*sourceledger.*sessionstore.Repositories)
 	fileIDs := map[string]string{}
 	for _, name := range []string{"first.txt", "second.txt"} {
 		head, err := ledger.History.ResolveHead(ctx, p.ID, p.BranchForRoot(p.Roots[0].ID), p.Roots[0].ID, name)
@@ -125,7 +126,7 @@ func TestSourceRewindRejectsStalePreviewAndContinuation(t *testing.T) {
 		t.Fatalf("stale preview err=%v", err)
 	}
 	continuation := uuid.NewString()
-	testutil.FailErr(t, "append continuation", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(ctx, id, api.Message{ID: continuation, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Kind: api.MessageKindUserContinuation, Content: "more"}))
+	testutil.FailErr(t, "append continuation", mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Transcript.AppendMessages(ctx, id, api.Message{ID: continuation, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Kind: api.MessageKindUserContinuation, Content: "more"}))
 	_, err = mgr.Chats.Rewinds.PreviewRewind(ctx, id, continuation)
 	if !errors.Is(err, checkpointcontrol.ErrRewindAnchorIneligible) {
 		t.Fatalf("continuation preview err=%v", err)
@@ -136,7 +137,7 @@ func TestSourceRewindChecksUnrecordedChangesAcrossTheWholeSuffix(t *testing.T) {
 	mgr, id, root := newCheckpointTestSession(t)
 	first := appendRewindAsk(t, mgr, id)
 	second := appendRewindAsk(t, mgr, id)
-	cp := sessioncheckpoint.New(mgr.Workspace.DataDir, root, mgr.Coordinator.Context.Sessions.(Store))
+	cp := sessioncheckpoint.New(mgr.Workspace.DataDir, root, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind)
 	_, err := cp.Open(t.Context(), id, second)
 	testutil.FailErr(t, "open later checkpoint", err)
 	testutil.FailErr(t, "capture unversioned path", cp.CapturePreImage(t.Context(), id, second, "blueprint.md", ""))
@@ -153,7 +154,7 @@ func TestSourceRewindRestoresDeletedExecutableMode(t *testing.T) {
 	anchor := appendRewindAsk(t, mgr, id)
 	path := filepath.Join(root, "run.sh")
 	testutil.FailErr(t, "create executable", os.WriteFile(path, []byte("exit 0\n"), 0o751))
-	cp := sessioncheckpoint.New(mgr.Workspace.DataDir, root, mgr.Coordinator.Context.Sessions.(Store))
+	cp := sessioncheckpoint.New(mgr.Workspace.DataDir, root, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind)
 	_, err := cp.Open(t.Context(), id, anchor)
 	testutil.FailErr(t, "open checkpoint", err)
 	testutil.FailErr(t, "capture executable", cp.CapturePreImage(t.Context(), id, anchor, "run.sh", ""))
@@ -180,7 +181,7 @@ func TestSourceRewindResolvesEachRootAndRenamedFile(t *testing.T) {
 	testutil.FailErr(t, "write primary file", os.WriteFile(filepath.Join(root, "same.txt"), []byte("primary"), 0o644))
 	recordRewindTestEffect(t, mgr, id, "same.txt", nil, []byte("primary"), api.SourceChangeOpCreate)
 	testutil.FailErr(t, "write secondary file", os.WriteFile(filepath.Join(secondary, "renamed.txt"), []byte("secondary"), 0o644))
-	ledger := mgr.ToolContext.SourceLedger.(*sourceledger.Store)
+	ledger := mgr.ToolContext.SourceLedger.(*sourceledger.*sessionstore.Repositories)
 	err = ledger.Record(ctx, sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: change.Added.ID, FromRootID: change.Added.ID, FromPath: "same.txt", Path: "renamed.txt"}, ProjectID: p.ID, SessionID: id, Turn: 1, Origin: api.SourceChangeOriginAgent, Op: api.SourceChangeOpRename, Before: []byte("secondary"), After: []byte("secondary")})
 	testutil.FailErr(t, "record secondary rename", err)
@@ -281,9 +282,9 @@ func TestRootDependentsInFlightWorkerAndBusySession(t *testing.T) {
 		Status:          api.WorkerStatusRunning,
 	}}})
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)
-	if err := store.UpdateSession(ctx, sess.ID, func(s *api.Session) {
+	if err := store.Sessions.UpdateSession(ctx, sess.ID, func(s *api.Session) {
 		s.WorkspaceRootID = rootID
 		s.Status = api.SessionStatusBusy
 	}); err != nil {
@@ -315,9 +316,9 @@ func TestRootDependentsIncludesBusySessionAcrossMultiRootUnion(t *testing.T) {
 	store := sessionFixture
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetProjectRegistry(reg)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "mark busy", store.UpdateSession(ctx, sess.ID, func(s *api.Session) {
+	testutil.FailErr(t, "mark busy", store.Sessions.UpdateSession(ctx, sess.ID, func(s *api.Session) {
 		s.WorkspaceRootID = p.Roots[0].ID
 		s.Status = api.SessionStatusBusy
 	}))
@@ -409,9 +410,9 @@ func TestRootDetachStopsOnlyStrandedCommandsAndQueuesCompletionAfterAbort(t *tes
 	t.Cleanup(func() { _ = bgReg.Lifecycle.Close(context.Background()) })
 	mgr.SetBackgroundRegistry(bgReg)
 
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "mark session busy on rootA", st.UpdateSession(ctx, sess.ID, func(s *api.Session) {
+	testutil.FailErr(t, "mark session busy on rootA", st.Sessions.UpdateSession(ctx, sess.ID, func(s *api.Session) {
 		s.WorkspaceRootID = rootA.ID
 		s.Status = api.SessionStatusBusy
 	}))
@@ -514,13 +515,13 @@ func TestRootDetachIdleAndArchivedChatsInventoryAndStopBackgroundCommands(t *tes
 	t.Cleanup(func() { _ = bgReg.Lifecycle.Close(context.Background()) })
 	mgr.SetBackgroundRegistry(bgReg)
 
-	idleSess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
+	idleSess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create idle session", err)
 
-	archivedSess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
+	archivedSess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create archived session", err)
 	now := time.Now().UTC()
-	testutil.FailErr(t, "archive session", st.UpdateSession(ctx, archivedSess.ID, func(s *api.Session) {
+	testutil.FailErr(t, "archive session", st.Sessions.UpdateSession(ctx, archivedSess.ID, func(s *api.Session) {
 		s.ArchivedAt = &now
 	}))
 

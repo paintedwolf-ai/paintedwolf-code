@@ -67,7 +67,7 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	checkpointSessions := storetest.New(t)
 	checkpointRoot := t.TempDir()
 	testdbseed.InsertSessionWithRoot(t, checkpointSessions.DB(), sid, testdbseed.DefaultProjectID, checkpointRoot)
-	checkpoints := sessioncheckpoint.New(t.TempDir(), checkpointRoot, checkpointSessions)
+	checkpoints := sessioncheckpoint.New(t.TempDir(), checkpointRoot, checkpointSessions.Rewind)
 	testutil.FailErr(t, "open checkpoint capture", m.Chats.Captures.Capture.Open(t.Context(), checkpoints, sid, "anchor"))
 	m.Promotion.SetMergeReconcilePaths(sid, []string{"a.go"})
 	calibrationSession := &api.Session{ID: sid}

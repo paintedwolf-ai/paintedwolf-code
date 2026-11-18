@@ -39,7 +39,7 @@ func TestMessageStampDuringRun(t *testing.T) {
 	if err := mgr.Transcript.StampAndAppendMessages(ctx, "sess-1", msg); err != nil {
 		testutil.FailErr(t, "mgr.Transcript.StampAndAppendMessages failed", err)
 	}
-	msgs, err := store.GetMessages(ctx, "sess-1")
+	msgs, err := store.Transcript.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var stamped bool
 	for _, m := range msgs {
@@ -57,7 +57,7 @@ func TestStartBoundaryMessageKind(t *testing.T) {
 	ctx := context.Background()
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
-	msgs, err := store.GetMessages(ctx, "sess-1")
+	msgs, err := store.Transcript.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var boundary bool
 	for _, m := range msgs {
@@ -76,14 +76,14 @@ func TestStartBoundaryMessageKind(t *testing.T) {
 func TestExitEndBoundaryAndPostureRestore(t *testing.T) {
 	mgr, store, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	_ = store.UpdateSession(ctx, "sess-1", func(s *api.Session) {
+	_ = store.Sessions.UpdateSession(ctx, "sess-1", func(s *api.Session) {
 		s.Posture = api.SessionPostureBuild
 	})
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	if err != nil {
 		testutil.FailErr(t, "startRun failed", err)
 	}
-	sess, err := store.Get(ctx, "sess-1")
+	sess, err := store.Sessions.Get(ctx, "sess-1")
 	testutil.FailErr(t, "store.Get failed", err)
 	if sess.Posture != api.SessionPostureSpec {
 		t.Fatalf("posture during run = %q want spec", sess.Posture)
@@ -95,12 +95,12 @@ func TestExitEndBoundaryAndPostureRestore(t *testing.T) {
 	if exited.PauseReason != "user_exit" {
 		t.Fatalf("exit reason = %q want user_exit", exited.PauseReason)
 	}
-	sess, err = store.Get(ctx, "sess-1")
+	sess, err = store.Sessions.Get(ctx, "sess-1")
 	testutil.FailErr(t, "store.Get failed", err)
 	if sess.Posture != api.SessionPostureBuild {
 		t.Fatalf("posture after exit = %q want baseline build", sess.Posture)
 	}
-	msgs, err := store.GetMessages(ctx, "sess-1")
+	msgs, err := store.Transcript.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var sawExitBoundary bool
 	for _, m := range msgs {

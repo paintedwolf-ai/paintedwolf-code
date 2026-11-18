@@ -3,10 +3,10 @@ package runstate
 import (
 	"context"
 	"database/sql"
-	"github.com/lycaon/lycaon/internal/reviewcoverage"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -87,9 +87,13 @@ type TransactionsRepository interface {
 	SetAuthzRecorder(authzledger.TransactionalRecorder)
 }
 
-type SessionMutations interface {
-	AppendMessagesTx(context.Context, *sql.Tx, string, ...api.Message) error
-	SetPostureTx(context.Context, *sql.Tx, string, api.SessionPosture) error
+type Sessions interface {
+	Get(ctx context.Context, id string) (*api.Session, error)
+	SetPostureTx(ctx context.Context, tx *sql.Tx, sessionID string, posture api.SessionPosture) error
+}
+
+type Transcript interface {
+	AppendMessagesTx(ctx context.Context, tx *sql.Tx, id string, msgs ...api.Message) error
 }
 
 type RunnableNotifier interface{ NotifyRunnable() }

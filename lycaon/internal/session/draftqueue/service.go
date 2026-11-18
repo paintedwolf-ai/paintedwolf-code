@@ -13,21 +13,28 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	Get(context.Context, string) (*api.Session, error)
-	CancelQueuedPromptSubmissions(context.Context, []string) error
-	GetPromptSubmission(context.Context, string) (*store.PromptSubmission, error)
-	UpdateQueuedPromptSubmissionInputs(context.Context, []store.PromptSubmissionInputUpdate) (bool, error)
-}
-type Service struct {
-	store        Store
-	queue        *queue.Store
-	publisher    *events.Publisher
-	publishState func(context.Context, string)
+type Sessions interface {
+	Get(ctx context.Context, id string) (*api.Session, error)
 }
 
-func New(store Store, queue *queue.Store, publishState func(context.Context, string)) *Service {
-	return &Service{store: store, queue: queue, publishState: publishState}
+type Submissions interface {
+	CancelQueuedPromptSubmissions(ctx context.Context, ids []string) error
+	GetPromptSubmission(ctx context.Context, id string) (*store.PromptSubmission, error)
+	UpdateQueuedPromptSubmissionInputs(
+		ctx context.Context,
+		updates []store.PromptSubmissionInputUpdate,
+	) (bool, error)
+}
+type Service struct {
+	sessionStore    Sessions
+	submissionStore Submissions
+	queue           *queue.Store
+	publisher       *events.Publisher
+	publishState    func(context.Context, string)
+}
+
+func New(sessionStore Sessions, submissionStore Submissions, queue *queue.Store, publishState func(context.Context, string)) *Service {
+	return &Service{sessionStore: sessionStore, submissionStore: submissionStore, queue: queue, publishState: publishState}
 }
 func (s *Service) SetPublisher(publisher *events.Publisher) { s.publisher = publisher }
 func (s *Service) Publish(ctx context.Context, sessionID string, revision uint64) {
@@ -74,10 +81,10 @@ func (m *Service) Unlink(ctx context.Context, id string, expectedRevision uint64
 // Remove drops items and resolves their admission receipts.
 func (m *Service) Remove(ctx context.Context, id string, expectedRevision uint64, itemIDs []string) (api.QueueDraft, error) {
 	draft, err := m.queue.Remove(id, expectedRevision, itemIDs, func() error {
-		if m == nil || m.store == nil {
+		if m == nil || (m.sessionStore == nil || m.submissionStore == nil) {
 			return nil
 		}
-		return m.store.CancelQueuedPromptSubmissions(context.WithoutCancel(ctx), itemIDs)
+		return m.submissionStore.CancelQueuedPromptSubmissions(context.WithoutCancel(ctx), itemIDs)
 	})
 	if err != nil {
 		return draft, err
@@ -101,10 +108,10 @@ func (m *Service) UpdateText(ctx context.Context, id string, expectedRevision ui
 
 // updateQueuedSubmissionText re-encodes one queued receipt's input with the edited prose.
 func (m *Service) updateQueuedSubmissionText(ctx context.Context, submissionID, text string) error {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.submissionStore == nil) {
 		return nil
 	}
-	row, err := m.store.GetPromptSubmission(ctx, submissionID)
+	row, err := m.submissionStore.GetPromptSubmission(ctx, submissionID)
 	if err != nil {
 		if errors.Is(err, store.ErrPromptSubmissionNotFound) {
 			return nil
@@ -120,7 +127,7 @@ func (m *Service) updateQueuedSubmissionText(ctx context.Context, submissionID, 
 	if err != nil {
 		return fmt.Errorf("encode queued prompt receipt input: %w", err)
 	}
-	updated, err := m.store.UpdateQueuedPromptSubmissionInputs(ctx, []store.PromptSubmissionInputUpdate{{
+	updated, err := m.submissionStore.UpdateQueuedPromptSubmissionInputs(ctx, []store.PromptSubmissionInputUpdate{{
 		ID: submissionID, InputJSON: string(raw),
 	}})
 	if err != nil {
@@ -153,7 +160,7 @@ func (m *Service) FireNow(ctx context.Context, id string, expectedRevision uint6
 
 // Send reserves the head group for the active turn's next boundary.
 func (m *Service) Send(ctx context.Context, id string, expectedRevision uint64) (api.QueueDraft, error) {
-	sess, err := m.store.Get(ctx, id)
+	sess, err := m.sessionStore.Get(ctx, id)
 	if err != nil {
 		return m.Snapshot(id), err
 	}
@@ -187,7 +194,7 @@ func (m *Service) CancelSend(ctx context.Context, id string, expectedRevision ui
 func (m *Service) setContinuation(ctx context.Context, items []api.QueueItem, continuation bool) error {
 	updates := make([]store.PromptSubmissionInputUpdate, 0, len(items))
 	for _, item := range items {
-		row, err := m.store.GetPromptSubmission(ctx, item.ID)
+		row, err := m.submissionStore.GetPromptSubmission(ctx, item.ID)
 		if err != nil {
 			return fmt.Errorf("read queued send receipt %s: %w", item.ID, err)
 		}
@@ -202,7 +209,7 @@ func (m *Service) setContinuation(ctx context.Context, items []api.QueueItem, co
 		}
 		updates = append(updates, store.PromptSubmissionInputUpdate{ID: item.ID, InputJSON: string(raw)})
 	}
-	updated, err := m.store.UpdateQueuedPromptSubmissionInputs(ctx, updates)
+	updated, err := m.submissionStore.UpdateQueuedPromptSubmissionInputs(ctx, updates)
 	if err != nil {
 		return err
 	}

@@ -5,7 +5,6 @@ package apitestdeps
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -57,6 +56,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -75,7 +75,7 @@ type Deps struct {
 	}
 	ApprovalGate      hitl.ApprovalGate
 	Database          db.Handle
-	Store             session.Store
+	Store             *sessionstore.Repositories
 	Projects          project.Registry
 	Sessions          *session.Host
 	Settings          *settings.Service
@@ -314,7 +314,7 @@ func fillHarness(t *testing.T, d *Deps) {
 		d.HarnessWorkers = scripted
 	}
 	if d.LLM.Preparation == nil {
-		preparation, err := harnessfixture.NewPreludeController(t.TempDir(), d.Store)
+		preparation, err := harnessfixture.NewPreludeController(t.TempDir(), d.Store.Transcript)
 		testutil.FailErr(t, "conversation preparation", err)
 		d.LLM.Preparation = preparation
 	}
@@ -329,7 +329,7 @@ func (refusingExecutor) Execute(context.Context, wire.WorkerTask, worker.WorkerR
 
 func (refusingExecutor) AbortWorkerRuntime(context.Context, wire.WorkerTask) error { return nil }
 
-func storeDatabase(store session.Store) db.Handle {
+func storeDatabase(store *sessionstore.Repositories) db.Handle {
 	if database, ok := store.(interface{ DB() db.Handle }); ok {
 		return database.DB()
 	}

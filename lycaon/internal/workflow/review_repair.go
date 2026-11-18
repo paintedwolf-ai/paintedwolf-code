@@ -56,7 +56,7 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 	if m.Sessions == nil {
 		return fmt.Errorf("review repair requires transcript storage")
 	}
-	messages, err := m.Sessions.GetMessages(ctx, sessionID)
+	messages, err := m.Sessions.Transcript.GetMessages(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -141,7 +141,7 @@ func (m ReviewRepairs) Recover(ctx context.Context) error {
 		return err
 	}
 	for _, run := range runs {
-		messages, err := m.Sessions.GetMessages(ctx, run.SessionID)
+		messages, err := m.Sessions.Transcript.GetMessages(ctx, run.SessionID)
 		if err != nil {
 			return err
 		}

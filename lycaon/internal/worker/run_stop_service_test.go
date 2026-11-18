@@ -30,7 +30,7 @@ func TestRunStopServiceCancelProjectsWorkerCard(t *testing.T) {
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	runID := uuid.NewString()
@@ -57,7 +57,7 @@ func TestRunStopServiceCancelProjectsWorkerCard(t *testing.T) {
 
 	canonicalID := uuid.NewString()
 	enqueue := `{"job_id":"` + jobID + `","status":"enqueued"}`
-	testutil.FailErr(t, "seed canonical row", store.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "seed canonical row", store.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		ID:         canonicalID,
 		Role:       api.MessageRoleTool,
 		Content:    enqueue,
@@ -67,7 +67,7 @@ func TestRunStopServiceCancelProjectsWorkerCard(t *testing.T) {
 	svc := &RunStopService{Queue: queue, Holds: mgr.Workers.Cards, Cancellations: mgr.Workers.Cancellations}
 	testutil.FailErr(t, "cancel workers by run", svc.CancelWorkersByRunID(ctx, runID, "workflow stopped"))
 
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	if len(msgs) != 1 {
 		t.Fatalf("message count = %d want 1 canonical row", len(msgs))
@@ -190,7 +190,7 @@ func TestRunStopServiceHoldPatchesCanonicalWorkerRow(t *testing.T) {
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	runID := uuid.NewString()
@@ -213,7 +213,7 @@ func TestRunStopServiceHoldPatchesCanonicalWorkerRow(t *testing.T) {
 
 	canonicalID := uuid.NewString()
 	enqueue := `{"job_id":"` + jobID + `","status":"enqueued"}`
-	testutil.FailErr(t, "seed canonical row", store.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "seed canonical row", store.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		ID:         canonicalID,
 		Role:       api.MessageRoleTool,
 		Content:    enqueue,
@@ -223,7 +223,7 @@ func TestRunStopServiceHoldPatchesCanonicalWorkerRow(t *testing.T) {
 	svc := &RunStopService{Queue: queue, Holds: mgr.Workers.Cards, Cancellations: mgr.Workers.Cancellations}
 	testutil.FailErr(t, "hold workers by run", svc.HoldPendingWorkersByRunID(ctx, runID))
 
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	if len(msgs) != 1 {
 		t.Fatalf("message count = %d want 1 canonical row", len(msgs))

@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/viewstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -24,7 +24,7 @@ type Dependencies struct {
 	MutationGate    *project.MutationGate
 	ProjectRegistry project.Registry
 	SecretSpans     *secretspan.Screener
-	SessionStore    session.Store
+	SessionStore    *sessionstore.Repositories
 	TryRunPromotion func(context.Context, string)
 }
 type Handler struct {
@@ -36,7 +36,7 @@ type Handler struct {
 	MutationGate    *project.MutationGate
 	ProjectRegistry project.Registry
 	SecretSpans     *secretspan.Screener
-	SessionStore    session.Store
+	SessionStore    *sessionstore.Repositories
 	TryRunPromotion func(context.Context, string)
 	editorScreens   editorScreenMemo
 	background      *taskgroup.Group

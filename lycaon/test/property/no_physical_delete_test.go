@@ -4,11 +4,11 @@ package property
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/pkg/api"
 	"pgregory.net/rapid"
@@ -24,7 +24,7 @@ func TestStorePatchNeverRemovesRows(t *testing.T) {
 
 	rapid.Check(t, func(t *rapid.T) {
 		// Fresh session per iteration so the row count is isolated.
-		sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		failErr(t, "create", err)
 
 		count := rapid.IntRange(1, 5).Draw(t, "count")
@@ -32,12 +32,12 @@ func TestStorePatchNeverRemovesRows(t *testing.T) {
 		for i := 0; i < count; i++ {
 			id := uuid.NewString()
 			ids = append(ids, id)
-			failErr(t, "append", store.AppendMessages(ctx, sess.ID, api.Message{
+			failErr(t, "append", store.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 				ID: id, Role: api.MessageRoleAssistant, Content: rapid.String().Draw(t, "body"),
 			}))
 		}
 		for _, id := range ids {
-			rows, err := store.GetMessages(ctx, sess.ID)
+			rows, err := store.Transcript.GetMessages(ctx, sess.ID)
 			failErr(t, "get", err)
 			var row api.Message
 			for _, m := range rows {
@@ -47,10 +47,10 @@ func TestStorePatchNeverRemovesRows(t *testing.T) {
 				}
 			}
 			row.DraftStatus = api.DraftStatusRejected
-			_, err = store.UpdateMessage(ctx, sess.ID, id, row)
+			_, err = store.Transcript.UpdateMessage(ctx, sess.ID, id, row)
 			failErr(t, "patch", err)
 		}
-		after, err := store.GetMessages(ctx, sess.ID)
+		after, err := store.Transcript.GetMessages(ctx, sess.ID)
 		failErr(t, "get after", err)
 		if len(after) != count {
 			t.Fatalf("row count = %d want %d (append-only store)", len(after), count)

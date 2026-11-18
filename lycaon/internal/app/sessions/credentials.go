@@ -3,7 +3,6 @@ package sessions
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"log/slog"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmint"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -27,7 +27,7 @@ type credentialFiles struct {
 	exposure func(ctx context.Context, sessionID, path string) error
 }
 
-func newCredentialFiles(harvest *secretharvest.Runtime, fp *secretmatch.Fingerprinter, database *db.Store, capabilities *secretcap.Service, sessions *store.SQL) *credentialFiles {
+func newCredentialFiles(harvest *secretharvest.Runtime, fp *secretmatch.Fingerprinter, database *db.Store, capabilities *secretcap.Service, sessions *store.Repositories) *credentialFiles {
 	files := &credentialFiles{
 		harvest: harvest, fp: fp, queries: db.New(database),
 		managed: func(projectID string) []secretmatch.Remembered {
@@ -36,7 +36,7 @@ func newCredentialFiles(harvest *secretharvest.Runtime, fp *secretmatch.Fingerpr
 			}
 			return capabilities.DurableScreeningValues(projectID)
 		},
-		exposure: sessions.MarkSecretExposureOnRead,
+		exposure: sessions.Evidence.MarkSecretExposureOnRead,
 	}
 	files.index = newCredentialIndex(files)
 	return files

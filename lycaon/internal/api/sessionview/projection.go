@@ -8,13 +8,14 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 type Projector struct {
 	Workflows *workflow.RunManager
-	Store     session.Store
+	Store     *sessionstore.Repositories
 	Sessions  *session.Host
 	Projects  project.Registry
 }
@@ -35,7 +36,7 @@ func (s *Projector) EnrichSession(ctx context.Context, sess *wire.Session) {
 		return
 	}
 	s.HydrateSessionWorkspace(ctx, sess)
-	sess.UntrustedContent = s.Store.SessionUntrustedContent(sess.ID)
+	sess.UntrustedContent = s.Store.Evidence.SessionUntrustedContent(sess.ID)
 	sess.PromptPending = s.Sessions.Runner.SubmissionState.PromptPending(ctx, sess.ID)
 	if ui, err := s.Workflows.Presentation.ComputeSessionUI(ctx, sess.ID); err == nil {
 		sess.UI = ui

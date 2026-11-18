@@ -37,7 +37,7 @@ func newSynthesisDelayManager(t *testing.T) (*Host, *api.Session) {
 	testutil.FailErr(t, "load hint registry", err)
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 
-	sess, err := store.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create coordinator session", err)
@@ -197,7 +197,7 @@ func loadAgentsForTest(t *testing.T) profiles.AgentProfileResolver {
 func TestBuildSessionCreateDefaultsCoordinatorProfile(t *testing.T) {
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if sess.AgentType != orchestration.ProfileCoordinator {
 		t.Fatalf("agent_type = %q want coordinator", sess.AgentType)

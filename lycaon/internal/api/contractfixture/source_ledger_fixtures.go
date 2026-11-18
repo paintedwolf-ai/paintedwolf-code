@@ -2,7 +2,6 @@ package contractfixture
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,11 +11,12 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/projectsource"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/worker"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -86,7 +86,7 @@ func TestSourceLedger(t *testing.T) (*sourceledger.Store, *db.Store, TestDeps) {
 
 // withSessionStore serves sessions from store.
 
-func WithSessionStore(store session.Store) TestDeps {
+func WithSessionStore(store *sessionstore.Repositories) TestDeps {
 	return func(d *hostapi.Dependencies) { d.Core.Store = store }
 }
 

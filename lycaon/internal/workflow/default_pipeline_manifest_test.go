@@ -154,7 +154,7 @@ func TestBugbashApprovedBlueprintRunsImplementChildAndCompletes(t *testing.T) {
 	if child.WorkflowID != "implement" || child.BlueprintPath != parent.BlueprintPath {
 		t.Fatalf("child = workflow %q Blueprint %q want implement/%q", child.WorkflowID, child.BlueprintPath, parent.BlueprintPath)
 	}
-	msgs, err := mgr.Verdicts.Sessions.GetMessages(ctx, parent.SessionID)
+	msgs, err := mgr.Verdicts.Sessions.Transcript.GetMessages(ctx, parent.SessionID)
 	testutil.FailErr(t, "get Blueprint transcript while child runs", err)
 	blueprintRow, ok := findBlueprintTranscriptMessage(msgs, parent.BlueprintPath)
 	if !ok || blueprintRow.Blueprint == nil {
@@ -182,7 +182,7 @@ func TestBugbashApprovedBlueprintRunsImplementChildAndCompletes(t *testing.T) {
 	if parent.Status != api.WorkflowRunStatusComplete || parent.CurrentPhase != "done" {
 		t.Fatalf("parent = status %q phase %q want complete/done", parent.Status, parent.CurrentPhase)
 	}
-	msgs, err = mgr.Verdicts.Sessions.GetMessages(ctx, parent.SessionID)
+	msgs, err = mgr.Verdicts.Sessions.Transcript.GetMessages(ctx, parent.SessionID)
 	testutil.FailErr(t, "get completed Blueprint transcript", err)
 	blueprintRow, ok = findBlueprintTranscriptMessage(msgs, parent.BlueprintPath)
 	if !ok || blueprintRow.Blueprint == nil || blueprintRow.Blueprint.PhaseLabel != "Done" {

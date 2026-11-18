@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -168,7 +169,7 @@ func recordSandboxAskSuppressed(ctx context.Context, req sandboxAskRequest, caus
 }
 
 // askSessionIDs returns the invoking session and its chat.
-func askSessionIDs(ctx context.Context, store Store, sessionID, parentSessionID string) (string, string) {
+func askSessionIDs(ctx context.Context, store *sessionstore.Repositories, sessionID, parentSessionID string) (string, string) {
 	invokingSessionID := strings.TrimSpace(sessionID)
 	if invokingSessionID == "" {
 		invokingSessionID = strings.TrimSpace(parentSessionID)
@@ -176,7 +177,7 @@ func askSessionIDs(ctx context.Context, store Store, sessionID, parentSessionID 
 	if invokingSessionID == "" {
 		return "", ""
 	}
-	rootSessionID := sessiontree.RootID(ctx, store, invokingSessionID)
+	rootSessionID := sessiontree.RootID(ctx, store.Sessions, invokingSessionID)
 	if rootSessionID == "" {
 		rootSessionID = invokingSessionID
 	}

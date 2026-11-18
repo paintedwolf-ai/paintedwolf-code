@@ -2,10 +2,10 @@ package lifecycle_test
 
 import (
 	"context"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -56,7 +56,7 @@ func completePlanDepthPhaseAtNone(ctx context.Context, mgr *workflow.RunManager,
 	vars = runstate.StampDepthParamSkips(vars, manifest)
 	projectDir := ""
 	if mgr.Policy.Sessions != nil {
-		if sess, getErr := mgr.Policy.Sessions.Get(ctx, run.SessionID); getErr == nil && sess != nil {
+		if sess, getErr := mgr.Policy.SessionStore.Get(ctx, run.SessionID); getErr == nil && sess != nil {
 			projectDir = sess.WorkspacePath
 		}
 	}

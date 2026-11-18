@@ -68,7 +68,7 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 		surface: "implement_investigate",
 	})
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session in store", err)
 	resp, err := mgr.Submissions.Prompt(ctx, sess.ID, "multi-iter start")
 	if err != nil {
@@ -77,7 +77,7 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 
 	reqs := rec.AllRequests()
 	if len(reqs) < 2 {
-		msgs, _ := store.GetMessages(ctx, sess.ID)
+		msgs, _ := store.Transcript.GetMessages(ctx, sess.ID)
 		var offered []string
 		if len(reqs) > 0 {
 			offered = toolNames(reqs[0].Tools)
@@ -106,7 +106,7 @@ func TestSecondPromptStillGetsRunContextAfterAdvance(t *testing.T) {
 	coord := &phaseStubCoordinator{phase: "expand", brief: "phase expand brief"}
 	mgr.SetCoordinatorTurnFrameSource(coord)
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "turn one"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
@@ -204,7 +204,7 @@ func TestGateBlockedSingleImperativeChannel(t *testing.T) {
 	})
 	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	mgr.Coordinator.Guidance.Emit(context.Background(), sess.ID, anchor.GateBlocked, anchor.Envelope{})
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "why blocked"); err != nil {

@@ -3,7 +3,6 @@ package session_test
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
@@ -41,7 +41,7 @@ func TestCoordinatorRunContextDelegatesToBuilder(t *testing.T) {
 		ctx: wire.CoordinatorRunContext{WorkflowID: "hotfix-session", CoordinatorBrief: "brief text"},
 	})
 	ctx := context.Background()
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	runCtx, err := mgr.Coordinator.Context.RunContext(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.CoordinatorRunContext failed", err)
@@ -69,9 +69,9 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "build"})
+	child, err := store.Sessions.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "build"})
 	testutil.FailErr(t, "store.CreateChild failed", err)
 	jobID, err := worker.NewSQLQueue(sqlDB, 1).EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, wire.WorkerTask{
 		Prompt: "build", Brief: "build", ParentSessionID: sess.ID, ChildSessionID: child.ID,
@@ -87,12 +87,12 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 		},
 		{Role: wire.MessageRoleTool, WorkerID: jobID, Content: "Wrote game.py", ToolResult: &wire.ToolResult{ToolCallID: "tc1", Outcome: wire.ToolResultOutcomeCompleted}},
 	}
-	handle, _, err := store.CommitEvidenceToolResult(ctx, child.ID, sess.WorkspacePath, "write", map[string]any{"path": "game.py"}, "Wrote game.py")
+	handle, _, err := store.Evidence.CommitEvidenceToolResult(ctx, child.ID, sess.WorkspacePath, "write", map[string]any{"path": "game.py"}, "Wrote game.py")
 	testutil.FailErr(t, "CommitEvidenceToolResult", err)
 	childMsgs[1].EvidenceHandles = []string{handle}
 	for i, msg := range childMsgs {
 		msg.ID = fmt.Sprintf("m-%d", i)
-		if err := store.AppendMessages(ctx, child.ID, msg); err != nil {
+		if err := store.Transcript.AppendMessages(ctx, child.ID, msg); err != nil {
 			testutil.FailErr(t, "store.AppendMessages failed", err)
 		}
 	}
@@ -112,7 +112,7 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 	if status != "complete" {
 		t.Fatalf("status = %q", status)
 	}
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	if len(msgs) != 2 || msgs[1].Role != wire.MessageRoleTool || msgs[1].WorkerSummary == nil {
 		t.Fatalf("messages = %+v want task call/result with worker_summary", msgs)
@@ -137,11 +137,11 @@ func TestAppendWorkerSummaryFinalizesEnqueuedTaskTool(t *testing.T) {
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	ctx := context.Background()
 
-	parent, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: orchestration.ProfileImplementer})
+	child, err := store.Sessions.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: orchestration.ProfileImplementer})
 	testutil.FailErr(t, "create child", err)
-	if err := store.AppendMessages(ctx, parent.ID,
+	if err := store.Transcript.AppendMessages(ctx, parent.ID,
 		wire.Message{ID: "a1", Role: wire.MessageRoleAssistant, ToolCalls: []wire.ToolCall{{ID: "tc1", Name: "task"}}},
 		wire.Message{
 			ID: "t1", Role: wire.MessageRoleTool, Content: `{"job_id":"job-9","status":"enqueued"}`,
@@ -163,7 +163,7 @@ func TestAppendWorkerSummaryFinalizesEnqueuedTaskTool(t *testing.T) {
 		Status:         "complete",
 	})
 	testutil.FailErr(t, "mgr.AppendWorkerSummary failed", err)
-	msgs, err := store.GetMessages(ctx, parent.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var toolContent string
 	for _, msg := range msgs {

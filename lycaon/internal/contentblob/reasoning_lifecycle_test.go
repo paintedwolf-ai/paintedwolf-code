@@ -3,7 +3,6 @@ package contentblob_test
 import (
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
@@ -14,21 +13,22 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func settleReasoning(t *testing.T, history *store.SQL, session *api.Session) string {
+func settleReasoning(t *testing.T, history *store.Repositories, session *api.Session) string {
 	t.Helper()
-	turn, err := history.BeginTurn(t.Context(), store.TurnStart{SessionID: session.ID, ProjectID: session.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
+	turn, err := history.Turns.BeginTurn(t.Context(), store.TurnStart{SessionID: session.ID, ProjectID: session.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
 	testutil.FailErr(t, "begin reasoning turn", err)
 	reasoning := &api.ModelReasoning{ProviderID: "provider", Model: "model", Text: "Check the source before editing.", Details: []json.RawMessage{json.RawMessage(`{"type":"thinking","thinking":"Check the source before editing.","signature":"signed-block"}`)}}
 	raw, err := json.Marshal(reasoning)
 	testutil.FailErr(t, "encode reasoning", err)
-	output, err := history.SettleModelOutput(t.Context(), store.ModelOutput{ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: session.ID, Iteration: 1, MessageID: uuid.NewString(), ProviderID: reasoning.ProviderID, Model: reasoning.Model, Content: "Done.", ReasoningJSON: string(raw)})
+	output, err := history.Turns.SettleModelOutput(t.Context(), store.ModelOutput{ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: session.ID, Iteration: 1, MessageID: uuid.NewString(), ProviderID: reasoning.ProviderID, Model: reasoning.Model, Content: "Done.", ReasoningJSON: string(raw)})
 	testutil.FailErr(t, "settle reasoning", err)
-	testutil.FailErr(t, "project reasoning", history.AppendMessages(t.Context(), session.ID, api.Message{ID: output.MessageID, Role: api.MessageRoleAssistant, Content: output.Content, ModelReasoning: reasoning}))
-	testutil.FailErr(t, "acknowledge reasoning projection", history.MarkModelOutputProjected(t.Context(), output.ID))
-	_, err = history.FinishTurn(t.Context(), turn.Turn.ID, turn.Attempt.ID, store.TurnStatusComplete, output.ID, "{}", "")
+	testutil.FailErr(t, "project reasoning", history.Transcript.AppendMessages(t.Context(), session.ID, api.Message{ID: output.MessageID, Role: api.MessageRoleAssistant, Content: output.Content, ModelReasoning: reasoning}))
+	testutil.FailErr(t, "acknowledge reasoning projection", history.Turns.MarkModelOutputProjected(t.Context(), output.ID))
+	_, err = history.Turns.FinishTurn(t.Context(), turn.Turn.ID, turn.Attempt.ID, store.TurnStatusComplete, output.ID, "{}", "")
 	testutil.FailErr(t, "finish reasoning turn", err)
 	return output.ID
 }
@@ -39,11 +39,11 @@ func TestReasoningRetentionAndChatTreeDeletionUseProjectBlobLifecycle(t *testing
 	history := store.NewSQL(database)
 	history.SetDataDir(dataDir)
 	deps := gcDeps(t, database, dataDir)
-	root, err := history.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	root, err := history.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create root chat", err)
-	child, err := history.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "implement"})
+	child, err := history.Sessions.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "implement"})
 	testutil.FailErr(t, "create child chat", err)
-	other, err := history.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	other, err := history.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create retained chat", err)
 	rootOutput := settleReasoning(t, history, root)
 	settleReasoning(t, history, child)
@@ -56,12 +56,12 @@ func TestReasoningRetentionAndChatTreeDeletionUseProjectBlobLifecycle(t *testing
 	_, err = db.RunRetention(t.Context(), database, db.DefaultRetention())
 	testutil.FailErr(t, "maintain old history", err)
 	reloaded := store.NewSQL(database)
-	messages, err := reloaded.GetMessages(t.Context(), other.ID)
+	messages, err := reloaded.Transcript.GetMessages(t.Context(), other.ID)
 	testutil.FailErr(t, "reload old reasoning", err)
 	if len(messages) != 1 || messages[0].ModelReasoning == nil || len(messages[0].ModelReasoning.Details) != 1 {
 		t.Fatal("maintenance discarded retained reasoning")
 	}
-	testutil.FailErr(t, "delete root chat tree", history.Delete(t.Context(), root.ID))
+	testutil.FailErr(t, "delete root chat tree", history.Sessions.Delete(t.Context(), root.ID))
 	var outputs, projections int
 	testutil.FailErr(t, "count surviving outputs", database.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM model_outputs`).Scan(&outputs))
 	testutil.FailErr(t, "count surviving reasoning", database.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM messages WHERE reasoning_json IS NOT NULL`).Scan(&projections))
@@ -73,7 +73,7 @@ func TestReasoningRetentionAndChatTreeDeletionUseProjectBlobLifecycle(t *testing
 	blobStore := contentblob.StoreFor(dataDir, root.ProjectID)
 	_, err = contentblob.Read(blobStore, sha)
 	testutil.FailErr(t, "preserve retained chat envelope", err)
-	testutil.FailErr(t, "delete final chat", history.Delete(t.Context(), other.ID))
+	testutil.FailErr(t, "delete final chat", history.Sessions.Delete(t.Context(), other.ID))
 	processed, err := contentblob.RunGCBatch(t.Context(), deps)
 	testutil.FailErr(t, "reclaim reasoning envelope", err)
 	if processed != 1 {
@@ -90,7 +90,7 @@ func TestProjectDeletionReconciliationReclaimsRetainedReasoning(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	history := store.NewSQL(database)
 	history.SetDataDir(dataDir)
-	session, err := history.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	session, err := history.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create project chat", err)
 	output := settleReasoning(t, history, session)
 	var sha string

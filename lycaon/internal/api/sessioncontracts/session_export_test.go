@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -27,14 +26,14 @@ func TestExportSessionTranscriptFormats(t *testing.T) {
 		t.Fatalf("patch status=%d body=%s", patchRec.Code, patchRec.Body.String())
 	}
 
-	testutil.FailErr(t, "append user", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), created.ID, wire.Message{
+	testutil.FailErr(t, "append user", srv.Sources.Workspace.SessionStore.Transcript.AppendMessages(t.Context(), created.ID, wire.Message{
 		Role:    wire.MessageRoleUser,
 		Content: "please ship",
 	}))
 	var runID string
-	err := srv.Sources.Workspace.SessionStore.(*store.SQL).DB().QueryRowContext(t.Context(), `SELECT id FROM workflow_runs WHERE session_id = ? ORDER BY created_at DESC LIMIT 1`, created.ID).Scan(&runID)
+	err := srv.Sources.Workspace.SessionStore.DB().QueryRowContext(t.Context(), `SELECT id FROM workflow_runs WHERE session_id = ? ORDER BY created_at DESC LIMIT 1`, created.ID).Scan(&runID)
 	testutil.FailErr(t, "read session workflow", err)
-	testutil.FailErr(t, "append chrome", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), created.ID, wire.Message{
+	testutil.FailErr(t, "append chrome", srv.Sources.Workspace.SessionStore.Transcript.AppendMessages(t.Context(), created.ID, wire.Message{
 		Role:           wire.MessageRoleSystem,
 		Kind:           wire.MessageKindProgressUpdate,
 		Content:        "should not appear in md",
@@ -42,7 +41,7 @@ func TestExportSessionTranscriptFormats(t *testing.T) {
 		ProgressUpdate: &wire.ProgressUpdateMeta{},
 		Visibility:     wire.MessageVisibilityTranscript,
 	}))
-	testutil.FailErr(t, "append assistant", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), created.ID, wire.Message{
+	testutil.FailErr(t, "append assistant", srv.Sources.Workspace.SessionStore.Transcript.AppendMessages(t.Context(), created.ID, wire.Message{
 		Role:    wire.MessageRoleAssistant,
 		Content: "working on it",
 	}))

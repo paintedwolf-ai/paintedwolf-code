@@ -356,7 +356,7 @@ func TestDoomLoopPageResolverWiringOrder(t *testing.T) {
 
 func TestFirstChecklistPublicationResolvesMissingProgressWithoutGeneralAdvancement(t *testing.T) {
 	manager, sessions := newTestManager(t)
-	session, err := sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	session, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create coordinator", err)
 	store := progress.NewMemoryStore()
 	manager.SetProgressStore(store)

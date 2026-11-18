@@ -217,10 +217,10 @@ func (s *HarnessControl) handleHarnessAskUser(w http.ResponseWriter, r *http.Req
 	// Announce the card after its transcript rows are durable.
 	mgr.Asks.AnnouncePendingAsk(r.Context(), sessionID)
 	// Publish the card to late SSE subscribers.
-	if msgs, err := s.sessionStore.GetMessages(r.Context(), sessionID); err == nil {
+	if msgs, err := s.sessionStore.Transcript.GetMessages(r.Context(), sessionID); err == nil {
 		for _, msg := range msgs {
 			if msg.WorkflowFeedback != nil && msg.WorkflowFeedback.PhaseID == handle.PhaseID {
-				sess, _ := s.sessionStore.Get(r.Context(), sessionID)
+				sess, _ := s.sessionStore.Sessions.Get(r.Context(), sessionID)
 				key := ""
 				if sess != nil {
 					key = sess.ProjectID
@@ -318,7 +318,7 @@ func (s *HarnessControl) handleHarnessAskUserLastResponse(w http.ResponseWriter,
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "session_id is required")
 		return
 	}
-	msgs, err := s.sessionStore.GetMessages(r.Context(), sessionID)
+	msgs, err := s.sessionStore.Transcript.GetMessages(r.Context(), sessionID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -368,7 +368,7 @@ func (s *HarnessControl) handleHarnessVisualFixture(w http.ResponseWriter, r *ht
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "session_id is required")
 		return
 	}
-	root := sessiontree.RootID(r.Context(), s.sessionStore, sessionID)
+	root := sessiontree.RootID(r.Context(), s.sessionStore.Sessions, sessionID)
 	caption := strings.TrimSpace(req.Caption)
 	if caption == "" {
 		caption = "harness fixture"

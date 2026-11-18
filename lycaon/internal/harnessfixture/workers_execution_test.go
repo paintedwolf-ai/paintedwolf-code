@@ -98,7 +98,7 @@ func TestAnsweredDecisionDeliveryErrorDoesNotBecomeComplete(t *testing.T) {
 	job.ChildSessionID = bound.ChildSessionID
 	_, err = h.queue.Complete(t.Context(), job, result)
 	testutil.FailErr(t, "hold decision job", err)
-	testutil.FailErr(t, "answer decision", h.sessions.AppendMessages(t.Context(), bound.ChildSessionID, worker.DecisionAnswerMessage("first", "coordinator")))
+	testutil.FailErr(t, "answer decision", h.sessions.Transcript.AppendMessages(t.Context(), bound.ChildSessionID, worker.DecisionAnswerMessage("first", "coordinator")))
 	controller.verify = func(context.Context, *api.Session, *api.WorkerTask, string) (*tools.SourceRunCapture, error) {
 		return nil, errors.New("decision delivery verification failed")
 	}

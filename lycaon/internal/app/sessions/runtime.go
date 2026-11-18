@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 // ResourceTracker tracks closers registered during runtime wiring.
@@ -20,7 +21,7 @@ type ResourceTracker interface {
 // Runtime holds the wired session manager, checkpoints, runtimes, and prompt engines.
 type Runtime struct {
 	Manager          *session.Host
-	Store            session.Store
+	Store            *sessionstore.Repositories
 	PromptEngine     *prompts.FileTemplateEngine
 	Invocations      invocation.Recorder
 	Checkpoints      hitl.CheckpointManager

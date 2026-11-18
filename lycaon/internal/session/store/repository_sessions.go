@@ -11,6 +11,7 @@ import (
 
 // SessionRepository persists session identity, lifecycle and workspace binding.
 type SessionRepository interface {
+	SessionEventsOutboxed() bool
 	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
 	CreateChild(ctx context.Context, parent *api.Session, req api.SpawnChildRequest) (*api.Session, error)
 	CreateWithStatus(ctx context.Context, req api.CreateSessionRequest, projectID string, status api.SessionStatus) (*api.Session, error)

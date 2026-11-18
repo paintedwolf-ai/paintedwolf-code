@@ -23,10 +23,10 @@ func (m *Service) ReassignProjectSessionsOffEditorOnlyRoots(ctx context.Context,
 }
 
 func (m *Service) reassignOffEditorOnlyRoots(ctx context.Context, inScope func(projectID string) bool) error {
-	if m == nil || m.store == nil || m.projects == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) || m.projects == nil {
 		return nil
 	}
-	sessions, err := m.store.List(ctx)
+	sessions, err := m.sessionStore.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -66,7 +66,7 @@ func (m *Service) reassignOffEditorOnlyRoots(ctx context.Context, inScope func(p
 		if len(admitted) > 0 {
 			replacement = admitted[0].ID
 		}
-		if err := m.store.ReassignSessionsWorkspaceRoot(ctx, projectID, rootID, replacement); err != nil {
+		if err := m.sessionStore.ReassignSessionsWorkspaceRoot(ctx, projectID, rootID, replacement); err != nil {
 			return err
 		}
 		done[move{projectID, rootID}] = struct{}{}

@@ -63,7 +63,7 @@ func TestRewindClosesTheCaptureInterval(t *testing.T) {
 	_, err = rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor)
 	testutil.FailErr(t, "rewind", err)
 
-	checkpoint := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
+	checkpoint := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind)
 	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", "foo.go")
 	if _, err := checkpoint.Load(ctx, sessionID, anchor); !errors.Is(err, sessionstore.ErrCheckpointMissing) {
 		t.Fatalf("capture recreated the rewound anchor: %v", err)
@@ -143,7 +143,7 @@ func TestRewindRefusesWhileBusy(t *testing.T) {
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
 
-	testutil.FailErr(t, "mark busy", mgr.Coordinator.Context.Sessions.(Store).SetSessionStatus(ctx, sessionID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark busy", mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Sessions.SetSessionStatus(ctx, sessionID, api.SessionStatusBusy))
 	_, err = rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor)
 	if err == nil {
 		t.Fatal("rewind succeeded on a busy session")

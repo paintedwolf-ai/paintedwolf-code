@@ -25,7 +25,7 @@ type TranscriptRepository interface {
 	ListDraftVersions(ctx context.Context, sessionID, slotID string) ([]api.DraftVersion, error)
 	MaxMessageScreenGenerationInTree(ctx context.Context, rootSessionID string) (uint64, error)
 	MessageIDsBelowScreenGeneration(ctx context.Context, sessionID string, generation uint64) ([]string, error)
-	MutationEventsOutboxed() bool
+	MessageEventsOutboxed() bool
 	PatchLiveProjection(ctx context.Context, sessionID, messageID, content string, toolCalls []api.ToolCall) error
 	PatchMessageNavigation(ctx context.Context, sessionID, messageID, contentHash string, expected, refs []api.NavigationReference) (api.Message, error)
 	PatchMessageViewContext(ctx context.Context, sessionID, messageID string, view api.ViewContext) (api.Message, error)

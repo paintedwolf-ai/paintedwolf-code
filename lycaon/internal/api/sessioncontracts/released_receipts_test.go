@@ -41,7 +41,7 @@ func TestReleasedInvocationReceiptsRenderAfterUpgrade(t *testing.T) {
 
 			var sessionID, receiptID, toolName, status string
 			testutil.FailErr(t, "read released receipt", upgraded.QueryRowContext(t.Context(), `SELECT session_id, id, tool_name, status FROM invocation_receipts ORDER BY started_at LIMIT 1`).Scan(&sessionID, &receiptID, &toolName, &status))
-			_, err = store.NewSQL(upgraded).Get(t.Context(), sessionID)
+			_, err = store.NewSQL(upgraded).Sessions.Get(t.Context(), sessionID)
 			testutil.FailErr(t, "read released session", err)
 			list, err := invocation.NewSQLRecorder(upgraded).ListSessionPage(t.Context(), sessionID, "", 100)
 			testutil.FailErr(t, "list released receipts", err)

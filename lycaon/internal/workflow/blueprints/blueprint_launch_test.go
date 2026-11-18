@@ -2,12 +2,12 @@ package blueprints_test
 
 import (
 	"context"
-	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -43,7 +43,7 @@ func TestLaunchFromBlueprintCopiesFile(t *testing.T) {
 	target, err := workflowblueprints.ResolveLaunchTarget(source.Path, "plan", mgr.Resolver.Overlay.List())
 	testutil.FailErr(t, "workflowblueprints.ResolveLaunchTarget", err)
 
-	sess2, err := mgr.Verdicts.Sessions.Create(ctx, api.CreateSessionRequest{
+	sess2, err := mgr.Verdicts.Sessions.Sessions.Create(ctx, api.CreateSessionRequest{
 		ProjectID: run.ProjectID,
 		Posture:   api.SessionPostureSpec,
 	}, run.ProjectID)
@@ -83,7 +83,7 @@ func TestLaunchFromBlueprintDeferStartArmsPendingPath(t *testing.T) {
 	target, err := workflowblueprints.ResolveLaunchTarget(source.Path, "plan", mgr.Resolver.Overlay.List())
 	testutil.FailErr(t, "workflowblueprints.ResolveLaunchTarget", err)
 
-	sess2, err := mgr.Verdicts.Sessions.Create(ctx, api.CreateSessionRequest{
+	sess2, err := mgr.Verdicts.Sessions.Sessions.Create(ctx, api.CreateSessionRequest{
 		ProjectID: run.ProjectID,
 		Posture:   api.SessionPostureSpec,
 	}, run.ProjectID)

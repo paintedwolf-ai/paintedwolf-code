@@ -78,7 +78,7 @@ func TestRewindRejectsUnknownAndIneligibleAnchors(t *testing.T) {
 
 	// Only user turns can anchor a rewind.
 	assistantID := uuid.New().String()
-	testutil.FailErr(t, "append assistant row", f.h.Store.AppendMessages(ctx, f.sessionID, wire.Message{
+	testutil.FailErr(t, "append assistant row", f.h.Store.Transcript.AppendMessages(ctx, f.sessionID, wire.Message{
 		ID:      assistantID,
 		Role:    wire.MessageRoleAssistant,
 		Content: "a reply",
@@ -116,13 +116,13 @@ func TestRewindRefusedWhileSessionBusy(t *testing.T) {
 	ctx := context.Background()
 
 	userID := uuid.New().String()
-	testutil.FailErr(t, "append user ask", f.h.Store.AppendMessages(ctx, f.sessionID, wire.Message{
+	testutil.FailErr(t, "append user ask", f.h.Store.Transcript.AppendMessages(ctx, f.sessionID, wire.Message{
 		ID:      userID,
 		Role:    wire.MessageRoleUser,
 		Content: "do the thing",
 	}))
 	// Rewind requires an idle session to avoid racing file writes.
-	testutil.FailErr(t, "mark busy", f.h.Store.SetSessionStatus(ctx, f.sessionID, wire.SessionStatusBusy))
+	testutil.FailErr(t, "mark busy", f.h.Store.Sessions.SetSessionStatus(ctx, f.sessionID, wire.SessionStatusBusy))
 
 	assertRewindError(t, f.base, f.sessionID, rewindErrorCase{
 		name:       "busy session refuses rewind",
@@ -150,7 +150,7 @@ func TestRewindRestoresFilesAndTruncatesTranscript(t *testing.T) {
 	testutil.FailErr(t, "resolve source storage", f.h.DB.QueryRowContext(ctx, `SELECT file FROM pragma_database_list WHERE name='main'`).Scan(&dbPath))
 	testutil.FailErr(t, "resolve project root", f.h.DB.QueryRowContext(ctx, `SELECT id FROM project_roots WHERE project_id=? AND is_primary=1`, f.projectID).Scan(&rootID))
 	ledger := sourceledger.New(f.h.DB, filepath.Join(filepath.Dir(dbPath), enginepaths.SourceContentDirName))
-	turnSource, err := f.h.Store.ReadSourceTurn(ctx, f.sessionID, 0)
+	turnSource, err := f.h.Store.Transcript.ReadSourceTurn(ctx, f.sessionID, 0)
 	turn := turnSource.Number
 	testutil.FailErr(t, "resolve source turn", err)
 	testutil.FailErr(t, "record agent effect", ledger.Record(ctx, sourceledger.RecordInput{
@@ -208,7 +208,7 @@ func TestRewindWillNotUseAnotherSessionsAnchor(t *testing.T) {
 		`{"project_id":"`+f.projectID+`","posture":"spec"}`, http.StatusAccepted)
 	foreignAnchor := uuid.New().String()
 	testutil.FailErr(t, "append ask to the other session",
-		f.h.Store.AppendMessages(ctx, other.ID, wire.Message{
+		f.h.Store.Transcript.AppendMessages(ctx, other.ID, wire.Message{
 			ID:      foreignAnchor,
 			Role:    wire.MessageRoleUser,
 			Content: "someone else's ask",
@@ -221,7 +221,7 @@ func TestRewindWillNotUseAnotherSessionsAnchor(t *testing.T) {
 		wantCode:   "rewind_anchor_not_found",
 	})
 
-	msgs, err := f.h.Store.GetMessages(ctx, other.ID)
+	msgs, err := f.h.Store.Transcript.GetMessages(ctx, other.ID)
 	testutil.FailErr(t, "get other session messages", err)
 	found := false
 	for _, m := range msgs {

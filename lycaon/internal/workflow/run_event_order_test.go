@@ -124,7 +124,7 @@ func newOrderHarness(t *testing.T) orderHarness {
 	runs.Transactions.SetEventOutbox(outbox)
 	runs.Transactions.SetSessionMutations(sessions)
 
-	sess, err := sessions.Create(context.Background(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessions.Sessions.Create(context.Background(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	return orderHarness{runs: runs, db: sqlDB, session: sess}
 }

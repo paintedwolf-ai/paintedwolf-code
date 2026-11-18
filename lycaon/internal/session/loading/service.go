@@ -20,13 +20,19 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	Get(context.Context, string) (*api.Session, error)
-	LatestTurnLoadReceipt(context.Context, string) (store.TurnLoadReceipt, bool, error)
-	PutTurnLoadReceipt(context.Context, store.TurnLoadReceipt) (store.TurnLoadReceipt, error)
-	ListTurnLoadReceiptsForTurns(context.Context, []string) ([]store.TurnLoadReceipt, error)
-	GetCompactionView(context.Context, string) (*store.CompactionView, bool, error)
-	CompactionViewCurrent(context.Context, string, int64, string, int64) (bool, error)
+type Sessions interface {
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Compaction interface {
+	CompactionViewCurrent(ctx context.Context, sessionID string, coveredThroughOrd int64, coveredThroughID string, sourceSeq int64) (bool, error)
+	GetCompactionView(ctx context.Context, sessionID string) (*store.CompactionView, bool, error)
+}
+
+type Turns interface {
+	LatestTurnLoadReceipt(ctx context.Context, sessionID string) (store.TurnLoadReceipt, bool, error)
+	ListTurnLoadReceiptsForTurns(ctx context.Context, openingMessageIDs []string) ([]store.TurnLoadReceipt, error)
+	PutTurnLoadReceipt(ctx context.Context, r store.TurnLoadReceipt) (store.TurnLoadReceipt, error)
 }
 type Workflow interface {
 	ResolvedRequest(ctx context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest
@@ -43,25 +49,27 @@ type ImplementState func(context.Context, *api.Session) surface.ImplementSession
 
 // Service selects additions to the standing tool and instruction surface.
 type Service struct {
-	store       Store
-	Ledger      *turnload.Ledger
-	Workspace   *sessionscope.Service
-	decider     decide.Decider
-	router      *llm.StaticModelRouter
-	models      Models
-	cost        cost.CostTracker
-	policy      func() toolpolicy.Engine
-	skills      SkillRoster
-	implement   ImplementState
-	workflows   Workflow
-	workerQueue Workers
-	skillBody   SkillBodyRenderer
-	profiles    func(context.Context, *api.Session) []sandbox.ToolProfile
-	events      *events.Publisher
+	sessionStore    Sessions
+	compactionStore Compaction
+	turnStore       Turns
+	Ledger          *turnload.Ledger
+	Workspace       *sessionscope.Service
+	decider         decide.Decider
+	router          *llm.StaticModelRouter
+	models          Models
+	cost            cost.CostTracker
+	policy          func() toolpolicy.Engine
+	skills          SkillRoster
+	implement       ImplementState
+	workflows       Workflow
+	workerQueue     Workers
+	skillBody       SkillBodyRenderer
+	profiles        func(context.Context, *api.Session) []sandbox.ToolProfile
+	events          *events.Publisher
 }
 
-func New(store Store, workspace *sessionscope.Service, router *llm.StaticModelRouter, models Models, cost cost.CostTracker, policy func() toolpolicy.Engine, skills SkillRoster, implement ImplementState) *Service {
-	return &Service{store: store, Workspace: workspace, router: router, models: models, cost: cost, policy: policy, skills: skills, implement: implement}
+func New(sessionStore Sessions, compactionStore Compaction, turnStore Turns, workspace *sessionscope.Service, router *llm.StaticModelRouter, models Models, cost cost.CostTracker, policy func() toolpolicy.Engine, skills SkillRoster, implement ImplementState) *Service {
+	return &Service{sessionStore: sessionStore, compactionStore: compactionStore, turnStore: turnStore, Workspace: workspace, router: router, models: models, cost: cost, policy: policy, skills: skills, implement: implement}
 }
 func (m *Service) SetWorkflow(workflow Workflow)         { m.workflows = workflow }
 func (m *Service) SetWorkers(workers Workers)            { m.workerQueue = workers }

@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/promptassembly"
@@ -37,7 +38,7 @@ func (m *Service) ForceCompact(ctx context.Context, sessionID string) (report co
 }
 
 func (m *Service) forceCompact(ctx context.Context, sessionID string) (compaction.CompactionReport, error) {
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return compaction.CompactionReport{}, err
 	}

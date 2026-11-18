@@ -33,10 +33,10 @@ func (m *Service) VisibleUser(ctx context.Context, sessionID string, msg api.Mes
 }
 
 func (m *Service) TaskEnqueued(ctx context.Context, sessionID, agentType string) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil || sess.IsWorkerChild() {
 		return
 	}
@@ -53,10 +53,10 @@ func (m *Service) TaskEnqueued(ctx context.Context, sessionID, agentType string)
 // Reconcile is the single host path for batch phase and
 // overlay-integrate completion derived from the worker job ledger.
 func (m *Service) Reconcile(ctx context.Context, sessionID string) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil || sess.IsWorkerChild() {
 		return
 	}
@@ -75,7 +75,7 @@ func (m *Service) Reconcile(ctx context.Context, sessionID string) {
 	if err != nil || !idle {
 		return
 	}
-	msgs, msgErr := m.store.GetMessages(ctx, sessionID)
+	msgs, msgErr := m.transcriptStore.GetMessages(ctx, sessionID)
 	if msgErr != nil {
 		return
 	}
@@ -87,7 +87,7 @@ func (m *Service) Reconcile(ctx context.Context, sessionID string) {
 	}
 	progressContent := ""
 	if m.progress != nil {
-		progressContent = m.progress.Get(ctx, sessiontree.RootID(ctx, m.store, sess.ID))
+		progressContent = m.progress.Get(ctx, sessiontree.RootID(ctx, m.sessionStore, sess.ID))
 	}
 	verifyRequired, verifyPassed, _, verifyUnverified := m.verification.WorkflowGateState(ctx, sess, msgs)
 	if !workeroutcomes.BatchReadyForSynthesis(state, msgs, progressContent, verifyRequired, verifyPassed || verifyUnverified) {
@@ -117,10 +117,10 @@ func (m *Service) IntegrateComplete(ctx context.Context, sess *api.Session, sess
 }
 
 func (m *Service) DisarmTerminal(ctx context.Context, sessionID string) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil || sess.IsWorkerChild() {
 		return
 	}

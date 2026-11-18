@@ -33,9 +33,9 @@ func TestHandleCostSummarySessionBreakdown(t *testing.T) {
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, toolstest.NewRegistry())
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
-	parent, err := store.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := store.CreateChild(t.Context(), parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "work"})
+	child, err := store.Sessions.CreateChild(t.Context(), parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "work"})
 	testutil.FailErr(t, "store.CreateChild failed", err)
 
 	coord := 0.40
@@ -78,9 +78,9 @@ func TestHandleCostSummaryProjectBreakdown(t *testing.T) {
 	dir := t.TempDir()
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
-	parent, err := store.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild, ProjectID: p.ID}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild, ProjectID: p.ID}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := store.CreateChild(t.Context(), parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "work"})
+	child, err := store.Sessions.CreateChild(t.Context(), parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "work"})
 	testutil.FailErr(t, "store.CreateChild failed", err)
 
 	c1, c2 := 0.10, 0.07
@@ -121,15 +121,15 @@ func TestHandleProjectCostReportIncludesSessionBreakdownAndArchivedChats(t *test
 	dir := t.TempDir()
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "create project", err)
-	first, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{
+	first, err := sessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		Posture: wire.SessionPostureBuild, ProjectID: p.ID,
 	}, "")
 	testutil.FailErr(t, "create first session", err)
-	child, err := sessionStore.CreateChild(t.Context(), first, wire.SpawnChildRequest{
+	child, err := sessionStore.Sessions.CreateChild(t.Context(), first, wire.SpawnChildRequest{
 		AgentType: "implementer", Prompt: "work",
 	})
 	testutil.FailErr(t, "create worker child", err)
-	second, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{
+	second, err := sessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		Posture: wire.SessionPostureVet, ProjectID: p.ID,
 	}, "")
 	testutil.FailErr(t, "create second session", err)

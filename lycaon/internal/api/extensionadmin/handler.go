@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 )
 
@@ -26,7 +27,7 @@ type Deps struct {
 	MCPRegistry *mcp.Runtime
 	ModuleRoot  string
 	Projects    project.Registry
-	Store       session.Store
+	Store       *sessionstore.Repositories
 	Sessions    *session.Host
 	Settings    *settings.Service
 	Workflow    *workflowadmin.Handler
@@ -70,7 +71,7 @@ type Execution struct {
 	PromptExecution  *promptadmin.Execution
 	Runtime          ContributionRuntime
 	Sessions         *session.Host
-	Store            session.Store
+	Store            *sessionstore.Repositories
 	Workflow         *workflowadmin.RunControl
 	responses        *httpio.Responder
 }

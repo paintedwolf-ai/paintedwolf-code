@@ -104,7 +104,7 @@ func TestCoordinatorPromptRejectsOffSurfaceDelegate(t *testing.T) {
 		testutil.FailErr(t, "run coordinator prompt", err)
 	}
 
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	seenRejection := false
 	for _, msg := range msgs {
@@ -161,7 +161,7 @@ func TestCoordinatorPromptSuccessWorkflowGateBanner(t *testing.T) {
 	acceptPromptHTTP(t, srv, sess.ID, "review notes")
 	waitToolFeedbackHTTP(t, srv, sess.ID, "WORKFLOW_GATE_BLOCKED")
 
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var toolOut string
 	for _, msg := range msgs {

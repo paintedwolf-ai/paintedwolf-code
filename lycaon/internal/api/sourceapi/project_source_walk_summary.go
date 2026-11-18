@@ -109,7 +109,7 @@ func (s *History) HandleListProjectSourceWalk(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if query.currentTurn {
-		turnSource, err := s.SessionStore.ReadSourceTurn(r.Context(), bas.SessionID, 0)
+		turnSource, err := s.SessionStore.Transcript.ReadSourceTurn(r.Context(), bas.SessionID, 0)
 		turn := turnSource.Number
 		if err != nil {
 			s.responses.InternalError(w, r, err)

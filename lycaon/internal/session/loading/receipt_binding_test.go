@@ -3,15 +3,16 @@ package loading
 import (
 	"context"
 	"encoding/json"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
-	"time"
 )
 
 type decisionReceiptStore struct {
@@ -39,7 +40,7 @@ func TestLatestDecisionIsTheSessionsNewestReceipt(t *testing.T) {
 		t.Fatalf("unconfigured service found a decision: %v", err)
 	}
 	repository := &decisionReceiptStore{}
-	s := &Service{store: repository, Ledger: turnload.NewLedger()}
+	s := &Service{sessionStore: repository, compactionStore: repository, turnStore: repository, Ledger: turnload.NewLedger()}
 	if _, found, _ := s.LatestDecision(t.Context(), "session"); found {
 		t.Fatal("a decision was found before any was recorded")
 	}
@@ -56,7 +57,7 @@ func TestLatestDecisionIsTheSessionsNewestReceipt(t *testing.T) {
 
 func TestRequestAndSkillLookupReceiptsRetainCallAndStandingSurface(t *testing.T) {
 	repository := &decisionReceiptStore{}
-	s := &Service{store: repository, Ledger: turnload.NewLedger()}
+	s := &Service{sessionStore: repository, compactionStore: repository, turnStore: repository, Ledger: turnload.NewLedger()}
 	s.Ledger.BeginTurn("session", turnload.TurnOpening{OpeningMessageID: "opening", Request: "Inspect repository", Loadable: []string{"read"}}, turnload.Decision{})
 	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session", ToolCallID: "call", Agent: "implementer"}, Turn: tools.InvocationTurn{TurnSurfaceID: "implement"}}
 	outcome := s.ResolveToolRequest(t.Context(), tctx, "read", []turnload.ToolCard{{Name: "read"}})
@@ -77,7 +78,7 @@ func TestRequestAndSkillLookupReceiptsRetainCallAndStandingSurface(t *testing.T)
 
 func TestContinuationVisibilityRecordsOnlyChangedSurfaces(t *testing.T) {
 	repository := &decisionReceiptStore{}
-	service := &Service{store: repository, Ledger: turnload.NewLedger()}
+	service := &Service{sessionStore: repository, compactionStore: repository, turnStore: repository, Ledger: turnload.NewLedger()}
 	sess := &api.Session{ID: "session"}
 	service.Ledger.Restore(sess.ID, turnload.Standing{}, nil)
 	service.reconcileVisibility(t.Context(), sess, "opening", "implement", []string{"command"}, []string{"task", "search"}, turnload.RankingUnavailable)

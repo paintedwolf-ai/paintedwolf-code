@@ -3,13 +3,13 @@ package workflow
 import (
 	"context"
 	"errors"
-	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -31,7 +31,7 @@ func TestSyncHumanApprovalRejectsWhenNotReady(t *testing.T) {
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	vars = runstate.SetHostVar(vars, "phase_skipped.review", true)
 	vars, err = workflowphases.ApplyPhaseOnEnter(ctx, workflowphases.PhaseEnterRequest{
-		Sessions: sessStore, SessionID: run.SessionID, Manifest: manifest, PhaseID: "approve",
+		Sessions: sessStore.Sessions, SessionID: run.SessionID, Manifest: manifest, PhaseID: "approve",
 		Vars: vars, BlueprintPath: run.BlueprintPath, Registry: mgr.Policy.Registry,
 	})
 	testutil.FailErr(t, "workflowphases.ApplyPhaseOnEnter approve", err)
@@ -143,7 +143,7 @@ func TestTrySatisfyHumanApprovalFromChatBailsWhenNotReady(t *testing.T) {
 	manifest, err := mgr.Resolver.ForRun(ctx, run)
 	testutil.FailErr(t, "manifestForRun", err)
 	vars, err = workflowphases.ApplyPhaseOnEnter(ctx, workflowphases.PhaseEnterRequest{
-		Sessions: sessStore, SessionID: run.SessionID, Manifest: manifest, PhaseID: "select",
+		Sessions: sessStore.Sessions, SessionID: run.SessionID, Manifest: manifest, PhaseID: "select",
 		Vars: vars, Registry: mgr.Policy.Registry,
 	})
 	testutil.FailErr(t, "workflowphases.ApplyPhaseOnEnter select", err)
@@ -174,7 +174,7 @@ func TestOptionsTerminalApprovalDoesNotWakeAmbientImplementation(t *testing.T) {
 	vars, err := mgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	vars, err = workflowphases.ApplyPhaseOnEnter(ctx, workflowphases.PhaseEnterRequest{
-		Sessions: sessStore, SessionID: run.SessionID, Manifest: manifest, PhaseID: "select",
+		Sessions: sessStore.Sessions, SessionID: run.SessionID, Manifest: manifest, PhaseID: "select",
 		Vars: vars, BlueprintPath: run.BlueprintPath, Registry: mgr.Policy.Registry,
 	})
 	testutil.FailErr(t, "workflowphases.ApplyPhaseOnEnter select", err)

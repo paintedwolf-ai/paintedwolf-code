@@ -11,7 +11,7 @@ import (
 // CreateForProject opens a project-bound session.
 func (m *Service) CreateForProject(ctx context.Context, projectID string, mode api.SessionPosture) (*api.Session, error) {
 	projectID = strings.TrimSpace(projectID)
-	sess, err := m.store.Create(ctx, api.CreateSessionRequest{
+	sess, err := m.sessionStore.Create(ctx, api.CreateSessionRequest{
 		ProjectID: projectID,
 		Posture:   mode,
 	}, projectID)
@@ -24,13 +24,13 @@ func (m *Service) CreateForProject(ctx context.Context, projectID string, mode a
 
 // Get returns a session by ID.
 func (m *Service) Get(ctx context.Context, id string) (*api.Session, error) {
-	return m.store.Get(ctx, id)
+	return m.sessionStore.Get(ctx, id)
 }
 
 // HasActiveProjectSessions reports whether a project has unarchived active sessions.
 func (m *Service) HasActiveProjectSessions(ctx context.Context, projectID string, activeSince time.Time) (bool, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return false, nil
 	}
-	return m.store.HasActiveProjectSessions(ctx, projectID, activeSince)
+	return m.sessionStore.HasActiveProjectSessions(ctx, projectID, activeSince)
 }

@@ -6,7 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
@@ -18,7 +18,7 @@ import (
 )
 
 // RegisterTools registers state, plan, compose, feedback, ask_user, advance, transition, fanout, and verdict tools.
-func (r *Runtime) RegisterTools(reg *tools.DefaultRegistry, boundary *sandbox.Boundary, sessions session.Store, surfaceGate *settings.ProjectSurfaceGate) error {
+func (r *Runtime) RegisterTools(reg *tools.DefaultRegistry, boundary *sandbox.Boundary, sessions *sessionstore.Repositories, surfaceGate *settings.ProjectSurfaceGate) error {
 	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{
 		Runs:     r.Store.Runs,
 		Vars:     r.Manager.Phases.Vars,
@@ -27,7 +27,7 @@ func (r *Runtime) RegisterTools(reg *tools.DefaultRegistry, boundary *sandbox.Bo
 		Starts:   r.Manager.Starts,
 		Controls: r.Manager.Controls,
 		Scaffold: r.Manager.Blueprints.Scaffold,
-		Sessions: sessions,
+		Sessions: sessions.Sessions,
 	}); err != nil {
 		return fmt.Errorf("state tools: %w", err)
 	}

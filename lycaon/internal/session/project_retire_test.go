@@ -27,20 +27,20 @@ func TestRetireForProjectDeleteRemovesSessionsAndAttention(t *testing.T) {
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true, Name: "scratch"})
 	testutil.FailErr(t, "create project", err)
 
-	keep, err := sessionStore.Create(ctx, api.CreateSessionRequest{ProjectID: "other"}, "other")
+	keep, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: "other"}, "other")
 	testutil.FailErr(t, "create other session", err)
-	doomed, err := sessionStore.Create(ctx, api.CreateSessionRequest{ProjectID: p.ID}, p.ID)
+	doomed, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: p.ID}, p.ID)
 	testutil.FailErr(t, "create doomed session", err)
-	testutil.FailErr(t, "mark error", sessionStore.SetSessionStatus(ctx, doomed.ID, api.SessionStatusError))
+	testutil.FailErr(t, "mark error", sessionStore.Sessions.SetSessionStatus(ctx, doomed.ID, api.SessionStatusError))
 
-	child, err := sessionStore.CreateChild(ctx, doomed, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := sessionStore.Sessions.CreateChild(ctx, doomed, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 
-	archived, err := sessionStore.Create(ctx, api.CreateSessionRequest{ProjectID: p.ID}, p.ID)
+	archived, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: p.ID}, p.ID)
 	testutil.FailErr(t, "create archived session", err)
-	testutil.FailErr(t, "archive session", sessionStore.UpdateSession(ctx, archived.ID, func(s *api.Session) { now := time.Now(); s.ArchivedAt = &now }))
+	testutil.FailErr(t, "archive session", sessionStore.Sessions.UpdateSession(ctx, archived.ID, func(s *api.Session) { now := time.Now(); s.ArchivedAt = &now }))
 	hub := events.NewMemoryHub()
-	src := &attention.Source{Sessions: sessionStore}
+	src := &attention.Source{Sessions: sessionStore.Sessions}
 	pub := &events.Publisher{Hub: hub, Attention: src}
 	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetEventPublisher(pub)
@@ -56,17 +56,17 @@ func TestRetireForProjectDeleteRemovesSessionsAndAttention(t *testing.T) {
 	if !reflect.DeepEqual(progress, [][2]int{{0, 3}, {1, 3}, {2, 3}, {3, 3}}) {
 		t.Fatalf("chat progress = %v", progress)
 	}
-	if _, err := sessionStore.Get(ctx, archived.ID); !errors.Is(err, store.ErrSessionNotFound) {
+	if _, err := sessionStore.Sessions.Get(ctx, archived.ID); !errors.Is(err, store.ErrSessionNotFound) {
 		t.Fatalf("archived chat survived: %v", err)
 	}
 
-	if _, err := sessionStore.Get(ctx, doomed.ID); !errors.Is(err, store.ErrSessionNotFound) {
+	if _, err := sessionStore.Sessions.Get(ctx, doomed.ID); !errors.Is(err, store.ErrSessionNotFound) {
 		t.Fatalf("doomed session still present: %v", err)
 	}
-	if _, err := sessionStore.Get(ctx, child.ID); !errors.Is(err, store.ErrSessionNotFound) {
+	if _, err := sessionStore.Sessions.Get(ctx, child.ID); !errors.Is(err, store.ErrSessionNotFound) {
 		t.Fatalf("child session still present: %v", err)
 	}
-	if _, err := sessionStore.Get(ctx, keep.ID); err != nil {
+	if _, err := sessionStore.Sessions.Get(ctx, keep.ID); err != nil {
 		testutil.FailErr(t, "kept session", err)
 	}
 
@@ -80,9 +80,9 @@ func TestRetireForProjectDeleteRemovesSessionsAndAttention(t *testing.T) {
 func TestRetireForProjectDeleteIgnoresWorktreeBinding(t *testing.T) {
 	ctx := context.Background()
 	sessionStore := storetest.New(t, "p1")
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{ProjectID: "p1"}, "p1")
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: "p1"}, "p1")
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "bind worktree", sessionStore.PutWorktreeBinding(ctx, store.WorktreeBinding{
+	testutil.FailErr(t, "bind worktree", sessionStore.Sessions.PutWorktreeBinding(ctx, store.WorktreeBinding{
 		SessionID:    sess.ID,
 		ProjectID:    "p1",
 		RepoID:       "repo",
@@ -97,7 +97,7 @@ func TestRetireForProjectDeleteIgnoresWorktreeBinding(t *testing.T) {
 		t.Fatalf("DeleteSession = %v, want chats.ErrSessionWorktreeBound", err)
 	}
 	testutil.FailErr(t, "retire", mgr.Chats.RetireForProjectDelete(ctx, "p1", nil))
-	if _, err := sessionStore.Get(ctx, sess.ID); !errors.Is(err, store.ErrSessionNotFound) {
+	if _, err := sessionStore.Sessions.Get(ctx, sess.ID); !errors.Is(err, store.ErrSessionNotFound) {
 		t.Fatalf("worktree-bound session survived project retire: %v", err)
 	}
 }

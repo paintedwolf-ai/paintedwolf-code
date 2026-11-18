@@ -3,7 +3,6 @@ package workflowadmin_test
 import (
 	"context"
 	"encoding/json"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"io"
 	"log/slog"
 	"net/http"
@@ -26,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -34,7 +34,7 @@ import (
 type routesFixture struct {
 	router     chi.Router
 	handler    workflowadmin.Handler
-	sessions   *store.SQL
+	sessions   *store.Repositories
 	runs       *runstate.Repository
 	blueprints *blueprint.Manager
 	project    *project.Project
@@ -99,7 +99,7 @@ func workflowRouter(h workflowadmin.Handler) chi.Router {
 
 func (f *routesFixture) createSession(t *testing.T) *wire.Session {
 	t.Helper()
-	sess, err := f.sessions.Create(t.Context(), wire.CreateSessionRequest{
+	sess, err := f.sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		ProjectID: f.project.ID, Posture: wire.SessionPostureBuild,
 	}, f.project.ID)
 	testutil.FailErr(t, "create session", err)

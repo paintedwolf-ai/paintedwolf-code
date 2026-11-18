@@ -17,7 +17,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newSupervisorTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestration.OrchestratorImpl, *orchestration.MemoryTopologyWorkers, *session.Host, *store.SQL) {
+func newSupervisorTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestration.OrchestratorImpl, *orchestration.MemoryTopologyWorkers, *session.Host, *store.Repositories) {
 	t.Helper()
 	mem := orchestration.NewMemoryTopologyWorkers()
 	sessStore := storetest.New(t, testdbseed.DefaultProjectID)

@@ -49,7 +49,7 @@ type Dependencies struct {
 // Build creates the session manager, prompt engine, and crash recovery handlers.
 func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	if configdir.IsHarnessChannel() && deps.Providers.Service != nil {
-		preparation, err := harnessfixture.NewPreludeController(deps.Storage.Directory, deps.Storage.Sessions)
+		preparation, err := harnessfixture.NewPreludeController(deps.Storage.Directory, deps.Storage.Sessions.Transcript)
 		if err != nil {
 			return nil, err
 		}

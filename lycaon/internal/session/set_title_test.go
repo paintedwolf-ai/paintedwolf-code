@@ -55,7 +55,7 @@ func TestSetTitleOverwritesAndPublishes(t *testing.T) {
 		t.Fatalf("title = %q", updated.Title)
 	}
 
-	got, err := sessionStore.Get(ctx, sess.ID)
+	got, err := sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get", err)
 	if got.Title != "Ship readiness checklist" {
 		t.Fatalf("stored title = %q", got.Title)
@@ -105,13 +105,13 @@ func TestUpdateTitleIfUnsetNoOpsAfterManualSet(t *testing.T) {
 
 	// The auto-title path does not overwrite a manual title.
 	mgr.Chats.Naming.SessionFromPrompt(ctx, sess, "Build a completely different thing")
-	got, err := sessionStore.Get(ctx, sess.ID)
+	got, err := sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get", err)
 	if got.Title != "Manual name" {
 		t.Fatalf("title overwritten to %q", got.Title)
 	}
 
-	updated, err := sessionStore.UpdateTitleIfUnset(ctx, sess.ID, "Race loser")
+	updated, err := sessionStore.Sessions.UpdateTitleIfUnset(ctx, sess.ID, "Race loser")
 	testutil.FailErr(t, "ifunset", err)
 	if updated {
 		t.Fatal("UpdateTitleIfUnset reported update after manual set")
@@ -137,12 +137,12 @@ func TestSetTitleWinsRaceVsIfUnset(t *testing.T) {
 	// Concurrent-style: Set always writes; subsequent IfUnset no-ops.
 	_, err = mgr.Chats.Naming.SetTitle(ctx, sess.ID, "User wins")
 	testutil.FailErr(t, "set", err)
-	ok, err := sessionStore.UpdateTitleIfUnset(ctx, sess.ID, "Auto late")
+	ok, err := sessionStore.Sessions.UpdateTitleIfUnset(ctx, sess.ID, "Auto late")
 	testutil.FailErr(t, "ifunset", err)
 	if ok {
 		t.Fatal("IfUnset should no-op when title already set")
 	}
-	got, err := sessionStore.Get(ctx, sess.ID)
+	got, err := sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get", err)
 	if got.Title != "User wins" {
 		t.Fatalf("title = %q", got.Title)
@@ -195,7 +195,7 @@ func TestSyntaxOverrideFeedbackRecordsExplicitChoice(t *testing.T) {
 
 // ordStoreFixture binds the repository to one fresh session.
 type ordStoreFixture struct {
-	store     Store
+	store     *store.Repositories
 	sessionID string
 }
 
@@ -205,7 +205,7 @@ func newSQLOrdFixture(t *testing.T) ordStoreFixture {
 	dir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	store := store.NewSQL(sqlDB)
-	sess, err := store.Create(context.Background(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(context.Background(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	return ordStoreFixture{store: store, sessionID: sess.ID}
 }

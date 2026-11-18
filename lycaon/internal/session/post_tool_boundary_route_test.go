@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/isolation"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -162,7 +163,7 @@ func TestRewindRefusesWhenNoCheckpointRootIsConfigured(t *testing.T) {
 		Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser,
 		TrustTier: api.ContentTrustTierTrusted,
 	}
-	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(ctx, sessionID, anchor))
+	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Transcript.AppendMessages(ctx, sessionID, anchor))
 
 	if _, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID); !errors.Is(err, checkpointcontrol.ErrCheckpointRootUnset) {
 		t.Fatalf("RewindToPrompt err = %v, want checkpointcontrol.ErrCheckpointRootUnset", err)
@@ -209,8 +210,8 @@ func TestRewindRestoredPromptIsUserInstructionOnly(t *testing.T) {
 		},
 		ArtifactIDs: []string{"art-1"},
 	}
-	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(ctx, sessionID, anchor))
-	_, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store)).Open(t.Context(), sessionID, anchor.ID)
+	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Transcript.AppendMessages(ctx, sessionID, anchor))
+	_, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind).Open(t.Context(), sessionID, anchor.ID)
 	testutil.FailErr(t, "open checkpoint", err)
 
 	result, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID)

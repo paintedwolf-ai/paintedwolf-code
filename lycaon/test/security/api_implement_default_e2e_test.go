@@ -137,7 +137,7 @@ func TestImplementDefaultDisallowsPlanWriterSpawn(t *testing.T) {
 
 	postPromptAndWaitIdle(t, h.Server, sess.ID, "spawn plan writer")
 
-	msgs, err := h.Store.GetMessages(ctx, sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var toolDeny string
 	for _, msg := range msgs {

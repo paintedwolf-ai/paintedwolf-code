@@ -14,7 +14,7 @@ import (
 
 func emitProgressCompletionFromContent(
 	ctx context.Context,
-	store *store.SQL,
+	store *store.Repositories,
 	eventPub *events.Publisher,
 	progressStore progress.RunScopedStore,
 	activeRun ActiveRunID,
@@ -58,7 +58,7 @@ func emitProgressCompletionFromContent(
 // appendAndPublishMessage publishes directly when no outbox is configured.
 func appendAndPublishMessage(
 	ctx context.Context,
-	store *store.SQL,
+	store *store.Repositories,
 	eventPub *events.Publisher,
 	sessionID string,
 	msg wire.Message,
@@ -67,17 +67,17 @@ func appendAndPublishMessage(
 		return errProgressStoreRequired
 	}
 	batch := []wire.Message{msg}
-	if err := store.AppendMessages(ctx, sessionID, batch...); err != nil {
+	if err := store.Transcript.AppendMessages(ctx, sessionID, batch...); err != nil {
 		return err
 	}
-	if eventPub != nil && !store.MutationEventsOutboxed() {
+	if eventPub != nil && !store.Transcript.MessageEventsOutboxed() {
 		eventPub.PublishMessageAppend(ctx, projectKeyForSession(ctx, store, sessionID), sessionID, batch[0])
 	}
 	return nil
 }
 
-func projectKeyForSession(ctx context.Context, store *store.SQL, sessionID string) string {
-	sess, err := store.Get(ctx, sessionID)
+func projectKeyForSession(ctx context.Context, store *store.Repositories, sessionID string) string {
+	sess, err := store.Sessions.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return ""
 	}

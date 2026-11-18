@@ -31,7 +31,7 @@ func (s *Submission) HandleCreateComposerSecret(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	chatSessionID := sessiontree.RootID(r.Context(), s.Store, sessionID)
+	chatSessionID := sessiontree.RootID(r.Context(), s.Store.Sessions, sessionID)
 	put, err := s.ManagedSecrets.Put(r.Context(), secretcap.PutRequest{
 		ProjectID: sess.ProjectID, ChatSessionID: chatSessionID, SessionID: sessionID,
 		OperationID: operationID.String(), Name: strings.TrimSpace(body.Name),

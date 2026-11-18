@@ -73,7 +73,7 @@ func (m *Asks) ResolveUserSecret(
 	if err := runstate.ValidateCoordinatorAskForResolution(run, ask, phaseID); err != nil {
 		return nil, err
 	}
-	sess, err := m.Sessions.Get(ctx, sessionID)
+	sess, err := m.SessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}

@@ -20,7 +20,7 @@ func (r *Runtime) bindEvidence(deps Dependencies) {
 		}
 		if r.Store != nil && r.Store.Runs != nil {
 			if wfRun, err := r.Store.Runs.Get(c, runID); err == nil && wfRun != nil && deps.Sessions != nil {
-				if sess, sErr := deps.Sessions.Get(c, wfRun.SessionID); sErr == nil && sess != nil && strings.TrimSpace(sess.ProjectID) != "" {
+				if sess, sErr := deps.Sessions.Sessions.Get(c, wfRun.SessionID); sErr == nil && sess != nil && strings.TrimSpace(sess.ProjectID) != "" {
 					return project.EnsureHostDataDir(deps.DataDir, sess.ProjectID)
 				}
 			}
@@ -28,7 +28,7 @@ func (r *Runtime) bindEvidence(deps Dependencies) {
 		if deps.Sessions == nil {
 			return "", nil
 		}
-		sess, err := deps.Sessions.Get(c, runID)
+		sess, err := deps.Sessions.Sessions.Get(c, runID)
 		if err != nil || sess == nil {
 			return "", err
 		}
@@ -42,7 +42,7 @@ func (r *Runtime) bindEvidence(deps Dependencies) {
 		if deps.Sessions == nil {
 			return "", nil
 		}
-		sess, err := deps.Sessions.Get(c, sessionID)
+		sess, err := deps.Sessions.Sessions.Get(c, sessionID)
 		if err != nil || sess == nil {
 			return "", err
 		}

@@ -19,10 +19,8 @@ import (
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
-	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -37,11 +35,13 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	"gopkg.in/yaml.v3"
+	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 // checkpointPreImages is the engine's shared source content store, where a
 // checkpoint seals each path's pre-turn bytes.
-func checkpointPreImages(mgr *Host) *sourceblob.Store {
+func checkpointPreImages(mgr *Host) *sourceblob.*sessionstore.Repositories {
 	return sourceblob.New(filepath.Join(mgr.Workspace.DataDir, enginepaths.SourceContentDirName))
 }
 
@@ -59,9 +59,9 @@ func newCheckpointTestSession(t *testing.T) (*Host, string, string) {
 	mgr.ToolContext.SetSourceMutations(mutations)
 	mgr.Chats.Rewinds.SetSourceRewinds(&sourcerewind.Service{Planner: ledger.Comparisons, Mutations: mutations})
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "bind workspace path", st.UpdateSession(ctx, sess.ID, func(s *api.Session) {
+	testutil.FailErr(t, "bind workspace path", st.Sessions.UpdateSession(ctx, sess.ID, func(s *api.Session) {
 		s.WorkspacePath = dir
 	}))
 	return mgr, sess.ID, dir
@@ -92,7 +92,7 @@ func TestPromptOpensCheckpointForTheVisibleUserMessage(t *testing.T) {
 	if len(anchors) != 1 {
 		t.Fatalf("visible user messages = %d, want 1", len(anchors))
 	}
-	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
+	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind)
 	man, err := store.Load(t.Context(), sessionID, anchors[0])
 	testutil.FailErr(t, "load checkpoint for the anchor", err)
 	if man.AnchorMessageID != anchors[0] {
@@ -116,7 +116,7 @@ func TestPrimaryMutationCapturesPreTurnBytesIntoTheOpenAnchor(t *testing.T) {
 	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", "foo.go")
 	testutil.FailErr(t, "simulate the write", os.WriteFile(filepath.Join(dir, "foo.go"), []byte("after"), 0o644))
 
-	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
+	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind)
 	man, err := store.Load(t.Context(), sessionID, anchor)
 	testutil.FailErr(t, "load checkpoint", err)
 	entry, ok := man.Paths["foo.go"]
@@ -149,7 +149,7 @@ func TestPrimaryMutationRecordsTheProjectRootIdentity(t *testing.T) {
 	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "root-alpha", "foo.go")
 	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", "notes.md")
 
-	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
+	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind)
 	man, err := store.Load(t.Context(), sessionID, anchor)
 	testutil.FailErr(t, "load checkpoint", err)
 	if entry := man.Paths["foo.go"]; entry.RootID != "root-alpha" {
@@ -181,7 +181,7 @@ func TestEachPromptOpensItsOwnAnchorAndOlderAnchorsKeepTheirBytes(t *testing.T) 
 	if len(anchors) != 2 {
 		t.Fatalf("anchors = %d, want 2", len(anchors))
 	}
-	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
+	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind)
 	for i, want := range []string{"v1", "v2"} {
 		man, err := store.Load(t.Context(), sessionID, anchors[i])
 		testutil.FailErr(t, "load anchor", err)
@@ -209,7 +209,7 @@ func TestUnderCapTurnLeavesTheCheckpointComplete(t *testing.T) {
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
 	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", "foo.go")
 
-	man, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store)).Load(t.Context(), sessionID, anchor)
+	man, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind).Load(t.Context(), sessionID, anchor)
 	testutil.FailErr(t, "load manifest", err)
 	if man.Truncated {
 		t.Fatal("an ordinary turn must not be reported as truncated")
@@ -218,7 +218,7 @@ func TestUnderCapTurnLeavesTheCheckpointComplete(t *testing.T) {
 
 func checkpointCaller(t *testing.T, mgr *Host) context.Context {
 	t.Helper()
-	owner, err := mgr.Coordinator.Context.Sessions.(Store).HostOwner(t.Context())
+	owner, err := mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).People.HostOwner(t.Context())
 	testutil.FailErr(t, "host owner", err)
 	return people.WithCaller(t.Context(), owner)
 }
@@ -226,7 +226,7 @@ func checkpointCaller(t *testing.T, mgr *Host) context.Context {
 func rewindTest(t *testing.T, mgr *Host, ctx context.Context, operationID, sessionID, anchor string) (*checkpointcontrol.RewindResult, error) {
 	t.Helper()
 	if _, ok := people.Caller(ctx); !ok {
-		owner, err := mgr.Coordinator.Context.Sessions.(Store).HostOwner(ctx)
+		owner, err := mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).People.HostOwner(ctx)
 		testutil.FailErr(t, "host owner", err)
 		ctx = people.WithCaller(ctx, owner)
 	}
@@ -243,7 +243,7 @@ func recordRewindTestEffect(t *testing.T, mgr *Host, sessionID, path string, bef
 	ctx := t.Context()
 	p, err := rewindFixtureProject(t, mgr, ctx, sessionID)
 	testutil.FailErr(t, "resolve project", err)
-	turnSource, err := mgr.Coordinator.Context.Sessions.(Store).ReadSourceTurn(ctx, sessionID, 0)
+	turnSource, err := mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Transcript.ReadSourceTurn(ctx, sessionID, 0)
 	turn := turnSource.Number
 	testutil.FailErr(t, "resolve turn", err)
 	testutil.FailErr(t, "record source effect", mgr.ToolContext.SourceLedger.Record(ctx, sourceledger.RecordInput{
@@ -253,7 +253,7 @@ func recordRewindTestEffect(t *testing.T, mgr *Host, sessionID, path string, bef
 
 func rewindFixtureProject(t *testing.T, mgr *Host, ctx context.Context, id string) (*project.Project, error) {
 	t.Helper()
-	sess, err := mgr.Coordinator.Context.Sessions.(Store).Get(ctx, id)
+	sess, err := mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Sessions.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func TestPromptExecutionAppliesCloseoutBoundaryBeforeModel(t *testing.T) {
 			mgr, sessions := newTestManager(t)
 			stopped := &failure.ProviderEmptyCompletionError{ProviderID: "fixture"}
 			mgr.Coordinator.Model.LLM = failingTurnClient{failure: stopped}
-			sess, err := sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+			sess, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create closeout session", err)
 			mgr.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sess.ID, "citation", "offender", guidance.ParseCloseoutDraft("draft", citationmd.Options{}), nil)
 			want := guidance.RetainedCloseout{}
@@ -393,9 +393,9 @@ func TestManualCompactionDoesNotHoldSessionStopAdmission(t *testing.T) {
 	mgr, st := newCompactionManager(t, cfg)
 	started := make(chan struct{})
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, cancelableCompactionSummary{started: started}))
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append history", st.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append history", st.Transcript.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "old", Role: api.MessageRoleAssistant, Content: strings.Repeat("Old observations. ", 2000)},
 		api.Message{ID: "current", Role: api.MessageRoleUser, Content: "Continue."}))
 	ctx, cancel := context.WithCancel(t.Context())
@@ -422,7 +422,7 @@ func TestManualCompactionDoesNotHoldSessionStopAdmission(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatalf("compaction cancellation: %v", err)
 	}
-	current, err := st.Get(t.Context(), sess.ID)
+	current, err := st.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read generation", err)
 	if current.CompactionGeneration != 1 {
 		t.Fatal("cancellation lost the independent baseline")

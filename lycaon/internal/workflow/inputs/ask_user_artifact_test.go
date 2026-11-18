@@ -3,8 +3,6 @@
 package inputs_test
 
 import (
-	session "github.com/lycaon/lycaon/internal/session"
-
 	"context"
 	"encoding/json"
 	"os"
@@ -15,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
@@ -49,7 +48,7 @@ func TestAskUserArtifactReviewAttach(t *testing.T) {
 	testutil.FailErr(t, "unmarshal", json.Unmarshal([]byte(out), &body))
 	phaseID, _ := body["phase_id"].(string)
 
-	msgs, err := fx.wfMgr.Policy.Sessions.(session.Store).GetMessages(ctx, fx.sess.ID)
+	msgs, err := fx.wfMgr.Policy.Sessions.(*sessionstore.Repositories).Transcript.GetMessages(ctx, fx.sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	var found bool
 	for _, m := range msgs {
@@ -77,7 +76,7 @@ func TestAskUserArtifactReviewAttach(t *testing.T) {
 	if _, still := vars["last_user_ask_response"]; still {
 		t.Fatal("last_user_ask_response latch must not be stamped")
 	}
-	msgs, err = fx.wfMgr.Policy.Sessions.(session.Store).GetMessages(ctx, fx.sess.ID)
+	msgs, err = fx.wfMgr.Policy.Sessions.(*sessionstore.Repositories).Transcript.GetMessages(ctx, fx.sess.ID)
 	testutil.FailErr(t, "GetMessages after resolve", err)
 	var card *wire.WorkflowFeedbackMeta
 	for _, m := range msgs {
@@ -194,7 +193,7 @@ func TestAskUserWorkspaceFileArtifact(t *testing.T) {
 	var body map[string]any
 	testutil.FailErr(t, "unmarshal", json.Unmarshal([]byte(out), &body))
 	phaseID, _ := body["phase_id"].(string)
-	msgs, err := fx.wfMgr.Policy.Sessions.(session.Store).GetMessages(ctx, fx.sess.ID)
+	msgs, err := fx.wfMgr.Policy.Sessions.(*sessionstore.Repositories).Transcript.GetMessages(ctx, fx.sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	var found bool
 	for _, m := range msgs {

@@ -41,18 +41,18 @@ func (s *retirementSelectionStore) SessionTreeIDs(ctx context.Context, id string
 func TestProjectRetirementSelectionPagesBothArchiveStatesWithoutHydration(t *testing.T) {
 	sessionStore := storetest.New(t, "other", "target")
 	for i := range 3 {
-		root, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: "target"}, "target")
+		root, err := sessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: "target"}, "target")
 		testutil.FailErr(t, "create root", err)
 		if i == 0 {
-			_, err = sessionStore.CreateChild(t.Context(), root, wire.SpawnChildRequest{AgentType: "implementer"})
+			_, err = sessionStore.Sessions.CreateChild(t.Context(), root, wire.SpawnChildRequest{AgentType: "implementer"})
 			testutil.FailErr(t, "create child", err)
-			testutil.FailErr(t, "archive root", sessionStore.UpdateSession(t.Context(), root.ID, func(s *wire.Session) { now := time.Now(); s.ArchivedAt = &now }))
+			testutil.FailErr(t, "archive root", sessionStore.Sessions.UpdateSession(t.Context(), root.ID, func(s *wire.Session) { now := time.Now(); s.ArchivedAt = &now }))
 		}
 	}
-	_, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: "other"}, "other")
+	_, err := sessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: "other"}, "other")
 	testutil.FailErr(t, "create unrelated chat", err)
 	selected := &retirementSelectionStore{Store: sessionStore}
-	plan, err := planProjectRetirement(t.Context(), selected, "target")
+	plan, err := planProjectRetirement(t.Context(), selected, selected, "target")
 	testutil.FailErr(t, "select project chats", err)
 	if len(plan.roots) != 3 || plan.total != 4 || selected.pages != 3 {
 		t.Fatalf("selection = %+v, pages = %d", plan, selected.pages)
@@ -70,7 +70,7 @@ func TestProjectRetirementSelectionPagesBothArchiveStatesWithoutHydration(t *tes
 		} else {
 			broken.pageError = want
 		}
-		if _, err := planProjectRetirement(t.Context(), broken, "target"); !errors.Is(err, want) {
+		if _, err := planProjectRetirement(t.Context(), broken, broken, "target"); !errors.Is(err, want) {
 			t.Fatalf("selection error = %v", err)
 		}
 	}

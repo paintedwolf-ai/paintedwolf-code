@@ -50,7 +50,7 @@ func (b *Runtime) InstallEvidence(ctx context.Context, m *secretmatch.Matcher, f
 		if b.sessions == nil {
 			return ""
 		}
-		sess, err := b.sessions.Get(context.WithoutCancel(ctx), rootSessionID)
+		sess, err := b.sessions.Sessions.Get(context.WithoutCancel(ctx), rootSessionID)
 		if err != nil || sess == nil {
 			return ""
 		}

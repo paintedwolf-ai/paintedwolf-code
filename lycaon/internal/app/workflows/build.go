@@ -34,7 +34,7 @@ type Dependencies struct {
 	ModuleRoot          string
 	EffectiveCatalog    *extpacks.EffectiveCatalog
 	Projects            project.Registry
-	Sessions            *store.SQL
+	Sessions            *store.Repositories
 	SessionManager      *session.Host
 	EventsOutbox        *eventoutbox.Outbox
 	EventPublisher      *events.Publisher
@@ -71,7 +71,7 @@ func Build(ctx context.Context, deps Dependencies, registerRecovery func(bootrec
 		SessionStore: sessionWorkflowStore,
 		CatalogFor: func(c context.Context, _ string, sessionID string) *extpacks.EffectiveCatalog {
 			if deps.SessionManager != nil && deps.Sessions != nil && strings.TrimSpace(sessionID) != "" {
-				if sess, sErr := deps.Sessions.Get(c, sessionID); sErr == nil && sess != nil {
+				if sess, sErr := deps.Sessions.Sessions.Get(c, sessionID); sErr == nil && sess != nil {
 					if cat, catErr := deps.SessionManager.Catalog.EffectiveCatalogForProject(c, sess.ProjectID); catErr == nil && cat != nil {
 						return cat
 					}

@@ -17,7 +17,7 @@ func TestAgentsMDMessageRetainsActiveRootAndRenderedPaths(t *testing.T) {
 	registry := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := registry.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: t.TempDir()}, {Path: t.TempDir()}}})
 	testutil.FailErr(t, "project roots", err)
-	roots := scope.New(sessionFixture)
+	roots := scope.New(sessionFixture.Sessions)
 	roots.SetProjects(registry)
 	m := New(nil, roots)
 	sess := &api.Session{ProjectID: p.ID, WorkspaceRootID: p.Roots[1].ID}

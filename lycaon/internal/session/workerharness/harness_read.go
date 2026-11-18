@@ -43,7 +43,7 @@ func (m *Service) Read(ctx context.Context, child *api.Session, job *api.WorkerT
 	if err != nil {
 		return "", "", err
 	}
-	handle, patched, err := m.store.CommitEvidenceToolResult(ctx, child.ID, projectDir, "read", args, content)
+	handle, patched, err := m.evidenceStore.CommitEvidenceToolResult(ctx, child.ID, projectDir, "read", args, content)
 	if err != nil {
 		return "", "", err
 	}
@@ -58,7 +58,7 @@ func (m *Service) Read(ctx context.Context, child *api.Session, job *api.WorkerT
 		EvidenceHandles: []string{handle},
 		ToolResult:      &api.ToolResult{Content: patched, Tool: "read", ToolCallID: tctx.Identity.ToolCallID, AssistantMessageID: assistant.ID, ToolArgs: args, Outcome: api.ToolResultOutcomeCompleted},
 	}
-	if err := m.store.AppendMessages(ctx, child.ID, assistant, result); err != nil {
+	if err := m.transcriptStore.AppendMessages(ctx, child.ID, assistant, result); err != nil {
 		return "", "", err
 	}
 	return handle, patched, nil

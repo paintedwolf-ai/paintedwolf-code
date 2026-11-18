@@ -33,14 +33,14 @@ func (s *publicationOnlyStore) Get(ctx context.Context, id string) (*api.Session
 
 func TestPreparedPublicationDoesNotSubmitWorkUnderItsAdmissionGate(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append source", sessionStore.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: "assistant", Content: "original source"}))
-	rows, err := sessionStore.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "append source", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: "assistant", Content: "original source"}))
+	rows, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read source", err)
 	release := make(chan struct{})
 	st := &publicationOnlyStore{Store: sessionStore, release: release}
-	svc := &Service{store: st, Gate: lifecycle.New(sessionStore), Runner: NewRunner(), Compactor: compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), nil)}
+	svc := &Service{sessionStore: st, transcriptStore: st, compactionStore: st, Gate: lifecycle.New(sessionStore.Sessions), Runner: NewRunner(), Compactor: compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), nil)}
 	defer func() {
 		close(release)
 		svc.Runner.Stop()

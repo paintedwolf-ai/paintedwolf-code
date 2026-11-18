@@ -12,8 +12,8 @@ import (
 )
 
 // MergeWorkerUntrustedIntoParent propagates a child's external-content evidence.
-func MergeWorkerUntrustedIntoParent(ctx context.Context, store SummaryStore, parentID, childID string) error {
-	if store == nil {
+func MergeWorkerUntrustedIntoParent(ctx context.Context, sessionStore Sessions, transcriptStore Transcript, evidenceStore Evidence, parentID, childID string) error {
+	if sessionStore == nil || transcriptStore == nil || evidenceStore == nil {
 		return nil
 	}
 	parentID = strings.TrimSpace(parentID)
@@ -22,14 +22,14 @@ func MergeWorkerUntrustedIntoParent(ctx context.Context, store SummaryStore, par
 		return nil
 	}
 
-	childEv, err := store.LoadLedger(ctx, childID)
+	childEv, err := evidenceStore.LoadLedger(ctx, childID)
 	if err != nil {
 		return fmt.Errorf("load child evidence ledger: %w", err)
 	}
 	if !ledgerMarksUntrustedContent(childEv) {
 		return nil
 	}
-	if err := store.SeedUntrustedContent(ctx, parentID); err != nil {
+	if err := evidenceStore.SeedUntrustedContent(ctx, parentID); err != nil {
 		return err
 	}
 	for _, raw := range evidence.ObservedURLsSorted(childEv) {
@@ -47,7 +47,7 @@ func MergeWorkerUntrustedIntoParent(ctx context.Context, store SummaryStore, par
 			Fidelity: evidence.FidelityStructured,
 			URL:      u,
 		}
-		if err := store.UpsertEvidenceRecord(ctx, parentID, rec); err != nil {
+		if err := evidenceStore.UpsertEvidenceRecord(ctx, parentID, rec); err != nil {
 			return err
 		}
 	}

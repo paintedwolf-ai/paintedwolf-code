@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
@@ -37,7 +38,7 @@ type Deps struct {
 	ManagedSecrets *secretcap.Service
 	Projects       project.Registry
 	Scans          scan.ScanCoordinator
-	Store          session.Store
+	Store          *sessionstore.Repositories
 	Sessions       *session.Host
 	VisualStore    visual.Store
 	Workers        worker.WorkerQueue
@@ -71,7 +72,7 @@ type Composition struct {
 	Persister      *workflowcomposition.Persister
 	SessionView    *sessionview.Projector
 	Sessions       *session.Host
-	Store          session.Store
+	Store          *sessionstore.Repositories
 	responses      *httpio.Responder
 }
 
@@ -80,7 +81,7 @@ type Reports struct {
 	Projects    project.Registry
 	Runs        *runstate.Repository
 	Scans       scan.ScanCoordinator
-	Store       session.Store
+	Store       *sessionstore.Repositories
 	VisualStore visual.Store
 	Workers     worker.WorkerQueue
 	Workflows   *workflow.RunManager
@@ -94,7 +95,7 @@ type RunControl struct {
 	Runs           *runstate.Repository
 	SessionView    *sessionview.Projector
 	Sessions       *session.Host
-	Store          session.Store
+	Store          *sessionstore.Repositories
 	Topology       *Topology
 	Workflows      *workflow.RunManager
 	responses      *httpio.Responder
@@ -104,7 +105,7 @@ type Topology struct {
 	Requests           *workflowinputs.Requests
 	Orchestrator       orchestration.Orchestrator
 	Runs               *runstate.Repository
-	Store              session.Store
+	Store              *sessionstore.Repositories
 	activeTopologyRuns sync.Map // workflow run id → struct{} while topology settlement is executing
 	background         *taskgroup.Group
 }

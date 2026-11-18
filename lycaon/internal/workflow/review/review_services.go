@@ -2,10 +2,11 @@ package review
 
 import (
 	"context"
+
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/inspector"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
@@ -38,7 +39,7 @@ type Verdicts struct {
 	Records                 runstate.VerdictsRepository
 	Vars                    *runstate.Variables
 	Resolver                *catalog.Resolver
-	Sessions                session.Store
+	Sessions                *sessionstore.Repositories
 	Phases                  *workflowphases.Service
 	Coverage                *Coverage
 	Questions               *Questions

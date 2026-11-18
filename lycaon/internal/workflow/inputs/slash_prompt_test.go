@@ -1,23 +1,22 @@
 package inputs_test
 
 import (
-	session "github.com/lycaon/lycaon/internal/session"
-
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/workflow"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func userRowByID(t *testing.T, mgr *workflow.RunManager, sessionID, messageID string) api.Message {
 	t.Helper()
-	msgs, err := mgr.Policy.Sessions.(session.Store).GetMessages(context.Background(), sessionID)
+	msgs, err := mgr.Policy.Sessions.(*sessionstore.Repositories).Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "Sessions.GetMessages", err)
 	for _, msg := range msgs {
 		if msg.ID == messageID {
@@ -62,7 +61,7 @@ func TestSlashStartWithoutSubmissionIDStillMintsUserRow(t *testing.T) {
 	if !handled {
 		t.Fatal("expected /plan slash handled")
 	}
-	msgs, err := mgr.Policy.Sessions.(session.Store).GetMessages(ctx, sessionID)
+	msgs, err := mgr.Policy.Sessions.(*sessionstore.Repositories).Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "Sessions.GetMessages", err)
 	for _, msg := range msgs {
 		if msg.Role == api.MessageRoleUser && msg.Content == "/plan" {
@@ -82,7 +81,7 @@ func TestSlashStartLeavesSessionStatusToTurns(t *testing.T) {
 	mgr.Publication.OnPhaseAutoAdvanced = func(context.Context, string, string, string, string) {
 		woke = true
 	}
-	before, err := mgr.Policy.Sessions.Get(ctx, sessionID)
+	before, err := mgr.Policy.SessionStore.Get(ctx, sessionID)
 	testutil.FailErr(t, "Sessions.Get before", err)
 
 	_, handled, err := mgr.Slash.TrySlashPrompt(ctx, sessionID, "/plan test request", uuid.NewString())
@@ -95,7 +94,7 @@ func TestSlashStartLeavesSessionStatusToTurns(t *testing.T) {
 	}
 	// Status is set by the turn: a busy start has no idle-setter when the
 	// wake consumer is absent, blocking admission and quiescence.
-	after, err := mgr.Policy.Sessions.Get(ctx, sessionID)
+	after, err := mgr.Policy.SessionStore.Get(ctx, sessionID)
 	testutil.FailErr(t, "Sessions.Get after", err)
 	if after.Status != before.Status {
 		t.Fatalf("status changed %q -> %q; start must not own status", before.Status, after.Status)

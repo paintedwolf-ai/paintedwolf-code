@@ -18,11 +18,11 @@ import (
 
 func TestPromptRewindReplaysReceiptWithoutReplacingLaterWork(t *testing.T) {
 	r, repository, ledger, id, root := newRewindControlFixture(t)
-	owner, err := repository.HostOwner(t.Context())
+	owner, err := repository.People.HostOwner(t.Context())
 	testutil.FailErr(t, "host owner", err)
 	ctx := people.WithCaller(t.Context(), owner)
 	anchor := api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Content: "restore this turn", Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser, TrustTier: api.ContentTrustTierTrusted}
-	testutil.FailErr(t, "append anchor", repository.AppendMessages(ctx, id, anchor))
+	testutil.FailErr(t, "append anchor", repository.Transcript.AppendMessages(ctx, id, anchor))
 	path := filepath.Join(root, "file.txt")
 	testutil.FailErr(t, "seed file", os.WriteFile(path, []byte("before"), 0o640))
 	testutil.FailErr(t, "open capture", r.captures.SealPromptCheckpoint(ctx, id, anchor.ID))
@@ -30,7 +30,7 @@ func TestPromptRewindReplaysReceiptWithoutReplacingLaterWork(t *testing.T) {
 	testutil.FailErr(t, "write result", os.WriteFile(path, []byte("after"), 0o640))
 	project, err := r.rewindProject(ctx, id)
 	testutil.FailErr(t, "resolve project", err)
-	turnSource, err := repository.ReadSourceTurn(ctx, id, 0)
+	turnSource, err := repository.Transcript.ReadSourceTurn(ctx, id, 0)
 	turn := turnSource.Number
 	testutil.FailErr(t, "turn ordinal", err)
 	testutil.FailErr(t, "record effect", ledger.Record(ctx, sourceledger.RecordInput{ProjectID: project.ID, RecordLocation: sourceledger.RecordLocation{RootID: project.Roots[0].ID, Path: "file.txt"}, Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, SessionID: id, Turn: turn, Before: []byte("before"), After: []byte("after")}))
@@ -51,7 +51,7 @@ func TestPromptRewindReplaysReceiptWithoutReplacingLaterWork(t *testing.T) {
 	if string(raw) != "before" {
 		t.Fatalf("restored bytes=%q", raw)
 	}
-	messages, err := repository.GetMessages(ctx, id)
+	messages, err := repository.Transcript.GetMessages(ctx, id)
 	testutil.FailErr(t, "read truncated transcript", err)
 	if len(messages) != 0 {
 		t.Fatalf("messages retained=%+v", messages)
@@ -82,9 +82,9 @@ func TestRecoveryResolvesPreparedAndAppliedRewindReceipts(t *testing.T) {
 				testutil.FailErr(t, "apply before interruption", err)
 			}
 			op := sessionstore.RewindOperation{ID: journal.ID, SessionID: journal.TranscriptID, AnchorMessageID: journal.AnchorMessageID, ProjectDir: journal.ProjectDir, InputDigest: rewindInputDigest(journal.TranscriptID, journal.AnchorMessageID), Status: "prepared"}
-			testutil.FailErr(t, "persist interrupted receipt", mgr.store.PrepareRewind(t.Context(), op))
+			testutil.FailErr(t, "persist interrupted receipt", mgr.rewindStore.PrepareRewind(t.Context(), op))
 			testutil.FailErr(t, "recover session rewind", mgr.RecoverRewindsForSession(t.Context(), op.SessionID))
-			retained, err := mgr.store.GetRewindOperation(t.Context(), op.ID)
+			retained, err := mgr.rewindStore.GetRewindOperation(t.Context(), op.ID)
 			testutil.FailErr(t, "read recovered receipt", err)
 			raw, err := os.ReadFile(path)
 			testutil.FailErr(t, "read recovered source bytes", err)
@@ -95,7 +95,7 @@ func TestRecoveryResolvesPreparedAndAppliedRewindReceipts(t *testing.T) {
 			if retained == nil || retained.Status != wantStatus || string(raw) != wantBytes {
 				t.Fatalf("recovery receipt=%+v source=%q", retained, raw)
 			}
-			messages, err := mgr.store.GetMessages(t.Context(), op.SessionID)
+			messages, err := mgr.transcriptStore.GetMessages(t.Context(), op.SessionID)
 			testutil.FailErr(t, "read recovered transcript", err)
 			if applied && (len(messages) != 0 || retained.ResponseJSON == "") {
 				t.Fatalf("applied recovery lost committed transcript receipt=%+v messages=%+v", retained, messages)

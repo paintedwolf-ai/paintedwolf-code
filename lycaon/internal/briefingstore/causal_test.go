@@ -26,7 +26,7 @@ func TestActionCause(t *testing.T) {
 	database := testdbfixture.Open(t, "briefing-cause.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	sessions := store.NewSQL(database)
-	session, err := sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	session, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	_, err = database.ExecContext(t.Context(), `INSERT INTO worker_jobs (id, project_id, child_session_id, agent_type, status, prompt, brief, created_at)
 		VALUES (?, ?, ?, 'repo-researcher', 'complete', 'fixture', 'fixture', ?)`, workerRunA, testdbseed.DefaultProjectID, session.ID, time.Now().UTC().Format(time.RFC3339Nano))

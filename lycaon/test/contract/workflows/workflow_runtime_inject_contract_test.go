@@ -2,7 +2,6 @@ package contract
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"go/parser"
 	"go/token"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -90,7 +90,7 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "store.Create failed", err)
 	if _, err := wfMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "bugbash", WorkflowVersion: "1.1.0",

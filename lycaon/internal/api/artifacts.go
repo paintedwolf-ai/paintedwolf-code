@@ -23,7 +23,7 @@ import (
 
 func (s *Artifacts) HandleListSessionArtifacts(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	if _, err := s.sessionStore.Get(r.Context(), sessionID); err != nil {
+	if _, err := s.sessionStore.Sessions.Get(r.Context(), sessionID); err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "This chat no longer exists.")
 			return
@@ -36,7 +36,7 @@ func (s *Artifacts) HandleListSessionArtifacts(w http.ResponseWriter, r *http.Re
 		s.responses.InvalidQuery(w, err)
 		return
 	}
-	root := sessiontree.RootID(r.Context(), s.sessionStore, sessionID)
+	root := sessiontree.RootID(r.Context(), s.sessionStore.Sessions, sessionID)
 	scope := pagecursor.Scope(root)
 	var after *sessionArtifactCursor
 	if pq.Cursor != "" {
@@ -125,7 +125,7 @@ func (s *Artifacts) HandleCreateSessionArtifact(w http.ResponseWriter, r *http.R
 		return
 	}
 	sessionID := strings.TrimSpace(chi.URLParam(r, "id"))
-	sess, err := s.sessionStore.Get(r.Context(), sessionID)
+	sess, err := s.sessionStore.Sessions.Get(r.Context(), sessionID)
 	if err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "This chat no longer exists.")
@@ -166,7 +166,7 @@ func (s *Artifacts) HandleCreateSessionArtifact(w http.ResponseWriter, r *http.R
 		s.responses.Fail(w, wire.ApiErrorCodeArtifactEmpty, "live tool recording bytes required")
 		return
 	}
-	messages, err := s.sessionStore.GetMessages(r.Context(), sessionID)
+	messages, err := s.sessionStore.Transcript.GetMessages(r.Context(), sessionID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -175,7 +175,7 @@ func (s *Artifacts) HandleCreateSessionArtifact(w http.ResponseWriter, r *http.R
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "live tool recording transcript origin not found")
 		return
 	}
-	root := sessiontree.RootID(r.Context(), s.sessionStore, sess.ID)
+	root := sessiontree.RootID(r.Context(), s.sessionStore.Sessions, sess.ID)
 	holder := strings.TrimSpace(sess.ID)
 	artifact, err := s.visualStore.Put(r.Context(), root, visual.Entry{
 		Meta: visual.LiveToolRecordingMeta(recordingMediaType, pageID, originMessageID, toolCallID, recordedAt, durationMS),
@@ -368,7 +368,7 @@ func (s *Artifacts) HandleSessionArtifact(w http.ResponseWriter, r *http.Request
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "artifact id required")
 		return
 	}
-	if _, err := s.sessionStore.Get(r.Context(), sessionID); err != nil {
+	if _, err := s.sessionStore.Sessions.Get(r.Context(), sessionID); err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "This chat no longer exists.")
 			return
@@ -376,7 +376,7 @@ func (s *Artifacts) HandleSessionArtifact(w http.ResponseWriter, r *http.Request
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	root := sessiontree.RootID(r.Context(), s.sessionStore, sessionID)
+	root := sessiontree.RootID(r.Context(), s.sessionStore.Sessions, sessionID)
 	res := s.visualStore.Resolve(r.Context(), root, artifactID)
 	if !res.IsPresent() {
 		switch res.Reason() {

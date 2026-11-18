@@ -1,11 +1,11 @@
 package blueprints_test
 
 import (
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,7 +26,7 @@ func TestSyncBlueprintTranscriptPreservesOrdOnPatch(t *testing.T) {
 	testutil.FailErr(t, "completePlanReviewAtDepthNone", err)
 
 	testutil.FailErr(t, "SyncBlueprintTranscript append", mgr.Blueprints.SyncBlueprintTranscript(ctx, run.ProjectID, run.BlueprintPath, false))
-	msgs, err := sessStore.GetMessages(ctx, run.SessionID)
+	msgs, err := sessStore.Transcript.GetMessages(ctx, run.SessionID)
 	testutil.FailErr(t, "GetMessages after append", err)
 	blueprintRow, ok := findBlueprintTranscriptMessage(msgs, run.BlueprintPath)
 	if !ok {
@@ -41,7 +41,7 @@ func TestSyncBlueprintTranscriptPreservesOrdOnPatch(t *testing.T) {
 	testutil.FailErr(t, "Update blueprint", err)
 	testutil.FailErr(t, "SyncBlueprintTranscript patch", mgr.Blueprints.SyncBlueprintTranscript(ctx, run.ProjectID, run.BlueprintPath, true))
 
-	msgs, err = sessStore.GetMessages(ctx, run.SessionID)
+	msgs, err = sessStore.Transcript.GetMessages(ctx, run.SessionID)
 	testutil.FailErr(t, "GetMessages after patch", err)
 	patched, ok := findBlueprintTranscriptMessage(msgs, run.BlueprintPath)
 	if !ok {
@@ -81,7 +81,7 @@ func TestTriggerPhaseEnterSyncsBlueprintApprovalTranscriptForAnyPhaseName(t *tes
 	testutil.FailErr(t, "Store.UpdateVars approval ready", mgr.Store.State.UpdateVars(ctx, run, projectDir, vars))
 
 	mgr.Phases.Entries.Trigger(ctx, run, projectDir, approvalPhase)
-	msgs, err := mgr.Verdicts.Sessions.GetMessages(ctx, run.SessionID)
+	msgs, err := mgr.Verdicts.Sessions.Transcript.GetMessages(ctx, run.SessionID)
 	testutil.FailErr(t, "GetMessages", err)
 	blueprintRow, found := findBlueprintTranscriptMessage(msgs, run.BlueprintPath)
 	if !found || blueprintRow.Blueprint == nil {

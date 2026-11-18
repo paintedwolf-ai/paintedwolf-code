@@ -161,7 +161,7 @@ func TestSessionReadsAndAbortRefuseMissingChatBeforeProjection(t *testing.T) {
 	}
 	p, err := project.CreateWithRoot(t.Context(), deps.Projects, t.TempDir())
 	testutil.FailErr(t, "create session project", err)
-	sess, err := deps.Store.CreateWithStatus(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID, wire.SessionStatusIdle)
+	sess, err := deps.Store.Sessions.CreateWithStatus(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID, wire.SessionStatusIdle)
 	testutil.FailErr(t, "create session for program receipt refusal", err)
 	for _, tc := range []struct {
 		target      string

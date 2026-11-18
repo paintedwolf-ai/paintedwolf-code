@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/coordinatorcontrol"
 	sessionobservation "github.com/lycaon/lycaon/internal/session/observation"
 	"github.com/lycaon/lycaon/internal/session/promptsource"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/toolpresentation"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/webresearch"
@@ -24,14 +25,14 @@ func (m *Host) SetWebResearchConfig(cfg *webresearch.ConfigStore) {
 
 }
 
-func acquireCoordinatorSources(m *Host, store Store, client modelcall.LLMClient, svc *llm.Service, registry tools.ToolRegistry, tracker cost.CostTracker) {
+func acquireCoordinatorSources(m *Host, store *sessionstore.Repositories, client modelcall.LLMClient, svc *llm.Service, registry tools.ToolRegistry, tracker cost.CostTracker) {
 	stash := toolpresentation.NewStash()
 	scanWait := &m.Coordinator.Scans.Wait
 	scanInFlight := func(ctx context.Context, id string) bool {
 		return scanWait.InFlight != nil && scanWait.InFlight(ctx, id)
 	}
 	m.Coordinator.PolicyIndex.SetWorkspaceRoots(m.Workers.Workspaces.BoardRoots)
-	m.Coordinator.Context = &promptsource.Context{PolicyIndex: m.Coordinator.PolicyIndex, Frame: nil, Guards: m.Coordinator.Guards, Limits: m.Limits, Loading: m.Coordinator.Loading, Pages: nil, Policy: m.ToolPolicy, Processes: m.Processes, Profiles: m.Profiles, Prompts: nil, Runtime: nil, Sessions: store, ToolContext: m.ToolContext, Tools: registry, WebResearch: nil, WorkerState: m.Workers.State, Workspace: m.Workspace, Workspaces: m.Workers.Workspaces}
+	m.Coordinator.Context = &promptsource.Context{PolicyIndex: m.Coordinator.PolicyIndex, Frame: nil, Guards: m.Coordinator.Guards, Limits: m.Limits, Loading: m.Coordinator.Loading, Pages: nil, Policy: m.ToolPolicy, Processes: m.Processes, Profiles: m.Profiles, Prompts: nil, Runtime: nil, Sessions: store.Sessions, ToolContext: m.ToolContext, Tools: registry, WebResearch: nil, WorkerState: m.Workers.State, Workspace: m.Workspace, Workspaces: m.Workers.Workspaces}
 	m.Coordinator.Tools = &promptsource.Tools{
 		Results: &promptsource.ToolResults{Batch: m.Coordinator.Batch, Guards: m.Coordinator.Guards,
 			Guidance: m.Coordinator.Guidance, Policy: m.ToolPolicy, WorkerState: m.Workers.State},
@@ -42,18 +43,18 @@ func acquireCoordinatorSources(m *Host, store Store, client modelcall.LLMClient,
 	m.Coordinator.Control = &promptsource.Control{Batch: m.Coordinator.Batch, GracefulCancel: m.Workers.Cancel, Approvals: nil, Obligations: nil, Processes: m.Processes, Runtime: nil, Workflow: nil}
 	m.Coordinator.Inbox = &promptsource.Inbox{Guidance: m.Coordinator.Guidance, Submissions: m.Submissions}
 	m.Coordinator.Model = &promptsource.Model{PolicyIndex: m.Coordinator.PolicyIndex, Cost: tracker, History: m.Runner.History, LLM: client, LLMService: svc, Limits: m.Limits, Workspace: m.Workspace}
-	m.Coordinator.Projection = &promptsource.Projection{Events: nil, Rejections: m.Workers.Rejections, Sessions: store, Stash: stash, Transcript: m.Runner.Transcript, Workflow: nil}
+	m.Coordinator.Projection = &promptsource.Projection{Events: nil, Rejections: m.Workers.Rejections, TranscriptStore: store.Transcript, TurnStore: store.Turns, Stash: stash, Transcript: m.Runner.Transcript, Workflow: nil}
 	m.Coordinator.Nudging = &promptsource.Nudges{DoomLoop: nil, Nudges: m.Coordinator.Nudges, Policy: m.ToolPolicy, Spend: m.Runner.Spend, Workers: nil}
 	if usage, ok := tracker.(promptsource.RoundUsage); ok {
 		m.Coordinator.Nudging.RoundUsage = usage
 	}
 	m.Coordinator.Completion = &promptsource.Closeout{Batch: m.Coordinator.Batch, Closeout: m.Coordinator.Closeout, Closeouts: m.Runner.Closeouts, Evidence: m.Verification.Evidence, Guards: m.Coordinator.Guards, Hints: nil, Nudges: m.Coordinator.Nudges, Policy: m.ToolPolicy, Rejects: nil, RenderKick: m.Workers.RenderKick, Reports: nil}
-	m.Coordinator.Assembly = &promptsource.Assembly{Messages: store.ReadMessageWindow, Briefs: m.SourceBriefs, Catalog: &m.Catalog, Closeout: m.Coordinator.Closeout, Feedback: nil, Frame: nil, Guards: m.Coordinator.Guards, Hints: nil, Limits: m.Limits, Loading: m.Coordinator.Loading, Model: m.Coordinator.Model, Notes: m.Workers.Notes, PolicyIndex: m.Coordinator.PolicyIndex, Processes: m.Processes, Profiles: m.Profiles, Prompts: nil, Repository: nil, Runtime: nil, Scan: nil, Stash: stash, State: m.Workers.State, WebResearch: nil, WorkerContext: nil, Workspace: m.Workspace, Workspaces: m.Workers.Workspaces, ToolContext: m.ToolContext}
-	m.Coordinator.Loop = &promptsource.Loop{ActiveRuns: nil, Admission: m.Admission, Events: nil, Frame: nil, Grounding: nil, Guidance: m.Coordinator.Guidance, Limits: m.Limits, Processes: m.Processes, Runtime: nil, ScanInFlight: scanInFlight, Sessions: store, Settlement: m.Runner.Settlement, State: m.Workers.State, Submissions: m.Submissions, Turns: m.Runner.Turns, Workers: nil, Workflow: nil}
+	m.Coordinator.Assembly = &promptsource.Assembly{Messages: store.Transcript.ReadMessageWindow, Briefs: m.SourceBriefs, Catalog: &m.Catalog, Closeout: m.Coordinator.Closeout, Feedback: nil, Frame: nil, Guards: m.Coordinator.Guards, Hints: nil, Limits: m.Limits, Loading: m.Coordinator.Loading, Model: m.Coordinator.Model, Notes: m.Workers.Notes, PolicyIndex: m.Coordinator.PolicyIndex, Processes: m.Processes, Profiles: m.Profiles, Prompts: nil, Repository: nil, Runtime: nil, Scan: nil, Stash: stash, State: m.Workers.State, WebResearch: nil, WorkerContext: nil, Workspace: m.Workspace, Workspaces: m.Workers.Workspaces, ToolContext: m.ToolContext}
+	m.Coordinator.Loop = &promptsource.Loop{ActiveRuns: nil, Admission: m.Admission, Events: nil, Frame: nil, Grounding: nil, Guidance: m.Coordinator.Guidance, Limits: m.Limits, Processes: m.Processes, Runtime: nil, ScanInFlight: scanInFlight, TranscriptStore: store.Transcript, Settlement: m.Runner.Settlement, State: m.Workers.State, Submissions: m.Submissions, Turns: m.Runner.Turns, Workers: nil, Workflow: nil}
 }
 
 // bindCoordinatorRuntime connects the acquired session peers to one coordinator loop.
-func bindCoordinatorRuntime(m *Host, store Store) {
+func bindCoordinatorRuntime(m *Host, store *sessionstore.Repositories) {
 	runtime := coordinator.NewRuntime(m.Coordinator.RuntimeDependencies())
 	m.Coordinator.Runtime = runtime
 	m.Stops.SetCoordinator(runtime)
@@ -66,7 +67,7 @@ func bindCoordinatorRuntime(m *Host, store Store) {
 	m.Coordinator.Loop.Runtime = runtime
 	m.Resources.Work.Coordinator = runtime
 	m.RewindRuntime.Coordinator = runtime
-	m.Observations = sessionobservation.New(store, runtime.CoordinatorLoop().Admission, runtime.CoordinatorLoop().Nudges, m.Runner.Turns)
+	m.Observations = sessionobservation.New(store.Sessions, store.Submissions, runtime.CoordinatorLoop().Admission, runtime.CoordinatorLoop().Nudges, m.Runner.Turns)
 	m.Processes.SetLoop(runtime.CoordinatorLoop().Waits, runtime.CoordinatorLoop().Nudges)
 	m.Admission.SetLoop(runtime.CoordinatorLoop().Nudges, runtime.CoordinatorLoop().Cycles)
 	m.ProjectControl.SetAnchors(runtime.Anchors())
