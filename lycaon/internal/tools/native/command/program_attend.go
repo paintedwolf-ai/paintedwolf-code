@@ -148,7 +148,7 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 	run, state := e.run, blocked.state
 	programID := run.root.Identity.ProgramID
 	parked, err := r.Parking.ParkProgram(callCtx, e.callTC, tools.ProgramPark{
-		ProgramID: programID, Reason: state.Statement, Deadline: e.call.deadline,
+		ProgramID: programID, Reason: state.Statement,
 		Claim:     func() bool { return e.park.claim(blocked) },
 		Interrupt: func(ctx context.Context) string { return r.interruptProgram(ctx, run, ending) },
 	})
@@ -268,34 +268,13 @@ func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID
 // bounded result, whether the call still holds it or it parked.
 func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	run, ctx := e.run, e.ctx
-	// The bound covers the program's & jobs, so the call ends once both its
-	// foreground result is delivered and its jobs have ended.
-	var endMu sync.Mutex
-	pending := 2
-	endCall := func() {
-		endMu.Lock()
-		defer endMu.Unlock()
-		if pending--; pending == 0 {
-			e.call.end()
-		}
-	}
-	defer endCall()
+	defer e.call.end()
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, run.root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
 		var err error
 		evaluated, err = r.Evaluate(ctx, e.plan, e.ports)
 		return evaluatedResult(evaluated), err
 	})
-	var expired *callDeadline
-	// A program that ended on its own as the bound expired keeps its result.
-	if evalErr != nil && errors.As(context.Cause(ctx), &expired) {
-		stop := e.call.bound.deadlineStop(expired, r.clock().Now().Sub(e.call.started))
-		if projection, err := r.Recorder.ProjectProgram(context.WithoutCancel(ctx), run.tc.Identity.SessionID, run.root.Identity.ProgramID, 1); err == nil {
-			stop.Data["children_started"] = projection.ExecutedChildren
-		}
-		result.Status, result.Terminal, result.StopCode = commandprogram.TimedOutStatus, toolcontract.ProducerInterrupted, stop.Code
-		evalErr = errors.Join(evalErr, stop)
-	}
 	e.park.settle()
 	// Attribution ends with evaluation: a detached job must not hold other
 	// sessions' attribution or claim a person's edits for its whole life.
@@ -305,7 +284,6 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	defer lifetime.callerDone()
 	r.Supervisor.AfterJobs(run.root.Identity.ProgramID, func(stopped bool) {
 		settled <- r.settleProgram(ctx, run, result, evaluated, stopped)
-		endCall()
 		lifetime.settled()
 	})
 	var settleErr error
@@ -317,8 +295,8 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 		// & jobs still run under supervision; the program settles when they end.
 	}
 	feedbackCtx := ctx
-	if errors.Is(evalErr, ErrProgramInterrupted) || expired != nil {
-		// The interruption or deadline canceled the program; its refusal still renders.
+	if errors.Is(evalErr, ErrProgramInterrupted) {
+		// The interruption canceled the program; its refusal still renders.
 		feedbackCtx = context.WithoutCancel(ctx)
 	}
 	refusal, releaseFeedback, feedbackErr := r.feedback(feedbackCtx, run, e.dispatcher, e.stderr, evalErr)

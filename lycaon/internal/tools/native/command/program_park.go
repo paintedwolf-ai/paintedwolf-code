@@ -6,114 +6,32 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
-// programBound is a program's outer deadline: the catalog's program lifetime.
-type programBound struct {
-	limitID string
-	maximum time.Duration
-}
-
-func callBound(catalog toolcontract.LanguageCatalog) programBound {
-	for _, limit := range catalog.Language.Limits {
-		if limit.ID == "program_lifetime_ms" {
-			return programBound{limitID: limit.ID, maximum: time.Duration(limit.Maximum) * time.Millisecond}
-		}
-	}
-	return programBound{}
-}
-
-// refusal is the limit a single wait reaches when it cannot end within the
-// bound; observed is how long after the program's start the wait would end.
-func (b programBound) refusal(observed time.Duration) *toolrejection.ToolReject {
-	data := map[string]any{
-		"limit_id": b.limitID, "resource_unit": "milliseconds",
-		"maximum": b.maximum.Milliseconds(), "observed": observed.Milliseconds(),
-	}
-	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: data}
-}
-
-// callDeadline is the cause that ends a program whose bound expired; waiting
-// is the statement the program was waiting in then, and jobsStopped how many
-// of its & jobs the expiry ended.
-type callDeadline struct {
-	waiting     string
-	jobsStopped int
-}
-
-func (*callDeadline) Error() string { return "command program lifetime expired" }
-
-// deadlineStop is the refusal for a program its bound ended after elapsed.
-func (b programBound) deadlineStop(expired *callDeadline, elapsed time.Duration) *toolrejection.ToolReject {
-	reject := b.refusal(elapsed)
-	reject.Data["deadline_expired"] = true
-	if expired.waiting != "" {
-		reject.Data["waiting_statement"] = expired.waiting
-	}
-	reject.Data["jobs_stopped"] = expired.jobsStopped
-	return reject
-}
-
-// programCall ties one command call to its program. The program runs under
-// the call's bound and follows the call's cancellation until the call parks.
+// programCall ties one command call to its program. The program follows the
+// call's cancellation until the call parks.
 type programCall struct {
 	ctx context.Context
 	// started is the program's start on the runtime clock.
 	started time.Time
-	// deadline is the program's bound on the host clock, which leases use.
-	deadline time.Time
-	bound    programBound
-	park     *programPark
-	end      func()
-	detach   func() bool
-
-	mu sync.Mutex
-	// endJobs ends the program's & jobs when its bound expires.
-	endJobs func(cause error) int
+	park    *programPark
+	end     func()
+	detach  func() bool
 }
 
-// bindJobs names how the call's expiry ends its program's & jobs.
-func (c *programCall) bindJobs(end func(cause error) int) {
-	c.mu.Lock()
-	c.endJobs = end
-	c.mu.Unlock()
-}
-
-// expire ends the program and its & jobs at its bound.
-func (c *programCall) expire(cancel context.CancelCauseFunc) {
-	expired := &callDeadline{waiting: c.park.waiting()}
-	c.mu.Lock()
-	end := c.endJobs
-	c.mu.Unlock()
-	if end != nil {
-		expired.jobsStopped = end(expired)
-	}
-	cancel(expired)
-}
-
-func (r *ProgramRuntime) newProgramCall(ctx context.Context, catalog toolcontract.LanguageCatalog) (context.Context, *programCall) {
+func (r *ProgramRuntime) newProgramCall(ctx context.Context) (context.Context, *programCall) {
 	clock := r.clock()
-	call := &programCall{started: clock.Now(), bound: callBound(catalog)}
+	call := &programCall{started: clock.Now()}
 	call.park = newProgramPark(clock, call, r.parkThreshold())
 	programCtx, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
 	call.detach = context.AfterFunc(ctx, func() { cancel(context.Cause(ctx)) })
 	call.end = func() { cancel(nil) }
-	if call.bound.maximum > 0 {
-		// The bound expires on the program clock, like an in-program timeout,
-		// so its cause tells the result which deadline ended the program.
-		call.deadline = time.Now().Add(call.bound.maximum)
-		programCtx = commandprogram.WithBound(programCtx, clock, call.bound.maximum)
-		stop := clock.AfterFunc(call.bound.maximum, func() { call.expire(cancel) })
-		call.end = func() { stop(); cancel(nil) }
-	}
 	call.ctx = programCtx
 	return programCtx, call
 }
 
-// programPark is one call's watch over its program's waits. It refuses a wait
-// the bound cannot hold and signals each wait that should park the call. A
+// programPark is one call's watch over its program's waits. It signals each
+// wait that should park the call. A
 // signal parks only through claim, which holds while that wait is still the
 // program's current one, so a wait that ended before its signal was taken
 // never parks the call.
@@ -121,7 +39,6 @@ type programPark struct {
 	clock     commandprogram.Clock
 	started   time.Time
 	threshold time.Duration
-	bound     programBound
 	// parks carries the latest wait that should park the call.
 	parks chan *blockedWait
 
@@ -138,27 +55,10 @@ type blockedWait struct{ state commandprogram.WaitState }
 var _ commandprogram.ProgramWaits = (*programPark)(nil)
 
 func newProgramPark(clock commandprogram.Clock, call *programCall, threshold time.Duration) *programPark {
-	return &programPark{clock: clock, started: call.started, threshold: threshold, bound: call.bound, parks: make(chan *blockedWait, 1)}
+	return &programPark{clock: clock, started: call.started, threshold: threshold, parks: make(chan *blockedWait, 1)}
 }
 
-// waiting is the statement of the wait that holds the program, if any.
-func (p *programPark) waiting() string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.blocked == nil {
-		return ""
-	}
-	return p.blocked.state.Statement
-}
-
-// Block refuses at once a wait that would end after the program's bound.
 func (p *programPark) Block(_ context.Context, state commandprogram.WaitState) (func(), error) {
-	if p.bound.maximum > 0 && !state.Until.IsZero() && state.Until.After(p.started.Add(p.bound.maximum)) {
-		reject := p.bound.refusal(state.Until.Sub(p.started))
-		reject.Data["wait_refused"] = true
-		reject.Data["waiting_statement"] = state.Statement
-		return nil, reject
-	}
 	blocked := &blockedWait{state: state}
 	p.mu.Lock()
 	p.blocked = blocked

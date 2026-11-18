@@ -115,6 +115,8 @@ type supervisedProgram struct {
 	foreground  bool
 	// interrupted records a foreground the host interrupted.
 	interrupted bool
+	// jobsStopped counts the & jobs an explicit stop ended with the program.
+	jobsStopped int
 	settle      func(stopped bool)
 }
 
@@ -166,7 +168,13 @@ func (s *ProgramSupervisor) RunProgram(ctx context.Context, root toolcontract.Op
 		}
 		if errors.Is(cause, ErrProgramInterrupted) {
 			// An interrupted wait is the program's typed stop; its result still reaches the turn.
-			return stopped, errors.Join(err, cause, toolrejection.RejectInvalidArguments(toolrejection.ToolOwnerInterruptedCode, map[string]any{"program_id": root.Identity.ProgramID}))
+			data := map[string]any{"program_id": root.Identity.ProgramID}
+			s.mu.Lock()
+			if program.jobsStopped > 0 {
+				data["jobs_stopped"] = program.jobsStopped
+			}
+			s.mu.Unlock()
+			return stopped, errors.Join(err, cause, toolrejection.RejectInvalidArguments(toolrejection.ToolOwnerInterruptedCode, data))
 		}
 		return stopped, errors.Join(err, cause)
 	}
@@ -209,8 +217,8 @@ func (s *ProgramSupervisor) Lost(ctx context.Context, sessionID, detailReference
 }
 
 // Interrupt cancels a program's foreground at the statement it waits at. Its
-// & jobs keep running under supervision until a stop or the program's bound
-// ends them. It reports whether a foreground was running.
+// & jobs keep running under supervision, as a shell's background jobs outlive
+// an interrupted foreground. It reports whether a foreground was running.
 func (s *ProgramSupervisor) Interrupt(programID string) bool {
 	if s == nil {
 		return false
@@ -226,6 +234,29 @@ func (s *ProgramSupervisor) Interrupt(programID string) bool {
 		program.cancel(ErrProgramInterrupted)
 	}
 	return running
+}
+
+// StopProgram ends a program's foreground at the statement it waits at and
+// ends its & jobs, for an explicit stop of the program's handle. Each external
+// command leads its own session, which ends with its job.
+func (s *ProgramSupervisor) StopProgram(programID string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	program, ok := s.programs[programID]
+	var jobs []*supervisedJob
+	if ok {
+		for _, job := range program.jobs {
+			jobs = append(jobs, job)
+		}
+		program.jobsStopped = len(jobs)
+	}
+	s.mu.Unlock()
+	s.Interrupt(programID)
+	for _, job := range jobs {
+		job.end(ErrProgramStopped)
+	}
 }
 
 // StopAll stops every session's programs, for the host disable control.
@@ -267,7 +298,7 @@ func (s *ProgramSupervisor) end(sessionID string, cause error) []string {
 type supervisedJob struct {
 	mu     sync.Mutex
 	cancel context.CancelCauseFunc
-	stop   func(cause error)
+	stop   func()
 }
 
 func (j *supervisedJob) end(cause error) {
@@ -275,44 +306,16 @@ func (j *supervisedJob) end(cause error) {
 	stop := j.stop
 	j.mu.Unlock()
 	if stop != nil {
-		stop(cause)
+		stop()
 	}
 	j.cancel(cause)
 }
 
-// EndJobs ends every & job a program holds and reports how many it ended.
-// Each external command leads its own session, which ends with its job.
-func (s *ProgramSupervisor) EndJobs(programID string, cause error) int {
-	if s == nil {
-		return 0
-	}
-	s.mu.Lock()
-	var jobs []*supervisedJob
-	if program, ok := s.programs[programID]; ok {
-		for _, job := range program.jobs {
-			jobs = append(jobs, job)
-		}
-	}
-	s.mu.Unlock()
-	for _, job := range jobs {
-		job.end(cause)
-	}
-	return len(jobs)
-}
-
-// StopProgram ends a program's foreground at the statement it waits at and
-// ends its & jobs, for an explicit stop of the program's handle.
-func (s *ProgramSupervisor) StopProgram(programID string) {
-	s.Interrupt(programID)
-	s.EndJobs(programID, ErrProgramStopped)
-}
-
 // Hold keeps a program supervised for one & job beyond its foreground. The
 // job context keeps the program's identity, survives the launching call and
-// ends on a stop, loss or the program's bound, which also calls the stop
-// registered with setStop.
+// ends on Stop or loss, which also calls the stop registered with setStop.
 // release ends the hold exactly once.
-func (s *ProgramSupervisor) Hold(ctx context.Context) (jobCtx context.Context, setStop func(func(cause error)), release func(), err error) {
+func (s *ProgramSupervisor) Hold(ctx context.Context) (jobCtx context.Context, setStop func(func()), release func(), err error) {
 	id, _ := ctx.Value(supervisedKey{}).(string)
 	if s == nil || id == "" {
 		return nil, nil, nil, fmt.Errorf("program job is outside supervision")
@@ -334,7 +337,7 @@ func (s *ProgramSupervisor) Hold(ctx context.Context) (jobCtx context.Context, s
 	program.jobs[key] = job
 	s.mu.Unlock()
 	var once sync.Once
-	setStop = func(stop func(cause error)) {
+	setStop = func(stop func()) {
 		job.mu.Lock()
 		job.stop = stop
 		job.mu.Unlock()

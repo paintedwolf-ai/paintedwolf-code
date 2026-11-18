@@ -41,7 +41,6 @@ func CommandGuidanceFactKeys() []string {
 		"runner_local_listen_tools",
 		"runner_loopback_connect_tools",
 		"runner_park_seconds",
-		"runner_program_lifetime_minutes",
 		"runner_socket_tools",
 		"runner_write_root_tools",
 		"session_scratch_dir",
