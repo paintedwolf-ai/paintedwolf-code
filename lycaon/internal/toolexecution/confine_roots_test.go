@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -264,7 +265,7 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 		},
 	}
 
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	for _, tc := range cases {
 		testutil.FailErr(t, "mkdir "+tc.name, os.MkdirAll(tc.dir, 0o700))
 		p, err := project.CreateWithRoot(t.Context(), reg, tc.dir)

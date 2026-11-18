@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
@@ -65,7 +66,7 @@ func TestW10ReachMatrix(t *testing.T) {
 	}
 
 	m, _ := newViewManager(t, root, surfaces)
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	m.SetProjectRegistry(reg)
 
 	projA := t.TempDir()
@@ -129,7 +130,7 @@ func TestW11GateMatrix(t *testing.T) {
 				testutil.FailErr(t, "PutEnabled", err)
 			}
 			m, _ := newViewManager(t, root, surfaces)
-			reg := project.NewMemoryRegistry()
+			reg := projecttest.NewRegistry(t)
 			m.SetProjectRegistry(reg)
 			projDir := t.TempDir()
 			writeProjectExtensions(t, projDir, "disabled:\n  - guidance/coordinator-gate-blocked\n")
@@ -242,7 +243,7 @@ func TestW13NoSharedMutation(t *testing.T) {
 		testutil.FailErr(t, "PutEnabled", err)
 	}
 	m, _ := newViewManager(t, root, surfaces)
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	m.SetProjectRegistry(reg)
 
 	makeProj := func(disable string) *project.Project {
@@ -324,7 +325,7 @@ func TestW14FailureDegradesToDevice(t *testing.T) {
 		t.Fatalf("fallback fingerprint %s want %s", got.Catalog.Revision, device.Catalog.Revision)
 	}
 	// Later valid projects still build.
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	m.SetProjectRegistry(reg)
 	dir := t.TempDir()
 	writeProjectExtensions(t, dir, "disabled: []\n")

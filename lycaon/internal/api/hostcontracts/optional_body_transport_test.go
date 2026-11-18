@@ -15,13 +15,14 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestOptionalCommandBodiesHonorTransportFraming(t *testing.T) {
 	dir := t.TempDir()
-	projects := project.NewMemoryRegistry()
+	projects := projecttest.NewRegistry(t)
 	p, err := project.CreateWithRoot(t.Context(), projects, dir)
 	testutil.FailErr(t, "create project", err)
 	blueprints := blueprint.NewManager(blueprinttest.NewFileStore(dir))

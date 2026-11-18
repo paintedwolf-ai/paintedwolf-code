@@ -15,8 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -149,10 +149,10 @@ func NewGitBoard() *board.SnapshotBuilder {
 	return &board.SnapshotBuilder{Git: manager, StatusCache: git.NewStatusCache(manager)}
 }
 
-func NewGitServer(t *testing.T, reg project.Registry, opts ...TestDeps) *hostapi.Server {
+func NewGitServer(t *testing.T, sessions session.Store, reg project.Registry, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: storetest.New(t, testdbseed.DefaultProjectID), Projects: reg}, Workflow: hostapi.WorkflowDependencies{
+		Store: sessions, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
 		Board: NewGitBoard(), RepoSetCache: git.NewRepoSetCache(git.DefaultStatusCacheTTL)}}
 	for _, opt := range opts {
 		opt(&deps)
@@ -163,19 +163,17 @@ func NewGitServer(t *testing.T, reg project.Registry, opts ...TestDeps) *hostapi
 func NewGitTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, string) {
 	t.Helper()
 	dir := InitDirtyRepo(t)
-	reg := project.NewMemoryRegistry()
+	sessions := storetest.New(t)
+	reg := project.NewSQLRegistry(sessions.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open", err)
 
 	drafter := func(d *hostapi.Dependencies) {
 		d.Providers.CommitDrafter = compaction.MockSummarizer{Text: "feat: drafted subject"}
 	}
-	srv := NewGitServer(t, reg, append([]TestDeps{drafter}, opts...)...)
+	srv := NewGitServer(t, sessions, reg, append([]TestDeps{drafter}, opts...)...)
 	return srv, p.ID
 }
-
-// newGitServer serves reg over a memory session store with a real git board
-// and repo-set cache; opts adjust the dependencies after those defaults.
 
 func PostGitJSON(t *testing.T, srv *hostapi.Server, path, body string) *httptest.ResponseRecorder {
 	t.Helper()

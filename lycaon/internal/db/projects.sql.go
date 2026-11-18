@@ -99,19 +99,6 @@ func (q *Queries) CountProjectBlockingDependents(ctx context.Context, projectID 
 	return count, err
 }
 
-const countProjectRoots = `-- name: CountProjectRoots :one
-SELECT COUNT(*) AS count
-FROM project_roots
-WHERE project_id = ?
-`
-
-func (q *Queries) CountProjectRoots(ctx context.Context, projectID string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countProjectRoots, projectID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countRootBlockingDependents = `-- name: CountRootBlockingDependents :one
 SELECT (
     SELECT COUNT(*) FROM sessions

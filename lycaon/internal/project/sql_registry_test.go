@@ -157,55 +157,39 @@ func TestRegistriesAllowAnyExistingDirectoryAndPreserveStructuralChecks(t *testi
 		testutil.FailErr(t, "mkdir fixture", os.MkdirAll(dir, 0o700))
 	}
 
-	for _, tc := range []struct {
-		name string
-		open func(*testing.T) Registry
-	}{
-		{
-			name: "memory",
-			open: func(*testing.T) Registry { return NewMemoryRegistry() },
-		},
-		{
-			name: "sql",
-			open: func(t *testing.T) Registry { return NewSQLRegistry(testdbfixture.Open(t, "store.db")) },
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := t.Context()
-			reg := tc.open(t)
+	ctx := t.Context()
+	reg := newProjectRegistry(t)
 
-			p, err := CreateWithRoot(ctx, reg, home)
-			if err != nil {
-				t.Fatalf("CreateWithRoot($HOME): %v", err)
-			}
-			for _, extra := range dirs[1:] {
-				if _, err := reg.AttachRoot(ctx, p.ID, AttachRootParams{Path: extra}); err != nil {
-					t.Fatalf("AttachRoot(%q): %v", extra, err)
-				}
-			}
+	p, err := CreateWithRoot(ctx, reg, home)
+	if err != nil {
+		t.Fatalf("CreateWithRoot($HOME): %v", err)
+	}
+	for _, extra := range dirs[1:] {
+		if _, err := reg.AttachRoot(ctx, p.ID, AttachRootParams{Path: extra}); err != nil {
+			t.Fatalf("AttachRoot(%q): %v", extra, err)
+		}
+	}
 
-			// Read-only registration check for filesystem root ("/").
-			if _, err := reg.AttachRoot(ctx, p.ID, AttachRootParams{Path: string(filepath.Separator), Label: "fs-root"}); err != nil {
-				t.Fatalf("AttachRoot(filesystem root): %v", err)
-			}
+	// Read-only registration check for filesystem root ("/").
+	if _, err := reg.AttachRoot(ctx, p.ID, AttachRootParams{Path: string(filepath.Separator), Label: "fs-root"}); err != nil {
+		t.Fatalf("AttachRoot(filesystem root): %v", err)
+	}
 
-			// Duplicate root is still rejected.
-			if _, err := reg.AttachRoot(ctx, p.ID, AttachRootParams{Path: home}); !errors.Is(err, ErrDuplicateRoot) {
-				t.Fatalf("duplicate AttachRoot($HOME) err = %v, want ErrDuplicateRoot", err)
-			}
+	// Duplicate root is still rejected.
+	if _, err := reg.AttachRoot(ctx, p.ID, AttachRootParams{Path: home}); !errors.Is(err, ErrDuplicateRoot) {
+		t.Fatalf("duplicate AttachRoot($HOME) err = %v, want ErrDuplicateRoot", err)
+	}
 
-			// Empty, missing, and file paths are still rejected.
-			if _, err := CreateWithRoot(ctx, reg, ""); !errors.Is(err, ErrInvalidPath) {
-				t.Fatalf("empty CreateWithRoot err = %v, want ErrInvalidPath", err)
-			}
-			if _, err := CreateWithRoot(ctx, reg, filepath.Join(home, "missing")); !errors.Is(err, ErrPathNotFound) {
-				t.Fatalf("missing CreateWithRoot err = %v, want ErrPathNotFound", err)
-			}
-			filePath := filepath.Join(home, "regular-file.txt")
-			testutil.FailErr(t, "write file", os.WriteFile(filePath, []byte("hello"), 0o600))
-			if _, err := CreateWithRoot(ctx, reg, filePath); !errors.Is(err, ErrNotDirectory) {
-				t.Fatalf("file CreateWithRoot err = %v, want ErrNotDirectory", err)
-			}
-		})
+	// Empty, missing, and file paths are still rejected.
+	if _, err := CreateWithRoot(ctx, reg, ""); !errors.Is(err, ErrInvalidPath) {
+		t.Fatalf("empty CreateWithRoot err = %v, want ErrInvalidPath", err)
+	}
+	if _, err := CreateWithRoot(ctx, reg, filepath.Join(home, "missing")); !errors.Is(err, ErrPathNotFound) {
+		t.Fatalf("missing CreateWithRoot err = %v, want ErrPathNotFound", err)
+	}
+	filePath := filepath.Join(home, "regular-file.txt")
+	testutil.FailErr(t, "write file", os.WriteFile(filePath, []byte("hello"), 0o600))
+	if _, err := CreateWithRoot(ctx, reg, filePath); !errors.Is(err, ErrNotDirectory) {
+		t.Fatalf("file CreateWithRoot err = %v, want ErrNotDirectory", err)
 	}
 }
