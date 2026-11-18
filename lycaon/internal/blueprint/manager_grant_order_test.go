@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/authzcontext/authztest"
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -44,12 +45,10 @@ func approvedManager(t *testing.T, recorderFor func(db.Handle) authzledger.Trans
 // alone, so no approved row is left bound to re-creatable bytes.
 func TestUpdateAndDeleteEndTheGrantBeforeTouchingBytes(t *testing.T) {
 	ctx := context.Background()
-	failing := func(db.Handle) authzledger.TransactionalRecorder {
-		return authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.FailStore{}}}
-	}
 
 	t.Run("update", func(t *testing.T) {
-		mgr, sqlDB, bp := approvedManager(t, failing)
+		mgr, sqlDB, bp := approvedManager(t, sealingRecorder)
+		authztest.RejectEvents(t, sqlDB)
 		body := "# Rewritten\n"
 		if _, err := mgr.Update(ctx, testdbseed.DefaultProjectID, bp.Path, &body, nil); err == nil {
 			t.Fatal("update must fail when the supersede cannot be sealed")
@@ -63,7 +62,8 @@ func TestUpdateAndDeleteEndTheGrantBeforeTouchingBytes(t *testing.T) {
 	})
 
 	t.Run("delete", func(t *testing.T) {
-		mgr, sqlDB, bp := approvedManager(t, failing)
+		mgr, sqlDB, bp := approvedManager(t, sealingRecorder)
+		authztest.RejectEvents(t, sqlDB)
 		if err := mgr.Delete(ctx, testdbseed.DefaultProjectID, bp.Path); err == nil {
 			t.Fatal("delete must fail when the revoke cannot be sealed")
 		}
