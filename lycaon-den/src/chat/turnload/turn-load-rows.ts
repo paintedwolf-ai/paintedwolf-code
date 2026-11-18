@@ -12,12 +12,7 @@ export type TurnLoadRow = {
   /** Message where the row is ordered. */
   anchorMessageId: string;
   workflowRunId?: string;
-  /** Structural order before the tool rows. */
-  sub: number;
 };
-
-/** Tool rows sit at TOOL_SUB_ORDINAL_BASE (10) plus their call index. */
-const TURN_ROW_SUB = 8;
 
 const rowKey = (load: TurnLoad, role: TurnLoadRow["role"]): string =>
   `turn-load:${load.opening_message_id}:${load.trigger}:${load.tool_call_id ?? ""}:${role}`;
@@ -81,7 +76,7 @@ export function turnLoadRows(
           anchorMessageId: anchor.id,
           workflowRunId: anchor.workflow_run_id?.trim() || undefined,
         };
-        rows.push({ ...base, key: rowKey(load, "tools"), role: "tools", sub: TURN_ROW_SUB });
+        rows.push({ ...base, key: rowKey(load, "tools"), role: "tools" });
         continue;
       }
     }

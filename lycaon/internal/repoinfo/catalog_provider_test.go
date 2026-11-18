@@ -65,8 +65,7 @@ func TestCatalogProviderProjectsSharedGeneration(t *testing.T) {
 		return repoinfo.CatalogRoot{ProjectID: "p1", RootID: "r1"}, true, nil
 	}, "")
 	defer func() { _ = provider.Close() }()
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	brief, err := repoinfo.AwaitBrief(ctx, provider, root)
 	testutil.FailErr(t, "await brief", err)
 	if brief.FileCount != 1 || len(brief.Languages) != 1 || brief.Languages[0] != "Go" {
@@ -92,7 +91,7 @@ func TestBriefRevokesEmptyClaimWhenItsIndexRefreshFails(t *testing.T) {
 	}
 	testutil.FailErr(t, "remove fixture root", os.Remove(root))
 	catalog.InvalidateRoot(root)
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the index refresh fails", func() bool {
 		status, statusErr := catalog.Trees.IndexStatus(ctx, "p", sourcecatalog.Root{ID: "r", Path: root})
 		return statusErr != nil || status.Error != ""
 	})

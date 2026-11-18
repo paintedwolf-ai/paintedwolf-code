@@ -67,17 +67,15 @@ func runTerminalRunner(t *testing.T, scanner scan.CodeScanner, runtime ...scanca
 	defer cancel()
 	go func() { _ = runner.Run(ctx) }()
 
-	for ctx.Err() == nil {
-		if scans := rec.snapshot(); len(scans) > 0 {
-			if scans[0].ID != created.ID {
-				t.Fatalf("OnTerminal scan id = %q want %q", scans[0].ID, created.ID)
-			}
-			return scans
-		}
-		time.Sleep(10 * time.Millisecond)
+	var scans []api.CodeScan
+	testutil.WaitFor(t, "the runner reports the scan's terminal state", func() bool {
+		scans = rec.snapshot()
+		return len(scans) > 0
+	})
+	if scans[0].ID != created.ID {
+		t.Fatalf("OnTerminal scan id = %q want %q", scans[0].ID, created.ID)
 	}
-	t.Fatal("timed out waiting for OnTerminal")
-	return nil
+	return scans
 }
 
 type deadlineScanner struct{}

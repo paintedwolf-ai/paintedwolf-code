@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/attention"
@@ -87,39 +88,41 @@ func TestAttentionCandidateStatusSinceParity(t *testing.T) {
 		{"sql", func(t *testing.T) attentionTurnStore { return openTurnSQLStore(t).(*SQL) }},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
-			st := fixture.open(t)
-			ctx := t.Context()
-			sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
-			testutil.FailErr(t, "create session", err)
-			since := func() time.Time {
-				t.Helper()
-				candidates, err := st.ListAttentionCandidates(ctx)
-				testutil.FailErr(t, "list candidates", err)
-				if len(candidates) != 1 {
-					t.Fatalf("candidates = %+v", candidates)
+			synctest.Test(t, func(t *testing.T) {
+				st := fixture.open(t)
+				ctx := t.Context()
+				sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+				testutil.FailErr(t, "create session", err)
+				since := func() time.Time {
+					t.Helper()
+					candidates, err := st.ListAttentionCandidates(ctx)
+					testutil.FailErr(t, "list candidates", err)
+					if len(candidates) != 1 {
+						t.Fatalf("candidates = %+v", candidates)
+					}
+					return candidates[0].StatusSince
 				}
-				return candidates[0].StatusSince
-			}
 
-			time.Sleep(2 * time.Millisecond)
-			testutil.FailErr(t, "fail session", st.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.Status = api.SessionStatusError }))
-			failedAt := since()
-			if !failedAt.After(sess.CreatedAt) {
-				t.Fatalf("status since %v, want after creation %v", failedAt, sess.CreatedAt)
-			}
+				time.Sleep(2 * time.Millisecond)
+				testutil.FailErr(t, "fail session", st.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.Status = api.SessionStatusError }))
+				failedAt := since()
+				if !failedAt.After(sess.CreatedAt) {
+					t.Fatalf("status since %v, want after creation %v", failedAt, sess.CreatedAt)
+				}
 
-			time.Sleep(2 * time.Millisecond)
-			testutil.FailErr(t, "rename", st.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.Title = "Renamed" }))
-			testutil.FailErr(t, "read", st.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.SeenAt = new(time.Now().UTC()) }))
-			if got := since(); !got.Equal(failedAt) {
-				t.Fatalf("record writes moved status since: %v -> %v", failedAt, got)
-			}
+				time.Sleep(2 * time.Millisecond)
+				testutil.FailErr(t, "rename", st.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.Title = "Renamed" }))
+				testutil.FailErr(t, "read", st.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.SeenAt = new(time.Now().UTC()) }))
+				if got := since(); !got.Equal(failedAt) {
+					t.Fatalf("record writes moved status since: %v -> %v", failedAt, got)
+				}
 
-			time.Sleep(2 * time.Millisecond)
-			testutil.FailErr(t, "go busy", st.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.Status = api.SessionStatusBusy }))
-			if got := since(); !got.After(failedAt) {
-				t.Fatalf("status change kept the old since: %v", got)
-			}
+				time.Sleep(2 * time.Millisecond)
+				testutil.FailErr(t, "go busy", st.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.Status = api.SessionStatusBusy }))
+				if got := since(); !got.After(failedAt) {
+					t.Fatalf("status change kept the old since: %v", got)
+				}
+			})
 		})
 	}
 }

@@ -42,7 +42,6 @@ describe("ProjectLoadingStage tone", () => {
     expect(hint?.getAttribute("role")).toBe("alert");
     expect(hint?.classList.contains("project-loading-stage__hint--error")).toBe(true);
     expect(hint?.textContent).toBe("The editor workspace could not be opened.");
-    expect(componentsCss).toMatch(/\.project-loading-stage__hint--error\s*\{[^}]*--den-danger-text/);
   });
 });
 

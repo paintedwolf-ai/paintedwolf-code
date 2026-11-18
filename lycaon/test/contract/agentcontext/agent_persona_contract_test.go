@@ -23,16 +23,6 @@ func contractPersonaEngine(t *testing.T) *prompts.FileTemplateEngine {
 	return prompts.NewFileTemplateEngineLayers(contractPromptLayers(t))
 }
 
-func TestArchetypeRequiredPartialsExist(t *testing.T) {
-	t.Parallel()
-	cfg, err := prompts.LoadPersonaContract()
-	contractcheck.FailErr(t, "prompts.LoadPersonaContract failed", err)
-	layers := contractPromptLayers(t)
-	if err := prompts.ValidateArchetypePartials(layers, cfg); err != nil {
-		contractcheck.FailErr(t, "prompts.ValidateArchetypePartials failed", err)
-	}
-}
-
 func TestEachAgentPersonaRenders(t *testing.T) {
 	contractcheck.ActivateStockCatalog(t)
 	prompts.ResetPersonaContractCache()

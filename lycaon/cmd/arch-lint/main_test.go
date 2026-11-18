@@ -35,7 +35,7 @@ func TestSubcommandsWriteFindingsAsJSON(t *testing.T) {
 		"-dir", filepath.Join(fixtures, "reach", "testdata", "fixture"), "-goos", "linux",
 		"-report", "^example.com/fixture/", "-skip", "test$", "./cmd/...",
 	}, &out); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "runReach failed", err)
 	}
 	if got := decode(t, &out); len(got) == 0 {
 		t.Fatal("reach found nothing in a fixture with dead code")

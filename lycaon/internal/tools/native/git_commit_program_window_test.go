@@ -98,7 +98,7 @@ func TestBulkCommitLeavesAnOutsideEditMadeBetweenProcessesOfAProgram(t *testing.
 		_, err := f.Call(t, t.Context(), `external -- /bin/sh -c 'echo generated > gen.txt'; until [ -e done.flag ]; do sleep 0.01; done`)
 		done <- err
 	}()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the launch writes gen.txt", func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "gen.txt"))
 		return err == nil
 	})

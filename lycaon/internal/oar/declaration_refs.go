@@ -95,6 +95,11 @@ func UnreferencedDeclaredFacts(moduleRoot string) ([]string, error) {
 		if err != nil {
 			return err
 		}
+		rel = filepath.ToSlash(rel)
+		// Generated license texts cannot establish a host fact reference.
+		if rel == "THIRD-PARTY-NOTICES.md" || rel == "lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md" {
+			return nil
+		}
 		if declarationPlumbing[rel] || isPublicationPlumbing(rel) {
 			return nil
 		}

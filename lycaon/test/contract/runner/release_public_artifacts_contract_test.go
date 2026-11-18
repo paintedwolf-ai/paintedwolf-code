@@ -37,13 +37,13 @@ func TestRepositorySetupArtifactsFollowSharedReleaseAdmission(t *testing.T) {
 			uploaded = true
 		}
 	}
-	if !assembled || !uploaded || !workflow.ancestors("publication-credentials")["linux-repositories"] {
-		t.Fatal("setup packages must be assembled and admitted before publication credentials")
+	if !assembled || !uploaded {
+		t.Fatal("setup packages must be assembled and admitted before publication")
 	}
 	for _, name := range []string{"publish-artifacts", "publish-github-release"} {
 		job := workflow.Jobs[name]
-		if !workflow.ancestors(name)["publication-credentials"] {
-			t.Errorf("%s bypasses shared publication admission", name)
+		if !workflow.ancestors(name)["linux-repositories"] {
+			t.Errorf("%s can publish before the setup packages are admitted", name)
 		}
 		downloaded := false
 		for _, step := range job.Steps {

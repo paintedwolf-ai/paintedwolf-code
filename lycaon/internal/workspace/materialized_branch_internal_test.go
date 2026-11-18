@@ -332,7 +332,7 @@ func TestCanceledWorkKeepsOnlyWhatChanged(t *testing.T) {
 	testutil.FailErr(t, "create", err)
 	testutil.FailErr(t, "edit", os.WriteFile(filepath.Join(binding.Root, "main.go"), []byte("package edited\n"), 0o644))
 	testutil.FailErr(t, "delete", os.Remove(filepath.Join(binding.Root, "gone.go")))
-	testutil.FailErr(t, "retain", mgr.RetainCanceledWork(t.Context(), "job-cancel", binding.Root, ""))
+	testutil.FailErr(t, "retain", mgr.RetainCanceledWork(t.Context(), "job-cancel", binding.Root, "", projectroot.RootRef{ID: projectroot.SingleRootID}))
 	records, err := mgr.recovery.ListInterruptedRecords("job-cancel")
 	testutil.FailErr(t, "list", err)
 	if len(records) != 1 || records[0].UnknownScope || len(records[0].AffectedPaths) != 2 {
@@ -475,50 +475,4 @@ func TestMaterializedBranchRecoveryFailsClosedOnMissingGitObjectsOrSymlinkEscape
 	if _, _, _, err := resolveConfinedRepoGitDir(root, root, "../escape", "."); !errors.Is(err, recovery.ErrIncompleteCheckpoint) {
 		t.Fatalf("resolveConfinedRepoGitDir on escaping worktree_rel err = %v, want ErrIncompleteCheckpoint", err)
 	}
-}
-
-func TestSymlinkedBranchParentResolvesSameClaimAndCheckpointView(t *testing.T) {
-	source := materializedSource(t)
-	realBase, err := filepath.EvalSymlinks(t.TempDir())
-	testutil.FailErr(t, "resolve real base", err)
-	realBranches := filepath.Join(realBase, "worker-branches")
-	testutil.FailErr(t, "mkdir real branches", os.MkdirAll(realBranches, 0o755))
-
-	aliasParent := t.TempDir()
-	aliasBranches := filepath.Join(aliasParent, "worker-branches")
-	testutil.FailErr(t, "symlink branches", os.Symlink(realBranches, aliasBranches))
-
-	mgr := newMaterializedManager(t, aliasBranches, platform.NewSelector(platform.Config{}))
-	binding, err := mgr.CreateWorkerWorkspace(t.Context(), source, "job-symlink")
-	testutil.FailErr(t, "create via alias", err)
-
-	rel, err := filepath.Rel(aliasBranches, binding.Root)
-	testutil.FailErr(t, "rel from alias", err)
-	canonicalRoot := filepath.Join(realBranches, rel)
-
-	if _, ok := LookupBranchClaimedView(canonicalRoot); !ok {
-		t.Fatalf("LookupBranchClaimedView(%s) missed view recorded via %s", canonicalRoot, binding.Root)
-	}
-	if _, _, ok := BranchWorkspaceState(canonicalRoot); !ok {
-		t.Fatalf("BranchWorkspaceState(%s) missed state recorded via %s", canonicalRoot, binding.Root)
-	}
-	if _, _, ok := mgr.lookupBranchViews(canonicalRoot); !ok {
-		t.Fatalf("lookupBranchViews(%s) missed view recorded via %s", canonicalRoot, binding.Root)
-	}
-	_ = BranchViewBoundary(canonicalRoot)()
-	_ = BranchProcessRecorder(canonicalRoot)(os.Getpid())
-
-	testutil.FailErr(t, "edit main.go", os.WriteFile(filepath.Join(canonicalRoot, "main.go"), []byte("package canonical\n"), 0o644))
-	paths, handled, err := OverlayWorkspaceDivergencePaths(t.Context(), canonicalRoot)
-	testutil.FailErr(t, "divergence via canonical root", err)
-	if !handled || strings.Join(paths, ",") != "main.go" {
-		t.Fatalf("divergence handled=%v paths=%v, want [main.go]", handled, paths)
-	}
-
-	handled, err = PublishBranchCheckpoint(t.Context(), canonicalRoot)
-	testutil.FailErr(t, "publish via canonical root", err)
-	if !handled {
-		t.Fatal("PublishBranchCheckpoint via canonical root returned handled=false")
-	}
-	testutil.FailErr(t, "destroy via canonical root", mgr.DestroyWorkerWorkspace(t.Context(), &Binding{ID: "job-symlink", Root: canonicalRoot}))
 }

@@ -1,4 +1,4 @@
-import { ViewPlugin, type EditorView, type ViewUpdate } from "@codemirror/view";
+import { BlockType, ViewPlugin, type EditorView, type ViewUpdate } from "@codemirror/view";
 import { setEditorScrollTop } from "./editor-scroll-position.ts";
 import { isSettlingScroll, positionRect, settleGeneration, topEdgePoint } from "./editor-settled-scroll.ts";
 
@@ -10,12 +10,13 @@ type Drift = { top: number; left: number };
  * line there is longer than the viewport: taller when it wraps, wider when it
  * does not. The editor anchors scrolling to whole lines and estimates the size
  * of text it has not drawn, so as it draws more of such a line, the text in
- * view moves.
+ * view moves. A block widget is not a line of text and has no anchor.
  */
 export function readReadingAnchor(view: EditorView): Anchor | null {
   const scroller = view.scrollDOM;
   if (scroller.clientHeight <= 0) return null;
   const block = view.lineBlockAtHeight(scroller.scrollTop);
+  if (block.type !== BlockType.Text) return null;
   const tall = block.height > scroller.clientHeight;
   const wide = !view.lineWrapping && scroller.scrollWidth > scroller.clientWidth;
   if (!tall && !wide) return null;

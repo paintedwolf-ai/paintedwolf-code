@@ -19,7 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/findings"
+	"github.com/lycaon/lycaon/internal/findings/findingstest"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/invocation"
@@ -90,8 +90,9 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	if err := board.RegisterBoardTools(reg, board.ToolDeps{Builder: boardSnap}); err != nil {
 		contractcheck.FailErr(t, "board.RegisterBoardTools failed", err)
 	}
-	if err := native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findings.NewMemoryStore(), func(_ context.Context, _ string) string {
-		return t.TempDir()
+	findingsScope := t.TempDir()
+	if err := native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findingstest.New(t, findingsScope), func(_ context.Context, _ string) string {
+		return findingsScope
 	}); err != nil {
 		contractcheck.FailErr(t, "native.RegisterRecordFindingTool failed", err)
 	}

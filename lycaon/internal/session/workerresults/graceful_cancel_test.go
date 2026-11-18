@@ -3,7 +3,6 @@ package workerresults
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -43,7 +42,6 @@ func TestRegisterOutlivesRequest(t *testing.T) {
 		t.Fatal("expected registration pending before request cancel")
 	}
 	reqCancel()
-	time.Sleep(10 * time.Millisecond) // allow the cancellation to propagate
 
 	if _, pending := mgr.Pending(context.Background(), child); !pending {
 		t.Fatal("registration cleared by request cancellation; register-and-return must outlive the request")

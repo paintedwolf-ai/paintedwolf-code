@@ -1,4 +1,5 @@
 import { SECURITY_SCANNERS_SECTION_LABEL } from "../settings-nav-model.ts";
+import type { ScannerSlot } from "./scanners-catalog-model.ts";
 
 export const SCANNERS_SETTINGS_COPY = {
   title: SECURITY_SCANNERS_SECTION_LABEL,
@@ -15,12 +16,12 @@ export const SCANNERS_SETTINGS_COPY = {
     sast: "Static analysis",
     sca: "Dependencies",
     secret: "Secrets",
-  } as Record<string, string>,
+  } satisfies Record<ScannerSlot, string>,
   slotHint: {
     sast: "Finds insecure patterns in your code.",
     sca: "Finds known CVEs in your dependencies.",
     secret: "Finds credentials committed to the repo.",
-  } as Record<string, string>,
+  } satisfies Record<ScannerSlot, string>,
   slotEmpty: "No scanner selected.",
   changeButton: "Change",
 
@@ -88,6 +89,6 @@ export const SCANNERS_SETTINGS_COPY = {
   sourceVerifyContent: "By content",
 } as const;
 
-export function scannerSlotLabel(slot: string): string {
-  return SCANNERS_SETTINGS_COPY.slotLabel[slot] ?? slot;
+export function scannerSlotLabel(slot: ScannerSlot): string {
+  return SCANNERS_SETTINGS_COPY.slotLabel[slot];
 }

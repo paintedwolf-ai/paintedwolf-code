@@ -343,6 +343,16 @@ func goBuild(t *testing.T, output, pkg string, ldflags string, options ...string
 	testutil.FailErr(t, "build fixture binary", buildBinary(output, pkg, ldflags, options...))
 }
 
+// buildBinaries builds each main package into dir under its package name.
+func buildBinaries(dir string, pkgs []string) error {
+	cmd := exec.Command("go", append([]string{"build", "-o", dir + string(filepath.Separator)}, pkgs...)...)
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("build %v: %w\n%s", pkgs, err, out)
+	}
+	return nil
+}
+
 func buildBinary(output, pkg string, ldflags string, options ...string) error {
 	args := append([]string{"build", "-o", output}, options...)
 	if ldflags != "" {
@@ -356,27 +366,49 @@ func buildBinary(output, pkg string, ldflags string, options ...string) error {
 	return nil
 }
 
-// sharedLaunchHelpers builds the fixture binaries that do not embed its location
-// once per process; only the bootstrap relinks for each fixture.
-var sharedLaunchHelpers = sync.OnceValues(func() (string, error) {
-	dir, err := os.MkdirTemp("", "pw-launch-helpers")
+// launchFixtureTag builds pw-launch to read its layout beside its executable.
+const launchFixtureTag = "-tags=launchfixture"
+
+// fixtureBinaries builds every fixture binary once per test process into one
+// directory: pw-launch with launchFixtureTag, so one link serves every fixture
+// directory, and the helpers it launches, with the release desktop and the
+// fixed mount transition.
+var fixtureBinaries = sync.OnceValues(func() (string, error) {
+	dir, err := os.MkdirTemp("", "pw-launch-fixtures")
 	if err != nil {
 		return "", err
 	}
 	if err := os.Chmod(dir, 0o755); err != nil {
 		return "", err
 	}
-	if err := buildBinary(filepath.Join(dir, "pw-launch-entry"), "github.com/lycaon/lycaon/cmd/pw-launch-entry", ""); err != nil {
+	if err := buildBinary(filepath.Join(dir, "pw-launch"), "github.com/lycaon/lycaon/cmd/pw-launch", "", launchFixtureTag); err != nil {
+		return "", err
+	}
+	plain := []string{
+		"github.com/lycaon/lycaon/cmd/pw-launch-entry",
+		"github.com/lycaon/lycaon/cmd/pw-vault-identity",
+		"./testdata/bwrapshim",
+		"./testdata/blobcommit",
+	}
+	if err := buildBinaries(dir, plain); err != nil {
+		return "", err
+	}
+	if err := os.Rename(filepath.Join(dir, "bwrapshim"), filepath.Join(dir, "bwrap")); err != nil {
 		return "", err
 	}
 	if err := buildBinary(filepath.Join(dir, "painted-wolf-code"), "./testdata/protecteddesktop", "", "-tags=paintedwolf_release"); err != nil {
 		return "", err
 	}
-	if err := buildBinary(filepath.Join(dir, "bwrap"), "./testdata/bwrapshim", ""); err != nil {
-		return "", err
-	}
 	return dir, buildMountTransitionImage(filepath.Join(dir, "pw-mount-intake-transition"))
 })
+
+// fixtureBinary is the path of one binary fixtureBinaries built.
+func fixtureBinary(t *testing.T, name string) string {
+	t.Helper()
+	dir, err := fixtureBinaries()
+	testutil.FailErr(t, "build fixture binaries", err)
+	return filepath.Join(dir, name)
+}
 
 // installLaunchFixture builds the real bootstrap and entry with the fixture
 // desktop and installs them as root.
@@ -391,38 +423,26 @@ func installLaunchFixture(t *testing.T, modes ...launchFixtureBuild) launchFixtu
 	// The fixture's whole ancestry from "/" must be root-owned and neither
 	// sticky nor group/world-writable.
 	dir := filepath.Join("/var/lib", "pw-protected-launch-"+hex.EncodeToString(nonce[:]))
-	build := t.TempDir()
-	module := "github.com/lycaon/lycaon/internal/launchguard"
-	layout := fmt.Sprintf("-X %s.policyPath=%s -X %s.lockDirectory=%s", module, filepath.Join(dir, "launch.json"), module, filepath.Join(dir, "locks"))
 	measured := len(modes) == 1 && modes[0] == measuredLaunchFixture && testing.CoverMode() != ""
-	var options []string
-	entryFlags := ""
+	var binaries []string
+	for _, name := range []string{"pw-launch", "pw-launch-entry", "painted-wolf-code", "pw-mount-intake-transition", "bwrap"} {
+		binaries = append(binaries, fixtureBinary(t, name))
+	}
 	if measured {
+		// Coverage counters name this fixture's collector, so the measured
+		// bootstrap and entry link for it alone.
+		build := t.TempDir()
+		module := "github.com/lycaon/lycaon/internal/launchguard"
 		overlay, linked := launchCoverageOverlay(t, build, dir)
-		options = []string{"-cover", "-covermode=" + nativeCoverageMode(), "-coverpkg=" + module + ",github.com/lycaon/lycaon/cmd/pw-launch,github.com/lycaon/lycaon/cmd/pw-launch-entry", "-overlay=" + overlay, launchCoverageTool(t, overlay)}
-		layout += " " + linked
-		entryFlags = linked
-	}
-	binaries := []string{filepath.Join(build, "pw-launch"), filepath.Join(build, "pw-launch-entry"), filepath.Join(build, "painted-wolf-code"), filepath.Join(build, "pw-mount-intake-transition"), filepath.Join(build, "bwrap")}
-	goBuild(t, binaries[0], "github.com/lycaon/lycaon/cmd/pw-launch", layout, options...)
-	if measured {
-		goBuild(t, binaries[1], "github.com/lycaon/lycaon/cmd/pw-launch-entry", entryFlags, options...)
-		goBuild(t, binaries[2], "./testdata/protecteddesktop", "", "-tags=paintedwolf_release")
-		buildMountTransition(t, binaries[3])
-		goBuild(t, binaries[4], "./testdata/bwrapshim", "")
-	} else {
-		helpers, err := sharedLaunchHelpers()
-		testutil.FailErr(t, "build shared launch helpers", err)
-		for _, binary := range binaries[1:] {
-			data, err := os.ReadFile(filepath.Join(helpers, filepath.Base(binary)))
-			testutil.FailErr(t, "read shared launch helper", err)
-			testutil.FailErr(t, "copy shared launch helper", os.WriteFile(binary, data, 0o755))
+		options := []string{"-cover", "-covermode=" + nativeCoverageMode(), "-coverpkg=" + module + ",github.com/lycaon/lycaon/cmd/pw-launch,github.com/lycaon/lycaon/cmd/pw-launch-entry", "-overlay=" + overlay, launchCoverageTool(t, overlay)}
+		binaries[0], binaries[1] = filepath.Join(build, "pw-launch"), filepath.Join(build, "pw-launch-entry")
+		goBuild(t, binaries[0], "github.com/lycaon/lycaon/cmd/pw-launch", linked, append(options, launchFixtureTag)...)
+		goBuild(t, binaries[1], "github.com/lycaon/lycaon/cmd/pw-launch-entry", linked, options...)
+		for _, binary := range binaries[:2] {
+			testutil.FailErr(t, "fixture binary readable", os.Chmod(binary, 0o755))
 		}
+		testutil.FailErr(t, "make build directory traversable", os.Chmod(build, 0o755))
 	}
-	for _, binary := range binaries {
-		testutil.FailErr(t, "fixture binary readable", os.Chmod(binary, 0o755))
-	}
-	testutil.FailErr(t, "make build directory traversable", os.Chmod(build, 0o755))
 	testutil.FailErr(t, "install fixture", sudoFixture(t, "install", dir, fixtureBinsEnv+"="+strings.Join(binaries, ":")))
 	if measured {
 		testutil.FailErr(t, "prepare owned native runtime collector", sudoFixture(t, "coverage-prepare", dir,

@@ -2,10 +2,10 @@ import { Show, createSignal } from "solid-js";
 import type { SessionProtectionState } from "../../api/types.ts";
 import { SystemNudge } from "../SystemNudge.tsx";
 
-export const MEDIATION_UNAVAILABLE_COPY =
+const MEDIATION_UNAVAILABLE_COPY =
   "Network mediation is unavailable. Outbound connections are blocked; commands that do not use the network are unaffected.";
 
-export const SANDBOX_BYPASS_COPY =
+const SANDBOX_BYPASS_COPY =
   "Sandbox protections are turned off for this session. Commands may access your machine and network without mediation.";
 
 export type ProtectionBannerId =

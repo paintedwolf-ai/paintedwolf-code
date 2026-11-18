@@ -13,16 +13,31 @@ def coverage_partition(changed, metadata, exclude):
             for package in touched if metadata[package]['tested']}
 
 
+def go_change(scope):
+    """Whether the change can alter what Go compiles; a scope without one is treated as such."""
+    return scope is None or scope['full'] or any(
+        path.endswith('.go') or path in {'lycaon/go.mod', 'lycaon/go.sum'} for path in scope.get('paths', []))
+
+
 def check_phases(targets, scope, early):
-    """Native admission, then the early targets, then the remaining checks."""
+    """Native admission, then the early targets, then the remaining checks; the cross-platform build only
+    when Go can compile differently."""
     from ci_policy.native_admission import commands as native_commands
+    if not go_change(scope):
+        targets = [target for target in targets if target != 'build:cross']
     first = [target for target in early if target in targets]
     rest = [target for target in targets if target not in first]
     return [*native_commands(scope), *[['./task', *part] for part in (first, rest) if part]]
 
 
 def test_phases(scope):
-    """Repository contracts, then the affected short tests that changed coverage does not already run."""
+    """Repository contracts, the affected short tests that changed coverage does not already run, then the
+    integration tests of the packages the change edits."""
+    phases, packages = short_phases(scope)
+    return [*phases, ['./task', 'test:integration:changes']], packages
+
+
+def short_phases(scope):
     from ci_policy.impact import go_scope
     contracts = ['./task', 'test:contract', '--', './test/contract/...']
     if scope is None:

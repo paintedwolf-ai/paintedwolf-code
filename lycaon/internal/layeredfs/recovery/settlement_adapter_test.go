@@ -91,7 +91,7 @@ func TestStorageLossOrderingENOSPCAndCorruptMetadata(t *testing.T) {
 		AdapterID:                 fx.mountedAdp.ID(),
 		LastPublishedCheckpointID: "cp-durable-1",
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "coord.SaveWorkerJournal failed", err)
 	}
 
 	// Simulate disk-full (ENOSPC) on subsequent transition update: prior valid journal must remain intact.

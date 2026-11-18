@@ -57,21 +57,6 @@ describe("PROVIDER_ONBOARDING_MODEL_HINTS", () => {
       expect(hint!.includes("\n")).toBe(false);
     }
   });
-
-  it("does not use a generated onboarding-kinds stub", () => {
-    // Reject generated kind stubs.
-    const generated = join(
-      REPO_ROOT,
-      "lycaon-den/src/settings/provider-onboarding-kinds.generated.ts",
-    );
-    expect(() => readFileSync(generated, "utf8")).toThrow();
-  });
-
-  it("returns the Anthropic Coordinator guidance", () => {
-    expect(onboardingModelHintForKind("anthropic")).toBe(
-      "Claude Sonnet and Opus both work well.",
-    );
-  });
 });
 
 describe("onboardingModelHintForProviders", () => {

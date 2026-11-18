@@ -89,6 +89,27 @@ func TestMergeApplyLeaseLossCancelsActiveWriter(t *testing.T) {
 	}
 }
 
+// A promotion that panics stops renewing its lease, as a crashed one would, so
+// the lease expires and recovery can reclaim the branch.
+func TestPanickedPromotionStopsRenewingItsLease(t *testing.T) {
+	store := obligationTestStore(t)
+	oldToken := insertApplyingWorker(t, store, "job-panic", t.TempDir())
+	testutil.FailErr(t, "release setup claim", store.ReleaseMergeApply(t.Context(), "job-panic", oldToken))
+	service := &MergeService{Store: store}
+	claim, _, err := service.beginMergeClaim(t.Context(), "job-panic")
+	testutil.FailErr(t, "begin merge claim", err)
+	func() {
+		defer func() {
+			if recovered := recover(); !isPanicError(recovered, errPromoteCrash) {
+				t.Fatalf("panic = %v, want the promotion's own", recovered)
+			}
+		}()
+		defer claim.stopOnPanic()
+		panic(errPromoteCrash)
+	}()
+	testutil.AwaitClosed(t, "lease heartbeat ends", claim.heartbeatDone)
+}
+
 func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 	for _, tc := range []struct {
 		name                     string

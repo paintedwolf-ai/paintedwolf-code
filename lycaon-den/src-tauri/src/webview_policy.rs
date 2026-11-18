@@ -12,14 +12,15 @@ fn is_local_dev_origin(url: &Url) -> bool {
 
 /// Fail-closed allowlist for top-level webview navigations.
 pub fn is_allowed_webview_navigation(url: &Url) -> bool {
+    allows_navigation(url, cfg!(dev))
+}
+
+/// A development build also loads the local dev server; a production build loads the app protocol only.
+fn allows_navigation(url: &Url, dev: bool) -> bool {
     if url.scheme() == "tauri" && url.host_str() == Some("localhost") {
         return true;
     }
-    if cfg!(dev) && (url.scheme() == "http" || url.scheme() == "https") && is_local_dev_origin(url)
-    {
-        return true;
-    }
-    false
+    dev && (url.scheme() == "http" || url.scheme() == "https") && is_local_dev_origin(url)
 }
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
@@ -45,15 +46,15 @@ mod tests {
 
     #[test]
     fn denies_external_http_in_production_builds() {
-        if cfg!(dev) {
-            return;
-        }
-        assert!(!is_allowed_webview_navigation(&parse(
-            "https://example.com/"
-        )));
-        assert!(!is_allowed_webview_navigation(&parse(
-            "http://127.0.0.1:8080/"
-        )));
+        assert!(!allows_navigation(&parse("https://example.com/"), false));
+        assert!(!allows_navigation(&parse("http://127.0.0.1:8080/"), false));
+        assert!(allows_navigation(&parse("tauri://localhost/index.html"), false));
+    }
+
+    #[test]
+    fn development_builds_add_only_the_local_dev_server() {
+        assert!(allows_navigation(&parse("http://127.0.0.1:1420/"), true));
+        assert!(!allows_navigation(&parse("https://example.com/"), true));
     }
 
     #[test]
