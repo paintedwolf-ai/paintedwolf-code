@@ -30,6 +30,7 @@ func (e *Approvals) awaitApproval(
 			NativeInputs:       tc.Invocation.NativeInputs,
 			BoundStages:        toolcontract.CloneExecutionStages(tc.Invocation.NativeStages),
 			Tool:               tool,
+			EntryTool:          tc.Invocation.EntryTool,
 			Args:               args,
 			Files:              append(filesFromArgs(tool, args), policyWritePaths(confReq)...),
 			ResolvedFiles:      append(ResolvedApprovalFiles(tool, args, tc), policyWritePaths(confReq)...),

@@ -17,6 +17,7 @@ type PolicyContext struct {
 	NativeInputs    *hitl.NativeActionInputs
 	NativeOperation *toolcontract.BoundOperation
 	BoundStages     []toolcontract.ExecutionStage
+	EntryTool       string
 	ProfileID       string
 	ToolAccess      sandbox.ToolAccess
 	ToolName        string
