@@ -140,8 +140,14 @@ func (w commandWindow) closeOnExit(ctx context.Context, registry *bgprocess.Regi
 }
 
 func stateObservation(tctx tools.ToolContext, window *hostcmd.SourceWindow) {
-	if tctx.Effects.Out == nil || window == nil {
-		return
+	if fact := observationFact(window); fact != nil {
+		tctx.Effects.Out.StateCardFact(*fact)
+	}
+}
+
+func observationFact(window *hostcmd.SourceWindow) *api.ActionFact {
+	if window == nil {
+		return nil
 	}
 	fact := api.ActionFact{Kind: api.ActionFactSourceObservation}
 	for _, folder := range window.Coverage {
@@ -152,7 +158,8 @@ func stateObservation(tctx tools.ToolContext, window *hostcmd.SourceWindow) {
 	if window.ID != "" && !window.Settled {
 		fact.SourceWindows = []string{window.ID}
 	}
-	if len(fact.SourceCoverage) > 0 || len(fact.SourceWindows) > 0 {
-		tctx.Effects.Out.StateCardFact(fact)
+	if len(fact.SourceCoverage) == 0 && len(fact.SourceWindows) == 0 {
+		return nil
 	}
+	return &fact
 }

@@ -120,6 +120,12 @@ func TestProgramWindowACCW01UntrustedTokenSettlesBeforeTheResult(t *testing.T) {
 
 func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
 	f := newWindowFixture(t)
+	out := &tools.ToolInvocationOut{}
+	configure := f.Configure
+	f.Configure = func(tc *tools.ToolContext) {
+		configure(tc)
+		tc.Effects.Out = out
+	}
 	repochange.MarkCoverageCompleteForTest(f.Dir)
 	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
 	gate := make(chan time.Time)
@@ -127,6 +133,10 @@ func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
 	outcome := f.run(t, writeGen)
 	if outcome.SourceWindow == nil || outcome.SourceWindow.Settled {
 		t.Fatalf("outcome = %+v, want an unsettled source window", outcome)
+	}
+	if facts := out.CardFacts; len(facts) != 1 || facts[0].Kind != api.ActionFactSourceObservation ||
+		len(facts[0].SourceWindows) != 1 || facts[0].SourceWindows[0] != outcome.SourceWindow.ID {
+		t.Fatalf("tool result facts = %+v, want pending window %q", facts, outcome.SourceWindow.ID)
 	}
 	listed := f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)
 	if len(listed) != 1 || listed[0].ID != outcome.SourceWindow.ID || !listed[0].Closing {

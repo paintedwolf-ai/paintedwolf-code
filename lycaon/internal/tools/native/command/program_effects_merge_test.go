@@ -189,11 +189,11 @@ type recordedEffects struct {
 	calls []string
 }
 
-func (r *recordedEffects) AppendProgramEffects(_ context.Context, sessionID, toolCallID string, edits []api.FileEditSnapshot, _ int) {
+func (r *recordedEffects) AppendProgramEffects(_ context.Context, sessionID, toolCallID string, effects tools.ProgramEffects) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	paths := make([]string, 0, len(edits))
-	for _, edit := range edits {
+	paths := make([]string, 0, len(effects.FileEdits))
+	for _, edit := range effects.FileEdits {
 		paths = append(paths, edit.Path)
 	}
 	r.calls = append(r.calls, sessionID+"/"+toolCallID+":"+strings.Join(paths, ","))

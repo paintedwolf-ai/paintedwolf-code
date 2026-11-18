@@ -118,6 +118,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 		out.MergeChild(program, tools.MergeProgram)
 		out.CommandProgram, out.SourceRun = program.CommandProgram, program.SourceRun
 	}
+	stateObservation(e.callTC, e.run.window.fact())
 	stateGitNoRepository(e)
 	return ending.result, ending.err
 }
@@ -225,15 +226,15 @@ func (r *ProgramRuntime) recordParkedRun(ctx context.Context, run *programRun) {
 	r.SourceRuns.RecordSourceRunEvidence(ctx, sess.ID, sess, run.tool, *capture)
 }
 
-// recordDetachedEffects hands the file edits a program made after its call
-// returned to that call's stored result. The call took what came before, so
-// each edit is recorded once.
+// Commit effects recorded after the program's tool result was published.
 func (r *ProgramRuntime) recordDetachedEffects(ctx context.Context, run *programRun) {
 	late := run.tc.Effects.Out.TakeCommitted()
 	if r.Effects == nil {
 		return
 	}
-	r.Effects.AppendProgramEffects(ctx, run.tc.Identity.SessionID, run.tc.Identity.ToolCallID, late.FileEdits, late.FileEditsOmitted)
+	r.Effects.AppendProgramEffects(ctx, run.tc.Identity.SessionID, run.tc.Identity.ToolCallID, tools.ProgramEffects{
+		FileEdits: late.FileEdits, Omitted: late.FileEditsOmitted, Observation: observationFact(run.window.fact()),
+	})
 }
 
 // ReceiptResult is a program's result as its durable receipts record it, for
@@ -315,7 +316,6 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	outcome.Refusal = refusal
 	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
 	outcome.SourceWindow = run.window.fact()
-	stateObservation(run.tc, outcome.SourceWindow)
 	if settledNow {
 		recordProgramAttempt(r.FailureTracker, e.failureAttempt, ctx, outcome)
 		stampProgramRun(run.tc, run.source, e.paths.Cwd(), outcome, e.verification)
