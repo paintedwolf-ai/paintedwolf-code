@@ -93,7 +93,7 @@ func TestStressFirefoxMountedSparseWorkerLifecycle(t *testing.T) {
 	if !published || len(manifest.Entries) != 1 || manifest.Entries[0].Path.Rel != name {
 		t.Fatal("checkpoint scope differs from the single authored file")
 	}
-	service := &MergeService{Queue: fixture.queue, Branches: fixture.queue.Branches, Store: fixture.queue.Promotions, DataDir: testbaseline.DataDir(t, fixture.db), Workspace: fixture.manager}
+	service := &MergeService{Queue: fixture.queue, Branches: fixture.queue.Branches, Store: fixture.promotions, DataDir: testbaseline.DataDir(t, fixture.db), Workspace: fixture.manager}
 	started = time.Now()
 	result, err := service.PromoteOverlay(t.Context(), "", task.ID, api.PromoteOverlayInput{})
 	t.Logf("promotion elapsed=%s", time.Since(started))
@@ -120,10 +120,11 @@ func newFirefoxWorkerFixture(t *testing.T, source string) *layeredWorkerFixture 
 	selector := workspace.HostSelector()
 	selector.BudgetFor = adapter.ZeroBudget
 	manager := workspace.NewManager(branches, selector).WithPrivateGit(git)
-	queue := NewSQLQueue(database, 4)
+	services := NewSQLServices(database, 4)
+	queue := services.Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content")).Baselines)
 	queue.Branches.SetWorkerWorkspaceManager(manager)
-	return &layeredWorkerFixture{db: database, queue: queue, manager: manager, source: source, branches: branches}
+	return &layeredWorkerFixture{db: database, queue: queue, promotions: services.Promotions, manager: manager, source: source, branches: branches}
 }
 
 func claimFirefoxWorker(t *testing.T, f *layeredWorkerFixture, name string) *api.WorkerTask {

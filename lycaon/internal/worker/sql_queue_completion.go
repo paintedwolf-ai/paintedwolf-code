@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
@@ -12,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/workspace"
-	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -27,33 +25,13 @@ func (q *SQLQueue) completeAdmitted(ctx context.Context, claimed *api.WorkerTask
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("claimed worker task required")
 	}
-	task, mergeStatus, teardown := q.Branches.resolveWriteCompletionTarget(ctx, claimed, result)
-	jobID := claimed.ID
-	overlayPath, checkpointID := "", ""
-	// A view publishes its checkpoint; an earlier-format branch seals an overlay against its baseline.
-	// A budget-exceeded overlay stays unsealed for review.
-	if mergeStatus == api.WorkerMergeStatusPending && strings.TrimSpace(task.WorkspaceOverlayPath) == "" {
-		published, err := workspace.PublishBranchCheckpoint(ctx, task.WorkspaceRoot)
-		if err != nil {
-			return false, fmt.Errorf("worker %s: publish checkpoint: %w", task.ID, err)
-		}
-		if published {
-			_, checkpointID, _ = workspace.BranchCheckpoint(task.WorkspaceRoot)
-		}
-		if !published && strings.TrimSpace(task.WorkspaceBaselinePath) != "" {
-			captured, err := q.Branches.captureOverlay(ctx, task)
-			if err != nil {
-				if errors.Is(err, workspacebaseline.ErrOverlayBudgetExceeded) {
-					workerWorkspaceLog.Warn("write overlay exceeds budget; leaving unsealed for review",
-						"job_id", task.ID, "error", err)
-				} else {
-					return false, err
-				}
-			} else {
-				overlayPath = captured
-			}
-		}
+	prepared, err := q.Branches.prepareCompletion(ctx, claimed, result)
+	if err != nil {
+		return false, err
 	}
+	task, mergeStatus, teardown := prepared.task, prepared.mergeStatus, prepared.teardown
+	overlayPath, checkpointID := prepared.overlayPath, prepared.checkpointID
+	jobID := claimed.ID
 	criteriaJSON := q.evaluateRoundCriteria(ctx, task, strings.TrimSpace(result.Status) != "needs_decision", result.Summary, result.ChangeReport)
 	completion, err := q.store.CompleteJob(ctx, jobID, result, claimed.ClaimToken, mergeStatus, teardown, overlayPath, checkpointID, criteriaJSON)
 	if err != nil || !completion.Committed || completion.Suspended {

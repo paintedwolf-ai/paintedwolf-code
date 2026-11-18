@@ -41,7 +41,7 @@ func TestRuntimeBatchDispatchReloadAndAbort(t *testing.T) {
 	insertWorkflowRun(t, sqlDB, runID, sessionID)
 
 	records := workerrecords.New(sqlDB)
-	queue := worker.NewSQLQueue(sqlDB, 8)
+	queue := worker.NewSQLServices(sqlDB, 8).Queue
 	queue.SetWorkflowDomains(&worker.WorkflowDomains{Runs: allowWorkflow{}, Tasks: allowWorkflow{}})
 	rt := workertopology.New(records, queue)
 	ctx := t.Context()
@@ -119,7 +119,7 @@ func TestRuntimeDispatchSettledFailedStage(t *testing.T) {
 	testdbseed.InsertSession(t, sqlDB, sessionID, testdbseed.DefaultProjectID)
 
 	records := workerrecords.New(sqlDB)
-	queue := worker.NewSQLQueue(sqlDB, 4)
+	queue := worker.NewSQLServices(sqlDB, 4).Queue
 	rt := workertopology.New(records, queue)
 	ctx := t.Context()
 

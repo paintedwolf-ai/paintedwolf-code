@@ -27,7 +27,7 @@ func NewQueue(t testing.TB, maxRunning int, projectID string, sessionIDs ...stri
 // OnDatabase shares durable worker and session state in one fixture installation.
 func OnDatabase(t testing.TB, database db.Handle, maxRunning int) *worker.SQLQueue {
 	t.Helper()
-	queue := worker.NewSQLQueue(database, maxRunning)
+	queue := worker.NewSQLServices(database, maxRunning).Queue
 	root := db.DataDir(database)
 	queue.Branches.SetBaselineStore(workspacebaseline.New(database, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "worker-baselines")))
 	return queue

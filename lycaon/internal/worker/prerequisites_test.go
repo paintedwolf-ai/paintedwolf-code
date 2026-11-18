@@ -24,7 +24,8 @@ func TestPrerequisitesWaitForPromotedSuccessfulOutput(t *testing.T) {
 
 	database := testdbfixture.Open(t, "workers.db")
 	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
-	queue := NewSQLQueue(database, 2)
+	queueServices := NewSQLServices(database, 2)
+	queue := queueServices.Queue
 	q = queue
 	transition = func(id, status string, merge api.WorkerMergeStatus) {
 		_, err := database.ExecContext(t.Context(), `UPDATE worker_jobs SET status='complete', result_json=json_object('status',?), merge_status=? WHERE id=?`, status, string(merge), id)
@@ -150,7 +151,8 @@ func TestConsumerCapturesPrimaryAfterProducerPromotion(t *testing.T) {
 func TestProducerPromotionPublishesConsumerReadiness(t *testing.T) {
 	database := testdbfixture.Open(t, "events.db")
 	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
-	queue := NewSQLQueue(database, 2)
+	queueServices := NewSQLServices(database, 2)
+	queue := queueServices.Queue
 	queue.SetEventOutbox(eventoutbox.New(database, nil))
 	producer := api.WorkerTask{WorkspacePath: t.TempDir(), ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, Prompt: "produce", Brief: "produce", AgentType: "implementer", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}
 	id, err := queue.Enqueue(t.Context(), producer)
@@ -161,7 +163,7 @@ func TestProducerPromotionPublishesConsumerReadiness(t *testing.T) {
 	testutil.FailErr(t, "enqueue consumer", err)
 	_, err = database.ExecContext(t.Context(), `UPDATE worker_jobs SET status='complete', result_json='{"status":"complete"}' WHERE id=?`, id)
 	testutil.FailErr(t, "complete producer", err)
-	testutil.FailErr(t, "promote producer", queue.Promotions.SetMergeStatus(t.Context(), id, api.WorkerMergeStatusMerged))
+	testutil.FailErr(t, "promote producer", queueServices.Promotions.SetMergeStatus(t.Context(), id, api.WorkerMergeStatusMerged))
 	var state string
 	err = database.QueryRowContext(t.Context(), `SELECT json_extract(data_json,'$.dependencies[0].state') FROM event_outbox WHERE topic='worker' AND facet=? ORDER BY id DESC LIMIT 1`, cid).Scan(&state)
 	testutil.FailErr(t, "read consumer event", err)

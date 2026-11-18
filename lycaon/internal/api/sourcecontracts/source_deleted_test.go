@@ -129,7 +129,7 @@ func TestDeletedSourceKeepsContentAvailabilityAndScreening(t *testing.T) {
 
 func TestDeletedWorkerSourceDoesNotOpenThePrimaryReplacement(t *testing.T) {
 	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
-	queue := worker.NewSQLQueue(ledgerDB, 1)
+	queue := worker.NewSQLServices(ledgerDB, 1).Queue
 	srv := contractfixture.NewTestServer(t, withLedger, contractfixture.WithWorkers(queue))
 	primary, branchRoot := t.TempDir(), workertest.NewBranch(t, ledgerDB)
 	p := contractfixture.CreateProjectForTest(t, srv, primary)

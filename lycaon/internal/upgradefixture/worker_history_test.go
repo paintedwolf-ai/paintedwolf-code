@@ -28,7 +28,7 @@ func TestWorkerFixtureReconstructsAfterOriginalWorkspaceRemoval(t *testing.T) {
 	sessions := store.NewSQL(database)
 	parent, err := sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: attached.Roots[0].ID}, attached.ID)
 	testutil.FailErr(t, "create fixture session", err)
-	queue := worker.NewSQLQueue(database, 2)
+	queue := worker.NewSQLServices(database, 2).Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
 	queue.Branches.SetProjectStore(projects)
 	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{})))

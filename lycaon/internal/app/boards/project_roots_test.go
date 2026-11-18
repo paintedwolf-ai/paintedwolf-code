@@ -76,7 +76,7 @@ func TestWorkerReaderChecksLatestSettledResultReadiness(t *testing.T) {
 		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'implementer', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
 	testutil.FailErr(t, "insert child", err)
 	records := workerrecords.New(database)
-	queue := worker.NewSQLQueue(database, 1)
+	queue := worker.NewSQLServices(database, 1).Queue
 	rt := &Runtime{
 		WorkerRecords: records,
 		deps: Dependencies{

@@ -43,7 +43,8 @@ func TestEntryLeftOutOfTheBranchIsNotAWorkerDeletion(t *testing.T) {
 	testdbseed.InsertProjectRootWithID(t, sqlDB, testdbseed.DefaultProjectID, "root-id", project)
 	dataDir := testbaseline.DataDir(t, sqlDB)
 	mgr := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}))
-	q := NewSQLQueue(sqlDB, 4)
+	qServices := NewSQLServices(sqlDB, 4)
+	q := qServices.Queue
 	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(dataDir, "source-content")).Baselines)
 	q.Branches.SetWorkerWorkspaceManager(mgr)
 	id, err := q.Enqueue(ctx, api.WorkerTask{
@@ -71,7 +72,7 @@ func TestEntryLeftOutOfTheBranchIsNotAWorkerDeletion(t *testing.T) {
 	if len(changed) != 1 || changed[0] != "main.go" {
 		t.Fatalf("changes = %v", changed)
 	}
-	svc := &MergeService{Queue: q, Branches: q.Branches, Store: q.Promotions, Workspace: mgr, DataDir: t.TempDir()}
+	svc := &MergeService{Queue: q, Branches: q.Branches, Store: qServices.Promotions, Workspace: mgr, DataDir: t.TempDir()}
 	out, err := svc.PromoteOverlay(ctx, "", id, api.PromoteOverlayInput{})
 	testutil.FailErr(t, "promote", err)
 	if out.Status != api.WorkerMergeStatusMerged {

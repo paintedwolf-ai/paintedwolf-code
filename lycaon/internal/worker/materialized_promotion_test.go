@@ -36,7 +36,8 @@ func TestMaterializedWorkerPromotesThreeWayFromItsPristineBase(t *testing.T) {
 	}
 	selector.Confinement = nil
 	manager := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), selector)
-	queue := NewSQLQueue(database, 4)
+	queueServices := NewSQLServices(database, 4)
+	queue := queueServices.Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
 	queue.Branches.SetWorkerWorkspaceManager(manager)
 	id, err := queue.Enqueue(ctx, api.WorkerTask{
@@ -62,7 +63,7 @@ func TestMaterializedWorkerPromotesThreeWayFromItsPristineBase(t *testing.T) {
 	moved[8] = "NINE"
 	testutil.FailErr(t, "source moves", os.WriteFile(filepath.Join(source, "notes.txt"), []byte(strings.Join(moved, "\n")+"\n"), 0o644))
 
-	service := &MergeService{Queue: queue, Branches: queue.Branches, Store: queue.Promotions, DataDir: dataDir}
+	service := &MergeService{Queue: queue, Branches: queue.Branches, Store: queueServices.Promotions, DataDir: dataDir}
 	result, err := service.PromoteOverlay(ctx, "parent", id, api.PromoteOverlayInput{})
 	testutil.FailErr(t, "promote", err)
 	if result.Status != api.WorkerMergeStatusMerged {

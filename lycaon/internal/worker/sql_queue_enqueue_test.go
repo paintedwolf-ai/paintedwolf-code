@@ -15,7 +15,7 @@ func TestSQLQueueEnqueueReturnsJobID(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	testdbseed.InsertSession(t, sqlDB, "parent-1", testdbseed.DefaultProjectID)
-	q := NewSQLQueue(sqlDB, 2)
+	q := NewSQLServices(sqlDB, 2).Queue
 	id, err := q.EnqueueWithProjectID(context.Background(), testdbseed.DefaultProjectID, api.WorkerTask{
 		ParentSessionID: "parent-1",
 		ProjectID:       testdbseed.DefaultProjectID,
@@ -42,7 +42,7 @@ func TestSQLQueueEnqueueReturnsJobID(t *testing.T) {
 func TestSQLQueuePublishEnqueuedWakesClaimer(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 
-	q := NewSQLQueue(sqlDB, 1)
+	q := NewSQLServices(sqlDB, 1).Queue
 	q.PublishEnqueued(t.Context(), "job-1")
 	select {
 	case <-q.RunnableWake():
@@ -55,7 +55,7 @@ func TestSQLQueueCompleteRequiresCurrentClaim(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	testdbseed.InsertSession(t, sqlDB, "parent-1", testdbseed.DefaultProjectID)
-	q := NewSQLQueue(sqlDB, 1)
+	q := NewSQLServices(sqlDB, 1).Queue
 	id, err := q.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		ParentSessionID: "parent-1",
 		ProjectID:       testdbseed.DefaultProjectID,
@@ -97,7 +97,7 @@ func TestSQLQueueCompleteRequiresCurrentClaim(t *testing.T) {
 func TestSQLQueuePersistsOutcomeDeliveryAcknowledgement(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	id, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		ParentSessionID: "parent-1", ProjectID: testdbseed.DefaultProjectID,
 		AgentType: "implementer", Prompt: "do work", Brief: "Do work",
@@ -114,14 +114,14 @@ func TestSQLQueuePersistsOutcomeDeliveryAcknowledgement(t *testing.T) {
 		t.Fatal("current claim did not complete worker")
 	}
 
-	reopened := NewSQLQueue(database, 1)
+	reopened := NewSQLServices(database, 1).Queue
 	pending, err := reopened.ListPendingOutcomes(t.Context())
 	testutil.FailErr(t, "list pending outcomes", err)
 	if len(pending) != 1 || pending[0].ID != id {
 		t.Fatalf("pending outcomes = %+v", pending)
 	}
 	testutil.FailErr(t, "acknowledge outcome", reopened.MarkOutcomeDelivered(t.Context(), id))
-	pending, err = NewSQLQueue(database, 1).ListPendingOutcomes(t.Context())
+	pending, err = NewSQLServices(database, 1).Queue.ListPendingOutcomes(t.Context())
 	testutil.FailErr(t, "list acknowledged outcomes", err)
 	if len(pending) != 0 {
 		t.Fatalf("pending outcomes after acknowledgement = %+v", pending)
@@ -131,7 +131,7 @@ func TestSQLQueuePersistsOutcomeDeliveryAcknowledgement(t *testing.T) {
 func TestSQLQueueDecisionSuspendsWithoutTerminalResult(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	id, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		ParentSessionID: "parent-1", ProjectID: testdbseed.DefaultProjectID,
 		AgentType: "implementer", Prompt: "ask", Brief: "Ask",

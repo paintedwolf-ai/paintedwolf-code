@@ -527,7 +527,7 @@ func restoreWorkerDrafts(b *serveBuilder, ctx context.Context) error {
 	if b.workerRuntime == nil || b.workerRuntime.Queue == nil {
 		return nil
 	}
-	pending, err := b.workerRuntime.Queue.Promotions.ListPendingOverlays(ctx)
+	pending, err := b.workerRuntime.Promotions.ListPendingOverlays(ctx)
 	if err != nil {
 		return err
 	}

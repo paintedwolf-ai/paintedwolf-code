@@ -21,7 +21,7 @@ func cancellationQueue(t *testing.T) *SQLQueue {
 
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
-	return NewSQLQueue(database, 1)
+	return NewSQLServices(database, 1).Queue
 }
 
 func enqueueCancellationWorker(t *testing.T, q WorkerQueue) string {
@@ -210,7 +210,7 @@ func TestCancellationIntentSurvivesInterruptedRuntimeCleanup(t *testing.T) {
 				expireCancellationClaim(t, q, id)
 			}
 
-			q = NewSQLQueue(q.db, 1)
+			q = NewSQLServices(q.db, 1).Queue
 
 			recovered, err := q.RecoverExpiredClaims(t.Context())
 			testutil.FailErr(t, "recover cancellation", err)

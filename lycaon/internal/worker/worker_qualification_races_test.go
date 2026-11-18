@@ -137,7 +137,8 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 	projects := project.NewSQLRegistry(sqlDB)
 
 	outbox := eventoutbox.New(sqlDB, nil)
-	queue := NewSQLQueue(sqlDB, 4)
+	queueServices := NewSQLServices(sqlDB, 4)
+	queue := queueServices.Queue
 	queue.SetEventOutbox(outbox)
 	queue.Branches.SetProjectStore(projects)
 	dataDir := testbaseline.DataDir(t, sqlDB)
@@ -180,7 +181,7 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 
 	merge := &MergeService{
 		Queue: queue, Branches: queue.Branches,
-		Store:        queue.Promotions,
+		Store:        queueServices.Promotions,
 		Projects:     projects,
 		Workspace:    mgr,
 		Reject:       rejectFmt,

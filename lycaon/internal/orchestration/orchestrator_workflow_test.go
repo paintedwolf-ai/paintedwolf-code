@@ -63,7 +63,7 @@ func newWorkflowOrchestrator(t *testing.T, rec *recordingWorkers, spy *spyWorkfl
 	sessStore := store.NewSQL(sqlDB)
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	records := workerrecords.New(sqlDB)
-	queue := worker.NewSQLQueue(sqlDB, 10)
+	queue := worker.NewSQLServices(sqlDB, 10).Queue
 
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
