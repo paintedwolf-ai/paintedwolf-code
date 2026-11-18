@@ -18,7 +18,7 @@ func TestPrepareStartChecksAuthorityAndReachedExecutables(t *testing.T) {
 		t.Skip("unix executable fixtures")
 	}
 	dir := t.TempDir()
-	testutil.FailErr(t, "write executable", os.WriteFile(filepath.Join(dir, "stage-tool"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+	testutil.FailErr(t, "write executable", os.WriteFile(filepath.Join(dir, "stage-tool"), []byte("#!/bin/sh\nexit 1\n"), 0o755))
 	authorityChanged := errors.New("authority changed")
 	for _, tc := range []struct {
 		name   string
@@ -29,9 +29,9 @@ func TestPrepareStartChecksAuthorityAndReachedExecutables(t *testing.T) {
 	}{
 		{name: "cancelled", cancel: true},
 		{name: "no stages"},
-		{name: "authority changed", refuse: authorityChanged, stages: []exec.Stage{{Name: "/bin/true"}}},
-		{name: "missing pipeline stage", stages: []exec.Stage{{Name: "/bin/true"}, {Name: "./missing"}}},
-		{name: "sequenced stage not reached", stages: []exec.Stage{{Name: "/bin/false"}, {Name: "./missing", Connector: argv.ConnectorAnd}}, ready: true},
+		{name: "authority changed", refuse: authorityChanged, stages: []exec.Stage{{Name: "./stage-tool"}}},
+		{name: "missing pipeline stage", stages: []exec.Stage{{Name: "./stage-tool"}, {Name: "./missing"}}},
+		{name: "sequenced stage not reached", stages: []exec.Stage{{Name: "./stage-tool"}, {Name: "./missing", Connector: argv.ConnectorAnd}}, ready: true},
 		{name: "effective search path", stages: []exec.Stage{{Name: "stage-tool"}}, ready: true},
 		{name: "reserved stage environment", stages: []exec.Stage{{Name: "stage-tool", Env: map[string]string{"PATH": dir}}}, refuse: exec.ErrBlockedEnvKey},
 	} {
