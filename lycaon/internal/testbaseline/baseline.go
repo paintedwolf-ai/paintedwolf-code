@@ -8,17 +8,19 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 )
 
-func Capture(t testing.TB, dir string) string {
+func Capture(t testing.TB, rootID, dir string) string {
 	t.Helper()
 	root := t.TempDir()
 	store := workspacebaseline.New(nil, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "manifests"))
-	path, err := store.Capture(t.Context(), "fixture", workspacebaseline.Branch(Roots(dir), dir))
+	path, err := store.Capture(t.Context(), "fixture", workspacebaseline.Branch([]projectroot.RootRef{{ID: rootID, Path: dir, IsPrimary: true}}, dir))
 	testutil.FailErr(t, "capture workspace baseline", err)
 	return path
 }
@@ -28,7 +30,7 @@ type File struct {
 	Content   string
 }
 
-func FromFiles(t testing.TB, files map[string]File) string {
+func FromFiles(t testing.TB, rootID string, files map[string]File) string {
 	t.Helper()
 	root := t.TempDir()
 	for path, file := range files {
@@ -41,14 +43,14 @@ func FromFiles(t testing.TB, files map[string]File) string {
 			testutil.FailErr(t, "set baseline fixture time", os.Chtimes(abs, timestamp, timestamp))
 		}
 	}
-	return Capture(t, root)
+	return Capture(t, rootID, root)
 }
 
-func Durable(t testing.TB, database db.Handle, jobID, dir string) string {
+func Durable(t testing.TB, rootID string, database db.Handle, jobID, dir string) string {
 	t.Helper()
 	root := DataDir(t, database)
 	store := workspacebaseline.New(database, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "worker-baselines"))
-	path, err := store.Capture(t.Context(), jobID, workspacebaseline.Branch(Roots(dir), dir))
+	path, err := store.Capture(t.Context(), jobID, workspacebaseline.Branch([]projectroot.RootRef{{ID: rootID, Path: dir, IsPrimary: true}}, dir))
 	testutil.FailErr(t, "capture durable baseline", err)
 	return path
 }
@@ -63,7 +65,8 @@ func DataDir(t testing.TB, database db.DBTX) string {
 	return root
 }
 
-// Roots identifies the single-root baseline fixture.
-func Roots(dir string) []projectroot.RootRef {
-	return []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}}
+// RecordBranch writes the topology that inspection reloads after capture.
+func RecordBranch(t testing.TB, rootID, project, branch string) {
+	t.Helper()
+	testutil.FailErr(t, "record branch topology", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{SnapshotComplete: true, Roots: []workspace.JobMetaRoot{{ID: rootID, Path: project, IsPrimary: true}}}))
 }

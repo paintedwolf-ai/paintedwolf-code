@@ -125,7 +125,7 @@ func TestCoordinatorParallelWorkersReplayLineShiftAtomicRejection(t *testing.T) 
 		MergeStatus:           wire.WorkerMergeStatusPending,
 		AgentType:             "implementer",
 		Scope:                 &wire.TaskScope{Mode: wire.TaskScopeModeWrite, Paths: []string{"safe.go", "shifted.py"}},
-		WorkspaceBaselinePath: testbaseline.FromFiles(t, map[string]testbaseline.File{"safe.go": {}, "shifted.py": {Content: base}}),
+		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"safe.go": {}, "shifted.py": {Content: base}}),
 		Status:                wire.WorkerStatusComplete,
 	}
 	svc := &worker.MergeService{

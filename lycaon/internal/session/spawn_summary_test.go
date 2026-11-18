@@ -197,7 +197,7 @@ func TestAppendWorkerSummaryUnmetEvidenceKeepsDeliveredWork(t *testing.T) {
 	testutil.FailErr(t, "MkdirAll", os.MkdirAll(overlay, 0o755))
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(overlay, "game.py"), []byte("print(1)\n"), 0o644))
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py"}}
-	baseline := testbaseline.Capture(t, primary)
+	baseline := testbaseline.Capture(t, "root", primary)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
@@ -260,7 +260,7 @@ func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 	testutil.FailErr(t, "MkdirAll", os.MkdirAll(overlay, 0o755))
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(overlay, "game.py"), []byte("print(1)\n"), 0o644))
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py"}}
-	baseline := testbaseline.Capture(t, primary)
+	baseline := testbaseline.Capture(t, "root", primary)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})

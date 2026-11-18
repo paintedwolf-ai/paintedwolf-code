@@ -32,7 +32,7 @@ func TestPromoteExcludesUnchangedSiblingPath(t *testing.T) {
 
 	mustWrite(primary, "space_pacifism/constants.py", constantsStale)
 	mustWrite(overlay, "space_pacifism/constants.py", constantsStale)
-	baseline := testbaseline.Capture(t, overlay)
+	baseline := testbaseline.Capture(t, "root", overlay)
 
 	mustWrite(overlay, "space_pacifism/main.py", mainNew)
 	mustWrite(primary, "space_pacifism/constants.py", constantsFixed)

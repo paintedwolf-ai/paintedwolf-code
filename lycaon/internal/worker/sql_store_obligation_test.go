@@ -49,7 +49,7 @@ func insertApplyingWorker(t *testing.T, store *SQLStore, jobID, projectDir strin
 		DelegationID: "dep-1", WorkflowRunID: "run-1", AgentType: "implementer",
 		Prompt: "fixture", Brief: "fixture", ExecutionTarget: api.ExecutionTargetLocal, Status: api.WorkerStatusComplete,
 	}))
-	bound, err := store.SetWorkerWorkspace(t.Context(), jobID, filepath.Join(testbaseline.DataDir(t, store.db), "worker-branches", jobID), testbaseline.Durable(t, store.db, jobID, t.TempDir()))
+	bound, err := store.SetWorkerWorkspace(t.Context(), jobID, filepath.Join(testbaseline.DataDir(t, store.db), "worker-branches", jobID), testbaseline.Durable(t, "root", store.db, jobID, t.TempDir()))
 	testutil.FailErr(t, "SetWorkerWorkspace", err)
 	if !bound {
 		t.Fatal("expected workspace root CAS to win on a fresh job")

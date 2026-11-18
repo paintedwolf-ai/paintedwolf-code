@@ -186,7 +186,7 @@ func TestWorkspaceSnapshotWalksTree(t *testing.T) {
 
 func TestEmptyWorkspaceBaselineIsValidAndDetectsLaterCreation(t *testing.T) {
 	dir := t.TempDir()
-	ref := testbaseline.Capture(t, dir)
+	ref := testbaseline.Capture(t, "root", dir)
 	baseline, err := workspacebaseline.Open(t.Context(), ref, workspacebaseline.ContentStore(ref))
 	testutil.FailErr(t, "open empty baseline", err)
 	defer func() { _ = baseline.Close() }()

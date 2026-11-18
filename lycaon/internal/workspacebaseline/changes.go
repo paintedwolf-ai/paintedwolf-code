@@ -96,7 +96,7 @@ func (r *Reader) eachChange(ctx context.Context, roots []projectroot.RootRef, br
 			return err
 		}
 		if kind != "" {
-			if err := visit(Change{RootID: entry.RootID, ScopeRel: entry.ScopeRel, Path: entry.Path, Kind: kind}); err != nil {
+			if err := visit(Change{RootID: entry.RootID, ScopeRel: entry.ScopeRel, Path: projectroot.BaselineDisplayPath(roots, entry.RootID, entry.ScopeRel), Kind: kind}); err != nil {
 				return err
 			}
 		}
@@ -161,7 +161,7 @@ func (r *Reader) ComparePath(ctx context.Context, roots []projectroot.RootRef, b
 	}
 	abs := filepath.Join(base, rel)
 	out := PathComparison{Abs: abs}
-	before, inBaseline, err := r.Lookup(ctx, path)
+	before, inBaseline, err := r.lookupPath(ctx, roots, path)
 	if err != nil {
 		return PathComparison{}, err
 	}
@@ -196,7 +196,7 @@ func (r *Reader) baselineText(ctx context.Context, path string, before File, inB
 	if before.Opaque || before.SHA256 == "" {
 		return "", false
 	}
-	text, _, err := r.Content(ctx, path)
+	text, _, err := r.content(ctx, path, before)
 	if err != nil {
 		return "", false
 	}
@@ -236,7 +236,7 @@ type PathMove struct{ From, To string }
 // MoveUnchanged reports whether the file now at To has the bytes the baseline holds
 // at From. A body the baseline did not pin, or a file it cannot read, is no match.
 func (r *Reader) MoveUnchanged(ctx context.Context, roots []projectroot.RootRef, branch string, move PathMove) (bool, error) {
-	before, inBaseline, err := r.Lookup(ctx, move.From)
+	before, inBaseline, err := r.lookupPath(ctx, roots, move.From)
 	if err != nil {
 		return false, err
 	}
@@ -298,14 +298,14 @@ func LocateInBranch(roots []projectroot.RootRef, branch, path string) (BranchLoc
 // qualifies paths outside the primary root as @label/rel.
 func manifestRoot(roots []projectroot.RootRef, path string) (projectroot.RootRef, string, error) {
 	if len(roots) == 1 {
-		return roots[0], path, nil
+		return roots[0], filepath.ToSlash(filepath.Clean(path)), nil
 	}
 	primary, err := projectroot.PrimaryRoot(roots)
 	if err != nil {
 		return projectroot.RootRef{}, "", err
 	}
 	if !strings.HasPrefix(path, "@") {
-		return primary, path, nil
+		return primary, filepath.ToSlash(filepath.Clean(path)), nil
 	}
 	label, rel, ok := strings.Cut(path[1:], "/")
 	if !ok {
@@ -394,6 +394,9 @@ type OverlayChange struct {
 // EachOverlayChange visits a sealed overlay's paths with their baseline state. It reads only the
 // immutable manifests and their pinned content, never a working tree.
 func EachOverlayChange(ctx context.Context, baselinePath, overlayPath string, roots []projectroot.RootRef, visit func(OverlayChange) error) error {
+	if err := validateRoots(roots); err != nil {
+		return err
+	}
 	blobs := ContentStore(baselinePath)
 	baseline, err := Open(ctx, baselinePath, blobs)
 	if err != nil {

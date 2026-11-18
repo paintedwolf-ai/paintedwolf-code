@@ -31,7 +31,7 @@ func TestExpiredWorkerClaimRetriesAvailableAttempt(t *testing.T) {
 	testdbseed.InsertSession(t, sqlDB, "child-1", testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "bind child session", queue.SetChildSessionID(t.Context(), claimed.ID, "child-1"))
 	branchRoot := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", "worker-branch")
-	bound, err := queue.store.SetWorkerWorkspace(t.Context(), claimed.ID, branchRoot, testbaseline.Durable(t, sqlDB, claimed.ID, t.TempDir()))
+	bound, err := queue.store.SetWorkerWorkspace(t.Context(), claimed.ID, branchRoot, testbaseline.Durable(t, "root", sqlDB, claimed.ID, t.TempDir()))
 	testutil.FailErr(t, "bind worker workspace", err)
 	if !bound {
 		t.Fatal("worker workspace was not bound")

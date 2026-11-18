@@ -30,7 +30,7 @@ func TestPreviewForSessionHunksOmitsFullBodies(t *testing.T) {
 		WorkspaceRoot:         branch,
 		MergeStatus:           api.WorkerMergeStatusPending,
 		Scope:                 &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"d.go"}},
-		WorkspaceBaselinePath: testbaseline.FromFiles(t, map[string]testbaseline.File{"d.go": {Content: "original\n"}}),
+		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"d.go": {Content: "original\n"}}),
 		Status:                api.WorkerStatusComplete,
 	}
 	svc := &worker.MergeService{
@@ -76,7 +76,7 @@ func TestPreviewForSessionIncludesOverlayIntent(t *testing.T) {
 		WorkspaceRoot:         branch,
 		MergeStatus:           api.WorkerMergeStatusPending,
 		Scope:                 &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"d.go"}},
-		WorkspaceBaselinePath: testbaseline.FromFiles(t, map[string]testbaseline.File{"d.go": {Content: "base\n"}}),
+		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"d.go": {Content: "base\n"}}),
 		Status:                api.WorkerStatusComplete,
 		Result:                &api.WorkerResult{Summary: "Add who/uname builtins"},
 	}
@@ -110,7 +110,7 @@ func TestPreviewForSessionFullIncludesBodies(t *testing.T) {
 		WorkspaceRoot:         branch,
 		MergeStatus:           api.WorkerMergeStatusPending,
 		Scope:                 &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"d.go"}},
-		WorkspaceBaselinePath: testbaseline.FromFiles(t, map[string]testbaseline.File{"d.go": {Content: "original\n"}}),
+		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"d.go": {Content: "original\n"}}),
 		Status:                api.WorkerStatusComplete,
 	}
 	svc := &worker.MergeService{

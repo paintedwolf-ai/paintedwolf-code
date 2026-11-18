@@ -20,11 +20,7 @@ func Branch(roots []projectroot.RootRef, branch string) Walk {
 			return err
 		}
 		if len(roots) == 1 {
-			return walkRoot(ctx, branch, roots[0].ID, func(rel string) string { return rel }, visit)
-		}
-		primary, err := projectroot.PrimaryRoot(roots)
-		if err != nil {
-			return err
+			return walkRoot(ctx, branch, roots[0].ID, func(rel string) string { return projectroot.BaselineDisplayPath(roots, roots[0].ID, rel) }, visit)
 		}
 		for _, root := range roots {
 			dir, err := projectroot.BranchDirForID(root.ID)
@@ -32,7 +28,7 @@ func Branch(roots []projectroot.RootRef, branch string) Walk {
 				return err
 			}
 			qualify := func(path string) string {
-				return projectroot.Qualify(roots, primary.ID, root, filepath.Join(root.Path, filepath.FromSlash(path)))
+				return projectroot.BaselineDisplayPath(roots, root.ID, path)
 			}
 			if err := walkRoot(ctx, filepath.Join(branch, dir), root.ID, qualify, visit); err != nil {
 				return err

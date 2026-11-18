@@ -41,7 +41,7 @@ func TestPromoteAtomicResolutionContractP4(t *testing.T) {
 		MergeStatus:           api.WorkerMergeStatusPending,
 		AgentType:             "implementer",
 		Scope:                 &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"safe.go", "shifted.py"}},
-		WorkspaceBaselinePath: testbaseline.FromFiles(t, map[string]testbaseline.File{"safe.go": {}, "shifted.py": {Content: base}}),
+		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"safe.go": {}, "shifted.py": {Content: base}}),
 		Status:                api.WorkerStatusComplete,
 	}
 	svc := &worker.MergeService{

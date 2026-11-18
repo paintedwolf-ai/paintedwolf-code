@@ -197,7 +197,7 @@ func commitRequiredSecurityLanding(
 		ExecutionTarget: api.ExecutionTargetLocal, Status: api.WorkerStatusComplete,
 	}))
 	branch := enginepaths.JobBranchDir(enginepaths.WorkerBranchesRootUnder(testbaseline.DataDir(t, sqlDB)), projectDir, jobID)
-	bound, err := workerStore.SetWorkerWorkspace(ctx, jobID, branch, testbaseline.Durable(t, sqlDB, jobID, t.TempDir()))
+	bound, err := workerStore.SetWorkerWorkspace(ctx, jobID, branch, testbaseline.Durable(t, "root", sqlDB, jobID, t.TempDir()))
 	testutil.FailErr(t, "SetWorkerWorkspace", err)
 	if !bound {
 		t.Fatal("worker workspace binding did not win")

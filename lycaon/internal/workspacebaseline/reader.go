@@ -199,6 +199,10 @@ func (r *Reader) Content(ctx context.Context, path string) (string, bool, error)
 	if err != nil || !exists {
 		return "", exists, err
 	}
+	return r.content(ctx, path, f)
+}
+
+func (r *Reader) content(ctx context.Context, path string, f File) (string, bool, error) {
 	if f.Deleted {
 		return "", false, nil
 	}
@@ -216,10 +220,7 @@ func (r *Reader) Content(ctx context.Context, path string) (string, bool, error)
 	return doc.Text(), true, nil
 }
 
-// parseDisplayPath splits a legacy display spelling into the root holding it
-// and the path relative to that root. Bare paths are primary-relative; other
-// roots are qualified with @label. Unlabeled roots spelled bare are ambiguous
-// by construction; format 1 recorded them under the primary.
+// parseDisplayPath reads Format-1 labels; bare paths belong to the primary root.
 func parseDisplayPath(roots []projectroot.RootRef, path string) (rootID, scopeRel string, err error) {
 	if len(roots) > 1 {
 		primary, err := projectroot.PrimaryRoot(roots)
@@ -276,4 +277,16 @@ func (b *boundedBody) Write(p []byte) (int, error) {
 		return 0, fmt.Errorf("workspace baseline content exceeds limit")
 	}
 	return b.Buffer.Write(p)
+}
+
+// lookupPath resolves current display labels before reading a structured manifest.
+func (r *Reader) lookupPath(ctx context.Context, roots []projectroot.RootRef, path string) (File, bool, error) {
+	if r.format == 1 {
+		return r.Lookup(ctx, path)
+	}
+	root, rel, err := manifestRoot(roots, path)
+	if err != nil {
+		return File{}, false, err
+	}
+	return r.LookupIdentity(ctx, roots, root.ID, rel)
 }

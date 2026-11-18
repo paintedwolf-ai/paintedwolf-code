@@ -28,6 +28,9 @@ type MaterializeReport struct {
 // exactly the overlay's changes. Opaque baseline bodies are not pinned; current
 // names the file that stands in for one, or "" when nothing can.
 func Materialize(ctx context.Context, baselinePath, overlayPath string, blobs *sourceblob.Store, roots []projectroot.RootRef, branch string, current func(path string) string) (MaterializeReport, error) {
+	if err := validateRoots(roots); err != nil {
+		return MaterializeReport{}, err
+	}
 	baseline, err := Open(ctx, baselinePath, blobs)
 	if err != nil {
 		return MaterializeReport{}, err

@@ -38,7 +38,7 @@ func TestPromoteOverlayDoesNotScanKeepOursResolution(t *testing.T) {
 		WorkspacePath: dir, WorkspaceRoot: branch, MergeStatus: api.WorkerMergeStatusPending,
 		AgentType: "implementer", Status: api.WorkerStatusComplete,
 		Scope:                 &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"conflict.go"}},
-		WorkspaceBaselinePath: testbaseline.FromFiles(t, map[string]testbaseline.File{"conflict.go": {Content: "original\n"}}),
+		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"conflict.go": {Content: "original\n"}}),
 	}
 	hook := &landingPathsHook{}
 	svc := &worker.MergeService{

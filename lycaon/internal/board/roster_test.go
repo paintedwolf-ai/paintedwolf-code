@@ -15,7 +15,7 @@ func TestPackBoardEnvelopeOmitsHeavyWorkerFields(t *testing.T) {
 	baseline := map[string]testbaseline.File{
 		"src/main.go": {Content: strings.Repeat("x", 8000)},
 	}
-	rawBaseline := testbaseline.FromFiles(t, baseline)
+	rawBaseline := testbaseline.FromFiles(t, "root", baseline)
 
 	snap := fixtureSnapshot()
 	snap.Workers = &api.BoardWorkersSlice{
@@ -85,7 +85,7 @@ func TestPackBoardEnvelopeFullOmitsPromptAndBaselines(t *testing.T) {
 	baseline := map[string]testbaseline.File{
 		"src/main.go": {Content: "baseline body"},
 	}
-	rawBaseline := testbaseline.FromFiles(t, baseline)
+	rawBaseline := testbaseline.FromFiles(t, "root", baseline)
 
 	snap := fixtureSnapshot()
 	snap.Workers = &api.BoardWorkersSlice{
@@ -113,7 +113,7 @@ func TestBuildBoardViewForensicIncludesNoticeAndTasks(t *testing.T) {
 	baseline := map[string]testbaseline.File{
 		"src/main.go": {Content: "baseline body"},
 	}
-	rawBaseline := testbaseline.FromFiles(t, baseline)
+	rawBaseline := testbaseline.FromFiles(t, "root", baseline)
 
 	snap := fixtureSnapshot()
 	snap.Workers = &api.BoardWorkersSlice{

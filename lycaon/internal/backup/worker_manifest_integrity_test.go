@@ -20,7 +20,7 @@ func TestArchiveRejectsChangedSealedWorkerManifest(t *testing.T) {
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
 	_, err := database.ExecContext(t.Context(), `INSERT INTO worker_jobs(id,project_id,agent_type,prompt,brief,created_at) VALUES('job',?,'implementer','work','work','2026-01-01T00:00:00Z')`, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "insert worker", err)
-	manifest := testbaseline.Durable(t, database, "job", t.TempDir())
+	manifest := testbaseline.Durable(t, "root", database, "job", t.TempDir())
 	id, err := workspacebaseline.ID(manifest)
 	testutil.FailErr(t, "resolve manifest identity", err)
 	_, err = database.ExecContext(t.Context(), `UPDATE worker_jobs SET workspace_baseline_id=? WHERE id='job'`, id)

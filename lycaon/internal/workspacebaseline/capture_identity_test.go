@@ -122,6 +122,29 @@ func TestOverlayIdentitySurvivesLabelChangesAndRootOrder(t *testing.T) {
 	overlay, err := store.CaptureOverlay(t.Context(), "job", baseline, roots, branch)
 	testutil.FailErr(t, "capture overlay", err)
 	roots[0].Label = "renamed"
+	reader, err := workspacebaseline.Open(t.Context(), baseline, workspacebaseline.ContentStore(baseline))
+	testutil.FailErr(t, "reopen baseline", err)
+	defer func() { _ = reader.Close() }()
+	changes, err := reader.ChangeSet(t.Context(), roots, branch)
+	testutil.FailErr(t, "renamed change set", err)
+	if len(changes) != 2 || changes[0].Path != "@renamed/same.txt" {
+		t.Fatalf("renamed changes = %+v", changes)
+	}
+	compared, err := reader.ComparePath(t.Context(), roots, branch, "@renamed/same.txt")
+	testutil.FailErr(t, "renamed comparison", err)
+	if compared.Before != "a base" || compared.After != "a changed" {
+		t.Fatalf("renamed comparison = %+v", compared)
+	}
+	literal, err := reader.ComparePath(t.Context(), roots, branch, "./@shared/literal:part")
+	testutil.FailErr(t, "literal @ comparison", err)
+	if literal.Kind != "" || literal.Absent {
+		t.Fatalf("literal @ comparison = %+v", literal)
+	}
+	unknown := []projectroot.RootRef{{ID: "unknown", IsPrimary: true}}
+	if _, err := reader.ChangeSet(t.Context(), unknown, branch); err == nil {
+		t.Fatal("unknown root compared against another tree")
+	}
+
 	seen := map[string]bool{}
 	err = workspacebaseline.EachOverlayChange(t.Context(), baseline, overlay.Path, roots, func(change workspacebaseline.OverlayChange) error {
 		if !change.BaseExists || change.Rel != "same.txt" {

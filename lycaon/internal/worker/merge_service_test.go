@@ -139,7 +139,7 @@ func mergeRejectFmt(t *testing.T) *guidance.StaticRejectFormatter {
 
 func workspaceBaselinePath(t *testing.T, dir string) string {
 	t.Helper()
-	snap := testbaseline.Capture(t, dir)
+	snap := testbaseline.Capture(t, "root", dir)
 	raw := snap
 	return raw
 }
@@ -345,7 +345,7 @@ func TestPromoteOverlayAppliesExplicitConflictResolution(t *testing.T) {
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(branch, "c.go"), []byte("branch\n"), 0o644))
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(dir, "c.go"), []byte("primary-changed\n"), 0o644))
 
-	baseline := testbaseline.FromFiles(t, map[string]testbaseline.File{"c.go": {Content: "original\n"}})
+	baseline := testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"c.go": {Content: "original\n"}})
 	task := &api.WorkerTask{
 		ID:                    "job-conflict",
 		ParentSessionID:       "parent-1",
@@ -379,7 +379,7 @@ func TestPromoteOverlayWritesResolvedContent(t *testing.T) {
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(branch, "e.go"), []byte("branch\n"), 0o644))
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(dir, "e.go"), []byte("primary-changed\n"), 0o644))
 
-	baseline := testbaseline.FromFiles(t, map[string]testbaseline.File{"e.go": {Content: "primary\n"}})
+	baseline := testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"e.go": {Content: "primary\n"}})
 	task := &api.WorkerTask{
 		ID:                    "job-resolve",
 		ParentSessionID:       "parent-1",
@@ -421,7 +421,7 @@ func TestPromoteOverlayAppliesCleanAndResolvedPathsTogether(t *testing.T) {
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(branch, "conflict.go"), []byte("branch\n"), 0o644))
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(dir, "conflict.go"), []byte("primary-changed\n"), 0o644))
 
-	baseline := testbaseline.FromFiles(t, map[string]testbaseline.File{"safe.go": {Content: ""}, "conflict.go": {Content: "original\n"}})
+	baseline := testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"safe.go": {Content: ""}, "conflict.go": {Content: "original\n"}})
 	task := &api.WorkerTask{
 		ID:                    "job-partial",
 		ParentSessionID:       "parent-1",
@@ -470,7 +470,7 @@ func TestPreviewForSessionReportsConflicts(t *testing.T) {
 		WorkspaceRoot:         branch,
 		MergeStatus:           api.WorkerMergeStatusPending,
 		Scope:                 &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"d.go"}},
-		WorkspaceBaselinePath: testbaseline.FromFiles(t, map[string]testbaseline.File{"d.go": {Content: "original\n"}}),
+		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"d.go": {Content: "original\n"}}),
 		Status:                api.WorkerStatusComplete,
 	}
 	svc := &worker.MergeService{

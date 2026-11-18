@@ -62,7 +62,7 @@ func overlaySourceFixture(t *testing.T) (primary, overlay string, scope api.Task
 		Roots:            []workspace.JobMetaRoot{{ID: "primary", Label: "primary", Path: primary, IsPrimary: true}},
 	}))
 	scope = api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py", "dirty_upper.py", "pkg/dep.py"}}
-	snap := testbaseline.Capture(t, primary)
+	snap := testbaseline.Capture(t, "primary", primary)
 	return primary, overlay, scope, snap
 }
 

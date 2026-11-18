@@ -29,7 +29,7 @@ func TestAssessPromotePaths3WayCleanIfFirstWhenSiblingWouldConflict(t *testing.T
 	baseline := map[string]testbaseline.File{
 		"shared.go": {Content: body},
 	}
-	raw := testbaseline.FromFiles(t, baseline)
+	raw := testbaseline.FromFiles(t, "root", baseline)
 
 	taskA := &api.WorkerTask{
 		ID:                    "job-a",
@@ -84,7 +84,7 @@ func TestAssessPromotePaths3WayIndependentWhenLineDistant(t *testing.T) {
 	baseline := map[string]testbaseline.File{
 		"shared.go": {Content: body},
 	}
-	raw := testbaseline.FromFiles(t, baseline)
+	raw := testbaseline.FromFiles(t, "root", baseline)
 
 	taskA := &api.WorkerTask{
 		ID:                    "job-a",

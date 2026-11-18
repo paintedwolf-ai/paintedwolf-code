@@ -173,7 +173,7 @@ func TestAssessPromoteSafeWithPrimaryContentBaselineDespiteOverlayMtime(t *testi
 	branchPath := filepath.Join(branchRoot, "f.go")
 	testutil.FailErr(t, "WriteFile branch", os.WriteFile(branchPath, append(content, '\n', '/'), 0o644))
 
-	primaryBaseline := testbaseline.Capture(t, dir)
+	primaryBaseline := testbaseline.Capture(t, "root", dir)
 
 	raw := primaryBaseline
 	task := &api.WorkerTask{
@@ -198,7 +198,7 @@ func TestAssessPromotePaths3WayDetectsDeletedBranchFile(t *testing.T) {
 	baseline := map[string]testbaseline.File{
 		"main.go": {MtimeNano: 1, Content: baseBody},
 	}
-	raw := testbaseline.FromFiles(t, baseline)
+	raw := testbaseline.FromFiles(t, "root", baseline)
 	testutil.FailErr(t, "write metadata", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branchRoot), workspace.JobMeta{
 		Roots:            []workspace.JobMetaRoot{{ID: "root", Label: "root", Path: primary, IsPrimary: true}},
 		SnapshotComplete: true,

@@ -77,7 +77,7 @@ func TestSQLDecisionResolverRequeuesSameWorkerWithBranchContinuity(t *testing.T)
 		OverlayID: "job-1",
 	}))
 	workspaceRoot := filepath.Join(testbaseline.DataDir(t, database), "worker-branches", "job-1")
-	baseline := testbaseline.Durable(t, database, "job-1", t.TempDir())
+	baseline := testbaseline.Durable(t, "root", database, "job-1", t.TempDir())
 	bound, err := store.SetWorkerWorkspace(t.Context(), "job-1", workspaceRoot, baseline)
 	testutil.FailErr(t, "bind worker workspace", err)
 	if !bound {

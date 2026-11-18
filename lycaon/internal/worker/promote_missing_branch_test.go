@@ -24,7 +24,7 @@ func TestAssessPromotePaths3WayMissingBranchDoesNotZeroPrimary(t *testing.T) {
 	baseline := map[string]testbaseline.File{
 		"main.go": {Content: baseBody},
 	}
-	raw := testbaseline.FromFiles(t, baseline)
+	raw := testbaseline.FromFiles(t, "root", baseline)
 
 	task := &api.WorkerTask{
 		ID:                    "job-missing",
@@ -67,7 +67,7 @@ func TestAssessPromotePaths3WayMissingBranchConflictsWhenPrimaryMoved(t *testing
 	baseline := map[string]testbaseline.File{
 		"a.go": {Content: baseBody},
 	}
-	raw := testbaseline.FromFiles(t, baseline)
+	raw := testbaseline.FromFiles(t, "root", baseline)
 
 	task := &api.WorkerTask{
 		ProjectID:             testdbseed.DefaultProjectID,
