@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -23,20 +24,22 @@ func (s *countingSummarizer) Summarize(ctx context.Context, system, user string,
 }
 
 // oversizedSession holds history above the hard ceiling, so a request fit
-// schedules compaction and a background page publishes a view.
+// schedules compaction and a background pass summarizes and publishes a view.
 func oversizedSession(t *testing.T, summarizer compaction.Summarizer) (*Service, *store.Memory, *api.Session) {
 	t.Helper()
 	m, st := newCompactionManager(t, compaction.DefaultCompactionConfig())
 	m.SetCompactor(compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), summarizer))
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
+	// Many rows each below the chunk threshold: chunk reduction cannot bring the
+	// session under budget, so the background pass needs a provider summary.
 	var rows []api.Message
-	for i, id := range []string{"a", "b", "c", "d", "e", "f"} {
+	for i := range 400 {
 		role := api.MessageRoleUser
 		if i%2 == 1 {
 			role = api.MessageRoleAssistant
 		}
-		rows = append(rows, api.Message{ID: id, Role: role, Content: strings.Repeat("Observed evidence line "+id+".\n", 4000)})
+		rows = append(rows, api.Message{ID: fmt.Sprintf("row-%03d", i), Role: role, Content: strings.Repeat(fmt.Sprintf("Observed evidence line %d.\n", i), 60)})
 	}
 	rows = append(rows, api.Message{ID: "recent", Role: api.MessageRoleUser, Content: "Continue"})
 	testutil.FailErr(t, "append history", st.AppendMessages(t.Context(), sess.ID, rows...))
@@ -89,6 +92,9 @@ func TestCompactionSyncPathAvoidsSummarizer(t *testing.T) {
 	release()
 	m.Runner.Wait()
 	requirePublishedView(t, st, sess.ID)
+	if summarizer.calls.Load() == 0 {
+		t.Fatal("the scheduled pass never summarized, so the request-path check proved nothing")
+	}
 }
 
 // A scheduled pass outlives the request that scheduled it.
