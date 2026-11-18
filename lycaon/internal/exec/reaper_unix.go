@@ -10,12 +10,15 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/osprocess"
+	"github.com/lycaon/lycaon/internal/sandboxmark"
+	"golang.org/x/sys/unix"
 )
 
 // reaperWriteTimeout bounds a registration so a stalled companion never blocks a launch.
@@ -67,6 +70,12 @@ func startReaperLocked(name string, args ...string) error {
 	}
 	cmd := exec.CommandContext(context.Background(), name, args...) //nolint:gosec // G204 — the engine's own executable; the reaper outlives every request
 	cmd.Stdin = read
+	// The companion outlives the engine, so it takes along only the temp root its
+	// directory entries must lie in.
+	cmd.Env = []string{}
+	if tmp, ok := os.LookupEnv("TMPDIR"); ok {
+		cmd.Env = append(cmd.Env, "TMPDIR="+tmp)
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		_ = read.Close()
@@ -79,6 +88,12 @@ func startReaperLocked(name string, args ...string) error {
 	previousCmd := reaper.cmd
 	reaper.pipe = write
 	reaper.cmd = cmd
+	// The mark lives exactly as long as the companion that sweeps and removes it.
+	if dir, err := sandboxmark.Enable(); err != nil {
+		slog.Warn("sandbox mark unavailable; a detached command descendant can outlive the engine", "err", err)
+	} else if dir != "" {
+		_, _ = write.WriteString(string([]byte{'+', reaperMark}) + dir + "\n")
+	}
 	if previous != nil {
 		_ = previous.Close()
 		if previousCmd != nil {
@@ -130,8 +145,28 @@ const reaperDrainTimeout = 5 * time.Second
 func RunReaper(in io.Reader) int {
 	// Only the engine's exit ends reaping, so stray signals are ignored.
 	signal.Ignore(syscall.SIGINT, syscall.SIGHUP, syscall.SIGTERM)
+	closeInheritedDescriptors()
 	reap(in)
 	return 0
+}
+
+// closeInheritedDescriptors drops what the engine's own parent left open
+// without close-on-exec; the runtime marks every descriptor it opens, so only
+// those strays lack it. Standard streams stay.
+func closeInheritedDescriptors() {
+	entries, err := os.ReadDir("/dev/fd")
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		fd, err := strconv.Atoi(entry.Name())
+		if err != nil || fd <= 2 {
+			continue
+		}
+		if flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err == nil && flags&unix.FD_CLOEXEC == 0 {
+			_ = unix.Close(fd)
+		}
+	}
 }
 
 // reap blocks until in closes, then kills what is still tracked and removes
@@ -143,11 +178,18 @@ func reap(in io.Reader) {
 func reapWithOps(in io.Reader, ops reaperOps) {
 	entries := readReaperEntriesWithOps(in, ops)
 	var killed []osprocess.Incarnation
-	var dirs []string
+	var dirs, marks []string
 	for _, entry := range entries {
 		switch entry.kind {
 		case reaperDir:
 			dirs = append(dirs, entry.path)
+		case reaperMark:
+			marks = append(marks, entry.path)
+			for _, inc := range ops.markedProcesses(entry.path) {
+				if ops.signalProcess(inc, syscall.SIGKILL) == nil {
+					killed = appendIncarnation(killed, inc)
+				}
+			}
 		case reaperSupervisor:
 			if ops.incarnationAlive(entry.leader) && signalSupervisor(entry.leader.PID, entry.leader.Start, true) {
 				killed = appendIncarnation(killed, entry.leader)
@@ -160,12 +202,15 @@ func reapWithOps(in io.Reader, ops reaperOps) {
 			killed = reapGroupEntry(entry, ops, killed)
 		}
 	}
-	if len(dirs) == 0 {
+	if len(dirs) == 0 && len(marks) == 0 {
 		return
 	}
 	awaitSignalledGone(killed, ops.incarnationAlive, reaperDrainTimeout)
 	for _, dir := range dirs {
 		_ = os.RemoveAll(dir)
+	}
+	for _, mark := range marks {
+		sandboxmark.Remove(mark)
 	}
 }
 

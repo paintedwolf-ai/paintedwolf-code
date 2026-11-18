@@ -6,14 +6,17 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/osprocess"
+	"github.com/lycaon/lycaon/internal/sandboxmark"
 )
 
 type reaperOps struct {
+	markedProcesses  func(string) []osprocess.Incarnation
 	sessionMembers   func(int) []int
 	incarnationOf    func(int) (osprocess.Incarnation, bool)
 	incarnationAlive func(osprocess.Incarnation) bool
@@ -23,6 +26,7 @@ type reaperOps struct {
 
 func defaultReaperOps() reaperOps {
 	return reaperOps{
+		markedProcesses:  sandboxmark.Processes,
 		sessionMembers:   osprocess.SessionMembers,
 		incarnationOf:    osprocess.IncarnationOf,
 		incarnationAlive: osprocess.Incarnation.Alive,
@@ -112,7 +116,7 @@ func recordReaperMember(entries map[string]*reaperEntry, payload string) {
 }
 
 func reaperEntryKey(kind byte, payload string) (string, bool) {
-	if kind == reaperDir {
+	if kind == reaperDir || kind == reaperMark {
 		return string(kind) + payload, true
 	}
 	idText, _, _ := strings.Cut(payload, ":")
@@ -127,6 +131,11 @@ func parseReaperEntry(kind byte, payload string, ops reaperOps) (string, *reaper
 	switch kind {
 	case reaperDir:
 		if !reaperDirPath(payload) {
+			return "", nil
+		}
+		return string(kind) + payload, &reaperEntry{kind: kind, path: payload}
+	case reaperMark:
+		if !filepath.IsAbs(payload) || filepath.Clean(payload) != payload {
 			return "", nil
 		}
 		return string(kind) + payload, &reaperEntry{kind: kind, path: payload}

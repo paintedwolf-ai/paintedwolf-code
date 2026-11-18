@@ -80,6 +80,48 @@ def lease_holders(path):
     return {int(pid) for pid in result.stdout.split()}
 
 
+def _darwin_arguments(libc, pid):
+    # KERN_PROCARGS2 holds argc, the executable path, argv and then the environment.
+    mib = (ctypes.c_int * 3)(1, 49, int(pid))
+    size = ctypes.c_size_t(0)
+    if libc.sysctl(mib, 3, None, ctypes.byref(size), None, 0) != 0 or not size.value:
+        return b""
+    buf = ctypes.create_string_buffer(size.value)
+    if libc.sysctl(mib, 3, buf, ctypes.byref(size), None, 0) != 0:
+        return b""
+    return buf.raw[:size.value]
+
+
+def carriers(entry):
+    """Processes whose environment holds entry, wherever they moved in the process tree."""
+    needle = b"\0" + os.fsencode(entry) + b"\0"
+    if Path("/proc/self/environ").is_file():
+        found = set()
+        for process in Path("/proc").glob("[0-9]*"):
+            try:
+                data = (process / "environ").read_bytes()
+            except OSError:
+                continue
+            if needle in b"\0" + data + b"\0":
+                found.add(int(process.name))
+        return found
+    libc = _darwin_libc() if sys.platform == "darwin" else None
+    if libc is None:
+        raise OSError("Process environment inspection is unavailable")
+    return {pid for pid in _darwin_process_snapshot() if needle in _darwin_arguments(libc, pid)}
+
+
+def carries(pid, entry):
+    needle = b"\0" + os.fsencode(entry) + b"\0"
+    if Path("/proc/self/environ").is_file():
+        try:
+            return needle in b"\0" + Path(f"/proc/{pid}/environ").read_bytes() + b"\0"
+        except OSError:
+            return False
+    libc = _darwin_libc()
+    return libc is not None and needle in _darwin_arguments(libc, pid)
+
+
 def commands(pids):
     if not pids:
         return {}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 // reaperRoleEnv selects which part a re-executed test binary plays.
@@ -152,6 +153,55 @@ func TestReaperRemovesTrackedDirAfterKillingItsGroup(t *testing.T) {
 	}
 }
 
+func TestReaperKillsWhatRunsUnderTheSandboxMarkAndRemovesIt(t *testing.T) {
+	leader, descendant := startGroup(t)
+	marked, ok := osprocess.IncarnationOf(descendant)
+	if !ok {
+		t.Fatal("read the marked process incarnation")
+	}
+	mark := filepath.Join(t.TempDir(), "mark")
+	testutil.FailErr(t, "create mark", os.Mkdir(mark, 0o700))
+	for _, name := range []string{"own", "foreign"} {
+		testutil.FailErr(t, "write marker", os.WriteFile(filepath.Join(mark, name), nil, 0o400))
+	}
+	var asked []string
+	ops := defaultReaperOps()
+	ops.markedProcesses = func(dir string) []osprocess.Incarnation {
+		asked = append(asked, dir)
+		return []osprocess.Incarnation{marked}
+	}
+	reapWithOps(strings.NewReader("+b"+mark+"\n+b"+mark+"\n+brelative/mark\n"), ops)
+	waitForProcessGone(t, descendant)
+	if len(asked) != 1 || asked[0] != mark {
+		t.Fatalf("reaper asked for marked processes under %q, want only %q", asked, mark)
+	}
+	if !osprocess.Alive(leader) {
+		t.Fatal("the sandbox sweep killed a process the mark did not name")
+	}
+	if _, err := os.Stat(mark); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("sandbox mark survived the engine: stat err=%v", err)
+	}
+}
+
+func TestReaperDropsOnlyDescriptorsInheritedByAccident(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "held")
+	testutil.FailErr(t, "create held file", os.WriteFile(path, nil, 0o600))
+	stray, err := syscall.Open(path, syscall.O_RDONLY, 0)
+	testutil.FailErr(t, "open a descriptor without close-on-exec", err)
+	kept, err := os.Open(path) // #nosec G304 -- the test's own temp file
+	testutil.FailErr(t, "open a close-on-exec descriptor", err)
+	defer func() { _ = kept.Close() }()
+
+	closeInheritedDescriptors()
+	if _, err := unix.FcntlInt(uintptr(stray), unix.F_GETFD, 0); !errors.Is(err, unix.EBADF) {
+		_ = syscall.Close(stray)
+		t.Fatalf("a descriptor without close-on-exec stayed open: %v", err)
+	}
+	if _, err := unix.FcntlInt(kept.Fd(), unix.F_GETFD, 0); err != nil {
+		t.Fatalf("a close-on-exec descriptor was closed: %v", err)
+	}
+}
+
 func TestReaperSparesForgottenAndUnanchoredDirs(t *testing.T) {
 	root := t.TempDir()
 	forgotten := filepath.Join(root, "forgotten")
@@ -212,18 +262,12 @@ func assertEngineDeathReapsOwnedGroup(t *testing.T, role string) {
 // only when the parent case re-execs this binary with reaperRoleEnv set.
 func TestReaperHelperProcess(t *testing.T) {
 	role, dir, _ := strings.Cut(os.Getenv(reaperRoleEnv), ":")
-	switch role {
-	case "reaper":
-		os.Exit(RunReaper(os.Stdin))
-	case "engine", "engine-group":
-	default:
+	if role != "engine" && role != "engine-group" {
 		t.Skip("helper process for TestEngineKilledOutrightTakesItsTrackedGroupsWithIt")
 	}
-	// The companion inherits this environment and so takes the reaper role.
-	t.Setenv(reaperRoleEnv, "reaper")
 	self, err := os.Executable()
 	if err == nil {
-		err = StartReaper(self, "-test.run=^TestReaperHelperProcess$", "-test.v=false")
+		err = StartReaper(self, ReaperCommand)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "start reaper: %v\n", err)
