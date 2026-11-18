@@ -849,17 +849,13 @@ func runPathCell(t *testing.T, host *programHost, template refusalProject, tpl p
 	config := &llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: "run the program", FollowUpText: "Done."}}}
 	s = host.withClientAt(t, project.project, llm.NewMockProvider(config), wire.CreateSessionRequest{}, "")
 	s.h.SeedProgress(t, t.Context(), s.session)
-	configDir, err := configdir.UserConfigDir()
-	testutil.FailErr(t, "config dir", err)
-	probe := worldProbe{db: s.h.DB, session: s.session, outside: project.outside,
-		grantFile: filepath.Join(configDir, settingsoverlay.BasenameApprovals)}
-	before := probe.read(t)
+	// An escape can reach only the outside tree and its repository.
+	beforeTree, beforeGit := treeEntries(t, project.outside), gitDigest(t, project.outside)
 	config.Responses[0].ToolCalls = []llm.MockToolCall{{ID: "witness-1", Name: tpl.tool, Args: tpl.bind(chosen.file, chosen.dir)}}
 	promptDeciding(t, s, decide)
-	for _, part := range before.diff(probe.read(t)) {
-		if strings.HasPrefix(part, "outside:") || part == "git state" {
-			changed = append(changed, part)
-		}
+	changed = changedEntries("outside", beforeTree, treeEntries(t, project.outside))
+	if gitDigest(t, project.outside) != beforeGit {
+		changed = append(changed, "git state")
 	}
 	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
 	testutil.FailErr(t, "read transcript", err)
