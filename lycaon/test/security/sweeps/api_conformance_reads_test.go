@@ -231,7 +231,7 @@ func (e *hostEffects) awaitWatcherBarrier(ctx context.Context) error {
 		e.drain()
 		patience *= 2
 	}
-	return fmt.Errorf("the watcher reported none of %d barrier rounds in %s; it reported %v", watcherBarrierRounds, e.projectDir, e.unmatched)
+	return fmt.Errorf("the watcher reported none of %d barrier rounds in %s; it reported %v; coverage %+v", watcherBarrierRounds, e.projectDir, e.unmatched, repochange.Coverage(e.projectDir))
 }
 
 // watcherBarrierRounds bounds the rewrites of an unanswered barrier, so a
