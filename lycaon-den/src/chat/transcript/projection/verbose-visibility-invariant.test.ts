@@ -166,6 +166,9 @@ describe.each([...PROGRAM_ACTIVITY_TOOLS])("%s command program", (tool) => {
         observeProgram(sessionId, tool, []);
         frame([assistant]);
         if (progress) observeProgram(sessionId, tool, [admittedActivity]);
+        const internal = { ...assistant, visibility: "internal" } as const;
+        const privateRows = project([internal], undefined, options)[0]!;
+        expect(privateRows.some((item) => item.kind === "tool" || item.kind === "activity_span")).toBe(false);
         frame([assistant]);
         clearCommandActivities(sessionId);
         frame([assistant]);
