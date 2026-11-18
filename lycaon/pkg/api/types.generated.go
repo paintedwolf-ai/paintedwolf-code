@@ -8972,7 +8972,7 @@ type UpdateFileSummariesSettingsRequest struct {
 
 // UpdateHostResourceRequest
 type UpdateHostResourceRequest struct {
-	Access HostResourceAccessSetting `json:"access"`
+	Access HostResourceAccessSetting `json:"access,omitempty"`
 }
 
 // UpdateManagedSecretRequest Administers one capability. Omitted fields are left as they stand, and nothing here reaches the stored value. A revoked capability is terminal and accepts no update.

@@ -63,6 +63,15 @@ func (s *Contributions) storeDeviceContributionFrame(frame *contribframe.Frame) 
 	s.contribFramesMu.Unlock()
 }
 
+// ReleaseFrames drops every retained frame, whose views hold megabytes, so a
+// closed host keeps none.
+func (s *Contributions) ReleaseFrames() {
+	s.contribFramesMu.Lock()
+	defer s.contribFramesMu.Unlock()
+	s.contribDeviceFrame = nil
+	s.contribFrames, s.contribFrameOrder = nil, nil
+}
+
 func (s *Contributions) invalidateDeviceContributionFrame() {
 	s.contribFramesMu.Lock()
 	s.contribDeviceFrame = nil
