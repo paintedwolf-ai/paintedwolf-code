@@ -73,6 +73,8 @@ def main() -> int:
     flag = Path(sys.argv[3])
     description = sys.argv[4]
     deadline = time.monotonic() + timeout
+    if os.environ.get("PW_TEST_WATCHDOG_DEADLINE"):
+        deadline = min(deadline, timeout_seconds(os.environ["PW_TEST_WATCHDOG_DEADLINE"]))
     while True:
         try:
             os.killpg(pgid, 0)

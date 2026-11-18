@@ -88,8 +88,9 @@ prepare_runtime() {
   if [[ -d "$ROOT/lycaon-den/src-tauri/binaries" && ! -e "$SNAPSHOT_DIR/lycaon-den/src-tauri/binaries" && ! -L "$SNAPSHOT_DIR/lycaon-den/src-tauri/binaries" ]]; then
     ln -s "$ROOT/lycaon-den/src-tauri/binaries" "$SNAPSHOT_DIR/lycaon-den/src-tauri/binaries"
   fi
-  if [[ -f "$ROOT/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md" && ! -e "$SNAPSHOT_DIR/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md" && ! -L "$SNAPSHOT_DIR/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md" ]]; then
-    ln -s "$ROOT/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md" "$SNAPSHOT_DIR/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md"
+  local notices=lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md
+  if [[ -f "$ROOT/$notices" && ! -e "$SNAPSHOT_DIR/$notices" && ! -L "$SNAPSHOT_DIR/$notices" ]]; then
+    cp "$ROOT/$notices" "$SNAPSHOT_DIR/$notices"
   fi
   if [[ -d "$ROOT/lycaon-den/src-tauri/engine-root/gitengine" ]]; then
     local engine_root="$SNAPSHOT_DIR/lycaon-den/src-tauri/engine-root" staged
