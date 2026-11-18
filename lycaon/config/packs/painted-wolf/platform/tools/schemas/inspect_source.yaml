@@ -1,10 +1,10 @@
-description: Read a file with line numbers, list a directory, search project files, query JSON or YAML, or inspect Git history and changes. Each call performs one read operation.
+description: Read a file with line numbers, list a directory, search project files, query JSON or YAML, or read the current Git branch and commit.
 schema:
   type: object
   properties:
     operation:
       type: string
-      enum: [read, list, search, query_json, query_yaml, git_status, git_diff, git_log]
+      enum: [read, list, search, query_json, query_yaml, git_head]
     path:
       type: string
       description: Project-relative path or @label/path. Required for read and query operations. List and search default to the session folder.

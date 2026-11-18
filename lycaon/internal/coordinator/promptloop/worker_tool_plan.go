@@ -157,6 +157,10 @@ func (l *promptContext) coordinatorToolsForTurn(
 	plan = filterToolPlanForRootCount(plan, rootCount)
 	if ask {
 		plan = clampAskMode(plan, all)
+		if frame.RunContext.RunID == "" {
+			plan = plan.Without("ask_user")
+		}
+		all = askToolArgumentSchemas(all)
 	}
 	return trimCoordinatorToolMetasForPlan(plan, all, taskAllowlist, phaseVerdictSchema(frame)), plan, surfaceID, nil
 }

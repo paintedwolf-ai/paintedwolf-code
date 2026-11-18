@@ -50,21 +50,24 @@ func (m *SessionPolicy) AssertSessionRunnable(ctx context.Context, sessionID str
 	if m == nil || sessionID == "" {
 		return nil
 	}
+	mode, err := m.sessionMode(ctx, sessionID)
+	if err != nil {
+		return err
+	}
 	active, err := m.activeRunForPolicy(ctx, sessionID)
 	if err != nil {
 		return err
 	}
 	if active == nil {
+		if mode == api.SessionModeAsk {
+			return nil
+		}
 		sess, err := m.Sessions.Get(ctx, sessionID)
 		if err != nil {
 			return err
 		}
 		if sess != nil && sess.IsWorkerChild() {
 			return nil
-		}
-		mode, err := m.sessionMode(ctx, sessionID)
-		if err != nil || mode == api.SessionModeAsk {
-			return err
 		}
 		return runstate.ErrNoActiveRun
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -21,13 +22,18 @@ func withAskRound(ctx context.Context, ask bool) context.Context {
 
 func (m *Service) checkAskPhase(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, target string) error {
 	ask, _ := ctx.Value(askRoundKey{}).(bool)
-	if m.ResolveEffectiveMode != nil {
-		authority, err := m.ResolveEffectiveMode(ctx, run.SessionID)
-		if err != nil {
-			return err
-		}
-		ask = ask || authority.Mode == api.SessionModeAsk
+	if m.ResolveEffectiveMode == nil {
+		return store.ErrSessionModeUnavailable
 	}
+	authority, err := m.ResolveEffectiveMode(ctx, run.SessionID)
+	if err != nil {
+		return err
+	}
+	mode, err := authority.WithModeIntent(nil)
+	if err != nil {
+		return err
+	}
+	ask = ask || mode == api.SessionModeAsk
 	if ask && (runstate.IsAmbientRun(run) || target != "" && manifest.PhaseRequiresAgent(target)) {
 		return runstate.ErrAskWorkflowRequiresAgent
 	}

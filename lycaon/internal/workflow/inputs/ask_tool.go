@@ -33,6 +33,9 @@ func RegisterAskUserTool(reg *tools.DefaultRegistry, runs *Asks, boundary *sandb
 		if err != nil {
 			return "", err
 		}
+		if tctx.Source.AskMode && (req.ResponseType == workflowdef.FeedbackResponseSecret || req.Secret != nil) {
+			return "", tools.AskModeReject("ask_user")
+		}
 		req.ToolCallID = strings.TrimSpace(tctx.Identity.ToolCallID)
 		req.WorkspaceImages = WorkspaceImageReaderForBoundary(boundary, tctx)
 		handle, err := runs.RequestUserInput(ctx, tctx.Identity.SessionID, req)

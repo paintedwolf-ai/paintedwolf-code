@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -17,16 +18,19 @@ type RoundAuthority struct {
 }
 
 func (l *promptContext) roundAuthority(ctx context.Context, sess *api.Session, workerReadOnly bool) (RoundAuthority, error) {
-	auth := RoundAuthority{Mode: sess.Mode, ReadOnly: workerReadOnly}
-	if l.Deps.ResolveEffectiveMode != nil {
-		root, err := l.Deps.ResolveEffectiveMode(ctx, sess.ID)
-		if err != nil {
-			return RoundAuthority{}, err
-		}
-		auth.RootSessionID, auth.Mode = root.RootSessionID, root.Mode
+	if sess == nil || l.Deps.ResolveEffectiveMode == nil {
+		return RoundAuthority{}, store.ErrSessionModeUnavailable
 	}
-	auth.ReadOnly = auth.ReadOnly || auth.Mode == api.SessionModeAsk
-	return auth, nil
+	root, err := l.Deps.ResolveEffectiveMode(ctx, sess.ID)
+	if err != nil {
+		return RoundAuthority{}, err
+	}
+	if root.RootSessionID == "" || root.Mode != api.SessionModeAgent && root.Mode != api.SessionModeAsk {
+		return RoundAuthority{}, store.ErrSessionModeUnavailable
+	}
+	return RoundAuthority{
+		RootSessionID: root.RootSessionID, Mode: root.Mode, ReadOnly: workerReadOnly || root.Mode == api.SessionModeAsk,
+	}, nil
 }
 
 func (a RoundAuthority) sessionView(sess *api.Session) *api.Session {

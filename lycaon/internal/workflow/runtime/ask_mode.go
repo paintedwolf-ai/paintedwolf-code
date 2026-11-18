@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/hostctx"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -25,8 +26,11 @@ func (m *SessionPolicy) sessionMode(ctx context.Context, id string) (api.Session
 		return mode, nil
 	}
 	if m.ResolveEffectiveMode == nil {
-		return "", nil
+		return "", store.ErrSessionModeUnavailable
 	}
 	mode, err := m.ResolveEffectiveMode(ctx, id)
-	return mode.Mode, err
+	if err != nil {
+		return "", err
+	}
+	return mode.WithModeIntent(nil)
 }

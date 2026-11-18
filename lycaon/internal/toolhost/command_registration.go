@@ -22,7 +22,6 @@ var formTools = []struct {
 }{
 	{"summarize", toolreach.SummarizeArgv},
 	{"survey_repo", toolreach.SurveyRepoArgv},
-	{"inspect_source", toolreach.InspectSourceArgv},
 	{"code_rewrite", toolreach.CodeRewriteArgv},
 }
 

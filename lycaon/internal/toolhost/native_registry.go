@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/survey"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	skilltools "github.com/lycaon/lycaon/internal/tools/native/skills"
@@ -92,6 +93,12 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 			if err := register(form.name, tool.Run); err != nil {
 				return nil, nil, err
 			}
+		}
+		inspect := &native.InspectSourceTool{
+			Boundary: boundary, Form: native.FormTool{Programs: verifyTool.Programs, Argv: toolreach.InspectSourceArgv},
+		}
+		if err := register("inspect_source", inspect.Run); err != nil {
+			return nil, nil, err
 		}
 	}
 

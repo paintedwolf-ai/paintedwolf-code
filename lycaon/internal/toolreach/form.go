@@ -6,7 +6,8 @@ func FormCommand(tool string, args map[string]any) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return QuoteProgram(argv(args)), true
+	words := argv(args)
+	return QuoteProgram(words), len(words) > 0
 }
 
 var formArgv = map[string]func(map[string]any) []string{

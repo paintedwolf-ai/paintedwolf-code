@@ -66,4 +66,13 @@ func TestRoundAuthorityKeepsWorkerScopeAcrossUpgradeAndFailsClosed(t *testing.T)
 	if _, err := prompt.roundAuthority(t.Context(), worker, true); !errors.Is(err, readErr) {
 		t.Fatalf("round authority error = %v", err)
 	}
+	unwired := &promptContext{}
+	if _, err := unwired.roundAuthority(t.Context(), worker, true); !errors.Is(err, store.ErrSessionModeUnavailable) {
+		t.Fatalf("round ran with no authority resolver: %v", err)
+	}
+	readErr = nil
+	root.Mode = api.SessionMode("corrupt")
+	if _, err := prompt.roundAuthority(t.Context(), worker, true); !errors.Is(err, store.ErrSessionModeUnavailable) {
+		t.Fatalf("corrupt authority was accepted: %v", err)
+	}
 }

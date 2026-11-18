@@ -65,9 +65,11 @@ type Context struct {
 func (m *Context) Build() promptloop.ContextDeps {
 	rt := m.Runtime
 	deps := promptloop.ContextDeps{
-		Limits:                m.Limits.Effective,
-		Tools:                 m.Tools,
-		ResolveEffectiveMode:  m.Sessions.ResolveEffectiveMode,
+		Limits: m.Limits.Effective,
+		Tools:  m.Tools,
+		ResolveEffectiveMode: func(ctx context.Context, id string) (store.RootAuthority, error) {
+			return store.ResolveEffectiveMode(ctx, m.Sessions, id)
+		},
 		ActivateAgentWorkflow: m.ActivateAgentWorkflow,
 		RefreshRoundMachine:   m.Profiles.CompileMachine,
 		RootSessionID: func(ctx context.Context, sessionID string) string {

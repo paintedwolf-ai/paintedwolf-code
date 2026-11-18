@@ -28,12 +28,6 @@ func InspectSourceArgv(args map[string]any) []string {
 			}
 			return append(words, "--", expression, path)
 		}
-	case "git_status":
-		return appendValue([]string{"git", "status", "--short"}, "--", path)
-	case "git_diff":
-		return appendValue([]string{"git", "diff"}, "--", path)
-	case "git_log":
-		return appendValue([]string{"git", "log", "-n", "20", "--oneline"}, "--", path)
 	}
 	return nil
 }

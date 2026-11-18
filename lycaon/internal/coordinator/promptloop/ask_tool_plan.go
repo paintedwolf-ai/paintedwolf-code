@@ -4,12 +4,30 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func askToolArgumentSchemas(metas []tools.ToolMeta) []tools.ToolMeta {
+	out := append([]tools.ToolMeta(nil), metas...)
+	for index, meta := range out {
+		if meta.Name != "ask_user" {
+			continue
+		}
+		out[index].ArgsSchema = jsonvalue.CloneMap(meta.ArgsSchema)
+		properties, _ := out[index].ArgsSchema["properties"].(map[string]any)
+		if response, ok := properties["response_type"].(map[string]any); ok {
+			response["enum"] = []any{"text", "single_choice", "multi_choice"}
+			response["description"] = "Kind of response. Defaults to text."
+		}
+		delete(properties, "secret")
+	}
+	return out
+}
 
 func (l *promptContext) askEnabledMCPMetas(ctx context.Context, sess *api.Session, metas []tools.ToolMeta) []tools.ToolMeta {
 	if sess == nil || sess.Mode != api.SessionModeAsk || l.Deps.MCPAlwaysLoad == nil {

@@ -78,7 +78,9 @@ func (m *Admission) commitStart(ctx context.Context, sessionID string, req api.S
 	if err != nil {
 		return nil, err
 	}
-	if ambientStart && mode == api.SessionModeAsk {
+	// Automatic attachment during chat preparation cannot create a blueprint.
+	preparing := !sess.Started && sess.Status == api.SessionStatusPreparing
+	if ambientStart && (mode == api.SessionModeAsk || preparing && workflowdef.SupportsBlueprints(manifest)) {
 		return nil, nil
 	}
 	if err := m.validateActiveRunForStart(active, runstate.IsAmbientRun(active), manifest, humanStart); err != nil {
