@@ -24,6 +24,8 @@ type ReviewBuilder struct {
 }
 
 func (v *View) ReviewBuilder(ctx context.Context) *ReviewBuilder {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	return &ReviewBuilder{ctx: ctx, project: v.scope.Project, catalog: v.catalog, roots: v.roots, facts: make(map[string]*sourcecatalog.TreeOverlay)}
 }
 func (b *ReviewBuilder) Add(address Address) error {

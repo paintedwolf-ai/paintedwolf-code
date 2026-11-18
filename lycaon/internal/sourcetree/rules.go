@@ -4,6 +4,8 @@ package sourcetree
 import (
 	"path"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 )
 
 type Address struct{ Root, Path string }
@@ -13,7 +15,10 @@ type Disclosure struct {
 }
 
 // Rules share immutable ordered exceptions across presentations.
-type Rules struct{ root *ruleNode }
+type Rules struct {
+	root  *ruleNode
+	roots map[string]sourcecatalog.Root
+}
 
 func ruleKey(address Address) string { return address.Root + "\x00" + address.Path }
 
@@ -41,7 +46,26 @@ func (r *Rules) Set(address Address, disclosure Disclosure) {
 	r.root = mergeRules(mergeRules(left, newRule(key, entry)), right)
 }
 
-func (r *Rules) At(address Address) Disclosure { return r.atDefault(address, address.Path == ".") }
+func (r *Rules) At(address Address) Disclosure {
+	return r.atDefault(address, address.Path == "." && !r.roots[address.Root].OnDemand)
+}
+
+// limitToRoots drops disclosure rules for roots leaving the view.
+func (r *Rules) limitToRoots(roots map[string]sourcecatalog.Root) {
+	var removed []string
+	visitRules(r.root, func(value ruleValue) {
+		root, exists := roots[value.address.Root]
+		if !exists || root.OnDemand && value.recursive && value.hasRecursive {
+			removed = append(removed, ruleKey(value.address))
+		}
+	})
+	for _, key := range removed {
+		left, rest := splitRules(r.root, key)
+		_, right := splitRules(rest, key+"\x00")
+		r.root = mergeRules(left, right)
+	}
+	r.roots = roots
+}
 func (r *Rules) atDefault(address Address, open bool) Disclosure {
 	exact := findRule(r.root, ruleKey(address))
 	result := Disclosure{Open: open}
