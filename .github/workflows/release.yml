@@ -933,10 +933,11 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # Observe cache publication before immutable discovery metadata is signed.
+  # Observe cache publication before immutable discovery metadata is signed. Repository
+  # activation succeeds only after every build, import and upgrade case.
   linux-delivery:
     needs: [classify, prepare, ship-gates, publish-artifacts, publish-linux-repositories]
-    if: ${{ !cancelled() && needs.classify.outputs.publish == 'true' && needs.classify.outputs.linux_public == 'true' && needs.prepare.result == 'success' && needs.publish-linux-repositories.result == 'success' }}
+    if: ${{ !cancelled() && needs.classify.outputs.publish == 'true' && needs.classify.outputs.linux_public == 'true' && needs.publish-linux-repositories.result == 'success' }}
     uses: ./.github/workflows/release-linux-delivery.yml
     permissions:
       contents: read
