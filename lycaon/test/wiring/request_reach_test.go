@@ -179,6 +179,9 @@ func probeRequests(t *testing.T, names *toolvocab.Catalog, decider decide.Decide
 			}
 			t.Logf("  msg %d role=%s origin=%s kind=%s authority=%s parts=%d len=%d host=%d %q", j, m.Role, m.Origin, m.Kind, m.Authority, len(m.ContentParts), len(m.Content), len(hostText(m)), head)
 		}
+		if req.Debug.Surface == "implement_park" {
+			t.Logf("PARK SYSTEM PROMPT:\n%s\nEND PARK", req.Messages[0].Content)
+		}
 		for _, v := range requestReach(t, names, req, api.SessionPostureBuild) {
 			violations = append(violations, fmt.Sprintf("request %d: %s", i, v))
 		}
