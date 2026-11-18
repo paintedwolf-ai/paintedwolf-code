@@ -537,13 +537,13 @@ func requireRefusalEvidence(t *testing.T, s *commandProgramSession, mode refusal
 		}
 		return
 	}
-	if programEntry(w.tool) {
+	result, ok := findWitnessResult(t, s)
+	if ok && programEntry(w.tool) {
 		if outcome := s.outcome(t, "witness-1"); outcome.Refusal == nil && outcome.State != "rejected" {
 			t.Fatalf("%s under %s was not refused: %s", w.covers, mode.name, describeWitness(t, s, w))
 		}
 		return
 	}
-	result, ok := findWitnessResult(t, s)
 	if !ok {
 		// A tool the profile does not offer never runs: no result and no receipt.
 		var receipts int
@@ -729,13 +729,16 @@ type escapeSpelling struct {
 // escapeSpellings builds each spelling over the real tree. A spelling this
 // host's filesystem does not alias names a different, absent path; writing
 // there is still an outside write.
-func escapeSpellings(t *testing.T, p refusalProject) []escapeSpelling {
+func escapeSpellings(t *testing.T, p refusalProject, hardLink bool) []escapeSpelling {
 	t.Helper()
 	base, outsideName := filepath.Dir(p.project), filepath.Base(p.outside)
 	target := filepath.Join(p.outside, "target.json")
 	testutil.FailErr(t, "link chain", os.Symlink("l2", filepath.Join(p.project, "l1")))
 	testutil.FailErr(t, "link chain end", os.Symlink(filepath.Join("..", outsideName), filepath.Join(p.project, "l2")))
-	testutil.FailErr(t, "hard link", os.Link(target, filepath.Join(p.project, "hl.json")))
+	// A second link would make every cell's target a shared inode.
+	if hardLink {
+		testutil.FailErr(t, "hard link", os.Link(target, filepath.Join(p.project, "hl.json")))
+	}
 	nfd := filepath.Join(base, strings.TrimSuffix(outsideName, "é")+"é")
 	upper := filepath.Join(base, strings.ToUpper(outsideName))
 	return []escapeSpelling{
@@ -807,9 +810,6 @@ func TestRefusedPathsStayInsideTheRoots(t *testing.T) {
 					if len(changed) > 0 {
 						t.Errorf("%s through %s changed %v: %s", tpl.covers, name, changed, describePath(t, s, tpl))
 					}
-					if result, ok := findWitnessResult(t, s); ok && strings.Contains(result.Content, s.dir) {
-						t.Errorf("%s through %s exposed the absolute project root: %.300q", tpl.covers, name, result.Content)
-					}
 				})
 			}
 		})
@@ -821,7 +821,7 @@ func TestRefusedPathsStayInsideTheRoots(t *testing.T) {
 func spellingAliases(t *testing.T, template refusalProject, name string) bool {
 	t.Helper()
 	project := copyRefusalProject(t, template)
-	for _, spelling := range escapeSpellings(t, project) {
+	for _, spelling := range escapeSpellings(t, project, false) {
 		if spelling.name != name {
 			continue
 		}
@@ -840,7 +840,7 @@ func runPathCell(t *testing.T, host *programHost, template refusalProject, tpl p
 	t.Helper()
 	project := copyRefusalProject(t, template)
 	var chosen escapeSpelling
-	for _, candidate := range escapeSpellings(t, project) {
+	for _, candidate := range escapeSpellings(t, project, spelling == "hardlink") {
 		if candidate.name == spelling {
 			chosen = candidate
 		}
@@ -862,9 +862,14 @@ func runPathCell(t *testing.T, host *programHost, template refusalProject, tpl p
 	}
 	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
 	testutil.FailErr(t, "read transcript", err)
-	raw, err := json.Marshal(msgs)
-	testutil.FailErr(t, "encode transcript", err)
-	delivered = strings.Contains(string(raw), canaryToken)
+	// Only results deliver: the call's own arguments name the outside path.
+	for _, msg := range msgs {
+		if msg.Role == wire.MessageRoleTool && msg.ToolResult != nil {
+			raw, err := json.Marshal(msg.ToolResult)
+			testutil.FailErr(t, "encode tool result", err)
+			delivered = delivered || strings.Contains(string(raw), canaryToken)
+		}
+	}
 	testutil.FailErr(t, "count cards", s.h.DB.QueryRowContext(t.Context(),
 		`SELECT COUNT(*) FROM checkpoints WHERE session_id = ? AND kind = 'tool_approval'`, s.session).Scan(&cards))
 	return s, changed, delivered, cards

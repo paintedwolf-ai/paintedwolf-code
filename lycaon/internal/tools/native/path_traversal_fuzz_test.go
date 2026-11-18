@@ -1,6 +1,7 @@
 package native
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
 func TestMultiRootResolveAbsNeverEscapesUnion(t *testing.T) {
@@ -36,5 +39,50 @@ func TestMultiRootResolveAbsNeverEscapesUnion(t *testing.T) {
 	}
 	if !strings.HasPrefix(abs, secondary) {
 		t.Fatalf("abs = %q want under secondary", abs)
+	}
+}
+
+// A refused native path names no absolute project root, for escapes spelled
+// over a real tree whose outside target exists.
+func TestNativePathRefusalsNameNoProjectRoot(t *testing.T) {
+	base := t.TempDir()
+	projectDir, outside := filepath.Join(base, "proj"), filepath.Join(base, "outside")
+	for _, dir := range []string{projectDir, outside} {
+		testutil.FailErr(t, "create directory", os.MkdirAll(dir, 0o755))
+	}
+	target := filepath.Join(outside, "secret.txt")
+	testutil.FailErr(t, "write outside", os.WriteFile(target, []byte("outside"), 0o644))
+	testutil.FailErr(t, "link outside", os.Symlink(outside, filepath.Join(projectDir, "link")))
+	boundary := nativefixture.Boundary(t)
+	type tool interface {
+		Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error)
+	}
+	for _, path := range []string{filepath.Join("..", "outside", "secret.txt"), filepath.Join("link", "secret.txt"), target} {
+		for name, run := range map[string]func() error{
+			"write": func() error {
+				_, err := (&WriteTool{Boundary: boundary}).Run(t.Context(), map[string]any{"path": path, "content": "x"}, nativefixture.AgentContext(projectDir, "implement"))
+				return err
+			},
+			"chmod": func() error {
+				_, err := tool(&ChmodTool{Boundary: boundary}).Run(t.Context(), map[string]any{"paths": []any{path}, "mode": "+x"}, nativefixture.AgentContext(projectDir, "implement"))
+				return err
+			},
+			"delete": func() error {
+				_, err := tool(&DeleteTool{Boundary: boundary}).Run(t.Context(), map[string]any{"paths": []any{path}}, nativefixture.AgentContext(projectDir, "implement"))
+				return err
+			},
+		} {
+			err := run()
+			if err == nil {
+				t.Errorf("%s accepted %q outside the project", name, path)
+				continue
+			}
+			if strings.Contains(err.Error(), projectDir) {
+				t.Errorf("%s refusal for %q names the project root: %v", name, path, err)
+			}
+		}
+	}
+	if data, err := os.ReadFile(target); err != nil || string(data) != "outside" {
+		t.Fatalf("outside file = %q, %v", data, err)
 	}
 }
