@@ -13,7 +13,7 @@ import (
 )
 
 type retirementSelectionStore struct {
-	Store
+	Sessions
 	pageError, treeError error
 	pages                int
 }
@@ -30,13 +30,13 @@ func (s *retirementSelectionStore) ListProjectSummaries(ctx context.Context, q s
 		return store.SummaryPage{}, s.pageError
 	}
 	q.Limit = 1
-	return s.Store.ListProjectSummaries(ctx, q)
+	return s.Sessions.ListProjectSummaries(ctx, q)
 }
 func (s *retirementSelectionStore) SessionTreeIDs(ctx context.Context, id string) ([]string, error) {
 	if s.treeError != nil {
 		return nil, s.treeError
 	}
-	return s.Store.SessionTreeIDs(ctx, id)
+	return s.Sessions.SessionTreeIDs(ctx, id)
 }
 func TestProjectRetirementSelectionPagesBothArchiveStatesWithoutHydration(t *testing.T) {
 	sessionStore := storetest.New(t, "other", "target")
@@ -51,8 +51,8 @@ func TestProjectRetirementSelectionPagesBothArchiveStatesWithoutHydration(t *tes
 	}
 	_, err := sessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: "other"}, "other")
 	testutil.FailErr(t, "create unrelated chat", err)
-	selected := &retirementSelectionStore{Store: sessionStore}
-	plan, err := planProjectRetirement(t.Context(), selected, selected, "target")
+	selected := &retirementSelectionStore{Sessions: sessionStore.Sessions}
+	plan, err := planProjectRetirement(t.Context(), selected, "target")
 	testutil.FailErr(t, "select project chats", err)
 	if len(plan.roots) != 3 || plan.total != 4 || selected.pages != 3 {
 		t.Fatalf("selection = %+v, pages = %d", plan, selected.pages)
@@ -64,13 +64,13 @@ func TestProjectRetirementSelectionPagesBothArchiveStatesWithoutHydration(t *tes
 	}
 	for _, treeFailure := range []bool{false, true} {
 		want := errors.New("selection unavailable")
-		broken := &retirementSelectionStore{Store: sessionStore}
+		broken := &retirementSelectionStore{Sessions: sessionStore.Sessions}
 		if treeFailure {
 			broken.treeError = want
 		} else {
 			broken.pageError = want
 		}
-		if _, err := planProjectRetirement(t.Context(), broken, broken, "target"); !errors.Is(err, want) {
+		if _, err := planProjectRetirement(t.Context(), broken, "target"); !errors.Is(err, want) {
 			t.Fatalf("selection error = %v", err)
 		}
 	}

@@ -19,7 +19,7 @@ func prepareRequestHistory(ctx context.Context, service *Service, sess *api.Sess
 	}
 	if service != nil && (service.sessionStore != nil && service.transcriptStore != nil && service.compactionStore != nil) && sess != nil {
 		var err error
-		history, err = withCurrentRequest(ctx, service.sessionStore, service.transcriptStore, service.compactionStore, sess, history)
+		history, err = withCurrentRequest(ctx, service.sessionStore, service.transcriptStore, sess, history)
 		if err != nil {
 			return nil, req, err
 		}

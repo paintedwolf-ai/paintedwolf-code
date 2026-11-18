@@ -61,7 +61,7 @@ func TestDelayedSynthesisPreservesNewerCoverage(t *testing.T) {
 			}))
 			enriched := &messageview.Continuation{ThroughOrd: rows[0].Ord, SummaryThroughOrd: rows[0].Ord,
 				Summary: messageview.ContinuationSummary{Facts: []string{"delayed clue"}}}
-			history := &Service{sessionTranscript: sessionStore.Transcript.Sessions, transcriptTranscript: sessionStore.Transcript.Transcript, compactionTranscript: sessionStore.Transcript.Compaction}
+			history := &Service{sessionStore: sessionStore.Sessions, transcriptStore: sessionStore.Transcript, compactionStore: sessionStore.Compaction}
 			testutil.FailErr(t, "publish delayed synthesis", history.publishSynthesis(t.Context(), compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
 			view, _, err := sessionStore.Compaction.GetCompactionView(t.Context(), sess.ID)
 			testutil.FailErr(t, "read enriched view", err)
@@ -97,7 +97,7 @@ func TestDelayedSynthesisRejectsChangedCanonicalSource(t *testing.T) {
 	testutil.FailErr(t, "correct source", err)
 	enriched := &messageview.Continuation{ThroughOrd: source.Ord, SummaryThroughOrd: source.Ord,
 		Summary: messageview.ContinuationSummary{Facts: []string{"original fact"}}}
-	testutil.FailErr(t, "reject stale synthesis", (&Service{sessionTranscript: sessionStore.Transcript.Sessions, transcriptTranscript: sessionStore.Transcript.Transcript, compactionTranscript: sessionStore.Transcript.Compaction}).publishSynthesis(t.Context(),
+	testutil.FailErr(t, "reject stale synthesis", (&Service{sessionStore: sessionStore.Sessions, transcriptStore: sessionStore.Transcript, compactionStore: sessionStore.Compaction}).publishSynthesis(t.Context(),
 		compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
 	current, err := sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read generation", err)

@@ -81,7 +81,7 @@ func (m *Service) Unlink(ctx context.Context, id string, expectedRevision uint64
 // Remove drops items and resolves their admission receipts.
 func (m *Service) Remove(ctx context.Context, id string, expectedRevision uint64, itemIDs []string) (api.QueueDraft, error) {
 	draft, err := m.queue.Remove(id, expectedRevision, itemIDs, func() error {
-		if m == nil || (m.sessionStore == nil || m.submissionStore == nil) {
+		if m == nil || m.submissionStore == nil {
 			return nil
 		}
 		return m.submissionStore.CancelQueuedPromptSubmissions(context.WithoutCancel(ctx), itemIDs)
@@ -108,7 +108,7 @@ func (m *Service) UpdateText(ctx context.Context, id string, expectedRevision ui
 
 // updateQueuedSubmissionText re-encodes one queued receipt's input with the edited prose.
 func (m *Service) updateQueuedSubmissionText(ctx context.Context, submissionID, text string) error {
-	if m == nil || (m.sessionStore == nil || m.submissionStore == nil) {
+	if m == nil || m.submissionStore == nil {
 		return nil
 	}
 	row, err := m.submissionStore.GetPromptSubmission(ctx, submissionID)

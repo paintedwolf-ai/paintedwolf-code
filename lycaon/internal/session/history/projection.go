@@ -78,7 +78,7 @@ func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *
 		oldest = tail[0].Ord
 	}
 	if _, ok := api.LastUserIntentMessage(tail); !ok {
-		if tail, err = withCurrentRequest(ctx, m.sessionStore, m.transcriptStore, m.compactionStore, sess, tail); err != nil {
+		if tail, err = withCurrentRequest(ctx, m.sessionStore, m.transcriptStore, sess, tail); err != nil {
 			return nil, err
 		}
 	}
@@ -122,7 +122,7 @@ func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *a
 		return history, nil
 	}
 	firstTailOrd := history[0].Ord
-	history, err = withCurrentRequest(ctx, m.sessionStore, m.transcriptStore, m.compactionStore, sess, history)
+	history, err = withCurrentRequest(ctx, m.sessionStore, m.transcriptStore, sess, history)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +253,7 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 }
 
 // withCurrentRequest restores the active human opener when it predates the tail.
-func withCurrentRequest(ctx context.Context, sessionStore Sessions, transcriptStore Transcript, compactionStore Compaction, sess *api.Session, tail []api.Message) ([]api.Message, error) {
+func withCurrentRequest(ctx context.Context, sessionStore Sessions, transcriptStore Transcript, sess *api.Session, tail []api.Message) ([]api.Message, error) {
 	currentTurn := sess.CurrentTurn
 	if currentTurn <= 0 {
 		if latest, err := sessionStore.Get(ctx, sess.ID); err == nil && latest != nil {

@@ -153,7 +153,7 @@ func (m *Service) restoreCanonicalTail(ctx context.Context, sess *api.Session, v
 	if tail[0].Ord > view.Continuation.ThroughOrd {
 		return nil, false, nil
 	}
-	tail, err = withCurrentRequest(ctx, m.sessionStore, m.transcriptStore, m.compactionStore, sess, tail)
+	tail, err = withCurrentRequest(ctx, m.sessionStore, m.transcriptStore, sess, tail)
 	if err != nil {
 		return nil, false, err
 	}

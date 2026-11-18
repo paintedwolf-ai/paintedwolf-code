@@ -180,7 +180,7 @@ func newAttemptFixture(t *testing.T, script ...func() (string, error)) *attemptF
 	svc.compactionStore = scans
 	sess, err := sqlStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	f := &attemptFixture{svc: svc, sqlCompaction: sqlStore.Compaction, sess: sess, clock: clock, provider: provider, scans: scans}
+	f := &attemptFixture{svc: svc, sqlStore: sqlStore, sess: sess, clock: clock, provider: provider, scans: scans}
 	t.Cleanup(func() {
 		svc.Runner.Stop()
 		testutil.FailErr(t, "drain compaction", svc.Runner.WaitContext(context.Background()))

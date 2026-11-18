@@ -79,7 +79,7 @@ func (m *Tools) Build() promptloop.ToolsDeps {
 		AfterToolRun:     m.Results.AfterTool,
 		EnrichToolOutput: m.Results.EnrichTool,
 	}
-	if m.Sessions != nil {
+	if m.SessionStore != nil {
 		deps.CommitProgramObservation = m.EvidenceStore.CommitProgramObservation
 	}
 	deps.CommitEvidenceToolResult = func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
@@ -128,7 +128,7 @@ func (m *Tools) Build() promptloop.ToolsDeps {
 // files later knows where their content came from. The chat did not read the
 // content itself, so this is custody, not ingestion.
 func (m *Tools) shareCustodyWithChat(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content string) error {
-	chatID := sessiontree.RootID(ctx, m.Sessions, sessionID)
+	chatID := sessiontree.RootID(ctx, m.SessionStore, sessionID)
 	if chatID == "" || chatID == sessionID {
 		return nil
 	}

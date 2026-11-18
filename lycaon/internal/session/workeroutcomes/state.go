@@ -40,10 +40,17 @@ type WorkspacePath interface {
 	SettingsPath(context.Context, *api.Session) string
 }
 
+type StateSessions interface {
+	Get(context.Context, string) (*api.Session, error)
+}
+type StateTranscript interface {
+	GetMessages(context.Context, string) ([]api.Message, error)
+}
+
 type State struct {
 	workers         CycleLedger
-	sessionStore    Sessions
-	transcriptStore Transcript
+	sessionStore    StateSessions
+	transcriptStore StateTranscript
 	workflows       WorkflowVars
 	progress        ProgressReader
 	reconciliation  ProgressReconciliationReader
@@ -62,8 +69,8 @@ func (m *State) SetDeliveredWorkers(count DeliveredWorkers) { m.delivered = coun
 
 type StatePorts struct {
 	Workers         CycleLedger
-	SessionStore    Sessions
-	TranscriptStore Transcript
+	SessionStore    StateSessions
+	TranscriptStore StateTranscript
 	Workflows       WorkflowVars
 	Progress        ProgressReader
 	Verification    VerificationFacts

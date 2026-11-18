@@ -307,7 +307,7 @@ func (m *Context) RunContext(ctx context.Context, sessionID string) (api.Coordin
 	if m == nil || m.Sessions == nil {
 		return api.CoordinatorRunContext{}, fmt.Errorf("session store not configured")
 	}
-	sess, err := m.SessionStore.Get(ctx, sessionID)
+	sess, err := m.Sessions.Get(ctx, sessionID)
 	if err != nil {
 		return api.CoordinatorRunContext{}, err
 	}

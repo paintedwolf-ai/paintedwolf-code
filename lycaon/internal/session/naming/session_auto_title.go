@@ -9,7 +9,7 @@ import (
 )
 
 func (m *Service) SessionFromPrompt(ctx context.Context, sess *wire.Session, promptText string) {
-	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.evidenceStore == nil) || sess == nil {
+	if m == nil || m.sessionStore == nil || sess == nil {
 		return
 	}
 	text := strings.TrimSpace(promptText)
@@ -48,7 +48,7 @@ func (m *Service) PublishSession(ctx context.Context, sess *wire.Session, title 
 	}
 	status := sess.Status
 	// Use the stored status when the turn snapshot is stale.
-	if m.sessionStore != nil && m.transcriptStore != nil && m.evidenceStore != nil {
+	if m.sessionStore != nil {
 		if fresh, err := m.sessionStore.Get(ctx, sess.ID); err == nil && fresh != nil {
 			status = fresh.Status
 		}
