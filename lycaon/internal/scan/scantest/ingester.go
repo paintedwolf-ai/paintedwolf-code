@@ -2,6 +2,7 @@ package scantest
 
 import (
 	"context"
+
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/scan"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"

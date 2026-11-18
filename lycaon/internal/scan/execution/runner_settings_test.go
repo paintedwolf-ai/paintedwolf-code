@@ -3,7 +3,6 @@ package execution
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -12,6 +11,7 @@ import (
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"

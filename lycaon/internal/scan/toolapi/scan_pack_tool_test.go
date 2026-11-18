@@ -3,7 +3,6 @@ package toolapi_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +16,7 @@ import (
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/scan/testfixture"
 	scantoolapi "github.com/lycaon/lycaon/internal/scan/toolapi"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
