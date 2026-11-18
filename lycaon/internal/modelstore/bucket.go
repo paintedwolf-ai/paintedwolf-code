@@ -45,7 +45,7 @@ func (s *Store) download(ctx context.Context, origin string, client *http.Client
 		return err
 	}
 	transfer := transferProgress{total: pin.TotalBytes, report: progress}
-	return s.install(ctx, signed, func(a Artifact) error {
+	return s.install(ctx, signed, true, nil, func(a Artifact) error {
 		if s.reusableArtifact(ctx, a) {
 			transfer.add(a.Bytes)
 			return nil

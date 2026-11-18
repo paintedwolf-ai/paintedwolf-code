@@ -38,3 +38,11 @@ func availableDiskBytes(blocks uint64, blockSize int64) (int64, error) {
 func openPartial(root *os.Root, name string) (*os.File, error) {
 	return root.OpenFile(name, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0600)
 }
+
+func reclaimableBlocks(info os.FileInfo, links int) int64 {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || !info.Mode().IsRegular() || uint64(stat.Nlink) != uint64(links) {
+		return 0
+	}
+	return min(info.Size(), stat.Blocks*512)
+}

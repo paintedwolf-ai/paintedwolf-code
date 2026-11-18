@@ -129,12 +129,18 @@ func (s *Store) ImportFromBundlePath(ctx context.Context, path string, target Sl
 		return errors.New("modelstore: offline bundle does not match selected model and device")
 	}
 	transfer := transferProgress{total: manifestSize(m), report: progress}
-	return s.install(ctx, signed, func(a Artifact) error {
+	return s.install(ctx, signed, false, func() error { return verifyOfflinePayloads(ctx, b, m) }, func(a Artifact) error {
 		f, err := b.open(a.Name, a.Bytes)
 		if err != nil {
 			return err
 		}
-		stageErr := s.Stage(io.TeeReader(contextReader{ctx: ctx, reader: f}, &transfer), a)
+		var stageErr error
+		reader := io.TeeReader(contextReader{ctx: ctx, reader: f}, &transfer)
+		if s.reusableArtifact(ctx, a) {
+			stageErr = verifyReader(reader, a)
+		} else {
+			stageErr = s.Stage(reader, a)
+		}
 		return errors.Join(stageErr, f.Close())
 	})
 }
@@ -147,4 +153,17 @@ func BundleSlot(ctx context.Context, path string) (Slot, error) {
 	}
 	signed, err := offlineManifest(b)
 	return Slot{Model: signed.Manifest.Model, Device: signed.Manifest.Device}, errors.Join(err, b.Close())
+}
+
+func verifyOfflinePayloads(ctx context.Context, b offlineBundle, m Manifest) error {
+	for _, a := range manifestFiles(m) {
+		f, err := b.open(a.Name, a.Bytes)
+		if err != nil {
+			return err
+		}
+		if err := errors.Join(verifyReader(contextReader{ctx: ctx, reader: f}, a), f.Close()); err != nil {
+			return err
+		}
+	}
+	return nil
 }

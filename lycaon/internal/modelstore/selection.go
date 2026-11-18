@@ -22,6 +22,9 @@ func (s *Store) Selection() (Selection, error) {
 		m := h.visible[len(h.visible)-1]
 		return Selection{State: "selected", Model: m.Model, Device: m.Device, Revision: m.Revision}, nil
 	}
+	if h.selection.State == "evicted" {
+		return Selection{State: "unconfigured"}, err
+	}
 	return h.selection, err
 }
 
@@ -106,7 +109,7 @@ func (s *Store) finishSelection() error {
 	return errors.Join(root.RemoveAll("partials"), root.Close())
 }
 
-func (s *Store) install(ctx context.Context, signed SignedManifest, stage func(Artifact) error) (resultErr error) {
+func (s *Store) install(ctx context.Context, signed SignedManifest, resumable bool, beforeEviction func() error, stage func(Artifact) error) (resultErr error) {
 	if err := validate(signed.Manifest); err != nil {
 		return err
 	}
@@ -125,6 +128,9 @@ func (s *Store) install(ctx context.Context, signed SignedManifest, stage func(A
 			resultErr = errors.Join(resultErr, f.Close())
 		}
 	}()
+	if err := s.admitInstall(ctx, signed.Manifest, resumable, beforeEviction); err != nil {
+		return err
+	}
 	for _, a := range append([]Artifact{signed.Manifest.Artifact}, signed.Manifest.Files...) {
 		if err := ctx.Err(); err != nil {
 			return err
