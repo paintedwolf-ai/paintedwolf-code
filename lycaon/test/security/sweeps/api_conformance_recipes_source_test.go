@@ -1047,7 +1047,8 @@ func sourceGitCommit(ctx context.Context, s *conformanceSweep, files [2]string, 
 	if _, err := sourceGit(ctx, s, "add", "--", files[0], files[1]); err != nil {
 		return "", err
 	}
-	if _, err := sourceGit(ctx, s, "commit", "-q", "-m", message); err != nil {
+	// A retried recipe finds its earlier commit in place.
+	if _, err := sourceGit(ctx, s, "commit", "-q", "--allow-empty", "-m", message); err != nil {
 		return "", err
 	}
 	head, err := sourceGit(ctx, s, "rev-parse", "HEAD")

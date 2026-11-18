@@ -25,6 +25,7 @@ import (
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	openapi "github.com/lycaon/lycaon/test/openapi"
 )
 
 // sessionRecipes cover sessions, workflow runs, checkpoints, workers,
@@ -202,7 +203,7 @@ func sessionRegisterManifests(s *conformanceSweep) error {
 				}},
 			}},
 		})
-		raw, err := os.ReadFile(filepath.Join("..", "..", "config", "fixtures", "workflows", "choice-transitions.yaml"))
+		raw, err := os.ReadFile(sessionRepoFile("lycaon", "config", "fixtures", "workflows", "choice-transitions.yaml"))
 		if err != nil {
 			return false, err
 		}
@@ -428,7 +429,7 @@ func sessionSeedWorkflowRuns(ctx context.Context, s *conformanceSweep) error {
 
 // sessionComposeYAML is the session workflow fixture under a fresh id.
 func sessionComposeYAML(id string) ([]byte, error) {
-	raw, err := os.ReadFile(filepath.Join("..", "contract", "testdata", "workflow", "compose_session_plan.yaml"))
+	raw, err := os.ReadFile(sessionRepoFile("lycaon", "test", "contract", "testdata", "workflow", "compose_session_plan.yaml"))
 	if err != nil {
 		return nil, err
 	}
@@ -1024,4 +1025,13 @@ func sessionPrepareLandWorktree(ctx context.Context, s *conformanceSweep, _ *con
 		return successInputs{}, err
 	}
 	return successInputs{params: map[string]string{"id": chat}}, nil
+}
+
+// sessionRepoFile resolves a path from the repository root.
+func sessionRepoFile(parts ...string) string {
+	root, err := openapi.RepoRoot()
+	if err != nil {
+		return filepath.Join(parts...)
+	}
+	return filepath.Join(append([]string{root}, parts...)...)
 }
