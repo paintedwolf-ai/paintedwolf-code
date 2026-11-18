@@ -58,8 +58,9 @@ truncating the WAL.
 
 `./task oar:verify` runs `test:oar` (engine, declared facts, copy rendering,
 tool vocabulary, full catalog construction, and rejection delivery) without
-`-short`, so catalog-wide walks that `test:short` skips still run, then the
-vendored standard corpus through `oar:conformance`. The full `check` gate
+`-short`, so catalog-wide walks that `test:short` skips still run, the walk of
+every intrinsic catalog rejection through the evaluator (`oar:rejection-walk`),
+then the vendored standard corpus through `oar:conformance`. The full `check` gate
 includes it. `oar:conformance --json` is the machine-readable standard report
 for comparison with other implementations.
 
@@ -74,6 +75,8 @@ observable behavior; they do not freeze prompt wording.
 ## Test rules
 
 - Tests make no real LLM calls. Use fixtures, stub providers, fake MCP servers, and `LYCAON_LLM_MOCK=1`. Live provider smoke tests require the `live_llm` build tag in addition to credentials; they never run in normal, full, race, or coverage suites and still require separate authorization for paid calls.
+- Every test runs in a scheduled tier or is named in the declared not-run set (`not_run` in `scripts/verification-plan.json`): the `live_llm`, `live_web` and `live_scanners` tags, which a person runs, and the tests that build only for Windows or for systems the product does not ship on, each group with its reason. The static job's tier check (`scripts/ci_policy/tier_reach`) reads the catalog lanes, the `./task` steps of tier workflows and the digest calls of scripted tasks, and fails on a test whose build tags, platform, `-short` skip, environment gate or name filter no run satisfies; it also fails on a not-run entry that some run reaches or that names no test. Environment gates count only through the variables the scheduler passes on, so a gate variable is declared in the catalog's environment list.
+- Tests that build only for macOS run in the platform job's macOS step; Rust tests that do run in the `native-macos` lane, nightly and in the merge queue when the updater changes. Source-transport outages are rehearsed there under the `fieldfixture` tag, against a loopback NFS volume the tests mount and cut (`internal/testutil/sourceoutage`).
 - Invalid manifests, unknown vocabulary ids, and forbidden ids fail at load or transition time.
 - New HTTP routes carry a contract test and an authenticated HTTP journey.
 - Durable encoding tests compare exact bytes, BOM state, line endings, and raw hashes.
@@ -82,7 +85,7 @@ observable behavior; they do not freeze prompt wording.
 - Race failures are product failures. Fix the synchronization boundary; do not skip, retry, or sleep around them.
 - Each E2E tier starts and stops its own dependencies.
 - Fixture corpora are committed. A test keyed to a path outside the repository runs on one machine and skips on every other.
-- A suite that needs a provisioned host — applied Seatbelt, a staged scanner engine — derives its gated inventory from source and fails when the declared CI scope does not reach a member. Where a job promises the suite, its `*_REQUIRED` flag makes a missing dependency fatal instead of a skip.
+- A suite that needs a provisioned host — applied Seatbelt, a staged scanner engine — derives its gated inventory from source and fails when the declared CI scope does not reach a member. Where a job promises the suite, its `*_REQUIRED` flag makes a missing dependency fatal instead of a skip. A test that needs confinement or process lineage calls `testutil.RequireConfinement` or `RequireLineage`; hosted lanes set `PW_CONFINE_REQUIRED=1`, so an unconfined runner fails rather than passing by covering nothing. Digests name every skipped test with its message.
   Applied Seatbelt recipes live in `scripts/verification-plan.json`: the complete confinement package, the exact packages owning gated consumers with their integration build tag, and the scanner stress suite. The existing source-derived inventory checks these declarations. Each stage enters through `./task test:seatbelt` and retains its own captured-source evidence.
 - A test belongs in the cheapest layer that can prove its promise. Unit/component tests exercise one domain boundary with in-process collaborators; repository contracts prove a durable cross-tree invariant; wiring tests prove assembled managers; HTTP and browser tiers prove a user-visible journey. Do not use a repository scan to stand in for behavior, or an end-to-end journey to prove a parser branch.
 - `test:short` is only the unit/component feedback loop. Repository contracts run beside it as their own `test:contract` stage of `check-fast`, because they are cheap and are the boundary changes most often cross. `test:integration:changes` runs the integration-tagged tests of the packages a change edits directly; the merge queue runs the packages that import them. External integration, wiring, process smoke tests, and HTTP journeys remain mandatory but run as named closeout/release tiers, where their failure names the boundary rather than making every edit wait on a source-tree crawl.
