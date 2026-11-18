@@ -802,13 +802,13 @@ func TestRefusedPathsStayInsideTheRoots(t *testing.T) {
 				}
 				cells++
 				t.Run(name, func(t *testing.T) {
-					s, changed, delivered, _ := runPathCell(t, host, template, tpl, name, declineCard)
+					s, changed, delivered, cards := runPathCell(t, host, template, tpl, name, declineCard)
 					// A hard link is inside the roots, so reading it is not an escape.
 					if delivered && name != "hardlink" {
 						t.Errorf("%s through %s delivered the outside file", tpl.covers, name)
 					}
 					if len(changed) > 0 {
-						t.Errorf("%s through %s changed %v: %s", tpl.covers, name, changed, describePath(t, s, tpl))
+						t.Errorf("%s through %s changed %v after %d declined cards: %s", tpl.covers, name, changed, cards, describePath(t, s, tpl))
 					}
 				})
 			}
