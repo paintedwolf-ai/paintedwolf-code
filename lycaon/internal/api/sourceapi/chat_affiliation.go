@@ -11,7 +11,7 @@ func (s *Workspace) UserSourceChatAffiliation(r *http.Request) (sessionID string
 	if held, ok := r.Context().Value(sourceRequestAffiliationKey{}).(sourceRequestAffiliation); ok {
 		return held.sessionID, held.turn
 	}
-	sessionID, turn, err := requestscope.ChatAffiliation(r.Context(), s.SessionStore, "", r.URL.Query().Get("session_id"))
+	sessionID, turn, err := requestscope.ChatAffiliation(r.Context(), s.SessionStore.Sessions, "", r.URL.Query().Get("session_id"))
 	if err != nil {
 		return "", 0
 	}

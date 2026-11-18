@@ -35,7 +35,7 @@ func (s *HarnessPreparation) handleHarnessModelLimit(w http.ResponseWriter, r *h
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	session, ok := requestscope.Session(s.sessionStore, s.responses, w, r, request.SessionID)
+	session, ok := requestscope.Session(s.sessionStore.Sessions, s.responses, w, r, request.SessionID)
 	if !ok {
 		return
 	}

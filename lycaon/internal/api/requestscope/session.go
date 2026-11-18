@@ -15,6 +15,11 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
+type Sessions interface {
+	Get(context.Context, string) (*wire.Session, error)
+	GetWorktreeBinding(context.Context, string) (*store.WorktreeBinding, bool, error)
+}
+
 // SessionProject resolves roots for session-scoped filesystem and Git access.
 type SessionProject struct {
 	Project *project.Project
@@ -22,21 +27,21 @@ type SessionProject struct {
 	Binding *store.WorktreeBinding
 }
 
-func ResolveSessionProject(storeReader *store.Repositories, ctx context.Context, p *project.Project, sessionID string) (SessionProject, error) {
+func ResolveSessionProject(storeReader Sessions, ctx context.Context, p *project.Project, sessionID string) (SessionProject, error) {
 	roots := project.RootRefsFrom(p)
 	scope := SessionProject{Project: p, Roots: roots}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return scope, nil
 	}
-	sess, err := storeReader.Sessions.Get(ctx, sessionID)
+	sess, err := storeReader.Get(ctx, sessionID)
 	if err != nil {
 		return SessionProject{}, err
 	}
 	if sess == nil || strings.TrimSpace(sess.ProjectID) != strings.TrimSpace(p.ID) {
 		return SessionProject{}, store.ErrSessionNotFound
 	}
-	row, bound, err := storeReader.Sessions.GetWorktreeBinding(ctx, sessionID)
+	row, bound, err := storeReader.GetWorktreeBinding(ctx, sessionID)
 	if err != nil {
 		return SessionProject{}, err
 	}
@@ -60,7 +65,7 @@ func ResolveSessionProject(storeReader *store.Repositories, ctx context.Context,
 	return scope, nil
 }
 
-func ProjectForRequest(storeReader *store.Repositories, responses *httpio.Responder, w http.ResponseWriter, r *http.Request, p *project.Project) (*project.Project, bool) {
+func ProjectForRequest(storeReader Sessions, responses *httpio.Responder, w http.ResponseWriter, r *http.Request, p *project.Project) (*project.Project, bool) {
 	scope, ok := SessionProjectForRequest(storeReader, responses, w, r, p)
 	if !ok {
 		return nil, false
@@ -70,7 +75,7 @@ func ProjectForRequest(storeReader *store.Repositories, responses *httpio.Respon
 
 // SessionProjectForRequest keeps the worktree binding that resolved the
 // project; a binding means the chat's own checkout answered, not the project's.
-func SessionProjectForRequest(storeReader *store.Repositories, responses *httpio.Responder, w http.ResponseWriter, r *http.Request, p *project.Project) (SessionProject, bool) {
+func SessionProjectForRequest(storeReader Sessions, responses *httpio.Responder, w http.ResponseWriter, r *http.Request, p *project.Project) (SessionProject, bool) {
 	scope, err := ResolveSessionProject(storeReader, r.Context(), p, r.URL.Query().Get("session_id"))
 	if err != nil {
 		writeSessionProjectError(responses, w, r, err)
@@ -79,7 +84,7 @@ func SessionProjectForRequest(storeReader *store.Repositories, responses *httpio
 	return scope, true
 }
 
-func ProjectForSession(storeReader *store.Repositories, responses *httpio.Responder, w http.ResponseWriter, r *http.Request, p *project.Project, sessionID string) (*project.Project, bool) {
+func ProjectForSession(storeReader Sessions, responses *httpio.Responder, w http.ResponseWriter, r *http.Request, p *project.Project, sessionID string) (*project.Project, bool) {
 	scope, err := ResolveSessionProject(storeReader, r.Context(), p, sessionID)
 	if err != nil {
 		writeSessionProjectError(responses, w, r, err)
@@ -101,8 +106,8 @@ func writeSessionProjectError(responses *httpio.Responder, w http.ResponseWriter
 
 // Session writes 404 for an absent session and 500 for a store failure.
 // The boolean reports whether the handler may continue.
-func Session(storeReader *store.Repositories, responses *httpio.Responder, w http.ResponseWriter, r *http.Request, id string) (*wire.Session, bool) {
-	sess, err := storeReader.Sessions.Get(r.Context(), id)
+func Session(storeReader Sessions, responses *httpio.Responder, w http.ResponseWriter, r *http.Request, id string) (*wire.Session, bool) {
+	sess, err := storeReader.Get(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "session not found")
@@ -115,7 +120,7 @@ func Session(storeReader *store.Repositories, responses *httpio.Responder, w htt
 }
 
 // SessionExists checks membership and writes the corresponding lookup error.
-func SessionExists(storeReader *store.Repositories, responses *httpio.Responder, w http.ResponseWriter, r *http.Request, id string) bool {
+func SessionExists(storeReader Sessions, responses *httpio.Responder, w http.ResponseWriter, r *http.Request, id string) bool {
 	_, ok := Session(storeReader, responses, w, r, id)
 	return ok
 }

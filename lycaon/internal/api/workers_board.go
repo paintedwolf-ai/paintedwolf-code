@@ -70,7 +70,7 @@ func (s *Workers) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 		s.responses.FailDetails(w, wire.ApiErrorCodeInvalidQuery, map[string]any{"param": "session_id"}, "session_id query parameter is required")
 		return
 	}
-	scope, err := requestscope.ResolveSessionProject(s.sessionStore, r.Context(), p, sessionID)
+	scope, err := requestscope.ResolveSessionProject(s.sessionStore.Sessions, r.Context(), p, sessionID)
 	if err != nil {
 		s.Git.WriteGitReposLoadError(w, r, err)
 		return

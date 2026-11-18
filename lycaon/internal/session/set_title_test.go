@@ -226,9 +226,9 @@ func TestStoreOrdMonotonicAppend(t *testing.T) {
 				{Role: api.MessageRoleAssistant, Content: "second", CreatedAt: time.Date(2026, 7, 8, 12, 0, 1, 0, time.UTC)},
 				{Role: api.MessageRoleTool, Content: "third", CreatedAt: time.Date(2026, 7, 8, 12, 0, 2, 0, time.UTC)},
 			}
-			testutil.FailErr(t, "append batch", f.store.AppendMessages(ctx, f.sessionID, batch...))
+			testutil.FailErr(t, "append batch", f.store.Transcript.AppendMessages(ctx, f.sessionID, batch...))
 
-			got, err := f.store.GetMessages(ctx, f.sessionID)
+			got, err := f.store.Transcript.GetMessages(ctx, f.sessionID)
 			testutil.FailErr(t, "get messages", err)
 			if len(got) != len(batch) {
 				t.Fatalf("got %d messages, want %d", len(got), len(batch))
@@ -239,10 +239,10 @@ func TestStoreOrdMonotonicAppend(t *testing.T) {
 				}
 			}
 			// A second append continues the ordinal; it does not reset.
-			testutil.FailErr(t, "append second batch", f.store.AppendMessages(ctx, f.sessionID, api.Message{
+			testutil.FailErr(t, "append second batch", f.store.Transcript.AppendMessages(ctx, f.sessionID, api.Message{
 				Role: api.MessageRoleUser, Content: "fourth", CreatedAt: time.Now().UTC(),
 			}))
-			got2, err := f.store.GetMessages(ctx, f.sessionID)
+			got2, err := f.store.Transcript.GetMessages(ctx, f.sessionID)
 			testutil.FailErr(t, "get messages after second append", err)
 			if got2[len(got2)-1].Ord != int64(len(batch)+1) {
 				t.Fatalf("fourth message ord = %d, want %d (ordinal continues across appends)", got2[len(got2)-1].Ord, len(batch)+1)
@@ -263,14 +263,14 @@ func TestStoreOrdAndTSSurvivePatch(t *testing.T) {
 			f := tc.fixture(t)
 			ctx := context.Background()
 			created := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
-			testutil.FailErr(t, "append", f.store.AppendMessages(ctx, f.sessionID, api.Message{
+			testutil.FailErr(t, "append", f.store.Transcript.AppendMessages(ctx, f.sessionID, api.Message{
 				ID:        "draft-1",
 				Role:      api.MessageRoleAssistant,
 				Content:   "streaming...",
 				CreatedAt: created,
 			}))
 
-			before, err := f.store.GetMessages(ctx, f.sessionID)
+			before, err := f.store.Transcript.GetMessages(ctx, f.sessionID)
 			testutil.FailErr(t, "get messages before patch", err)
 			if len(before) != 1 {
 				t.Fatalf("got %d messages, want 1", len(before))
@@ -284,7 +284,7 @@ func TestStoreOrdAndTSSurvivePatch(t *testing.T) {
 
 			// A patch with a zero ts and a mutated body: the caller does not know
 			// the creation time and cannot overwrite it.
-			_, err = f.store.UpdateMessage(ctx, f.sessionID, "draft-1", api.Message{
+			_, err = f.store.Transcript.UpdateMessage(ctx, f.sessionID, "draft-1", api.Message{
 				ID:        "draft-1",
 				Role:      api.MessageRoleAssistant,
 				Content:   "committed body",
@@ -292,7 +292,7 @@ func TestStoreOrdAndTSSurvivePatch(t *testing.T) {
 			})
 			testutil.FailErr(t, "patch", err)
 
-			after, err := f.store.GetMessages(ctx, f.sessionID)
+			after, err := f.store.Transcript.GetMessages(ctx, f.sessionID)
 			testutil.FailErr(t, "get messages after patch", err)
 			if len(after) != 1 {
 				t.Fatalf("got %d messages after patch, want 1", len(after))

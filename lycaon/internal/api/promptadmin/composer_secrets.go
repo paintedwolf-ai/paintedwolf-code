@@ -27,7 +27,7 @@ func (s *Submission) HandleCreateComposerSecret(w http.ResponseWriter, r *http.R
 		return
 	}
 	sessionID := strings.TrimSpace(chi.URLParam(r, "id"))
-	sess, ok := requestscope.Session(s.Store, s.responses, w, r, sessionID)
+	sess, ok := requestscope.Session(s.Store.Sessions, s.responses, w, r, sessionID)
 	if !ok {
 		return
 	}

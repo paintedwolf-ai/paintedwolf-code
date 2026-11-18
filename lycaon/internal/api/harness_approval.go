@@ -67,7 +67,7 @@ func (s *HarnessControl) handleHarnessToolApprovalCheckpoint(w http.ResponseWrit
 	if command == "" {
 		command = "git push origin main"
 	}
-	sess, ok := requestscope.Session(s.sessionStore, s.responses, w, r, sessionID)
+	sess, ok := requestscope.Session(s.sessionStore.Sessions, s.responses, w, r, sessionID)
 	if !ok {
 		return
 	}

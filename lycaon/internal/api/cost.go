@@ -68,7 +68,7 @@ func (s *Activity) parseCostSummaryQuery(w http.ResponseWriter, r *http.Request)
 		s.responses.InvalidQueryParam(w, "project_id", "must not be combined with session_id")
 		return "", "", "", false
 	case sessionID != "":
-		if !requestscope.SessionExists(s.sessionStore, s.responses, w, r, sessionID) {
+		if !requestscope.SessionExists(s.sessionStore.Sessions, s.responses, w, r, sessionID) {
 			return "", "", "", false
 		}
 		return wire.CostScopeSession, sessionID, "", true

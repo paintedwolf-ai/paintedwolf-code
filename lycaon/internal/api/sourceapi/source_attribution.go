@@ -79,7 +79,7 @@ func (s *History) HandleGetProjectSourceAttribution(w http.ResponseWriter, r *ht
 		return
 	}
 	// Worktree-bound chats resolve attribution in their own workspace.
-	p, ok = requestscope.ProjectForRequest(s.SessionStore, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
 	if !ok {
 		return
 	}

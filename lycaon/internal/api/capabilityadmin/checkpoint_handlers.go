@@ -22,7 +22,7 @@ import (
 
 func (s *CheckpointActions) HandleListCheckpoints(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
+	if !requestscope.SessionExists(s.Store.Sessions, s.responses, w, r, sessionID) {
 		return
 	}
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
@@ -70,7 +70,7 @@ func (s *CheckpointActions) HandleListCheckpoints(w http.ResponseWriter, r *http
 
 func (s *CheckpointActions) HandleResolveCheckpoint(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
+	if !requestscope.SessionExists(s.Store.Sessions, s.responses, w, r, sessionID) {
 		return
 	}
 	checkpointID := chi.URLParam(r, "checkpoint_id")
@@ -127,7 +127,7 @@ func (s *CheckpointActions) HandleResolveCheckpoint(w http.ResponseWriter, r *ht
 // answer it.
 func (s *CheckpointActions) HandleBeginUnlockChallenge(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
+	if !requestscope.SessionExists(s.Store.Sessions, s.responses, w, r, sessionID) {
 		return
 	}
 	var body wire.BeginUnlockChallengeRequest

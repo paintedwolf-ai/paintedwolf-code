@@ -77,7 +77,7 @@ func (s *History) HandleListProjectSourceSeen(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
 	if !ok {
 		return
 	}

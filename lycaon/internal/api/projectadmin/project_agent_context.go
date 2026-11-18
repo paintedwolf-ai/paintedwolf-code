@@ -19,7 +19,7 @@ func (s *Projects) HandleGetProjectAgentContext(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.Store, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.Store.Sessions, s.responses, w, r, p)
 	if !ok {
 		return
 	}

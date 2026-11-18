@@ -14,7 +14,7 @@ import (
 
 func (s *Content) HandleListDraftVersions(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
+	if !requestscope.SessionExists(s.Store.Sessions, s.responses, w, r, sessionID) {
 		return
 	}
 	slotID := chi.URLParam(r, "slot_id")

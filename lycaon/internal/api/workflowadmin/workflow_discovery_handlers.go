@@ -23,7 +23,7 @@ func (s *RunControl) HandleListWorkflows(w http.ResponseWriter, r *http.Request)
 	projectID := strings.TrimSpace(r.URL.Query().Get("project_id"))
 	sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
 	if sessionID != "" {
-		sess, ok := requestscope.Session(s.Store, s.responses, w, r, sessionID)
+		sess, ok := requestscope.Session(s.Store.Sessions, s.responses, w, r, sessionID)
 		if !ok {
 			return
 		}
@@ -69,7 +69,7 @@ var workflowRunPageLimit = httpio.MustPageLimit(20, 1, 100)
 
 func (s *RunControl) HandleListSessionWorkflowRuns(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
+	if !requestscope.SessionExists(s.Store.Sessions, s.responses, w, r, sessionID) {
 		return
 	}
 	pq, err := httpio.ReadPageQuery(r, workflowRunPageLimit)

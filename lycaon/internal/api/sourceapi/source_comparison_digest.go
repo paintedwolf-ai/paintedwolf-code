@@ -33,7 +33,7 @@ func (s *Comparisons) HandleDigestSourceComparisons(w http.ResponseWriter, r *ht
 		s.Views.writeSourceViewError(w, r, err)
 		return
 	}
-	scoped, err := requestscope.ResolveSessionProject(s.SessionStore, r.Context(), p, request.SessionID)
+	scoped, err := requestscope.ResolveSessionProject(s.SessionStore.Sessions, r.Context(), p, request.SessionID)
 	if err != nil {
 		s.Views.writeSourceViewError(w, r, err)
 		return

@@ -19,7 +19,7 @@ func (s *HarnessPreparation) handleHarnessOverlays(w http.ResponseWriter, r *htt
 		s.harnessRequestRejected(w, r, "the fixture setup is not valid", err)
 		return
 	}
-	parent, ok := requestscope.Session(s.sessionStore, s.responses, w, r, request.SessionID)
+	parent, ok := requestscope.Session(s.sessionStore.Sessions, s.responses, w, r, request.SessionID)
 	if !ok {
 		return
 	}

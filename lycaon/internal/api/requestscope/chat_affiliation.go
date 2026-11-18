@@ -12,12 +12,12 @@ import (
 // chatAffiliation names the focused chat and the turn live when the change
 // lands. A chat the host cannot place leaves the change unaffiliated; a
 // person's text is never refused for its affiliation.
-func ChatAffiliation(ctx context.Context, sessions *store.Repositories, projectID, sessionID string) (string, int, error) {
+func ChatAffiliation(ctx context.Context, sessions Sessions, projectID, sessionID string) (string, int, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return "", 0, nil
 	}
-	sess, err := sessions.Sessions.Get(ctx, sessionID)
+	sess, err := sessions.Get(ctx, sessionID)
 	if errors.Is(err, store.ErrSessionNotFound) || (err == nil && sess == nil) {
 		return "", 0, nil
 	}

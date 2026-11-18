@@ -15,7 +15,7 @@ import (
 func (s *Composition) HandlePersistWorkflow(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	workflowID := chi.URLParam(r, "workflow_id")
-	sess, ok := requestscope.Session(s.Store, s.responses, w, r, sessionID)
+	sess, ok := requestscope.Session(s.Store.Sessions, s.responses, w, r, sessionID)
 	if !ok {
 		return
 	}

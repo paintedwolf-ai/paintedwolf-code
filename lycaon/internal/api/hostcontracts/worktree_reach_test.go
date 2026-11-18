@@ -297,7 +297,7 @@ func TestWorktreeReachSourceHistoryCannotChangeGitRepositoryIdentity(t *testing.
 	sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
 	p, err := srv.Sources.Workspace.ProjectRegistry.Get(t.Context(), projectID)
 	testutil.FailErr(t, "load project", err)
-	scope, err := requestscope.ResolveSessionProject(srv.Sources.Workspace.SessionStore, t.Context(), p, sess.ID)
+	scope, err := requestscope.ResolveSessionProject(srv.Sources.Workspace.SessionStore.Sessions, t.Context(), p, sess.ID)
 	testutil.FailErr(t, "resolve worktree", err)
 	if scope.Binding == nil {
 		t.Fatal("expected worktree binding")

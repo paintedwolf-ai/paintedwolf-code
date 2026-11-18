@@ -22,7 +22,7 @@ func (s *History) HandleGetProjectSourceWalkSummary(w http.ResponseWriter, r *ht
 	if !ok {
 		return
 	}
-	project, ok = requestscope.ProjectForRequest(s.SessionStore, s.responses, w, r, project)
+	project, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, project)
 	if !ok {
 		return
 	}
@@ -238,7 +238,7 @@ func (s *History) scopeProjectForWalk(w http.ResponseWriter, r *http.Request, p 
 		}
 		sessionID = bas.SessionID
 	}
-	scoped, ok := requestscope.ProjectForSession(s.SessionStore, s.responses, w, r, p, sessionID)
+	scoped, ok := requestscope.ProjectForSession(s.SessionStore.Sessions, s.responses, w, r, p, sessionID)
 	return scoped, sessionID, ok
 }
 

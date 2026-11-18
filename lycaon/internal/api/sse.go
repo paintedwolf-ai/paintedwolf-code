@@ -33,7 +33,7 @@ func (s *Conversation) streamReplayMessage(w http.ResponseWriter, r *http.Reques
 func (s *Conversation) handleStream(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	messageID := strings.TrimSpace(r.URL.Query().Get("message"))
-	if !requestscope.SessionExists(s.sessionStore, s.responses, w, r, id) {
+	if !requestscope.SessionExists(s.sessionStore.Sessions, s.responses, w, r, id) {
 		return
 	}
 	flusher, ok := w.(http.Flusher)

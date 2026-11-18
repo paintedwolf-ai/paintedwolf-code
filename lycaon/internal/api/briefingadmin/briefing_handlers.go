@@ -108,7 +108,7 @@ func (s *EngineRoutes) HandleGetBriefingRecord(w http.ResponseWriter, r *http.Re
 		if audience == "" {
 			return true, nil
 		}
-		_, err := requestscope.ResolveSessionProject(s.sessions, ctx, p, audience)
+		_, err := requestscope.ResolveSessionProject(s.sessions.Sessions, ctx, p, audience)
 		if errors.Is(err, store.ErrSessionNotFound) {
 			return false, nil
 		}

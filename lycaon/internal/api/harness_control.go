@@ -60,7 +60,7 @@ func (s *HarnessControl) handleHarnessPreview(w http.ResponseWriter, r *http.Req
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "page_id and op are required")
 		return
 	}
-	sess, ok := requestscope.Session(s.sessionStore, s.responses, w, r, event.SessionID)
+	sess, ok := requestscope.Session(s.sessionStore.Sessions, s.responses, w, r, event.SessionID)
 	if !ok {
 		return
 	}

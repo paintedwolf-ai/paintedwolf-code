@@ -12,7 +12,7 @@ import (
 
 func (s *Conversation) requireBackgroundProcessSession(w http.ResponseWriter, r *http.Request) (string, bool) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
-	if !requestscope.SessionExists(s.sessionStore, s.responses, w, r, id) {
+	if !requestscope.SessionExists(s.sessionStore.Sessions, s.responses, w, r, id) {
 		return "", false
 	}
 	return id, true

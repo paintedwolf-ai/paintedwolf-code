@@ -171,7 +171,7 @@ func (s *Server) markRestorePending() {
 
 func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	sess, ok := requestscope.Session(s.sessionStore, &s.responses, w, r, id)
+	sess, ok := requestscope.Session(s.sessionStore.Sessions, &s.responses, w, r, id)
 	if !ok {
 		return
 	}

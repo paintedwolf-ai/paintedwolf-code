@@ -22,7 +22,7 @@ type worktreeScope struct {
 }
 
 func (s *Handler) resolveWorktreeScope(w http.ResponseWriter, r *http.Request, sessionID string) (worktreeScope, bool) {
-	sess, ok := requestscope.Session(s.SessionStore, s.responses, w, r, sessionID)
+	sess, ok := requestscope.Session(s.SessionStore.Sessions, s.responses, w, r, sessionID)
 	if !ok {
 		return worktreeScope{}, false
 	}

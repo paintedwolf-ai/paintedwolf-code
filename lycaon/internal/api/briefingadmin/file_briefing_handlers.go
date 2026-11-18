@@ -17,7 +17,7 @@ func (s *Handler) HandleRequestFileBriefing(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
 	if !ok {
 		return
 	}
@@ -68,7 +68,7 @@ func (s *Handler) HandleGetFileBriefing(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
 	if !ok {
 		return
 	}
