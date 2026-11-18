@@ -13,7 +13,7 @@ import (
 
 // prepareRefs records each root's ref undo. Only the built-in namespaced importer runs, because its
 // refs can be restored by compare-and-swap.
-func (txn *Transaction) prepareRefs(m Manifest, targetRoots map[string]string) ([]refUndo, error) {
+func (txn *Transaction) prepareRefs(m Manifest, targetRoots map[string]string, primaryID string) ([]refUndo, error) {
 	if !m.PrivateGit.HasRefs() {
 		return nil, nil
 	}
@@ -24,7 +24,7 @@ func (txn *Transaction) prepareRefs(m Manifest, targetRoots map[string]string) (
 		return nil, err
 	}
 	var undo []refUndo
-	if primaryID := selectPrimaryRootID(targetRoots); len(m.PrivateGit.Refs) > 0 && repositoryPresent(targetRoots[primaryID]) {
+	if len(m.PrivateGit.Refs) > 0 && repositoryPresent(targetRoots[primaryID]) {
 		txn.journal.Checkpoint.PrimaryRootID = primaryID
 		refs, err := txn.rootRefUndo(m, primaryID, targetRoots[primaryID], m.PrivateGit.Refs)
 		if err != nil {

@@ -31,7 +31,7 @@ inputs:
     description: Provision GTK and display dependencies for protected launch tests
     default: 'false'
   repository-tools:
-    description: Install native package and signature tools used by repository and script-coverage fixtures
+    description: Install native package, lint and signature tools used by repository, package metadata and script-coverage fixtures
     default: 'false'
   nix:
     description: Provision the pinned Nix toolchain and locked flake inputs before an offline Nix lane
@@ -65,6 +65,9 @@ outputs:
   decide-cache-hit:
     description: Whether the decision engine's exact build cache was restored
     value: ${{ steps.decide.outputs.cache-hit }}
+  generation-cache-hit:
+    description: Whether the generation runtime's exact build cache was restored
+    value: ${{ steps.generation.outputs.cache-hit }}
   document-cache-hit:
     description: Whether the document compiler cache was restored
     value: ${{ steps.document.outputs.cache-hit }}
@@ -77,6 +80,12 @@ outputs:
   rust-cache-hit:
     description: Whether the Tauri shell dependency build for the current lockfile was restored
     value: ${{ steps.rust.outputs.cache-hit }}
+  go-modules-cache-hit:
+    description: Whether the Go module downloads for the current go.sum files were restored
+    value: ${{ steps.modules.outputs.go-cache-hit }}
+  cargo-cache-hit:
+    description: Whether the Cargo downloads for the current lockfiles were restored
+    value: ${{ steps.modules.outputs.cargo-cache-hit }}
 runs:
   using: composite
   steps:
@@ -134,6 +143,12 @@ runs:
       shell: bash
       run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
 
+    - id: modules
+      uses: ./.github/actions/cache-modules
+      with:
+        go: ${{ inputs.setup != 'frontend' }}
+        lookup-only: ${{ inputs.lookup-only }}
+
     - name: Allow verification engines to create user namespaces
       if: inputs.lookup-only != 'true' && (runner.os == 'Linux')
       shell: bash
@@ -170,6 +185,13 @@ runs:
       id: decide
       if: inputs.setup == 'shell'
       uses: ./.github/actions/cache-decide
+      with:
+        lookup-only: ${{ inputs.lookup-only }}
+
+    - name: Restore the generation runtime build
+      id: generation
+      if: inputs.setup == 'shell'
+      uses: ./.github/actions/cache-generation
       with:
         lookup-only: ${{ inputs.lookup-only }}
 

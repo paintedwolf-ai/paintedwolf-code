@@ -16,11 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func buildMountTransition(t *testing.T, output string) {
-	t.Helper()
-	testutil.FailErr(t, "build mount transition image", buildMountTransitionImage(output))
-}
-
 func buildMountTransitionImage(output string) error {
 	command := exec.Command("python3", "-m", "scripts.linux_release.mount_intake", "--output", output, "--architecture", runtime.GOARCH)
 	command.Dir = filepath.Join("..", "..", "..")
@@ -31,8 +26,7 @@ func buildMountTransitionImage(output string) error {
 }
 
 func TestMountTransitionBuildIsFreestandingAndRefusesUnprivilegedInputs(t *testing.T) {
-	image := filepath.Join(t.TempDir(), "pw-mount-intake-transition")
-	buildMountTransition(t, image)
+	image := fixtureBinary(t, "pw-mount-intake-transition")
 	object, err := elf.Open(image)
 	testutil.FailErr(t, "inspect fixed transition", err)
 	defer func() { _ = object.Close() }()

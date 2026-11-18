@@ -162,7 +162,7 @@ func TestWorktreeReach_tabAndBoardAgree(t *testing.T) {
 	// The board reads Git status through the status cache, which fills after
 	// its first revalidation.
 	var snap *wire.BoardSnapshot
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the board lists the worktree", func() bool {
 		built, err := srv.Admin.Project.Sandboxes.Board.Build(t.Context(), projectID, binding.WorktreePath, sess.ID, wire.BoardDetailLevelCompact, agentRoots)
 		testutil.FailErr(t, "board Build", err)
 		snap = built

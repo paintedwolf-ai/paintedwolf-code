@@ -62,7 +62,7 @@ func TestFixedReaderCancellationAndStartFailureAreBoundedAndPrivate(t *testing.T
 	// records its descendant; either ending must leave no descendant running.
 	var err error
 	returned := false
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the reader's descendant starts or the read returns", func() bool {
 		select {
 		case err = <-done:
 			returned = true
@@ -81,7 +81,7 @@ func TestFixedReaderCancellationAndStartFailureAreBoundedAndPrivate(t *testing.T
 	}
 	raw, _ := os.ReadFile(descendant)
 	if pid, parseErr := strconv.Atoi(strings.TrimSpace(string(raw))); parseErr == nil {
-		testutil.WaitFor(t, func() bool { return !processRunning(pid) })
+		testutil.WaitFor(t, "the reader's descendant exits", func() bool { return !processRunning(pid) })
 	}
 	_, _, err = read(t.Context(), "/nonexistent/private-reader-secret")
 	if err == nil || strings.Contains(err.Error(), "secret") {

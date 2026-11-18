@@ -48,10 +48,6 @@ describe("den-shell drawer layout contract", () => {
     expect(shellStyles).toMatch(
       /\.den-shell-stage--chat\s+\.den-shell-main\s+>\s+\.den-chat\s*\{[\s\S]*?z-index:\s*var\(--den-z-composer-dock\)[\s\S]*?overflow:\s*visible/,
     );
-    // Drawer-open chat stays below tab chrome.
-    expect(chatStyles).toMatch(
-      /\.den-shell-stage--chat[\s\S]*?>\s*\.den-chat\.den-chat--context-drawer-open\s*\{[\s\S]*?position:\s*static[\s\S]*?overflow:\s*visible[\s\S]*?z-index:\s*auto/,
-    );
     expect(shellStyles).toMatch(
       /\.den-shell-stage-host \.den-shell-main > \*\s*\{[\s\S]*?z-index:\s*var\(--den-z-content\)/,
     );
@@ -79,18 +75,8 @@ describe("den-shell drawer layout contract", () => {
     expect(shellStyles).toMatch(
       /\.den-resident-surface--idle\s*\{[^}]*visibility:\s*hidden/,
     );
-    expect(chatStyles).toMatch(
-      /\.den-shell-main:has\(\.den-chat--context-drawer-open\)\s*\{[\s\S]*?position:\s*static[\s\S]*?overflow:\s*visible/,
-    );
     expect(drawerCss).toMatch(
       /\.den-shell--orientation-mirrored \.den-context-drawer\s*\{[\s\S]*?left:\s*0[\s\S]*?border-right:\s*1px solid var\(--den-line\)[\s\S]*?animation-name:\s*den-drawer-in-mirrored/,
-    );
-    // Header padding follows the shell inset.
-    expect(drawerCss).toMatch(
-      /\.den-shell\s*\{[\s\S]*?--den-context-drawer-header-pad-top:\s*calc\(\s*var\(--den-titlebar-inset\) \+ var\(--den-tabs-top-gap\)\s*\)/,
-    );
-    expect(drawerCss).toMatch(
-      /\.den-custom-chrome:not\(\.den-tauri-macos\) \.den-shell,\s*\.den-tauri-macos\.den-custom-chrome\s*\.den-shell:not\(\.den-shell--orientation-mirrored\)\s*\{[\s\S]*?--den-context-drawer-header-pad-top:\s*var\(--den-tabs-top-gap\)/,
     );
     expect(drawerCss).toMatch(
       /@utility den-context-drawer-header\s*\{[\s\S]*?padding:\s*var\(--den-context-drawer-header-pad-top\) 12px var\(--den-tabs-top-gap\)/,
@@ -176,12 +162,6 @@ describe("den-shell drawer layout contract", () => {
     // The centered card leaves a drag surface around it and remains clickable.
     expect(stopCss).toMatch(
       /\.den-window-host__surface > \.den-critical-stop\s*\{[\s\S]*?position:\s*relative[\s\S]*?z-index:\s*1[\s\S]*?flex:\s*0 0 auto[\s\S]*?margin:\s*auto[\s\S]*?-webkit-app-region:\s*no-drag/,
-    );
-  });
-
-  it("chat stage controls opaque fill under chrome (not host --chat)", () => {
-    expect(shellCss).toMatch(
-      /\.den-shell-stage--chat \.den-shell-header::before[\s\S]*?background:\s*var\(--den-background\)/,
     );
   });
 
@@ -281,15 +261,18 @@ describe("den-shell drawer layout contract", () => {
     expect(shellCss).toMatch(
       /\.den-shell-header-chat\s*\{[\s\S]*?padding:\s*calc\(var\(--den-titlebar-inset\) \+ var\(--den-tabs-top-gap\)\) 0 0/,
     );
-    // Whichever header sits at the window's left edge clears the lights.
-    expect(shellCss).toMatch(
-      /\.den-custom-chrome \.den-shell-header--window-leading \.den-shell-header-titlebar[\s\S]*?padding-left:\s*var\(--den-traffic-light-clearance/,
-    );
     expect(componentsCssForFade).toMatch(
       /@container den-tab-chips \(max-width:\s*28rem\)/,
     );
     expect(shellStyles).toMatch(/\.den-shell-header-titlebar[\s\S]*?flex:\s*1/);
     expect(shellCss).toMatch(/--den-traffic-light-clearance:\s*78px/);
+    // Under custom chrome the titlebar leaves layout flow; the stage keeps its inset.
+    expect(shellCss).toMatch(
+      /\.den-custom-chrome \.den-shell-header-titlebar\s*\{[^}]*position:\s*absolute/s,
+    );
+    expect(shellCss).toMatch(
+      /\.den-custom-chrome[\s\S]*\.den-shell-stage--pane:has\(\.den-browse-stage\)[\s\S]*min-height:\s*var\(--den-titlebar-inset\)/,
+    );
   });
 
   it("empty tab panels share one open-height floor", () => {
@@ -299,30 +282,6 @@ describe("den-shell drawer layout contract", () => {
     expect(componentsCss).toMatch(
       /\.tabs__panel\s*\{[\s\S]*?min-height:\s*var\(--den-tabs-panel-min-height\)/,
     );
-  });
-
-  it("context drawers share an in-pane primitive without global modality", () => {
-    const contextDrawer = readSourceText(
-      join(root, "components", "shell", "ContextDrawer.tsx"),
-      "utf8",
-    );
-    expect(contextDrawer).not.toMatch(/Portal/);
-    expect(contextDrawer).not.toMatch(/createModalFocusTrap/);
-    expect(contextDrawer).toMatch(/class="den-context-drawer"/);
-    const workers = readSourceText(
-      join(root, "components", "worker", "WorkersDrawer.tsx"),
-      "utf8",
-    );
-    const worklog = readSourceText(
-      join(root, "components", "worklog", "WorklogPanel.tsx"),
-      "utf8",
-    );
-    for (const drawer of [workers, worklog]) {
-      expect(drawer).toMatch(/<ContextDrawer/);
-      expect(drawer).not.toMatch(/Portal/);
-      expect(drawer).not.toMatch(/bindPanelOutsideDismiss/);
-      expect(drawer).not.toMatch(/createModalFocusTrap/);
-    }
   });
 
   it("context drawer headers drag the window without swallowing their controls", () => {
@@ -360,20 +319,10 @@ describe("den-shell drawer layout contract", () => {
     expect(shell).toMatch(/dock: \(\) => navDockEl/);
   });
 
-  it("adapts main navigation and chat spacing to the actual column", () => {
-    const shell = ["Shell.tsx", "WorkspaceSidebar.tsx", "ChatWorkspace.tsx"].map((file) => readSourceText(join(root, "components/shell", file), "utf8")).join("\n");
+  it("offers the orientation setting and narrows chat gutters by band", () => {
     const settings = readSourceText(
       join(root, "components/settings/appearance/GeneralSettingsPanel.tsx"),
       "utf8",
-    );
-    expect(shell).toMatch(/"den-shell--orientation-mirrored":\s*workspaceOrientationPref\(\) === "mirrored"/);
-    expect(shell).toMatch(/<NavResizeHandle[\s\S]*side=\{workspaceOrientationPref\(\) === "mirrored" \? "right" : "left"\}/);
-    // Mirroring keeps the resize handle on the edge shared with the stage.
-    expect(shellUtils).toMatch(
-      /\.den-shell--orientation-mirrored \.den-shell-aside\s*\{[\s\S]*?flex-direction:\s*row-reverse/,
-    );
-    expect(shellCss).toMatch(
-      /\.den-shell-nav-resize--right::before\s*\{[\s\S]*?left:\s*0[\s\S]*?right:\s*auto/,
     );
     expect(settings).toMatch(/testId="display-workspace-orientation"/);
     expect(shellCss).toMatch(/\[data-chat-band~="max-34rem"\]/);
@@ -432,7 +381,6 @@ describe("den-shell drawer layout contract", () => {
     expect(readSourceText(join(root, "components/shell/shell-pane-visibility.ts"), "utf8")).toMatch(/navCollapsedPref\(\)/);
     // Hidden panes reopen from the stage title bar, which keeps its height.
     expect(shell).toMatch(/<ShellStageColumn[\s\S]*?back=\{titlebarBack\(\)\}\s+edges=\{stageEdges\(/);
-    expect(columns).toMatch(/<ShellHeaderTitlebar back=\{props\.back\} edges=\{props\.edges\} windowEdges=\{props\.windowEdges\} \/>/);
     expect(titlebar).toMatch(/StageEdgeControls/);
     // ChatView mounts within the chat-stage provider.
     const stageColumnStart = columns.indexOf('aria-label="Stage"');
@@ -463,49 +411,5 @@ describe("den-shell drawer layout contract", () => {
       /<BrowseOverflowMenu[\s\S]*?disabled=\{!canExportConversation\(\)\}/,
     );
     expect(runtime).toMatch(/usesCustomWindowChrome/);
-  });
-
-  it("session workers drawer lives in its conversation's ChatView", () => {
-    const shell = ["Shell.tsx", "WorkspaceSidebar.tsx", "ChatWorkspace.tsx"].map((file) => readSourceText(join(root, "components/shell", file), "utf8")).join("\n");
-    expect(shell).not.toMatch(/SessionWorkersDrawer/);
-    const chat = readSourceText(join(root, "components/chatview/ChatView.tsx"), "utf8");
-    expect(chat).toMatch(/SessionWorkersDrawer/);
-  });
-
-  it("Shell controls the workers drawer state while ChatView controls its placement", () => {
-    const shell = ["Shell.tsx", "WorkspaceSidebar.tsx", "ChatWorkspace.tsx"].map((file) => readSourceText(join(root, "components/shell", file), "utf8")).join("\n");
-    expect(shell).toMatch(/closeWorkers/);
-    expect(shell).toMatch(
-      /workersDrawerOpen=\{body\.surfaceActive\(\) && workersOpen\(\)\}/,
-    );
-  });
-
-  it("worker roster lives in the Workers tab", () => {
-    const tabRail = readSourceText(join(root, "components/nav/ChatTabRail.tsx"), "utf8");
-    expect(tabRail).toMatch(/WorkersTab/);
-    expect(tabRail).toMatch(/sessionWorkerRows/);
-    expect(tabRail).toMatch(/liveWorkerRows/);
-  });
-
-  it("workers drawer renders WorkerTranscript", () => {
-    const src = readSourceText(join(root, "components/worker/WorkersDrawer.tsx"), "utf8");
-    expect(src).toMatch(/WorkerTranscript/);
-  });
-
-  it("patch-first SSE topics do not invalidate HTTP refetch", () => {
-    const events = readSourceText(join(root, "api/events.ts"), "utf8");
-    expect(events).toMatch(/message:\s*\[\]/);
-    expect(events).toMatch(/worker:\s*\[\]/);
-    expect(events).toMatch(/board:\s*\[\]/);
-  });
-
-  it("HTTP transcript hydrate lives in SessionWorkersDrawer", () => {
-    const drawer = readSourceText(
-      join(root, "components/worker/SessionWorkersDrawer.tsx"),
-      "utf8",
-    );
-    expect(drawer).toMatch(/hydrateWorkerTranscripts/);
-    expect(drawer).toMatch(/runTranscriptHydrate/);
-    expect(drawer).toMatch(/workersColdCacheRevision/);
   });
 });

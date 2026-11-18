@@ -31,7 +31,7 @@ func TestBriefRevokesEmptyClaimWhenIndexGenerationAdvances(t *testing.T) {
 	}
 	testutil.FailErr(t, "create source file", os.WriteFile(filepath.Join(root, "main.py"), []byte("print('hello')\n"), 0600))
 	catalog.InvalidateRoot(root, "main.py")
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the index is complete and idle", func() bool {
 		status, err := catalog.Trees.IndexStatus(ctx, "p", sourcecatalog.Root{ID: "r", Path: root})
 		return err == nil && status.Complete && !status.Refreshing && status.Revision != initial.Generation
 	})

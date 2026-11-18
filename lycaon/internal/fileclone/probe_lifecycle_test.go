@@ -61,7 +61,7 @@ func TestCloneProbeOwnsLifetimeAcrossPrimitiveOutcomes(t *testing.T) {
 							}
 						}
 						if !failed && !cancelled && !cleanupFailed && err != nil {
-							t.Fatal(err)
+							testutil.FailErr(t, "probe with no injected fault", err)
 						}
 						entries, readErr := os.ReadDir(root)
 						if readErr != nil {

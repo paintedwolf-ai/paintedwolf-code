@@ -159,7 +159,7 @@ func TestProjectSourceIndexWarmsOffRequestPath(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 
 	var summary wire.SourceIndexSummary
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the source index warms", func() bool {
 		req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/source/index", nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
@@ -192,7 +192,7 @@ func TestSourceSearchRestrictsCoverageToRequestedRoot(t *testing.T) {
 	testutil.FailErr(t, "attach unavailable root", err)
 	testutil.FailErr(t, "remove unavailable root", os.Remove(other))
 	var result wire.SourceSearchResponse
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the search covers the requested root", func() bool {
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/source/search?q=match&root_id="+p.Roots[0].ID, nil))
 		if w.Code != http.StatusOK && w.Code != http.StatusAccepted {
@@ -216,7 +216,7 @@ func TestSourceSearchReadsAPastedFullPathAndLocation(t *testing.T) {
 	search := func(q string) (wire.SourceSearchResponse, string) {
 		var result wire.SourceSearchResponse
 		var body string
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "the search finds the pasted location", func() bool {
 			w := httptest.NewRecorder()
 			srv.ServeHTTP(w, contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/source/search?q="+url.QueryEscape(q), nil))
 			if w.Code != http.StatusOK && w.Code != http.StatusAccepted {

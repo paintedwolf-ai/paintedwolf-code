@@ -268,9 +268,9 @@ fn exercise_adapter(peer: Peer) {
             assert_eq!(service.read(&main).await.unwrap(), text);
         }
 
-        // A peer that asks later is still served by the owner.
+        // The owner keeps serving every peer request, not only the first.
         service.write(&main, "served later ✓".into()).await.unwrap();
-        std::thread::sleep(Duration::from_millis(500));
+        assert_eq!(peer.read_until(Some("served later ✓")).as_deref(), Some("served later ✓"));
         assert_eq!(peer.read().as_deref(), Some("served later ✓"));
         assert_eq!(peer.read().as_deref(), Some("served later ✓"));
 

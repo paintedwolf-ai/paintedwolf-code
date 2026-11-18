@@ -180,6 +180,7 @@ func (s mergeEngine) applyPromoteOverlayPlans(ctx context.Context, work promoteW
 	if err != nil {
 		return api.WorkerMergeResult{}, err
 	}
+	defer claim.stopOnPanic()
 	revertPending := func() error { return s.releaseMergeClaim(ctx, claim) }
 	if s.Captures != nil {
 		s.Captures.RecordPromotedPrimaryPaths(ctx, work.sessionID, promoteMutationIdentities(plans.all))
@@ -299,6 +300,7 @@ func (s mergeEngine) finalizeEmptyPromote(ctx context.Context, sessionID string,
 	if err != nil {
 		return out, err
 	}
+	defer claim.stopOnPanic()
 	rebased, childStatuses, err := s.assessChildRebases(claimCtx, sessionID, jobID)
 	if err != nil {
 		return out, errors.Join(err, s.releaseMergeClaim(ctx, claim))

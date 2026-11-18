@@ -7,10 +7,6 @@ import {
   VITEST_HOOK_TIMEOUT_MS,
 } from "./src/test/vitest-timeouts.ts";
 
-const includePerf = process.env.LYCAON_VITEST_PERF === "1";
-const vitestFast = process.env.LYCAON_VITEST_FAST === "1";
-// Changed-coverage runs measure only tests related to changed sources, whatever else changed.
-const changedOnly = process.env.PW_VITEST_CHANGED_ONLY === "1";
 const denRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(denRoot, "..");
 
@@ -20,44 +16,6 @@ function maxWorkers(): number {
     throw new Error("Verification admission must set PW_VITEST_MAX_WORKERS to a positive integer");
   }
   return workers;
-}
-
-const VITEST_FAST_INCLUDE = [
-  "src/api/events.test.ts",
-  "src/platform/connection/tauri-ipc-parity.contract.test.ts",
-  "src/store/app-state.test.ts",
-  "src/store/app-state.activity.test.ts",
-  "src/store/app-state.transcript.test.ts",
-  "src/store/app-state.workers.test.ts",
-  "src/store/app-state.board.test.ts",
-  "src/chat/send/pending-sends.test.ts",
-  "src/chat/transcript/projection/transcript-items.test.ts",
-  "src/chat/transcript/projection/transcript-drafts.test.ts",
-  "src/chat/transcript/projection/transcript-workflow-feedback.test.ts",
-  "src/chat/transcript/projection/transcript-tool-results.test.ts",
-  "src/chat/transcript/projection/transcript-message-visibility.test.ts",
-  "src/chat/transcript/projection/transcript-tool-visibility.test.ts",
-  "src/chat/transcript/projection/transcript-ordering.test.ts",
-  "src/chat/transcript/projection/transcript-progress.test.ts",
-  "src/chat/transcript/projection/transcript-incremental.test.ts",
-  "src/chat/workflow/workflow-spans.test.ts",
-  "src/search/search-query-model.test.ts",
-  "src/settings/providers/models-editor-model.test.ts",
-  "src/App.boot.test.tsx",
-  "src/components/transcript/pending-transcript.test.tsx",
-] as const;
-
-function projectInclude(kind: "ts" | "tsx"): string[] {
-  if (vitestFast) {
-    return VITEST_FAST_INCLUDE.filter((p) => p.endsWith(`.${kind}`));
-  }
-  return [`src/**/*.test.${kind}`];
-}
-
-function projectExclude(kind: "ts" | "tsx"): string[] {
-  const extra: string[] = [];
-  if (!includePerf) extra.push(`src/**/*.perf.test.${kind}`);
-  return extra;
 }
 
 export default defineConfig({
@@ -70,7 +28,6 @@ export default defineConfig({
   test: {
     globals: true,
     maxWorkers: maxWorkers(),
-    ...(changedOnly ? { forceRerunTriggers: [] } : {}),
     testTimeout: VITEST_DEFAULT_TIMEOUT_MS,
     hookTimeout: VITEST_HOOK_TIMEOUT_MS,
     setupFiles: ["./vitest.setup.ts"],
@@ -83,8 +40,7 @@ export default defineConfig({
         test: {
           name: "model",
           environment: "node",
-          include: projectInclude("ts"),
-          exclude: projectExclude("ts"),
+          include: ["src/**/*.test.ts"],
         },
       },
       {
@@ -92,8 +48,7 @@ export default defineConfig({
         test: {
           name: "dom",
           environment: "jsdom",
-          include: projectInclude("tsx"),
-          exclude: projectExclude("tsx"),
+          include: ["src/**/*.test.tsx"],
         },
       },
     ],

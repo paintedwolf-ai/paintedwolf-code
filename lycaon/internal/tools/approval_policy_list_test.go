@@ -80,7 +80,7 @@ func TestApprovalPolicyListIncludesDeleteOnExecutor(t *testing.T) {
 		if err := reg.Register(n, func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 			return n, nil
 		}); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "reg.Register failed", err)
 		}
 	}
 	exec := toolexecution.NewExecutor(policy, reg, "implement")

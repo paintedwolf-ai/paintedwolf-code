@@ -83,9 +83,7 @@ func TestMaybeCurateSynthesisEvidenceOneCurateOverBudget(t *testing.T) {
 		AllowCurate:    true,
 		TopologyOutput: block,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "curate synthesis evidence", err)
 	if !out.Curated || !strings.Contains(out.EvidenceDigest, "Evidence digest (curated)") {
 		t.Fatalf("expected digest: %+v", out)
 	}

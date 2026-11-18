@@ -181,8 +181,8 @@ func TestLinuxConfineRunsOnBothArchitectures(t *testing.T) {
 	}
 	contractcheck.FailErr(t, "decode platform workflow", yaml.Unmarshal([]byte(contractcheck.ReadRepoFile(t, root, ".github/workflows/platform-verification.yml")), &workflow))
 	job := workflow.Jobs["upgrade-corpus"]
-	if job.Runner != "ubuntu-latest" {
-		t.Error("the amd64 upgrade-corpus job must use its declared Linux runner")
+	if job.Runner != "ubuntu-24.04" {
+		t.Error("the amd64 upgrade-corpus job must use the runner whose caches the warmer publishes")
 	}
 	want := []string{"sandbox", "supervisor", "launch", "browser", "helpers"}
 	var legs []string

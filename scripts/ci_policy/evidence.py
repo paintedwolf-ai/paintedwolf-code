@@ -28,7 +28,3 @@ def classify(record, failures):
         return 'runner_oom'
     return 'check_failure' if failures else 'unknown'
 
-
-def retryable(records, attempt):
-    failed = [r for r in records if r.get('classification') != 'passed']
-    return attempt == 1 and bool(failed) and all(r.get('classification') == 'runner_oom' for r in failed)

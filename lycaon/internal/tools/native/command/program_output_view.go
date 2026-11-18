@@ -116,6 +116,7 @@ func classifyOutputStream(w io.Writer) outputStreamClass {
 	return outputStreamClass{piped: true}
 }
 
+// countingStreamWriter records whether a producer wrote to its stream.
 type countingStreamWriter struct {
 	w     io.Writer
 	bytes atomic.Int64
@@ -129,23 +130,28 @@ func (c *countingStreamWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-func (c *countingStreamWriter) writeLocated(p []byte) (int, int64, error) {
-	if lw, ok := c.w.(locatedSourceWriter); ok {
-		n, start, err := lw.writeLocated(p)
-		if n > 0 {
-			c.bytes.Add(int64(n))
-		}
-		return n, start, err
-	}
-	n, err := c.Write(p)
-	return n, 0, err
+// countingMappedWriter counts a sink that keeps source mappings. Producers
+// batch output for any other sink, so only this form records mappings.
+type countingMappedWriter struct {
+	counter  *countingStreamWriter
+	mappings commandprogram.SourceMappingRecorder
 }
 
-func (c *countingStreamWriter) RecordSourceMapping(mapping toolcontract.StreamSourceMapping) error {
-	if lw, ok := c.w.(locatedSourceWriter); ok {
-		return lw.RecordSourceMapping(mapping)
+func (c countingMappedWriter) Write(p []byte) (int, error) {
+	return c.counter.Write(p)
+}
+
+func (c countingMappedWriter) RecordSourceMapping(mapping toolcontract.StreamSourceMapping) error {
+	return c.mappings.RecordSourceMapping(mapping)
+}
+
+// countProducerStream returns the producer's writer over sink and its count.
+func countProducerStream(sink io.Writer) (io.Writer, *countingStreamWriter) {
+	counter := &countingStreamWriter{w: nonNilWriter(sink)}
+	if mappings, ok := counter.w.(commandprogram.SourceMappingRecorder); ok {
+		return countingMappedWriter{counter: counter, mappings: mappings}, counter
 	}
-	return nil
+	return counter, counter
 }
 
 // Located writers return coordinates in their own mapping domain. Nested views
@@ -175,8 +181,8 @@ func newChildStreamView(writer io.Writer) *childStreamView {
 		return &childStreamView{target: source, ctx: source.ctx, memory: source.mappings.memory}
 	case *childStreamView:
 		return &childStreamView{target: source, ctx: source.ctx, memory: source.memory}
-	case *countingStreamWriter:
-		return newChildStreamView(source.w)
+	case countingMappedWriter:
+		return newChildStreamView(source.counter.w)
 	default:
 		return nil
 	}

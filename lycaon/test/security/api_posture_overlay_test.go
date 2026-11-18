@@ -48,7 +48,7 @@ postures:
   spec:
     label: Audit
 `), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 
 	sess := createAPISessionForProject(t, srv, projectDir, "spec")
@@ -77,7 +77,7 @@ postures:
   plan:
     label: Plan
 `), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 
 	createBody := `{"roots":[{"path":"` + projectDir + `"}]}`
@@ -104,7 +104,7 @@ postures:
 	if err := json.Unmarshal(w.Body.Bytes(), &sess); err != nil {
 		testutil.FailErr(t, "decode accepted session", err)
 	}
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the session is in error", func() bool {
 		stored, err := h.Store.Get(t.Context(), sess.ID)
 		return err == nil && stored.Status == wire.SessionStatusError
 	})
@@ -125,7 +125,7 @@ postures:
   spec:
     label: Audit
 `), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 
 	createBody := `{"roots":[{"path":"` + projectDir + `"}]}`

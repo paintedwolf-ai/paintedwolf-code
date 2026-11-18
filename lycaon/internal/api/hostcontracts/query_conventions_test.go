@@ -114,7 +114,7 @@ func TestCostSummaryRequiresSessionID(t *testing.T) {
 		PromptTokens:     10,
 		CompletionTokens: 5,
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "tracker.RecordUsage failed", err)
 	}
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}), nil, hostapi.TestAPIToken)

@@ -48,7 +48,7 @@ func AcceptPrompt(t *testing.T, baseURL, sessionID, text string) {
 	if accepted.Status != "queued" {
 		t.Fatalf("prompt accept status = %q", accepted.Status)
 	}
-	WaitForSessionIdle(t, baseURL, sessionID, 10*time.Second)
+	WaitForSessionIdle(t, baseURL, sessionID)
 }
 
 func AssertErrorResponse(t *testing.T, w *httptest.ResponseRecorder, wantStatus int, wantCode string) {
@@ -291,9 +291,9 @@ func StartTestHTTPServer(t *testing.T, srv *hostapi.Server) string {
 	return fmt.Sprintf("http://%s", listener.Addr().String())
 }
 
-func WaitForAssistantStream(t *testing.T, baseURL, sessionID string, timeout time.Duration) (messageID, streamURL string) {
+func WaitForAssistantStream(t *testing.T, baseURL, sessionID string) (messageID, streamURL string) {
 	t.Helper()
-	WaitForSessionIdle(t, baseURL, sessionID, timeout)
+	WaitForSessionIdle(t, baseURL, sessionID)
 	msgs := ListMessagesAtURL(t, baseURL, sessionID)
 	for i := len(msgs) - 1; i >= 0; i-- {
 		if msgs[i].Role == wire.MessageRoleAssistant && strings.TrimSpace(msgs[i].ID) != "" {
@@ -306,44 +306,32 @@ func WaitForAssistantStream(t *testing.T, baseURL, sessionID string, timeout tim
 	return "", ""
 }
 
-func WaitForSessionIdle(t *testing.T, baseURL, sessionID string, timeout time.Duration) wire.Session {
+func WaitForSessionIdle(t *testing.T, baseURL, sessionID string) wire.Session {
 	t.Helper()
-	timeout = testutil.Timeout(timeout)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		sess := GetSessionAtURL(t, baseURL, sessionID)
-		if sess.Status == wire.SessionStatusIdle && !sess.PromptPending {
-			return sess
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("session %s prompt turn did not complete within %s", sessionID, timeout)
-	return wire.Session{}
+	var sess wire.Session
+	testutil.WaitFor(t, "session "+sessionID+" finishes its prompt turn", func() bool {
+		sess = GetSessionAtURL(t, baseURL, sessionID)
+		return sess.Status == wire.SessionStatusIdle && !sess.PromptPending
+	})
+	return sess
 }
 
 func WaitSessionPrepared(t *testing.T, baseURL string, sess wire.Session) wire.Session {
 	t.Helper()
-	deadline := time.Now().Add(testutil.Timeout(10 * time.Second))
-	for sess.Status == wire.SessionStatusPreparing && time.Now().Before(deadline) {
+	testutil.WaitFor(t, "session "+sess.ID+" is prepared", func() bool {
+		if sess.Status != wire.SessionStatusPreparing {
+			return true
+		}
 		readyResp, getErr := AuthedHTTPGet(baseURL + "/v1/sessions/" + sess.ID)
 		if getErr != nil {
 			t.Fatalf("wait for session preparation: %v", getErr)
 		}
+		defer func() { _ = readyResp.Body.Close() }()
 		if readyResp.StatusCode != http.StatusOK {
-			_ = readyResp.Body.Close()
 			t.Fatalf("wait for session preparation status = %d", readyResp.StatusCode)
 		}
-		if DecodeErr := json.NewDecoder(readyResp.Body).Decode(&sess); DecodeErr != nil {
-			_ = readyResp.Body.Close()
-			t.Fatalf("decode prepared session: %v", DecodeErr)
-		}
-		_ = readyResp.Body.Close()
-		if sess.Status == wire.SessionStatusPreparing {
-			time.Sleep(5 * time.Millisecond)
-		}
-	}
-	if sess.Status == wire.SessionStatusPreparing {
-		t.Fatal("session preparation did not complete")
-	}
+		testutil.FailErr(t, "decode prepared session", json.NewDecoder(readyResp.Body).Decode(&sess))
+		return sess.Status != wire.SessionStatusPreparing
+	})
 	return sess
 }

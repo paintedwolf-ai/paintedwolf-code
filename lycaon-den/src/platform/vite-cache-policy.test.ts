@@ -1,17 +1,9 @@
-import { readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { harnessRuntimePaths } from "../../vite.runtime-paths.ts";
 
 describe("Vite development cache policy", () => {
-  it("prevents WKWebView from retaining HMR module variants", () => {
-    const denRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-    const config = readFileSync(join(denRoot, "vite.config.ts"), "utf8");
-
-    expect(config).toContain('"Cache-Control": "no-store"');
-  });
-
   it("keeps every mutable frontend path inside its owning harness", () => {
     const roots = ["/tmp/first harness", "/tmp/second café", "relative-state"];
     const allPaths = new Set<string>();
@@ -44,6 +36,8 @@ describe("Vite development cache policy", () => {
         vi.stubEnv("LYCAON_E2E_STATE_DIR", state);
         vi.stubEnv("VITE_DEN_SCROLL_DEBUG_FILE", "");
         const config = await resolveConfig({ root: denRoot, configFile: join(denRoot, "vite.config.ts") }, "serve");
+        // WKWebView must not retain HMR module variants.
+        expect(config.server.headers?.["Cache-Control"]).toBe("no-store");
         expect(config.cacheDir).toBe(join(state, "runtime", "vite-cache"));
         expect(process.env.VITE_DEN_SCROLL_DEBUG_FILE).toBe(join(state, "config", "debug", "den-scroll.jsonl"));
         caches.add(config.cacheDir);

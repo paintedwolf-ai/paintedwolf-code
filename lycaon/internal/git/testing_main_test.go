@@ -2,6 +2,7 @@ package git
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	lyexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/fileclone"
+	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/repochange"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -29,6 +31,11 @@ type fixtureTemplate struct {
 
 func TestMain(m *testing.M) {
 	gittestsetup.Enable()
+	// Without the pinned git every repository test fails on its own; say why once.
+	if _, err := gitengine.BinaryPath(); err != nil {
+		fmt.Fprintf(os.Stderr, "bundled git is not staged; run ./task gitengine:fetch: %v\n", err)
+		os.Exit(1)
+	}
 	// Status cache tests count loads; a watcher event invalidates one mid-load.
 	repochange.DisableWatchersForTest()
 	// Detached auto-maintenance rewrites shared templates while tests clone them.
