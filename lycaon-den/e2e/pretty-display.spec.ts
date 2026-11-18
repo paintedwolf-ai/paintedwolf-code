@@ -302,8 +302,7 @@ modelIndependentWebE2e("moves by visual rows and stops line keys at the visual l
 
 modelIndependentWebE2e("reserves text width at every Pretty indent depth", async ({ page, request }) => {
   const long = "x".repeat(180);
-  let text = JSON.stringify(long);
-  for (let depth = 0; depth < 62; depth++) text = `["${long}",${text}]`;
+  const text = `["${long}",${"[".repeat(62)}"${long}"${"]".repeat(62)}]`;
   await page.setViewportSize({ width: 2100, height: 950 });
   const { scroller } = await openPretty(page, request, { name: "deep.json", text });
   for (const columns of [30, 60, 120]) {
