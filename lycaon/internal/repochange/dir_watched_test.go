@@ -49,6 +49,7 @@ func TestDirWatchedReportsEverySeededDirectory(t *testing.T) {
 	reg.Ensure(t.Context(), root)
 	reg.Seed(t.Context(), root, fanoutWatchDirectories(root, dirs, filesPerDir))
 
+	testutil.WaitFor(t, "watch coverage is complete", func() bool { return reg.Coverage(root).Complete })
 	if coverage := reg.Coverage(root); !coverage.Complete {
 		t.Fatalf("coverage = %+v, want a complete watch", coverage)
 	}

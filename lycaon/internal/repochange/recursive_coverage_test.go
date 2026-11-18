@@ -37,6 +37,7 @@ func TestRecursiveWatchIsCompleteBeyondTheDirectoryCap(t *testing.T) {
 	reg.Ensure(t.Context(), root)
 	reg.Seed(t.Context(), root, fanoutWatchDirectories(root, dirs, 2))
 
+	testutil.WaitFor(t, "watch coverage is complete", func() bool { return reg.Coverage(root).Complete })
 	coverage := reg.Coverage(root)
 	if !coverage.Watching || !coverage.Complete || coverage.Truncated != 0 || !coverage.Recursive {
 		t.Fatalf("coverage = %+v, want a complete recursive watch", coverage)

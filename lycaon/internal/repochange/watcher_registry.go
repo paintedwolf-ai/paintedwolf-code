@@ -170,6 +170,7 @@ func (r *watcherRegistry) Ensure(ctx context.Context, projectDir string) {
 		slog.WarnContext(ctx, "worktree watch could not start", "root", key, "err", err)
 		return
 	}
+	w.starting = true
 	w.refs.work = &r.work
 	if r.debounce == nil {
 		r.debounce = newDebouncer(DefaultDebounce)
@@ -188,6 +189,11 @@ func (r *watcherRegistry) Ensure(ctx context.Context, projectDir string) {
 		"root", key, "recursive", coverage.Recursive, "complete", coverage.Complete)
 	go func() {
 		defer finish()
+		// Reopening coverage cannot certify changes from the unwatched interval.
+		Notify(loopCtx, Event{ProjectDir: key, Kind: WorktreeChanged, Changes: []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, Source: SourceWatcher})
+		w.mu.Lock()
+		w.starting = false
+		w.mu.Unlock()
 		w.loop(loopCtx)
 	}()
 }

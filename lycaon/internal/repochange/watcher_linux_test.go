@@ -182,6 +182,7 @@ func TestInotifyCoversALargeSeededTreeCompletely(t *testing.T) {
 		testutil.FailErr(t, "write leaf", os.WriteFile(filepath.Join(directory.Path, "leaf.txt"), []byte("x"), 0o644))
 	}
 	fixture.registry.Seed(t.Context(), fixture.root, directories)
+	testutil.WaitFor(t, "seeded watch coverage is complete", func() bool { return fixture.registry.Coverage(fixture.root).Complete })
 	// The root and the repository's ref surfaces register beside the seeded tree.
 	coverage := fixture.registry.Coverage(fixture.root)
 	if !coverage.Complete || coverage.Truncated != 0 || coverage.WatchLimit || coverage.Watched < len(directories)+1 {

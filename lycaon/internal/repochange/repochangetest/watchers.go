@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func Acquire(t testing.TB) {
@@ -56,6 +57,7 @@ func Watch(t testing.TB, root string) {
 	}
 	repochange.SeedWatch(t.Context(), root, directories)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
+	testutil.WaitFor(t, "watcher fixture coverage is complete", func() bool { return repochange.Coverage(root).Complete })
 	if coverage := repochange.Coverage(root); !coverage.Complete {
 		t.Fatalf("watcher fixture is incomplete: %+v", coverage)
 	}

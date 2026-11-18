@@ -328,6 +328,7 @@ func TestCoverageIsCompleteWhenEverythingRegisters(t *testing.T) {
 	reg.Ensure(t.Context(), root)
 	reg.Seed(t.Context(), root, fanoutWatchDirectories(root, 3, 2))
 
+	testutil.WaitFor(t, "watch coverage is complete", func() bool { return reg.Coverage(root).Complete })
 	coverage := reg.Coverage(root)
 	if !coverage.Watching || !coverage.Complete || coverage.Truncated != 0 {
 		t.Fatalf("coverage = %+v, want a complete watch", coverage)
@@ -367,6 +368,7 @@ func TestReseedingChargesTheBudgetOnce(t *testing.T) {
 	if spent := reg.spentForTest(); spent != spentOnce {
 		t.Fatalf("re-seeding moved spent budget from %d to %d", spentOnce, spent)
 	}
+	testutil.WaitFor(t, "watch coverage is complete", func() bool { return reg.Coverage(root).Complete })
 	coverage := reg.Coverage(root)
 	if coverage.Watched != watchedOnce {
 		t.Fatalf("re-seeding moved watched dirs from %d to %d", watchedOnce, coverage.Watched)
@@ -399,6 +401,7 @@ func TestTruncatedCoverageHealsWhenCapacityFrees(t *testing.T) {
 	reg.CloseRoot(crowded)
 	reg.Seed(t.Context(), small, fanoutWatchDirectories(small, 2, 2))
 
+	testutil.WaitFor(t, "healed watch coverage is complete", func() bool { return reg.Coverage(small).Complete })
 	if coverage := reg.Coverage(small); !coverage.Complete {
 		t.Fatalf("coverage = %+v, want a re-seed after freed capacity to heal", coverage)
 	}

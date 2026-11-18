@@ -35,6 +35,7 @@ type worktreeWatcher struct {
 	scope           *sourcescope.Scope
 	reported        bool
 	faulted         bool
+	starting        bool
 	// overflowed holds between a dropped event window and the resync that
 	// closes it; overflows counts the windows for diagnostics.
 	overflowed bool
@@ -263,7 +264,7 @@ func (w *worktreeWatcher) coveredByRootLocked(path string) bool {
 func (w *worktreeWatcher) coverageLocked() WatchCoverage {
 	return WatchCoverage{
 		Root: w.root, Watching: true, Watched: len(w.watched),
-		Truncated: w.truncated, PolicyUnwatched: w.policyUnwatched, Complete: w.truncated == 0 && !w.faulted && !w.overflowed,
+		Truncated: w.truncated, PolicyUnwatched: w.policyUnwatched, Complete: w.truncated == 0 && !w.starting && !w.faulted && !w.overflowed,
 		Recursive: w.recursive, Faulted: w.faulted, Overflows: w.overflows, WatchLimit: w.watchLimit,
 	}
 }
