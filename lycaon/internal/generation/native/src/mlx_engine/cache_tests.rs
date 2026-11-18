@@ -138,3 +138,27 @@ fn sliding_state_retains_only_the_window_and_current_chunk() {
     }
     assert_eq!(cache.bytes(), 2 * 2 * 767 * 256 * 2);
 }
+
+#[test]
+fn dense_and_expert_profiles_checkpoint_the_last_global_bank() {
+    for profile in [crate::profile::DENSE, crate::profile::MOE] {
+        let mut cache = Cache::new(4, profile).unwrap();
+        let last = profile.layers - 1;
+        let keys = Array::ones::<half::f16>(&[1, profile.global_heads as i32, 2, 512]).unwrap();
+        cache.update(last, keys.clone(), keys).unwrap();
+        cache.offset = 2;
+        let mut checkpoint = checkpoint::Checkpoint::save(&cache).unwrap();
+        let mut restored = checkpoint.restore().unwrap();
+        let next = Array::zeros::<half::f16>(&[1, profile.global_heads as i32, 1, 512]).unwrap();
+        let values = restored.update(last, next.clone(), next).unwrap().values;
+        let values = values
+            .as_dtype(Dtype::Float32)
+            .unwrap()
+            .contiguous()
+            .unwrap();
+        for head in values.try_as_slice::<f32>().unwrap().chunks(3 * 512) {
+            assert!(head[..2 * 512].iter().all(|&v| v == 1.0));
+            assert!(head[2 * 512..].iter().all(|&v| v == 0.0));
+        }
+    }
+}

@@ -68,6 +68,23 @@ impl Plan {
 mod tests {
     use super::*;
     #[test]
+    fn non_ple_profiles_reserve_their_own_kv_heads_and_layer_counts() {
+        for (profile, global, sliding, heads) in [
+            (crate::profile::DENSE, 8, 40, 1),
+            (crate::profile::MOE, 5, 25, 2),
+        ] {
+            let plan = Plan::for_model(profile, profile.weight_limit, 0, 8192, 256, true).unwrap();
+            assert_eq!(
+                plan.kv_capacity_bytes,
+                global * heads * 512 * 8192 * 4 + sliding * 8 * 256 * 2 * (1024 + 256) * 4
+            );
+            assert!(
+                Plan::for_model(profile, profile.weight_limit + 1, 0, 8192, 256, true).is_err()
+            );
+            assert!(Plan::for_model(profile, profile.weight_limit, 4, 8192, 256, true).is_err());
+        }
+    }
+    #[test]
     fn mlx_workspace_scales_with_chunk_without_cache_growth() {
         let small =
             Plan::for_model(crate::profile::E4B, 2787934208, 2290089984, 8192, 128, true).unwrap();

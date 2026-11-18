@@ -27,7 +27,7 @@ fn checked(status: i32, operation: &str) -> Result<()> {
 
 impl Activation {
     pub fn new() -> Result<Self> {
-        Self::create(c"e4b_gelu_product", SOURCE)
+        Self::create(c"gemma4_gelu_product", SOURCE)
     }
 
     fn create(name: &std::ffi::CStr, source: &std::ffi::CStr) -> Result<Self> {

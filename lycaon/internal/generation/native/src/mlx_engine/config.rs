@@ -39,7 +39,11 @@ pub fn validate(config: &Value) -> Result<()> {
         ("head_dim", 256),
         ("intermediate_size", profile.intermediate),
     ] {
-        if text[name].as_u64() != Some(value as u64) {
+        let optional_zero = matches!(name, "hidden_size_per_layer_input" | "num_kv_shared_layers");
+        let actual = text.get(name).and_then(Value::as_u64);
+        if actual != Some(value as u64)
+            && !(optional_zero && value == 0 && text.get(name).is_none())
+        {
             return Err(format!("Unsupported Gemma 4 {name}").into());
         }
     }
@@ -133,6 +137,67 @@ mod tests {
                 "full_attention": {"rope_theta": 1000000.0, "rope_type": "proportional", "partial_rotary_factor": 0.25}
             }
         }})
+    }
+
+    #[test]
+    fn dense_and_expert_students_validate_their_kv_and_routing_geometry() {
+        for (layers, hidden, global_heads, intermediate, moe) in
+            [(48, 3840, 1, 15360, false), (30, 2816, 2, 2112, true)]
+        {
+            let mut config = supported();
+            let text = config["text_config"].as_object_mut().unwrap();
+            text.remove("per_layer_config");
+            text.remove("num_kv_shared_layers");
+            text.remove("hidden_size_per_layer_input");
+            for (key, value) in [
+                ("num_hidden_layers", layers),
+                ("hidden_size", hidden),
+                ("num_global_key_value_heads", global_heads),
+                ("num_key_value_heads", 8),
+                ("num_attention_heads", 16),
+                ("intermediate_size", intermediate),
+                ("sliding_window", 1024),
+            ] {
+                text.insert(key.into(), value.into());
+            }
+            text.insert("enable_moe_block".into(), moe.into());
+            text.insert("attention_k_eq_v".into(), true.into());
+            text.insert("use_bidirectional_attention".into(), "vision".into());
+            text.insert(
+                "model_type".into(),
+                if moe {
+                    "gemma4_text"
+                } else {
+                    "gemma4_unified_text"
+                }
+                .into(),
+            );
+            text.insert(
+                "layer_types".into(),
+                (0..layers)
+                    .map(|i| {
+                        if i % 6 == 5 {
+                            "full_attention"
+                        } else {
+                            "sliding_attention"
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .into(),
+            );
+            if moe {
+                for (key, value) in [
+                    ("num_experts", 128),
+                    ("top_k_experts", 8),
+                    ("moe_intermediate_size", 704),
+                ] {
+                    text.insert(key.into(), value.into());
+                }
+            }
+            validate(&config).unwrap();
+            config["text_config"]["num_global_key_value_heads"] = 8.into();
+            assert!(validate(&config).is_err());
+        }
     }
 
     #[test]

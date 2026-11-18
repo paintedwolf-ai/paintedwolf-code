@@ -95,3 +95,39 @@ impl Linear {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn selected_experts_multiply_each_token_by_its_own_weights() {
+        let a = ops::broadcast_to(
+            Array::from_slice(&[1_f32, 3.], &[2, 1, 1, 1]),
+            &[2, 1, 1, 64],
+        )
+        .unwrap();
+        let indices = Array::from_slice(&[0_i32, 2, 1, 2], &[2, 2]);
+        let weights =
+            ops::broadcast_to(Array::from_slice(&[1_f32, 2., 3.], &[3, 1, 1]), &[3, 1, 64])
+                .unwrap();
+        let (packed, scales, biases) = ops::quantize(&weights, 64, 4).unwrap();
+        for linear in [
+            Linear {
+                weight: weights,
+                quantization: None,
+            },
+            Linear {
+                weight: packed,
+                quantization: Some((scales, biases, 4)),
+            },
+        ] {
+            let actual = linear.gather(&a, &indices).unwrap().contiguous().unwrap();
+            assert_eq!(actual.shape(), &[2, 2, 1, 1]);
+            assert_eq!(
+                actual.try_as_slice::<f32>().unwrap(),
+                &[64., 192., 384., 576.]
+            );
+        }
+    }
+}
