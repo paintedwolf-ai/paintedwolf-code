@@ -181,7 +181,7 @@ func (inv *invocation) failure(err error) (toolcontract.ProducerResult, error) {
 		failure = classify(err)
 	}
 	if !inv.opts.silent || inv.opts.showError {
-		_, _ = fmt.Fprintf(inv.stderr, "curl: (%d) %s\n", code, failure.message)
+		_, _ = fmt.Fprintf(inv.stderr, "curl: (%d) %s\n", code, inv.jarOutput.Text(failure.message))
 	}
 	result.Evidence = inv.evidence()
 	return result, err

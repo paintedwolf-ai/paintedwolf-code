@@ -25,6 +25,15 @@ func (inv *invocation) requestArgs(cookieHeader string) (map[string]any, error) 
 func (inv *invocation) buildRequestArgs(cookieHeader string) (map[string]any, error) {
 	o := inv.opts
 	args := map[string]any{"url": o.url}
+	if o.managedCookies != "" {
+		args["cookie_jar"] = o.managedCookies
+	}
+	if o.managedTokens != "" {
+		args["token_jar"] = o.managedTokens
+	}
+	if len(o.captures) > 0 {
+		args["capture_tokens"] = o.captures
+	}
 	method := o.method
 	headers := make([]any, 0, len(o.headers)+2)
 	set := map[string]bool{}

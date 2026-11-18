@@ -41,9 +41,10 @@ type Transfer struct {
 // invocation is one curl run: its options, streams, captured destinations
 // and the outcome reported as curl's exit status.
 type invocation struct {
-	ctx    context.Context
-	owners *Owners
-	tc     tools.ToolContext
+	jarOutput *httpaction.JarOutput
+	ctx       context.Context
+	owners    *Owners
+	tc        tools.ToolContext
 	// record is the admitted request record before resolution.
 	record     map[string]any
 	program    mutation.Program
@@ -134,6 +135,22 @@ func (inv *invocation) run() error {
 		return err
 	}
 	limits := httpaction.ExchangeOptions{Jar: jar, MaxBodyBytes: inv.owners.limits["stream_bytes"], ConnectTimeout: inv.opts.connectTimeout, WireHeaders: true, TLS: material, Dial: inv.opts.dial}
+	if inv.opts.managedCookies != "" {
+		limits.Jar = nil
+	}
+	if inv.opts.managedCookies != "" || inv.opts.managedTokens != "" {
+		inv.jarOutput = &httpaction.JarOutput{}
+		limits.Output = inv.jarOutput
+		limits.DecodeManagedBody = decodeContent
+		for _, h := range inv.opts.headers {
+			if !strings.EqualFold(h[0], "Host") {
+				limits.Slots.Headers = append(limits.Slots.Headers, outboundhttp.Header{Name: h[0], Value: h[1]})
+			}
+		}
+		if body, ok := inv.record["body_text"].(string); ok {
+			limits.Slots.Body = &body
+		}
+	}
 	if inv.opts.location {
 		// curl follows up to 50 redirects; the owner's ceiling is lower.
 		limits.RedirectLimit = outboundhttp.MaxRedirectLimit
@@ -172,10 +189,10 @@ func (inv *invocation) run() error {
 		blocks.WriteString(presentedBlock(hop.StatusLine, hop.Headers, hop.Wire))
 	}
 	blocks.WriteString(presentedBlock(resp.StatusLine, resp.Headers, resp.Wire))
-	headers := blocks.String()
+	headers := inv.jarOutput.Text(blocks.String())
 	inv.headers = headers
 	if inv.opts.verbose {
-		v := verbose(ex)
+		v := inv.jarOutput.Text(verbose(ex))
 		if _, err := io.WriteString(inv.stderr, v); err != nil {
 			return err
 		}
@@ -203,10 +220,13 @@ func (inv *invocation) run() error {
 		return httpFailure(resp.Status)
 	}
 	received := resp.Body
-	if inv.opts.compressed {
+	if inv.opts.compressed && inv.jarOutput == nil {
 		if received, err = decodeContent(resp.Headers, received, inv.owners.limits["stream_bytes"]); err != nil {
 			return err
 		}
+	}
+	if inv.jarOutput != nil {
+		received = []byte(inv.jarOutput.Text(string(received)))
 	}
 	var body bytes.Buffer
 	if inv.opts.include || inv.opts.head {
@@ -230,7 +250,7 @@ func (inv *invocation) run() error {
 			inv.provenance.WroteStdout = true
 		}
 		if ex.RemotePage && len(received) > 0 {
-			inv.provenance.Page = &evidence.DeliveredPage{Host: finalHost(ex), Bytes: int64(len(received)), ContentType: resp.ContentType}
+			inv.provenance.Page = &evidence.DeliveredPage{Host: finalHost(ex), Bytes: int64(len(received)), ContentType: inv.jarOutput.Text(resp.ContentType)}
 		}
 	}
 	if jarFile != nil {

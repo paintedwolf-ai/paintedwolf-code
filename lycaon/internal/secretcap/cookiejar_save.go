@@ -88,6 +88,30 @@ func (s *Jars) cookieJarSaveTarget(ctx context.Context, req CookieJarRequest, ja
 	return row, found, err
 }
 
+// RefreshCookieJar rechecks the opening scope and merges pending response cookies.
+func (s *Jars) RefreshCookieJar(ctx context.Context, jar *CookieJar) (bool, error) {
+	if jar == nil || jar.issuer != s {
+		return false, ErrInvalidCookieJar
+	}
+	s.repository.mutationMu.Lock()
+	defer s.repository.mutationMu.Unlock()
+	row, found, err := s.cookieJarSaveTarget(ctx, jar.request, jar)
+	if err != nil || !found {
+		return false, err
+	}
+	current, cookies, err := s.cookieJarCurrent(ctx, row.ID)
+	if err != nil {
+		return false, err
+	}
+	if current.Version == jar.version && jar.id == row.ID {
+		return false, nil
+	}
+	jar.Store.Refresh(cookies)
+	jar.version, jar.id, jar.Reference = current.Version, row.ID, secretmatch.ReferenceToken(row.ID)
+	s.rememberJarValues(jar.request.ChatSessionID, "cookie", jar.id, jar.Store.Values())
+	return true, nil
+}
+
 func (s *Jars) cookieJarCurrent(ctx context.Context, id string) (db.ManagedSecretVersions, []httpcookies.Cookie, error) {
 	current, found, err := s.repository.currentVersion(ctx, id)
 	if err != nil {

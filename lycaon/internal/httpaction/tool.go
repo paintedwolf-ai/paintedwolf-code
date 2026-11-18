@@ -2,9 +2,6 @@
 package httpaction
 
 import (
-	"github.com/lycaon/lycaon/internal/capabilityrequest"
-	"github.com/lycaon/lycaon/internal/socketref"
-
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,8 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/toolrejection"
-
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/egressclass"
@@ -31,6 +27,8 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/socketref"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -46,7 +44,6 @@ type Deps struct {
 // SecretMetadata supplies value-free identities for jar release review.
 type SecretMetadata interface {
 	Describe(context.Context, string, string, string) (secretcap.Metadata, error)
-	List(context.Context, string, string) ([]secretcap.Metadata, error)
 }
 
 type requestSpec struct {
@@ -66,18 +63,20 @@ type requestSpec struct {
 	socketBinding socketref.Binding
 	hostHeader    string
 	resolve       []outboundhttp.ResolveMapping
+	tokenJar      string
+	captureTokens []captureTokenRule
 }
 
-// ExchangeOptions select a typed frontend's response handling. Jar replaces
-// a named cookie jar with a frontend-owned one; MaxBodyBytes keeps the whole
-// received body in Exchange.Response.Body up to that bound; RedirectLimit
-// bounds followed redirects within the owner's maximum; ConnectTimeout bounds
-// each hop's connection separately from the exchange timeout.
+// ExchangeOptions binds transfer limits, transport overrides and managed output.
 type ExchangeOptions struct {
-	Jar            http.CookieJar
-	MaxBodyBytes   int64
-	RedirectLimit  int
-	ConnectTimeout time.Duration
+	DecodeManagedBody func([]outboundhttp.Header, []byte, int64) ([]byte, error)
+	Output            *JarOutput
+	finalHop          func(requestSpec)
+	Slots             JarSlots
+	Jar               http.CookieJar
+	MaxBodyBytes      int64
+	RedirectLimit     int
+	ConnectTimeout    time.Duration
 	// WireHeaders keeps complete headers and any observable cleartext block.
 	WireHeaders bool
 	// TLS adds request-scoped trust and a client certificate.
@@ -110,15 +109,21 @@ type Exchange struct {
 // headers, host_header, body_text or form, auth, redirects, timeout_ms and
 // unix_socket. A transport failure is a *TransportFailure.
 func Perform(ctx context.Context, deps Deps, args map[string]any, tctx tools.ToolContext, opts ExchangeOptions) (Exchange, error) {
+	if opts.Jar != nil && args["cookie_jar"] != nil {
+		return Exchange{}, invalid(errors.New("choose one cookie store"))
+	}
 	ex, err := exchange(ctx, deps, args, tctx, opts)
 	if err != nil {
 		return Exchange{}, err
 	}
 	sum := sha256.Sum256(ex.outbound.body)
 	extURLs := externalObservedURLs(tctx.Effects.Secrets, ex.spec, ex.finalURL, ex.redirects)
+	for i, u := range extURLs {
+		extURLs[i] = opts.Output.Text(u)
+	}
 	return Exchange{
 		Response:       ex.resp,
-		FinalURL:       ex.finalURL,
+		FinalURL:       opts.Output.Text(ex.finalURL),
 		Redirects:      ex.redirects,
 		SentHeaders:    ex.sentHeaders,
 		SentBodyBytes:  int64(len(ex.outbound.body)),
@@ -173,6 +178,20 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 	if reject := checkLoopbackAuthority(spec, allowAddress); reject != nil {
 		return exchanged{}, reject
 	}
+	jar, jarReq, err := openCookieJar(ctx, deps, tctx, args)
+	if err != nil {
+		return exchanged{}, err
+	}
+	tokenJar, tokenJarReq, err := openTokenJar(ctx, deps, tctx, args)
+	if err != nil {
+		return exchanged{}, err
+	}
+	if jar != nil {
+		opts.Output.protect(jar.Store.Values()...)
+	}
+	if tokenJar != nil {
+		opts.Output.protect(tokenJar.Values()...)
+	}
 	if spec.unixSocket != "" {
 		grant, reject := tools.ClaimDeclaredSocket(ctx, tctx, spec.unixSocket)
 		if reject != nil {
@@ -204,11 +223,15 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		return exchanged{}, invalid(err)
 	}
 	cookieSpec.hostHeader = screened.hostHeader
-	screened.beforeCookieHop, err = frontendJarCookieDelivery(ctx, deps, cookieSpec, tctx, opts.Jar)
+	templates := opts.Slots.templates(screened)
+	screened.beforeCookieHop, err = prepareRequestCookieDelivery(ctx, deps, cookieSpec, tctx, jar, opts.Jar, hasCookieReference(templates))
 	if err != nil {
 		return exchanged{}, err
 	}
-	outbound := screened
+	outbound, err := placeJarSlots(ctx, deps, tctx, cookieSpec, screened, templates, jar, tokenJar)
+	if err != nil {
+		return exchanged{}, err
+	}
 	if reject := reviewClientIdentity(ctx, deps, spec, tctx, opts.TLS); reject != nil {
 		return exchanged{}, reject
 	}
@@ -222,8 +245,19 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		})
 		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.EffectActionID())
 	}
-	resp, listenerFact, err := send(ctx, deps, tctx, spec, outbound, allowAddress, durationArg(args["timeout_ms"]), opts)
+	lastHop := cookieSpec
+	opts.finalHop = func(hop requestSpec) {
+		lastHop = hop
+		if jar != nil {
+			opts.Output.protect(jar.Store.Values()...)
+		}
+	}
+	resp, listenerFact, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]), opts)
+	if jar != nil {
+		opts.Output.protect(jar.Store.Changes().Values()...)
+	}
 	if err != nil {
+		cookieReceipt := saveCookieJar(ctx, deps, jarReq, jar)
 		if spec.socket != "" && (errors.Is(err, socketref.ErrUnbound) || errors.Is(err, syscall.ECONNREFUSED)) {
 			return exchanged{}, capabilityrequest.SocketResolveReject(&confine.SocketResolveError{Code: confine.SocketResolveChanged, Path: spec.unixSocket, Err: err})
 		}
@@ -232,12 +266,45 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 			(reject.Code == toolrejection.OutboundSecretDeniedCode || reject.Code == toolrejection.OutboundSecretScreenFailedCode || toolrejection.IsSecretCapabilityCode(reject.Code)) {
 			return exchanged{}, reject
 		}
-		return exchanged{}, &TransportFailure{Reject: sendReject(ctx, err), Cause: err}
+		rejection := sendReject(ctx, err)
+		if cookieReceipt != nil {
+			if rejection.Data == nil {
+				rejection.Data = map[string]any{}
+			}
+			rejection.Data["cookies"] = cookieReceipt.facts()
+		}
+		return exchanged{}, &TransportFailure{Reject: rejection, Cause: err}
+	}
+	cookies := saveCookieJar(ctx, deps, jarReq, jar)
+	if cookies != nil && !cookies.Persisted {
+		return exchanged{}, afterResponse(resp, &toolrejection.ToolReject{Code: CookieJarFailedCode, Data: cookies.facts()})
+	}
+	if opts.DecodeManagedBody != nil && len(resp.Body) > 0 {
+		resp.Body, err = opts.DecodeManagedBody(resp.Headers, resp.Body, opts.MaxBodyBytes)
+		if err != nil {
+			return exchanged{}, afterResponse(resp, err)
+		}
+	}
+	issuerID, issuerLabel := requestDestination(lastHop)
+	tokens, captureErr := captureResponseTokens(ctx, deps, tokenJar, tokenJarReq, spec.captureTokens, resp, issuerID, issuerLabel)
+	if captureErr != nil {
+		return exchanged{}, afterResponse(resp, captureErr)
+	}
+	if tokenJar != nil {
+		opts.Output.protect(tokenJar.Values()...)
+	}
+	if tokens != nil && !tokens.Persisted {
+		return exchanged{}, afterResponse(resp, &toolrejection.ToolReject{Code: TokenJarFailedCode, Data: tokens.facts()})
 	}
 	finalURL, redirects := resp.FinalURL, resp.Redirects
 	return exchanged{spec: spec, outbound: outbound, resp: resp, finalURL: finalURL, redirects: redirects,
 		sentHeaders: sentHeaders(spec, statedHeaders(tctx, args, screened)),
 		listener:    listenerFact}, nil
+}
+
+func afterResponse(resp outboundhttp.Response, err error) error {
+	hops := len(resp.Redirects) + 1
+	return &outboundhttp.ExchangeError{RequestsStarted: hops, ResponsesReceived: hops, LastStatus: resp.Status, Err: err}
 }
 
 // parseRequestSpec validates declared fields before screening or transport.
@@ -248,6 +315,9 @@ func parseRequestSpec(ctx context.Context, boundary *sandbox.Boundary, tctx tool
 		method = "GET"
 	}
 	rawURL, _ := args["url"].(string)
+	if err := referencesOutsideTheirFields(rawURL, args["host_header"]); err != nil {
+		return requestSpec{}, err
+	}
 	target, err := outboundhttp.NormalizeURL(rawURL)
 	if err != nil {
 		return requestSpec{}, err
@@ -286,7 +356,17 @@ func parseRequestSpec(ctx context.Context, boundary *sandbox.Boundary, tctx tool
 	if err != nil {
 		return requestSpec{}, err
 	}
+	captureTokens, err := parseCaptureTokens(args["capture_tokens"])
+	if err != nil {
+		return requestSpec{}, err
+	}
+	tokenJar, _ := args["token_jar"].(string)
+	tokenJar = strings.TrimSpace(tokenJar)
+	if len(captureTokens) > 0 && tokenJar == "" {
+		return requestSpec{}, fmt.Errorf("capture_tokens requires token_jar")
+	}
 	return requestSpec{
+		tokenJar: tokenJar, captureTokens: captureTokens,
 		method: method, target: target, headers: headers, headerSources: sources, body: body,
 		outgoing:        func(path string) bool { return secretmatch.HTTPArgumentConsumed(args, path) },
 		outgoingHeaders: func(path string) bool { return secretmatch.HTTPHeaderArgumentConsumed(args, path) },
@@ -296,10 +376,10 @@ func parseRequestSpec(ctx context.Context, boundary *sandbox.Boundary, tctx tool
 	}, nil
 }
 
-// response_path bodies land through the write door and return a file receipt;
-// one that may need a scrub is buffered first.
+// send revalidates each hop before dispatch.
 func send(
 	ctx context.Context, deps Deps, tctx tools.ToolContext, spec requestSpec, outbound outboundRequest,
+	jar *secretcap.CookieJar, tokenJar *secretcap.TokenJar, tokenJarReq secretcap.TokenJarRequest,
 	allowAddress func(netip.Addr, uint16) bool, timeout time.Duration, opts ExchangeOptions,
 ) (outboundhttp.Response, *api.LoopbackListenerFact, error) {
 	var loopbackObs loopbackHopObservation
@@ -332,11 +412,34 @@ func send(
 				return err
 			}
 		}
+
 		if spec.socket == "" {
 			recipientID, _ := requestDestination(spec.forHop(hop))
 			if err := admitHopRoute(hopCtx, hop.URL, hop.Method, spec.resolve, recipientID); err != nil {
 				return err
 			}
+		}
+		if jar != nil {
+			changed, err := deps.Jars.RefreshCookieJar(hopCtx, jar)
+			if err != nil {
+				return cookieJarOpenReject(jar.Name, err)
+			}
+			if changed {
+				if err := outbound.beforeCookieHop(hopCtx, hop); err != nil {
+					return err
+				}
+			}
+			if outbound.validateJarSlots != nil {
+				if err := outbound.validateJarSlots(hop); err != nil {
+					return err
+				}
+			}
+		}
+		if err := checkTokenJarState(hopCtx, deps, tokenJarReq, tokenJar); err != nil {
+			return err
+		}
+		if opts.finalHop != nil {
+			opts.finalHop(spec.forHop(hop))
 		}
 		if !firstHopSeen {
 			firstHopSeen = true
@@ -387,6 +490,9 @@ func send(
 			}
 		}
 		return nil
+	}
+	if jar != nil {
+		req.Jar = jar.Store
 	}
 	if opts.Jar != nil {
 		req.Jar = opts.Jar

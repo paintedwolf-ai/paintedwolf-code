@@ -34,6 +34,15 @@ func (c Changes) Merge(latest []Cookie) *Store {
 	return store
 }
 
+// Refresh retains response mutations and traffic counts while adopting a new stored version.
+func (s *Store) Refresh(latest []Cookie) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	replayed := Changes{entries: s.changes}.Merge(latest)
+	s.cookies = replayed.cookies
+	s.changed = replayed.changed
+}
+
 // Values includes cookies replaced or deleted by a later response in the same
 // exchange, so those observed credentials also enter exact-match screening.
 func (c Changes) Values() []string {

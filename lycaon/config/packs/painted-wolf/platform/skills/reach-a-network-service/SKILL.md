@@ -39,3 +39,9 @@ HTTP proxy variables are injected by default; SOCKS is opt-in with `socks_proxy`
 Application errors are clues, not host decisions. Read the result's structured network observations and `boundary_refusal` first; a timeout alone proves neither a permission gap nor a peer failure. Do not retry an unchanged call after a boundary refusal, request direct IP for TCP that mediation carries, or partially strip proxy variables.
 
 Observation-to-next-move table and the full list of pitfalls: [refusals and pitfalls](references/refusals-and-pitfalls.md).
+
+## Use a named HTTP session
+
+Pass `--managed-cookie-jar NAME` to read and update a chat or project cookie jar. File jars use `-b` and `-c`.
+
+Pass `--managed-token-jar NAME --capture-token session=json:session.token` to hold a response field, or use `session=header:X-Session` for a response header. Later requests can place `{% verbatim %}{{token:session}}{% endverbatim %}` in an inline header or body. Keep the token in its jar. Managed transfers decode the response before capture and screen delivered headers, body and files.

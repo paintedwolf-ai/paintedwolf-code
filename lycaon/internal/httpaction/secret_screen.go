@@ -11,13 +11,14 @@ import (
 )
 
 type outboundRequest struct {
-	beforeCookieHop func(context.Context, outboundhttp.HopRequest) error
-	classification  map[secretmatch.SecretFingerprint]bool
-	url             string
-	hostHeader      string
-	headers         []outboundhttp.Header
-	body            []byte
-	protected       map[int][]string
+	validateJarSlots func(outboundhttp.HopRequest) error
+	beforeCookieHop  func(context.Context, outboundhttp.HopRequest) error
+	classification   map[secretmatch.SecretFingerprint]bool
+	url              string
+	hostHeader       string
+	headers          []outboundhttp.Header
+	body             []byte
+	protected        map[int][]string
 	// redacted reports that the sent bytes differ everywhere the screen matched.
 	redacted bool
 	receipt  string
