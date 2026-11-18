@@ -129,7 +129,7 @@ class HealthTests(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "POSIX process sampling")
     def test_status_persists_observations_but_never_changes_admission(self):
         with tempfile.TemporaryDirectory() as temporary:
-            queue = Mock(root=Path(temporary))
+            queue = Mock(root=Path(temporary), history=Path(temporary))
             queue.locked.side_effect = contextlib.nullcontext
             waiting = {**self.entry, "ticket": "waiting", "state": "queued"}
             status = {"runs": [], "operations": [self.entry, waiting]}
@@ -150,7 +150,7 @@ class HealthTests(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "POSIX process sampling")
     def test_separate_observers_share_the_activity_clock(self):
         with tempfile.TemporaryDirectory() as temporary:
-            queue = Mock(root=Path(temporary))
+            queue = Mock(root=Path(temporary), history=Path(temporary))
             queue.locked.side_effect = contextlib.nullcontext
             status = {"runs": [self.entry], "operations": []}
             before = time.clock_gettime(time.CLOCK_MONOTONIC)
