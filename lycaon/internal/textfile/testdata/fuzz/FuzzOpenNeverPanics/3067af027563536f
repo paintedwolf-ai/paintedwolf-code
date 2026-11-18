@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("\xff\xfe000\xdb00")
+int64(24)
+int64(8)

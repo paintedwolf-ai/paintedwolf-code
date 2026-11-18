@@ -1,0 +1,3 @@
+go test fuzz v1
+[]byte("<<''\n000\n0000000000\n000\n")
+bool(false)

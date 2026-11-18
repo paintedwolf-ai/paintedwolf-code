@@ -1,0 +1,4 @@
+go test fuzz v1
+string("grep")
+string("-ZZZZZZZZZZZZZZZZ")
+string("0")

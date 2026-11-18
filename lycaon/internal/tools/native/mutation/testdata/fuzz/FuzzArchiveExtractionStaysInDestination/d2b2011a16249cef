@@ -1,0 +1,5 @@
+go test fuzz v1
+string("fesc/planted\nfup/planted\nfdangle\nfa/b/c/\x8b")
+byte('W')
+bool(true)
+bool(true)
