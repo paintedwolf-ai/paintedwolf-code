@@ -126,6 +126,7 @@ type CommandStore interface {
 	AdmitModelResponse(ctx context.Context, sessionID, attemptID string) error
 	SealTurnCloseout(ctx context.Context, commit store.TurnCloseoutCommit) error
 	SettleModelOutput(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error)
+	SettledModelOutputIteration(context.Context, string) (int, error)
 	MarkModelOutputProjected(ctx context.Context, outputID string) error
 	FinishTurn(ctx context.Context, turnID, attemptID string, status store.TurnStatus, finalOutputID, resultJSON, failure string) (store.Turn, error)
 	RecoverTurns(ctx context.Context) ([]store.Turn, error)

@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +12,9 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 

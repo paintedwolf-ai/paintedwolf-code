@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -192,8 +192,7 @@ func TestSyntaxOverrideFeedbackRecordsExplicitChoice(t *testing.T) {
 	}
 }
 
-// ordStoreFixture is one Store backend wired up with a fresh session, ready for
-// the ord contract checks. The SQL and memory stores behave identically.
+// ordStoreFixture binds the repository to one fresh session.
 type ordStoreFixture struct {
 	store     Store
 	sessionID string
@@ -210,23 +209,13 @@ func newSQLOrdFixture(t *testing.T) ordStoreFixture {
 	return ordStoreFixture{store: store, sessionID: sess.ID}
 }
 
-func newMemoryOrdFixture(t *testing.T) ordStoreFixture {
-	t.Helper()
-	store := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := store.Create(context.Background(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create session", err)
-	return ordStoreFixture{store: store, sessionID: sess.ID}
-}
-
-// AppendMessages mints a strictly increasing per-session creation ordinal in both
-// stores; ord is the integer Den sorts by.
+// AppendMessages assigns the creation ordinal used for transcript ordering.
 func TestStoreOrdMonotonicAppend(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		fixture func(t *testing.T) ordStoreFixture
 	}{
 		{"sql", newSQLOrdFixture},
-		{"memory", newMemoryOrdFixture},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := tc.fixture(t)
@@ -268,7 +257,6 @@ func TestStoreOrdAndTSSurvivePatch(t *testing.T) {
 		fixture func(t *testing.T) ordStoreFixture
 	}{
 		{"sql", newSQLOrdFixture},
-		{"memory", newMemoryOrdFixture},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := tc.fixture(t)

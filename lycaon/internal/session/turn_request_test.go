@@ -3,8 +3,6 @@ package session
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -23,10 +21,12 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -72,7 +72,7 @@ func TestTurnRequestDecidesAParkedRequestOnItsFirstHostTurn(t *testing.T) {
 }
 
 func TestTurnRequestKeepsADecidedRequestAcrossHostTurns(t *testing.T) {
-	st := storetest.New(t, testdbseed.DefaultProjectID)
+	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
@@ -86,7 +86,7 @@ func TestTurnRequestKeepsADecidedRequestAcrossHostTurns(t *testing.T) {
 }
 
 func TestResolvedWorkflowRequestDoesNotReplaceWorkerAssignment(t *testing.T) {
-	st := storetest.New(t, testdbseed.DefaultProjectID)
+	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	var asked []string
 	mgr.SetWorkflowDomains(workflowDomainFixture(requestWorkflowView{request: workflowfacts.ResolvedWorkflowRequest{Text: "run request"}, asked: &asked}))
@@ -119,7 +119,7 @@ func TestTurnRequestNeedsNoWorkflow(t *testing.T) {
 
 func TestTurnOptimizationRunsWithoutWorkflowOptIn(t *testing.T) {
 	for _, unavailable := range []bool{false, true} {
-		st := storetest.New(t, testdbseed.DefaultProjectID)
+		st := storetest.New(t, "project-1")
 		mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 		sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 		testutil.FailErr(t, "create session", err)
@@ -176,7 +176,7 @@ func (loadablePolicy) EvaluateInvoke(context.Context, *api.Session, string, map[
 }
 
 func TestTurnOptimizationFailureClearsTheStaleSkill(t *testing.T) {
-	st := storetest.New(t, testdbseed.DefaultProjectID)
+	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
@@ -198,7 +198,7 @@ func TestTurnOptimizationFailureClearsTheStaleSkill(t *testing.T) {
 }
 
 func TestWorkflowStartDecisionUsesItsBoundRequestOnce(t *testing.T) {
-	st := storetest.New(t, testdbseed.DefaultProjectID)
+	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)

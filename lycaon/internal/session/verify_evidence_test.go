@@ -2,8 +2,6 @@ package session
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"testing"
 	"time"
 
@@ -13,8 +11,10 @@ import (
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -39,7 +39,7 @@ func verifyGateHarness(t *testing.T, declared string) (*Host, *api.Session, []ap
 	if declared != "" {
 		mgr.Verification.SetVerifyConfig(stubVerifyConfig{cmd: declared})
 	}
-	sess, err := mgr.Coordinator.Context.Sessions.(Store).Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
+	sess, err := mgr.Coordinator.Context.Sessions.(Store).Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestVerifyGateState_commandUnverifiableCountsAsAttempt(t *testing.T) {
 
 func TestWorkflowSourceVerifyPassedReadsCurrentSessionEvidence(t *testing.T) {
 	ctx := t.Context()
-	memory := storetest.New(t, testdbseed.DefaultProjectID)
+	memory := storetest.New(t, "verify-proj")
 	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
@@ -277,7 +277,7 @@ func TestSourceRunEvidenceRequiresTerminalVerdict(t *testing.T) {
 
 func TestCommandCompletionRecordsPromotedCommandEvidence(t *testing.T) {
 	ctx := context.Background()
-	memory := storetest.New(t, testdbseed.DefaultProjectID)
+	memory := storetest.New(t, "verify-proj")
 	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	evidenceStore := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
@@ -311,7 +311,7 @@ func TestCommandCompletionRecordsPromotedCommandEvidence(t *testing.T) {
 
 func TestCommandCompletionRecordsPromotedVerifyEvidence(t *testing.T) {
 	ctx := context.Background()
-	memory := storetest.New(t, testdbseed.DefaultProjectID)
+	memory := storetest.New(t, "verify-proj")
 	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	evidenceStore := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)

@@ -3,8 +3,6 @@ package promptsource
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"slices"
 	"testing"
 
@@ -12,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -53,7 +52,7 @@ func TestProjectionAppendSettlesTranscriptBeforeReviewAccounting(t *testing.T) {
 		{name: "without review binding", withoutReviews: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			memory := storetest.New(t, testdbseed.DefaultProjectID)
+			memory := storetest.New(t, "project-1")
 			session, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 			testutil.FailErr(t, "create projection session", err)
 			source := projectionStore{SQL: memory, appendErr: tc.storageErr}
@@ -102,7 +101,7 @@ func TestProjectionAppendSettlesTranscriptBeforeReviewAccounting(t *testing.T) {
 }
 
 func TestModelBuildWiresContextOverflowAndTokenObservationCallbacks(t *testing.T) {
-	memory := storetest.New(t, testdbseed.DefaultProjectID)
+	memory := storetest.New(t, "project-1")
 	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append message", memory.AppendMessages(t.Context(), sess.ID, api.Message{
@@ -125,7 +124,7 @@ func TestModelBuildWiresContextOverflowAndTokenObservationCallbacks(t *testing.T
 
 func TestProjectionBuildForwardsSettledModelOutputIteration(t *testing.T) {
 	ctx := t.Context()
-	memory := storetest.New(t, testdbseed.DefaultProjectID)
+	memory := storetest.New(t, "project-1")
 	sess, err := memory.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 	turn, err := memory.BeginTurn(ctx, store.TurnStart{
@@ -133,7 +132,7 @@ func TestProjectionBuildForwardsSettledModelOutputIteration(t *testing.T) {
 	})
 	testutil.FailErr(t, "begin turn", err)
 
-	projection := &Projection{Sessions: memory, Transcript: transcript.New(memory, nil)}
+	projection := &Projection{Sessions: projectionStore{SQL: memory}, Transcript: transcript.New(memory, nil)}
 	deps := projection.Build()
 	iter, err := deps.SettledModelOutputIteration(ctx, turn.Attempt.ID)
 	testutil.FailErr(t, "initial settled iteration", err)

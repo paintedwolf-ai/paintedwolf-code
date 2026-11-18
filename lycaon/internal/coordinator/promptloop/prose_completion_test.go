@@ -3,13 +3,13 @@ package promptloop_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -92,7 +92,7 @@ func TestProseCompletionRequiresUsablePayload(t *testing.T) {
 	for _, forced := range []bool{false, true} {
 		for _, content := range []string{"", " \n", "The turn limit prevented reading the file."} {
 			t.Run(proseCompletionCaseName(forced, content), func(t *testing.T) {
-				messages := storetest.New(t, testdbseed.DefaultProjectID)
+				messages := storetest.New(t, "project")
 				sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 				testutil.FailErr(t, "create session", err)
 				calls := 0
@@ -153,7 +153,7 @@ func proseCompletionCaseName(forced bool, content string) string {
 }
 
 func TestProseCompletionRecoversFromBookkeepingToolCallAttempt(t *testing.T) {
-	messages := storetest.New(t, testdbseed.DefaultProjectID)
+	messages := storetest.New(t, "project")
 	sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	client := &sequentialLLMClient{completions: []*modelcall.Completion{

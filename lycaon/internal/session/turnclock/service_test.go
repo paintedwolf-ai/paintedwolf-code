@@ -1,13 +1,13 @@
 package turnclock
 
 import (
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"

@@ -3,7 +3,6 @@ package hostcontracts
 import (
 	"bufio"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net"
 	"net/http"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 )

@@ -3,8 +3,6 @@ package session
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"runtime"
 	"strings"
 	"testing"
@@ -15,9 +13,11 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/session/chats"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -204,7 +204,7 @@ func TestScreenGenerationStampNarrowsTheCandidateSet(t *testing.T) {
 }
 
 func TestDeleteSessionSharesTurnLifecycleGate(t *testing.T) {
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
+	mem := storetest.New(t, "p1")
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild, ProjectID: "p1"}, "p1")
 	testutil.FailErr(t, "create session", err)
@@ -223,7 +223,7 @@ func TestDeleteSessionDisposesBackgroundRuntimeBeforeRow(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("sleep fixture is unix-oriented")
 	}
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
+	mem := storetest.New(t, "p1")
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	mgr.SetBackgroundRegistry(reg)
@@ -248,7 +248,7 @@ func TestDeleteSessionDisposesBackgroundRuntimeBeforeRow(t *testing.T) {
 }
 
 func TestDeleteSession_refusesWhileBound(t *testing.T) {
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
+	mem := storetest.New(t, "p1")
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	ctx := context.Background()
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{
@@ -282,7 +282,7 @@ func TestDeleteSession_refusesWhileBound(t *testing.T) {
 }
 
 func TestBoundSession_archivePinRenameUnaffected(t *testing.T) {
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
+	mem := storetest.New(t, "p1")
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	ctx := context.Background()
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{

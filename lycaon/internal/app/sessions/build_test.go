@@ -3,7 +3,6 @@ package sessions
 import (
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"log/slog"
 	"maps"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"

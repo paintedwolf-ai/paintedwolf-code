@@ -4,7 +4,6 @@ package sessioncontracts
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -26,7 +26,7 @@ import (
 )
 
 func TestHandleCostSummarySessionBreakdown(t *testing.T) {
-	sessionFixture := storetest.New(t)
+	sessionFixture := storetest.New(t, testdbseed.DefaultProjectID)
 
 	tracker := costtest.NewTracker(t, nil)
 	store := sessionFixture
@@ -67,7 +67,7 @@ func TestHandleCostSummarySessionBreakdown(t *testing.T) {
 }
 
 func TestHandleCostSummaryProjectBreakdown(t *testing.T) {
-	sessionFixture := storetest.New(t)
+	sessionFixture := storetest.New(t, testdbseed.DefaultProjectID)
 
 	tracker := costtest.NewTracker(t, nil)
 	store := sessionFixture
@@ -78,7 +78,7 @@ func TestHandleCostSummaryProjectBreakdown(t *testing.T) {
 	dir := t.TempDir()
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
-	parent, err := store.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild, ProjectID: p.ID}, "")
+	parent, err := store.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild, ProjectID: p.ID}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	child, err := store.CreateChild(t.Context(), parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "work"})
 	testutil.FailErr(t, "store.CreateChild failed", err)

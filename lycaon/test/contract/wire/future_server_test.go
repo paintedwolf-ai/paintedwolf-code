@@ -3,7 +3,6 @@ package contract
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"io"
 	"net/http"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -152,7 +152,7 @@ func TestRealServerPromptRoutes(t *testing.T) {
 }
 
 func newRealServerWithSession(t *testing.T, root string) (*api.Server, string) {
-	sessionFixture := storetest.New(t)
+	sessionFixture := storetest.New(t, testdbseed.DefaultProjectID)
 
 	t.Helper()
 	store := sessionFixture

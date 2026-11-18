@@ -2,11 +2,11 @@ package store
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/messageview"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"

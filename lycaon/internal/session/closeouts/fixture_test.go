@@ -1,9 +1,9 @@
 package closeouts
 
 import (
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"

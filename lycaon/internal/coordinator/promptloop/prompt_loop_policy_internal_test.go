@@ -2,13 +2,12 @@ package promptloop
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -16,7 +15,7 @@ import (
 )
 
 func TestRunLoadsOneCoordinatorFramePerModelTurn(t *testing.T) {
-	memory := storetest.New(t, testdbseed.DefaultProjectID)
+	memory := storetest.New(t, "project")
 	source := &countingCoordinatorFrameSource{}
 	buildCalls := 0
 	deps := StoreDeps(memory)
@@ -44,7 +43,7 @@ func TestRunLoadsOneCoordinatorFramePerModelTurn(t *testing.T) {
 }
 
 func TestRunBindsCoordinatorPolicySnapshotToPromptToolSchema(t *testing.T) {
-	memory := storetest.New(t, testdbseed.DefaultProjectID)
+	memory := storetest.New(t, "project")
 	policy := &frameCheckingToolPolicy{}
 	deps := StoreDeps(memory)
 	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "done"}}})

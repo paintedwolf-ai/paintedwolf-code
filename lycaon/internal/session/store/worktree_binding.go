@@ -3,12 +3,12 @@ package store
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 )
 
 // WorktreeBinding is one session's worktree, as persisted. Absence of a row is

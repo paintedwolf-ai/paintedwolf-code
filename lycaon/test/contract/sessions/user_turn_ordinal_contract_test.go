@@ -2,12 +2,12 @@ package contract
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	wire "github.com/lycaon/lycaon/pkg/api"

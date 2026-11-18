@@ -3,8 +3,6 @@ package editoradmin
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"net/http"
 	"net/url"
 	"testing"
@@ -13,13 +11,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/pagecursor"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // failingSessions cannot read any chat.
-type failingSessions struct{ session.Store }
+type failingSessions struct{ *sessionstore.SQL }
 
 func (failingSessions) Get(context.Context, string) (*wire.Session, error) {
 	return nil, errors.New("session store offline")
@@ -89,7 +88,7 @@ func TestChangeHistoryRefusesForeignCursorsAndLimits(t *testing.T) {
 }
 
 func TestUnreadableChatStopsAffiliatedCommands(t *testing.T) {
-	f := newEditorFixture(t, withSessions(failingSessions{Store: storetest.New(t, testdbseed.DefaultProjectID)}))
+	f := newEditorFixture(t, withSessions(failingSessions{SQL: storetest.New(t)}))
 	d := f.open(t, "a.txt", "window")
 	chat := uuid.NewString()
 	command := wire.EditorDocumentCommandRequest{SessionID: chat, OperationID: uuid.NewString(), ClientID: "window", ExpectedRevision: d.Revision}

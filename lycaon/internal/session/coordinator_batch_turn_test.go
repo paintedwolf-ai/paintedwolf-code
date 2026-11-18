@@ -3,7 +3,6 @@ package session_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strings"
 	"testing"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -30,7 +30,7 @@ import (
 func TestCoordinatorBatchTurn_oneSynthesisPerTurnLatch(t *testing.T) {
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load hints", err)
-	store := storetest.New(t, testdbseed.DefaultProjectID)
+	store := storetest.New(t, "coordinator")
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 
@@ -58,7 +58,7 @@ func TestCoordinatorBatchTurn_oneSynthesisPerTurnLatch(t *testing.T) {
 }
 
 func TestCoordinatorBatchTurn_groundingRetryDoesNotSetLatch(t *testing.T) {
-	store := storetest.New(t, testdbseed.DefaultProjectID)
+	store := storetest.New(t, "coordinator")
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 
 	ctx := context.Background()
@@ -84,9 +84,9 @@ func (c *executionCheckpoints) ListPending(_ context.Context, id string, _ *api.
 }
 
 func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
-	for _, backend := range []string{"memory", "sql"} {
+	for _, backend := range []string{"sql"} {
 		t.Run(backend, func(t *testing.T) {
-			var st session.Store = storetest.New(t, testdbseed.DefaultProjectID)
+			var st session.Store
 			if backend == "sql" {
 				database := testdbfixture.Open(t, "execution.db")
 				testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
@@ -180,7 +180,7 @@ func TestExecutionObservationRejectsMissingSession(t *testing.T) {
 }
 
 func TestExecutionTreeSupportsWorkflowStartsWithoutPromptAdmission(t *testing.T) {
-	st := storetest.New(t, testdbseed.DefaultProjectID)
+	st := storetest.New(t, "project")
 	root, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project")
 	testutil.FailErr(t, "create workflow session", err)
 	manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)

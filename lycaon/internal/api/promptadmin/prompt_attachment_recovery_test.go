@@ -2,8 +2,6 @@ package promptadmin
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/bytebound"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -20,7 +19,7 @@ import (
 
 func newPromptAttachmentRecoveryFixture(t *testing.T) (*Handler, *store.SQL, blobstore.Store, *wire.Session) {
 	t.Helper()
-	sessions := storetest.New(t, testdbseed.DefaultProjectID)
+	sessions := storetest.New(t, "project")
 	sess, err := sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	manager := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)

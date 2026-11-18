@@ -3,7 +3,6 @@ package history
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"reflect"
 	"strings"
 	"testing"
@@ -13,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"

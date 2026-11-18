@@ -2,7 +2,6 @@ package hostcontracts
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
@@ -108,7 +108,7 @@ func TestWorkersRequiresSessionID(t *testing.T) {
 }
 
 func TestCostSummaryRequiresSessionID(t *testing.T) {
-	sessionFixture := storetest.New(t)
+	sessionFixture := storetest.New(t, testdbseed.DefaultProjectID)
 
 	store := sessionFixture
 	mock := llm.NewMockProvider(nil)

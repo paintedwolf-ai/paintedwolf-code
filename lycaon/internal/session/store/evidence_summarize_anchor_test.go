@@ -3,13 +3,14 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"testing"
 )
 
 func summarizeAnchorJSON(anchors []map[string]any) string {

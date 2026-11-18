@@ -3,21 +3,21 @@ package promptloop
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/coordinator/guard"
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"path/filepath"
 	"reflect"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -25,7 +25,7 @@ import (
 
 func TestPromptLoopResponseAdmissionStopsBeforeAnotherRequest(t *testing.T) {
 	ctx := t.Context()
-	messages := storetest.New(t, testdbseed.DefaultProjectID)
+	messages := storetest.New(t, "project")
 	session, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "configure response allowance", messages.ConfigureModelLimit(ctx, session.ID, 1))
@@ -329,12 +329,10 @@ func newAttemptHarness(t *testing.T, workerChild bool, maxIter int, steps []scri
 			Streams: &testMessageStreams{project: func(ctx context.Context, sessionID string, message api.Message) error {
 				return messages.PatchLiveProjection(ctx, sessionID, message.ID, message.Content, message.ToolCalls)
 			}},
-			AppendDraftVersion: messages.AppendDraftVersion,
-			CountDraftVersions: messages.CountDraftVersions,
-			AdmitModelResponse: messages.AdmitModelResponse,
-			SettledModelOutputIteration: func(ctx context.Context, attemptID string) (int, error) {
-				return store.SettledModelOutputIteration(ctx, messages, attemptID)
-			},
+			AppendDraftVersion:          messages.AppendDraftVersion,
+			CountDraftVersions:          messages.CountDraftVersions,
+			AdmitModelResponse:          messages.AdmitModelResponse,
+			SettledModelOutputIteration: messages.SettledModelOutputIteration,
 			SettleModelOutput: func(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error) {
 				seenIterations[out.Iteration]++
 				settledIterations = append(settledIterations, out.Iteration)

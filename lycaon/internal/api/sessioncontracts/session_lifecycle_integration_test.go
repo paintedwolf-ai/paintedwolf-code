@@ -5,7 +5,6 @@ package sessioncontracts
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -272,7 +272,7 @@ func TestSessionCreateDeletePublishLifecycleActions(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := reg.Create(ctx, project.CreateParams{})
+	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	mem := sessionFixture
 	hub := events.NewMemoryHub()

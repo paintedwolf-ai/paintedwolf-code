@@ -2,7 +2,6 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
@@ -84,7 +84,6 @@ func TestInjectOnImplementDefaultFirstTurn(t *testing.T) {
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
 	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)

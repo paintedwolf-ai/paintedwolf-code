@@ -3,12 +3,10 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -20,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/postturn"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -271,7 +270,7 @@ func TestProgressMissingSkipsAfterRejectedDispatchTurn(t *testing.T) {
 
 func TestProgressMissingSkipsWorkerChild(t *testing.T) {
 	mgr := newPostHookManager(t)
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
+	mem := storetest.New(t, "proj-1")
 	ctx := t.Context()
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "proj-1")
 	testutil.FailErr(t, "Create parent", err)
@@ -295,7 +294,7 @@ func TestProgressMissingSkipsWorkerChild(t *testing.T) {
 
 func TestProgressMissingSkipsSpecWorkflowArtifacts(t *testing.T) {
 	mgr := newPostHookManager(t)
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
+	mem := storetest.New(t, "proj-1")
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureSpec}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
 	mgr.Coordinator.Context.Sessions = mem
@@ -310,7 +309,7 @@ func TestProgressMissingSkipsSpecWorkflowArtifacts(t *testing.T) {
 
 func TestWorkflowPhaseExitNudgesAfterUnrelatedToolArc(t *testing.T) {
 	mgr := newPostHookManager(t)
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
+	mem := storetest.New(t, "proj-1")
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
 	mgr.Coordinator.Context.Sessions = mem
@@ -335,7 +334,7 @@ func TestWorkflowPhaseExitNudgesAfterUnrelatedToolArc(t *testing.T) {
 
 func TestWorkflowPhaseExitAllowsAnotherAsk(t *testing.T) {
 	mgr := newPostHookManager(t)
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
+	mem := storetest.New(t, "proj-1")
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
 	mgr.Coordinator.Context.Sessions = mem

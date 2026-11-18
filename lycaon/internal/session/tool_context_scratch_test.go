@@ -1,7 +1,6 @@
 package session
 
 import (
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -324,7 +324,7 @@ func TestTurnClockRestoresFromTheStoreAfterRestart(t *testing.T) {
 
 func TestEvaluateVerdictGroundingHostAssemblesMissingCitations(t *testing.T) {
 	ctx := t.Context()
-	st := storetest.New(t, testdbseed.DefaultProjectID)
+	st := storetest.New(t, "project-1")
 	parent, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create parent", err)
 	child, err := st.CreateChild(ctx, parent, api.SpawnChildRequest{
@@ -369,7 +369,7 @@ func TestEvaluateVerdictGroundingHostAssemblesMissingCitations(t *testing.T) {
 
 func TestEvaluateVerdictGroundingRejectsInventedCitation(t *testing.T) {
 	ctx := t.Context()
-	st := storetest.New(t, testdbseed.DefaultProjectID)
+	st := storetest.New(t, "project-1")
 	parent, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create parent", err)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())

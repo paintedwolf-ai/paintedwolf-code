@@ -96,7 +96,13 @@ func BindSessionWorkspace(t *testing.T, sessionStore interface {
 	var projectID string
 	err := database.QueryRowContext(t.Context(), `SELECT project_id FROM sessions WHERE id = ?`, sessionID).Scan(&projectID)
 	testutil.FailErr(t, "read session project", err)
-	rootID := InsertProjectRoot(t, database, projectID, path)
+	var rootID string
+	err = database.QueryRowContext(t.Context(), `SELECT id FROM project_roots WHERE project_id = ? AND path = ?`, projectID, path).Scan(&rootID)
+	if err == sql.ErrNoRows {
+		rootID = InsertProjectRoot(t, database, projectID, path)
+	} else {
+		testutil.FailErr(t, "find workspace root", err)
+	}
 	_, err = database.ExecContext(t.Context(), `UPDATE sessions SET workspace_root_id = ? WHERE id = ?`, rootID, sessionID)
 	testutil.FailErr(t, "bind session workspace", err)
 }

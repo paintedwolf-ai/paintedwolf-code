@@ -2,10 +2,10 @@ package store
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 )
 
 // UserIntentBefore reads the latest human opener at a worker's creation boundary.

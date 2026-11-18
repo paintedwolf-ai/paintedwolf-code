@@ -3,7 +3,6 @@ package contract
 import (
 	"bytes"
 	"context"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -19,10 +18,12 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/tools"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"gopkg.in/yaml.v3"
 )
 
 // extpacksActiveAllowlist names device-catalog boundaries. The ambient task()

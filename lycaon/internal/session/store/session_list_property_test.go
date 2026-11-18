@@ -2,7 +2,6 @@ package store
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"reflect"
 	"sort"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

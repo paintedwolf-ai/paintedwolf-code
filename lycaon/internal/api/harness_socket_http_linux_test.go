@@ -4,7 +4,6 @@ package api
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net"
 	"net/http"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"

@@ -1,9 +1,10 @@
 package store
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
-	"testing"
 )
 
 func newSQLTestStore(t *testing.T, projectIDs ...string) *SQL {

@@ -3,8 +3,6 @@ package turnsettlement
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator"
@@ -13,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/batchcontrol"
 	"github.com/lycaon/lycaon/internal/session/execution"
 	"github.com/lycaon/lycaon/internal/session/promptstate"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -39,7 +38,7 @@ func (stubWorkflowPolicy) AssertSessionCompletion(context.Context, string) error
 func (stubWorkflowPolicy) CurrentPhase(context.Context, string) string { return "plan" }
 
 func TestFinishAndSettlePendingPreservesCloseoutBlockedWithoutFailingTurn(t *testing.T) {
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
+	mem := storetest.New(t, "proj-1")
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark session busy", mem.SetSessionStatus(t.Context(), sess.ID, api.SessionStatusBusy))

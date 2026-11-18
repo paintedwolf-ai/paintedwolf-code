@@ -1,8 +1,6 @@
 package api
 
 import (
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +8,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 )
 
 func TestHarnessProviderProbeRequiresHarnessAuthenticationAndLiveOptIn(t *testing.T) {

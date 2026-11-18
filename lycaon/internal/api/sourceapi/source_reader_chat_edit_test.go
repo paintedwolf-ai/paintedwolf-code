@@ -1,9 +1,9 @@
 package sourceapi
 
 import (
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"

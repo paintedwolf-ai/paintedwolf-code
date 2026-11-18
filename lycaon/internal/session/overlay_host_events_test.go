@@ -2,8 +2,6 @@ package session
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"strings"
 	"testing"
 
@@ -13,7 +11,9 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -40,7 +40,7 @@ func setupHostEventManager(t *testing.T, promoter OverlayPromoter) (*Host, strin
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := store.Create(context.Background(), api.CreateSessionRequest{}, "")
+	sess, err := store.Create(context.Background(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestManagerOverlayResolutionRetriesProjectPromotion(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-			st := storetest.New(t, testdbseed.DefaultProjectID)
+			st := storetest.New(t, "project-1")
 			sess, err := st.Create(context.Background(), api.CreateSessionRequest{}, "project-1")
 			testutil.FailErr(t, "create session", err)
 			mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
@@ -260,7 +260,7 @@ func TestAppendHostEventPublishesOrd(t *testing.T) {
 	pub := &events.Publisher{Hub: hub}
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetEventPublisher(pub)
-	projectID := attachTestProject(t, mgr)
+	projectID := attachTestProject(t, mgr, store)
 
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: projectID}, projectID)

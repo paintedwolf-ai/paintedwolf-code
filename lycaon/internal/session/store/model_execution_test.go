@@ -4,16 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/promptresult"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type modelExecutionStore interface {
+	SettledModelOutputIteration(context.Context, string) (int, error)
 	turnTestStore
 	ConfigureModelLimit(context.Context, string, int) error
 	AdmitModelResponse(context.Context, string, string) error
@@ -219,7 +220,7 @@ func TestCloseoutRollsBackWhenFinalizingCheckpointLosesItsClaim(t *testing.T) {
 	}
 }
 
-func TestSettleModelOutputIterationCollisionReturnsTypedErrorParity(t *testing.T) {
+func TestSettleModelOutputIterationCollisionReturnsTypedError(t *testing.T) {
 	if got := (*ModelOutputIterationCollisionError)(nil).Error(); got != ErrModelOutputIterationCollision.Error() {
 		t.Fatalf("nil collision error = %q want %q", got, ErrModelOutputIterationCollision.Error())
 	}
@@ -234,17 +235,12 @@ func TestSettleModelOutputIterationCollisionReturnsTypedErrorParity(t *testing.T
 	turn, err := st.BeginTurn(ctx, TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: "{}"})
 	testutil.FailErr(t, "begin turn", err)
 
-	emptySeed, err := SettledModelOutputIteration(ctx, st, "")
+	emptySeed, err := st.SettledModelOutputIteration(ctx, "")
 	testutil.FailErr(t, "read empty attempt iteration", err)
 	if emptySeed != 0 {
 		t.Fatalf("empty attempt iteration = %d want 0", emptySeed)
 	}
-	unknownStoreSeed, err := SettledModelOutputIteration(ctx, struct{}{}, turn.Attempt.ID)
-	testutil.FailErr(t, "read unknown store attempt iteration", err)
-	if unknownStoreSeed != 0 {
-		t.Fatalf("unknown store attempt iteration = %d want 0", unknownStoreSeed)
-	}
-	initialSeed, err := SettledModelOutputIteration(ctx, st, turn.Attempt.ID)
+	initialSeed, err := st.SettledModelOutputIteration(ctx, turn.Attempt.ID)
 	testutil.FailErr(t, "read initial attempt iteration", err)
 	if initialSeed != 0 {
 		t.Fatalf("initial attempt iteration = %d want 0", initialSeed)
@@ -258,7 +254,7 @@ func TestSettleModelOutputIterationCollisionReturnsTypedErrorParity(t *testing.T
 	_, err = st.SettleModelOutput(ctx, first)
 	testutil.FailErr(t, "replay identical iteration 1 output", err)
 
-	afterFirst, err := SettledModelOutputIteration(ctx, st, turn.Attempt.ID)
+	afterFirst, err := st.SettledModelOutputIteration(ctx, turn.Attempt.ID)
 	testutil.FailErr(t, "read settled iteration after first output", err)
 	if afterFirst != 1 {
 		t.Fatalf("settled iteration = %d want 1", afterFirst)
@@ -287,7 +283,7 @@ func TestSettleModelOutputIterationCollisionReturnsTypedErrorParity(t *testing.T
 		Iteration: 3, MessageID: uuid.NewString(), Content: "Third output.",
 	})
 	testutil.FailErr(t, "settle iteration 3", err)
-	afterThird, err := SettledModelOutputIteration(ctx, st, turn.Attempt.ID)
+	afterThird, err := st.SettledModelOutputIteration(ctx, turn.Attempt.ID)
 	testutil.FailErr(t, "read settled iteration after third output", err)
 	if afterThird != 3 {
 		t.Fatalf("settled iteration = %d want 3", afterThird)

@@ -3,7 +3,6 @@ package contractfixture
 import (
 	"context"
 	"database/sql"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api"
@@ -12,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"

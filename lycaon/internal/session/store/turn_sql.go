@@ -291,17 +291,11 @@ func insertSettledModelOutput(ctx context.Context, q *db.Queries, out ModelOutpu
 	return err
 }
 
-// SettledModelOutputIteration returns the highest model output iteration
-// settled for the given turn attempt, or 0 when the attempt has none.
-func SettledModelOutputIteration(ctx context.Context, st any, attemptID string) (int, error) {
-	if strings.TrimSpace(attemptID) == "" || st == nil {
+// SettledModelOutputIteration returns the last settled iteration for an attempt.
+func (t *sqlTurns) SettledModelOutputIteration(ctx context.Context, attemptID string) (int, error) {
+	if strings.TrimSpace(attemptID) == "" {
 		return 0, nil
 	}
-	switch s := st.(type) {
-	case *SQL:
-		maxIteration, err := s.queries.MaxSettledModelOutputIteration(ctx, attemptID)
-		return int(maxIteration), err
-	default:
-		return 0, nil
-	}
+	iteration, err := t.core.queries.MaxSettledModelOutputIteration(ctx, attemptID)
+	return int(iteration), err
 }

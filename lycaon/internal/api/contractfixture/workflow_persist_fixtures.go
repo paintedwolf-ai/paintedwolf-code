@@ -2,9 +2,6 @@ package contractfixture
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
-	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -14,8 +11,11 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )

@@ -5,7 +5,6 @@ package apitestdeps
 import (
 	"context"
 	"errors"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"path/filepath"
 	"testing"
 	"time"
@@ -48,6 +47,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/session"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -326,8 +326,8 @@ func (refusingExecutor) Execute(context.Context, wire.WorkerTask, worker.WorkerR
 func (refusingExecutor) AbortWorkerRuntime(context.Context, wire.WorkerTask) error { return nil }
 
 func storeDatabase(store session.Store) db.Handle {
-	if owner, ok := store.(interface{ DB() db.Handle }); ok {
-		return owner.DB()
+	if database, ok := store.(interface{ DB() db.Handle }); ok {
+		return database.DB()
 	}
 	return nil
 }
