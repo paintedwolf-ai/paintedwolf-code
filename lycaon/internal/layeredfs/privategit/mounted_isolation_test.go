@@ -429,7 +429,7 @@ func TestMountedDirectMutableGitCoherenceLockContentionAndStoreStockMetrics(t *t
 	privGitDir := v.repos["."].privateGitDir
 	v.mu.Unlock()
 
-	// Verify #1667 StoreMetrics RetainedObjects and RetainedBytes stock metrics.
+	// Check retained object and byte counts.
 	metrics := mgr.Store().Metrics()
 	if metrics.RetainedObjects <= 0 || metrics.RetainedBytes <= 0 {
 		t.Fatalf("expected positive RetainedObjects and RetainedBytes in StoreMetrics, got %+v", metrics)

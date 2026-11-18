@@ -18,7 +18,7 @@ func (m *Service) BeforeTool(
 	ctx context.Context,
 	sess *api.Session,
 	history []api.Message,
-	_ string,
+
 	tool string,
 	args map[string]any,
 ) (string, bool, error) {
@@ -75,7 +75,7 @@ func (m *Service) BeforeFinish(
 	ctx context.Context,
 	sess *api.Session,
 	history []api.Message,
-	_ string,
+
 	lastAssistant string,
 	draft guidance.CloseoutDraft,
 	surfaceID string,

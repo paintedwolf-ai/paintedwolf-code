@@ -96,7 +96,7 @@ func runTaskArgumentCall(t *testing.T, call api.ToolCall) (invocation.Settlement
 	deps.Context.Tools, deps.Tools.Invocations = reg, rec
 	deps.Context.Limits = loopTestLimits(2)
 	deps.Model.LLM = &sequentialLLMClient{completions: []*modelcall.Completion{{ToolCalls: []api.ToolCall{call}}, {Content: "Done"}}}
-	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, args map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, args map[string]any) (string, bool, error) {
 		guarded = true
 		scope, scopeErr := api.TaskScopeFromArgs(args)
 		if scopeErr != nil {

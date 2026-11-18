@@ -122,7 +122,7 @@ func initLLMCaptureLog() {
 	if !LLMDebugEnabled() {
 		return
 	}
-	log, err := openJSONLDebugLog(true, debugpaths.KindLLM)
+	log, err := openJSONLDebugLog(debugpaths.KindLLM)
 	if err != nil {
 		slog.Warn("llm capture disabled", "err", err)
 		return

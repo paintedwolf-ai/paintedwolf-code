@@ -115,7 +115,7 @@ func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pen
 		return
 	}
 	runID := l.Facts.activeRunID(ctx, sessionID)
-	allow, busy := l.Admission.evaluate(ctx, sessionID, wake)
+	allow, busy := l.Admission.evaluate(ctx, sessionID)
 	if !l.Cycles.workerCycleIdle(ctx, sessionID, "") && !perJobWake {
 		loopLogNudge(sessionID, wake, inform, legID, completingJobID, "defer_worker_cycle_idle")
 		l.deferNudge(ctx, sessionID, pending)

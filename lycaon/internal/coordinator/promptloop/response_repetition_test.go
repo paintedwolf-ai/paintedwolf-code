@@ -38,7 +38,7 @@ func TestBatchRejectionsEscalateOnlyAcrossResponses(t *testing.T) {
 				return guidance.NewRefusal("TOOL_NOT_OFFERED", "schema not loaded").WithCause(&toolrejection.ToolReject{Code: "TOOL_NOT_OFFERED", FailureClass: api.FailureClassPolicyRejection})
 			}
 			if beforeInvoke {
-				deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+				deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, map[string]any) (string, bool, error) {
 					return "", false, refusal()
 				}
 			} else {

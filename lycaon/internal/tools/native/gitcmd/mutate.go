@@ -69,9 +69,9 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 	case "git checkout":
 		return runCheckout(ctx, p, scopedTC, dir, repo, out, stderr)
 	case "git switch":
-		return runSwitch(ctx, p, scopedTC, repo, out, stderr)
+		return runSwitch(ctx, p, scopedTC, out, stderr)
 	case "git merge":
-		return runMerge(ctx, p, scopedTC, repo, out, stderr)
+		return runMerge(ctx, p, scopedTC, out, stderr)
 	case "git cherry-pick":
 		return runSequence(ctx, p, scopedTC, "cherry-pick", out, stderr)
 	case "git revert":
@@ -87,13 +87,13 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 	case "git worktree":
 		return runWorktree(ctx, p, tc, dir, repo, stderr)
 	case "git fetch":
-		return runNetwork(ctx, p, scopedTC, dir, repo, out, stderr, toolcontract.EffectCompleted)
+		return runNetwork(ctx, p, scopedTC, repo, out, stderr, toolcontract.EffectCompleted)
 	case "git push":
-		return runNetwork(ctx, p, scopedTC, dir, repo, out, stderr, toolcontract.EffectCompleted)
+		return runNetwork(ctx, p, scopedTC, repo, out, stderr, toolcontract.EffectCompleted)
 	case "git ls-remote":
-		return runNetwork(ctx, p, scopedTC, dir, repo, out, stderr, toolcontract.NoEffect)
+		return runNetwork(ctx, p, scopedTC, repo, out, stderr, toolcontract.NoEffect)
 	case "git pull":
-		return runPull(ctx, p, scopedTC, dir, repo, out, stderr)
+		return runPull(ctx, p, scopedTC, repo, out, stderr)
 	case "git bisect", "git bisect start", "git bisect skip", "git bisect run", "git bisect reset",
 		"git bisect log", "git bisect terms", "git bisect visualize", "git bisect view":
 		return runBisect(ctx, p, scopedTC, repo, out, stderr)
@@ -265,7 +265,7 @@ func runCheckout(ctx context.Context, p Prepared, tc tools.ToolContext, dir stri
 	return settleOperate(ctx, p, res, out, stderr, has(p.Argv, "-q"), err)
 }
 
-func runSwitch(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
+func runSwitch(ctx context.Context, p Prepared, tc tools.ToolContext, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
 	ops := p.Argv.Operands().Values()
 	var req git.OperationRequest
 	switch {
@@ -286,7 +286,7 @@ func runSwitch(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitre
 	return settleOperate(ctx, p, res, out, stderr, has(p.Argv, "-q"), err)
 }
 
-func runMerge(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
+func runMerge(ctx context.Context, p Prepared, tc tools.ToolContext, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
 	action := ""
 	if has(p.Argv, "--continue") {
 		action = "continue"

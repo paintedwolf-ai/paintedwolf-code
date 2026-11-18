@@ -12,11 +12,10 @@ import (
 
 func TestCoordinatorContextDietTurnProfileMatrix(t *testing.T) {
 	t.Parallel()
-	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon")
 	for _, row := range ContextDietMatrix {
 		t.Run(row.Name, func(t *testing.T) {
 			t.Parallel()
-			runCtx := surface.EnrichRunContextForWorkflow(row.RunCtx, root)
+			runCtx := surface.EnrichRunContextForWorkflow(row.RunCtx)
 			profile := surface.ResolveTurnProfile(runCtx, row.Sess, coordinatorTurnHistory(row.History, row.UserPrompt), row.State)
 			if profile.SurfaceID != row.SurfaceID {
 				t.Fatalf("surface = %q want %q", profile.SurfaceID, row.SurfaceID)

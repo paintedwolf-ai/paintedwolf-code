@@ -96,7 +96,7 @@ func TestBeforeToolObservesWaitVisibility(t *testing.T) {
 	}}
 
 	ctx := tools.WithCallReach(t.Context(), toolreach.Offered([]string{"wait"}))
-	_, _, err = svc.BeforeTool(ctx, sess, history, "", "wait", map[string]any{"timeout_ms": 60000})
+	_, _, err = svc.BeforeTool(ctx, sess, history, "wait", map[string]any{"timeout_ms": 60000})
 	refusal, rejected := guidance.RefusalFromError(err)
 	if !rejected || refusal.Code() != guard.WaitHiddenTextCode {
 		t.Fatalf("expected %s refusal, got %v", guard.WaitHiddenTextCode, err)
@@ -147,7 +147,7 @@ func TestBeforeFinishSkipsHostNoToolTurnWhenInvokeDisallowed(t *testing.T) {
 	svc := New(stubSessions{sess: sess}, policy, nil, nil, state, nil, nil, nil, nil, closeouts.New(stubSessions{sess: sess}), nil, nil)
 
 	reject, blocked := svc.BeforeFinish(
-		t.Context(), sess, nil, "", "Final summary.", guidance.CloseoutDraft{}, surface.SurfaceImplementDispatch, false, nil, false,
+		t.Context(), sess, nil, "Final summary.", guidance.CloseoutDraft{}, surface.SurfaceImplementDispatch, false, nil, false,
 	)
 	if blocked || reject != nil {
 		t.Fatalf("BeforeFinish with invokeAllowed=false blocked: blocked=%v reject=%v", blocked, reject)
@@ -183,14 +183,14 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 	}
 	for i := 0; i < synthesisDelayMaxPerPrompt; i++ {
 		reject, blocked := svc.BeforeFinish(
-			t.Context(), sess, history, "", "Final summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
+			t.Context(), sess, history, "Final summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
 		)
 		if !blocked || reject == nil || reject.Code() != progressOpenBeforeCloseoutCode {
 			t.Fatalf("attempt %d: got blocked=%v reject=%v, want %s", i+1, blocked, reject, progressOpenBeforeCloseoutCode)
 		}
 	}
 	reject, blocked := svc.BeforeFinish(
-		t.Context(), sess, history, "", "Final summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
+		t.Context(), sess, history, "Final summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
 	)
 	if blocked || reject != nil {
 		t.Fatalf("after %d retries: got blocked=%v reject=%v, want waiver", synthesisDelayMaxPerPrompt, blocked, reject)
@@ -198,7 +198,7 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 
 	closeoutSvc.BeginPrompt(t.Context(), sess, promptinput.Input{Text: "next user prompt"})
 	reject, blocked = svc.BeforeFinish(
-		t.Context(), sess, history, "", "Next turn summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
+		t.Context(), sess, history, "Next turn summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
 	)
 	if blocked || reject != nil {
 		t.Fatalf("unchanged waived checklist on subsequent prompt: got blocked=%v reject=%v, want waiver preserved", blocked, reject)
@@ -206,7 +206,7 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 
 	progressStore.content = "- [x] Done\n- [ ] Newly added item\n"
 	reject, blocked = svc.BeforeFinish(
-		t.Context(), sess, history, "", "Updated checklist summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
+		t.Context(), sess, history, "Updated checklist summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
 	)
 	if !blocked || reject == nil || reject.Code() != progressOpenBeforeCloseoutCode {
 		t.Fatalf("updated checklist after waiver: got blocked=%v reject=%v, want %s", blocked, reject, progressOpenBeforeCloseoutCode)

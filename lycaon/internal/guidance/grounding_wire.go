@@ -74,7 +74,7 @@ func wireEvidenceRecord(ev evidence.Ledger, rec evidence.Record) api.CitationGro
 	shape := evidence.RecordShape(rec)
 	trust := strings.TrimSpace(rec.Fidelity)
 	if trust == "" {
-		trust = evidence.RecordFidelity(rec, ev, rec.Handle)
+		trust = evidence.RecordFidelity(rec, ev)
 	}
 	item := api.CitationGroundingEvidenceRecord{
 		Handle:    rec.Handle,

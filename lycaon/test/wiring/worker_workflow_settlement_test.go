@@ -45,7 +45,7 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 			for i := 1; i <= 5; i++ {
 				call.Identity.ToolCallID = uuid.NewString()
 				args := map[string]any{"workflow_work_id": fmt.Sprintf("leg-%d", i)}
-				_, blocked, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "task", args)
+				_, blocked, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(ctx, sess, nil, "task", args)
 				testutil.FailErr(t, "admit planned identity", err)
 				if blocked {
 					t.Fatal("planned task admission blocked")

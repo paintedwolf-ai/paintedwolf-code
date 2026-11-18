@@ -146,7 +146,7 @@ func (c *closeoutContract) drive(t *testing.T, surface, content string, reportPh
 	assistant := api.Message{ID: "slot", Role: api.MessageRoleAssistant, Content: content}
 	read, err := c.loop.Closeout.readCloseoutDraft(t.Context(), sess, surface, st, history, assistant)
 	testutil.FailErr(t, "read the closeout", err)
-	out, err := c.loop.Closeout.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, "", surface, st, history, assistant, read)
+	out, err := c.loop.Closeout.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, surface, st, history, assistant, read)
 	testutil.FailErr(t, "handle the closeout", err)
 	return out, st
 }
@@ -410,12 +410,12 @@ func TestRepeatedOffenderExhausts(t *testing.T) {
 	assistant := api.Message{ID: "slot", Role: api.MessageRoleAssistant, Content: content}
 	read, err := c.loop.Closeout.readCloseoutDraft(t.Context(), sess, "implement_synthesis", st, contractHistory(content), assistant)
 	testutil.FailErr(t, "read", err)
-	first, err := c.loop.Closeout.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, "", "implement_synthesis", st, contractHistory(content), assistant, read)
+	first, err := c.loop.Closeout.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, "implement_synthesis", st, contractHistory(content), assistant, read)
 	testutil.FailErr(t, "first refusal", err)
 	if !first.retry {
 		t.Fatalf("first = %+v", first)
 	}
-	second, err := c.loop.Closeout.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, "", "implement_synthesis", st, contractHistory(content), assistant, read)
+	second, err := c.loop.Closeout.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, "implement_synthesis", st, contractHistory(content), assistant, read)
 	testutil.FailErr(t, "second refusal", err)
 	if !second.exhausted || second.retry {
 		t.Fatalf("second = %+v, want the repeat to exhaust", second)
@@ -552,7 +552,7 @@ func TestCloseoutDocumentDefectRefusedBeforeCitations(t *testing.T) {
 	}
 	out, err := loop.Closeout.handleAcceptedCloseoutReport(
 		context.Background(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()},
-		"s1", "", "implement_synthesis", st, history,
+		"s1", "implement_synthesis", st, history,
 		api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "no citations here"},
 		markdownRead("no citations here [missing#1]", false),
 	)
@@ -625,7 +625,7 @@ func TestCloseoutReportUsesOnePolicyOccurrence(t *testing.T) {
 			})
 			st := &promptLoopTurnState{draftSlotID: "draft", draftSlotAppended: true, turnBatchState: turnBatchState{turnTools: []string{"command"}}}
 			read := markdownRead(tc.body+" ["+tc.evidence+"]", false)
-			out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, "", tc.surface, st, history, history[2], read)
+			out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, tc.surface, st, history, history[2], read)
 			testutil.FailErr(t, "check report", err)
 			if calls != 1 {
 				t.Fatalf("report generated %d policy occurrences", calls)

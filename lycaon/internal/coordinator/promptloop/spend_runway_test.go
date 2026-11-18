@@ -311,7 +311,7 @@ func TestContextOverflow400TriggersCompactionAndOneRetry(t *testing.T) {
 		sess.ID,
 		initialHistory,
 		"coordinator",
-		"please summarize",
+
 		0,
 		4,
 		false,
@@ -395,7 +395,7 @@ func TestContextOverflow400RetryFailsTurnAfterSingleRetry(t *testing.T) {
 			{ID: "m3", Role: api.MessageRoleUser, Content: "third"},
 		},
 		"coordinator",
-		"third",
+
 		0,
 		4,
 		false,

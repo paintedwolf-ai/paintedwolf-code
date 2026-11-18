@@ -130,7 +130,7 @@ func (m *Approvals) SyncHumanApproval(ctx context.Context, runID, projectDir str
 	if !ok || def.HumanApproval == nil {
 		return run, nil
 	}
-	return m.recordHumanApproval(ctx, runID, projectDir, run.CurrentPhase, manifest, def.HumanApproval)
+	return m.recordHumanApproval(ctx, runID, projectDir, run.CurrentPhase, def.HumanApproval)
 }
 
 func (m *Approvals) validateHumanApprovalReady(ctx context.Context, runID, projectDir string) error {
@@ -162,7 +162,7 @@ func (m *Approvals) validateHumanApprovalReady(ctx context.Context, runID, proje
 	return nil
 }
 
-func (m *Approvals) recordHumanApproval(ctx context.Context, runID, projectDir, phaseID string, manifest workflowdef.Manifest, cfg *workflowdef.HumanApprovalConfig) (*api.WorkflowRun, error) {
+func (m *Approvals) recordHumanApproval(ctx context.Context, runID, projectDir, phaseID string, cfg *workflowdef.HumanApprovalConfig) (*api.WorkflowRun, error) {
 	if cfg == nil {
 		return nil, nil
 	}

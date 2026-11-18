@@ -26,7 +26,7 @@ func readDirectoryNamespace(ctx context.Context, store *indexStore, dir string, 
 		return listing, err
 	}
 	defer release()
-	navigation, err := openNavigation(ctx, store, headGeneration)
+	navigation, err := openNavigation(ctx, store)
 	if err != nil {
 		return DirectoryListing{}, err
 	}

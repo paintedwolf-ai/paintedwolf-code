@@ -271,11 +271,11 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 	}
 	closeoutState.proseFinish = true
 	closeoutState.closeoutCauseText = cause.Text()
-	assistantMsg, completion, _, err := l.Model.runAssistantStreamTurn(ctx, sessionID, sess, history, closeoutState, profileID, userPrompt, 0, maxIter, in.HostTurn)
+	assistantMsg, completion, err := l.Model.runAssistantStreamTurn(ctx, sessionID, sess, history, closeoutState, profileID, 0, maxIter, in.HostTurn)
 	if err != nil {
 		if finalTurnGaveNoAnswer(ctx, err, closeoutState) && l.canCloseWithoutAnswer(sess) {
 			closeoutState.history = history
-			if _, cerr := l.endWithClosing(ctx, sess, sessionID, userPrompt, l.Context.promptTurnSurface(sessionID), closeoutState); cerr != nil {
+			if _, cerr := l.endWithClosing(ctx, sess, sessionID, l.Context.promptTurnSurface(sessionID), closeoutState); cerr != nil {
 				return history, "", "", cerr
 			}
 			return closeoutState.history, closeoutState.lastAssistantID, closeoutState.lastAssistantContent, nil
@@ -328,14 +328,14 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 		return history, "", "", err
 	}
 	history, reject, blocked, err := l.Tools.tryRejectNoToolTurn(
-		ctx, sess, history, userPrompt, assistantMsg.Content, read.Draft, surfaceID, turnTools, sessionID, assistantMsg.ID, st, false, nil,
+		ctx, sess, history, assistantMsg.Content, read.Draft, surfaceID, turnTools, sessionID, assistantMsg.ID, st, false, nil,
 	)
 	if err != nil {
 		return history, "", "", err
 	}
 	if blocked {
 		return l.emitEarlyCloseoutAfterFinishBlock(
-			ctx, sess, sessionID, userPrompt, surfaceID, assistantMsg.Content, read.Draft, reject, st, history,
+			ctx, sess, sessionID, surfaceID, assistantMsg.Content, read.Draft, reject, st, history,
 		)
 	}
 
@@ -345,7 +345,7 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 			closeoutState = &promptLoopTurnState{}
 		}
 		commitOut, cerr := l.handleAcceptedCloseoutReport(
-			ctx, sess, sessionID, userPrompt, surfaceID, closeoutState, history, assistantMsg, read,
+			ctx, sess, sessionID, surfaceID, closeoutState, history, assistantMsg, read,
 		)
 		if cerr != nil {
 			return history, "", "", cerr
@@ -359,14 +359,14 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 		}
 		// Forced finish has no further iteration; assemble from the draft.
 		return l.returnAssembledEarlyCloseout(
-			ctx, sess, sessionID, userPrompt, surfaceID, commitOut.drafted, closeoutState.closeoutRetry.codes, closeoutState, history,
+			ctx, sess, sessionID, surfaceID, commitOut.drafted, closeoutState.closeoutRetry.codes, closeoutState, history,
 		)
 	}
 
 	if st != nil && !tools.CallReach(ctx).Known() {
 		ctx = tools.WithCallReach(ctx, st.requestReach())
 	}
-	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, userPrompt, surfaceID, assistantMsg)
+	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, surfaceID, assistantMsg)
 	if err != nil {
 		return history, "", "", err
 	}
@@ -398,7 +398,7 @@ func workerCompletionAccepted(history []api.Message, assistantMessageID string) 
 func (l *turnCloseout) emitEarlyCloseoutAfterFinishBlock(
 	ctx context.Context,
 	sess *api.Session,
-	sessionID, userPrompt, surfaceID, content string,
+	sessionID, surfaceID, content string,
 	draft guidance.CloseoutDraft,
 	reject *guidance.Refusal,
 	st *promptLoopTurnState,
@@ -417,21 +417,21 @@ func (l *turnCloseout) emitEarlyCloseoutAfterFinishBlock(
 		forcedBy = append(append([]string(nil), forcedBy...), code)
 	}
 	return l.returnAssembledEarlyCloseout(
-		ctx, sess, sessionID, userPrompt, surfaceID, draft, forcedBy, closeoutState, history,
+		ctx, sess, sessionID, surfaceID, draft, forcedBy, closeoutState, history,
 	)
 }
 
 func (l *turnCloseout) returnAssembledEarlyCloseout(
 	ctx context.Context,
 	sess *api.Session,
-	sessionID, userPrompt, surfaceID string,
+	sessionID, surfaceID string,
 	draft guidance.CloseoutDraft,
 	forcedBy []string,
 	st *promptLoopTurnState,
 	history []api.Message,
 ) ([]api.Message, string, string, error) {
 	emitOut, err := l.emitAssembledCloseout(
-		ctx, sess, sessionID, userPrompt, surfaceID, draft, forcedBy, st, history,
+		ctx, sess, sessionID, surfaceID, draft, forcedBy, st, history,
 	)
 	if err != nil {
 		return history, "", "", err
@@ -443,7 +443,7 @@ func (l *turnCloseout) returnAssembledEarlyCloseout(
 		return history, "", "", nil
 	}
 	st.history = history
-	if _, err := l.endWithClosing(ctx, sess, sessionID, userPrompt, surfaceID, st); err != nil {
+	if _, err := l.endWithClosing(ctx, sess, sessionID, surfaceID, st); err != nil {
 		return history, "", "", err
 	}
 	return st.history, st.lastAssistantID, st.lastAssistantContent, nil

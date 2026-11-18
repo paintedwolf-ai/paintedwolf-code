@@ -49,7 +49,7 @@ func TestCommitProvisionalAssistantInHistorySkipsAlreadyTranscript(t *testing.T)
 	history := []api.Message{
 		{ID: "a1", Role: api.MessageRoleAssistant, Content: "ok", Visibility: api.MessageVisibilityTranscript},
 	}
-	out, err := loop.Projection.commitProvisionalAssistantInHistory(context.Background(), &api.Session{}, "s1", history, "", "", "a1")
+	out, err := loop.Projection.commitProvisionalAssistantInHistory(context.Background(), &api.Session{}, "s1", history, "", "a1")
 	testutil.FailErr(t, "loop.commitProvisionalAssistantInHistory failed", err)
 	if updateCalls != 0 {
 		t.Fatalf("update calls = %d want 0 for already-transcript row", updateCalls)
@@ -76,7 +76,7 @@ func TestCommitProvisionalAssistantInHistoryKeepsAttachedGrounding(t *testing.T)
 		{ID: "a1", Role: api.MessageRoleAssistant, Content: "the fix landed", Visibility: api.MessageVisibilityInternal, Grounding: grounding},
 	}
 	out, err := loop.Projection.commitProvisionalAssistantInHistory(
-		context.Background(), &api.Session{}, "s1", history, "go", "implement_synthesis", "a1",
+		context.Background(), &api.Session{}, "s1", history, "implement_synthesis", "a1",
 	)
 	testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
 	if committed.Grounding != grounding || committed.Visibility != api.MessageVisibilityTranscript {
@@ -113,7 +113,7 @@ func TestCommitOfUnacceptedReportSurfaceReply(t *testing.T) {
 				{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
 				{ID: "a1", Role: api.MessageRoleAssistant, Content: tc.content, Visibility: api.MessageVisibilityInternal},
 			}
-			_, err := loop.Projection.commitProvisionalAssistantInHistory(context.Background(), &api.Session{}, "s1", history, "go", "implement_investigate", "a1")
+			_, err := loop.Projection.commitProvisionalAssistantInHistory(context.Background(), &api.Session{}, "s1", history, "implement_investigate", "a1")
 			testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
 			if tc.visible {
 				if committed.Visibility != api.MessageVisibilityTranscript || committed.Kind != api.MessageKindDraft || committed.Content != tc.want || committed.CompletionReport != nil {
@@ -146,7 +146,7 @@ func TestCommitProvisionalAssistantInHistoryStampsDraftOnOrchestrationSurface(t 
 		},
 	}
 	out, err := loop.Projection.commitProvisionalAssistantInHistory(
-		context.Background(), &api.Session{}, "s1", history, "go", "implement_dispatch", "a1",
+		context.Background(), &api.Session{}, "s1", history, "implement_dispatch", "a1",
 	)
 	testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
 	if committed.Kind != api.MessageKindDraft {
@@ -177,7 +177,7 @@ func TestCommitProvisionalAssistantInHistoryStampsDraftOnInvestigateOrchestratio
 		},
 	}
 	out, err := loop.Projection.commitProvisionalAssistantInHistory(
-		context.Background(), &api.Session{}, "s1", history, "go", "implement_investigate", "a1",
+		context.Background(), &api.Session{}, "s1", history, "implement_investigate", "a1",
 	)
 	testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
 	if committed.Kind != api.MessageKindDraft {
@@ -210,7 +210,7 @@ func TestCommitProvisionalAssistantInHistoryDoesNotStampDraftOnWorkerChild(t *te
 	}
 	child := &api.Session{ID: "child", ParentSessionID: "parent"}
 	out, err := loop.Projection.commitProvisionalAssistantInHistory(
-		context.Background(), child, "child", history, "go", "", "a1",
+		context.Background(), child, "child", history, "", "a1",
 	)
 	testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
 	if committed.Kind != "" {
@@ -246,7 +246,7 @@ func TestCommitDoesNotStampDraftOnToolStep(t *testing.T) {
 				},
 			}
 			out, err := loop.Projection.commitProvisionalAssistantInHistory(
-				context.Background(), &api.Session{ID: "s1"}, "s1", history, "go", "implement_dispatch", "a1",
+				context.Background(), &api.Session{ID: "s1"}, "s1", history, "implement_dispatch", "a1",
 			)
 			testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
 			if committed.Kind != "" {

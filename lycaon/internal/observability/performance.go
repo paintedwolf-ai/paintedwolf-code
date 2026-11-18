@@ -75,7 +75,7 @@ func activePerformanceCapture() *performanceCapture {
 		if !PerformanceEnabled() {
 			return
 		}
-		log, err := openJSONLDebugLog(true, debugpaths.KindPerformance)
+		log, err := openJSONLDebugLog(debugpaths.KindPerformance)
 		if err != nil {
 			slog.Warn("performance capture disabled", "err", err)
 			return

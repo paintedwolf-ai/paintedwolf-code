@@ -166,7 +166,7 @@ func TestTaskAdmissionUsesTheExecutedIdentity(t *testing.T) {
 			args := map[string]any{"agent_type": tc.agent, "scope": map[string]any{"mode": tc.mode, "paths": []any{"src/**"}}, "brief": map[string]any{"goal": "Continue assigned work", "done_when": []any{"Return grounded results"}}}
 			before, err := json.Marshal(args)
 			testutil.FailErr(t, "capture original arguments", err)
-			_, blocked, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "task", args)
+			_, blocked, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(ctx, sess, nil, "task", args)
 			testutil.FailErr(t, "admit effective identity", err)
 			if blocked {
 				t.Fatal("task admission blocked")
@@ -201,7 +201,7 @@ func TestTaskAdmissionPreservesTypedResolutionFailure(t *testing.T) {
 		{"missing identity", map[string]any{}, "TOOL_ARGS_INVALID"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, _, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(t.Context(), sess, nil, "", "task", tc.args)
+			_, _, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(t.Context(), sess, nil, "task", tc.args)
 			reject := toolrejection.AsToolReject(err)
 			if reject == nil || reject.Code != tc.code {
 				t.Fatalf("rejection = %v, want typed %s", err, tc.code)

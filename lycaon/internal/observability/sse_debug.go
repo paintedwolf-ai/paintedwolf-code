@@ -42,7 +42,7 @@ func initSSEDebugLog() {
 	if !SSEDebugEnabled() {
 		return
 	}
-	log, err := openJSONLDebugLog(true, debugpaths.KindSSE)
+	log, err := openJSONLDebugLog(debugpaths.KindSSE)
 	if err != nil {
 		slog.Warn("sse debug logging disabled", "err", err)
 		return

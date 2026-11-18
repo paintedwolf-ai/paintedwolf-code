@@ -248,7 +248,7 @@ func validateIconAttr(element string, attr xml.Attr) (string, string, error) {
 		}
 		return key, normalized, nil
 	}
-	if err := validateGeometryAttr(element, key, value); err != nil {
+	if err := validateGeometryAttr(key, value); err != nil {
 		return "", "", fmt.Errorf("<%s %s=%q>: %w", element, key, attr.Value, err)
 	}
 	return key, value, nil

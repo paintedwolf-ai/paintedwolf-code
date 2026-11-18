@@ -1,39 +1,35 @@
 package surface
 
 import (
-	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // EnrichRunContextForWorkflow applies the declared surface profile.
-func EnrichRunContextForWorkflow(runCtx api.CoordinatorRunContext, configRoot string) api.CoordinatorRunContext {
+func EnrichRunContextForWorkflow(runCtx api.CoordinatorRunContext) api.CoordinatorRunContext {
 	if runCtx.HasComposeDraft {
 		return runCtx
 	}
 	if profile := strings.TrimSpace(runCtx.SurfaceProfile); profile != "" {
-		return EnrichRunContextWithSurfaceProfile(runCtx, profile, configRoot)
+		return EnrichRunContextWithSurfaceProfile(runCtx, profile)
 	}
 	wf := strings.ToLower(strings.TrimSpace(runCtx.WorkflowID))
 	if wf == "" || wf == "implement" {
-		return EnrichRunContextWithSurfaceProfile(runCtx, "implement", configRoot)
+		return EnrichRunContextWithSurfaceProfile(runCtx, "implement")
 	}
 	return runCtx
 }
 
 // EnrichRunContextWithSurfaceProfile applies profile-table phase defaults to runCtx.
-func EnrichRunContextWithSurfaceProfile(runCtx api.CoordinatorRunContext, profileName, configRoot string) api.CoordinatorRunContext {
-	if strings.TrimSpace(configRoot) == "" {
-		configRoot = filepath.Join("..", "..", "..")
-	}
+func EnrichRunContextWithSurfaceProfile(runCtx api.CoordinatorRunContext, profileName string) api.CoordinatorRunContext {
 	if profileName == "" && strings.TrimSpace(runCtx.WorkflowID) == "" {
 		profileName = "implement"
 	}
 	if profileName == "" {
 		return runCtx
 	}
-	profiles, err := LoadSurfaceProfiles(configRoot)
+	profiles, err := LoadSurfaceProfiles()
 	if err != nil {
 		return runCtx
 	}

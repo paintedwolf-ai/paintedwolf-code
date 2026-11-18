@@ -83,7 +83,7 @@ func (l *promptContext) coordinatorToolsForTurn(
 	sess *api.Session,
 	profileID string,
 	history []api.Message,
-	userPrompt string,
+
 	iterIndex, maxIter int,
 	frame inject.CoordinatorTurnFrame,
 	st *promptLoopTurnState,

@@ -83,7 +83,7 @@ func TestToollessResponseBoundFallsBackToDefault(t *testing.T) {
 // refuseWorkerProse refuses a worker's tool-less response the way the host's
 // report guard does, so the loop's own bound decides when the round ends.
 func refuseWorkerProse(h *attemptHarness) {
-	h.deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, sess *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
+	h.deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, sess *api.Session, _ []api.Message, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 		if !sess.IsWorkerChild() {
 			return nil, false
 		}

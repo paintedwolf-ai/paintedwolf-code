@@ -34,7 +34,7 @@ func checkClosure(
 ) []api.ComposeValidationError {
 	var out []api.ComposeValidationError
 	out = append(out, checkInvoke(opts, path, m)...)
-	out = append(out, checkPrompts(opts, path, m)...)
+	out = append(out, checkPrompts(path, m)...)
 	out = append(out, checkKicks(opts, path, m)...)
 	out = append(out, checkReadiness(condReg, path, m)...)
 	out = append(out, checkEvidenceKeys(path, m)...)
@@ -121,15 +121,15 @@ func checkInvoke(opts CatalogValidateOptions, path string, m workflowdef.Manifes
 	return out
 }
 
-func checkPrompts(opts CatalogValidateOptions, path string, m workflowdef.Manifest) []api.ComposeValidationError {
+func checkPrompts(path string, m workflowdef.Manifest) []api.ComposeValidationError {
 	var out []api.ComposeValidationError
 	for _, p := range m.PhaseDefs {
-		binding, err := workflowdef.ResolveSurfaceBinding(m, p.ID, m.ID, opts.ConfigRoot)
+		binding, err := workflowdef.ResolveSurfaceBinding(m, p.ID, m.ID)
 		if err != nil {
 			continue
 		}
 		if tmpl := strings.TrimSpace(binding.SurfaceTemplate); tmpl != "" {
-			if !promptExists(opts.ConfigRoot, tmpl) {
+			if !promptExists(tmpl) {
 				out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("missing_surface_template"),
 					fmt.Sprintf("%s: phases[%s].surface_template", path, p.ID),
 					map[string]any{"path": tmpl}))
@@ -137,7 +137,7 @@ func checkPrompts(opts CatalogValidateOptions, path string, m workflowdef.Manife
 		}
 		for _, ref := range binding.ModeRefs {
 			modePath := surface.ModeTemplateRef(ref)
-			if !promptExists(opts.ConfigRoot, modePath) {
+			if !promptExists(modePath) {
 				out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("missing_mode_ref"),
 					fmt.Sprintf("%s: phases[%s].mode_refs", path, p.ID),
 					map[string]any{"mode_ref": ref, "path": modePath}))
@@ -147,7 +147,7 @@ func checkPrompts(opts CatalogValidateOptions, path string, m workflowdef.Manife
 	return out
 }
 
-func promptExists(configRoot, rel string) bool {
+func promptExists(rel string) bool {
 	rel = strings.TrimSpace(rel)
 	if rel == "" {
 		return false
@@ -374,15 +374,15 @@ func checkReviewLoopBundled(opts CatalogValidateOptions, path string, m workflow
 
 func validateBundledExtras(opts CatalogValidateOptions, condReg *conditions.ConditionRegistry, reg *workflowdef.Registry) []api.ComposeValidationError {
 	var out []api.ComposeValidationError
-	out = append(out, checkAmbient(opts, reg)...)
+	out = append(out, checkAmbient(reg)...)
 	out = append(out, checkSpawnSubset(opts, reg)...)
-	out = append(out, checkGateFeedbackCoverage(opts, reg)...)
-	out = append(out, checkComposePolicy(opts, reg)...)
+	out = append(out, checkGateFeedbackCoverage(reg)...)
+	out = append(out, checkComposePolicy(reg)...)
 	out = append(out, checkTemplates(opts, condReg)...)
 	return out
 }
 
-func checkAmbient(opts CatalogValidateOptions, reg *workflowdef.Registry) []api.ComposeValidationError {
+func checkAmbient(reg *workflowdef.Registry) []api.ComposeValidationError {
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.Bundled(config.PlatformFlows))
 	if err != nil {
 		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("load_error"), "registry",
@@ -415,7 +415,7 @@ func checkSpawnSubset(_ CatalogValidateOptions, reg *workflowdef.Registry) []api
 }
 
 // checkSurfaceProgress validates progress-gated surfaces.
-func checkSurfaceProgress(_ CatalogValidateOptions) []api.ComposeValidationError {
+func checkSurfaceProgress() []api.ComposeValidationError {
 	surfaces, err := surface.CompileToolPlans(1)
 	if err != nil {
 		return nil
@@ -431,7 +431,7 @@ func checkSurfaceProgress(_ CatalogValidateOptions) []api.ComposeValidationError
 	return out
 }
 
-func checkGateFeedbackCoverage(opts CatalogValidateOptions, reg *workflowdef.Registry) []api.ComposeValidationError {
+func checkGateFeedbackCoverage(reg *workflowdef.Registry) []api.ComposeValidationError {
 	fbCat, err := feedback.LoadGateFeedbackCatalog()
 	if err != nil {
 		return nil
@@ -459,7 +459,7 @@ func checkGateFeedbackCoverage(opts CatalogValidateOptions, reg *workflowdef.Reg
 	return out
 }
 
-func checkComposePolicy(opts CatalogValidateOptions, reg *workflowdef.Registry) []api.ComposeValidationError {
+func checkComposePolicy(reg *workflowdef.Registry) []api.ComposeValidationError {
 	policy, err := workflowcomposition.LoadComposePolicy()
 	if err != nil {
 		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("load_error"), "compose-policy",

@@ -33,7 +33,7 @@ func validateManifestSchema(m Manifest) error {
 	for id := range surfaces {
 		knownSurfaces[id] = struct{}{}
 	}
-	knownProfiles, err := surface.LoadSurfaceProfiles("")
+	knownProfiles, err := surface.LoadSurfaceProfiles()
 	if err != nil {
 		return err
 	}

@@ -154,7 +154,7 @@ func (g generationLayout) readActivePolicy() (generationPolicy, error) {
 	if err := controlledAncestors(dir, g.anchor, g.owner); err != nil {
 		return generationPolicy{}, err
 	}
-	root, err := openControlledRoot(dir, g.anchor, g.owner)
+	root, err := openControlledRoot(dir, g.owner)
 	if err != nil {
 		return generationPolicy{}, err
 	}
@@ -192,7 +192,7 @@ func (g generationLayout) loadGeneration(sha string) (resolvedGeneration, error)
 	if err := controlledAncestors(genDir, g.anchor, g.owner); err != nil {
 		return resolvedGeneration{}, err
 	}
-	root, err := openControlledRoot(genDir, g.anchor, g.owner)
+	root, err := openControlledRoot(genDir, g.owner)
 	if err != nil {
 		return resolvedGeneration{}, err
 	}
@@ -241,7 +241,7 @@ func (g generationLayout) generationLocked(sha string, launcherPID int) bool {
 	if err := controlledAncestors(g.locksDir, g.anchor, g.owner); err != nil {
 		return false
 	}
-	root, err := openControlledRoot(g.locksDir, g.anchor, g.owner)
+	root, err := openControlledRoot(g.locksDir, g.owner)
 	if err != nil {
 		return false
 	}

@@ -71,7 +71,7 @@ func TestCitationRepairExhaustionKeepsPinnedReport(t *testing.T) {
 		history: []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "Inspect the marker"}, assistant}, turnBatchState: turnBatchState{turnTools: []string{"read"}},
 	}
 	read := guidance.ReadCloseoutReport(assistant.Content, retained, true, citationmd.Options{})
-	out, err := loop.Closeout.applyAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "", "implement_investigate", state, assistant, read)
+	out, err := loop.Closeout.applyAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "implement_investigate", state, assistant, read)
 	testutil.FailErr(t, "finish exhausted citation repair", err)
 	if !out.breakLoop || !state.proseFinishDelivered || committed.Content != "The original marker was amber [notes.txt](notes.txt)." {
 		t.Fatalf("exhaustion did not preserve the report body: outcome=%+v content=%q", out, committed.Content)

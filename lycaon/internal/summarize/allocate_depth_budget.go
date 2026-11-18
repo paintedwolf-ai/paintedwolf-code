@@ -9,7 +9,7 @@ func redistributeRolledUpDepthBudget(plans []childPlan, caps Caps, remaining int
 			weight += plan.bi
 			continue
 		}
-		cost := caps.EstimateTokens(rollupSkeletonLine(rollupRow(plan.child, nil)))
+		cost := caps.EstimateTokens(rollupSkeletonLine(rollupRow(plan.child)))
 		coverage += cost
 		released += max(0, plan.bi-cost)
 	}

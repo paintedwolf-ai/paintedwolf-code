@@ -27,7 +27,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
-func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer, certainty toolcontract.EffectCertainty) (toolcontract.ProducerResult, error) {
+func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer, certainty toolcontract.EffectCertainty) (toolcontract.ProducerResult, error) {
 	ctx, forget := attributeRemotes(ctx, p, tc, repo.Root)
 	defer forget()
 	admitted, err := authorizeRepoNetwork(ctx, p, tc, repo.Root, stderr)
@@ -72,7 +72,7 @@ func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir strin
 	return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: certainty}, nil
 }
 
-func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
+func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
 	ctx, forget := attributeRemotes(ctx, p, tc, repo.Root)
 	defer forget()
 	admitted, err := authorizeRepoNetwork(ctx, p, tc, repo.Root, stderr)
@@ -134,7 +134,7 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	ctx, forget := attributeRemotes(ctx, p, tc, dir)
 	defer forget()
 	admitted := admittedRemotes{urls: []string{rawURL}}
-	if err := authorizeRemote(ctx, p, tc, dir, rawURL, false, &admitted, stderr); err != nil {
+	if err := authorizeRemote(ctx, p, dir, rawURL, false, &admitted, stderr); err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
 	var destTarget string
@@ -226,7 +226,7 @@ func authorizeRepoNetwork(ctx context.Context, p Prepared, tc tools.ToolContext,
 	}
 	admitted := admittedRemotes{urls: urls}
 	for _, rawURL := range urls {
-		if err := authorizeRemote(ctx, p, tc, repoRoot, rawURL, intent.Push, &admitted, stderr); err != nil {
+		if err := authorizeRemote(ctx, p, repoRoot, rawURL, intent.Push, &admitted, stderr); err != nil {
 			return admittedRemotes{}, err
 		}
 	}
@@ -369,7 +369,7 @@ func within(root, path string) bool {
 
 // authorizeRemote admits one remote: network hosts through the egress gate,
 // local repositories through filesystem authority, write for push.
-func authorizeRemote(ctx context.Context, p Prepared, tc tools.ToolContext, dir, rawURL string, push bool, admitted *admittedRemotes, stderr io.Writer) error {
+func authorizeRemote(ctx context.Context, p Prepared, dir, rawURL string, push bool, admitted *admittedRemotes, stderr io.Writer) error {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
 		return nil

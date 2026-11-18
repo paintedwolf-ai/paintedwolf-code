@@ -56,7 +56,7 @@ func (l *turnProjection) commitGuardedAssistantTurn(
 	sess *api.Session,
 	sessionID string,
 	history []api.Message,
-	userPrompt, surfaceID string,
+	surfaceID string,
 	msg api.Message,
 ) (api.Message, error) {
 	if err := l.assertCoordinatorCompletion(ctx, sess, sessionID, history, msg); err != nil {
@@ -108,7 +108,7 @@ func (l *turnProjection) commitProvisionalAssistantInHistory(
 	sess *api.Session,
 	sessionID string,
 	history []api.Message,
-	userPrompt, surfaceID, assistantMessageID string,
+	surfaceID, assistantMessageID string,
 ) ([]api.Message, error) {
 	assistantMessageID = strings.TrimSpace(assistantMessageID)
 	if assistantMessageID == "" {
@@ -121,7 +121,7 @@ func (l *turnProjection) commitProvisionalAssistantInHistory(
 		if history[i].Visibility == api.MessageVisibilityTranscript {
 			return history, nil
 		}
-		committed, err := l.commitGuardedAssistantTurn(ctx, sess, sessionID, history, userPrompt, surfaceID, history[i])
+		committed, err := l.commitGuardedAssistantTurn(ctx, sess, sessionID, history, surfaceID, history[i])
 		if err != nil {
 			return nil, err
 		}

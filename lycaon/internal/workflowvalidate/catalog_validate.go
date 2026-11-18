@@ -62,7 +62,7 @@ func ValidateCatalog(ctx context.Context, opts CatalogValidateOptions) ([]api.Co
 		if err != nil {
 			return nil, err
 		}
-		agents, err := loadAgents(ctx, opts.ConfigRoot)
+		agents, err := loadAgents(ctx)
 		if err != nil {
 			return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("load_error"), "agents", //nolint:nilerr // the load error is returned as a api.ComposeValidationError, which is this API's error channel
 				map[string]any{"detail": err.Error()})}, nil
@@ -90,7 +90,7 @@ func ValidateCatalog(ctx context.Context, opts CatalogValidateOptions) ([]api.Co
 			}
 			out = append(out, validateOne(opts, condReg, agents, p, eff, true)...)
 		}
-		out = append(out, checkSurfaceProgress(opts)...)
+		out = append(out, checkSurfaceProgress()...)
 		return out, nil
 	}
 
@@ -111,7 +111,7 @@ func ValidateCatalog(ctx context.Context, opts CatalogValidateOptions) ([]api.Co
 	}
 	out = append(out, vocabulary.ValidateBundled(condReg, reg, ruleConfigs)...)
 
-	agents, err := loadAgents(ctx, opts.ConfigRoot)
+	agents, err := loadAgents(ctx)
 	if err != nil {
 		out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("load_error"), "agents",
 			map[string]any{"detail": err.Error()}))
@@ -138,7 +138,7 @@ func ValidateCatalog(ctx context.Context, opts CatalogValidateOptions) ([]api.Co
 	}
 
 	// Surface progress is host-catalog SSOT (one emitter for all modes).
-	out = append(out, checkSurfaceProgress(opts)...)
+	out = append(out, checkSurfaceProgress()...)
 	if opts.Mode == ModeBundled {
 		out = append(out, validateBundledExtras(opts, condReg, reg)...)
 	}
@@ -178,7 +178,7 @@ func validateOne(
 		d.Field = prefix(d.Field)
 		out = append(out, d)
 	}
-	out = append(out, checkLeaveability(opts, path, m)...)
+	out = append(out, checkLeaveability(path, m)...)
 	out = append(out, checkClosure(opts, condReg, path, m, overlayRules)...)
 	if overlayRules {
 		out = append(out, checkOverlayGateKit(path, m)...)
@@ -228,7 +228,7 @@ func assertSourceBijection(reg *workflowdef.Registry, sources []WorkflowSource) 
 	return nil
 }
 
-func loadAgents(ctx context.Context, configRoot string) (orchestration.AgentRegistry, error) {
+func loadAgents(ctx context.Context) (orchestration.AgentRegistry, error) {
 	reg := orchestration.NewMemoryAgentRegistry()
 	if err := orchestration.LoadRequiredAgentRegistry(ctx, reg); err != nil {
 		return nil, err

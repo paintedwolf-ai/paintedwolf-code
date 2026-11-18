@@ -94,7 +94,7 @@ func stripEllipses(processed string, expando rune) (string, []ellipsisHole) {
 			i = nameEnd
 			continue
 		}
-		out, i = elideOne(out, rs, i, nameEnd)
+		out, i = elideOne(out, rs, nameEnd)
 		holes = append(holes, ellipsisHole{
 			offset: byteLen(out),
 			mv:     metaVar{name: name, ellipsis: true, capture: name != "" && name != "_"},
@@ -104,7 +104,7 @@ func stripEllipses(processed string, expando rune) (string, []ellipsisHole) {
 }
 
 // elideOne removes one sequence variable and its list separator.
-func elideOne(out, rs []rune, start, end int) ([]rune, int) {
+func elideOne(out, rs []rune, end int) ([]rune, int) {
 	i := end
 	for i < len(rs) && (rs[i] == ' ' || rs[i] == '\t' || rs[i] == '\n') {
 		i++

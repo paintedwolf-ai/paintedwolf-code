@@ -2,7 +2,6 @@ package contract
 
 import (
 	"context"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -99,7 +98,7 @@ func TestNoFolderSpawnRosterWebResearcherOnly(t *testing.T) {
 	}
 }
 
-func renderCoordinatorTripartiteAtRootCount(t *testing.T, root string, rootCount int, forcedSurfaceID string) string {
+func renderCoordinatorTripartiteAtRootCount(t *testing.T, rootCount int, forcedSurfaceID string) string {
 	t.Helper()
 	sess := &api.Session{Posture: api.SessionPostureBuild, WorkspacePath: ""}
 	if rootCount > 0 {
@@ -113,12 +112,12 @@ func renderCoordinatorTripartiteAtRootCount(t *testing.T, root string, rootCount
 		roots = append(roots, projectroot.RootRef{ID: "r2", Label: "den", Path: "/tmp/fixture-den", IsPrimary: false})
 	}
 	runCtx := api.CoordinatorRunContext{AllowedAgents: spawn.AmbientAllowedAgents()}
-	return renderCoordinatorTripartiteForRunContextWithRoots(t, root, runCtx, sess, "Hi", nil, forcedSurfaceID, roots)
+	return renderCoordinatorTripartiteForRunContextWithRoots(t, runCtx, sess, "Hi", nil, forcedSurfaceID, roots)
 }
 
 func renderCoordinatorTripartiteForRunContextWithRoots(
 	t *testing.T,
-	root string,
+
 	runCtx api.CoordinatorRunContext,
 	sess *api.Session,
 	userPrompt string,
@@ -129,7 +128,7 @@ func renderCoordinatorTripartiteForRunContextWithRoots(
 	t.Helper()
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	var profile surface.TurnProfile
-	runCtx = surface.EnrichRunContextForWorkflow(runCtx, filepath.Join(root, "lycaon"))
+	runCtx = surface.EnrichRunContextForWorkflow(runCtx)
 	if strings.TrimSpace(forcedSurfaceID) != "" {
 		profile = surface.ResolveTurnProfileForSurface(forcedSurfaceID, runCtx, sess)
 	} else {
@@ -139,8 +138,7 @@ func renderCoordinatorTripartiteForRunContextWithRoots(
 	transition := surface.ComputeModeTransition("", surface.ExecutionModeFamily(profile.SurfaceID), nil)
 	vars := mergeCoordinatorSurfaceVars(t, profile.SurfaceID)
 	prompts.MergeWorkspaceRootsVars(vars, roots, "")
-	err := prompts.MergeCoordinatorPromptVars(profile.SurfaceID, prompts.ExecutionModePromptTransition{
-		ExecutionMode: transition.ExecutionMode, ExecutionModePrevious: transition.ExecutionModePrevious,
+	err := prompts.MergeCoordinatorPromptVars(profile.SurfaceID, prompts.ExecutionModePromptTransition{ExecutionModePrevious: transition.ExecutionModePrevious,
 		ExecutionModeEntered: transition.ExecutionModeEntered, ExecutionModeLeft: transition.ExecutionModeLeft,
 	}, "", vars)
 	contractcheck.FailErr(t, "merge coordinator prompt vars", err)

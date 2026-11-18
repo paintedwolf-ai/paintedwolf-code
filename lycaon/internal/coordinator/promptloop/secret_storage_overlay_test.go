@@ -346,9 +346,9 @@ func TestSecretStorageOverlayIsVisibleToExactlyOneModelRequest(t *testing.T) {
 		},
 	})
 	sess := &api.Session{ID: "sess", ParentSessionID: "parent"}
-	_, _, err := loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 0, 2, false, st, nil)
+	_, _, err := loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", 0, 2, false, st, nil)
 	testutil.FailErr(t, "first model request", err)
-	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 1, 2, false, st, nil)
+	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", 1, 2, false, st, nil)
 	testutil.FailErr(t, "second model request", err)
 	if len(client.requests) != 2 {
 		t.Fatalf("requests = %d want 2", len(client.requests))
@@ -408,8 +408,8 @@ func TestAssistantToolCallSecretIsStoredRedactedAndSentOnce(t *testing.T) {
 	})
 	st := &promptLoopTurnState{}
 	sess := &api.Session{ID: "sess", ParentSessionID: "parent"}
-	assistant, completion, _, err := loop.Model.runAssistantStreamTurn(
-		context.Background(), sess.ID, sess, nil, st, "worker", "", 0, 3, false,
+	assistant, completion, err := loop.Model.runAssistantStreamTurn(
+		context.Background(), sess.ID, sess, nil, st, "worker", 0, 3, false,
 	)
 	testutil.FailErr(t, "assistant tool-call turn", err)
 	if len(completion.ToolCalls) != 1 || !messageCarriesStorageSecret(assistant) {
@@ -428,9 +428,9 @@ func TestAssistantToolCallSecretIsStoredRedactedAndSentOnce(t *testing.T) {
 		t.Fatalf("reloaded assistant overlay lost canonical metadata or raw args: %+v", st.history[0])
 	}
 
-	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 1, 3, false, st, nil)
+	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", 1, 3, false, st, nil)
 	testutil.FailErr(t, "first follow-up request", err)
-	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 2, 3, false, st, nil)
+	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", 2, 3, false, st, nil)
 	testutil.FailErr(t, "second follow-up request", err)
 	if len(client.requests) != 3 {
 		t.Fatalf("requests = %d want 3", len(client.requests))

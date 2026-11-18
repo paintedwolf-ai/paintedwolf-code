@@ -36,7 +36,7 @@ func TestBeforeWaitReadsSurfaceAndDurableNotes(t *testing.T) {
 			if tc.noted {
 				history = append(history, api.Message{Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote, Content: "Visible update"})
 			}
-			_, _, err := mgr.Coordinator.Guards.BeforeTool(context.Background(), sess, history, "", "wait", map[string]any{"timeout_ms": 60000})
+			_, _, err := mgr.Coordinator.Guards.BeforeTool(context.Background(), sess, history, "wait", map[string]any{"timeout_ms": 60000})
 			refusal, rejected := guidance.RefusalFromError(err)
 			if tc.blocked {
 				if !rejected || refusal.Code() != guard.WaitHiddenTextCode {

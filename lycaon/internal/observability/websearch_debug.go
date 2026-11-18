@@ -57,7 +57,7 @@ func activeWebSearchDebugLog() *jsonlDebugLog {
 		if !WebSearchDebugEnabled() {
 			return
 		}
-		log, err := openJSONLDebugLog(true, debugpaths.KindWebSearch)
+		log, err := openJSONLDebugLog(debugpaths.KindWebSearch)
 		if err != nil {
 			slog.Warn("web-search debug logging disabled", "err", err)
 			return

@@ -294,7 +294,7 @@ func (l *toolInvocations) executeToolCall(
 		return refused
 	}
 	if l.Deps.BeforeToolRun != nil {
-		if out, skip, err := l.Deps.BeforeToolRun(ctx, sess, history, userPrompt, tc.Name, tc.Args); err != nil {
+		if out, skip, err := l.Deps.BeforeToolRun(ctx, sess, history, tc.Name, tc.Args); err != nil {
 			refused := refusedInvocation(rejectForCallError(err))
 			refused.receipt, refused.contract = receipt, def.Contract
 			return refused

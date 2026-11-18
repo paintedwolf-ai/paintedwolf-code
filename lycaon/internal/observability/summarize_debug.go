@@ -51,7 +51,7 @@ func activeSummarizeDebugLog() *jsonlDebugLog {
 	if summarizeDebug != nil {
 		return summarizeDebug
 	}
-	log, err := openJSONLDebugLog(true, debugpaths.KindSummarize)
+	log, err := openJSONLDebugLog(debugpaths.KindSummarize)
 	if err != nil {
 		slog.Warn("summarize debug logging disabled", "err", err)
 		return nil
