@@ -133,6 +133,8 @@ wheel-glide = { path = "crates/wheel-glide" }
 # Tests that wait on tokio timers run on a paused clock.
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
+# Tests sign update pointers and artifacts with a disposable key.
+minisign = "0.10"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 desktop-settings-observer = { path = "crates/desktop-settings-observer" }
@@ -145,10 +147,6 @@ gdkwayland-sys = "0.18"
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client", "staging"] }
 x11rb = { version = "0.14", features = ["screensaver"] }
-
-# Tests sign update pointers and artifacts with a disposable key.
-[dev-dependencies]
-minisign = "0.10"
 
 # An in-test compositor serves the idle protocol to the step-away monitor.
 [target.'cfg(target_os = "linux")'.dev-dependencies]

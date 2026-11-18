@@ -69,11 +69,12 @@ impl Trust {
         EMBEDDED.clone()
     }
     pub fn endpoint(&self, channel: UpdateChannel) -> String {
+        // Spelled as the egress inventory's endpoint template.
         format!(
-            "{}/updates/{}/key-{}/latest.json",
-            self.origin,
-            channel.name(),
-            self.generation
+            "{origin}/updates/{channel}/key-{key_generation}/latest.json",
+            origin = self.origin,
+            channel = channel.name(),
+            key_generation = self.generation
         )
     }
     /// The signed name of a channel's pointer; it binds channel and key generation.
