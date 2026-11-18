@@ -61,3 +61,14 @@ func TestPromoteRejectsPathsOutsideRoot(t *testing.T) {
 		}
 	}
 }
+
+func TestPromoteRejectsUnknownSingleRootIdentity(t *testing.T) {
+	primary, branch := t.TempDir(), t.TempDir()
+	task := &api.WorkerTask{WorkspacePath: primary, WorkspaceRoot: branch, WorkspaceRootID: "primary"}
+	promote := PromoteRootsForTask(task, []projectroot.RootRef{{ID: "primary", Path: primary, IsPrimary: true}})
+	for _, id := range []string{"", "other"} {
+		if _, _, _, err := promote.ReadPairBytesAt(task, id, "file.txt"); err == nil {
+			t.Fatalf("accepted unknown root %q", id)
+		}
+	}
+}

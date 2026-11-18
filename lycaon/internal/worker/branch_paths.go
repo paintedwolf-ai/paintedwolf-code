@@ -109,6 +109,9 @@ func (p PromoteRoots) identityAt(task *api.WorkerTask, rootID, scopeRel string) 
 	if !filepath.IsLocal(scopeRel) || strings.ContainsRune(scopeRel, 0) {
 		return promoteIdentity{}, fmt.Errorf("invalid root-relative promote path %q", scopeRel)
 	}
+	if len(p.Roots) == 1 && rootID != p.Roots[0].ID {
+		return promoteIdentity{}, fmt.Errorf("unknown project root %q", rootID)
+	}
 	if len(p.Roots) <= 1 {
 		rel := filepath.FromSlash(scopeRel)
 		id := promoteIdentity{
