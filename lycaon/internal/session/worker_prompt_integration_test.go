@@ -87,7 +87,7 @@ func TestChildPromptIncludesWorkerContextBlock(t *testing.T) {
 	}
 	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create failed", err)
-	testdbseed.BindSessionWorkspace(t, store, parent.ID, dir)
+	testdbseed.BindSessionWorkspace(t, store.DB(), parent.ID, dir)
 	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer,
 		Prompt:    "implement feature",

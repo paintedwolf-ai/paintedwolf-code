@@ -20,7 +20,7 @@ func TestStoreCreateGet(t *testing.T) {
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create", err)
-	testdbseed.BindSessionWorkspace(t, store, sess.ID, "/tmp/test")
+	testdbseed.BindSessionWorkspace(t, store.DB(), sess.ID, "/tmp/test")
 	got, err := store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get", err)
 	if got.WorkspacePath != "/tmp/test" {
