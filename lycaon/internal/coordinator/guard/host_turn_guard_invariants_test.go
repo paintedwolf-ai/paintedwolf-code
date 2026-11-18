@@ -1,6 +1,7 @@
 package guard_test
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/guardtest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"strings"
@@ -65,7 +66,7 @@ func TestHostTurnGuard_fullChainMatrix(t *testing.T) {
 	pendingOverlay := surface.ImplementSessionState{PendingOverlayIDs: []string{"job-1"}}
 
 	chain := func(prose, surfaceID string, workersIdle bool, state surface.ImplementSessionState, turnTools []string) (string, bool) {
-		return guard.FormatHostNoToolTurnReject(
+		return guardtest.FormatHostNoToolTurnReject(t,
 			sess, hostLoopHistory(
 				history),
 			prose,
@@ -120,7 +121,7 @@ func TestHostTurnGuard_readScoutSynthesisFinish(t *testing.T) {
 	}})
 
 	chain := func(history []api.Message, surfaceID, prose string) (string, bool) {
-		return guard.FormatHostNoToolTurnReject(
+		return guardtest.FormatHostNoToolTurnReject(t,
 			sess, hostLoopHistory(
 				history),
 			prose,
@@ -148,7 +149,7 @@ func TestHostTurnGuard_hostCycleOpenPlanBlocksProse(t *testing.T) {
 	prose := coordinatorReportMarkdown("Engine leg is done; AI and UI are next.", nil)
 	state := surface.ImplementSessionState{ProgressOpenCount: 1}
 
-	reject, block := guard.FormatHostNoToolTurnReject(
+	reject, block := guardtest.FormatHostNoToolTurnReject(t,
 		sess, hostLoopHistory(
 			history),
 		prose,
@@ -158,7 +159,7 @@ func TestHostTurnGuard_hostCycleOpenPlanBlocksProse(t *testing.T) {
 		t.Fatalf("host cycle with open plan must block investigate prose, got reject=%q block=%v", reject, block)
 	}
 
-	reject, block = guard.FormatHostNoToolTurnReject(
+	reject, block = guardtest.FormatHostNoToolTurnReject(t,
 		sess, hostLoopHistory(
 			history),
 		prose,

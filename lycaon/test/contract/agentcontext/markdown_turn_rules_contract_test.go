@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/testutil/guardtest"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -35,7 +36,7 @@ func TestMarkdownTurnRulesFireOnTheirTriggers(t *testing.T) {
 		{name: "an echoed task block", code: guard.CoordinatorTaskEnvelopeEchoCode, content: `It returned <task job_id="j1" state="complete"></task>.`, surfaceID: "implement_routing"},
 	} {
 		t.Run(tc.code+"/"+tc.name, func(t *testing.T) {
-			reject, blocked := guard.FormatHostNoToolTurnReject(sess, history, tc.content, nil, tc.surfaceID, true,
+			reject, blocked := guardtest.FormatHostNoToolTurnReject(t, sess, history, tc.content, nil, tc.surfaceID, true,
 				surface.ImplementSessionState{}, formatter, tc.batch)
 			if !blocked || !strings.Contains(reject, "Code: "+tc.code) {
 				t.Fatalf("blocked = %v, reject = %q", blocked, reject)

@@ -78,14 +78,6 @@ type ImplementSessionState struct {
 	ProgressGatedToolAttemptedSinceIntent bool
 }
 
-// WithWrapupGates records computed synthesis gates.
-func WithWrapupGates(state ImplementSessionState, batchReady, openRepair bool) ImplementSessionState {
-	state.WrapupGatesLoaded = true
-	state.BatchReadyForSynthesis = batchReady
-	state.OpenRepairSinceUserIntent = openRepair
-	return state
-}
-
 // HostLoopWakeTurn reports an explicitly tagged host loop re-entry.
 func HostLoopWakeTurn(history []api.Message) bool {
 	for _, msg := range history[api.UserIntentBoundary(history):] {

@@ -53,7 +53,7 @@ func TestWaitVisibilityDerivesDebtFromDurableRows(t *testing.T) {
 			}
 			gc := oar.NewGuardContext()
 			ObserveWaitVisibility(sess, tc.history, tc.tool, tc.publishes, gc)
-			if got := hasRejectCode(gc, WaitHiddenTextCode); got != tc.blocked {
+			if got := hasRejectCode(t, gc, WaitHiddenTextCode); got != tc.blocked {
 				t.Fatalf("blocked=%v, want %v: %+v", got, tc.blocked, gc.Session)
 			}
 		})

@@ -61,32 +61,6 @@ var factKinds = map[string]surfaceFactKind{
 	FactPhaseHostHeld:                         surfaceFactKindBool,
 }
 
-// registeredSurfaceFactNames is the closed vocabulary IsKnownFact and closure tests use.
-var registeredSurfaceFactNames = []string{
-	FactHasComposeDraft,
-	FactManifestBoundSurface,
-	FactOverlayPromotePending,
-	FactChildSubroutineBlocksInvestigate,
-	FactWorkflowDeclaredMode,
-	FactInvestigateDefaultEligible,
-	FactInvestigateHardBlock,
-	FactWorkersInFlight,
-	FactWorkersDelivered,
-	FactHostCycleTurn,
-	FactWorkerTaskFinishedTurn,
-	FactHostLoopWakeTurn,
-	FactOpenRepairSinceUserIntent,
-	FactBatchReadyForSynthesis,
-	FactWrapupGatesLoaded,
-	FactVerifyUnverified,
-	FactVisibleUserTurn,
-	FactPosture,
-	FactProgressHasOpenSteps,
-	FactProgressMissing,
-	FactProgressGatedToolAttemptedSinceIntent,
-	FactPhaseHostHeld,
-}
-
 // IsKnownFact reports whether name may appear in coordinator-flow.yaml when/dispatch_on cells.
 func IsKnownFact(name string) bool {
 	name = strings.TrimSpace(name)
@@ -95,11 +69,4 @@ func IsKnownFact(name string) bool {
 	}
 	_, ok := factKinds[name]
 	return ok
-}
-
-// RegisteredSurfaceFactNames returns the closed fact vocabulary (stable order for tests).
-func RegisteredSurfaceFactNames() []string {
-	out := make([]string, len(registeredSurfaceFactNames))
-	copy(out, registeredSurfaceFactNames)
-	return out
 }

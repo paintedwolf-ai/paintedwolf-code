@@ -1,6 +1,7 @@
 package guard_test
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/guardtest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"strings"
@@ -38,7 +39,7 @@ func TestObserveCloseoutHasAnswer(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			reject, blocked := guard.FormatHostNoToolTurnReject(sess, hostLoopHistory(nil), tc.content, nil,
+			reject, blocked := guardtest.FormatHostNoToolTurnReject(t, sess, hostLoopHistory(nil), tc.content, nil,
 				tc.surfaceID, true, surface.ImplementSessionState{}, rejectFmt, guard.BatchTurnGuard{})
 			if blocked != tc.blocked {
 				t.Fatalf("blocked=%v want %v, reject=%q", blocked, tc.blocked, reject)

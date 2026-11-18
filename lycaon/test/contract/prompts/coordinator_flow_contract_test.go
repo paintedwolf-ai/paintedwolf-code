@@ -21,9 +21,4 @@ func TestCoordinatorFlowTable_loadAndValidate(t *testing.T) {
 	if defaultSurface != "implement_investigate" {
 		t.Fatalf("default surface = %q want implement_investigate", defaultSurface)
 	}
-	for _, name := range surface.RegisteredSurfaceFactNames() {
-		if !surface.IsKnownFact(name) {
-			t.Fatalf("registry fact %q not known", name)
-		}
-	}
 }

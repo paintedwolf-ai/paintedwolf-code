@@ -1,6 +1,7 @@
 package wiring
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/surfacetest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"testing"
@@ -54,7 +55,7 @@ func TestSelectSurface_inlineEditNoVerifierRoutesInvestigate(t *testing.T) {
 
 func TestSelectSurface_openRepairRoutesInvestigateDespiteSynthesizePhase(t *testing.T) {
 	history := inlineEditHistoryForWrapup()
-	state := surface.WithWrapupGates(surface.ImplementSessionState{
+	state := surfacetest.WithWrapupGates(surface.ImplementSessionState{
 		WorkersInFlight:   0,
 		PendingOverlayIDs: []string{},
 		BatchPhase:        batch.PhaseSynthesize,
@@ -71,7 +72,7 @@ func TestSelectSurface_openRepairRoutesInvestigateDespiteSynthesizePhase(t *test
 }
 
 func TestSelectSurface_manifestBoundSurfaceOverridesBatchReadySynthesis(t *testing.T) {
-	state := surface.WithWrapupGates(surface.ImplementSessionState{
+	state := surfacetest.WithWrapupGates(surface.ImplementSessionState{
 		WorkersInFlight:   0,
 		PendingOverlayIDs: []string{},
 		BatchPhase:        batch.PhaseSynthesize,
@@ -93,7 +94,7 @@ func TestSelectSurface_manifestBoundSurfaceOverridesBatchReadySynthesis(t *testi
 
 func TestSelectSurface_batchReadyAdmitsSynthesis(t *testing.T) {
 	history := inlineEditHistoryForWrapup()
-	state := surface.WithWrapupGates(surface.ImplementSessionState{
+	state := surfacetest.WithWrapupGates(surface.ImplementSessionState{
 		WorkersInFlight:   0,
 		PendingOverlayIDs: []string{},
 		BatchPhase:        batch.PhaseSynthesize,
@@ -110,7 +111,7 @@ func TestSelectSurface_batchReadyAdmitsSynthesis(t *testing.T) {
 }
 
 func TestSelectSurface_workersInFlightOverridesBatchReady(t *testing.T) {
-	state := surface.WithWrapupGates(surface.ImplementSessionState{
+	state := surfacetest.WithWrapupGates(surface.ImplementSessionState{
 		WorkersInFlight:   2,
 		PendingOverlayIDs: []string{},
 	}, true, false)

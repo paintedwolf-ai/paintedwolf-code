@@ -1,6 +1,7 @@
 package surface_test
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/surfacetest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"testing"
@@ -138,7 +139,7 @@ func TestResolveTurnProfileImplementerSynthesisWhenIdle(t *testing.T) {
 		api.CoordinatorRunContext{},
 		&api.Session{Posture: api.SessionPostureBuild},
 		hostLoopHistory(completeImplementerHistory()),
-		surface.WithWrapupGates(surface.ImplementSessionState{}, true, false),
+		surfacetest.WithWrapupGates(surface.ImplementSessionState{}, true, false),
 	)
 	if profile.SurfaceID != "implement_synthesis" {
 		t.Fatalf("surface = %q want implement_synthesis", profile.SurfaceID)
@@ -333,7 +334,7 @@ func TestResolveTurnProfilePathExplorerUsesSynthesisWhenBatchReady(t *testing.T)
 		api.CoordinatorRunContext{},
 		&api.Session{Posture: api.SessionPostureBuild},
 		hostLoopHistory(history),
-		surface.WithWrapupGates(surface.ImplementSessionState{}, true, false),
+		surfacetest.WithWrapupGates(surface.ImplementSessionState{}, true, false),
 	)
 	if profile.SurfaceID != "implement_synthesis" {
 		t.Fatalf("surface = %q want implement_synthesis", profile.SurfaceID)

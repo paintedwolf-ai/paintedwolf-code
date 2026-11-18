@@ -13,7 +13,7 @@ func TestCoordinatorFlowParity_ResolveTurnProfileMatchesEvaluator(t *testing.T) 
 	table, err := surface.LoadCoordinatorFlow()
 	contractcheck.FailErr(t, "LoadCoordinatorFlow", err)
 
-	for _, tc := range surface.AllFlowParityCases() {
+	for _, tc := range flowParityCases() {
 		t.Run(tc.Name, func(t *testing.T) {
 			t.Parallel()
 			facts := surface.ComputeSurfaceFacts(tc.RunCtx, tc.Sess, tc.History, tc.State)
@@ -37,7 +37,7 @@ func TestCoordinatorFlowParity_ResolveTurnProfileMatchesEvaluator(t *testing.T) 
 
 func TestCoordinatorFlowParity_caseCount(t *testing.T) {
 	t.Parallel()
-	n := len(surface.AllFlowParityCases())
+	n := len(flowParityCases())
 	if n < 100 {
 		t.Fatalf("parity matrix too small: %d cases", n)
 	}
