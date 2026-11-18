@@ -89,20 +89,20 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 		}
 		out.NonzeroExecutions = append(out.NonzeroExecutions, observed)
 	}
-	stdoutBudget, stderrBudget := splitStreamBudgets(CommandOutputBudget(run.tc.Host.ModelContextWindow), int(stdout.Len()), int(stderr.Len()))
-	for i, stream := range []*programStream{stdout, stderr} {
-		if stream.Len() == 0 {
-			continue
-		}
-		name, budget := "stdout", stdoutBudget
-		if i == 1 {
-			name, budget = "stderr", stderrBudget
-		}
-		delivered, window, err := r.deliverProgramStream(ctx, run, outputs, stream, name, budget, scope)
+	staged, err := r.screenProgramOutputs(ctx, run, stdout, stderr, scope)
+	if err != nil {
+		return ProgramOutcome{}, err
+	}
+	defer staged.close()
+	if err := r.commitProgramHTTPProvenance(ctx, run, staged.hasVisibleOutput()); err != nil {
+		return ProgramOutcome{}, err
+	}
+	for _, stream := range staged {
+		delivered, window, err := r.deliverProgramStream(ctx, run, outputs, stream)
 		if err != nil {
 			return ProgramOutcome{}, err
 		}
-		if i == 0 {
+		if stream.name == "stdout" {
 			out.Stdout, out.StdoutRef = delivered, window.Ref
 		} else {
 			out.Stderr, out.StderrRef = delivered, window.Ref
@@ -113,7 +113,6 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 	if run.tc.Effects.Out != nil && run.tc.Effects.Out.CommandProgram != nil {
 		run.tc.Effects.Out.CommandProgram.Outputs = append([]api.CommandProgramOutputWindow(nil), out.Outputs...)
 	}
-	r.commitProgramHTTPProvenance(ctx, run, out.Stdout != "" || out.Stderr != "")
 	return out, nil
 }
 
@@ -170,15 +169,57 @@ func retainOutcome(spill *tooloutput.StreamSpill, screenErr error) (*tooloutput.
 	return spill, screenErr
 }
 
-func (r *ProgramRuntime) deliverProgramStream(ctx context.Context, run *programRun, outputs *invocation.ProgramOutputRetention, stream *programStream, name string, budget int, scope captureprojection.Scope) (string, api.CommandProgramOutputWindow, error) {
-	spill, redacted, err := r.retainProgramStream(ctx, run, stream, name, scope)
-	if err != nil {
-		if spill != nil {
-			_ = spill.Close()
-		}
-		return "", api.CommandProgramOutputWindow{}, err
+type screenedProgramOutput struct {
+	stream   *programStream
+	spill    *tooloutput.StreamSpill
+	name     string
+	budget   int
+	redacted bool
+}
+
+type screenedProgramOutputs []screenedProgramOutput
+
+func (outputs screenedProgramOutputs) close() {
+	for _, output := range outputs {
+		_ = output.spill.Close()
 	}
-	defer func() { _ = spill.Close() }()
+}
+
+func (outputs screenedProgramOutputs) hasVisibleOutput() bool {
+	for _, output := range outputs {
+		if output.spill.Blob.Size > 0 || output.stream.truncated || !output.spill.Complete {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *ProgramRuntime) screenProgramOutputs(ctx context.Context, run *programRun, stdout, stderr *programStream, scope captureprojection.Scope) (screenedProgramOutputs, error) {
+	stdoutBudget, stderrBudget := splitStreamBudgets(CommandOutputBudget(run.tc.Host.ModelContextWindow), int(stdout.Len()), int(stderr.Len()))
+	var outputs screenedProgramOutputs
+	for _, output := range []screenedProgramOutput{
+		{stream: stdout, name: "stdout", budget: stdoutBudget},
+		{stream: stderr, name: "stderr", budget: stderrBudget},
+	} {
+		if output.stream.Len() == 0 {
+			continue
+		}
+		spill, redacted, err := r.retainProgramStream(ctx, run, output.stream, output.name, scope)
+		if err != nil {
+			if spill != nil {
+				_ = spill.Close()
+			}
+			outputs.close()
+			return nil, err
+		}
+		output.spill, output.redacted = spill, redacted
+		outputs = append(outputs, output)
+	}
+	return outputs, nil
+}
+
+func (r *ProgramRuntime) deliverProgramStream(ctx context.Context, run *programRun, outputs *invocation.ProgramOutputRetention, output screenedProgramOutput) (string, api.CommandProgramOutputWindow, error) {
+	stream, spill, name, budget, redacted := output.stream, output.spill, output.name, output.budget, output.redacted
 	program := run.root.Identity.ProgramID
 	reference := "output:program:" + program + ":" + name
 	outputPath := "@output/" + program + "." + name

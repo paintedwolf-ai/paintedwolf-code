@@ -2,6 +2,9 @@ package store
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/lycaon/lycaon/internal/db"
 
 	"github.com/lycaon/lycaon/internal/bloblifecycle"
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -63,12 +66,14 @@ func programProvenanceRecords(roots evidence.CitationRoots, prov evidence.Progra
 
 // CommitProgramHTTPProvenance persists what a command program received from
 // the network, the directories it filled, and the custody it replaced.
-func (ev *sqlEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessionID, projectDir string, prov evidence.ProgramHTTPProvenance) (string, error) {
-	if len(programProvenanceRecords(evidence.CitationRoots{ProjectDir: projectDir}, prov)) == 0 {
+func (ev *sqlEvidence) CommitProgramHTTPProvenance(ctx context.Context, target evidence.ProgramProvenanceTarget, prov evidence.ProgramHTTPProvenance) (string, error) {
+	if len(programProvenanceRecords(evidence.CitationRoots{ProjectDir: target.ProjectDir}, prov)) == 0 {
 		return "", nil
 	}
+	chat := target.ChatSessionID
+	sharesCustody := chat != "" && chat != target.SessionID && (len(prov.CustodyPaths)+len(prov.CustodyTrees)+len(prov.ClearedPaths) > 0)
 	s := ev.core
-	unlock := s.lockMutation(sessionID)
+	unlock := s.lockProvenanceTarget(target.SessionID, chat, sharesCustody)
 	defer unlock()
 	release := bloblifecycle.AcquirePublication(s.dataDir)
 	defer release()
@@ -78,49 +83,99 @@ func (ev *sqlEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessionI
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := s.queries.WithTx(tx)
+	projectID, err := q.GetSessionProjectID(ctx, target.SessionID)
+	if err != nil {
+		return "", err
+	}
+	primary, err := ev.writeProgramProvenance(ctx, q, target.SessionID, projectID, target.ProjectDir, prov)
+	if err != nil {
+		return "", err
+	}
+	var shared []evidence.Record
+	if sharesCustody {
+		chatProjectID, err := q.GetSessionProjectID(ctx, chat)
+		if err != nil {
+			return "", err
+		}
+		if chatProjectID != projectID {
+			return "", fmt.Errorf("program provenance spans different projects")
+		}
+		prov.UntrustedContent = false
+		shared, err = ev.writeProgramProvenance(ctx, q, chat, chatProjectID, target.ProjectDir, prov)
+		if err != nil {
+			return "", err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	for _, rec := range primary {
+		bumpUntrusted(s, target.SessionID, rec)
+		bumpSecretExposure(s, target.SessionID, rec)
+	}
+	for _, rec := range shared {
+		bumpUntrusted(s, chat, rec)
+		bumpSecretExposure(s, chat, rec)
+	}
+	if len(primary) == 0 {
+		return "", nil
+	}
+	return primary[0].Handle, nil
+}
+
+func (s *sqlCore) lockProvenanceTarget(sessionID, chatID string, shared bool) func() {
+	if !shared {
+		return s.lockMutation(sessionID)
+	}
+	n := uint(len(s.mutationLocks))
+	first, second := mutationShard(sessionID)%n, mutationShard(chatID)%n
+	if first > second {
+		first, second = second, first
+	}
+	s.mutationLocks[first].Lock()
+	if first == second {
+		return s.mutationLocks[first].Unlock
+	}
+	s.mutationLocks[second].Lock()
+	return func() {
+		s.mutationLocks[second].Unlock()
+		s.mutationLocks[first].Unlock()
+	}
+}
+
+func (ev *sqlEvidence) writeProgramProvenance(ctx context.Context, q *db.Queries, sessionID, projectID, projectDir string, prov evidence.ProgramHTTPProvenance) ([]evidence.Record, error) {
 	roots, err := sessionCitationRoots(ctx, q, sessionID, projectDir)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	recs := programProvenanceRecords(roots, prov)
-	projectID, err := q.GetSessionProjectID(ctx, sessionID)
-	if err != nil {
-		return "", err
-	}
 	nextSeq := 0
 	var inserted []evidence.Record
 	for i := range recs {
 		rec := &recs[i]
 		ordinal, err := nextEvidenceOrdinal(ctx, q, sessionID, rec.Kind)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		rec.Handle = evidence.FormatHandle(rec.Kind, ordinal)
 		if evidence.ReplacesWholeFileCustody(*rec) && rec.CustodySeq() == 0 {
 			if nextSeq == 0 {
 				if nextSeq, err = nextCustodySeq(ctx, q, sessionID); err != nil {
-					return "", err
+					return nil, err
 				}
 			}
 			rec.SetCustodySeq(nextSeq)
 			nextSeq++
 		}
-		ok, err := writeEvidenceRecord(ctx, q, s.dataDir, sessionID, projectID, *rec)
+		ok, err := writeEvidenceRecord(ctx, q, ev.core.dataDir, sessionID, projectID, *rec)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		if ok {
 			inserted = append(inserted, *rec)
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return "", err
-	}
-	for _, rec := range inserted {
-		bumpUntrusted(s, sessionID, rec)
-		bumpSecretExposure(s, sessionID, rec)
-	}
-	return recs[0].Handle, nil
+	return inserted, nil
 }
 
 // ExternalCustodyURLsForPaths returns external URLs associated with any of paths in sessionID.

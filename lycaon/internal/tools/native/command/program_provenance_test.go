@@ -33,11 +33,16 @@ func (f *fakeProvenanceStore) seed(sessionID, path string, urls ...string) {
 	f.custody[sessionID+"\x00"+path] = append([]string(nil), urls...)
 }
 
-func (f *fakeProvenanceStore) CommitProgramHTTPProvenance(_ context.Context, sessionID, _ string, prov evidence.ProgramHTTPProvenance) (string, error) {
+func (f *fakeProvenanceStore) CommitProgramHTTPProvenance(_ context.Context, target evidence.ProgramProvenanceTarget, prov evidence.ProgramHTTPProvenance) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.commits = append(f.commits, prov)
-	f.commitSessions = append(f.commitSessions, sessionID)
+	f.commitSessions = append(f.commitSessions, target.SessionID)
+	if target.ChatSessionID != "" && target.ChatSessionID != target.SessionID && (len(prov.CustodyPaths)+len(prov.CustodyTrees)+len(prov.ClearedPaths) > 0) {
+		prov.UntrustedContent = false
+		f.commits = append(f.commits, prov)
+		f.commitSessions = append(f.commitSessions, target.ChatSessionID)
+	}
 	return "http_response#1", nil
 }
 

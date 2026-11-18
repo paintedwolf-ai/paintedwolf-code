@@ -15,7 +15,7 @@ import (
 )
 
 type ProgramProvenance interface {
-	CommitProgramHTTPProvenance(ctx context.Context, sessionID, projectDir string, prov evidence.ProgramHTTPProvenance) (string, error)
+	CommitProgramHTTPProvenance(ctx context.Context, target evidence.ProgramProvenanceTarget, prov evidence.ProgramHTTPProvenance) (string, error)
 	ExternalCustodyURLsForPaths(ctx context.Context, sessionID, projectDir string, paths []string) ([]string, error)
 }
 
@@ -444,9 +444,9 @@ func (r *programRun) noteNativeFileMutation(ctx context.Context, commandName str
 	}
 }
 
-func (r *ProgramRuntime) commitProgramHTTPProvenance(ctx context.Context, run *programRun, hasModelVisibleOutput bool) {
+func (r *ProgramRuntime) commitProgramHTTPProvenance(ctx context.Context, run *programRun, hasModelVisibleOutput bool) error {
 	if r == nil || run == nil || r.Provenance == nil {
-		return
+		return nil
 	}
 	store := r.Provenance
 	run.provenance.mu.Lock()
@@ -495,7 +495,7 @@ func (r *ProgramRuntime) commitProgramHTTPProvenance(ctx context.Context, run *p
 	}
 
 	if !ingested && len(custodyPaths) == 0 && len(custodyTrees) == 0 && len(clearedPaths) == 0 {
-		return
+		return nil
 	}
 	prov := evidence.ProgramHTTPProvenance{
 		ProgramID:        run.root.Identity.ProgramID,
@@ -505,17 +505,9 @@ func (r *ProgramRuntime) commitProgramHTTPProvenance(ctx context.Context, run *p
 		CustodyTrees:     custodyTrees,
 		ClearedPaths:     clearedPaths,
 	}
-	_, _ = store.CommitProgramHTTPProvenance(commitCtx, run.tc.Identity.SessionID, projDir, prov)
-	if chatID := run.tc.ChatSessionID(); chatID != "" && chatID != run.tc.Identity.SessionID && (len(custodyPaths) > 0 || len(custodyTrees) > 0 || len(clearedPaths) > 0) {
-		_, _ = store.CommitProgramHTTPProvenance(commitCtx, chatID, projDir, evidence.ProgramHTTPProvenance{
-			ProgramID:        run.root.Identity.ProgramID,
-			UntrustedContent: false,
-			ObservedURLs:     observedURLs,
-			CustodyPaths:     custodyPaths,
-			CustodyTrees:     custodyTrees,
-			ClearedPaths:     clearedPaths,
-		})
-	}
+	target := evidence.ProgramProvenanceTarget{SessionID: run.tc.Identity.SessionID, ChatSessionID: run.tc.ChatSessionID(), ProjectDir: projDir}
+	_, err := store.CommitProgramHTTPProvenance(commitCtx, target, prov)
+	return err
 }
 
 func appendUniqueProvenanceStrings(dst []string, values ...string) []string {
