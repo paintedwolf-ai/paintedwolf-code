@@ -161,6 +161,8 @@ type hostEffects struct {
 	textColumns map[string][]string
 	// silent is set once the watcher stops reporting; later reads fail at once.
 	silent error
+	// unmatched keeps the latest changes a barrier saw that were not its own.
+	unmatched []string
 }
 
 // conformanceDebounce is the change coalesce window the sweep's host runs
@@ -229,7 +231,7 @@ func (e *hostEffects) awaitWatcherBarrier(ctx context.Context) error {
 		e.drain()
 		patience *= 2
 	}
-	return fmt.Errorf("the watcher reported none of %d barrier rounds in %s", watcherBarrierRounds, e.projectDir)
+	return fmt.Errorf("the watcher reported none of %d barrier rounds in %s; it reported %v", watcherBarrierRounds, e.projectDir, e.unmatched)
 }
 
 // watcherBarrierRounds bounds the rewrites of an unanswered barrier, so a
@@ -256,6 +258,7 @@ func (e *hostEffects) watcherBarrierRound(ctx context.Context, patience time.Dur
 			if slices.ContainsFunc(changed.Changes, func(c wire.SourceChange) bool { return c.Path == e.barrierName }) {
 				return rewrote, nil
 			}
+			e.noteUnmatched(changed)
 			if changed.Resync {
 				rewrote = true
 				if err := e.placeBarrier(); err != nil {
@@ -507,5 +510,17 @@ func hostSettle(h *wiring.Harness) func(context.Context) {
 		if briefings := h.Server.Sources.Briefings; briefings != nil && briefings.Engine != nil && briefings.Engine.Host() != nil {
 			briefings.Engine.Host().Scheduler.Wait(ctx)
 		}
+	}
+}
+
+func (e *hostEffects) noteUnmatched(changed wire.SourceChangesEvent) {
+	for _, change := range changed.Changes {
+		e.unmatched = append(e.unmatched, change.RootID+":"+change.Path)
+	}
+	if changed.Resync {
+		e.unmatched = append(e.unmatched, "resync")
+	}
+	if len(e.unmatched) > 8 {
+		e.unmatched = e.unmatched[len(e.unmatched)-8:]
 	}
 }
