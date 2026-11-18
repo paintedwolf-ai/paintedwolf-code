@@ -117,13 +117,8 @@ func startLoadedEngine(t *testing.T) *loadedEngine {
 	sessionID := createSmokeSession(t, baseURL, apiToken, projectID)
 	subscriber := openEventSubscriber(t, baseURL, apiToken, projectID)
 
-	smokeJSON(t, baseURL, apiToken, http.MethodPost, "/v1/sessions/"+sessionID+"/prompts",
-		fmt.Sprintf(`{"operation_id":%q,"text":"start the lifecycle daemon"}`, uuid.NewString()), nil)
-	approveCommand(t, baseURL, apiToken, sessionID)
-	testutil.WaitFor(t, "the daemon reports its pid", func() bool {
-		_, err := os.Stat(daemonPID)
-		return err == nil
-	})
+	submitPrompt(t, baseURL, apiToken, sessionID, "start the lifecycle daemon")
+	runApprovedCommand(t, baseURL, apiToken, sessionID, daemonPID)
 
 	engine := &loadedEngine{process: proc.Process, done: done, parent: parent, parentDone: parentDone,
 		dbPath: dbPath, tmpDir: tmpDir, subscriber: subscriber}
@@ -150,10 +145,34 @@ func openEventSubscriber(t *testing.T, baseURL, apiToken, projectID string) <-ch
 	return ended
 }
 
-func approveCommand(t *testing.T, baseURL, apiToken, sessionID string) {
+// submitPrompt sends text once the session's workspace has finished preparing.
+func submitPrompt(t *testing.T, baseURL, apiToken, sessionID, text string) {
 	t.Helper()
-	var checkpointID, optionID string
-	testutil.WaitFor(t, "the command asks for approval", func() bool {
+	body := fmt.Sprintf(`{"operation_id":%q,"text":%q}`, uuid.NewString(), text)
+	testutil.WaitFor(t, "the session accepts the prompt", func() bool {
+		status, raw := smokeRequest(t, baseURL, apiToken, http.MethodPost, "/v1/sessions/"+sessionID+"/prompts", body)
+		if status < 300 {
+			return true
+		}
+		var refusal struct {
+			Code string `json:"code"`
+		}
+		if status == http.StatusConflict && json.Unmarshal(raw, &refusal) == nil && refusal.Code == "session_preparing" {
+			return false
+		}
+		t.Fatalf("submit the prompt: status = %d body = %s", status, raw)
+		return false
+	})
+}
+
+// runApprovedCommand approves the command when the host's policy asks, and
+// returns once the daemon has written its pid.
+func runApprovedCommand(t *testing.T, baseURL, apiToken, sessionID, pidPath string) {
+	t.Helper()
+	testutil.WaitFor(t, "the daemon reports its pid", func() bool {
+		if _, err := os.Stat(pidPath); err == nil {
+			return true
+		}
 		var list struct {
 			Checkpoints []struct {
 				ID           string `json:"id"`
@@ -170,17 +189,26 @@ func approveCommand(t *testing.T, baseURL, apiToken, sessionID string) {
 		smokeJSON(t, baseURL, apiToken, http.MethodGet, "/v1/sessions/"+sessionID+"/checkpoints", "", &list)
 		for _, checkpoint := range list.Checkpoints {
 			if checkpoint.Status == "pending" && checkpoint.ToolApproval != nil && len(checkpoint.ToolApproval.Plan.Options) > 0 {
-				checkpointID, optionID = checkpoint.ID, checkpoint.ToolApproval.Plan.Options[0].ID
-				return true
+				smokeJSON(t, baseURL, apiToken, http.MethodPost, "/v1/sessions/"+sessionID+"/checkpoints/"+checkpoint.ID,
+					fmt.Sprintf(`{"kind":"tool_approval","action":"approve","option_id":%q}`, checkpoint.ToolApproval.Plan.Options[0].ID), nil)
 			}
 		}
 		return false
 	})
-	smokeJSON(t, baseURL, apiToken, http.MethodPost, "/v1/sessions/"+sessionID+"/checkpoints/"+checkpointID,
-		fmt.Sprintf(`{"kind":"tool_approval","action":"approve","option_id":%q}`, optionID), nil)
 }
 
 func smokeJSON(t *testing.T, baseURL, apiToken, method, path, body string, out any) {
+	t.Helper()
+	status, raw := smokeRequest(t, baseURL, apiToken, method, path, body)
+	if status >= 300 {
+		t.Fatalf("%s %s status = %d body = %s", method, path, status, raw)
+	}
+	if out != nil {
+		testutil.FailErr(t, "decode "+path, json.Unmarshal(raw, out))
+	}
+}
+
+func smokeRequest(t *testing.T, baseURL, apiToken, method, path, body string) (int, []byte) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), method, baseURL+path, strings.NewReader(body))
 	testutil.FailErr(t, "build "+path+" request", err)
@@ -193,12 +221,7 @@ func smokeJSON(t *testing.T, baseURL, apiToken, method, path, body string, out a
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(resp.Body)
 	testutil.FailErr(t, "read "+path, err)
-	if resp.StatusCode >= 300 {
-		t.Fatalf("%s %s status = %d body = %s", method, path, resp.StatusCode, raw)
-	}
-	if out != nil {
-		testutil.FailErr(t, "decode "+path, json.Unmarshal(raw, out))
-	}
+	return resp.StatusCode, raw
 }
 
 // ownedProcesses captures the engine's descendants and every process carrying
