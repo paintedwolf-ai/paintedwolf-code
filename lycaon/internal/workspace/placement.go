@@ -57,7 +57,7 @@ func (m *Manager) probeSourcesClone(ctx context.Context, sample, dir string) (bo
 	if sample == "" {
 		return fileclone.SupportedAt(dir)
 	}
-	return fileclone.SupportedFromUsing(ctx, sample, dir, m.cloneFile)
+	return fileclone.SupportedFromUsing(ctx, sample, dir, m.filesystem.CloneFile)
 }
 
 // placedBranchClonability re-derives a placed branch's clone answer when its view is rebuilt: the

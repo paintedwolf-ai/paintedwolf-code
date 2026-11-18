@@ -35,7 +35,7 @@ func TestMaterializedWorkerPromotesThreeWayFromItsPristineBase(t *testing.T) {
 		return adapter.BudgetFact{Class: class, Limit: 1 << 20, EntryCost: 1}
 	}
 	selector.Confinement = nil
-	manager := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), selector, nil)
+	manager := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), selector, workspace.Filesystem{})
 	queueServices := NewSQLServices(database, 4)
 	queue := queueServices.Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)

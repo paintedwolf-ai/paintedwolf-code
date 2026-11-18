@@ -368,7 +368,7 @@ func TestComposeWorkerAssignmentRendersNamedFollowUpAndWorkflowContext(t *testin
 		scanning: &scanning.Runtime{Store: scan.NewSQLStore(database)},
 		boards:   &boards.Runtime{WorkerRecords: records},
 		workerRuntime: &workerruntime.Runtime{
-			Workspace:      workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), nil),
+			Workspace:      workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), workspace.Filesystem{}),
 			InjectRenderer: prompts.NewInjectRenderer(engine),
 		},
 	}

@@ -24,7 +24,7 @@ func TestDecisionBranchStaysAttachedButCannotBePromoted(t *testing.T) {
 	queue := newTestQueue(t, 1, p.ID, "parent")
 	testdbseed.InsertProjectRootWithID(t, queue.db, p.ID, p.Roots[0].ID, canonical)
 	queue.Branches.SetProjectStore(projects)
-	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(db.DataDir(queue.db), "worker-branches"), platform.NewSelector(platform.Config{}), nil))
+	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(db.DataDir(queue.db), "worker-branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{}))
 	id, err := queue.Enqueue(t.Context(), api.WorkerTask{
 		ProjectID: p.ID, ParentSessionID: "parent", WorkspaceRootID: p.Roots[0].ID, WorkspacePath: canonical,
 		AgentType: "implementer", Prompt: "choose", Brief: "choose",

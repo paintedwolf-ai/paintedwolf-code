@@ -90,7 +90,7 @@ func TestTaskRootRefsUsesBranchSnapshotAfterProjectRename(t *testing.T) {
 	}})
 	testutil.FailErr(t, "create project", err)
 	roots := project.RootRefsFrom(p)
-	mgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{}), nil)
+	mgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	binding, _, err := mgr.CreateWorkerWorkspaceFromSources(ctx, roots, roots, roots[0].ID, "job-1")
 	testutil.FailErr(t, "create workspace", err)
 	renamed := "manuals"

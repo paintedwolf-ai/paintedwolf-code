@@ -97,7 +97,7 @@ func TestPromoteOverlayEmitsRootScopeSourceChanges(t *testing.T) {
 	testutil.FailErr(t, "MkdirAll primary", os.MkdirAll(filepath.Join(primary, "src"), 0o755))
 	testutil.FailErr(t, "WriteFile base", os.WriteFile(filepath.Join(primary, "src", "edited.go"), []byte("base\n"), 0o644))
 	const rootID = "root-id"
-	manager := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), nil)
+	manager := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	roots := []projectroot.RootRef{{
 		ID: rootID, Label: "project", Path: primary, IsPrimary: true,
 	}}
@@ -321,7 +321,7 @@ func newEditorSyncPromotion(t *testing.T, store *mergeStoreStub) editorSyncPromo
 	primary := t.TempDir()
 	testutil.FailErr(t, "WriteFile base", os.WriteFile(filepath.Join(primary, "edited.go"), []byte("base\n"), 0o644))
 	const rootID = "root-id"
-	manager := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), nil)
+	manager := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	roots := []projectroot.RootRef{{
 		ID: rootID, Label: "project", Path: primary, IsPrimary: true,
 	}}
