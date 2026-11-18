@@ -338,6 +338,18 @@ func TestRedactionContestRequiresReviewDespiteEarlierPermission(t *testing.T) {
 		t.Fatal("redaction did not return a contest receipt")
 	}
 	finding.ContestToken = redacted.ReceiptToken
+	for _, change := range []func(*secretmatch.Alert){
+		func(other *secretmatch.Alert) { other.SessionID = "other-chat" },
+		func(other *secretmatch.Alert) { other.DestinationID = "other-service" },
+	} {
+		other := finding
+		change(&other)
+		got, err := exec.Secrets.AskSecretScreen(ctx, other)
+		testutil.FailErr(t, "check unmatched receipt", err)
+		if got.Decision != secretmatch.SendRedacted || mgr.req.SecretScreen != nil {
+			t.Fatal("a receipt contested another chat or recipient")
+		}
+	}
 	_, err = exec.Secrets.AskSecretScreen(ctx, finding)
 	testutil.FailErr(t, "review redaction contest", err)
 	if mgr.req.SecretScreen == nil || !mgr.req.SecretScreen.Contested {

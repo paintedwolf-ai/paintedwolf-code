@@ -25,6 +25,9 @@ func (inv *invocation) requestArgs(cookieHeader string) (map[string]any, error) 
 func (inv *invocation) buildRequestArgs(cookieHeader string) (map[string]any, error) {
 	o := inv.opts
 	args := map[string]any{"url": o.url}
+	if o.reviewRedaction != "" {
+		args["unredact"] = o.reviewRedaction
+	}
 	if o.managedCookies != "" {
 		args["cookie_jar"] = o.managedCookies
 	}

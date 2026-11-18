@@ -80,6 +80,9 @@ func placeJarSlots(ctx context.Context, deps Deps, tc tools.ToolContext, spec re
 		return out, nil
 	}
 	out := screened
+	if release.Decision == secretmatch.SendRedacted && release.ReceiptToken != "" {
+		out.redactionReceipts = append(out.redactionReceipts, release.ReceiptToken)
+	}
 	out.headers = slices.Clone(screened.headers)
 	for i, h := range templates.headers {
 		if h.Name == "" {

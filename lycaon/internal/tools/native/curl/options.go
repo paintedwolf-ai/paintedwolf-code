@@ -41,39 +41,40 @@ type tlsOptions struct {
 }
 
 type options struct {
-	url            string
-	method         string
-	headers        [][2]string
-	data           []dataPart
-	forms          []string
-	user           string
-	output         string
-	dumpHeader     string
-	cookieJar      string
-	managedCookies string
-	managedTokens  string
-	captures       []any
-	cookies        []string
-	writeOut       []writeToken
-	hasWriteOut    bool
-	silent         bool
-	showError      bool
-	include        bool
-	head           bool
-	location       bool
-	fail           failMode
-	verbose        bool
-	maxTime        time.Duration
-	connectTimeout time.Duration
-	unixSocket     string
-	compressed     bool
-	userAgent      string
-	get            bool
-	json           []string
-	upload         string
-	byteRange      string
-	tls            tlsOptions
-	dial           []outboundhttp.ResolveMapping
+	url             string
+	method          string
+	headers         [][2]string
+	data            []dataPart
+	forms           []string
+	user            string
+	output          string
+	dumpHeader      string
+	cookieJar       string
+	managedCookies  string
+	managedTokens   string
+	reviewRedaction string
+	captures        []any
+	cookies         []string
+	writeOut        []writeToken
+	hasWriteOut     bool
+	silent          bool
+	showError       bool
+	include         bool
+	head            bool
+	location        bool
+	fail            failMode
+	verbose         bool
+	maxTime         time.Duration
+	connectTimeout  time.Duration
+	unixSocket      string
+	compressed      bool
+	userAgent       string
+	get             bool
+	json            []string
+	upload          string
+	byteRange       string
+	tls             tlsOptions
+	dial            []outboundhttp.ResolveMapping
 }
 
 func usage(word, expected string) error {
@@ -199,6 +200,11 @@ func parseOptions(bound commandprogram.BoundArgv) (options, error) {
 			} else {
 				o.managedTokens = value
 			}
+		case "--review-redaction":
+			if len(value) == 0 || len(value) > 64 {
+				return options{}, usage(option.Spelling, "a redaction receipt")
+			}
+			o.reviewRedaction = value
 		case "--capture-token":
 			name, from, ok := strings.Cut(value, "=")
 			if !ok || strings.TrimSpace(name) == "" || !(strings.HasPrefix(from, "json:") || strings.HasPrefix(from, "header:")) || strings.TrimSpace(strings.SplitN(from, ":", 2)[1]) == "" || len(o.captures) >= 16 {

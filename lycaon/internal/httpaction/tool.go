@@ -64,6 +64,7 @@ type requestSpec struct {
 	hostHeader    string
 	resolve       []outboundhttp.ResolveMapping
 	tokenJar      string
+	contest       string
 	captureTokens []captureTokenRule
 }
 
@@ -90,16 +91,17 @@ type ExchangeOptions struct {
 // screening belong to the command's model-delivery boundary. SentBodyBytes
 // and SentBodySHA256 identify the request body as it went on the wire.
 type Exchange struct {
-	CookieJarRef   string
-	TokenJarRef    string
-	Response       outboundhttp.Response
-	FinalURL       string
-	Redirects      []outboundhttp.Hop
-	SentHeaders    []outboundhttp.Header
-	SentBodyBytes  int64
-	SentBodySHA256 string
-	External       bool
-	ObservedURLs   []string
+	RedactionReceipts []string
+	CookieJarRef      string
+	TokenJarRef       string
+	Response          outboundhttp.Response
+	FinalURL          string
+	Redirects         []outboundhttp.Hop
+	SentHeaders       []outboundhttp.Header
+	SentBodyBytes     int64
+	SentBodySHA256    string
+	External          bool
+	ObservedURLs      []string
 	// Listener is the loopback listener the request reached.
 	Listener *api.LoopbackListenerFact
 	// RemotePage reports a successful remote GET that returned an HTML document.
@@ -124,7 +126,8 @@ func Perform(ctx context.Context, deps Deps, args map[string]any, tctx tools.Too
 		extURLs[i] = opts.Output.Text(u)
 	}
 	return Exchange{
-		CookieJarRef: ex.cookieJarRef, TokenJarRef: ex.tokenJarRef,
+		RedactionReceipts: ex.outbound.redactionReceipts,
+		CookieJarRef:      ex.cookieJarRef, TokenJarRef: ex.tokenJarRef,
 		Response:       ex.resp,
 		FinalURL:       opts.Output.Text(ex.finalURL),
 		Redirects:      ex.redirects,
@@ -380,8 +383,9 @@ func parseRequestSpec(ctx context.Context, boundary *sandbox.Boundary, tctx tool
 	if len(captureTokens) > 0 && tokenJar == "" {
 		return requestSpec{}, fmt.Errorf("capture_tokens requires token_jar")
 	}
+	contest, _ := args["unredact"].(string)
 	return requestSpec{
-		tokenJar: tokenJar, captureTokens: captureTokens,
+		contest: contest, tokenJar: tokenJar, captureTokens: captureTokens,
 		method: method, target: target, headers: headers, headerSources: sources, body: body,
 		outgoing:        func(path string) bool { return secretmatch.HTTPArgumentConsumed(args, path) },
 		outgoingHeaders: func(path string) bool { return secretmatch.HTTPHeaderArgumentConsumed(args, path) },

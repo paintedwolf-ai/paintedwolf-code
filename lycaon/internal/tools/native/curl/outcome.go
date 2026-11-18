@@ -233,6 +233,9 @@ func (inv *invocation) evidence() toolcontract.OperationEvidence {
 		refs = append(refs, "received:sha256:"+inv.transfer.ReceivedSHA256, "emitted:sha256:"+inv.transfer.EmittedSHA256)
 	}
 	if ex := inv.exchange; ex != nil {
+		for _, receipt := range ex.RedactionReceipts {
+			refs = append(refs, "redaction_receipt:"+receipt)
+		}
 		if ex.CookieJarRef != "" {
 			refs = append(refs, "cookie_jar:"+ex.CookieJarRef)
 		}

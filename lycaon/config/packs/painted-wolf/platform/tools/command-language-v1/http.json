@@ -502,6 +502,18 @@
         },
         {
           "spellings": [
+            "--review-redaction"
+          ],
+          "arity": 1,
+          "value_role": "receipt",
+          "fixture_id": "curl-option-review-redaction",
+          "consumption": "fixed",
+          "sample_values": [
+            "receipt-id"
+          ]
+        },
+        {
+          "spellings": [
             "--capture-token"
           ],
           "arity": 1,

@@ -42,7 +42,7 @@ func releaseForeignTokens(
 		SourceKind: secretmatch.SourceToolArgument, SourceTool: "http_request", SourcePath: "request",
 		OriginKind: secretmatch.OriginField, Fingerprints: tokenFingerprints(deps.SecretMatcher, foreign),
 		VarName: foreign[0].name, Container: "token jar " + jarName,
-		RecipientsLocal: spec.dialsLoopback(),
+		ContestToken: spec.contest, RecipientsLocal: spec.dialsLoopback(),
 	})
 	if err != nil {
 		stage := secretmatch.FaultStageRaise
