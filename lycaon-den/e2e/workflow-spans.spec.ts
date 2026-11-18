@@ -41,7 +41,9 @@ webE2e.describe("workflow spans", () => {
     await openWorkflowsTab(page);
     await expect(page.getByTestId("workflow-active-row")).toBeVisible({ timeout: 120_000 });
 
-    await sendChatPrompt(page, "/exit");
+    await stage.getByTestId("chat-composer").fill("/exit");
+    await stage.getByTestId("composer-send").click();
+    await expect(stage.getByTestId("chat-composer")).toHaveValue("");
     await expect
       .poll(async () => (await apiGetWorkflowRun(request, planRunId)).status, { timeout: 60_000 })
       .not.toMatch(/^(running|paused|paused_on_child)$/);
