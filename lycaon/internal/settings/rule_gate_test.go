@@ -15,12 +15,13 @@ import (
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestRuleApprovalGateNilStoreAutoApproves(t *testing.T) {
-	approvalGate := settings.NewRuleApprovalGate(nil, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(nil, settingstest.EmptySources())
 	res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "read",
@@ -41,7 +42,7 @@ func TestRuleApprovalGateWriteRequiresApproval(t *testing.T) {
 	}})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "write",
@@ -73,7 +74,7 @@ func TestRuleApprovalGateProjectDeny(t *testing.T) {
 	}}}); err != nil {
 		testutil.FailErr(t, "store.PutProject failed", err)
 	}
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "write",
@@ -95,7 +96,7 @@ func TestRuleApprovalGateCommandWildcardDeny(t *testing.T) {
 	})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "command",
@@ -118,7 +119,7 @@ func TestRuleApprovalGateCommandWildcardAsk(t *testing.T) {
 	})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "command",
@@ -164,7 +165,7 @@ func TestRuleApprovalGateDenyWinsWithinLayerRegardlessOfSpecificity(t *testing.T
 			stageBundledApprovals(t, tc.rules)
 			store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 			testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-			approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+			approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 			res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 				Invocation: hitl.ActionInvocation{
 					Tool: "command",
@@ -191,7 +192,7 @@ func TestRuleApprovalGateCompoundCommandDenyWinsOverAskedStage(t *testing.T) {
 	})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "command",
@@ -216,7 +217,7 @@ func TestRuleApprovalGateDenyWinsAcrossCategoriesWithinLayer(t *testing.T) {
 	})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool:  "write",
@@ -237,7 +238,7 @@ func TestRuleApprovalGateExtensionAskCannotShadowDeviceDeny(t *testing.T) {
 	stageBundledApprovals(t, nil)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt", err)
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.ApprovalRules = staticApprovalRuleSource{layers: settings.ApprovalRuleLayers{Device: []settings.ApprovalRule{
 		{Category: settings.ApprovalCategoryCommand, Pattern: "git push*", Effect: settings.ApprovalEffectDeny},
 		{
@@ -280,7 +281,7 @@ func TestRuleApprovalGateDenyWinsTieRegardlessOfOrder(t *testing.T) {
 			stageBundledApprovals(t, order.rules)
 			store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 			testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-			approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+			approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 			res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 				Invocation: hitl.ActionInvocation{
 					Tool: "command",
@@ -317,7 +318,7 @@ func TestRuleApprovalGateCatalogLayersAreAdditive(t *testing.T) {
 			stageBundledApprovals(t, nil)
 			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 			testutil.FailErr(t, "settings.NewApprovalStoreAt", err)
-			sources := settings.NoSources()
+			sources := settingstest.EmptySources()
 			sources.ApprovalRules = staticApprovalRuleSource{layers: settings.ApprovalRuleLayers{
 				Device: []settings.ApprovalRule{tt.device}, Project: []settings.ApprovalRule{tt.project},
 			}}
@@ -345,7 +346,7 @@ func TestRuleApprovalGateCitesEveryEffectiveExtensionAsk(t *testing.T) {
 	stageBundledApprovals(t, nil)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt", err)
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.ApprovalRules = staticApprovalRuleSource{layers: settings.ApprovalRuleLayers{
 		Device: []settings.ApprovalRule{{
 			Category: settings.ApprovalCategoryCommand, Pattern: "git *", Effect: settings.ApprovalEffectAsk,
@@ -382,7 +383,7 @@ func TestRuleApprovalGateCitesIndependentExtensionDenies(t *testing.T) {
 	source := settings.ApprovalRuleSource{
 		UnitID: "approvals/rules/device-block", PackID: "device/policy", Scope: settings.ApprovalRuleScopeDevice,
 	}
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.ApprovalRules = staticApprovalRuleSource{layers: settings.ApprovalRuleLayers{Device: []settings.ApprovalRule{
 		{Category: settings.ApprovalCategoryCommand, Pattern: "git push*", Effect: settings.ApprovalEffectDeny, Source: source},
 		{Category: settings.ApprovalCategoryHostResource, Pattern: "release-service", Effect: settings.ApprovalEffectDeny, Source: settings.ApprovalRuleSource{
@@ -424,7 +425,7 @@ func TestRuleApprovalGateCommandFallsBackToToolRule(t *testing.T) {
 	})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "command",
@@ -447,7 +448,7 @@ func TestRuleApprovalGateSubstrateInvariant(t *testing.T) {
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
 	locations, err := sensitivepath.Load(sensitivepath.Bundled())
 	testutil.FailErr(t, "sensitivepath.Load failed", err)
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.Locations = locations
 	approvalGate := settings.NewRuleApprovalGate(store, sources)
 	proj := filepath.Join(tmp, "project")
@@ -605,7 +606,7 @@ func TestRuleApprovalGateNoWorkerCarveOut(t *testing.T) {
 	})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	proj := filepath.Join(tmp, "project")
 
 	// A write at Careful (write -> ask) requires approval — no worker exemption.
@@ -633,7 +634,7 @@ func TestRuleApprovalGateDenyApplies(t *testing.T) {
 	})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool:  "write",
@@ -682,7 +683,7 @@ func TestRuleApprovalGateControlPlanePathDeniesWithoutCard(t *testing.T) {
 	stageBundledApprovals(t, nil)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	proj := filepath.Join(tmp, "project")
 
 	sessions := filepath.Join(cfg, "debug", "sessions")

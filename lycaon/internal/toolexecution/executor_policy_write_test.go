@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolhost"
@@ -33,7 +34,7 @@ func TestInstructionWriteUsesOrdinaryApprovalWithExactDiff(t *testing.T) {
 	testutil.FailErr(t, "seed instructions", os.WriteFile(target, []byte(before), 0o644))
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "create store", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	registry := tools.NewDefaultRegistry()
 	writer := &native.WriteTool{Boundary: boundary}
@@ -166,7 +167,7 @@ func TestFileChangeApprovalDeduplicatesPathsAndRetainsIndexPreviews(t *testing.T
 	path := filepath.Join(root, "AGENTS.md")
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "create store", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	registry := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register prepared review", registry.Register("write", func(ctx context.Context, _ map[string]any, tc tools.ToolContext) (string, error) {
@@ -216,7 +217,7 @@ func TestCommandInstructionGrantUsesOneOrdinaryApproval(t *testing.T) {
 	path := filepath.Join(root, "AGENTS.md")
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "create store", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	reg := tools.NewDefaultRegistry()
 	var executed tools.ToolContext
@@ -278,7 +279,7 @@ func TestCoordinatorInvestigateOverlayWriteReachesAgentPolicyApproval(t *testing
 
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "create store", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	scopes, err := sandbox.LoadPathScopes()
 	testutil.FailErr(t, "load path scopes", err)

@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -27,7 +28,7 @@ func TestWriteRootPlanBindsProjectIDOnDurableGrants(t *testing.T) {
 	t.Parallel()
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
-	authority := settings.NewRuleApprovalGate(store, settings.NoSources())
+	authority := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	broker := &WriteRootCheckpointBroker{
 		Runtime:   approvalstate.NewSandboxPathGrantRuntime(),
 		Authority: authority,

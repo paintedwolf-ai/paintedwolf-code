@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -40,7 +41,7 @@ func grantedPathOptionAccess(t *testing.T, access hitl.GrantedPathDelta) hitl.Ap
 func TestApprovalRecoveryRevokesOnlyItsOwnedGrant(t *testing.T) {
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	s := &Installation{Gate: gate, authorityMu: &sync.Mutex{}}
 	grant := hitl.ApprovalGrant{
 		ID: "grant_device", Scope: hitl.ApprovalGrantScopeDevice,
@@ -66,7 +67,7 @@ func TestApprovalRecoveryRevokesOnlyItsOwnedGrant(t *testing.T) {
 func TestApprovalRecoveryRevokesOnlyItsInstalledAskQuiet(t *testing.T) {
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	s := &Installation{Gate: gate, authorityMu: &sync.Mutex{}}
 	const chatID = "chat-1"
 	const key = "authority_misuse:pack/rule"

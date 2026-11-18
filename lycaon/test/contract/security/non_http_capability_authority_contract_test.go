@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -110,7 +111,7 @@ func TestNonHTTPContractTypedAuthResolvesOnlyMatchingSubstrate(t *testing.T) {
 
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	contractcheck.FailErr(t, "new approval store", err)
-	approvals := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvals := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 
 	socketOnly := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{

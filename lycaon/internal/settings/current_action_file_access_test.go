@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -17,7 +18,7 @@ func TestApprovalFreezesExactFileAccess(t *testing.T) {
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "create approval store", err)
 	testutil.FailErr(t, "PutGlobal strict", store.PutGlobal(settings.ApprovalConfig{Posture: gate.PostureStrict}))
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	project := t.TempDir()
 	outside := filepath.Join(filepath.VolumeName(project)+string(filepath.Separator), "unattached", t.Name())
 	for _, tc := range []struct {

@@ -125,7 +125,11 @@ func (h *harness) curlStdin(ctx context.Context, input string, words ...string) 
 	if validErr := result.Validate(); validErr != nil {
 		h.t.Fatalf("curl %v produced an invalid result %+v: %v", words, result, validErr)
 	}
-	return run{mode: prepared.Mode, stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, execution: execution, transfer: prepared.Transfer(),
+	var transfer Transfer
+	if prepared.transfer != nil {
+		transfer = *prepared.transfer
+	}
+	return run{mode: prepared.Mode, stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, execution: execution, transfer: transfer,
 		review: prepared.Review, evidence: result.Evidence}
 }
 

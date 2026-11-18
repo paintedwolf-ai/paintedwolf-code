@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -287,7 +288,7 @@ func approvalGateForFloor(t *testing.T) hitl.ApprovalGate {
 	configtest.Overlay(t, map[config.Rel]string{config.SecurityApprovals: string(data)})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
-	return settings.NewRuleApprovalGate(store, settings.NoSources())
+	return settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 }
 
 func asToolReject(err error, out **toolrejection.ToolReject) bool {

@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -73,7 +74,7 @@ func TestRecommendedOptionOnlySetInPlanConstruction(t *testing.T) {
 func TestPlanOptionTitlesAreFrozen(t *testing.T) {
 	t.Parallel()
 	store := mustApprovalStore(t)
-	approvals := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvals := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "network",
@@ -165,7 +166,7 @@ func TestPlanOptionTitlesAreFrozen(t *testing.T) {
 // TestTwoSubjectCardsCarryGroups pins absorbed and host-resource second ladders.
 func TestTwoSubjectCardsCarryGroups(t *testing.T) {
 	t.Parallel()
-	approvals := settings.NewRuleApprovalGate(mustApprovalStore(t), settings.NoSources())
+	approvals := settings.NewRuleApprovalGate(mustApprovalStore(t), settingstest.EmptySources())
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "network",

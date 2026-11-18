@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -8,10 +9,36 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
 	lyexec "github.com/lycaon/lycaon/internal/exec"
-	"github.com/lycaon/lycaon/internal/secretmint"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
+
+type passwordVendorPin struct {
+	ID         string   `yaml:"id"`
+	Upstream   string   `yaml:"upstream"`
+	Ref        string   `yaml:"ref"`
+	Commit     string   `yaml:"commit"`
+	TreeSHA256 string   `yaml:"tree_sha256"`
+	License    string   `yaml:"license"`
+	Include    []string `yaml:"include"`
+}
+
+type provenanceFile struct {
+	Vendors []passwordVendorPin `yaml:"vendors"`
+}
+
+func loadPasswordProvenance() ([]passwordVendorPin, error) {
+	raw, err := config.Read(config.SecretMintProvenance)
+	if err != nil {
+		return nil, fmt.Errorf("zxcvbn provenance: %w", err)
+	}
+	var file provenanceFile
+	if err := config.DecodeYAML(raw, &file); err != nil {
+		return nil, fmt.Errorf("zxcvbn provenance: %w", err)
+	}
+	return file.Vendors, nil
+}
 
 var (
 	zxcvbnCommitSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
@@ -20,8 +47,8 @@ var (
 
 func TestZxcvbnPasswordsCatalogIsPinned(t *testing.T) {
 	t.Parallel()
-	vendors, err := secretmint.LoadProvenance()
-	contractcheck.FailErr(t, "secretmint.LoadProvenance failed", err)
+	vendors, err := loadPasswordProvenance()
+	contractcheck.FailErr(t, "load password provenance", err)
 	if len(vendors) == 0 {
 		t.Fatal("zxcvbn-provenance.yaml has no vendors")
 	}

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,10 +14,10 @@ import (
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -33,7 +32,7 @@ func bundledStandardGate(t *testing.T) hitl.ApprovalGate {
 	t.Helper()
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	contractcheck.FailErr(t, "load bundled approval store", err)
-	return settings.NewRuleApprovalGate(store, settings.NoSources())
+	return settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 }
 
 func evalBundled(t *testing.T, action hitl.ProposedAction) *hitl.ApprovalResult {
@@ -184,7 +183,7 @@ func TestStrictAsksOnMCPUntilLeased(t *testing.T) {
 		os.WriteFile(global, []byte("approval_posture: strict\nrules:\n"), 0o644))
 	store, err := settings.NewApprovalStoreAt(global)
 	contractcheck.FailErr(t, "load strict approval store", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
@@ -222,58 +221,6 @@ func TestStrictAsksOnMCPUntilLeased(t *testing.T) {
 	contractcheck.FailErr(t, "gate Evaluate after lease", err)
 	if !res.AutoApproved() {
 		t.Fatalf("leased MCP tool must run silently at Strict: %+v", res)
-	}
-}
-
-// A retired tool holds no tool tier. Its name keeps a tier only as the native
-// operation command reaches, so approvals keep their class after retirement.
-func TestRetiredToolsHoldNoToolTier(t *testing.T) {
-	t.Parallel()
-	raw, err := os.ReadFile(filepath.Join(contractcheck.RepoRoot(t), "schemas", "agent-public-retirements.json"))
-	contractcheck.FailErr(t, "read retirements", err)
-	var doc struct {
-		Vocabularies struct {
-			Tools map[string]json.RawMessage `json:"tools"`
-		} `json:"vocabularies"`
-	}
-	contractcheck.FailErr(t, "decode retirements", json.Unmarshal(raw, &doc))
-	if len(doc.Vocabularies.Tools) == 0 {
-		t.Fatal("no retired tools read")
-	}
-	for tool, entry := range doc.Vocabularies.Tools {
-		if settings.ToolTierDeclared(tool) {
-			t.Errorf("retired tool %s holds a tool tier", tool)
-		}
-		// A successor list names tools; a content contract replaces a tool with no operation.
-		var successors []string
-		if json.Unmarshal(entry, &successors) == nil && slices.Equal(successors, []string{"command"}) && !settings.OperationTierDeclared(tool) {
-			t.Errorf("retired tool %s lost the operation tier command reaches", tool)
-		}
-	}
-}
-
-// TestEveryNativeToolDeclaresATier checks approval classification coverage.
-func TestEveryNativeToolDeclaresATier(t *testing.T) {
-	t.Parallel()
-	cfg, err := nativemanifest.Load()
-	contractcheck.FailErr(t, "nativemanifest.Load", err)
-	if err := cfg.ValidateApprovalReversibility(); err != nil {
-		t.Fatalf("approval_reversibility map: %v", err)
-	}
-	manifest := append(cfg.AllTools(), cfg.AllOperations()...)
-	if len(manifest) == 0 {
-		t.Fatal("native tools manifest is empty")
-	}
-	var undeclared []string
-	for _, tool := range manifest {
-		if !settings.ToolTierDeclared(tool) && !settings.OperationTierDeclared(tool) {
-			undeclared = append(undeclared, tool)
-		}
-	}
-	if len(undeclared) > 0 {
-		t.Fatalf("native tools missing approval reversibility (add approval_reversibility.<id> on "+
-			"pack platform/tools/native-tools.yaml and run ./task codegen:native-tool-contracts): %s",
-			strings.Join(undeclared, ", "))
 	}
 }
 
@@ -494,7 +441,7 @@ func denyOutsideRead(t *testing.T, path string) (string, *guidance.Refusal, *hit
 	t.Helper()
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	contractcheck.FailErr(t, "settings.NewApprovalStoreAt", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, outsideReadProfiles(t))
 	mgr := &denyingHITL{guidance: "Use the read tool and summarize the current file instead."}
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)

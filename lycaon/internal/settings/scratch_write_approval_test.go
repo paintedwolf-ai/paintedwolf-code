@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -22,7 +23,7 @@ func scratchGate(t *testing.T, posture gate.Posture) (hitl.ApprovalGate, string)
 	stageBundledApprovalsYAML(t, "approval_posture: "+string(posture)+"\nrules:\n")
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "approval store", err)
-	return settings.NewRuleApprovalGate(store, settings.NoSources()), t.TempDir()
+	return settings.NewRuleApprovalGate(store, settingstest.EmptySources()), t.TempDir()
 }
 
 func scratchAction(tool, project, path string) hitl.ProposedAction {

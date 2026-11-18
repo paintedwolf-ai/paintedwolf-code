@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -18,7 +19,7 @@ func TestNativeCommandRulesFollowReachedArgv(t *testing.T) {
 			}})
 			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 			testutil.FailErr(t, "create approval store", err)
-			approval := settings.NewRuleApprovalGate(store, settings.NoSources())
+			approval := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 			action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{
 				Tool: "sort", Args: map[string]any{"command": "echo harmless"},
 				BoundStages: []toolcontract.ExecutionStage{{

@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -95,7 +96,7 @@ func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 		d.Source.EditorDocuments = editordoc.New(editordoc.NewStore(database), sourceHistory16, sourceHistory16.History, d.Core.Projects)
 		d.Approvals.SecretSpans = secretspan.New(matcher)
 		d.Approvals.ManagedSecrets = secretcap.NewWithStore(database, values, matcher.Remember)
-		d.Approvals.ApprovalGate = settings.NewRuleApprovalGate(approvals, settings.NoSources())
+		d.Approvals.ApprovalGate = settings.NewRuleApprovalGate(approvals, settingstest.EmptySources())
 	})
 	t.Cleanup(func() {
 		testutil.FailErr(t, "close document service", srv.Sources.Editor.EditorDocuments.Close(context.Background()))

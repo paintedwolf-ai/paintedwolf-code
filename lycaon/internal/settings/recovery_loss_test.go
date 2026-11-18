@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -18,7 +19,7 @@ func TestRecoveryLossRequiresExactApprovalAtEveryPosture(t *testing.T) {
 			root := t.TempDir()
 			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 			testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-			approval := settings.NewRuleApprovalGate(store, settings.NoSources())
+			approval := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 			action := hitl.ProposedAction{
 				Invocation: hitl.ActionInvocation{Tool: "delete", ActionID: "first-removal", Files: []string{filepath.Join(root, "build")}},
 				Scope:      hitl.ActionScope{ProjectDir: root, ProjectID: "project", SessionID: "session"},
