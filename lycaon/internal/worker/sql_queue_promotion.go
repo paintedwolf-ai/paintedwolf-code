@@ -35,7 +35,7 @@ func (q *sqlQueuePromotion) ReleaseMergeApply(ctx context.Context, jobID, claimT
 	if err := q.store.ReleaseMergeApply(ctx, jobID, claimToken); err != nil {
 		return err
 	}
-	q.refreshBoardByID(ctx, jobID)
+	q.changes.byID(ctx, jobID)
 	q.NotifyRunnable()
 	return nil
 }
@@ -72,7 +72,7 @@ func (q *sqlQueuePromotion) SetMergeStatus(ctx context.Context, jobID string, st
 	if err := q.store.SetMergeStatus(ctx, jobID, status); err != nil {
 		return err
 	}
-	q.refreshBoardByID(ctx, jobID)
+	q.changes.byID(ctx, jobID)
 	q.NotifyRunnable()
 	return nil
 }
@@ -87,7 +87,7 @@ func (q *sqlQueuePromotion) SetMergeStatuses(ctx context.Context, updates []Merg
 	}
 	q.NotifyRunnable()
 	for _, update := range updates {
-		q.refreshBoardByID(ctx, update.JobID)
+		q.changes.byID(ctx, update.JobID)
 	}
 	return nil
 }
@@ -108,10 +108,10 @@ func (q *sqlQueuePromotion) CommitPromotion(ctx context.Context, jobID, claimTok
 	if err := q.store.CommitPromotion(ctx, jobID, claimToken, commit); err != nil {
 		return err
 	}
-	q.refreshBoardByID(ctx, jobID)
+	q.changes.byID(ctx, jobID)
 	q.NotifyRunnable()
 	for _, update := range commit.ChildStatuses {
-		q.refreshBoardByID(ctx, update.JobID)
+		q.changes.byID(ctx, update.JobID)
 	}
 	return nil
 }
@@ -124,7 +124,7 @@ func (q *sqlQueuePromotion) ClearWorkerWorkspace(ctx context.Context, jobID stri
 	if err := q.store.ClearWorkerWorkspace(ctx, jobID); err != nil {
 		return err
 	}
-	q.refreshBoardByID(ctx, jobID)
+	q.changes.byID(ctx, jobID)
 	q.NotifyRunnable()
 	return nil
 }

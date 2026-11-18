@@ -77,7 +77,7 @@ func (q *sqlQueuePromotion) ClaimWorkerBranch(ctx context.Context, jobID string)
 		return nil, err
 	}
 	stopPreparation()
-	q.refreshBoard(ctx, *task, task.ProjectID)
+	q.changes.board(ctx, *task, task.ProjectID)
 	return task, nil
 }
 
@@ -247,7 +247,7 @@ func (q *sqlQueueCore) withWorkspacePreparation(ctx context.Context, task *api.W
 		q.mu.Unlock()
 		if emit {
 			lastEmit, lastStage = now, progress.Stage
-			q.refreshBoard(context.WithoutCancel(ctx), snapshot, task.ProjectID)
+			q.changes.board(context.WithoutCancel(ctx), snapshot, task.ProjectID)
 		}
 	}), stop
 }

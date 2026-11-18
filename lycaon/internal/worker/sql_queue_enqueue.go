@@ -50,7 +50,7 @@ func (q *sqlQueueClaims) enqueueAdmitted(ctx context.Context, projectID string, 
 		}
 		return "", err
 	}
-	q.refreshBoard(ctx, task, task.ProjectID)
+	q.changes.board(ctx, task, task.ProjectID)
 	q.NotifyRunnable()
 	return task.ID, nil
 }
@@ -119,7 +119,7 @@ func (q *sqlQueueClaims) PrepareEnqueue(ctx context.Context, projectID string, t
 
 // PublishEnqueued refreshes projections and wakes claimers.
 func (q *sqlQueueClaims) PublishEnqueued(ctx context.Context, jobID string) {
-	q.refreshBoardByID(ctx, jobID)
+	q.changes.byID(ctx, jobID)
 	q.NotifyRunnable()
 }
 
@@ -138,7 +138,7 @@ func (q *sqlQueueClaims) ClaimNext(ctx context.Context, req ClaimRequest) (*api.
 	if task == nil {
 		return nil, fmt.Errorf("worker queue: claim returned no task")
 	}
-	q.refreshBoard(ctx, *task, task.ProjectID)
+	q.changes.board(ctx, *task, task.ProjectID)
 	return task, nil
 }
 
@@ -250,7 +250,7 @@ func (q *sqlQueueClaims) ReleaseAdmitted(ctx context.Context, jobID string) erro
 		return err
 	}
 	q.NotifyRunnable()
-	q.refreshBoardByID(ctx, jobID)
+	q.changes.byID(ctx, jobID)
 	return nil
 }
 
@@ -268,7 +268,7 @@ func (q *sqlQueueClaims) Hold(ctx context.Context, jobID string) error {
 		return err
 	}
 	if held {
-		q.refreshBoardByID(ctx, jobID)
+		q.changes.byID(ctx, jobID)
 	}
 	return nil
 }
@@ -296,6 +296,6 @@ func (q *sqlQueueClaims) finalizeCanceled(ctx context.Context, jobID string, res
 	if kept == "" {
 		q.destroyWorkerWorkspace(ctx, task)
 	}
-	q.refreshBoardByID(ctx, jobID)
+	q.changes.byID(ctx, jobID)
 	return nil
 }

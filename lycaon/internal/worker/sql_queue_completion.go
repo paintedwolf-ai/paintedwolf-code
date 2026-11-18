@@ -65,7 +65,7 @@ func (q *sqlQueueClaims) completeAdmitted(ctx context.Context, claimed *api.Work
 	if teardown && !completion.Suspended {
 		q.destroyWorkerWorkspace(ctx, task)
 	}
-	q.refreshBoardByID(ctx, jobID)
+	q.changes.byID(ctx, jobID)
 	if !completion.Suspended {
 		q.notifyRoundSettled(ctx, task)
 	}
@@ -163,7 +163,7 @@ func (q *sqlQueueClaims) failAdmitted(ctx context.Context, claimed *api.WorkerTa
 	if task != nil && kept == "" {
 		q.destroyWorkerWorkspace(ctx, task)
 	}
-	q.refreshBoardByID(ctx, claimed.ID)
+	q.changes.byID(ctx, claimed.ID)
 	q.notifyRoundSettled(ctx, task)
 	return true, nil
 }
@@ -192,7 +192,7 @@ func (q *sqlQueueClaims) retryAdmitted(ctx context.Context, claimed *api.WorkerT
 	if err != nil || !won {
 		return won, err
 	}
-	q.refreshBoardByID(ctx, claimed.ID)
+	q.changes.byID(ctx, claimed.ID)
 	q.NotifyRunnable()
 	return true, nil
 }
@@ -206,7 +206,7 @@ func (q *sqlQueueClaims) Park(ctx context.Context, claimed *api.WorkerTask) (boo
 func (q *sqlQueueClaims) parkAdmitted(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
 	won, err := q.store.ParkJob(ctx, claimed)
 	if err == nil && won {
-		q.refreshBoardByID(ctx, claimed.ID)
+		q.changes.byID(ctx, claimed.ID)
 	}
 	return won, err
 }

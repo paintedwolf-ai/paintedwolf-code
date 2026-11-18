@@ -35,7 +35,6 @@ type sqlQueueConfig struct {
 	activeExecution   func(jobID string) bool
 	workerWorkspace   WorkerWorkspaceManager
 	projects          ProjectStore
-	events            *events.Publisher
 	workflowRuns      *WorkflowDomains
 	sessionAdmission  func(ctx context.Context, sessionID string, fn func() error) error
 	failureCatalog    ExecuteFailureRenderer
@@ -55,6 +54,7 @@ type sqlQueueCore struct {
 	cancelReports ChangeReportDeps
 	preparations  map[string]*api.WorkspacePreparation
 	runnable      *runnableSignal
+	changes       *jobChanges
 }
 
 type sqlQueueClaims struct {
@@ -134,6 +134,7 @@ func NewSQLQueue(database db.Handle, maxRunning int) *SQLQueue {
 		preparations: make(map[string]*api.WorkspacePreparation),
 		runnable:     newRunnableSignal(),
 	}
+	core.changes = &jobChanges{store: core.store}
 	q := &SQLQueue{
 		sqlQueueCore:      core,
 		sqlQueueClaims:    sqlQueueClaims{sqlQueueCore: core},
@@ -196,7 +197,7 @@ func (q *SQLQueue) SetRunningCancel(fn func(ctx context.Context, jobID string) e
 
 // SetEventPublisher wires the derived board snapshot refresh.
 func (q *SQLQueue) SetEventPublisher(p *events.Publisher) {
-	q.events = p
+	q.changes.publisher = p
 }
 
 // SetEventOutbox makes each job transition and its wire event one commit.
