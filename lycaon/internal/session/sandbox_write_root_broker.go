@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"strings"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolapproval"
 	"github.com/lycaon/lycaon/internal/toolrejection"

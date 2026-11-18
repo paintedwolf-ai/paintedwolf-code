@@ -3,7 +3,6 @@ package sessioncontracts
 import (
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 

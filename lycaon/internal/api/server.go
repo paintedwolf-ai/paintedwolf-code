@@ -1,7 +1,6 @@
 package api
 
 import (
-	"github.com/lycaon/lycaon/internal/people/peoplestore"
 	"net/http"
 	"os"
 	"strings"
@@ -32,6 +31,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/people/peoplestore"
 	"github.com/lycaon/lycaon/internal/people/personactions"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/session"

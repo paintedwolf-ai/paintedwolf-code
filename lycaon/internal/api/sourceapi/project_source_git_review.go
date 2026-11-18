@@ -2,7 +2,6 @@ package sourceapi
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/sourceblob"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -10,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/pagecursor"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )

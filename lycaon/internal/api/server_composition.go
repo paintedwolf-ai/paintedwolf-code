@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
 	"github.com/lycaon/lycaon/internal/api/extensionadmin"
 	"github.com/lycaon/lycaon/internal/api/gitadmin"

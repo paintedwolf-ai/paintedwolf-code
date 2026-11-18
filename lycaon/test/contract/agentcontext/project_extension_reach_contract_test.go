@@ -12,8 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/lycaon/lycaon/internal/catalogview"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -25,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"gopkg.in/yaml.v3"
 )
 
 // extpacksActiveAllowlist names device-catalog boundaries. The ambient task()

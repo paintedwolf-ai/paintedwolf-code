@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )

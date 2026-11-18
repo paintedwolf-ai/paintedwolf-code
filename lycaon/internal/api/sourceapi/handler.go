@@ -2,9 +2,6 @@ package sourceapi
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/api/requestscope"
-	"github.com/lycaon/lycaon/internal/messageview"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	"sync"
 	"time"
 
@@ -12,12 +9,14 @@ import (
 	"github.com/lycaon/lycaon/internal/api/editoradmin"
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/briefinghost"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/fileops"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
@@ -31,6 +30,7 @@ import (
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workscope"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 type TranscriptReader interface {

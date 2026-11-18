@@ -2,9 +2,9 @@ package briefingadmin
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/api/requestscope"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/project"

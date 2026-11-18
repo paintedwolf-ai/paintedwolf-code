@@ -3,12 +3,12 @@ package store
 import (
 	"context"
 	"database/sql"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

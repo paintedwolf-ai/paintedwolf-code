@@ -1,11 +1,11 @@
 package extensionadmin
 
 import (
-	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/promptadmin"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/scanadmin"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/api/workflowadmin"
