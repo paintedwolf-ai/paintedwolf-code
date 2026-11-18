@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,10 +32,13 @@ import (
 )
 
 func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
+
 	for _, anchor := range []string{oar.AnchorContentInput, oar.AnchorCoordinatorPreInvoke} {
 		t.Run(anchor, func(t *testing.T) {
+			sessionFixture := storetest.New(t)
+
 			t.Setenv("LYCAON_LLM_MOCK", "1")
-			mem := store.NewMemory()
+			mem := sessionFixture
 			root := t.TempDir()
 			response := llm.MockResponseEntry{Pattern: ".", Text: "ok"}
 			if anchor == oar.AnchorCoordinatorPreInvoke {
@@ -47,7 +51,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 				return "", nil
 			}))
 			mgr := session.NewHost(mem, session.Models{Client: recorder, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
-			projects := project.NewMemoryRegistry()
+			projects := project.NewSQLRegistry(sessionFixture.DB())
 			proj, err := project.CreateWithRoot(t.Context(), projects, root)
 			testutil.FailErr(t, "create rooted project", err)
 			mgr.SetProjectRegistry(projects)
@@ -123,10 +127,10 @@ func loadTestAgentRegistry(t *testing.T) *orchestration.MemoryAgentRegistry {
 	return reg
 }
 
-func newPromptTestManager(t *testing.T, llmClient modelcall.LLMClient) (*session.Host, *store.Memory) {
+func newPromptTestManager(t *testing.T, llmClient modelcall.LLMClient) (*session.Host, *store.SQL) {
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	toolReg := tools.NewExecutorRegistry(nil, tools.NewDefaultRegistry())
 	mgr := session.NewHost(store, session.Models{Client: llmClient, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -197,7 +201,7 @@ func TestCoordinatorPromptIncludesPackBoardInject(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)

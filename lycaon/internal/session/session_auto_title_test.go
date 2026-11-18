@@ -3,6 +3,8 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/events"
@@ -20,14 +22,16 @@ import (
 )
 
 func TestAutoTitleSessionIdempotentOnReplay(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	store := store.NewMemory()
+	store := sessionFixture
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".*", Text: "ok"},
 	}})
@@ -80,14 +84,16 @@ func TestAutoTitleSessionIdempotentOnReplay(t *testing.T) {
 }
 
 func TestPublishSessionTitleUsesStoreStatus(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	store := store.NewMemory()
+	store := sessionFixture
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetProjectRegistry(reg)
 	hub := events.NewMemoryHub()
@@ -132,10 +138,12 @@ func TestPublishSessionTitleUsesStoreStatus(t *testing.T) {
 }
 
 func TestAutoNameProjectSkipsNonDraft(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: t.TempDir()}},
 	})
@@ -144,7 +152,7 @@ func TestAutoNameProjectSkipsNonDraft(t *testing.T) {
 		t.Fatal("expected folder-backed project to have a name")
 	}
 
-	store := store.NewMemory()
+	store := sessionFixture
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".*", Text: "ignored"},
 	}})
@@ -195,14 +203,16 @@ func (*blockingNamingLLM) Models() []modelcall.ModelInfo {
 func (*blockingNamingLLM) Profile() providerprofile.Profile { return providerprofile.Profile{} }
 
 func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	mem := store.NewMemory()
+	mem := sessionFixture
 	blocker := &blockingNamingLLM{
 		entered: make(chan struct{}, 2),
 		release: make(chan struct{}),
@@ -284,7 +294,7 @@ func TestCurationSharesLocalCoordinator(t *testing.T) {
 		Coordinator: llm.ModelRef{ProviderID: "ollama-1", Model: "gemma4:e2b"},
 		Lite:        llm.ModelRef{ProviderID: "ollama-1", Model: "gemma4:e2b"},
 	})
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.Runner.Curation.SetModelSources(policy, registry)
 
 	if !mgr.Runner.Curation.SharesCoordinatorCapacity(ctx, &api.Session{ProviderID: "ollama-1"}) {
@@ -301,7 +311,7 @@ func TestCurationSharesLocalCoordinator(t *testing.T) {
 
 func TestWorkflowRequestCurationPreservesManualTitlesAndExcludesWorkers(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
 	testutil.FailErr(t, "create root chat", err)
@@ -329,7 +339,7 @@ func TestWorkflowRequestCurationPreservesManualTitlesAndExcludesWorkers(t *testi
 
 func TestAcceptedWorkflowRequestCurationSurvivesInitiatingTurnCancellation(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
 	testutil.FailErr(t, "create chat", err)
@@ -346,12 +356,14 @@ func TestAcceptedWorkflowRequestCurationSurvivesInitiatingTurnCancellation(t *te
 }
 
 func TestEngineShutdownCancelsAndDrainsDetachedNaming(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "")
 	ctx := t.Context()
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
-	mem := store.NewMemory()
+	mem := sessionFixture
 	blocker := &blockingNamingLLM{entered: make(chan struct{}, 2), release: make(chan struct{}), text: "Should never publish"}
 	providers := &llm.Registry{}
 	providers.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))

@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -96,7 +97,7 @@ func TestSynthesisGroundingInvariants_dispatchedLegEvidenceIsObserved(t *testing
 	t.Parallel()
 	root := t.TempDir()
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create parent session", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "path-explorer", Prompt: "survey"})

@@ -3,6 +3,8 @@ package contractfixture
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -151,7 +152,7 @@ func NewGitBoard() *board.SnapshotBuilder {
 func NewGitServer(t *testing.T, reg project.Registry, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: store.NewMemory(), Projects: reg}, Workflow: hostapi.WorkflowDependencies{
+		Store: storetest.New(t, testdbseed.DefaultProjectID), Projects: reg}, Workflow: hostapi.WorkflowDependencies{
 		Board: NewGitBoard(), RepoSetCache: git.NewRepoSetCache(git.DefaultStatusCacheTTL)}}
 	for _, opt := range opts {
 		opt(&deps)

@@ -3,6 +3,8 @@ package promptsource
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"slices"
 	"testing"
 
@@ -17,7 +19,7 @@ import (
 )
 
 type projectionStore struct {
-	*store.Memory
+	*store.SQL
 	appendErr error
 }
 
@@ -25,7 +27,7 @@ func (s projectionStore) AppendMessages(ctx context.Context, sessionID string, m
 	if s.appendErr != nil {
 		return s.appendErr
 	}
-	return s.Memory.AppendMessages(ctx, sessionID, messages...)
+	return s.SQL.AppendMessages(ctx, sessionID, messages...)
 }
 
 type reviewAccounting func(context.Context, string, api.Message) error
@@ -51,10 +53,10 @@ func TestProjectionAppendSettlesTranscriptBeforeReviewAccounting(t *testing.T) {
 		{name: "without review binding", withoutReviews: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			memory := store.NewMemory()
+			memory := storetest.New(t, testdbseed.DefaultProjectID)
 			session, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 			testutil.FailErr(t, "create projection session", err)
-			source := projectionStore{Memory: memory, appendErr: tc.storageErr}
+			source := projectionStore{SQL: memory, appendErr: tc.storageErr}
 			projection := &Projection{Sessions: memory, Transcript: transcript.New(source, nil)}
 			var accounted []string
 			if !tc.withoutReviews {
@@ -100,7 +102,7 @@ func TestProjectionAppendSettlesTranscriptBeforeReviewAccounting(t *testing.T) {
 }
 
 func TestModelBuildWiresContextOverflowAndTokenObservationCallbacks(t *testing.T) {
-	memory := store.NewMemory()
+	memory := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append message", memory.AppendMessages(t.Context(), sess.ID, api.Message{
@@ -123,7 +125,7 @@ func TestModelBuildWiresContextOverflowAndTokenObservationCallbacks(t *testing.T
 
 func TestProjectionBuildForwardsSettledModelOutputIteration(t *testing.T) {
 	ctx := t.Context()
-	memory := store.NewMemory()
+	memory := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := memory.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 	turn, err := memory.BeginTurn(ctx, store.TurnStart{

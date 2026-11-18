@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -31,6 +32,8 @@ import (
 )
 
 func TestOpenAPIScansRealServer(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	root := t.TempDir()
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(root, "store.db"))
 
@@ -79,13 +82,13 @@ func TestOpenAPIScansRealServer(t *testing.T) {
 	}
 	testutil.FailErr(t, "seed scan source", os.WriteFile(filepath.Join(projectDir, "main.go"), []byte("package main\n"), 0o600))
 
-	projReg := project.NewMemoryRegistry()
+	projReg := project.NewSQLRegistry(sessionFixture.DB())
 	proj, err := projReg.Create(t.Context(), project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: projectDir}},
 	})
 	testutil.FailErr(t, "create project", err)
 
-	sessStore := store.NewMemory()
+	sessStore := sessionFixture
 	mockLLM := llm.NewMockProvider(nil)
 	mgr := session.NewHost(sessStore, session.Models{Client: mockLLM, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{

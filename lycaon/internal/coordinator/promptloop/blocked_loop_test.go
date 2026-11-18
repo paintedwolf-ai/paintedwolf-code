@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -62,7 +62,7 @@ func TestBlockedLoopClosesOutInsteadOfSpinning(t *testing.T) {
 	ctx := context.Background()
 	args := map[string]any{"path": "README.md"}
 	guard := loopguard.NewMemoryDoomLoopGuard()
-	msgStore := store.NewMemory()
+	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -153,7 +153,7 @@ func TestBlockedLoopFinalTurnToolCallIsReportedAsTheModelsMiss(t *testing.T) {
 	ctx := context.Background()
 	args := map[string]any{"path": "a.go"}
 	guard := loopguard.NewMemoryDoomLoopGuard()
-	msgStore := store.NewMemory()
+	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for i := 0; i < loopguard.DoomLoopMaxAttempts; i++ {
@@ -203,7 +203,7 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 	ctx := context.Background()
 	args := map[string]any{"path": "README.md"}
 	guard := loopguard.NewMemoryDoomLoopGuard()
-	msgStore := store.NewMemory()
+	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -308,7 +308,7 @@ func TestBlockedLoopStreakResetsOnProgress(t *testing.T) {
 		t.Skip("cap too small for this scenario")
 	}
 	ctx := context.Background()
-	msgStore := store.NewMemory()
+	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -349,7 +349,7 @@ func TestBlockedLoopStreakResetsOnProgress(t *testing.T) {
 // Schema rejection before the subsystem owner does not close the turn.
 func TestSchemaRejectsDoNotForceBlockedLoopCloseout(t *testing.T) {
 	ctx := context.Background()
-	msgStore := store.NewMemory()
+	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -440,7 +440,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 	// as an invoked rejection.
 	ctx := context.Background()
 	guard := loopguard.NewMemoryDoomLoopGuard()
-	msgStore := store.NewMemory()
+	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 

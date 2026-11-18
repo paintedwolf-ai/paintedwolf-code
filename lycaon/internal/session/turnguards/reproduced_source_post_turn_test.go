@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,7 +81,7 @@ func (c *scriptedTurnClient) Requests() []modelcall.CompletionRequest {
 
 type reproducedSourceFixture struct {
 	mgr     *session.Host
-	store   *store.Memory
+	store   *store.SQL
 	client  *scriptedTurnClient
 	rootDir string
 	projID  string
@@ -108,11 +109,13 @@ func loadStockGuardPipeline(t *testing.T) *oar.GuardPipeline {
 }
 
 func newReproducedSourceFixture(t *testing.T, completions []*modelcall.Completion) *reproducedSourceFixture {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 
 	rootDir := t.TempDir()
-	mem := store.NewMemory()
+	mem := sessionFixture
 	client := &scriptedTurnClient{completions: completions}
 
 	registry := tools.NewStubRegistry()
@@ -130,7 +133,7 @@ func newReproducedSourceFixture(t *testing.T, completions []*modelcall.Completio
 	mgr := session.NewHost(mem, session.Models{Client: client, Limits: settings.DefaultSessionLimits()}, registry)
 	mgr.SetDataDir(t.TempDir())
 
-	projects := project.NewMemoryRegistry()
+	projects := project.NewSQLRegistry(sessionFixture.DB())
 	proj, err := project.CreateWithRoot(t.Context(), projects, rootDir)
 	testutil.FailErr(t, "create rooted project", err)
 	mgr.SetProjectRegistry(projects)

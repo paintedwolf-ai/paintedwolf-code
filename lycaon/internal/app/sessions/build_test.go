@@ -3,6 +3,7 @@ package sessions
 import (
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"log/slog"
 	"maps"
 	"os"
@@ -15,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -324,7 +324,7 @@ func newWiredSkillHost(t *testing.T) (*toolhost.Runtime, string) {
 		Catalog:    cat,
 	})
 	testutil.FailErr(t, "build native runtime", err)
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	root := configlayout.FindModuleRoot()
 	mgr.SetEffectiveCatalogDeps(root, cat, nil)

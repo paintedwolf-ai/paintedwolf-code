@@ -1,9 +1,9 @@
 package sourceapi
 
 import (
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -11,7 +11,7 @@ import (
 
 // A reference names its list and a zero-based place in it; anything else finds nothing.
 func TestReadChatFileEditResolvesEachListFromZero(t *testing.T) {
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), wire.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "store result", mem.AppendMessages(t.Context(), sess.ID, wire.Message{

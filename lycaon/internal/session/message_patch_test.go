@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
@@ -33,7 +34,7 @@ func (s *failSecondMessageReadStore) GetMessage(ctx context.Context, sessionID, 
 
 func TestUpdateMessageDoesNotConfirmCommittedCommandThroughReadProjection(t *testing.T) {
 	ctx := t.Context()
-	base := store.NewMemory()
+	base := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := base.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append message", base.AppendMessages(ctx, sess.ID, wire.Message{

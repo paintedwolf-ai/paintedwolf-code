@@ -3,6 +3,8 @@ package chats
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"testing"
 	"time"
 
@@ -38,7 +40,7 @@ func (s *retirementSelectionStore) SessionTreeIDs(ctx context.Context, id string
 	return s.Store.SessionTreeIDs(ctx, id)
 }
 func TestProjectRetirementSelectionPagesBothArchiveStatesWithoutHydration(t *testing.T) {
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	for i := range 3 {
 		root, err := mem.Create(t.Context(), wire.CreateSessionRequest{ProjectID: "target"}, "target")
 		testutil.FailErr(t, "create root", err)

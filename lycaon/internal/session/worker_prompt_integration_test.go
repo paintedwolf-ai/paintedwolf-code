@@ -4,6 +4,7 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
@@ -37,14 +38,14 @@ func (s *stubWorkerContext) BuildWorkerPromptContext(_ context.Context, _ string
 	return s.ctx, nil
 }
 
-func setupWorkerPromptFixture(t *testing.T) (*session.Host, *store.Memory, *llm.RecordingClient) {
+func setupWorkerPromptFixture(t *testing.T) (*session.Host, *store.SQL, *llm.RecordingClient) {
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: ".",
 		Text:    "ok",
 	}}}))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	if err := orchestration.LoadRequiredAgentRegistry(context.Background(), agents); err != nil {

@@ -2,9 +2,9 @@ package execution
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -13,7 +13,7 @@ import (
 
 func TestRecoverOrphanedTurnsDrainsMultiplePages(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	recovery := NewRecovery(mem, transcript.New(mem, nil), NewStatus(mem), nil)
 	for i := 0; i < sessionRecoveryPageSize+7; i++ {
 		sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)

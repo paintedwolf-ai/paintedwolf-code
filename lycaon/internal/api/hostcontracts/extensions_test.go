@@ -3,6 +3,8 @@ package hostcontracts
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extensionstate"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extstatetest"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -195,7 +196,7 @@ func TestExtensionsUnitConflictDetail(t *testing.T) {
 	testutil.SkipIfShort(t, "installs conflicting packs and resolves the full device catalog")
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, Storage: hostapi.StorageDependencies{ModuleRoot: configlayout.FindModuleRoot()}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}, Storage: hostapi.StorageDependencies{ModuleRoot: configlayout.FindModuleRoot()}}), nil, hostapi.TestAPIToken)
 
 	dir := t.TempDir()
 	for _, leaf := range []struct{ id, msg string }{

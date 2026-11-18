@@ -2,6 +2,7 @@ package orchestration_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
@@ -15,10 +16,10 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newSupervisorTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestration.OrchestratorImpl, *orchestration.MemoryTopologyWorkers, *session.Host, *store.Memory) {
+func newSupervisorTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestration.OrchestratorImpl, *orchestration.MemoryTopologyWorkers, *session.Host, *store.SQL) {
 	t.Helper()
 	mem := orchestration.NewMemoryTopologyWorkers()
-	sessStore := store.NewMemory()
+	sessStore := storetest.New(t, testdbseed.DefaultProjectID)
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	if rec == nil {
 		rec = &recordingWorkers{}

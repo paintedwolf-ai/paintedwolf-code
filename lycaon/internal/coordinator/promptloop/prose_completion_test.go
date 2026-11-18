@@ -3,13 +3,13 @@ package promptloop_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -34,7 +34,7 @@ func TestPromptLoopSpendCeilingMapsToCloseout(t *testing.T) {
 func TestWorkerTerminalTurnRecordsOnlyAcceptedStructuredCompletion(t *testing.T) {
 	for _, status := range []string{"complete", "partial", "blocked", "prose"} {
 		t.Run(status, func(t *testing.T) {
-			memory := store.NewMemory()
+			memory := storetest.New(t, testdbseed.DefaultProjectID)
 			sess, err := memory.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create worker session", err)
 			sess.ParentSessionID, sess.AgentType = "parent", "implementer"
@@ -92,7 +92,7 @@ func TestProseCompletionRequiresUsablePayload(t *testing.T) {
 	for _, forced := range []bool{false, true} {
 		for _, content := range []string{"", " \n", "The turn limit prevented reading the file."} {
 			t.Run(proseCompletionCaseName(forced, content), func(t *testing.T) {
-				messages := store.NewMemory()
+				messages := storetest.New(t, testdbseed.DefaultProjectID)
 				sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 				testutil.FailErr(t, "create session", err)
 				calls := 0
@@ -153,7 +153,7 @@ func proseCompletionCaseName(forced bool, content string) string {
 }
 
 func TestProseCompletionRecoversFromBookkeepingToolCallAttempt(t *testing.T) {
-	messages := store.NewMemory()
+	messages := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	client := &sequentialLLMClient{completions: []*modelcall.Completion{

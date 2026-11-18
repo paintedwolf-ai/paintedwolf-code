@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -29,6 +30,8 @@ import (
 )
 
 func TestScanSummaryHTTPIntegration(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	findings := make([]wire.SecurityFinding, 0, 12)
@@ -77,9 +80,9 @@ func TestScanSummaryHTTPIntegration(t *testing.T) {
 	defer cancel()
 	go func() { _ = runner.Run(ctx) }()
 
-	sessStore := store.NewMemory()
+	sessStore := sessionFixture
 	mgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	projects := project.NewMemoryRegistry()
+	projects := project.NewSQLRegistry(sessionFixture.DB())
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
 		Store: sessStore, Projects: projects, Sessions: mgr}, Scans: api.ScansDependencies{
 		ScanCoordinator: coord, ScannerRegistry: reg}}), nil, api.TestAPIToken)

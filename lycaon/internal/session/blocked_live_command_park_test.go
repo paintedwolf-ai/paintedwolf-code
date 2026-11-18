@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -48,7 +49,7 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 	t.Cleanup(func() {
 		testutil.FailErr(t, "dispose process", reg.Lifecycle.DisposeSession(ctx, "session-1", bgprocess.TerminationChatDeleted))
 	})
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetBackgroundRegistry(reg)
 	handle, err := reg.StartPipeline(ctx, bgprocess.PipelineSpec{
 		SessionID:  "session-1",
@@ -83,7 +84,7 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 }
 
 func TestParkBlockedLiveCommandsDoesNothingWithoutVisibleJob(t *testing.T) {
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetBackgroundRegistry(bgprocess.NewRegistry(bgprocess.Config{}, bgprocess.Hooks{}))
 	if (&promptsource.Control{Processes: mgr.Processes, Runtime: mgr.Coordinator.Runtime}).ParkBlockedLiveCommands(context.Background(), "session-1") {
 		t.Fatal("empty process registry must not arm a wait")
@@ -176,7 +177,7 @@ func (jobLister) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, er
 }
 
 func TestCloseoutEvidenceListsDispatchedLegsSinceTheIntent(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create parent", err)
@@ -256,7 +257,7 @@ func TestFailedSynthesisKeepsPublishedRecoveryAndCanonicalHistory(t *testing.T) 
 	cfg.ChunkTokenThreshold = 1_000_000
 	cfg.KeepRecentMessages = 2
 
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, failedCompactionSummarizer{}))
@@ -307,7 +308,7 @@ func TestWorkerChildProjectDirIsDelegationNotOverlay(t *testing.T) {
 	dir := t.TempDir()
 	overlay := filepath.Join(dir, settingsoverlay.DirName(), "overlays", "job-write")
 
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer", Prompt: "write leg"})
@@ -322,7 +323,7 @@ func TestWorkerChildProjectDirIsDelegationNotOverlay(t *testing.T) {
 }
 
 func TestRecentSiblingNotesExcludesPriorRunFindings(t *testing.T) {
-	transcript := store.NewMemory()
+	transcript := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := transcript.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	root := parent.ID

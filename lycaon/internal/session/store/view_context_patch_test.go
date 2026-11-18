@@ -26,7 +26,6 @@ func TestViewContextPatchRecordsOnceAndPreservesTheMessage(t *testing.T) {
 			testdbseed.InsertProjectRoot(t, db, testdbseed.DefaultProjectID, t.TempDir())
 			return NewSQL(db)
 		},
-		"memory": func(*testing.T) viewContextStore { return NewMemory() },
 	}
 	attached := []api.NavigationTarget{{ProjectID: testdbseed.DefaultProjectID, RootID: "r", Path: "b.go", EntryKind: api.NavigationEntryKindFile}}
 	for name, open := range stores {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"log/slog"
 	"net/http"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -76,9 +76,12 @@ func TestCORSExposesClientResponseMetadata(t *testing.T) {
 }
 
 func TestCORSDevModeIgnoredWithoutDevFlag(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_DEV_CORS", "1")
 
-	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory(), Projects: project.NewMemoryRegistry()}}), slog.Default(), TestAPIToken)
+	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{
+		Store: sessionFixture, Projects: project.NewSQLRegistry(sessionFixture.DB())}}), slog.Default(), TestAPIToken)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodOptions, "/health", nil)
 	req.Header.Set("Origin", "http://evil.example")
@@ -92,10 +95,13 @@ func TestCORSDevModeIgnoredWithoutDevFlag(t *testing.T) {
 }
 
 func TestCORSDevModeAllowsAnyOrigin(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_DEV_CORS", "1")
 	t.Setenv("LYCAON_DEV", "1")
 
-	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory(), Projects: project.NewMemoryRegistry()}}), slog.Default(), TestAPIToken)
+	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{
+		Store: sessionFixture, Projects: project.NewSQLRegistry(sessionFixture.DB())}}), slog.Default(), TestAPIToken)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodOptions, "/health", nil)
 	req.Header.Set("Origin", "http://evil.example")

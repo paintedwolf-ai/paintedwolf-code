@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -65,7 +65,7 @@ func TestLoopRefusesOllamaUnofferedToolRejection(t *testing.T) {
 				editCalls++
 				return "edited", nil
 			})
-			mem := store.NewMemory()
+			mem := storetest.New(t, testdbseed.DefaultProjectID)
 			ctx := context.Background()
 			sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)

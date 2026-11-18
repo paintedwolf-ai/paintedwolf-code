@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/decisions/decisionstest"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -203,7 +203,7 @@ func TestCheckSpendCeiling(t *testing.T) {
 		lim := settings.DefaultSessionLimits()
 		lim.SpendCeilingEnabled = false
 		lim.SessionSpendCeilingUSD = 1
-		mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
+		mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
 		sess := &api.Session{ID: "s1", ProjectID: "p1"}
 		if err := mgr.Runner.Spend.Check(ctx, "s1", sess); err != nil {
 			t.Fatalf("disabled ceiling must not enforce: %v", err)
@@ -218,7 +218,7 @@ func TestCheckSpendCeiling(t *testing.T) {
 		lim := settings.DefaultSessionLimits()
 		lim.SpendCeilingEnabled = true
 		lim.SessionSpendCeilingUSD = 1
-		mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
+		mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
 		sess := &api.Session{ID: "s2", ProjectID: "p1"}
 		if err := mgr.Runner.Spend.Check(ctx, "s2", sess); err != nil {
 			t.Fatalf("unpriced must not enforce: %v", err)
@@ -234,7 +234,7 @@ func TestCheckSpendCeiling(t *testing.T) {
 		lim := settings.DefaultSessionLimits()
 		lim.SpendCeilingEnabled = true
 		lim.SessionSpendCeilingUSD = 5
-		mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
+		mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
 		sess := &api.Session{ID: "s3", ProjectID: "p1"}
 		if err := mgr.Runner.Spend.Check(ctx, "s3", sess); err != nil {
 			t.Fatalf("under ceiling must pass: %v", err)
@@ -254,7 +254,7 @@ func TestCheckSpendCeiling(t *testing.T) {
 		lim := settings.DefaultSessionLimits()
 		lim.SpendCeilingEnabled = true
 		lim.SessionSpendCeilingUSD = 5
-		mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
+		mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
 		sess := &api.Session{ID: "s4", ProjectID: "p1"}
 		err := mgr.Runner.Spend.Check(ctx, "s4", sess)
 		if !errors.Is(err, spendguard.ErrCeiling) {
@@ -277,7 +277,7 @@ func TestSpendCeilingRetainsUnknownChargedCalls(t *testing.T) {
 	lim := settings.DefaultSessionLimits()
 	lim.SpendCeilingEnabled = true
 	lim.SessionSpendCeilingUSD = 5
-	mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
 	err := mgr.Runner.Spend.Check(ctx, "s", &api.Session{ID: "s", ProjectID: "p"})
 	var reached *spendguard.CeilingReached
 	if !errors.As(err, &reached) || reached.UnknownChargedCalls != 1 || reached.UnpricedTokens != 0 || reached.Coverage != api.CostEstimateLowerBound {
@@ -289,7 +289,7 @@ func TestReviewedStopTransitionPreservesRuntimeOnRejection(t *testing.T) {
 	for _, accepted := range []bool{false, true} {
 		t.Run(map[bool]string{false: "rejected", true: "accepted"}[accepted], func(t *testing.T) {
 			ctx := t.Context()
-			st := store.NewMemory()
+			st := storetest.New(t, testdbseed.DefaultProjectID)
 			mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 			sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
@@ -327,7 +327,7 @@ func TestReviewedStopTransitionPreservesRuntimeOnRejection(t *testing.T) {
 
 func TestReviewedStopTransitionStillStopsOtherSessionWorkflows(t *testing.T) {
 	ctx := t.Context()
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	workflows := &stubSessionWorkflowStop{}
 	mgr.Stops.SetWorkflowStop(workflows)

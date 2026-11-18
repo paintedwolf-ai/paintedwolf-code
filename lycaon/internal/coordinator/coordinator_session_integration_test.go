@@ -4,6 +4,7 @@ package coordinator_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -70,7 +71,7 @@ func TestManagerPromptUsesCoordinatorAssembly(t *testing.T) {
 	root := sessionIntegrationRoot(t)
 	ctx := context.Background()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wireManagerPromptPolicy(t, mgr, root)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root}))
@@ -94,7 +95,7 @@ func TestManagerKickNudgeViaRuntime(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	root := sessionIntegrationRoot(t)
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wireManagerPromptPolicy(t, mgr, root)

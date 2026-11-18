@@ -2,6 +2,8 @@ package checkpoint
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -20,7 +22,7 @@ import (
 func newTestCheckpointStore(t *testing.T) (*Store, string) {
 	t.Helper()
 	dir := t.TempDir()
-	store := New(t.TempDir(), dir, sessionstore.NewMemory())
+	store := New(t.TempDir(), dir, storetest.New(t, testdbseed.DefaultProjectID))
 	if store == nil {
 		t.Fatal("NewCheckpointStore returned nil for a real state root and dir")
 	}
@@ -154,7 +156,7 @@ func TestReconcileCheckpointRootsKeepsAttachedRoots(t *testing.T) {
 	liveRoot := t.TempDir()
 	orphanRoot := t.TempDir()
 	for _, projectDir := range []string{liveRoot, orphanRoot} {
-		store := New(stateRoot, projectDir, sessionstore.NewMemory())
+		store := New(stateRoot, projectDir, storetest.New(t, testdbseed.DefaultProjectID))
 		testutil.FailErr(t, "seed checkpoint root", os.MkdirAll(store.root, 0o700))
 	}
 	removed, err := ReconcileRoots(stateRoot, []string{liveRoot})
@@ -162,10 +164,10 @@ func TestReconcileCheckpointRootsKeepsAttachedRoots(t *testing.T) {
 	if removed != 1 {
 		t.Fatalf("removed = %d, want 1", removed)
 	}
-	if _, err := os.Stat(New(stateRoot, liveRoot, sessionstore.NewMemory()).root); err != nil {
+	if _, err := os.Stat(New(stateRoot, liveRoot, storetest.New(t, testdbseed.DefaultProjectID)).root); err != nil {
 		t.Fatalf("live checkpoint root removed: %v", err)
 	}
-	if _, err := os.Stat(New(stateRoot, orphanRoot, sessionstore.NewMemory()).root); !os.IsNotExist(err) {
+	if _, err := os.Stat(New(stateRoot, orphanRoot, storetest.New(t, testdbseed.DefaultProjectID)).root); !os.IsNotExist(err) {
 		t.Fatalf("orphan checkpoint root survived: %v", err)
 	}
 }

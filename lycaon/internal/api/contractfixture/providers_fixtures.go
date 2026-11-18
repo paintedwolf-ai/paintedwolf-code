@@ -2,6 +2,7 @@ package contractfixture
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,7 +18,6 @@ import (
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -125,6 +125,8 @@ func NewProviderTestServerAt(t *testing.T, discoveryBaseURL string, opts ...Test
 }
 
 func NewProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string, opts ...TestDeps) (*hostapi.Server, string) {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	tmp := t.TempDir()
 	// Live instances and global policy use host files.
@@ -160,11 +162,11 @@ func NewProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string,
 		Mock:        llm.NewMockProvider(TestMockConfig(t)),
 	}
 
-	store := store.NewMemory()
+	store := sessionFixture
 	mock := llm.NewMockProvider(TestMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	hub := events.NewMemoryHub()
-	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}, Providers: hostapi.ProvidersDependencies{LLM: svc}, Host: hostapi.HostDependencies{Events: hub}}
+	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: mgr}, Providers: hostapi.ProvidersDependencies{LLM: svc}, Host: hostapi.HostDependencies{Events: hub}}
 	for _, opt := range opts {
 		opt(&deps)
 	}

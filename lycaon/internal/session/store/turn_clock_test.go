@@ -20,9 +20,8 @@ type turnClockTestStore interface {
 
 var turnClockStores = []struct {
 	name string
-	open func(*testing.T) turnClockTestStore
+	open func(t *testing.T) turnClockTestStore
 }{
-	{name: "memory", open: func(*testing.T) turnClockTestStore { return NewMemory() }},
 	{name: "sql", open: func(t *testing.T) turnClockTestStore { return openTurnSQLStore(t).(turnClockTestStore) }},
 }
 

@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -332,7 +332,7 @@ func TestDoomLoopPageResolverWiringOrder(t *testing.T) {
 			name = "guard first"
 		}
 		t.Run(name, func(t *testing.T) {
-			manager := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+			manager := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 			guard := newResolverRecordingGuard()
 			pages := pagesession.NewRegistry(pagesession.DefaultConfig())
 			t.Cleanup(func() { pages.Close(t.Context()) })

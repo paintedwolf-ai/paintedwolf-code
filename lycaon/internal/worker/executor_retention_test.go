@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
@@ -57,7 +58,7 @@ func TestWorkerBridgeReleasesParentAfterQueueAcknowledgement(t *testing.T) {
 
 func TestExecuteRetainsChildSessionForDenTranscript(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 
 	var childID string
 	runner := &fakePromptRunner{

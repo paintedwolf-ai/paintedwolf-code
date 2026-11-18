@@ -3,6 +3,7 @@ package transcript
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strings"
 	"sync"
 	"testing"
@@ -13,9 +14,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func programEffectsFixture(t *testing.T) (*Service, *store.Memory, string) {
+func programEffectsFixture(t *testing.T) (*Service, *store.SQL, string) {
 	t.Helper()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	return New(mem, nil), mem, sess.ID
@@ -30,7 +31,7 @@ func textEdit(path, before, after string) api.FileEditSnapshot {
 }
 
 // storedEdits renders a stored row's edits as path:before>after.
-func storedEdits(t *testing.T, mem *store.Memory, sessionID, callID string) (string, int) {
+func storedEdits(t *testing.T, mem *store.SQL, sessionID, callID string) (string, int) {
 	t.Helper()
 	msg, err := mem.GetMessage(t.Context(), sessionID, "row-"+callID)
 	testutil.FailErr(t, "read stored row", err)

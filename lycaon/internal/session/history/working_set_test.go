@@ -31,7 +31,7 @@ func turnExchange(i int, body string) []api.Message {
 }
 
 // seedTurn appends an older row, the human opener, and exchanges of two rows each.
-func seedTurn(t *testing.T, mem *store.Memory, sessionID string, exchanges int, body string) []api.Message {
+func seedTurn(t *testing.T, mem *store.SQL, sessionID string, exchanges int, body string) []api.Message {
 	t.Helper()
 	rows := []api.Message{
 		{ID: "before", Role: api.MessageRoleAssistant, Content: "earlier work"},
@@ -47,7 +47,7 @@ func seedTurn(t *testing.T, mem *store.Memory, sessionID string, exchanges int, 
 }
 
 // publishCoverage stores a view whose copies of retained rows are distinguishable from canonical rows.
-func publishCoverage(t *testing.T, mem *store.Memory, sessionID string, canonical []api.Message, covered, summarized int64, window int) {
+func publishCoverage(t *testing.T, mem *store.SQL, sessionID string, canonical []api.Message, covered, summarized int64, window int) {
 	t.Helper()
 	messages := []api.Message{
 		{ID: "checkpoint", Role: api.MessageRoleUser, Origin: api.MessageOriginHost, CompactionCheckpoint: true, Content: "checkpoint"},
@@ -109,7 +109,7 @@ func assertPairedExchanges(t *testing.T, rows []api.Message) {
 	}
 }
 
-func newTurnSession(t *testing.T, cfg compaction.CompactionConfig) (*Service, *store.Memory, *api.Session) {
+func newTurnSession(t *testing.T, cfg compaction.CompactionConfig) (*Service, *store.SQL, *api.Session) {
 	t.Helper()
 	svc, mem := newCompactionManager(t, cfg)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -152,7 +152,7 @@ func TestShortActiveTurnStaysCanonicalAC_KV_02(t *testing.T) {
 
 func TestLongTurnReplacesOnlyValidatedOlderRangeAC_KV_01(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
-	seeded := func(t *testing.T) (*Service, *store.Memory, *api.Session, []api.Message) {
+	seeded := func(t *testing.T) (*Service, *store.SQL, *api.Session, []api.Message) {
 		t.Helper()
 		svc, mem, sess := newTurnSession(t, cfg)
 		return svc, mem, sess, seedTurn(t, mem, sess.ID, 160, "recorded observation")
@@ -391,7 +391,7 @@ func requestFor(sess *api.Session, frame string, rows []api.Message) modelcall.C
 func TestOneLiveConfigBoundsEveryRequestAC_KV_09(t *testing.T) {
 	const providerWindow = 1_048_572
 	feed := &feedWindow{}
-	setup := func(t *testing.T, recall bool) (*Service, *store.Memory, *api.Session) {
+	setup := func(t *testing.T, recall bool) (*Service, *store.SQL, *api.Session) {
 		t.Helper()
 		svc, mem := newCompactionManager(t, compaction.DefaultCompactionConfig())
 		svc.Limits.SetModelSources(feedPolicy{llm.ModelRef{ProviderID: "fixture", Model: "feed-model"}}, feed)

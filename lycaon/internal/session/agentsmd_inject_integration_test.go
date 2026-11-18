@@ -4,6 +4,8 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"gopkg.in/yaml.v3"
 )
 
 func copyDir(t *testing.T, src, dst string) {
@@ -60,7 +61,7 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 		Pattern: ".",
 		Text:    "ok",
 	}}}))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{
@@ -167,7 +168,7 @@ func TestManagerEffectiveLimitsUsesProjectOverlay(t *testing.T) {
 	limitsStore, err := settings.NewLimitsStoreAt(filepath.Join(t.TempDir(), "global-limits.yaml"))
 	testutil.FailErr(t, "settings.NewLimitsStoreAt failed", err)
 
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: llm.NewMockProvider(&llm.MockConfig{
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: llm.NewMockProvider(&llm.MockConfig{
 		Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}},
 	}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: limitsStore})
@@ -185,7 +186,7 @@ func TestManagerEffectiveLimitsUsesProjectOverlay(t *testing.T) {
 func TestManagerEffectiveLimitsWithoutProviderUsesStaticCfg(t *testing.T) {
 	cfg := settings.DefaultSessionLimits()
 	cfg.MaxIterations = 7
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: cfg, Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: cfg, Cost: nil}, tools.NewStubRegistry())
 	sess := &api.Session{WorkspacePath: t.TempDir()}
 	limits := mgr.Limits.Effective(t.Context(), sess)
 	if limits.MaxIterations != 7 {

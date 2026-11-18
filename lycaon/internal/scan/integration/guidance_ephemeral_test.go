@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"path/filepath"
 	"testing"
 
@@ -34,7 +35,7 @@ func TestScanGuidancePrependDoesNotPersistMessages(t *testing.T) {
 		Provider: provider,
 	}
 
-	sessStore := store.NewMemory()
+	sessStore := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	loader, err := oar.NewLoader(filepath.Join(configlayout.FindModuleRoot(), "..", "schemas"))
 	testutil.FailErr(t, "create policy loader", err)

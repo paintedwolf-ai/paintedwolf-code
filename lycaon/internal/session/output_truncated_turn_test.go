@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strings"
 	"testing"
 
@@ -61,9 +62,9 @@ func (f *outputTruncatedFixtureLLM) Stream(ctx context.Context, req modelcall.Co
 	return ch, nil
 }
 
-func newOutputTruncatedTestHost(t *testing.T, client modelcall.LLMClient) (*Host, *store.Memory) {
+func newOutputTruncatedTestHost(t *testing.T, client modelcall.LLMClient) (*Host, *store.SQL) {
 	t.Helper()
-	memory := store.NewMemory()
+	memory := storetest.New(t, testdbseed.DefaultProjectID)
 	registry := tools.NewStubRegistry()
 	_ = registry.Register("write", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return "written", nil

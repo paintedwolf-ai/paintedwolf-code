@@ -184,7 +184,7 @@ func TestBoundaryConstraintsAC_KV_06(t *testing.T) {
 }
 
 // tailStarts replays appends through Load and records where the canonical tail begins.
-func tailStarts(t *testing.T, svc *Service, mem *store.Memory, sess *api.Session, appends int, first int, body string) []int64 {
+func tailStarts(t *testing.T, svc *Service, mem *store.SQL, sess *api.Session, appends int, first int, body string) []int64 {
 	t.Helper()
 	var starts []int64
 	for i := range appends {
@@ -212,7 +212,7 @@ func burstConfig() compaction.CompactionConfig {
 
 // stableTurnSession publishes nothing in the background, so a cutoff sequence
 // depends only on the appends a test makes.
-func stableTurnSession(t *testing.T, cfg compaction.CompactionConfig) (*Service, *store.Memory, *api.Session) {
+func stableTurnSession(t *testing.T, cfg compaction.CompactionConfig) (*Service, *store.SQL, *api.Session) {
 	t.Helper()
 	svc, mem, sess := newTurnSession(t, cfg)
 	svc.Runner = nil
@@ -221,7 +221,7 @@ func stableTurnSession(t *testing.T, cfg compaction.CompactionConfig) (*Service,
 
 // appendEditBurst fills the tail near its byte bound, then appends one batch of
 // eight ~35 KB tool results that crosses it.
-func appendEditBurst(t *testing.T, mem *store.Memory, sessionID string) {
+func appendEditBurst(t *testing.T, mem *store.SQL, sessionID string) {
 	t.Helper()
 	for i := range 120 {
 		testutil.FailErr(t, "append exchange", mem.AppendMessages(t.Context(), sessionID, turnExchange(100+i, strings.Repeat("o", 1000))...))
@@ -430,7 +430,7 @@ func TestSecondCollapseSignatureHoldsBehindAViewAC_KV_07(t *testing.T) {
 
 func TestCutoffStateInvalidatesAndRebuildsAC_KV_08(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
-	setup := func(t *testing.T) (*Service, *store.Memory, *api.Session) {
+	setup := func(t *testing.T) (*Service, *store.SQL, *api.Session) {
 		t.Helper()
 		svc, mem, sess := stableTurnSession(t, cfg)
 		seedTurn(t, mem, sess.ID, 100, "recorded observation")

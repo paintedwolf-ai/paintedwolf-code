@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -187,7 +188,7 @@ func (noopWorkerBranchClaim) ClaimWorkerBranch(context.Context, string) (*api.Wo
 }
 
 type failingWorkerModelStore struct {
-	*store.Memory
+	*store.SQL
 	err error
 }
 
@@ -196,7 +197,7 @@ func (s *failingWorkerModelStore) UpdateSession(context.Context, string, func(*a
 }
 
 func TestWorkerModelSaveFailureRemovesPartialChild(t *testing.T) {
-	st := &failingWorkerModelStore{Memory: store.NewMemory(), err: errors.New("model save failed")}
+	st := &failingWorkerModelStore{SQL: storetest.New(t, testdbseed.DefaultProjectID), err: errors.New("model save failed")}
 	policy := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "fixture", Model: "fixture"},
 	})
@@ -262,7 +263,7 @@ func (q *pendingOutcomeQueue) ListPendingOutcomes(context.Context) ([]api.Worker
 
 func TestWorkerSynthesisSettlesAfterOutcomeAcknowledgement(t *testing.T) {
 	ctx := t.Context()
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -302,7 +303,7 @@ func (unavailableWorkerEvidence) ReadAll(context.Context, string, string, string
 }
 
 func TestWorkerValidationEvidenceUnavailablePreservesDelivery(t *testing.T) {
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Verification.SetEvidenceStore(unavailableWorkerEvidence{})
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "")

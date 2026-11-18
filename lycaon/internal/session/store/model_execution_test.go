@@ -22,67 +22,65 @@ type modelExecutionStore interface {
 }
 
 func TestModelAllowanceUsesSettledOutputsAcrossTurns(t *testing.T) {
-	for _, name := range []string{"memory", "sql"} {
-		t.Run(name, func(t *testing.T) {
-			var st modelExecutionStore = NewMemory()
-			if name == "sql" {
-				st = openTurnSQLStore(t).(modelExecutionStore)
-			}
-			ctx := t.Context()
-			sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
-			testutil.FailErr(t, "create session", err)
-			testutil.FailErr(t, "configure allowance", st.ConfigureModelLimit(ctx, sess.ID, 2))
-			testutil.FailErr(t, "idempotent allowance", st.ConfigureModelLimit(ctx, sess.ID, 2))
-			if err := st.ConfigureModelLimit(ctx, sess.ID, 3); err == nil {
-				t.Fatal("allowance changed")
-			}
-			first, err := st.BeginTurn(ctx, TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: "{}"})
-			testutil.FailErr(t, "begin turn", err)
-			settle := func(execution TurnExecution, iteration int, scripted bool) ModelOutput {
-				t.Helper()
-				testutil.FailErr(t, "admit response", st.AdmitModelResponse(ctx, sess.ID, execution.Attempt.ID))
-				output, err := st.SettleModelOutput(ctx, ModelOutput{ID: uuid.NewString(), TurnAttemptID: execution.Attempt.ID, SessionID: sess.ID,
-					MessageID: uuid.NewString(), Iteration: iteration, Content: "Finished", Scripted: scripted})
-				testutil.FailErr(t, "settle output", err)
-				_, err = st.SettleModelOutput(ctx, output)
-				testutil.FailErr(t, "idempotent output settlement", err)
-				return output
-			}
-			settle(first, 1, true)
-			firstOutput := settle(first, 2, false)
-			_, err = st.FinishTurn(ctx, first.Turn.ID, first.Attempt.ID, TurnStatusComplete, firstOutput.ID, "{}", "")
-			testutil.FailErr(t, "finish first turn", err)
-			stale := firstOutput
-			stale.ID = uuid.NewString()
-			stale.Iteration++
-			if _, err := st.SettleModelOutput(ctx, stale); err == nil {
-				t.Fatal("stale attempt committed a new output")
-			}
-			_, err = st.SettleModelOutput(ctx, firstOutput)
-			testutil.FailErr(t, "settled output remains replayable after finalization", err)
-			second, err := st.BeginTurn(ctx, TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginLoopWake, InputJSON: "{}"})
-			testutil.FailErr(t, "begin host continuation", err)
-			if err := st.AdmitModelResponse(ctx, sess.ID, first.Attempt.ID); err == nil {
-				t.Fatal("old attempt admitted")
-			}
-			last := settle(second, 1, false)
-			// Settlement of the final allowed response is valid; only another request fails.
-			if err := st.AdmitModelResponse(ctx, sess.ID, second.Attempt.ID); !errors.Is(err, ErrModelResponseLimit) {
-				t.Fatalf("next request = %v", err)
-			}
-			testutil.FailErr(t, "seal closeout", st.SealTurnCloseout(ctx, TurnCloseoutCommit{TurnID: second.Turn.ID, AttemptID: second.Attempt.ID, OutputID: last.ID, Message: &api.Message{ID: last.MessageID, Content: "Finished"}, CheckpointJSON: "{}"}))
-			testutil.FailErr(t, "idempotent closeout", st.SealTurnCloseout(ctx, TurnCloseoutCommit{TurnID: second.Turn.ID, AttemptID: second.Attempt.ID, OutputID: last.ID, Message: &api.Message{ID: last.MessageID, Content: "Finished"}, CheckpointJSON: "{}"}))
-			if err := st.SealTurnCloseout(ctx, TurnCloseoutCommit{TurnID: second.Turn.ID, AttemptID: second.Attempt.ID, OutputID: last.ID, Message: &api.Message{ID: last.MessageID, Content: "Changed"}, CheckpointJSON: "{}"}); err == nil {
-				t.Fatal("sealed closeout changed")
-			}
-			if sqlStore, ok := st.(*SQL); ok {
-				reopened := NewSQL(sqlStore.db)
-				if err := reopened.AdmitModelResponse(ctx, sess.ID, second.Attempt.ID); !errors.Is(err, ErrModelResponseLimit) {
-					t.Fatalf("reopened allowance = %v", err)
-				}
-			}
-		})
+
+	var st modelExecutionStore
+
+	st = openTurnSQLStore(t).(modelExecutionStore)
+
+	ctx := t.Context()
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "configure allowance", st.ConfigureModelLimit(ctx, sess.ID, 2))
+	testutil.FailErr(t, "idempotent allowance", st.ConfigureModelLimit(ctx, sess.ID, 2))
+	if err := st.ConfigureModelLimit(ctx, sess.ID, 3); err == nil {
+		t.Fatal("allowance changed")
 	}
+	first, err := st.BeginTurn(ctx, TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: "{}"})
+	testutil.FailErr(t, "begin turn", err)
+	settle := func(execution TurnExecution, iteration int, scripted bool) ModelOutput {
+		t.Helper()
+		testutil.FailErr(t, "admit response", st.AdmitModelResponse(ctx, sess.ID, execution.Attempt.ID))
+		output, err := st.SettleModelOutput(ctx, ModelOutput{ID: uuid.NewString(), TurnAttemptID: execution.Attempt.ID, SessionID: sess.ID,
+			MessageID: uuid.NewString(), Iteration: iteration, Content: "Finished", Scripted: scripted})
+		testutil.FailErr(t, "settle output", err)
+		_, err = st.SettleModelOutput(ctx, output)
+		testutil.FailErr(t, "idempotent output settlement", err)
+		return output
+	}
+	settle(first, 1, true)
+	firstOutput := settle(first, 2, false)
+	_, err = st.FinishTurn(ctx, first.Turn.ID, first.Attempt.ID, TurnStatusComplete, firstOutput.ID, "{}", "")
+	testutil.FailErr(t, "finish first turn", err)
+	stale := firstOutput
+	stale.ID = uuid.NewString()
+	stale.Iteration++
+	if _, err := st.SettleModelOutput(ctx, stale); err == nil {
+		t.Fatal("stale attempt committed a new output")
+	}
+	_, err = st.SettleModelOutput(ctx, firstOutput)
+	testutil.FailErr(t, "settled output remains replayable after finalization", err)
+	second, err := st.BeginTurn(ctx, TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginLoopWake, InputJSON: "{}"})
+	testutil.FailErr(t, "begin host continuation", err)
+	if err := st.AdmitModelResponse(ctx, sess.ID, first.Attempt.ID); err == nil {
+		t.Fatal("old attempt admitted")
+	}
+	last := settle(second, 1, false)
+	// Settlement of the final allowed response is valid; only another request fails.
+	if err := st.AdmitModelResponse(ctx, sess.ID, second.Attempt.ID); !errors.Is(err, ErrModelResponseLimit) {
+		t.Fatalf("next request = %v", err)
+	}
+	testutil.FailErr(t, "seal closeout", st.SealTurnCloseout(ctx, TurnCloseoutCommit{TurnID: second.Turn.ID, AttemptID: second.Attempt.ID, OutputID: last.ID, Message: &api.Message{ID: last.MessageID, Content: "Finished"}, CheckpointJSON: "{}"}))
+	testutil.FailErr(t, "idempotent closeout", st.SealTurnCloseout(ctx, TurnCloseoutCommit{TurnID: second.Turn.ID, AttemptID: second.Attempt.ID, OutputID: last.ID, Message: &api.Message{ID: last.MessageID, Content: "Finished"}, CheckpointJSON: "{}"}))
+	if err := st.SealTurnCloseout(ctx, TurnCloseoutCommit{TurnID: second.Turn.ID, AttemptID: second.Attempt.ID, OutputID: last.ID, Message: &api.Message{ID: last.MessageID, Content: "Changed"}, CheckpointJSON: "{}"}); err == nil {
+		t.Fatal("sealed closeout changed")
+	}
+	if sqlStore, ok := st.(*SQL); ok {
+		reopened := NewSQL(sqlStore.db)
+		if err := reopened.AdmitModelResponse(ctx, sess.ID, second.Attempt.ID); !errors.Is(err, ErrModelResponseLimit) {
+			t.Fatalf("reopened allowance = %v", err)
+		}
+	}
+
 }
 
 func TestCloseoutAuthorshipDoesNotFollowAReusedDraftSlot(t *testing.T) {
@@ -147,59 +145,57 @@ func TestSQLCloseoutSurvivesHostTurnAndClearsOnNewUserAdmission(t *testing.T) {
 }
 
 func TestSealedCloseoutRecoversWithoutRequeueingTheModel(t *testing.T) {
-	for _, name := range []string{"memory", "sql"} {
-		t.Run(name, func(t *testing.T) {
-			var st modelExecutionStore = NewMemory()
-			if name == "sql" {
-				st = openTurnSQLStore(t).(modelExecutionStore)
-			}
-			ctx := t.Context()
-			sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
-			testutil.FailErr(t, "create session", err)
-			submissionID := uuid.NewString()
-			_, _, err = st.PutPromptSubmission(ctx, PromptSubmission{ID: submissionID, SessionID: sess.ID, ProjectID: sess.ProjectID, InputDigest: "digest", InputJSON: "{}", Origin: PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID})
-			testutil.FailErr(t, "submit prompt", err)
-			_, claimed, err := st.ClaimPromptSubmission(ctx, submissionID)
-			testutil.FailErr(t, "claim prompt", err)
-			if !claimed {
-				t.Fatal("prompt not claimed")
-			}
-			turn, err := st.BeginTurn(ctx, TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: "{}", SubmissionIDs: []string{submissionID}})
-			testutil.FailErr(t, "begin turn", err)
-			output, err := st.SettleModelOutput(ctx, ModelOutput{ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: sess.ID, Iteration: 1, MessageID: uuid.NewString(), Content: "Complete."})
-			testutil.FailErr(t, "settle model output", err)
-			response := promptresult.Result{MessageID: output.MessageID}
-			checkpoint, err := json.Marshal(map[string]any{"final_output_id": output.ID, "result": response})
-			testutil.FailErr(t, "encode finalizing checkpoint", err)
-			commit := TurnCloseoutCommit{TurnID: turn.Turn.ID, AttemptID: turn.Attempt.ID, OutputID: output.ID,
-				Message: &api.Message{ID: output.MessageID, Content: output.Content, Visibility: api.MessageVisibilityTranscript}, CheckpointJSON: "["}
-			if err := st.SealTurnCloseout(ctx, commit); err == nil {
-				t.Fatal("invalid checkpoint committed")
-			}
-			commit.CheckpointJSON = string(checkpoint)
-			testutil.FailErr(t, "seal closeout and recovery checkpoint", st.SealTurnCloseout(ctx, commit))
-			recovered, err := st.RecoverTurns(ctx)
-			testutil.FailErr(t, "recover without normal turn finalization", err)
-			if len(recovered) != 0 {
-				t.Fatalf("completed output requeued: %+v", recovered)
-			}
-			submission, err := st.GetPromptSubmission(ctx, submissionID)
-			testutil.FailErr(t, "read recovered submission", err)
-			if submission.Status != PromptSubmissionComplete {
-				t.Fatalf("submission status=%s", submission.Status)
-			}
-			var got promptresult.Result
-			testutil.FailErr(t, "read recovered handoff", json.Unmarshal([]byte(submission.ResultJSON), &got))
-			if got.MessageID != response.MessageID {
-				t.Fatalf("recovered response=%+v want=%+v", got, response)
-			}
-			queued, err := st.RecoverPromptSubmissions(ctx)
-			testutil.FailErr(t, "recover prompt queue", err)
-			if len(queued) != 0 {
-				t.Fatalf("completed prompt requeued: %v", queued)
-			}
-		})
+
+	var st modelExecutionStore
+
+	st = openTurnSQLStore(t).(modelExecutionStore)
+
+	ctx := t.Context()
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	submissionID := uuid.NewString()
+	_, _, err = st.PutPromptSubmission(ctx, PromptSubmission{ID: submissionID, SessionID: sess.ID, ProjectID: sess.ProjectID, InputDigest: "digest", InputJSON: "{}", Origin: PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID})
+	testutil.FailErr(t, "submit prompt", err)
+	_, claimed, err := st.ClaimPromptSubmission(ctx, submissionID)
+	testutil.FailErr(t, "claim prompt", err)
+	if !claimed {
+		t.Fatal("prompt not claimed")
 	}
+	turn, err := st.BeginTurn(ctx, TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: "{}", SubmissionIDs: []string{submissionID}})
+	testutil.FailErr(t, "begin turn", err)
+	output, err := st.SettleModelOutput(ctx, ModelOutput{ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: sess.ID, Iteration: 1, MessageID: uuid.NewString(), Content: "Complete."})
+	testutil.FailErr(t, "settle model output", err)
+	response := promptresult.Result{MessageID: output.MessageID}
+	checkpoint, err := json.Marshal(map[string]any{"final_output_id": output.ID, "result": response})
+	testutil.FailErr(t, "encode finalizing checkpoint", err)
+	commit := TurnCloseoutCommit{TurnID: turn.Turn.ID, AttemptID: turn.Attempt.ID, OutputID: output.ID,
+		Message: &api.Message{ID: output.MessageID, Content: output.Content, Visibility: api.MessageVisibilityTranscript}, CheckpointJSON: "["}
+	if err := st.SealTurnCloseout(ctx, commit); err == nil {
+		t.Fatal("invalid checkpoint committed")
+	}
+	commit.CheckpointJSON = string(checkpoint)
+	testutil.FailErr(t, "seal closeout and recovery checkpoint", st.SealTurnCloseout(ctx, commit))
+	recovered, err := st.RecoverTurns(ctx)
+	testutil.FailErr(t, "recover without normal turn finalization", err)
+	if len(recovered) != 0 {
+		t.Fatalf("completed output requeued: %+v", recovered)
+	}
+	submission, err := st.GetPromptSubmission(ctx, submissionID)
+	testutil.FailErr(t, "read recovered submission", err)
+	if submission.Status != PromptSubmissionComplete {
+		t.Fatalf("submission status=%s", submission.Status)
+	}
+	var got promptresult.Result
+	testutil.FailErr(t, "read recovered handoff", json.Unmarshal([]byte(submission.ResultJSON), &got))
+	if got.MessageID != response.MessageID {
+		t.Fatalf("recovered response=%+v want=%+v", got, response)
+	}
+	queued, err := st.RecoverPromptSubmissions(ctx)
+	testutil.FailErr(t, "recover prompt queue", err)
+	if len(queued) != 0 {
+		t.Fatalf("completed prompt requeued: %v", queued)
+	}
+
 }
 
 func TestCloseoutRollsBackWhenFinalizingCheckpointLosesItsClaim(t *testing.T) {
@@ -227,76 +223,74 @@ func TestSettleModelOutputIterationCollisionReturnsTypedErrorParity(t *testing.T
 	if got := (*ModelOutputIterationCollisionError)(nil).Error(); got != ErrModelOutputIterationCollision.Error() {
 		t.Fatalf("nil collision error = %q want %q", got, ErrModelOutputIterationCollision.Error())
 	}
-	for _, name := range []string{"memory", "sql"} {
-		t.Run(name, func(t *testing.T) {
-			var st modelExecutionStore = NewMemory()
-			if name == "sql" {
-				st = openTurnSQLStore(t).(modelExecutionStore)
-			}
-			ctx := t.Context()
-			sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
-			testutil.FailErr(t, "create session", err)
-			turn, err := st.BeginTurn(ctx, TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: "{}"})
-			testutil.FailErr(t, "begin turn", err)
 
-			emptySeed, err := SettledModelOutputIteration(ctx, st, "")
-			testutil.FailErr(t, "read empty attempt iteration", err)
-			if emptySeed != 0 {
-				t.Fatalf("empty attempt iteration = %d want 0", emptySeed)
-			}
-			unknownStoreSeed, err := SettledModelOutputIteration(ctx, struct{}{}, turn.Attempt.ID)
-			testutil.FailErr(t, "read unknown store attempt iteration", err)
-			if unknownStoreSeed != 0 {
-				t.Fatalf("unknown store attempt iteration = %d want 0", unknownStoreSeed)
-			}
-			initialSeed, err := SettledModelOutputIteration(ctx, st, turn.Attempt.ID)
-			testutil.FailErr(t, "read initial attempt iteration", err)
-			if initialSeed != 0 {
-				t.Fatalf("initial attempt iteration = %d want 0", initialSeed)
-			}
+	var st modelExecutionStore
 
-			first, err := st.SettleModelOutput(ctx, ModelOutput{
-				ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: sess.ID,
-				Iteration: 1, MessageID: uuid.NewString(), Content: "First output.",
-			})
-			testutil.FailErr(t, "settle iteration 1", err)
-			_, err = st.SettleModelOutput(ctx, first)
-			testutil.FailErr(t, "replay identical iteration 1 output", err)
+	st = openTurnSQLStore(t).(modelExecutionStore)
 
-			afterFirst, err := SettledModelOutputIteration(ctx, st, turn.Attempt.ID)
-			testutil.FailErr(t, "read settled iteration after first output", err)
-			if afterFirst != 1 {
-				t.Fatalf("settled iteration = %d want 1", afterFirst)
-			}
+	ctx := t.Context()
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	turn, err := st.BeginTurn(ctx, TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: "{}"})
+	testutil.FailErr(t, "begin turn", err)
 
-			_, err = st.SettleModelOutput(ctx, ModelOutput{
-				ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: sess.ID,
-				Iteration: 1, MessageID: uuid.NewString(), Content: "Duplicate iteration 1 output.",
-			})
-			if !errors.Is(err, ErrModelOutputIterationCollision) {
-				t.Fatalf("collision error = %v, want errors.Is(_, ErrModelOutputIterationCollision)", err)
-			}
-			var collision *ModelOutputIterationCollisionError
-			if !errors.As(err, &collision) {
-				t.Fatalf("collision error = %T (%v), want *ModelOutputIterationCollisionError", err, err)
-			}
-			if collision.TurnAttemptID != turn.Attempt.ID || collision.Iteration != 1 {
-				t.Fatalf("collision = %+v, want TurnAttemptID=%s Iteration=1", collision, turn.Attempt.ID)
-			}
-			if collision.Error() == "" {
-				t.Fatal("collision error string is empty")
-			}
-
-			_, err = st.SettleModelOutput(ctx, ModelOutput{
-				ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: sess.ID,
-				Iteration: 3, MessageID: uuid.NewString(), Content: "Third output.",
-			})
-			testutil.FailErr(t, "settle iteration 3", err)
-			afterThird, err := SettledModelOutputIteration(ctx, st, turn.Attempt.ID)
-			testutil.FailErr(t, "read settled iteration after third output", err)
-			if afterThird != 3 {
-				t.Fatalf("settled iteration = %d want 3", afterThird)
-			}
-		})
+	emptySeed, err := SettledModelOutputIteration(ctx, st, "")
+	testutil.FailErr(t, "read empty attempt iteration", err)
+	if emptySeed != 0 {
+		t.Fatalf("empty attempt iteration = %d want 0", emptySeed)
 	}
+	unknownStoreSeed, err := SettledModelOutputIteration(ctx, struct{}{}, turn.Attempt.ID)
+	testutil.FailErr(t, "read unknown store attempt iteration", err)
+	if unknownStoreSeed != 0 {
+		t.Fatalf("unknown store attempt iteration = %d want 0", unknownStoreSeed)
+	}
+	initialSeed, err := SettledModelOutputIteration(ctx, st, turn.Attempt.ID)
+	testutil.FailErr(t, "read initial attempt iteration", err)
+	if initialSeed != 0 {
+		t.Fatalf("initial attempt iteration = %d want 0", initialSeed)
+	}
+
+	first, err := st.SettleModelOutput(ctx, ModelOutput{
+		ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: sess.ID,
+		Iteration: 1, MessageID: uuid.NewString(), Content: "First output.",
+	})
+	testutil.FailErr(t, "settle iteration 1", err)
+	_, err = st.SettleModelOutput(ctx, first)
+	testutil.FailErr(t, "replay identical iteration 1 output", err)
+
+	afterFirst, err := SettledModelOutputIteration(ctx, st, turn.Attempt.ID)
+	testutil.FailErr(t, "read settled iteration after first output", err)
+	if afterFirst != 1 {
+		t.Fatalf("settled iteration = %d want 1", afterFirst)
+	}
+
+	_, err = st.SettleModelOutput(ctx, ModelOutput{
+		ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: sess.ID,
+		Iteration: 1, MessageID: uuid.NewString(), Content: "Duplicate iteration 1 output.",
+	})
+	if !errors.Is(err, ErrModelOutputIterationCollision) {
+		t.Fatalf("collision error = %v, want errors.Is(_, ErrModelOutputIterationCollision)", err)
+	}
+	var collision *ModelOutputIterationCollisionError
+	if !errors.As(err, &collision) {
+		t.Fatalf("collision error = %T (%v), want *ModelOutputIterationCollisionError", err, err)
+	}
+	if collision.TurnAttemptID != turn.Attempt.ID || collision.Iteration != 1 {
+		t.Fatalf("collision = %+v, want TurnAttemptID=%s Iteration=1", collision, turn.Attempt.ID)
+	}
+	if collision.Error() == "" {
+		t.Fatal("collision error string is empty")
+	}
+
+	_, err = st.SettleModelOutput(ctx, ModelOutput{
+		ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: sess.ID,
+		Iteration: 3, MessageID: uuid.NewString(), Content: "Third output.",
+	})
+	testutil.FailErr(t, "settle iteration 3", err)
+	afterThird, err := SettledModelOutputIteration(ctx, st, turn.Attempt.ID)
+	testutil.FailErr(t, "read settled iteration after third output", err)
+	if afterThird != 3 {
+		t.Fatalf("settled iteration = %d want 3", afterThird)
+	}
+
 }

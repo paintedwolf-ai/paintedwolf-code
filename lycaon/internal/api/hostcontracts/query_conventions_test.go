@@ -2,6 +2,7 @@ package hostcontracts
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -25,14 +26,16 @@ import (
 )
 
 func TestBoardRequiresProjectID(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	dir := t.TempDir()
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	queue := worker.NewInMemoryQueue(2)
 	snap := &board.SnapshotBuilder{Workers: queue, Repo: repotest.NewProvider(t)}
-	sessionStore := store.NewMemory()
+	sessionStore := sessionFixture
 	coord, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create coordinator session", err)
 	_, err = queue.Enqueue(t.Context(), wire.WorkerTask{
@@ -65,13 +68,15 @@ func TestBoardRequiresProjectID(t *testing.T) {
 }
 
 func TestBoardRequiresSessionIDMissing(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	dir := t.TempDir()
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: store.NewMemory(), Projects: reg}, Workflow: hostapi.WorkflowDependencies{
+		Store: sessionFixture, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
 		Workers: worker.NewInMemoryQueue(2), Board: &board.SnapshotBuilder{Repo: repotest.NewProvider(t)}}}), nil, hostapi.TestAPIToken)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/board", nil)
@@ -83,13 +88,15 @@ func TestBoardRequiresSessionIDMissing(t *testing.T) {
 }
 
 func TestWorkersRequiresSessionID(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	dir := t.TempDir()
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: store.NewMemory(), Projects: reg}, Workflow: hostapi.WorkflowDependencies{
+		Store: sessionFixture, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
 		Workers: worker.NewInMemoryQueue(2)}}), nil, hostapi.TestAPIToken)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/workers?project_id="+p.ID, nil)
@@ -101,7 +108,9 @@ func TestWorkersRequiresSessionID(t *testing.T) {
 }
 
 func TestCostSummaryRequiresSessionID(t *testing.T) {
-	store := store.NewMemory()
+	sessionFixture := storetest.New(t)
+
+	store := sessionFixture
 	mock := llm.NewMockProvider(nil)
 	tracker := costtest.NewTracker(t, cost.NoopPricer{})
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
@@ -117,7 +126,7 @@ func TestCostSummaryRequiresSessionID(t *testing.T) {
 		testutil.FailErr(t, "tracker.RecordUsage failed", err)
 	}
 
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: mgr}}), nil, hostapi.TestAPIToken)
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/cost/summary?session_id="+sess.ID, nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

@@ -1,6 +1,8 @@
 package boot_test
 
 import (
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/boot"
@@ -29,7 +31,7 @@ func TestValidateServeWiringAcceptsProductionShape(t *testing.T) {
 	}
 	engine, err := rules.NewPostureRuleEngine(postures, packs, reg)
 	testutil.FailErr(t, "rules.NewPostureRuleEngine failed", err)
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Profiles.SetPostureRegistry(postures)
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)

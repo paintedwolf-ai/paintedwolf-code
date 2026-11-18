@@ -2,6 +2,7 @@ package coordinator_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator"
@@ -21,7 +22,7 @@ import (
 
 func TestRuntimeRunPromptDelegatesToLoop(t *testing.T) {
 	client := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{
 		LoopDeps: func() promptloop.PromptLoopDeps {
 			return promptloop.PromptLoopDeps{

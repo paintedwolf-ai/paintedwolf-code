@@ -26,8 +26,7 @@ type storedLineRangesPayload struct {
 	URLsShown      []string                  `json:"urls_shown,omitempty"`
 	GrepLines      map[string]map[int]string `json:"grep_lines,omitempty"`
 	PathTiers      map[string]string         `json:"path_tiers,omitempty"`
-	// PathRoots maps a stored path key to its owning root ID.
-	// Empty values mark legacy keys that resolve under no attached root.
+	// PathRoots maps path keys to attached root IDs; empty values are unrooted.
 	PathRoots        map[string]string `json:"path_roots,omitempty"`
 	Surface          string            `json:"surface,omitempty"`
 	ArtifactID       string            `json:"artifact_id,omitempty"`
@@ -73,7 +72,6 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		return err
 	}
-	// v1 payloads predate durable root identity; v2 adds path_roots.
 	if payload.Version != 1 {
 		return fmt.Errorf("unsupported evidence record payload version %d", payload.Version)
 	}
@@ -201,53 +199,27 @@ func upsertEvidenceRecordSQL(ctx context.Context, s *sqlCore, sessionID string, 
 	if err != nil {
 		return err
 	}
+	if inserted {
+		if err := projectUntrustedLedger(ctx, tx, projectID, sessionID, rec); err != nil {
+			return err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	if inserted {
 		bumpUntrusted(s, sessionID, rec)
 		bumpSecretExposure(s, sessionID, rec)
-		if err := s.projectUntrustedLedger(ctx, nil, sessionID, rec); err != nil {
-			return err
-		}
 	}
 	return nil
 }
 
-// projectUntrustedLedger projects inherited and worker URL markers.
-// A nil transaction uses a short local transaction.
-func (s *sqlCore) projectUntrustedLedger(ctx context.Context, tx *sql.Tx, sessionID string, rec evidence.Record) error {
+// projectUntrustedLedger records trust markers in the evidence transaction.
+func projectUntrustedLedger(ctx context.Context, tx *sql.Tx, projectID, sessionID string, rec evidence.Record) error {
 	if !evidence.RecordMarksUntrustedContent(rec) {
 		return nil
 	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return nil
-	}
-	q := s.queries
-	if tx != nil {
-		q = s.queries.WithTx(tx)
-	}
-	projectID, err := q.GetSessionProjectID(ctx, sessionID)
-	if err != nil {
-		return fmt.Errorf("project untrusted ledger: session %s: %w", sessionID, err)
-	}
-	projectID = strings.TrimSpace(projectID)
-	if projectID == "" {
-		return nil
-	}
-	if tx != nil {
-		return search.SyncUntrustedLedgerWriteThrough(ctx, tx, projectID, sessionID, rec)
-	}
-	tx, err = s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := search.SyncUntrustedLedgerWriteThrough(ctx, tx, projectID, sessionID, rec); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return search.SyncUntrustedLedgerWriteThrough(ctx, tx, projectID, sessionID, rec)
 }
 
 func markSuperseded(ctx context.Context, q *db.Queries, sessionID, oldHandle, byHandle string) error {

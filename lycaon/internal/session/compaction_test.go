@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"strings"
 	"testing"
@@ -24,10 +25,10 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Host, *store.Memory) {
+func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Host, *store.SQL) {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetDataDir(t.TempDir())
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -215,7 +216,7 @@ func TestCompactionViewSplicesNewMessages(t *testing.T) {
 
 func TestPromptHistorySeeksAfterCompactionWatermark(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -276,7 +277,7 @@ func (p *promptHistoryReadProbe) GetMessages(context.Context, string) ([]api.Mes
 
 func TestPromptHistoryOverflowNeverLoadsFullTranscript(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create long session", err)
 	rows := make([]api.Message, 1200)

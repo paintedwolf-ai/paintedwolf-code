@@ -1,6 +1,7 @@
 package guidancedelivery
 
 import (
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strings"
 	"testing"
 
@@ -8,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -39,7 +39,7 @@ func TestCopy1QueuesFrozenExtensionAdvisories(t *testing.T) {
 }
 
 func TestAppendHostKickMessageStampsCanonicalOrdinal(t *testing.T) {
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	svc := &Service{store: mem, transcript: transcript.New(mem, nil), kicks: &kick.KickEngine{}}

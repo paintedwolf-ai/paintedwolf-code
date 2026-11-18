@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
@@ -26,7 +27,6 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
@@ -82,7 +82,7 @@ func newEditorFixture(t *testing.T, opts ...fixtureOption) *editorFixture {
 	fingerprints, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x5a}, 32))
 	testutil.FailErr(t, "build fingerprinter", err)
 	matcher.SetFingerprinter(fingerprints)
-	deps := apitestdeps.Deps{Store: store.NewMemory(), Database: testdbfixture.Open(t, "editor.db")}
+	deps := apitestdeps.Deps{Store: storetest.New(t, testdbseed.DefaultProjectID), Database: testdbfixture.Open(t, "editor.db")}
 	for _, opt := range opts {
 		opt(&deps)
 	}

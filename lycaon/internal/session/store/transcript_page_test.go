@@ -2,16 +2,17 @@ package store_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestTranscriptPageTailAndCursors(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{ProjectID: "p1", Posture: api.SessionPostureBuild}, "p1")
 	testutil.FailErr(t, "create session", err)
 
@@ -76,7 +77,7 @@ func TestTranscriptPageTailAndCursors(t *testing.T) {
 
 func TestTranscriptPageDefaultLimitIsBundledConst(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{ProjectID: "p1", Posture: api.SessionPostureBuild}, "p1")
 	testutil.FailErr(t, "create session", err)
 

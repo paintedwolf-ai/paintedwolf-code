@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -105,12 +105,14 @@ func (c PresenceTestChats) Chat(_ context.Context, sessionID string) (agentprese
 // presenceTestAnchors anchors every span and reports whether spans still hold.
 
 func PresenceTestServer(t *testing.T) (*hostapi.Server, *events.Presence) {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	hub := events.NewMemoryHub()
-	st := store.NewMemory()
+	st := sessionFixture
 	p := events.NewPresence(hub, time.Minute)
 	srv := hostapi.NewServer(RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: st, Projects: project.NewMemoryRegistry(), Sessions: session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{
+		Store: st, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{
 		Events: hub, Presence: p}}), nil, hostapi.TestAPIToken)
 	return srv, p
 }

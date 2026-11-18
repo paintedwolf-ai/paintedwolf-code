@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"io"
 	"net"
 	"net/http"
@@ -22,7 +23,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/oar"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -46,7 +46,7 @@ func TestWorkerWritePublishesBoardByProjectIdentity(t *testing.T) {
 	testutil.FailErr(t, "subscribe to project events", err)
 	defer unsubscribe()
 	board := &workerEventBoard{}
-	manager := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	manager := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	manager.SetEventPublisher(&events.Publisher{Hub: hub, Board: board})
 	manager.Workers.Workspaces.AfterWorkerWrite(t.Context(), tools.ToolContext{Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID, HandoffSessionID: "session"}}, "file.go")
 	hub.FlushDebounced()

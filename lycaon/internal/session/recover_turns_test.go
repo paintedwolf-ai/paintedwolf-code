@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ import (
 
 func TestRecoverOrphanedTurnsClearsStuckBusy(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	hub := events.NewMemoryHub()
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub})
@@ -156,7 +157,7 @@ func (r *reviewCheckpointRecorder) CreateStructuralCheckpoint(
 
 func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 	ctx := t.Context()
-	sessions := store.NewMemory()
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	recorder := &reviewCheckpointRecorder{}
 	mgr.SetSourceLedger(recorder, tools.SourceHistory{}, nil, nil, recorder, nil)
@@ -200,7 +201,7 @@ func TestReviewGuidanceFollowsLiveVerdictGate(t *testing.T) {
 		for _, pending := range []bool{false, true} {
 			for _, staged := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/pending=%v/staged=%v", id, pending, staged), func(t *testing.T) {
-					mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+					mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 					mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 					kicks := mgr.Coordinator.Runtime.Kicks()
 					review := anchor.InformRender(id)

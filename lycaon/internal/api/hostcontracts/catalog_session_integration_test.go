@@ -4,6 +4,7 @@ package hostcontracts
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,8 +20,10 @@ import (
 )
 
 func TestListWorkflowsIncludesSessionScope(t *testing.T) {
-	store := store.NewMemory()
-	projReg := project.NewMemoryRegistry()
+	sessionFixture := storetest.New(t)
+
+	store := sessionFixture
+	projReg := project.NewSQLRegistry(sessionFixture.DB())
 	dir := t.TempDir()
 	p, err := project.CreateWithRoot(t.Context(), projReg, dir)
 	testutil.FailErr(t, "reg.Create failed", err)
@@ -72,9 +75,11 @@ phases:
 }
 
 func TestListWorkflowsSessionNotFound(t *testing.T) {
-	store := store.NewMemory()
+	sessionFixture := storetest.New(t)
+
+	store := sessionFixture
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: store, Projects: project.NewMemoryRegistry()}, Workflow: hostapi.WorkflowDependencies{WorkflowCatalog: workflowcatalog.Resolver{}}}), nil, hostapi.TestAPIToken)
+		Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB())}, Workflow: hostapi.WorkflowDependencies{WorkflowCatalog: workflowcatalog.Resolver{}}}), nil, hostapi.TestAPIToken)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/workflows?session_id=missing-session", nil)
 	w := httptest.NewRecorder()

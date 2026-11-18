@@ -2,13 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/store"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -16,6 +16,8 @@ import (
 )
 
 func TestWorkersBoardAndCancelHandlers(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	for _, st := range []wire.WorkerStatus{
 		wire.WorkerStatusPending,
 		wire.WorkerStatusRunning,
@@ -49,11 +51,11 @@ func TestWorkersBoardAndCancelHandlers(t *testing.T) {
 
 	ctx := t.Context()
 	rootDir := resolveTestPath(t, t.TempDir())
-	projReg := project.NewMemoryRegistry()
+	projReg := project.NewSQLRegistry(sessionFixture.DB())
 	proj, err := project.CreateWithRoot(ctx, projReg, rootDir)
 	testutil.FailErr(t, "create project", err)
 
-	sessStore := store.NewMemory()
+	sessStore := sessionFixture
 	coord, err := sessStore.Create(ctx, wire.CreateSessionRequest{ProjectID: proj.ID, Posture: wire.SessionPostureBuild}, proj.ID)
 	testutil.FailErr(t, "create session", err)
 

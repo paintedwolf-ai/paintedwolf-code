@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"io"
 	"net/http"
 	"os"
@@ -20,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -70,6 +70,8 @@ func GetGlobalApprovalConfig(t *testing.T, base string) wire.ApprovalConfigRespo
 }
 
 func NewSettingsTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, string, *project.MemoryRegistry) {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv(configdir.EnvConfigDir, tmp)
@@ -78,11 +80,11 @@ func NewSettingsTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, str
 		t.Fatalf("settings service: %v", err)
 	}
 
-	store := store.NewMemory()
+	store := sessionFixture
 	mock := llm.NewMockProvider(TestMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: svc.Limits})
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	hub := events.NewMemoryHub()
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: reg, Sessions: mgr, Settings: svc}, Host: hostapi.HostDependencies{Events: hub}}
 	for _, opt := range opts {

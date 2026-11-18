@@ -41,9 +41,8 @@ func admitTestPrompt(t *testing.T, st unsettledPromptStore, sess *api.Session, o
 func TestUnsettledUserPromptsAreQueuedOrRunningInAdmissionOrder(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(*testing.T) unsettledPromptStore
+		open func(t *testing.T) unsettledPromptStore
 	}{
-		{name: "memory", open: func(*testing.T) unsettledPromptStore { return NewMemory() }},
 		{name: "sql", open: func(t *testing.T) unsettledPromptStore {
 			handle := testdbfixture.Open(t, "unsettled.db")
 			testdbseed.InsertProjectRoot(t, handle, testdbseed.DefaultProjectID, t.TempDir())

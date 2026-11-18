@@ -3,6 +3,7 @@ package property
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strconv"
 	"testing"
 
@@ -22,7 +23,7 @@ func TestOneCanonicalWorkerCardAndSupersedeInPlace(t *testing.T) {
 	ctx := context.Background()
 
 	rapid.Check(t, func(t *rapid.T) {
-		store := store.NewMemory()
+		store := storetest.New(t, testdbseed.DefaultProjectID)
 		mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 		sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		failErr(t, "create session", err)

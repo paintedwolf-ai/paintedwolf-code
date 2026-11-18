@@ -23,8 +23,7 @@ func TestSessionStoresRequireCompleteModelRef(t *testing.T) {
 	stores := map[string]interface {
 		Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
 	}{
-		"memory": NewMemory(),
-		"sql":    NewSQL(sqlDB),
+		"sql": NewSQL(sqlDB),
 	}
 	requests := map[string]api.CreateSessionRequest{
 		"provider only": {ProviderID: "provider"},

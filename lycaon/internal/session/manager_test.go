@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strings"
 	"testing"
 
@@ -45,9 +46,9 @@ func newStubCommandRegistry(t *testing.T) *tools.StubRegistry {
 	return registry
 }
 
-func newTestManager(t *testing.T) (*Host, *store.Memory) {
+func newTestManager(t *testing.T) (*Host, *store.SQL) {
 	t.Helper()
-	memory := store.NewMemory()
+	memory := storetest.New(t, testdbseed.DefaultProjectID)
 	return newTestManagerWithStore(t, memory), memory
 }
 
@@ -62,7 +63,7 @@ func newTestManagerWithStore(t *testing.T, persistence Store) *Host {
 	return mgr
 }
 
-func newRootedTestManager(t *testing.T) (*Host, *store.Memory, string) {
+func newRootedTestManager(t *testing.T) (*Host, *store.SQL, string) {
 	t.Helper()
 	mgr, store := newTestManager(t)
 	return mgr, store, attachTestProject(t, mgr)
@@ -223,7 +224,7 @@ func TestSessionHistoryAccumulation(t *testing.T) {
 }
 
 func TestToolCallError(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	reg := newStubCommandRegistry(t)
 	reg.SetFail("command", fmt.Errorf("command failed"))
 	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)

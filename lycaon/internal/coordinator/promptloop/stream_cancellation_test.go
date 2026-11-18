@@ -3,6 +3,8 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -12,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -147,7 +148,7 @@ func TestPromptObservationAcknowledgesOnlyDeliveredFrames(t *testing.T) {
 		for _, fail := range []bool{false, true} {
 			name := map[bool]string{false: "user", true: "host"}[hostTurn] + "/" + map[bool]string{false: "success", true: "failure"}[fail]
 			t.Run(name, func(t *testing.T) {
-				memory := store.NewMemory()
+				memory := storetest.New(t, testdbseed.DefaultProjectID)
 				source := &countingCoordinatorFrameSource{}
 				deps := StoreDeps(memory)
 				deps.Context.CoordinatorFrame = source

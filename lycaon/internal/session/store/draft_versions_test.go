@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-func TestMemoryStoreDraftVersionsRoundTrip(t *testing.T) {
-	store := NewMemory()
+func TestStoreDraftVersionsRoundTrip(t *testing.T) {
+	store := newSQLTestStore(t, "p1")
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: "p1"}, "p1")
 	testutil.FailErr(t, "Create", err)
@@ -37,8 +37,8 @@ func TestMemoryStoreDraftVersionsRoundTrip(t *testing.T) {
 	}
 }
 
-func TestMemoryStoreDraftVersionsCascadeOnSessionDelete(t *testing.T) {
-	store := NewMemory()
+func TestStoreDraftVersionsCascadeOnSessionDelete(t *testing.T) {
+	store := newSQLTestStore(t, "p1")
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: "p1"}, "p1")
 	testutil.FailErr(t, "Create", err)

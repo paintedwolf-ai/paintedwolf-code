@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -257,8 +258,10 @@ func (s *stubProjectWorkerLister) Get(jobID string) (*api.WorkerTask, bool) {
 }
 
 func TestRootDependentsInFlightWorkerAndBusySession(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	dir := t.TempDir()
 	p, err := reg.Create(ctx, project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: dir, IsPrimary: ptrBool(true)}},
@@ -266,7 +269,7 @@ func TestRootDependentsInFlightWorkerAndBusySession(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 	rootID := p.Roots[0].ID
 
-	store := store.NewMemory()
+	store := sessionFixture
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetProjectRegistry(reg)
 	mgr.SetWorkerQueue(&stubProjectWorkerLister{tasks: []api.WorkerTask{{
@@ -302,13 +305,15 @@ func TestRootDependentsInFlightWorkerAndBusySession(t *testing.T) {
 }
 
 func TestRootDependentsIncludesBusySessionAcrossMultiRootUnion(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	ctx := t.Context()
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Roots: []project.AttachRootParams{
 		{Path: t.TempDir(), IsPrimary: ptrBool(true)}, {Path: t.TempDir()},
 	}})
 	testutil.FailErr(t, "create project", err)
-	store := store.NewMemory()
+	store := sessionFixture
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetProjectRegistry(reg)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
@@ -372,6 +377,8 @@ func TestLoopbackRuntimeIsIndependentFromListenRuntime(t *testing.T) {
 }
 
 func TestRootDetachStopsOnlyStrandedCommandsAndQueuesCompletionAfterAbort(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	if runtime.GOOS == "windows" {
 		t.Skip("sleep fixture is unix-oriented")
 	}
@@ -381,7 +388,7 @@ func TestRootDetachStopsOnlyStrandedCommandsAndQueuesCompletionAfterAbort(t *tes
 	testutil.FailErr(t, "mkdir nestedA", os.MkdirAll(nestedADir, 0o755))
 	rootBDir := t.TempDir()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Roots: []project.AttachRootParams{
 		{Path: rootADir, IsPrimary: ptrBool(true)},
 		{Path: rootBDir},
@@ -390,7 +397,7 @@ func TestRootDetachStopsOnlyStrandedCommandsAndQueuesCompletionAfterAbort(t *tes
 	rootA := p.Roots[0]
 	rootB := p.Roots[1]
 
-	st := store.NewMemory()
+	st := sessionFixture
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetProjectRegistry(reg)
 	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
@@ -483,6 +490,8 @@ func TestRootDetachStopsOnlyStrandedCommandsAndQueuesCompletionAfterAbort(t *tes
 }
 
 func TestRootDetachIdleAndArchivedChatsInventoryAndStopBackgroundCommands(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	if runtime.GOOS == "windows" {
 		t.Skip("sleep fixture is unix-oriented")
 	}
@@ -490,7 +499,7 @@ func TestRootDetachIdleAndArchivedChatsInventoryAndStopBackgroundCommands(t *tes
 	rootADir := t.TempDir()
 	rootBDir := t.TempDir()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Roots: []project.AttachRootParams{
 		{Path: rootADir, IsPrimary: ptrBool(true)},
 		{Path: rootBDir},
@@ -498,7 +507,7 @@ func TestRootDetachIdleAndArchivedChatsInventoryAndStopBackgroundCommands(t *tes
 	testutil.FailErr(t, "create project", err)
 	rootA := p.Roots[0]
 
-	st := store.NewMemory()
+	st := sessionFixture
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetProjectRegistry(reg)
 

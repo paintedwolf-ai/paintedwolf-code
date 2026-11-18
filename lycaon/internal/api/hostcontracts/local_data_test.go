@@ -3,6 +3,8 @@ package hostcontracts
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/localdata"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,7 +29,7 @@ func TestLocalDataGetAndClear(t *testing.T) {
 	testutil.FailErr(t, "write fetch", os.WriteFile(filepath.Join(fetchDir, "a"), []byte("body"), 0o600))
 	testutil.FailErr(t, "seed durable", localdata.SeedDurableMarkers(base))
 
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, Storage: hostapi.StorageDependencies{DataDir: base}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}, Storage: hostapi.StorageDependencies{DataDir: base}}), nil, hostapi.TestAPIToken)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/local-data", nil)
 	w := httptest.NewRecorder()
@@ -95,7 +96,7 @@ func TestExtensionCacheClearReplacesDerivedCatalog(t *testing.T) {
 	testutil.FailErr(t, "mkdir extension cache", os.MkdirAll(cache, 0o700))
 	testutil.FailErr(t, "write extension body", os.WriteFile(filepath.Join(cache, "body"), []byte("cached"), 0o600))
 
-	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, Storage: hostapi.StorageDependencies{DataDir: base}}
+	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}, Storage: hostapi.StorageDependencies{DataDir: base}}
 	contractfixture.WithExtensionOwner(t)(&deps)
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, deps), nil, hostapi.TestAPIToken)
 	extpacks.SetActive(&extpacks.EffectiveCatalog{Desired: extpacks.DesiredState{
@@ -134,7 +135,7 @@ func TestExtensionCacheClearsWithoutOwner(t *testing.T) {
 	testutil.FailErr(t, "mkdir extension cache", os.MkdirAll(cache, 0o700))
 	testutil.FailErr(t, "write extension body", os.WriteFile(filepath.Join(cache, "body"), []byte("cached"), 0o600))
 
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, Storage: hostapi.StorageDependencies{DataDir: base}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}, Storage: hostapi.StorageDependencies{DataDir: base}}), nil, hostapi.TestAPIToken)
 	body, err := json.Marshal(wire.LocalDataClearRequest{Buckets: []wire.LocalDataBucketId{wire.LocalDataBucketId(localdata.BucketExtensionCache)}})
 	testutil.FailErr(t, "encode clear request", err)
 	response := httptest.NewRecorder()
@@ -149,7 +150,7 @@ func TestExtensionCacheClearsWithoutOwner(t *testing.T) {
 
 func TestLocalDataUnknownBucket400(t *testing.T) {
 	base := t.TempDir()
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, Storage: hostapi.StorageDependencies{DataDir: base}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}, Storage: hostapi.StorageDependencies{DataDir: base}}), nil, hostapi.TestAPIToken)
 
 	body := []byte(`{"buckets":["not_a_real_bucket"]}`)
 	req := contractfixture.NewAuthedRequest(http.MethodPost, "/v1/local-data/clear", bytes.NewReader(body))
@@ -163,7 +164,7 @@ func TestLocalDataUnknownBucket400(t *testing.T) {
 
 func TestLocalDataEmptyBuckets400(t *testing.T) {
 	base := t.TempDir()
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, Storage: hostapi.StorageDependencies{DataDir: base}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}, Storage: hostapi.StorageDependencies{DataDir: base}}), nil, hostapi.TestAPIToken)
 
 	body := []byte(`{"buckets":[]}`)
 	req := contractfixture.NewAuthedRequest(http.MethodPost, "/v1/local-data/clear", bytes.NewReader(body))

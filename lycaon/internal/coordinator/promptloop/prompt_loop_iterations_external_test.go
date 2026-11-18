@@ -2,6 +2,7 @@ package promptloop_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -23,7 +24,7 @@ func TestLoopRespectsMaxIterations(t *testing.T) {
 			Args: map[string]any{"path": "x"},
 		}},
 	}}})
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	limits := settings.DefaultSessionLimits()
 	limits.MaxIterations = 2
 	deps := promptloop.StoreDeps(store)

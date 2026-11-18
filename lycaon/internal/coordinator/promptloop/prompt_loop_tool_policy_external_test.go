@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"slices"
 	"strings"
 	"testing"
@@ -34,7 +35,7 @@ func TestLoopRuleRejectAppendsToolMessage(t *testing.T) {
 			Args: map[string]any{"path": "x"},
 		}},
 	}}})
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
 	deps.Context.Policy = denyToolPolicy{}
@@ -74,7 +75,7 @@ func TestPromptLoop_SpecDenyToolMessageShape(t *testing.T) {
 		}}},
 		{Content: "Plan workflow continues."},
 	}}
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
 	deps.Context.Policy = listedEvaluatingPolicy{
@@ -116,7 +117,7 @@ func TestLoopDoomLoopRejectKeepsCallResultPair(t *testing.T) {
 	guard := loopguard.NewMemoryDoomLoopGuard()
 	ctx := context.Background()
 	args := map[string]any{"path": "README.md"}
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	for i := 0; i < loopguard.DoomLoopMaxAttempts; i++ {
@@ -178,7 +179,7 @@ func TestLoopDoomLoopRejectKeepsCallResultPair(t *testing.T) {
 func TestLoopTruncatesLargeToolResult(t *testing.T) {
 	limits := settings.DefaultSessionLimits()
 	limits.MaxToolResultBytes = 20
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	reg := tools.NewStubRegistry()
 	_ = reg.Register("command", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return strings.Repeat("x", 100), nil
@@ -241,7 +242,7 @@ func TestLoopRejectsUnofferedToolCalls(t *testing.T) {
 			if !withRead {
 				client.completions[0].ToolCalls = client.completions[0].ToolCalls[1:]
 			}
-			mem := store.NewMemory()
+			mem := storetest.New(t, testdbseed.DefaultProjectID)
 			ctx := context.Background()
 			sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)

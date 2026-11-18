@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"reflect"
 	"strings"
 	"testing"
@@ -16,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/recall"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -195,7 +195,7 @@ func TestSmallObservationSurvivesModelFormattingOverhead(t *testing.T) {
 
 func TestFitRequestRetainsActiveTurnToolExchangesAcrossPriorTurns(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "small"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	priorUser := strings.Repeat("Prior turn context. ", 250)

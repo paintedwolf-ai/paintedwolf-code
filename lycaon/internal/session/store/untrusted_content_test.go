@@ -21,9 +21,7 @@ type contactStore interface {
 }
 
 func TestRecordContactBuildsSessionContacts(t *testing.T) {
-	t.Run("memory", func(t *testing.T) {
-		testRecordContactBuildsSessionContacts(t, NewMemory(), "proj-contacts-memory")
-	})
+
 	t.Run("sql", func(t *testing.T) {
 		sqlDB := testdbfixture.Open(t, "contacts.db")
 		testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
@@ -105,9 +103,7 @@ type urlStandingStore interface {
 }
 
 func TestSessionURLStandingMatchesRecordedAddressesExactly(t *testing.T) {
-	t.Run("memory", func(t *testing.T) {
-		testSessionURLStanding(t, NewMemory(), "proj-observed-memory")
-	})
+
 	t.Run("sql", func(t *testing.T) {
 		sqlDB := testdbfixture.Open(t, "observed.db")
 		testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())

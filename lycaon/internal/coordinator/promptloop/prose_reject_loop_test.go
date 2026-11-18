@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"slices"
 	"strings"
 	"testing"
@@ -13,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/promptresult"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -38,7 +39,7 @@ func (c *repeatedProseClient) Stream(ctx context.Context, req modelcall.Completi
 }
 
 func TestRepeatedProseRejectionEndsWithBoundedHandoff(t *testing.T) {
-	messages := store.NewMemory()
+	messages := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
 	testutil.FailErr(t, "create session", err)
 	client := &repeatedProseClient{}
@@ -74,7 +75,7 @@ func TestGatedCloseoutGetsOneActingRepairRound(t *testing.T) {
 	for _, barrier := range []bool{false, true} {
 		for _, repaired := range []bool{false, true} {
 			t.Run(fmt.Sprintf("barrier=%t/repaired=%t", barrier, repaired), func(t *testing.T) {
-				messages := store.NewMemory()
+				messages := storetest.New(t, testdbseed.DefaultProjectID)
 				sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
 				testutil.FailErr(t, "create session", err)
 				gateOpen := true
@@ -170,7 +171,7 @@ func TestGatedCloseoutGetsOneActingRepairRound(t *testing.T) {
 func TestGatedCloseoutPathsSettleAsCloseoutBlocked(t *testing.T) {
 	for _, path := range []string{"normal", "prose_finish", "completion_barrier"} {
 		t.Run(path, func(t *testing.T) {
-			messages := store.NewMemory()
+			messages := storetest.New(t, testdbseed.DefaultProjectID)
 			sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
 			testutil.FailErr(t, "create session", err)
 			registry := tools.NewStubRegistry()

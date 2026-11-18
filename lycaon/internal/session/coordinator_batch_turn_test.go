@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strings"
 	"testing"
 
@@ -29,7 +30,7 @@ import (
 func TestCoordinatorBatchTurn_oneSynthesisPerTurnLatch(t *testing.T) {
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load hints", err)
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 
@@ -57,7 +58,7 @@ func TestCoordinatorBatchTurn_oneSynthesisPerTurnLatch(t *testing.T) {
 }
 
 func TestCoordinatorBatchTurn_groundingRetryDoesNotSetLatch(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 
 	ctx := context.Background()
@@ -85,7 +86,7 @@ func (c *executionCheckpoints) ListPending(_ context.Context, id string, _ *api.
 func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 	for _, backend := range []string{"memory", "sql"} {
 		t.Run(backend, func(t *testing.T) {
-			var st session.Store = store.NewMemory()
+			var st session.Store = storetest.New(t, testdbseed.DefaultProjectID)
 			if backend == "sql" {
 				database := testdbfixture.Open(t, "execution.db")
 				testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
@@ -169,7 +170,7 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 }
 
 func TestExecutionObservationRejectsMissingSession(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	_, _, err := st.PutPromptSubmission(t.Context(), store.PromptSubmission{ID: "orphan", SessionID: "missing", Origin: store.PromptSubmissionOriginUser, SubmittedBy: testutil.HostOwner().ID})
 	testutil.FailErr(t, "retain orphan admission", err)
 	manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
@@ -179,7 +180,7 @@ func TestExecutionObservationRejectsMissingSession(t *testing.T) {
 }
 
 func TestExecutionTreeSupportsWorkflowStartsWithoutPromptAdmission(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	root, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project")
 	testutil.FailErr(t, "create workflow session", err)
 	manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
@@ -226,7 +227,7 @@ func (failingKickPromptEngine) Register(string, string) error { return nil }
 
 func TestPromptDoesNotQueueGreenfieldBuildKickForPlanReviewPolicyPrompt(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -253,7 +254,7 @@ func TestPromptDoesNotQueueGreenfieldBuildKickForPlanReviewPolicyPrompt(t *testi
 
 func TestQueueCoordinatorKickPrependsOnPrompt(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -303,7 +304,7 @@ func TestQueueCoordinatorKickPrependsOnPrompt(t *testing.T) {
 
 func TestPromptRenderFailurePreservesCoordinatorKickForRetry(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(st, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)

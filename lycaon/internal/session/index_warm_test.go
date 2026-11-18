@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -225,10 +226,12 @@ func TestHostLoopWakeTextFromUserRemainsUserIntent(t *testing.T) {
 }
 
 func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
-	registry := project.NewMemoryRegistry()
+	sessionFixture := storetest.New(t)
+
+	registry := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := registry.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: t.TempDir()}}})
 	testutil.FailErr(t, "create project", err)
-	mem := sessionstore.NewMemory()
+	mem := sessionFixture
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create session", err)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
@@ -275,14 +278,16 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 }
 
 func TestAssistantCommitAndNotePersistNavigationReferences(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	ctx := context.Background()
 	root := t.TempDir()
 	testutil.FailErr(t, "make scripts folder", os.Mkdir(filepath.Join(root, "scripts"), 0o755))
 	testutil.FailErr(t, "write findings", os.WriteFile(filepath.Join(root, "FINDINGS.md"), []byte("x"), 0o600))
-	registry := project.NewMemoryRegistry()
+	registry := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := registry.Create(ctx, project.CreateParams{Roots: []project.AttachRootParams{{Path: root}}})
 	testutil.FailErr(t, "create project", err)
-	mem := sessionstore.NewMemory()
+	mem := sessionFixture
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create session", err)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
@@ -312,10 +317,12 @@ func TestAssistantCommitAndNotePersistNavigationReferences(t *testing.T) {
 }
 
 func TestNavigationParsesWorktreeAbsolutePathsWithoutFilesystemValidation(t *testing.T) {
-	registry := project.NewMemoryRegistry()
+	sessionFixture := storetest.New(t)
+
+	registry := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := registry.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: t.TempDir()}}})
 	testutil.FailErr(t, "project", err)
-	mem := sessionstore.NewMemory()
+	mem := sessionFixture
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "session", err)
 	branch := filepath.Join(t.TempDir(), "not-materialized")

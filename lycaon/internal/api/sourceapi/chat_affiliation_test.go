@@ -1,12 +1,12 @@
 package sourceapi
 
 import (
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/api/requestscope"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -16,7 +16,7 @@ import (
 // running; the host names the turn only while one is active.
 func TestUserSourceChatAffiliationNamesTheChatAndOnlyAnActiveTurn(t *testing.T) {
 	ctx := t.Context()
-	sessions := store.NewMemory()
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := sessions.Create(ctx, wire.CreateSessionRequest{
 		Posture: wire.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)

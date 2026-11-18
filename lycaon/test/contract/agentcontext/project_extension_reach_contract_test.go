@@ -3,6 +3,7 @@ package contract
 import (
 	"bytes"
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -18,12 +19,10 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/tools"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
 )
 
 // extpacksActiveAllowlist names device-catalog boundaries. The ambient task()
@@ -260,6 +259,7 @@ func TestCatalogViewCacheBoundAndFingerprintKey(t *testing.T) {
 }
 
 func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
+
 	ctx := context.Background()
 	root := configlayout.FindModuleRoot()
 
@@ -273,6 +273,8 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			sessionFixture := storetest.New(t)
+
 			surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "cs.yaml"))
 			contractcheck.FailErr(t, "surfaces", err)
 			if err := surfaces.PutEnabled(map[string]bool{projectcontrib.SurfaceExtensionConfig: tc.deviceOn}); err != nil {
@@ -286,11 +288,11 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 				}(),
 				Desired: extpacks.EmptyDesired(),
 			})
-			m := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+			m := session.NewHost(sessionFixture, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 			m.SetEffectiveCatalogDeps(root, boot, surfaces)
 			m.Catalog.SetCatalogViewCache(catalogview.NewCache(root, nil))
 
-			reg := project.NewMemoryRegistry()
+			reg := project.NewSQLRegistry(sessionFixture.DB())
 			m.SetProjectRegistry(reg)
 			projDir := t.TempDir()
 			lycaonDir := filepath.Join(projDir, settingsoverlay.DirName())

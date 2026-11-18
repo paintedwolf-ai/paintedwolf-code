@@ -2,6 +2,8 @@ package toolfixture
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"path/filepath"
 	"testing"
 
@@ -32,7 +34,6 @@ import (
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scantoolapi "github.com/lycaon/lycaon/internal/scan/toolapi"
 	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
@@ -72,8 +73,8 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 		contractcheck.FailErr(t, "parse.RegisterParseTools failed", err)
 	}
 	sqlDB := testdbfixture.Open(t, "wf-contract.db")
-	workflowMgr := workflow.NewManager(workflowpersistence.New(sqlDB), store.NewMemory(), contractcheck.CatalogRegistry(t), nil)
-	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal, Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls, Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: store.NewMemory()}); err != nil {
+	workflowMgr := workflow.NewManager(workflowpersistence.New(sqlDB), storetest.New(t, testdbseed.DefaultProjectID), contractcheck.CatalogRegistry(t), nil)
+	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal, Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls, Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: storetest.New(t, testdbseed.DefaultProjectID)}); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterStateTools failed", err)
 	}
 	blueprintMgr := blueprint.NewManager(blueprint.NewFileStoreForTest(t.TempDir()))
@@ -273,7 +274,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	if err := heldtools.Register(rt.Registry, heldcall.New(nil, nil)); err != nil {
 		contractcheck.FailErr(t, "heldtools.Register failed", err)
 	}
-	memStore := store.NewMemory()
+	memStore := storetest.New(t, testdbseed.DefaultProjectID)
 	wireContractProgramServices(t, rt, sqlDB, memStore)
 	if err := native.RegisterRecallTool(rt.Registry, recall.NewService(sqlDB, t.TempDir())); err != nil {
 		contractcheck.FailErr(t, "native.RegisterRecallTool failed", err)

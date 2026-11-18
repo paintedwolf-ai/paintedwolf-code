@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"github.com/lycaon/lycaon/internal/timelayout"
-	"sort"
 	"strings"
 	"time"
 
@@ -188,96 +187,4 @@ func movedPinOrder(current []pinnedRank, id string, position int) []pinnedRank {
 	copy(next[at+1:], next[at:])
 	next[at] = *moved
 	return next
-}
-
-// PinSession matches SQL pin ordering in memory.
-func (s *memorySessionViews) PinSession(ctx context.Context, id string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	core := s.core
-	core.mu.Lock()
-	defer core.mu.Unlock()
-	sess, ok := core.sessions[strings.TrimSpace(id)]
-	if !ok {
-		return ErrSessionNotFound
-	}
-	if sess.IsWorkerChild() {
-		return ErrWorkerChildPin
-	}
-	if sess.ArchivedAt != nil {
-		return ErrSessionArchived
-	}
-	if sess.PinRank != nil {
-		return nil
-	}
-	rank := 1
-	for _, other := range core.sessions {
-		if other.ProjectID == sess.ProjectID && other.PinRank != nil && *other.PinRank >= rank {
-			rank = *other.PinRank + 1
-		}
-	}
-	sess.PinRank = &rank
-	sess.UpdatedAt = time.Now().UTC()
-	return nil
-}
-
-// UnpinSession matches SQL pin ordering in memory.
-func (s *memorySessionViews) UnpinSession(ctx context.Context, id string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	core := s.core
-	core.mu.Lock()
-	defer core.mu.Unlock()
-	sess, ok := core.sessions[strings.TrimSpace(id)]
-	if !ok {
-		return ErrSessionNotFound
-	}
-	if sess.PinRank == nil {
-		return nil
-	}
-	sess.PinRank = nil
-	sess.UpdatedAt = time.Now().UTC()
-	return nil
-}
-
-// MovePinnedSession matches SQL pin ordering in memory.
-func (s *memorySessionViews) MovePinnedSession(ctx context.Context, id string, position int) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	core := s.core
-	core.mu.Lock()
-	defer core.mu.Unlock()
-	sess, ok := core.sessions[strings.TrimSpace(id)]
-	if !ok {
-		return ErrSessionNotFound
-	}
-	if sess.PinRank == nil {
-		return ErrSessionNotPinned
-	}
-	current := []pinnedRank{}
-	for otherID, other := range core.sessions {
-		if other.ProjectID == sess.ProjectID && other.PinRank != nil {
-			current = append(current, pinnedRank{id: otherID, rank: int64(*other.PinRank)})
-		}
-	}
-	sort.Slice(current, func(i, j int) bool {
-		if current[i].rank != current[j].rank {
-			return current[i].rank < current[j].rank
-		}
-		return current[i].id < current[j].id
-	})
-	now := time.Now().UTC()
-	for i, pin := range movedPinOrder(current, sess.ID, position) {
-		rank := i + 1
-		if int64(rank) == pin.rank {
-			continue
-		}
-		other := core.sessions[pin.id]
-		other.PinRank = &rank
-		other.UpdatedAt = now
-	}
-	return nil
 }

@@ -3,11 +3,11 @@ package history
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -20,7 +20,7 @@ func (f failedMeasurement) RequestBudget(context.Context, string, modelcall.Comp
 }
 
 func TestRequestFitPreservesMeasurementFailure(t *testing.T) {
-	memory := store.NewMemory()
+	memory := storetest.New(t, testdbseed.DefaultProjectID)
 	session, err := memory.Create(t.Context(), api.CreateSessionRequest{ProviderID: "local", Model: "e4b"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	service := &Service{store: memory, Compactor: compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), nil)}

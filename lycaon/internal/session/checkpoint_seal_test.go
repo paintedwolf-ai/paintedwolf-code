@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -35,7 +36,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"gopkg.in/yaml.v3"
 )
 
 // checkpointPreImages is the engine's shared source content store, where a
@@ -429,7 +429,7 @@ func TestManualCompactionDoesNotHoldSessionStopAdmission(t *testing.T) {
 }
 
 func TestToolPolicyWithoutOptionalDependencies(t *testing.T) {
-	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	if mgr.Coordinator.Guards.Policy() == nil {
 		t.Fatal("expected policy without optional dependencies")
 	}

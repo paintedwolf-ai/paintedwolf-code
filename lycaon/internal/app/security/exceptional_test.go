@@ -3,6 +3,8 @@ package security
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"net"
 	"os"
 	"path/filepath"
@@ -14,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/resourcelifecycle"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/protection"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -33,7 +34,7 @@ func (a *directAuditFixture) AppendDirectIPLifecycle(ctx context.Context, record
 }
 
 func TestExceptionalCapabilitiesReleasePermitsAtRunEndAndGrantsAtChatDisposal(t *testing.T) {
-	host := session.NewHost(store.NewMemory(), session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	host := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
 	control := &toolexecution.Capabilities{}
 	var runtime Runtime
 	audit := &directAuditFixture{}

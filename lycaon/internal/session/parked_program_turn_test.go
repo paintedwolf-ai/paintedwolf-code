@@ -2,13 +2,13 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -22,7 +22,7 @@ import (
 // User input interrupts a parked command; the user's turn opens with the
 // program's interrupted result, ahead of the user's message.
 func TestUserTurnOpensWithTheInterruptedParkedProgram(t *testing.T) {
-	memory := store.NewMemory()
+	memory := storetest.New(t, testdbseed.DefaultProjectID)
 	registry := tools.NewStubRegistry()
 	mgr := NewHost(memory, Models{Client: llm.NewMockProvider(testMockConfig(t)), Limits: settings.DefaultSessionLimits()}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)

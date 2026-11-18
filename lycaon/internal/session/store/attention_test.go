@@ -25,9 +25,8 @@ type attentionTurnStore interface {
 func TestAttentionCompletedTurnParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(*testing.T) attentionTurnStore
+		open func(t *testing.T) attentionTurnStore
 	}{
-		{"memory", func(*testing.T) attentionTurnStore { return NewMemory() }},
 		{"sql", func(t *testing.T) attentionTurnStore { return openTurnSQLStore(t).(*SQL) }},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
@@ -82,9 +81,8 @@ func TestAttentionCompletedTurnParity(t *testing.T) {
 func TestAttentionCandidateStatusSinceParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(*testing.T) attentionTurnStore
+		open func(t *testing.T) attentionTurnStore
 	}{
-		{"memory", func(*testing.T) attentionTurnStore { return NewMemory() }},
 		{"sql", func(t *testing.T) attentionTurnStore { return openTurnSQLStore(t).(*SQL) }},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {

@@ -153,7 +153,7 @@ func (s *scanCountingStore) count() int {
 
 type attemptFixture struct {
 	svc      *Service
-	mem      *store.Memory
+	mem      *store.SQL
 	sess     *api.Session
 	clock    *virtualClock
 	provider *scriptedProvider

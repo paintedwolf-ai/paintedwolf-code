@@ -39,19 +39,6 @@ func TestWorktreeBindingRoundTrip(t *testing.T) {
 				return st, sess.ID, testdbseed.DefaultProjectID
 			},
 		},
-		{
-			name: "memory",
-			setup: func(t *testing.T) (worktreeStore, string, string) {
-				t.Helper()
-				st := NewMemory()
-				sess, err := st.Create(context.Background(), api.CreateSessionRequest{
-					Posture:   api.SessionPostureBuild,
-					ProjectID: testdbseed.DefaultProjectID,
-				}, testdbseed.DefaultProjectID)
-				testutil.FailErr(t, "create", err)
-				return st, sess.ID, testdbseed.DefaultProjectID
-			},
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			st, sessionID, projectID := tc.setup(t)

@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"sort"
 
 	"github.com/lycaon/lycaon/internal/db"
 )
@@ -30,37 +29,6 @@ func (s *sqlSessionViews) ExistingSessionIDs(ctx context.Context, ids []string) 
 			return nil, err
 		}
 		for _, id := range rows {
-			result[id] = true
-		}
-	}
-	return result, nil
-}
-
-func (s *memorySessionViews) WorkspaceNotificationIDs(ctx context.Context, root, after string) ([]string, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	s.core.mu.RLock()
-	defer s.core.mu.RUnlock()
-	var ids []string
-	for id, sess := range s.core.sessions {
-		if sess.WorkspacePath == root && sess.ArchivedAt == nil && id > after {
-			ids = append(ids, id)
-		}
-	}
-	sort.Strings(ids)
-	return ids[:min(len(ids), maintenanceSessionBatch)], nil
-}
-
-func (s *memorySessionViews) ExistingSessionIDs(ctx context.Context, ids []string) (map[string]bool, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	s.core.mu.RLock()
-	defer s.core.mu.RUnlock()
-	result := make(map[string]bool)
-	for _, id := range ids {
-		if _, ok := s.core.sessions[id]; ok {
 			result[id] = true
 		}
 	}

@@ -2,6 +2,7 @@ package contractfixture
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	"testing"
@@ -20,10 +21,12 @@ import (
 )
 
 func NewPersistTestServer(t *testing.T) (*api.Server, wire.Session, workflowdrafts.Store) {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
-	store := store.NewMemory()
+	store := sessionFixture
 	projectDir := t.TempDir()
-	projReg := project.NewMemoryRegistry()
+	projReg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), projReg, projectDir)
 	testutil.FailErr(t, "reg.Create failed", err)
 	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID}, p.ID)

@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm/failure"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -68,7 +69,7 @@ func TestTurnFailureReportingPreservesUnreportedCauses(t *testing.T) {
 }
 
 func TestStatusPublishIdleWithMessageOverride(t *testing.T) {
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "create session", err)
 	hub := events.NewMemoryHub()

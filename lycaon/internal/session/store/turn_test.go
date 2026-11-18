@@ -33,9 +33,8 @@ type turnTestStore interface {
 func TestTurnAttemptRecoveryParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(*testing.T) turnTestStore
+		open func(t *testing.T) turnTestStore
 	}{
-		{name: "memory", open: func(*testing.T) turnTestStore { return NewMemory() }},
 		{name: "sql", open: openTurnSQLStore},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
@@ -80,9 +79,8 @@ func TestTurnAttemptRecoveryParity(t *testing.T) {
 func TestRecoverTurnsForSessionLeavesOtherSessionsAloneParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(*testing.T) turnTestStore
+		open func(t *testing.T) turnTestStore
 	}{
-		{name: "memory", open: func(*testing.T) turnTestStore { return NewMemory() }},
 		{name: "sql", open: openTurnSQLStore},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
@@ -137,9 +135,8 @@ func TestRecoverTurnsForSessionLeavesOtherSessionsAloneParity(t *testing.T) {
 func TestSettledModelOutputRepairsProjectionParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(*testing.T) turnTestStore
+		open func(t *testing.T) turnTestStore
 	}{
-		{name: "memory", open: func(*testing.T) turnTestStore { return NewMemory() }},
 		{name: "sql", open: openTurnSQLStore},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
@@ -188,9 +185,8 @@ func TestSettledModelOutputRepairsProjectionParity(t *testing.T) {
 func TestFinalizingTurnCompletesDuringRecoveryParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(*testing.T) turnTestStore
+		open func(t *testing.T) turnTestStore
 	}{
-		{name: "memory", open: func(*testing.T) turnTestStore { return NewMemory() }},
 		{name: "sql", open: openTurnSQLStore},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
@@ -239,7 +235,7 @@ func TestFinalizingTurnCompletesDuringRecoveryParity(t *testing.T) {
 
 func TestWorkerRetryStartsNewAttemptOnSameTurn(t *testing.T) {
 	ctx := t.Context()
-	st := NewMemory()
+	st := newSQLTestStore(t)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	first, err := st.BeginTurn(ctx, TurnStart{
@@ -259,9 +255,9 @@ func TestWorkerRetryStartsNewAttemptOnSameTurn(t *testing.T) {
 	}
 }
 
-func TestWorkerTurnRecoveryIsScopedByOriginMemory(t *testing.T) {
+func TestWorkerTurnRecoveryIsScopedByOrigin(t *testing.T) {
 	ctx := t.Context()
-	st := NewMemory()
+	st := newSQLTestStore(t)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	first, err := st.BeginTurn(ctx, TurnStart{

@@ -3,6 +3,8 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"reflect"
 	"testing"
 	"time"
@@ -18,9 +20,11 @@ import (
 )
 
 func TestRetireForProjectDeleteRemovesSessionsAndAttention(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	ctx := context.Background()
-	mem := store.NewMemory()
-	reg := project.NewMemoryRegistry()
+	mem := sessionFixture
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true, Name: "scratch"})
 	testutil.FailErr(t, "create project", err)
 
@@ -76,7 +80,7 @@ func TestRetireForProjectDeleteRemovesSessionsAndAttention(t *testing.T) {
 
 func TestRetireForProjectDeleteIgnoresWorktreeBinding(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{ProjectID: "p1"}, "p1")
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "bind worktree", mem.PutWorktreeBinding(ctx, store.WorktreeBinding{

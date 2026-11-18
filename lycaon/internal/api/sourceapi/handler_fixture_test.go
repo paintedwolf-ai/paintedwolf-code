@@ -4,19 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -49,12 +48,15 @@ func readSourceViewResponse(t *testing.T, response *httptest.ResponseRecorder, s
 }
 
 func newSourceHandlerFixture(t *testing.T, opts ...func(*Deps)) *Handler {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	group := &taskgroup.Group{}
 	deps := Deps{
-		SessionStore:    store.NewMemory(),
+
+		SessionStore:    sessionFixture,
 		Git:             &gitadmin.Handler{},
-		ProjectRegistry: project.NewMemoryRegistry(),
+		ProjectRegistry: project.NewSQLRegistry(sessionFixture.DB()),
 	}
 	for _, opt := range opts {
 		opt(&deps)

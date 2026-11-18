@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strings"
 	"testing"
 	"time"
@@ -25,14 +26,16 @@ import (
 )
 
 func TestSetTitleOverwritesAndPublishes(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	mem := store.NewMemory()
+	mem := sessionFixture
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetProjectRegistry(reg)
 	hub := events.NewMemoryHub()
@@ -77,14 +80,16 @@ func TestSetTitleOverwritesAndPublishes(t *testing.T) {
 }
 
 func TestUpdateTitleIfUnsetNoOpsAfterManualSet(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	mem := store.NewMemory()
+	mem := sessionFixture
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".*", Text: "ok"},
 	}})
@@ -113,13 +118,15 @@ func TestUpdateTitleIfUnsetNoOpsAfterManualSet(t *testing.T) {
 }
 
 func TestSetTitleWinsRaceVsIfUnset(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	mem := store.NewMemory()
+	mem := sessionFixture
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetProjectRegistry(reg)
 
@@ -205,7 +212,7 @@ func newSQLOrdFixture(t *testing.T) ordStoreFixture {
 
 func newMemoryOrdFixture(t *testing.T) ordStoreFixture {
 	t.Helper()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(context.Background(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	return ordStoreFixture{store: store, sessionID: sess.ID}

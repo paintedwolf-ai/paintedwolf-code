@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -16,7 +17,7 @@ import (
 )
 
 func TestSendWithdrawsObsoleteToolProposalAndContinuesSameLoop(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	client := &sequentialLLMClient{completions: []*modelcall.Completion{
 		{Content: "I will read the old path.", ToolCalls: []api.ToolCall{{ID: "tc-old", Name: "read", Args: map[string]any{"path": "old.go"}}}},
 		{Content: "Understood. I will use the new path."},
@@ -79,7 +80,7 @@ func TestSendWithdrawsObsoleteToolProposalAndContinuesSameLoop(t *testing.T) {
 
 func TestLoopStopsOnNoToolCalls(t *testing.T) {
 	client := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "done"}}})
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
 	deps.Context.Policy = &recordingToolPolicy{}
@@ -106,7 +107,7 @@ func TestLoopStopsOnNoToolCalls(t *testing.T) {
 
 func TestLoopWorkflowAbortAfterAssistant(t *testing.T) {
 	calls := 0
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	client := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".*", Text: "partial"}}})
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client

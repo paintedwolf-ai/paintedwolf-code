@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"strings"
 	"testing"
 	"time"
@@ -37,7 +39,7 @@ func (markdownRunLedger) WorkerLegs(context.Context, string, time.Time) ([]guida
 }
 
 type markdownRun struct {
-	store    *store.Memory
+	store    *store.SQL
 	session  *api.Session
 	deps     promptloop.PromptLoopDeps
 	outputs  []string
@@ -49,7 +51,7 @@ type markdownRun struct {
 // first model response follows whatever history the caller gives Run.
 func newMarkdownRun(t *testing.T, completions ...*modelcall.Completion) *markdownRun {
 	t.Helper()
-	r := &markdownRun{store: store.NewMemory()}
+	r := &markdownRun{store: storetest.New(t, testdbseed.DefaultProjectID)}
 	session, err := r.store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	r.session = session

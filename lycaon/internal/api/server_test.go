@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -331,14 +331,16 @@ func TestCreateSessionByProjectIDHTTP(t *testing.T) {
 }
 
 func TestCreateSessionByProjectID(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	dir := t.TempDir()
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	opened, err := project.CreateWithRoot(t.Context(), reg, dir)
 	if err != nil {
 		t.Fatalf("open project: %v", err)
 	}
 
-	store := store.NewMemory()
+	store := sessionFixture
 	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{
 		Store: store, Projects: reg,
 		Sessions: session.NewHost(store, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())}}), nil, TestAPIToken)

@@ -2,6 +2,8 @@ package history
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -16,10 +18,10 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Service, *store.Memory) {
+func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Service, *store.SQL) {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	data := store.NewMemory()
+	data := storetest.New(t, testdbseed.DefaultProjectID)
 	workspace := sessionscope.New(data)
 	m := New(data, lifecycle.New(data), workspace, limits.New(settings.DefaultSessionLimits(), workspace), nil, func(context.Context, *api.Session) bool { return false })
 	m.SetDataDir(t.TempDir())

@@ -3,6 +3,7 @@ package contractfixture
 import (
 	"context"
 	"database/sql"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api"
@@ -11,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
@@ -81,14 +81,16 @@ func (e *ErrScanCoordinator) ResolveID(ctx context.Context, path, prefix string)
 func (c *ErrScanCoordinator) SnapshotStore() *sourcesnapshot.Store { return nil }
 
 func NewInMemoryWorkersServer(t *testing.T) *api.Server {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
-	store := store.NewMemory()
+	store := sessionFixture
 	mock := llm.NewMockProvider(TestMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	workersCfg := worker.DefaultWorkersConfig()
 	queue := worker.NewInMemoryQueue(workersCfg.Poller.MaxConcurrency)
 	queue.SetWorkersConfig(workersCfg)
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	snap := &board.SnapshotBuilder{Workers: queue, Repo: repotest.NewProvider(t)}
 	return api.NewServer(RequiredTestDeps(t, api.Dependencies{Core: api.CoreDependencies{
 		Store: store, Projects: reg, Sessions: mgr}, Workflow: api.WorkflowDependencies{

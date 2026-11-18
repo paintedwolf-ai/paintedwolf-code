@@ -3,6 +3,8 @@ package session
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -28,7 +30,6 @@ import (
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -62,7 +63,7 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	m.Runner.Closeouts.RecordGroundingFriction(t.Context(), sid)
 	m.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sid, "citation", "offender", guidance.ParseCloseoutDraft("draft", citationmd.Options{}), nil)
 	m.Coordinator.Batch.AcceptSynthesis(t.Context(), sid)
-	checkpoints := sessioncheckpoint.New(t.TempDir(), t.TempDir(), sessionstore.NewMemory())
+	checkpoints := sessioncheckpoint.New(t.TempDir(), t.TempDir(), storetest.New(t, testdbseed.DefaultProjectID))
 	testutil.FailErr(t, "open checkpoint capture", m.Chats.Captures.Capture.Open(t.Context(), checkpoints, sid, "anchor"))
 	m.Promotion.SetMergeReconcilePaths(sid, []string{"a.go"})
 	calibrationSession := &api.Session{ID: sid}
@@ -378,7 +379,7 @@ agent_pool:
 	limStore, err := settings.NewLimitsStoreAt(globalLimits)
 	testutil.FailErr(t, "NewLimitsStoreAt", err)
 
-	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: &llm.Service{Policy: policy}, Limits: settings.SessionLimits{}, Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: &llm.Service{Policy: policy}, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: limStore})
 
 	sess := &api.Session{WorkspacePath: tmp}

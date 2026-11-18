@@ -2,6 +2,8 @@ package hostcontracts
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -10,7 +12,6 @@ import (
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -21,7 +22,7 @@ func TestGetWebResearchProvidersStatus(t *testing.T) {
 	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
 	cfg := webresearch.NewConfigStoreAt(filepath.Join(t.TempDir(), "web-research-config.yaml"))
 	creds := webresearch.NewCredentialStoreAt(filepath.Join(t.TempDir(), "credential-vault.age"), reg.Catalog())
-	s := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{
+	s := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{
 		Catalog:  reg.Catalog(),
 		Registry: reg,
 		Config:   cfg,
@@ -95,7 +96,7 @@ func TestTestWebResearchProviderUnknown(t *testing.T) {
 	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t))
 	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
 	s := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: sessionstore.NewMemory()}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{Catalog: reg.Catalog(), Registry: reg}}}), nil, "test-token")
+		Store: storetest.New(t, testdbseed.DefaultProjectID)}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{Catalog: reg.Catalog(), Registry: reg}}}), nil, "test-token")
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/web-research/providers/unknown/test", nil)
 	testutil.FailErr(t, "NewRequest", err)
@@ -111,7 +112,7 @@ func TestTestWebResearchProviderNotConfigured(t *testing.T) {
 	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t))
 	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
 	s := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: sessionstore.NewMemory()}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{Catalog: reg.Catalog(), Registry: reg}}}), nil, "test-token")
+		Store: storetest.New(t, testdbseed.DefaultProjectID)}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{Catalog: reg.Catalog(), Registry: reg}}}), nil, "test-token")
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/web-research/providers/serper/test", nil)
 	testutil.FailErr(t, "NewRequest", err)
@@ -136,7 +137,7 @@ func TestUpdateWebResearchProviderConfigRejectsMetadataEndpoint(t *testing.T) {
 	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
 	cfg := webresearch.NewConfigStoreAt(filepath.Join(t.TempDir(), "web-research-config.yaml"))
 	creds := webresearch.NewCredentialStoreAt(filepath.Join(t.TempDir(), "credential-vault.age"), reg.Catalog())
-	s := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{
+	s := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{
 		Catalog:  reg.Catalog(),
 		Registry: reg,
 		Config:   cfg,

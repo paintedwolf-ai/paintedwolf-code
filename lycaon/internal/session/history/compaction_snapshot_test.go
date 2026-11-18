@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"reflect"
 	"strings"
 	"testing"
@@ -38,7 +39,7 @@ func TestDelayedSynthesisPreservesNewerCoverage(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	for _, newerSummary := range []bool{false, true} {
 		t.Run(fmt.Sprint(newerSummary), func(t *testing.T) {
-			mem := store.NewMemory()
+			mem := storetest.New(t, testdbseed.DefaultProjectID)
 			sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			testutil.FailErr(t, "append sources", mem.AppendMessages(t.Context(), sess.ID,
@@ -79,7 +80,7 @@ func TestDelayedSynthesisPreservesNewerCoverage(t *testing.T) {
 }
 
 func TestDelayedSynthesisRejectsChangedCanonicalSource(t *testing.T) {
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append source", mem.AppendMessages(t.Context(), sess.ID,
@@ -121,7 +122,7 @@ func (s *compactionInterleavedStore) ReadMessageWindow(ctx context.Context, id s
 }
 
 func TestCompactionSuffixCannotMaskConcurrentPrefixEdit(t *testing.T) {
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append prefix", mem.AppendMessages(t.Context(), sess.ID,

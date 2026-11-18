@@ -2,6 +2,8 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"strings"
 	"testing"
 
@@ -37,7 +39,7 @@ func (s *stubOverlayPromoter) RebaseChildren(_ context.Context, _, _ string) ([]
 func setupHostEventManager(t *testing.T, promoter OverlayPromoter) (*Host, string) {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(context.Background(), api.CreateSessionRequest{}, "")
 	if err != nil {
 		t.Fatalf("create session: %v", err)
@@ -189,7 +191,7 @@ func TestManagerOverlayResolutionRetriesProjectPromotion(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-			st := store.NewMemory()
+			st := storetest.New(t, testdbseed.DefaultProjectID)
 			sess, err := st.Create(context.Background(), api.CreateSessionRequest{}, "project-1")
 			testutil.FailErr(t, "create session", err)
 			mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
@@ -253,7 +255,7 @@ func TestFormatOverlayHostToolContent(t *testing.T) {
 
 func TestAppendHostEventPublishesOrd(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())

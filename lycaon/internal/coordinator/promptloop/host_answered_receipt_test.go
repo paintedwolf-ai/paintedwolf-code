@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"sync"
 	"testing"
 
@@ -93,14 +94,14 @@ func (r *recordingRecorder) only(t *testing.T) (invocation.Start, invocation.Set
 }
 
 // readCallDeps wires one `read` call the mock model makes, against a ledger.
-func readCallDeps(t *testing.T, rec *recordingRecorder) (promptloop.PromptLoopDeps, *store.Memory) {
+func readCallDeps(t *testing.T, rec *recordingRecorder) (promptloop.PromptLoopDeps, *store.SQL) {
 	t.Helper()
 	reg := tools.NewStubRegistry()
 	_ = reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		t.Fatal("subsystem owner ran: the pre-invoke hook was supposed to answer this call")
 		return "", nil
 	})
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(mem)
 	deps.Context.Limits = loopTestLimits(2)
 	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{
@@ -111,7 +112,7 @@ func readCallDeps(t *testing.T, rec *recordingRecorder) (promptloop.PromptLoopDe
 	return deps, mem
 }
 
-func runReadCall(t *testing.T, deps promptloop.PromptLoopDeps, mem *store.Memory) {
+func runReadCall(t *testing.T, deps promptloop.PromptLoopDeps, mem *store.SQL) {
 	t.Helper()
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
@@ -174,7 +175,7 @@ func TestPreInvokeRefusalSettlesOnTheLedger(t *testing.T) {
 func TestOffSurfaceToolOpensNoReceipt(t *testing.T) {
 	rec := newRecordingRecorder()
 	reg := tools.NewStubRegistry()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(mem)
 	deps.Context.Limits = loopTestLimits(2)
 	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{
@@ -203,7 +204,7 @@ func TestStatedSourceVerdictReachesTheLedger(t *testing.T) {
 		}
 		return `{"ok":true,"exit_code":0}`, nil
 	})
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(mem)
 	deps.Context.Limits = loopTestLimits(2)
 	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{
@@ -229,7 +230,7 @@ func TestOwnerWithoutSourceRunSettlesNoVerdict(t *testing.T) {
 	_ = reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "file contents", nil
 	})
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(mem)
 	deps.Context.Limits = loopTestLimits(2)
 	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{

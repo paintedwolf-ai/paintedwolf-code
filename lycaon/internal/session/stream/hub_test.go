@@ -3,11 +3,12 @@ package stream
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -15,7 +16,7 @@ import (
 // Deferred projection persists after the turn is canceled.
 func TestScheduleLiveProjectionSurvivesCallerContextCancellation(t *testing.T) {
 	mgr := New(nil)
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	ctx := context.Background()
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)

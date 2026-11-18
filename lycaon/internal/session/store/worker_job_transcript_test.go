@@ -22,8 +22,8 @@ type workerTranscriptStore interface {
 	GetTranscriptPage(context.Context, string, api.TranscriptPageQuery) (api.SessionTranscriptPage, error)
 }
 
-func TestMemoryWorkerJobTranscriptPagination(t *testing.T) {
-	store := NewMemory()
+func TestWorkerJobTranscriptPagination(t *testing.T) {
+	store := newSQLTestStore(t)
 	session, err := store.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	assertWorkerJobTranscriptPagination(t, store, session.ID)

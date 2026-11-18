@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strconv"
 	"strings"
 	"testing"
@@ -288,7 +289,7 @@ const messageStorageSecret = "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
 
 func TestUpdateMessageReappliesStorageRedaction(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.Runner.Transcript.SetRedactor(redactMessageStorageFixture)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -343,7 +344,7 @@ func redactMessageStorageFixture(_ context.Context, msg api.Message) (api.Messag
 // A phase the coordinator enters with its own tool call is taught on its next
 // model call, even while another kick waits for the next turn start.
 func TestPhaseGuidanceIsDeliveredOnTheNextModelCall(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	const phaseGuidance = "claims phase fixture"

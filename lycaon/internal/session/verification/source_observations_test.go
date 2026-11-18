@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"os"
 	"path/filepath"
 	"testing"
@@ -52,7 +54,7 @@ func TestSourceObservationsIntentBoundaryUsesUserTimestamp(t *testing.T) {
 
 func TestSourceObservationsTrackExactContentAcrossTime(t *testing.T) {
 	ctx := t.Context()
-	sessions := store.NewMemory()
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
 	testutil.FailErr(t, "create session", err)
 	sess.ProjectID, sess.WorkspacePath = "project", t.TempDir()
@@ -137,7 +139,7 @@ func (unavailableCheckRecords) ReadAll(context.Context, string, string, string, 
 }
 
 func TestSourceObservationsReportUnavailableRecords(t *testing.T) {
-	sessions := store.NewMemory()
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := sessions.Create(t.Context(), api.CreateSessionRequest{}, "")
 	testutil.FailErr(t, "create session", err)
 	m := New(sessions, scope.New(sessions), nil)
@@ -154,7 +156,7 @@ func TestSourceObservationsReportUnavailableRecords(t *testing.T) {
 
 func TestObservedDependencyAndIncompleteAttributionInvalidateVerificationChecks(t *testing.T) {
 	ctx := t.Context()
-	sessions := store.NewMemory()
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
 	testutil.FailErr(t, "create session", err)
 	sess.ProjectID, sess.WorkspacePath = "project", t.TempDir()

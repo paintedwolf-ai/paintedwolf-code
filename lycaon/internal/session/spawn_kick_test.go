@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strings"
 	"testing"
@@ -34,7 +35,7 @@ func (s *stubKickWorkerContext) BuildWorkerPromptContext(_ context.Context, _ st
 
 func TestSpawnChildInjectsWorkerKick(t *testing.T) {
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
@@ -69,7 +70,7 @@ func TestSpawnChildInjectsWorkerKick(t *testing.T) {
 
 func TestSpawnChildInjectsImplementModeWorkerKick(t *testing.T) {
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
@@ -104,7 +105,7 @@ func TestSpawnChildInjectsImplementModeWorkerKick(t *testing.T) {
 }
 
 func TestSpawnChildMissingKickTemplateSoftFails(t *testing.T) {
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	// No SetPromptEngine — worker kick queue is a no-op.
 	ctx := context.Background()
@@ -173,7 +174,7 @@ func TestListToolsForPromptCoordinatorCeiling(t *testing.T) {
 }
 
 func TestTranscriptPageProjectsToolStepWithoutChangingModelHistory(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
@@ -195,7 +196,7 @@ func TestTranscriptPageProjectsToolStepWithoutChangingModelHistory(t *testing.T)
 
 func TestSessionUntrustedContentFreshIsClean(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create", err)
 	if store.SessionUntrustedContent(sess.ID) {
@@ -210,7 +211,7 @@ func TestSessionUntrustedContentFreshIsClean(t *testing.T) {
 
 func TestSessionUntrustedContentWebAndMCP(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create", err)
 
@@ -258,7 +259,7 @@ func TestSessionUntrustedContentWebAndMCP(t *testing.T) {
 
 func TestSessionUntrustedContentSpawnInheritance(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
@@ -289,7 +290,7 @@ func TestSessionUntrustedContentSpawnInheritance(t *testing.T) {
 
 func TestMergeWorkerUntrustedIntoParent(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
@@ -332,7 +333,7 @@ func TestMergeWorkerUntrustedIntoParent(t *testing.T) {
 
 func TestMergeWorkerUntrustedIntoParentUsesChildEvidenceNotAgentName(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)

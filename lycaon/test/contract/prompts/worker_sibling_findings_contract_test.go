@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ func TestRootSessionKeyedFindingsAppendRecentParityContract(t *testing.T) {
 	dir := t.TempDir()
 	overlay := filepath.Join(dir, settingsoverlay.DirName(), "overlays", "job-a")
 
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create parent", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer", Prompt: "leg"})
@@ -76,7 +77,7 @@ func TestWorkerChildDelegationProjectDirInvariantContract(t *testing.T) {
 	dir := t.TempDir()
 	overlay := filepath.Join(dir, settingsoverlay.DirName(), "overlays", "job-write")
 
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create parent", err)
 

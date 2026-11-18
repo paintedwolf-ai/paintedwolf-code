@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"sync"
 	"testing"
 
@@ -31,13 +32,13 @@ import (
 
 // receiptRecorder records admitted receipt ids. Host turns mint their own operation id.
 type receiptRecorder struct {
-	*store.Memory
+	*store.SQL
 	mu  sync.Mutex
 	ids []string
 }
 
 func (r *receiptRecorder) PutPromptSubmission(ctx context.Context, in store.PromptSubmission) (*store.PromptSubmission, bool, error) {
-	row, created, err := r.Memory.PutPromptSubmission(ctx, in)
+	row, created, err := r.SQL.PutPromptSubmission(ctx, in)
 	if err == nil && created {
 		r.mu.Lock()
 		r.ids = append(r.ids, row.ID)
@@ -54,7 +55,7 @@ func (r *receiptRecorder) admitted() []string {
 
 func newReceiptTestManager(t *testing.T) (*Host, *receiptRecorder) {
 	t.Helper()
-	recorder := &receiptRecorder{Memory: store.NewMemory()}
+	recorder := &receiptRecorder{SQL: storetest.New(t, testdbseed.DefaultProjectID)}
 	registry := tools.NewStubRegistry()
 	mgr := NewHost(recorder, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -270,7 +271,7 @@ func TestProgressMissingSkipsAfterRejectedDispatchTurn(t *testing.T) {
 
 func TestProgressMissingSkipsWorkerChild(t *testing.T) {
 	mgr := newPostHookManager(t)
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	ctx := t.Context()
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "proj-1")
 	testutil.FailErr(t, "Create parent", err)
@@ -294,7 +295,7 @@ func TestProgressMissingSkipsWorkerChild(t *testing.T) {
 
 func TestProgressMissingSkipsSpecWorkflowArtifacts(t *testing.T) {
 	mgr := newPostHookManager(t)
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureSpec}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
 	mgr.Coordinator.Context.Sessions = mem
@@ -309,7 +310,7 @@ func TestProgressMissingSkipsSpecWorkflowArtifacts(t *testing.T) {
 
 func TestWorkflowPhaseExitNudgesAfterUnrelatedToolArc(t *testing.T) {
 	mgr := newPostHookManager(t)
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
 	mgr.Coordinator.Context.Sessions = mem
@@ -334,7 +335,7 @@ func TestWorkflowPhaseExitNudgesAfterUnrelatedToolArc(t *testing.T) {
 
 func TestWorkflowPhaseExitAllowsAnotherAsk(t *testing.T) {
 	mgr := newPostHookManager(t)
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
 	mgr.Coordinator.Context.Sessions = mem

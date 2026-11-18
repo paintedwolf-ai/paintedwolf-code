@@ -17,9 +17,8 @@ type turnLoadTestStore interface {
 
 var turnLoadStores = []struct {
 	name string
-	open func(*testing.T) turnLoadTestStore
+	open func(t *testing.T) turnLoadTestStore
 }{
-	{name: "memory", open: func(*testing.T) turnLoadTestStore { return NewMemory() }},
 	{name: "sql", open: func(t *testing.T) turnLoadTestStore { return openTurnSQLStore(t).(turnLoadTestStore) }},
 }
 

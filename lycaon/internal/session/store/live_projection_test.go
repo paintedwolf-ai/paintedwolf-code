@@ -101,8 +101,8 @@ func TestSQLPatchLiveProjectionPersistsContentAndToolCalls(t *testing.T) {
 	}
 }
 
-func TestMemoryPatchLiveProjectionDoesNotAdvanceSeq(t *testing.T) {
-	st := NewMemory()
+func TestPatchLiveProjectionDoesNotAdvanceSeq(t *testing.T) {
+	st := newSQLTestStore(t)
 	ctx := context.Background()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)

@@ -2,6 +2,8 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/skills"
@@ -25,7 +26,7 @@ import (
 
 func newSkillsTestManager(t *testing.T) *Host {
 	t.Helper()
-	return NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	return NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 }
 
 func writeSkill(t *testing.T, root, rel, name, desc string) {
@@ -203,15 +204,17 @@ func TestEffectiveSkillsShadowsStock(t *testing.T) {
 }
 
 func TestEffectiveSkillsNoTaint(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	ctx := context.Background()
 	root := t.TempDir()
 	writeSkill(t, root, ".agents/skills", "release-check", "Release checklist.")
 
-	mem := store.NewMemory()
+	mem := sessionFixture
 	m := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "cs.yaml"))
 	testutil.FailErr(t, "surfaces", err)
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(ctx, reg, root)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	m.SetProjectRegistry(reg)

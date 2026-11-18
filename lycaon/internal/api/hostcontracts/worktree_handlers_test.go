@@ -3,6 +3,7 @@ package hostcontracts
 import (
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -197,13 +197,15 @@ func TestGitWorktreeBindLeavesConfigUntouched(t *testing.T) {
 }
 
 func TestGitWorktreeBindRollsBack(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	dir := contractfixture.InitCommittedRepoDir(t)
-	mem := store.NewMemory()
+	mem := sessionFixture
 	failing := &contractfixture.PutFailStore{Store: mem, FailPut: true}
 	mock := llm.NewMockProvider(contractfixture.TestMockConfig(t))
 	mgr := session.NewHost(failing, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	contractfixture.WireTestBindingRegistry(t)
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "open", err)
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{

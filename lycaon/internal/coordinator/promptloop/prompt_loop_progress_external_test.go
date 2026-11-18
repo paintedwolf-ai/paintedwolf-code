@@ -2,6 +2,7 @@ package promptloop_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strings"
 	"testing"
 
@@ -18,7 +19,7 @@ import (
 )
 
 func TestStreamProgressBuffersContentUntilSettle(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(st)
 	var live, updates int
 	deps.Projection.Streams = &observedMessageStreams{MessageStreams: deps.Projection.Streams, project: func(ctx context.Context, sessionID string, msg api.Message) error {
@@ -57,7 +58,7 @@ func TestStreamProgressBuffersContentUntilSettle(t *testing.T) {
 }
 
 func TestStreamProgressBuffersAllToolCalls(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(st)
 	var sawCommand bool
 	deps.Projection.Streams = &observedMessageStreams{MessageStreams: deps.Projection.Streams, project: func(ctx context.Context, sessionID string, msg api.Message) error {
@@ -102,7 +103,7 @@ func TestStreamProgressBuffersAllToolCalls(t *testing.T) {
 }
 
 func TestLoopPublishesWorkerProgress(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	var published []publishedProgress
 	var lastCtx *api.WorkerContextUsage
 	deps := promptloop.StoreDeps(store)
@@ -174,7 +175,7 @@ func TestLoopPublishesAnEdgePerSettledToolCall(t *testing.T) {
 		}},
 		{Content: "done"},
 	}}
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	var published []publishedProgress
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client

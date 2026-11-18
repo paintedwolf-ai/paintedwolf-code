@@ -29,7 +29,7 @@ func summarizeAnchorJSON(anchors []map[string]any) string {
 
 func TestSummarizeAnchorHandlesPatched(t *testing.T) {
 	dir := t.TempDir()
-	store := NewMemory()
+	store := newSQLTestStore(t, "p1")
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "p1")
 	testutil.FailErr(t, "Create", err)
@@ -67,9 +67,9 @@ func TestSummarizeAnchorHandlesPatched(t *testing.T) {
 	}
 }
 
-func TestSummarizeAnchorResolvesInLedger_memory(t *testing.T) {
+func TestSummarizeAnchorResolvesInLedgerWithFixture(t *testing.T) {
 	dir := t.TempDir()
-	store := NewMemory()
+	store := newSQLTestStore(t, "p1")
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "p1")
 	testutil.FailErr(t, "Create", err)
@@ -121,7 +121,7 @@ func TestSummarizeAnchorResolvesInLedger_sql(t *testing.T) {
 
 func TestSummarizeNoAnchorsMintsNoneAtCommit(t *testing.T) {
 	dir := t.TempDir()
-	store := NewMemory()
+	store := newSQLTestStore(t, "p1")
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "p1")
 	testutil.FailErr(t, "Create", err)

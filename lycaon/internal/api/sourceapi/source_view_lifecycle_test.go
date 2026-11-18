@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,7 +15,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -61,7 +62,7 @@ func TestSourceViewHandlesTheHostDoesNotRetainAreNotFound(t *testing.T) {
 }
 
 func TestSourceViewsEndWithTheirChat(t *testing.T) {
-	sessions := store.NewMemory()
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	server := newSourceHandlerFixture(t, func(deps *Deps) { deps.SessionStore = sessions })
 	p := sourceViewFixtureProject(t, server)
 	chat, err := sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)

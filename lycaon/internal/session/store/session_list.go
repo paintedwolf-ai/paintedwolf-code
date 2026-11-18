@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/timelayout"
-	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -206,87 +205,6 @@ func scanProjectSummaryRows(rows *sql.Rows) ([]api.SessionSummary, error) {
 		return nil, err
 	}
 	return out, nil
-}
-
-// ListProjectSummaries matches SQL paging in memory.
-func (s *memorySessionViews) ListProjectSummaries(ctx context.Context, q SummaryQuery) (SummaryPage, error) {
-	return listProjectSummariesMemory(ctx, s.core, q)
-}
-
-func listProjectSummariesMemory(ctx context.Context, s *memoryCore, q SummaryQuery) (SummaryPage, error) {
-	if err := ctx.Err(); err != nil {
-		return SummaryPage{}, err
-	}
-	matched := filterMemoryProjectSummaries(s, q)
-	sort.SliceStable(matched, func(i, j int) bool {
-		comparison := compareSummary(matched[i], summaryCursor(matched[j], q.Sort), q.Sort)
-		if q.Order != api.SessionListOrderAsc {
-			return comparison > 0
-		}
-		return comparison < 0
-	})
-
-	total := len(matched)
-	start := 0
-	if q.After != nil {
-		for start < len(matched) {
-			comparison := compareSummary(matched[start], *q.After, q.Sort)
-			if q.Order == api.SessionListOrderAsc && comparison > 0 ||
-				q.Order != api.SessionListOrderAsc && comparison < 0 {
-				break
-			}
-			start++
-		}
-	}
-	end := start + q.effectiveLimit()
-	if end > total {
-		end = total
-	}
-	page := SummaryPage{Sessions: matched[start:end], Total: total}
-	if end < total && len(page.Sessions) > 0 {
-		cursor := summaryCursor(page.Sessions[len(page.Sessions)-1], q.Sort)
-		page.Next = &cursor
-	}
-	return page, nil
-}
-
-func filterMemoryProjectSummaries(s *memoryCore, q SummaryQuery) []api.SessionSummary {
-	projectID := strings.TrimSpace(q.ProjectID)
-	needle := strings.ToLower(strings.TrimSpace(q.TitleQuery))
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	matched := []api.SessionSummary{}
-	for id, sess := range s.sessions {
-		if strings.TrimSpace(sess.ProjectID) != projectID {
-			continue
-		}
-		if strings.TrimSpace(sess.ParentSessionID) != "" {
-			continue
-		}
-		if (sess.ArchivedAt != nil) != q.Archived {
-			continue
-		}
-		if q.Pinned != nil && (sess.PinRank != nil) != *q.Pinned {
-			continue
-		}
-		if needle != "" && !strings.Contains(strings.ToLower(sess.Title), needle) {
-			continue
-		}
-		matched = append(matched, api.SessionSummary{
-			ID:            sess.ID,
-			ProjectID:     sess.ProjectID,
-			OwnerPersonID: sess.OwnerPersonID,
-			Title:         sess.Title,
-			Posture:       sess.Posture,
-			Status:        sess.Status,
-			ArchivedAt:    sess.ArchivedAt,
-			PinRank:       sess.PinRank,
-			MessageCount:  len(s.messages[id]),
-			CreatedAt:     sess.CreatedAt,
-			ActivityAt:    sess.ActivityAt,
-		})
-	}
-	return matched
 }
 
 func summaryCursor(row api.SessionSummary, sortBy api.SessionListSort) SummaryCursor {

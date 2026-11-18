@@ -1,6 +1,8 @@
 package api
 
 import (
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -8,7 +10,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/llm"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 func TestHarnessProviderProbeRequiresHarnessAuthenticationAndLiveOptIn(t *testing.T) {
@@ -21,7 +22,7 @@ func TestHarnessProviderProbeRequiresHarnessAuthenticationAndLiveOptIn(t *testin
 				} else {
 					t.Setenv(configdir.EnvHarness, "")
 				}
-				server := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: sessionstore.NewMemory()}}), nil, TestAPIToken)
+				server := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}}), nil, TestAPIToken)
 				for _, test := range []struct {
 					auth, body string
 					want       int

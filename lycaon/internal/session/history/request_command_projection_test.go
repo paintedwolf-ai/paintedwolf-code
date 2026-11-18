@@ -2,6 +2,8 @@ package history
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -72,7 +73,7 @@ func TestCommandProjectionRequiresCompleteMatchingReceipts(t *testing.T) {
 func TestFittingLargeCompletedSourceLeavesRoomForContinuation(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	rows := largeRecordedCommand()
-	svc := &Service{store: store.NewMemory(), recallAvailable: func(context.Context, *api.Session) bool { return true }}
+	svc := &Service{store: storetest.New(t, testdbseed.DefaultProjectID), recallAvailable: func(context.Context, *api.Session) bool { return true }}
 	cfg := compaction.DefaultCompactionConfig()
 	cfg.ModelContextWindow = 8192
 	cfg.HardCeilingTokens = 6000

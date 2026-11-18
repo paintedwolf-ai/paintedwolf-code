@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/documentcore"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"sync"
 	"testing"
@@ -12,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -28,7 +28,7 @@ func TestBatchRejectionsEscalateOnlyAcrossResponses(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctx := t.Context()
 			guard := loopguard.NewMemoryDoomLoopGuard()
-			messages := store.NewMemory()
+			messages := storetest.New(t, testdbseed.DefaultProjectID)
 			sess, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			client := &varyingArgsToolClient{batchSize: 5, stopAfter: 3}
@@ -70,7 +70,7 @@ func TestBatchRejectionsEscalateOnlyAcrossResponses(t *testing.T) {
 func TestOfferedSchemaResolvesEarlierLoadingRejections(t *testing.T) {
 	ctx := t.Context()
 	guard := loopguard.NewMemoryDoomLoopGuard()
-	messages := store.NewMemory()
+	messages := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	args := map[string]any{"path": "portrait.svg", "old_string": "a", "new_string": "b"}
@@ -107,7 +107,7 @@ func TestToolPreflightResolvesOnlyItsFrozenReadPrerequisite(t *testing.T) {
 		t.Run(document, func(t *testing.T) {
 			ctx := t.Context()
 			guard := loopguard.NewMemoryDoomLoopGuard()
-			messages := store.NewMemory()
+			messages := storetest.New(t, testdbseed.DefaultProjectID)
 			sess, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create chat", err)
 			args := map[string]any{"path": "a.txt", "old_string": "base", "new_string": "changed"}

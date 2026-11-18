@@ -3,6 +3,8 @@ package contractfixture
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -13,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extensionstate"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
@@ -38,6 +39,8 @@ func ExtensionRevision(t *testing.T, owner *extensionstate.Owner, projectDir str
 }
 
 func ExtensionsScopeServer(t *testing.T) (*hostapi.Server, project.Registry) {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
@@ -45,8 +48,8 @@ func ExtensionsScopeServer(t *testing.T) (*hostapi.Server, project.Registry) {
 	svc, err := settings.NewService()
 	testutil.FailErr(t, "settings.NewService", err)
 
-	reg := project.NewMemoryRegistry()
-	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store.NewMemory(), Projects: reg, Settings: svc}, Storage: hostapi.StorageDependencies{ModuleRoot: configlayout.FindModuleRoot()}}
+	reg := project.NewSQLRegistry(sessionFixture.DB())
+	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionFixture, Projects: reg, Settings: svc}, Storage: hostapi.StorageDependencies{ModuleRoot: configlayout.FindModuleRoot()}}
 	WithExtensionOwner(t)(&deps)
 	return hostapi.NewServer(RequiredTestDeps(t, deps), nil, hostapi.TestAPIToken), reg
 }
@@ -64,7 +67,7 @@ func NewContributionHTTPTestServer(t *testing.T) *hostapi.Server {
 func NewExtensionsServer(t *testing.T, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
 	return NewServerForTest(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: store.NewMemory()}, Storage: hostapi.StorageDependencies{ModuleRoot: configlayout.FindModuleRoot()}}, append([]TestDeps{WithExtensionOwner(t)}, opts...)...)
+		Store: storetest.New(t, testdbseed.DefaultProjectID)}, Storage: hostapi.StorageDependencies{ModuleRoot: configlayout.FindModuleRoot()}}, append([]TestDeps{WithExtensionOwner(t)}, opts...)...)
 }
 
 func WithExtensionOwner(t *testing.T) TestDeps {

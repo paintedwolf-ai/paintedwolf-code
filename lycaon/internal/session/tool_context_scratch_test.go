@@ -1,6 +1,7 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,7 +28,7 @@ import (
 
 type scratchFixture struct {
 	mgr    *Host
-	store  *store.Memory
+	store  *store.SQL
 	root   *api.Session
 	worker *api.Session
 	dir    func(sessionID string) string
@@ -37,7 +38,7 @@ func newScratchFixture(t *testing.T) scratchFixture {
 	t.Helper()
 	ctx := t.Context()
 	stateRoot := t.TempDir()
-	sessions := store.NewMemory()
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetScratchFolders(scratch.New(stateRoot))
 	root, err := sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -149,7 +150,7 @@ func userTurnMessage(role api.MessageRole, visibility api.MessageVisibility) api
 // Writes and client turn lenses share the permanent opener ordinal across host continuations.
 func TestToolContextUserTurnTracksSessionCurrentTurn(t *testing.T) {
 	ctx := t.Context()
-	sessions := store.NewMemory()
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 
 	sess, err := sessions.Create(ctx, api.CreateSessionRequest{
@@ -323,7 +324,7 @@ func TestTurnClockRestoresFromTheStoreAfterRestart(t *testing.T) {
 
 func TestEvaluateVerdictGroundingHostAssemblesMissingCitations(t *testing.T) {
 	ctx := t.Context()
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create parent", err)
 	child, err := st.CreateChild(ctx, parent, api.SpawnChildRequest{
@@ -368,7 +369,7 @@ func TestEvaluateVerdictGroundingHostAssemblesMissingCitations(t *testing.T) {
 
 func TestEvaluateVerdictGroundingRejectsInventedCitation(t *testing.T) {
 	ctx := t.Context()
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create parent", err)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())

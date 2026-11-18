@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -20,20 +21,21 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestSSEEndToEnd(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	hub := events.NewMemoryHub()
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	ctx := context.Background()
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 
-	store := store.NewMemory()
+	store := sessionFixture
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
 
@@ -84,11 +86,13 @@ func TestSSEEndToEnd(t *testing.T) {
 }
 
 func TestSSEDeviceWideSubscription(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	hub := events.NewMemoryHub()
-	sessionStore := store.NewMemory()
+	sessionStore := sessionFixture
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store:    sessionStore,
-		Projects: project.NewMemoryRegistry(),
+		Projects: project.NewSQLRegistry(sessionFixture.DB()),
 		Sessions: session.NewHost(sessionStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{
 		Events: hub}}), nil, hostapi.TestAPIToken)
 
@@ -120,9 +124,12 @@ func TestSSEDeviceWideSubscription(t *testing.T) {
 }
 
 func TestSSERejectsEmptyProjectQuery(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store:    store.NewMemory(),
-		Projects: project.NewMemoryRegistry()}, Host: hostapi.HostDependencies{
+
+		Store:    sessionFixture,
+		Projects: project.NewSQLRegistry(sessionFixture.DB())}, Host: hostapi.HostDependencies{
 		Events: events.NewMemoryHub()}}), nil, hostapi.TestAPIToken)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/events?project_id=", nil)
@@ -136,9 +143,12 @@ func TestSSERejectsEmptyProjectQuery(t *testing.T) {
 }
 
 func TestSSEStreamEndReleasesTheClientsLeases(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	released := make(chan string, 1)
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: store.NewMemory(), Projects: project.NewMemoryRegistry()}, Host: hostapi.HostDependencies{Events: events.NewMemoryHub()}, Source: hostapi.SourceDependencies{
+
+		Store: sessionFixture, Projects: project.NewSQLRegistry(sessionFixture.DB())}, Host: hostapi.HostDependencies{Events: events.NewMemoryHub()}, Source: hostapi.SourceDependencies{
 		EditorClients: editordoc.NewClientLiveness(time.Millisecond, func(clientID string) { released <- clientID })}}), nil, hostapi.TestAPIToken)
 
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
@@ -172,9 +182,12 @@ func TestSSEStreamEndReleasesTheClientsLeases(t *testing.T) {
 }
 
 func TestSSERejectsEmptyClientQuery(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store:    store.NewMemory(),
-		Projects: project.NewMemoryRegistry()}, Host: hostapi.HostDependencies{
+
+		Store:    sessionFixture,
+		Projects: project.NewSQLRegistry(sessionFixture.DB())}, Host: hostapi.HostDependencies{
 		Events: events.NewMemoryHub()}}), nil, hostapi.TestAPIToken)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/events?client_id=", nil)
@@ -188,8 +201,11 @@ func TestSSERejectsEmptyClientQuery(t *testing.T) {
 }
 
 func TestSSEReplayErrorCarriesRecoveryBoundary(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	hub := events.NewMemoryHub()
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store.NewMemory(), Projects: project.NewMemoryRegistry()}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
+		Store: sessionFixture, Projects: project.NewSQLRegistry(sessionFixture.DB())}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/events?after=invalid", nil)
 	w := httptest.NewRecorder()
 
@@ -210,16 +226,18 @@ func TestSSEReplayErrorCarriesRecoveryBoundary(t *testing.T) {
 }
 
 func TestSSEHeartbeat(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	restore := events.SetHeartbeatIntervalForTests(50 * time.Millisecond)
 	defer restore()
 
 	hub := events.NewMemoryHub()
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	ctx := context.Background()
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 
-	store := store.NewMemory()
+	store := sessionFixture
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
 

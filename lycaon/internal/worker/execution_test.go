@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -14,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -49,7 +49,7 @@ func wireExecutionCloseoutPolicy(t *testing.T, manager *session.Host) {
 
 func newExecutionStack(t *testing.T) (*session.Host, *InMemoryQueue, *LocalWorkerExecutor, *LocalWorkerPoller) {
 	t.Helper()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wireExecutionCloseoutPolicy(t, mgr)
 	cfg := DefaultWorkersConfig()

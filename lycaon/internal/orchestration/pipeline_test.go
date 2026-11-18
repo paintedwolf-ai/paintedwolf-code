@@ -2,6 +2,7 @@ package orchestration_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"slices"
 	"sync"
 	"testing"
@@ -40,7 +41,7 @@ var _ orchestration.Orchestrator = (*orchestration.OrchestratorImpl)(nil)
 
 func TestPipelineTopologyLegAgentTypes(t *testing.T) {
 	ctx := context.Background()
-	sessStore := store.NewMemory()
+	sessStore := storetest.New(t, testdbseed.DefaultProjectID)
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 
 	reg := orchestration.NewMemoryAgentRegistryForTest()
@@ -94,7 +95,7 @@ func TestPipelineTopologyLegAgentTypes(t *testing.T) {
 
 func TestPipelineUnknownProfileFailsRun(t *testing.T) {
 	ctx := context.Background()
-	sessStore := store.NewMemory()
+	sessStore := storetest.New(t, testdbseed.DefaultProjectID)
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 
 	reg := orchestration.NewMemoryAgentRegistryForTest()
@@ -127,12 +128,12 @@ func TestPipelineUnknownProfileFailsRun(t *testing.T) {
 	}
 }
 
-func newPipelineIntegrationOrchestrator(t *testing.T) (*orchestration.OrchestratorImpl, *recordingWorkers, *session.Host, *store.Memory) {
+func newPipelineIntegrationOrchestrator(t *testing.T) (*orchestration.OrchestratorImpl, *recordingWorkers, *session.Host, *store.SQL) {
 	t.Helper()
 	mockCfg, err := llm.LoadMockConfig()
 	testutil.FailErr(t, "llm.LoadMockConfig failed", err)
 
-	sessStore := store.NewMemory()
+	sessStore := storetest.New(t, testdbseed.DefaultProjectID)
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	rec := &recordingWorkers{
 		TopologyWorkers: orchestration.NewMemoryTopologyWorkers(),

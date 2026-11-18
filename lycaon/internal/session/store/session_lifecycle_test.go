@@ -13,8 +13,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestMemoryStoreCreateGet(t *testing.T) {
-	store := NewMemory()
+func TestStoreCreateGet(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{
@@ -41,8 +41,8 @@ func TestMemoryStoreCreateGet(t *testing.T) {
 	}
 }
 
-func TestMemoryStoreCreateChildPersistsAgentType(t *testing.T) {
-	store := NewMemory()
+func TestStoreCreateChildPersistsAgentType(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := t.Context()
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
@@ -61,16 +61,16 @@ func TestMemoryStoreCreateChildPersistsAgentType(t *testing.T) {
 	}
 }
 
-func TestMemoryStoreGetNotFound(t *testing.T) {
-	store := NewMemory()
+func TestStoreGetNotFound(t *testing.T) {
+	store := newSQLTestStore(t)
 	_, err := store.Get(context.Background(), "missing")
 	if err == nil {
 		t.Fatal("expected error")
 	}
 }
 
-func TestMemoryStoreList(t *testing.T) {
-	store := NewMemory()
+func TestStoreList(t *testing.T) {
+	store := newSQLTestStore(t, "project-0", "project-1")
 	ctx := context.Background()
 
 	for i := 0; i < 2; i++ {
@@ -91,8 +91,8 @@ func TestMemoryStoreList(t *testing.T) {
 	}
 }
 
-func TestMemoryStoreDelete(t *testing.T) {
-	store := NewMemory()
+func TestStoreDelete(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{
@@ -110,16 +110,16 @@ func TestMemoryStoreDelete(t *testing.T) {
 	}
 }
 
-func TestMemoryStoreDeleteNotFound(t *testing.T) {
-	store := NewMemory()
+func TestStoreDeleteNotFound(t *testing.T) {
+	store := newSQLTestStore(t)
 	if err := store.Delete(context.Background(), "missing"); err == nil {
 		t.Fatal("expected error")
 	}
 }
 
-func TestMemoryStoreDeleteRemovesChildTree(t *testing.T) {
+func TestStoreDeleteRemovesChildTree(t *testing.T) {
 	ctx := context.Background()
-	mem := NewMemory()
+	mem := newSQLTestStore(t)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
@@ -133,7 +133,7 @@ func TestMemoryStoreDeleteRemovesChildTree(t *testing.T) {
 }
 
 func TestConcurrentSessionCreation(t *testing.T) {
-	store := NewMemory()
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 	var wg sync.WaitGroup
 
@@ -143,7 +143,7 @@ func TestConcurrentSessionCreation(t *testing.T) {
 			defer wg.Done()
 			_, err := store.Create(ctx, api.CreateSessionRequest{
 				Posture: api.SessionPostureBuild,
-			}, fmt.Sprintf("project-%d", idx))
+			}, testdbseed.DefaultProjectID)
 			if err != nil {
 				t.Errorf("create session %d: %v", idx, err)
 			}
@@ -161,7 +161,7 @@ func TestConcurrentSessionCreation(t *testing.T) {
 }
 
 func TestAppendMessagesRejectsExistingID(t *testing.T) {
-	mem := NewMemory()
+	mem := newSQLTestStore(t)
 	ctx := context.Background()
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create", err)
@@ -174,7 +174,7 @@ func TestAppendMessagesRejectsExistingID(t *testing.T) {
 }
 
 func TestContextCancellation(t *testing.T) {
-	store := NewMemory()
+	store := newSQLTestStore(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

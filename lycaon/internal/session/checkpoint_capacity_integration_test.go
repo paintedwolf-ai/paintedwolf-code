@@ -5,6 +5,7 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/profiles"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -67,7 +67,7 @@ postures:
 		testutil.FailErr(t, "write file", err)
 	}
 
-	mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.Profiles.SetPostureRegistry(reg)
 	if err := mgr.Profiles.WarmPostureOverlay(dir); err != nil {
 		testutil.FailErr(t, "mgr.Profiles.WarmPostureOverlay failed", err)
@@ -101,7 +101,7 @@ postures:
 `), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Profiles.SetPostureRegistry(reg)
 	if err := mgr.Profiles.WarmPostureOverlay(dir); err == nil {
 		t.Fatal("expected unknown overlay posture error")
@@ -122,7 +122,7 @@ func (s *feedbackReadFailureStore) GetMessage(ctx context.Context, sessionID, me
 }
 
 func TestPolicyFeedbackRetriesRenderingAndPersistenceWithoutLoss(t *testing.T) {
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	storage := &feedbackReadFailureStore{Store: mem}
 	mgr := NewHost(storage, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -186,7 +186,7 @@ func TestPolicyAdvisoryRoutingAtEveryHostBoundary(t *testing.T) {
 }
 
 func TestPolicyAdvisoryPersistenceUsesScreenedBytesAndAcknowledgesOnce(t *testing.T) {
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	renderer := advisoryTestManager(t).Coordinator.Feedback.Renderer()
 	mgr.SetOARPipeline(nil, renderer)

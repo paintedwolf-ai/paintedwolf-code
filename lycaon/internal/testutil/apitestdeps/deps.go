@@ -5,6 +5,7 @@ package apitestdeps
 import (
 	"context"
 	"errors"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"path/filepath"
 	"testing"
 	"time"
@@ -47,7 +48,6 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/session"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -137,7 +137,7 @@ func Fill(t *testing.T, d *Deps) {
 		d.Database = testdbfixture.Open(t, "api-deps.db")
 	}
 	if d.Store == nil {
-		d.Store = sessionstore.NewMemory()
+		d.Store = sessionstore.NewSQL(d.Database)
 	}
 	if d.Projects == nil {
 		// Source ledger rows reference the project table in the same database.

@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +22,7 @@ import (
 )
 
 func TestMessageCarriesVersionCount(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
@@ -50,7 +51,7 @@ func TestMessageCarriesVersionCount(t *testing.T) {
 }
 
 func TestDraftVersionsEndpointOrder(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
@@ -71,7 +72,7 @@ func TestDraftVersionsEndpointOrder(t *testing.T) {
 }
 
 func TestDraftNeverEmitsDeleteOpForCoordinatorDraftSlot(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())

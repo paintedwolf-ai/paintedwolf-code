@@ -2,6 +2,7 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -34,7 +34,7 @@ func TestMergeReconcilePathsAllowCoordinatorWrite(t *testing.T) {
 	}}
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, profiles)
 
-	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	mgr.Promotion.SetMergeReconcilePaths("sess-1", []string{"src/main.go"})
 	boundary.SetMergeReconcileAllowlister(mgr.Promotion)
 
@@ -52,7 +52,7 @@ func TestMergeReconcilePathsNotRegisteredForInvestigateProductWrite(t *testing.T
 	src := filepath.Join(root, "src", "foo.go")
 	testutil.FailErr(t, "MkdirAll", os.MkdirAll(filepath.Dir(src), 0o755))
 
-	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	if mgr.Promotion.Allowed("sess-investigate", "src/foo.go") {
 		t.Fatal("investigate product path must not be reconcile-allowed without SetMergeReconcilePaths")
 	}

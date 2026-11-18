@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +20,7 @@ import (
 
 func TestLoopContinuesAfterTaskEnqueue(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if err := store.AppendMessages(ctx, sess.ID, api.Message{
@@ -78,7 +79,7 @@ func TestLoopContinuesAfterTaskEnqueue(t *testing.T) {
 
 func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
@@ -143,7 +144,7 @@ func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 
 func TestLoopBatchTaskAndReadSameTurn(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
@@ -212,7 +213,7 @@ func TestLoopReloadsHistoryAfterToolBatchCompaction(t *testing.T) {
 		{ToolCalls: []api.ToolCall{{ID: "tc1", Name: "read", Args: map[string]any{"path": "x.go"}}}},
 		{Content: "done"},
 	}}
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)

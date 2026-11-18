@@ -13,9 +13,6 @@ import (
 func New(t *testing.T, projectIDs ...string) *store.SQL {
 	t.Helper()
 	database := testdbfixture.Open(t, "sessions.db")
-	if len(projectIDs) == 0 {
-		projectIDs = []string{testdbseed.DefaultProjectID}
-	}
 	for _, id := range projectIDs {
 		testdbseed.InsertProjectRoot(t, database, id, t.TempDir())
 	}

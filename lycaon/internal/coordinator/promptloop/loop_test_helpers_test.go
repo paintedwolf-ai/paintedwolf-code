@@ -44,7 +44,7 @@ func (s *testMessageStreams) Finish(ctx context.Context, sessionID string) {
 }
 
 // StoreDeps wires an in-memory store with an attached project and unchanged history.
-func StoreDeps(st *store.Memory) PromptLoopDeps {
+func StoreDeps(st *store.SQL) PromptLoopDeps {
 	return PromptLoopDeps{
 		Context: ContextDeps{
 			Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },

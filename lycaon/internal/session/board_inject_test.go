@@ -2,6 +2,7 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,7 +27,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func boardInjectManager(t *testing.T) (*session.Host, *llm.RecordingClient, *store.Memory, repoinfo.Provider) {
+func boardInjectManager(t *testing.T) (*session.Host, *llm.RecordingClient, *store.SQL, repoinfo.Provider) {
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	dir := t.TempDir()
@@ -34,7 +35,7 @@ func boardInjectManager(t *testing.T) (*session.Host, *llm.RecordingClient, *sto
 		testutil.FailErr(t, "write file", err)
 	}
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
@@ -147,7 +148,7 @@ func TestInjectOmitsWorkflowWhenRunContext(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 	rec2 := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr2 := session.NewHost(store, session.Models{Client: rec2, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr2)
 	wirePromptTestManager(t, mgr2)
@@ -188,7 +189,7 @@ func (p *phaseStubCoordinator) BuildCoordinatorTurnFrame(_ context.Context, _ st
 
 func TestLegFinishedKickIncludesRelativeTime(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)

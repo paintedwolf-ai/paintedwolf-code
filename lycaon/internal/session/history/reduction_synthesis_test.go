@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strings"
 	"testing"
 
@@ -19,7 +20,7 @@ import (
 func TestPreparedReductionPublicationRequiresItsCapturedState(t *testing.T) {
 	for _, changed := range []string{"none", "chunk_only", "source", "projection", "model", "cancellation"} {
 		t.Run(changed, func(t *testing.T) {
-			mem := store.NewMemory()
+			mem := storetest.New(t, testdbseed.DefaultProjectID)
 			sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			testutil.FailErr(t, "append source", mem.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: "assistant", Content: strings.Repeat("original observation ", 100)}))
@@ -73,7 +74,7 @@ func TestPreparedReductionPublicationRequiresItsCapturedState(t *testing.T) {
 
 func TestOptionalEnrichmentCannotExpandTheAcceptedProjection(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append source", mem.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: "assistant", Content: "recorded observation"}))

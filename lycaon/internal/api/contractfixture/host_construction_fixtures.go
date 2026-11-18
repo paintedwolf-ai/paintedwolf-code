@@ -2,6 +2,7 @@ package contractfixture
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"io"
 	"net/http"
@@ -50,9 +51,12 @@ func NewTestServer(t *testing.T, opts ...TestDeps) *hostapi.Server {
 }
 
 func NewTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...TestDeps) *hostapi.Server {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	WireTestBindingRegistry(t)
-	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store.NewMemory(), Projects: project.NewMemoryRegistry()}}
+	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{
+		Store: sessionFixture, Projects: project.NewSQLRegistry(sessionFixture.DB())}}
 	for _, opt := range opts {
 		opt(&deps)
 	}

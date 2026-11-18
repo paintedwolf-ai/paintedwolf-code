@@ -2,6 +2,7 @@ package hostcontracts
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,13 +11,14 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/project"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestPatchProjectRootLabelRename(t *testing.T) {
-	reg := project.NewMemoryRegistry()
+	sessionFixture := storetest.New(t)
+
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	dir := t.TempDir()
 	p, err := reg.Create(t.Context(), project.CreateParams{
 		Name:  "roots",
@@ -25,7 +27,7 @@ func TestPatchProjectRootLabelRename(t *testing.T) {
 	testutil.FailErr(t, "create", err)
 	rootID := p.Roots[0].ID
 
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory(), Projects: reg}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionFixture, Projects: reg}}), nil, hostapi.TestAPIToken)
 
 	req := contractfixture.NewAuthedRequest(
 		http.MethodPatch,

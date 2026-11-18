@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 	"testing"
@@ -62,7 +63,7 @@ func TestHandleCommandRefusalWakesWithDigest(t *testing.T) {
 }
 
 func testHandleCommandRefusalWakesWithDigest(t *testing.T, offered []string) {
-	memory := store.NewMemory()
+	memory := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Processes.ToolPolicy = newPostToolGuidanceManager(t).ToolPolicy
 	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "")
@@ -201,7 +202,7 @@ func TestMixedPathRecoveryKeepsTerminalPathsOutsideRequestedGrants(t *testing.T)
 }
 
 func TestCommandCompletionWakesWorkerProcessWait(t *testing.T) {
-	memory := store.NewMemory()
+	memory := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "")
 	testutil.FailErr(t, "create waiting worker session", err)
@@ -222,14 +223,16 @@ func TestCommandCompletionWakesWorkerProcessWait(t *testing.T) {
 }
 
 func TestAutoNameProjectIdempotentOnReplay(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	store := store.NewMemory()
+	store := sessionFixture
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".*", Text: "ok"},
 	}})

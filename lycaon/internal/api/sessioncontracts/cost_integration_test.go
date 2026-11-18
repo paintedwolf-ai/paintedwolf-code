@@ -4,6 +4,7 @@ package sessioncontracts
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -25,10 +26,12 @@ import (
 )
 
 func TestHandleCostSummarySessionBreakdown(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	tracker := costtest.NewTracker(t, nil)
-	store := store.NewMemory()
+	store := sessionFixture
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
 	parent, err := store.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
@@ -64,10 +67,12 @@ func TestHandleCostSummarySessionBreakdown(t *testing.T) {
 }
 
 func TestHandleCostSummaryProjectBreakdown(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	tracker := costtest.NewTracker(t, nil)
-	store := store.NewMemory()
+	store := sessionFixture
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: reg, Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
 	dir := t.TempDir()

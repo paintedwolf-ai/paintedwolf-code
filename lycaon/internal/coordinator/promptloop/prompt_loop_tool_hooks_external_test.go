@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strings"
 	"testing"
 
@@ -18,7 +19,7 @@ import (
 
 func TestLoopBeforeToolRunSkipsRegistryRun(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	reg := tools.NewStubRegistry()
@@ -64,7 +65,7 @@ func TestLoopBeforeToolRunSkipsRegistryRun(t *testing.T) {
 
 func TestLoopAfterToolRunMutatesSuccessOutput(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	reg := tools.NewStubRegistry()
@@ -101,7 +102,7 @@ func TestLoopAfterToolRunMutatesSuccessOutput(t *testing.T) {
 
 func TestLoopBeforeToolRunRejectDoesNotInvokeTool(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	sess.WorkspacePath = "/tmp/repo"

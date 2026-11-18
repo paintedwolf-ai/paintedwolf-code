@@ -301,8 +301,6 @@ func SettledModelOutputIteration(ctx context.Context, st any, attemptID string) 
 	case *SQL:
 		maxIteration, err := s.queries.MaxSettledModelOutputIteration(ctx, attemptID)
 		return int(maxIteration), err
-	case *Memory:
-		return memorySettledModelOutputIteration(ctx, s, attemptID)
 	default:
 		return 0, nil
 	}

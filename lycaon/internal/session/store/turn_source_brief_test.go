@@ -20,13 +20,12 @@ type turnSourceBriefTestStore interface {
 
 func turnSourceBriefStores() []struct {
 	name string
-	open func(*testing.T) turnSourceBriefTestStore
+	open func(t *testing.T) turnSourceBriefTestStore
 } {
 	return []struct {
 		name string
-		open func(*testing.T) turnSourceBriefTestStore
+		open func(t *testing.T) turnSourceBriefTestStore
 	}{
-		{name: "memory", open: func(*testing.T) turnSourceBriefTestStore { return NewMemory() }},
 		{name: "sql", open: func(t *testing.T) turnSourceBriefTestStore { return openTurnSQLStore(t).(turnSourceBriefTestStore) }},
 	}
 }

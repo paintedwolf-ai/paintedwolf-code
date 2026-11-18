@@ -1,6 +1,7 @@
 package hostcontracts
 
 import (
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 )
 
@@ -53,10 +53,12 @@ func TestPresenceMiddlewareSkipsUnauthenticated(t *testing.T) {
 // stamps nothing and must not panic.
 
 func TestPresenceMiddlewareUnwiredIsInert(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	hub := events.NewMemoryHub()
-	st := store.NewMemory()
+	st := sessionFixture
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: st, Projects: project.NewMemoryRegistry(), Sessions: session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{
+		Store: st, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{
 		Events: hub}}), nil, hostapi.TestAPIToken)
 	contractfixture.PresenceRequest(t, srv, http.MethodPost, "/v1/sessions/does-not-exist/prompts")
 }

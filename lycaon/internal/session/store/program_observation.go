@@ -36,35 +36,14 @@ func (ev *sqlEvidence) CommitProgramObservation(ctx context.Context, sessionID, 
 	if _, err := writeEvidenceRecord(ctx, q, s.dataDir, sessionID, projectID, rec); err != nil {
 		return "", err
 	}
+	if err := projectUntrustedLedger(ctx, tx, projectID, sessionID, rec); err != nil {
+		return "", err
+	}
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
 	bumpUntrusted(s, sessionID, rec)
 	bumpSecretExposure(s, sessionID, rec)
-	if err := s.projectUntrustedLedger(ctx, nil, sessionID, rec); err != nil {
-		return "", err
-	}
-	return rec.Handle, nil
-}
-
-func (ev *memoryEvidence) CommitProgramObservation(ctx context.Context, sessionID, tool string, receipt *api.CommandProgramReceipt, content string) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	rec := evidence.BuildProgramObservation(tool, receipt, content)
-	if rec.Kind == "" {
-		return "", nil
-	}
-	s := ev.core
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.sessions[sessionID]; !ok {
-		return "", ErrSessionNotFound
-	}
-	rec.Handle = evidence.FormatHandle(rec.Kind, nextEvidenceOrdinalLocked(s, sessionID, rec.Kind))
-	putMemoryEvidenceRowLocked(s, sessionID, rec.Handle, rec)
-	bumpUntrustedLocked(s, sessionID, rec)
-	bumpSecretExposureLocked(s, sessionID, rec)
 	return rec.Handle, nil
 }
 
@@ -137,39 +116,17 @@ func (ev *sqlEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessionI
 			inserted = append(inserted, *rec)
 		}
 	}
+	for _, rec := range inserted {
+		if err := projectUntrustedLedger(ctx, tx, projectID, sessionID, rec); err != nil {
+			return "", err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
 	for _, rec := range inserted {
 		bumpUntrusted(s, sessionID, rec)
 		bumpSecretExposure(s, sessionID, rec)
-		if err := s.projectUntrustedLedger(ctx, nil, sessionID, rec); err != nil {
-			return "", err
-		}
-	}
-	return recs[0].Handle, nil
-}
-
-func (ev *memoryEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessionID, projectDir string, prov evidence.ProgramHTTPProvenance) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	recs := programProvenanceRecords(evidence.CitationRoots{ProjectDir: projectDir}, prov)
-	if len(recs) == 0 {
-		return "", nil
-	}
-	s := ev.core
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.sessions[sessionID]; !ok {
-		return "", ErrSessionNotFound
-	}
-	for i := range recs {
-		rec := &recs[i]
-		rec.Handle = evidence.FormatHandle(rec.Kind, nextEvidenceOrdinalLocked(s, sessionID, rec.Kind))
-		putMemoryEvidenceRowLocked(s, sessionID, rec.Handle, *rec)
-		bumpUntrustedLocked(s, sessionID, *rec)
-		bumpSecretExposureLocked(s, sessionID, *rec)
 	}
 	return recs[0].Handle, nil
 }
@@ -188,17 +145,6 @@ func (ev *sqlEvidence) ExternalCustodyURLsForPaths(ctx context.Context, sessionI
 		return nil, err
 	}
 	return evidence.ExternalCustodyURLs(metaLedger, custodyQueryKeys(roots, paths)), nil
-}
-
-func (ev *memoryEvidence) ExternalCustodyURLsForPaths(ctx context.Context, sessionID, projectDir string, paths []string) ([]string, error) {
-	if len(paths) == 0 {
-		return nil, nil
-	}
-	ledger, err := loadLedgerMemory(ctx, ev.core, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return evidence.ExternalCustodyURLs(ledger, custodyQueryKeys(evidence.CitationRoots{ProjectDir: projectDir}, paths)), nil
 }
 
 // custodyQueryKeys maps path tokens to the keys custody is indexed under, so

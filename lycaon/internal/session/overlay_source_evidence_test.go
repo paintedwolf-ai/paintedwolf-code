@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,7 +86,7 @@ func currentVerifyPassedMessage(root string) api.Message {
 
 func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	t.Cleanup(mgr.BeginEngineShutdown)
 	q := worker.NewInMemoryQueue(4)
@@ -129,7 +130,7 @@ func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 
 func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	t.Cleanup(mgr.BeginEngineShutdown)
 	q := worker.NewInMemoryQueue(4)
@@ -185,7 +186,7 @@ func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	}
 }
 
-type failingSecretInheritanceStore struct{ *store.Memory }
+type failingSecretInheritanceStore struct{ *store.SQL }
 
 func (*failingSecretInheritanceStore) SeedSecretExposure(context.Context, string) error {
 	return errors.New("evidence store unavailable")
@@ -193,7 +194,7 @@ func (*failingSecretInheritanceStore) SeedSecretExposure(context.Context, string
 
 func TestReadSensitivePathSetsSecretExposure(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create", err)
 
@@ -217,7 +218,7 @@ func TestReadSensitivePathSetsSecretExposure(t *testing.T) {
 
 func TestSecretExposureInheritAndMerge(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
@@ -251,11 +252,11 @@ func TestSecretExposureInheritAndMerge(t *testing.T) {
 
 func TestSpawnChildRollsBackWhenSecurityInheritanceFails(t *testing.T) {
 	ctx := t.Context()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	testutil.FailErr(t, "seed parent", mem.SeedSecretExposure(ctx, parent.ID))
-	failing := &failingSecretInheritanceStore{Memory: mem}
+	failing := &failingSecretInheritanceStore{SQL: mem}
 	mgr := session.NewHost(failing, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 
 	if _, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "implementer"}); err == nil {
@@ -287,7 +288,7 @@ func TestSessionSecretExposureSQLRebuild(t *testing.T) {
 
 func TestAppendWorkerSummaryCarriesStructuredDecisionRequest(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
@@ -373,7 +374,7 @@ func TestWorkerProjectionWaitsForOriginalDispatchResponse(t *testing.T) {
 	for _, tool := range []string{"task"} {
 		t.Run(tool, func(t *testing.T) {
 			ctx := context.Background()
-			messages := store.NewMemory()
+			messages := storetest.New(t, testdbseed.DefaultProjectID)
 			mgr := session.NewHost(messages, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 			queue := worker.NewInMemoryQueue(2)
 			mgr.SetWorkerQueue(queue)
@@ -583,9 +584,9 @@ type unrelatedWorker struct {
 	primary string
 }
 
-func newObservationHost(t *testing.T) (*store.Memory, *tools.StubRegistry, *session.Host, *worker.InMemoryQueue) {
+func newObservationHost(t *testing.T) (*store.SQL, *tools.StubRegistry, *session.Host, *worker.InMemoryQueue) {
 	t.Helper()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	reg := tools.NewStubRegistry()
 
 	mgr := session.NewHost(
@@ -612,7 +613,7 @@ func newObservationHost(t *testing.T) (*store.Memory, *tools.StubRegistry, *sess
 func provisionUnrelatedWorker(
 	t *testing.T,
 	ctx context.Context,
-	mem *store.Memory,
+	mem *store.SQL,
 	mgr *session.Host,
 	q *worker.InMemoryQueue,
 	reg *tools.StubRegistry,

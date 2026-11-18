@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 	"time"
 
@@ -63,7 +64,7 @@ func TestUserTurnOrdinalSQLMatchesGoPredicate(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "user-turn-contract.db")
 
 	sqlStore := store.NewSQL(sqlDB)
-	memStore := store.NewMemory()
+	memStore := storetest.New(t, testdbseed.DefaultProjectID)
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 
 	sqlSess, err := sqlStore.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)

@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/netip"
 	"testing"
 	"time"
@@ -452,7 +453,7 @@ func TestLocalCapabilityCardsComposeSecretPermission(t *testing.T) {
 }
 
 func TestNudgeCoordinatorScanDoneWakesOnlyTheSessionThatRequestedTheScan(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 
 	requester, err := store.Create(context.Background(), api.CreateSessionRequest{ProjectID: "p1"}, "p1")

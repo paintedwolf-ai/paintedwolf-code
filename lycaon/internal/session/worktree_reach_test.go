@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"go/parser"
 	"go/token"
@@ -52,7 +53,7 @@ func initReachRepo(t *testing.T) string {
 
 type reachFixture struct {
 	mgr     *Host
-	mem     *store.Memory
+	mem     *store.SQL
 	reg     *project.MemoryRegistry
 	project *project.Project
 	sess    *api.Session
@@ -62,11 +63,13 @@ type reachFixture struct {
 }
 
 func newReachFixture(t *testing.T, rootPath string) *reachFixture {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
-	mem := store.NewMemory()
+	mem := sessionFixture
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
 	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, rootPath)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	mgr.SetProjectRegistry(reg)
@@ -276,15 +279,17 @@ func TestWorktreeReach_foreignRootsUntouched(t *testing.T) {
 }
 
 func TestWorktreeReach_rootBelowToplevel(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	top := initReachRepo(t)
 	web := filepath.Join(top, "packages", "web")
 	testutil.FailErr(t, "mkdir web", os.MkdirAll(web, 0o755))
 	testutil.FailErr(t, "write pkg", os.WriteFile(filepath.Join(web, "app.js"), []byte("1\n"), 0o644))
 
-	mem := store.NewMemory()
+	mem := sessionFixture
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
 	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, web)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	mgr.SetProjectRegistry(reg)
@@ -375,12 +380,14 @@ func (s *getFailStore) GetWorktreeBinding(ctx context.Context, sessionID string)
 }
 
 func TestWorktreeReach_getFailureRefuses(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	repoDir := initReachRepo(t)
-	mem := store.NewMemory()
+	mem := sessionFixture
 	failing := &getFailStore{Store: mem, failGet: true}
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
 	mgr := NewHost(failing, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, repoDir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	mgr.SetProjectRegistry(reg)

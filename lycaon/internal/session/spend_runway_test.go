@@ -3,6 +3,8 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"regexp"
 	"testing"
 
@@ -64,12 +66,12 @@ func spendRunwayMgr(t *testing.T, tracker cost.CostTracker, ceilingUSD float64, 
 	return mgr
 }
 
-func spendRunwayHost(t *testing.T, tracker cost.CostTracker, ceilingUSD float64, enabled bool) (*Host, *store.Memory) {
+func spendRunwayHost(t *testing.T, tracker cost.CostTracker, ceilingUSD float64, enabled bool) (*Host, *store.SQL) {
 	t.Helper()
 	lim := settings.DefaultSessionLimits()
 	lim.SpendCeilingEnabled = enabled
 	lim.SessionSpendCeilingUSD = ceilingUSD
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfigStock", err)

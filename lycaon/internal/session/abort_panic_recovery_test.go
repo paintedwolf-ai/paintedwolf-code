@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -35,7 +36,7 @@ func (panicSessionWorkerAbort) AbortWorkersForRoot(context.Context, string, stri
 // A stop panic still clears active state and releases waiters.
 func TestAbortRecoversPanicAndClearsStopState(t *testing.T) {
 	ctx := context.Background()
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetSessionWorkerAbort(panicSessionWorkerAbort{})
 
@@ -91,7 +92,7 @@ func (s *stubSessionWorkerAbort) AbortAllWorkers(_ context.Context, sessionID, p
 
 func TestAbortStopsEntireSessionTreeAndClearsQueuedTurns(t *testing.T) {
 	ctx := context.Background()
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	abort := &stubSessionWorkerAbort{}
 	workflows := &stubSessionWorkflowStop{}
@@ -172,7 +173,7 @@ func TestAbortStopsEntireSessionTreeAndClearsQueuedTurns(t *testing.T) {
 
 func TestAbortRetainsAddressedQueuedTurn(t *testing.T) {
 	ctx := context.Background()
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -222,7 +223,7 @@ func (s *stubSessionWorkerAbort) AbortWorkersForRoot(_ context.Context, _, _ str
 
 func TestAbortCancelsWorkersAndMarksIdle(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	abort := &stubSessionWorkerAbort{}
 	mgr.SetSessionWorkerAbort(abort)

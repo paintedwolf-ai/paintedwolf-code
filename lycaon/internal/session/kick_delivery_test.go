@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"strings"
 	"testing"
 	"time"
@@ -51,7 +52,7 @@ func (fixedJobs) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, er
 
 func TestTurnDeliversEveryQueuedKickAndDropsNoticesForFinishedRounds(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(st, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -138,7 +139,7 @@ func TestWorkerParentDeliveryPreservesFrozenDecision(t *testing.T) {
 
 func TestAppendWorkerSummaryDoesNotEchoEnvelopeInAssistantProse(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -196,7 +197,7 @@ func TestAppendWorkerSummaryDoesNotEchoEnvelopeInAssistantProse(t *testing.T) {
 
 func TestAppendWorkerSummaryProjectsEnvelopeToModel(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -246,7 +247,7 @@ func TestAppendWorkerSummaryProjectsEnvelopeToModel(t *testing.T) {
 
 func TestTwoUserStoppedBackgroundCommandsBetweenTurnsDeliverBothToNextTurn(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(st, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -303,7 +304,7 @@ func TestTwoUserStoppedBackgroundCommandsBetweenTurnsDeliverBothToNextTurn(t *te
 
 func TestAbortPreservesUnconsumedProcessFinishedKickWithoutAutoStartingTurn(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(st, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)

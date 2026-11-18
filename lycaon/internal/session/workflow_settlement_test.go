@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"reflect"
 	"sync/atomic"
 	"testing"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -59,7 +59,7 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 	for _, blocker := range []string{"none", "execution", "workers", "session lock"} {
 		t.Run(blocker, func(t *testing.T) {
 			ctx := t.Context()
-			st := store.NewMemory()
+			st := storetest.New(t, testdbseed.DefaultProjectID)
 			mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 			loopWorkflowFixture1 := &settlementWorkflowSource{}
 			mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: loopWorkflowFixture1, Approvals: loopWorkflowFixture1, Obligations: loopWorkflowFixture1})
@@ -117,7 +117,7 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 
 func TestWorkflowCompletionDoesNotSettleAnotherActiveRun(t *testing.T) {
 	ctx := t.Context()
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	source := &settlementWorkflowSource{active: &api.WorkflowRun{ID: "new-run", Status: api.WorkflowRunStatusRunning}}
 	loopWorkflowFixture2 := source
@@ -138,7 +138,7 @@ func TestWorkflowCompletionDoesNotSettleAnotherActiveRun(t *testing.T) {
 
 func TestWorkflowCompletionRetriesLookupFailure(t *testing.T) {
 	ctx := t.Context()
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	want := errors.New("workflow store unavailable")
 	source := &settlementWorkflowSource{err: want}

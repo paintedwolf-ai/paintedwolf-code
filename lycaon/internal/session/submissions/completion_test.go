@@ -3,6 +3,7 @@ package submissions
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"reflect"
 	"testing"
 
@@ -27,7 +28,7 @@ func TestStoppedReceiptWinsLateCompletion(t *testing.T) {
 		name string
 		open func(*testing.T) completionStore
 	}{
-		{"memory", func(*testing.T) completionStore { return store.NewMemory() }},
+		{"memory", func(t *testing.T) completionStore { return storetest.New(t, testdbseed.DefaultProjectID) }},
 		{"sql", func(t *testing.T) completionStore {
 			db := testdbfixture.Open(t, "completion.db")
 			testdbseed.InsertProjectRoot(t, db, testdbseed.DefaultProjectID, t.TempDir())

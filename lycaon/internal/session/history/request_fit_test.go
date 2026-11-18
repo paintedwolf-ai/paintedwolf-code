@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -44,7 +45,7 @@ func TestCompleteRequestFitsColdOllamaWindowWithoutChangingFrame(t *testing.T) {
 	}))
 	defer server.Close()
 	provider := ollama.New("local", server.URL+"/v1", "", []modelinfo.Entry{{ID: "gemma4:e4b", ContextLength: 16384}})
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "local", Model: "gemma4:e4b"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	var rows []api.Message
@@ -172,7 +173,7 @@ func TestRequestFittingUsesRemainingOutputAfterHistoryIsMinimal(t *testing.T) {
 }
 
 func TestEveryRequestAdoptsPublishedHistoryProjection(t *testing.T) {
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append original history", mem.AppendMessages(t.Context(), sess.ID,
@@ -204,7 +205,7 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 	}))
 	defer server.Close()
 	provider := ollama.New("local", server.URL+"/v1", "", []modelinfo.Entry{{ID: "gemma4:e4b", ContextLength: 16384}})
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "local", Model: "gemma4:e4b"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create active session", err)
 	args := map[string]any{"path": "observations.txt", "offset": float64(650), "limit": float64(151)}
@@ -371,7 +372,7 @@ func TestRequestFittingKeepsToolBodyWhenOutputCanYield(t *testing.T) {
 	toolDefs := []tools.ToolMeta{{Name: "read", Description: strings.Repeat("Tool schema. ", 800)}}
 	req := modelcall.CompletionRequest{Model: "small", Messages: rows, Tools: toolDefs}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 16384}})}
-	service := &Service{store: store.NewMemory(), recallAvailable: func(context.Context, *api.Session) bool { return true }}
+	service := &Service{store: storetest.New(t, testdbseed.DefaultProjectID), recallAvailable: func(context.Context, *api.Session) bool { return true }}
 	sess := &api.Session{ID: "s", Model: "small"}
 	initialTranscript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(rows[:1]))
 	toolTokens := modelcall.EstimateRequestInput(modelcall.CompletionRequest{Tools: toolDefs})
@@ -430,7 +431,7 @@ func TestRequestFittingCanProjectRecallBelowSixteenKilobytes(t *testing.T) {
 	frame := api.Message{ID: "frame", Role: api.MessageRoleSystem, Content: strings.Repeat("standing instruction ", 800)}
 	req := modelcall.CompletionRequest{Model: "small", MaxTokens: 512, Messages: append([]api.Message{frame}, rows...)}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 8192}})}
-	service := &Service{store: store.NewMemory(), recallAvailable: func(context.Context, *api.Session) bool { return true }}
+	service := &Service{store: storetest.New(t, testdbseed.DefaultProjectID), recallAvailable: func(context.Context, *api.Session) bool { return true }}
 	fitted, err := service.FitRequest(t.Context(), &api.Session{ID: "s", Model: "small"}, rows, req, budgets, nil)
 	testutil.FailErr(t, "fit medium recall around required frame", err)
 	budget := budgets.RequestBudget(t.Context(), "fixture", fitted)

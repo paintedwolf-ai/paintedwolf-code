@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"io"
 	"net"
 	"net/http"
@@ -21,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
@@ -53,15 +53,17 @@ func newTestServer(t *testing.T, opts ...testDeps) *Server {
 }
 
 func newTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...testDeps) *Server {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
-	store := store.NewMemory()
+	store := sessionFixture
 	mock := llm.NewMockProvider(testMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	mgr.SetDataDir(t.TempDir())
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
 	// Stub bindings do not expose coordinator tools.
 	wireTestBindingRegistry(t)
-	return newServerForTest(t, Dependencies{Core: CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}, opts...)
+	return newServerForTest(t, Dependencies{Core: CoreDependencies{Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: mgr}}, opts...)
 }
 
 // newServerForTest builds a server with the bundled user notices after opts

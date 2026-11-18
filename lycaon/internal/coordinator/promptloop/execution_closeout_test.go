@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"path/filepath"
@@ -24,7 +25,7 @@ import (
 
 func TestPromptLoopResponseAdmissionStopsBeforeAnotherRequest(t *testing.T) {
 	ctx := t.Context()
-	messages := store.NewMemory()
+	messages := storetest.New(t, testdbseed.DefaultProjectID)
 	session, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "configure response allowance", messages.ConfigureModelLimit(ctx, session.ID, 1))

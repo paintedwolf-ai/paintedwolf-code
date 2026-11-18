@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"io"
 	"net/http"
 	"strings"
@@ -151,14 +152,16 @@ func TestRealServerPromptRoutes(t *testing.T) {
 }
 
 func newRealServerWithSession(t *testing.T, root string) (*api.Server, string) {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
-	store := store.NewMemory()
+	store := sessionFixture
 	mockCfg, err := llm.LoadMockConfig()
 	if err != nil {
 		t.Fatalf("load mock config: %v", err)
 	}
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}), nil, api.TestAPIToken)
+	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: mgr}}), nil, api.TestAPIToken)
 
 	// Wait for detached prompt work before temporary-directory cleanup.
 	t.Cleanup(func() {

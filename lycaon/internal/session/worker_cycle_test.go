@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -237,7 +238,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTask(t *testing.T) {
 	q := worker.NewInMemoryQueue(8)
 	dir := t.TempDir()
 	parent := "parent-1"
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetWorkerQueue(q)
 
 	if !mgr.Workers.State.ShouldNudge(ctx, parent, testdbseed.DefaultProjectID, "") {
@@ -266,7 +267,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskWriteDefersUntilIdle(t *testin
 	q := worker.NewInMemoryQueue(8)
 	dir := t.TempDir()
 	parent := "parent-1"
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetWorkerQueue(q)
 
 	writeA, err := q.Enqueue(ctx, api.WorkerTask{
@@ -298,7 +299,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskPerJobWakeWhileSiblingsInFligh
 	q := worker.NewInMemoryQueue(8)
 	dir := t.TempDir()
 	parent := "parent-1"
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetWorkerQueue(q)
 
 	jobA, err := q.Enqueue(ctx, api.WorkerTask{
@@ -326,7 +327,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskPerJobWakeWhileSiblingsInFligh
 func TestBuildImplementSessionStateLedgerOverridesStaleEnvelope(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create parent", err)
 

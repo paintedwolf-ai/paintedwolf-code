@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -31,7 +32,7 @@ func (s *publicationOnlyStore) Get(ctx context.Context, id string) (*api.Session
 }
 
 func TestPreparedPublicationDoesNotSubmitWorkUnderItsAdmissionGate(t *testing.T) {
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append source", mem.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: "assistant", Content: "original source"}))

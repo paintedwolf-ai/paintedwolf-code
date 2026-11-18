@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"runtime"
 	"strings"
@@ -43,7 +44,7 @@ func (g *growingRedactor) redact(_ context.Context, msg api.Message) (api.Messag
 // Sweeping removes newly recognized secrets from existing transcript rows.
 func TestSweepRewritesRowsScreenedBeforeTheEvidenceGrew(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	evidence := &growingRedactor{}
 	mgr.Runner.Transcript.SetRedactor(evidence.redact)
@@ -83,7 +84,7 @@ func TestSweepRewritesRowsScreenedBeforeTheEvidenceGrew(t *testing.T) {
 // growing evidence base from re-walking settled history.
 func TestSweepSkipsRowsAlreadyStampedAtTheGeneration(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	evidence := &growingRedactor{known: true}
 	mgr.Runner.Transcript.SetRedactor(evidence.redact)
@@ -109,7 +110,7 @@ func TestSweepSkipsRowsAlreadyStampedAtTheGeneration(t *testing.T) {
 
 func TestSweepRevisitsRowsStampedByAnEarlierRun(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -136,7 +137,7 @@ func TestSweepRevisitsRowsStampedByAnEarlierRun(t *testing.T) {
 
 // failingUpdateStore refuses to rewrite one row.
 type failingUpdateStore struct {
-	*store.Memory
+	*store.SQL
 	messageID string
 }
 
@@ -144,13 +145,13 @@ func (s *failingUpdateStore) UpdateMessage(ctx context.Context, sessionID, messa
 	if messageID == s.messageID {
 		return api.Message{}, errors.New("row is locked")
 	}
-	return s.Memory.UpdateMessage(ctx, sessionID, messageID, msg)
+	return s.SQL.UpdateMessage(ctx, sessionID, messageID, msg)
 }
 
 func TestSweepContinuesPastARowTheStoreRefuses(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	blocked := &failingUpdateStore{Memory: mem, messageID: "tool-1"}
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
+	blocked := &failingUpdateStore{SQL: mem, messageID: "tool-1"}
 	mgr := NewHost(blocked, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.Runner.Transcript.SetRedactor((&growingRedactor{known: true}).redact)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -181,7 +182,7 @@ func TestSweepContinuesPastARowTheStoreRefuses(t *testing.T) {
 // candidate set.
 func TestScreenGenerationStampNarrowsTheCandidateSet(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -203,7 +204,7 @@ func TestScreenGenerationStampNarrowsTheCandidateSet(t *testing.T) {
 }
 
 func TestDeleteSessionSharesTurnLifecycleGate(t *testing.T) {
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild, ProjectID: "p1"}, "p1")
 	testutil.FailErr(t, "create session", err)
@@ -222,7 +223,7 @@ func TestDeleteSessionDisposesBackgroundRuntimeBeforeRow(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("sleep fixture is unix-oriented")
 	}
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	mgr.SetBackgroundRegistry(reg)
@@ -247,7 +248,7 @@ func TestDeleteSessionDisposesBackgroundRuntimeBeforeRow(t *testing.T) {
 }
 
 func TestDeleteSession_refusesWhileBound(t *testing.T) {
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	ctx := context.Background()
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{
@@ -281,7 +282,7 @@ func TestDeleteSession_refusesWhileBound(t *testing.T) {
 }
 
 func TestBoundSession_archivePinRenameUnaffected(t *testing.T) {
-	mem := store.NewMemory()
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	ctx := context.Background()
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{
