@@ -107,7 +107,6 @@ type shellSourceEdge struct {
 
 var (
 	shellSourceCommand   = regexp.MustCompile(`(?:^|[;&|]\s*|\b(?:then|do|else)\s+)(?:source|\.)\s+`)
-	shellSingleVariable  = regexp.MustCompile(`^\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?$`)
 	shellLeadingVariable = regexp.MustCompile(`^\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?(/.*)?$`)
 )
 
