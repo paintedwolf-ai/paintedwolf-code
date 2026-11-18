@@ -361,7 +361,9 @@ func TestLoopDropsEmptyArgPhantomTaskBeforeExecution(t *testing.T) {
 	}
 }
 
-func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
+// A result is stored once, already carrying its evidence handle, so no crash
+// can leave it stored without one.
+func TestLoopStoresClassifiedResultWithItsEvidence(t *testing.T) {
 	var order []string
 	var orderMu sync.Mutex
 	note := func(step string) {
@@ -388,7 +390,7 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 	deps.Projection.AppendMessages = func(ctx context.Context, sessionID string, msgs ...api.Message) error {
 		for _, msg := range msgs {
 			if msg.Role == api.MessageRoleTool {
-				note("append")
+				note("append " + strings.Join(msg.EvidenceHandles, ","))
 			}
 		}
 		return mem.AppendMessages(ctx, sessionID, msgs...)
@@ -412,8 +414,8 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "loop.Run", err)
-	if len(order) < 2 || order[0] != "append" || order[1] != "evidence" {
-		t.Fatalf("commit order = %v want append before evidence", order)
+	if !slices.Equal(order, []string{"evidence", "append command#1"}) {
+		t.Fatalf("commit order = %v want the evidence, then the result appended with its handle", order)
 	}
 }
 
