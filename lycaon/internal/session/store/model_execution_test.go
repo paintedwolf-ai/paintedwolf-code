@@ -14,9 +14,7 @@ import (
 
 func TestModelAllowanceUsesSettledOutputsAcrossTurns(t *testing.T) {
 
-	var st *Repositories
-
-	st = openTurnSQLStore(t)
+	st := openTurnSQLStore(t)
 
 	ctx := t.Context()
 	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -138,9 +136,7 @@ func TestSQLCloseoutSurvivesHostTurnAndClearsOnNewUserAdmission(t *testing.T) {
 
 func TestSealedCloseoutRecoversWithoutRequeueingTheModel(t *testing.T) {
 
-	var st *Repositories
-
-	st = openTurnSQLStore(t)
+	st := openTurnSQLStore(t)
 
 	ctx := t.Context()
 	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -216,9 +212,7 @@ func TestSettleModelOutputIterationCollisionReturnsTypedError(t *testing.T) {
 		t.Fatalf("nil collision error = %q want %q", got, ErrModelOutputIterationCollision.Error())
 	}
 
-	var st *Repositories
-
-	st = openTurnSQLStore(t)
+	st := openTurnSQLStore(t)
 
 	ctx := t.Context()
 	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)

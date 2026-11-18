@@ -98,8 +98,7 @@ func recoverCancellationJobs(ctx context.Context, queue WorkerQueue, ids []strin
 }
 
 func setQueueActiveExecution(queue WorkerQueue, fn func(jobID string) bool) {
-	switch q := queue.(type) {
-	case *SQLQueue:
+	if q, ok := queue.(*SQLQueue); ok {
 		q.mu.Lock()
 		q.activeExecution = fn
 		q.mu.Unlock()
@@ -108,13 +107,10 @@ func setQueueActiveExecution(queue WorkerQueue, fn func(jobID string) bool) {
 
 func queueHasActiveExecution(queue WorkerQueue, jobID string) bool {
 	var fn func(string) bool
-	switch q := queue.(type) {
-	case *SQLQueue:
-		if q != nil {
-			q.mu.Lock()
-			fn = q.activeExecution
-			q.mu.Unlock()
-		}
+	if q, ok := queue.(*SQLQueue); ok && q != nil {
+		q.mu.Lock()
+		fn = q.activeExecution
+		q.mu.Unlock()
 	}
 	return fn != nil && fn(jobID)
 }

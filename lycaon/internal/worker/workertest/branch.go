@@ -19,7 +19,7 @@ func NewBranch(t testing.TB, database db.Handle) string {
 	t.Helper()
 	root := enginepaths.WorkerBranchesRootUnder(db.DataDir(database))
 	testutil.FailErr(t, "create worker branches", os.MkdirAll(root, 0700))
-	branch, err := os.MkdirTemp(root, "fixture-")
+	branch, err := os.MkdirTemp(root, "fixture-") //nolint:usetesting // Branch lookup requires the installation root.
 	testutil.FailErr(t, "create worker branch", err)
 	return branch
 }

@@ -33,7 +33,7 @@ func TestCommittedRewindSweepAndRetentionParity(t *testing.T) {
 		name string
 		open func(t *testing.T) *Repositories
 	}{
-		{name: "sql", open: func(t *testing.T) *Repositories { return openTurnSQLStore(t) }},
+		{name: "sql", open: openTurnSQLStore},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			ctx := t.Context()

@@ -15,7 +15,7 @@ func TestLatestTurnStatusParity(t *testing.T) {
 		name string
 		open func(t *testing.T) *Repositories
 	}{
-		{"sql", func(t *testing.T) *Repositories { return openTurnSQLStore(t) }},
+		{"sql", openTurnSQLStore},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			st := fixture.open(t)

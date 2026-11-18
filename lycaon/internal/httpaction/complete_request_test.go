@@ -137,13 +137,6 @@ func registerPerform(registry *tools.DefaultRegistry, deps Deps) error {
 	})
 }
 
-func fmtResult(t *testing.T, got result) string {
-	t.Helper()
-	encoded, err := json.Marshal(got)
-	testutil.FailErr(t, "encode result", err)
-	return string(encoded)
-}
-
 func TestHTTPRequestAuthAndFormReachTheServer(t *testing.T) {
 	approveDials(t)
 	var seen struct {
