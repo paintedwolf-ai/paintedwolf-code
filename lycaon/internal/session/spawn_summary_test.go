@@ -136,7 +136,7 @@ func TestAppendWorkerSummaryWriteWorkerOpenStatus(t *testing.T) {
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	q := workertest.OnDatabase(t, database, 4)
 	mgr.SetWorkerQueue(q)
-	dir := t.TempDir()
+	primary, overlay, scope := overlaySourceFixture(t, database)
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
@@ -146,15 +146,16 @@ func TestAppendWorkerSummaryWriteWorkerOpenStatus(t *testing.T) {
 		Brief:           "fixture",
 		ParentSessionID: parent.ID,
 		ProjectID:       testdbseed.DefaultProjectID,
-		WorkspacePath:   dir,
+		WorkspacePath:   primary,
 		ChildSessionID:  child.ID,
 		AgentType:       "implementer",
 		Status:          api.WorkerStatusComplete,
 		MergeStatus:     api.WorkerMergeStatusPending,
-		WorkspaceRoot:   dir,
-		Scope:           &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py"}},
+		WorkspaceRoot:   overlay,
+		Scope:           &scope,
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
+	bindWorkerFixture(t, database, jobID, overlay, primary, api.WorkerMergeStatusPending)
 	status, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		JobID:          jobID,
 		ChildSessionID: child.ID,
@@ -192,27 +193,26 @@ func TestAppendWorkerSummaryUnmetEvidenceKeepsDeliveredWork(t *testing.T) {
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	q := workertest.OnDatabase(t, database, 4)
 	mgr.SetWorkerQueue(q)
-	primary, overlay, scope, baseline := overlaySourceFixture(t, mem.DB())
+	primary, overlay, scope := overlaySourceFixture(t, mem.DB())
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 	jobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
-		Prompt:                "fixture",
-		Brief:                 "fixture",
-		ParentSessionID:       parent.ID,
-		ProjectID:             testdbseed.DefaultProjectID,
-		WorkspacePath:         primary,
-		WorkspaceRoot:         overlay,
-		ChildSessionID:        child.ID,
-		AgentType:             "implementer",
-		Status:                api.WorkerStatusComplete,
-		MergeStatus:           api.WorkerMergeStatusPending,
-		Scope:                 &scope,
-		WorkspaceBaselinePath: baseline,
+		Prompt:          "fixture",
+		Brief:           "fixture",
+		ParentSessionID: parent.ID,
+		ProjectID:       testdbseed.DefaultProjectID,
+		WorkspacePath:   primary,
+		WorkspaceRoot:   overlay,
+		ChildSessionID:  child.ID,
+		AgentType:       "implementer",
+		Status:          api.WorkerStatusComplete,
+		MergeStatus:     api.WorkerMergeStatusPending,
+		Scope:           &scope,
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
-	bindWorkerFixture(t, mem.DB(), jobID, overlay, baseline, api.WorkerMergeStatusPending)
+	bindWorkerFixture(t, mem.DB(), jobID, overlay, primary, api.WorkerMergeStatusPending)
 	status, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		JobID:          jobID,
 		ChildSessionID: child.ID,
@@ -253,27 +253,26 @@ func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 	mgr.SetSourceLedger(ledger, tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
 	q := workertest.OnDatabase(t, database, 4)
 	mgr.SetWorkerQueue(q)
-	primary, overlay, scope, baseline := overlaySourceFixture(t, mem.DB())
+	primary, overlay, scope := overlaySourceFixture(t, mem.DB())
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild", err)
 	jobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
-		Prompt:                "fixture",
-		Brief:                 "fixture",
-		ParentSessionID:       parent.ID,
-		ProjectID:             testdbseed.DefaultProjectID,
-		WorkspacePath:         primary,
-		WorkspaceRoot:         overlay,
-		ChildSessionID:        child.ID,
-		AgentType:             "implementer",
-		Status:                api.WorkerStatusComplete,
-		MergeStatus:           api.WorkerMergeStatusPending,
-		Scope:                 &scope,
-		WorkspaceBaselinePath: baseline,
+		Prompt:          "fixture",
+		Brief:           "fixture",
+		ParentSessionID: parent.ID,
+		ProjectID:       testdbseed.DefaultProjectID,
+		WorkspacePath:   primary,
+		WorkspaceRoot:   overlay,
+		ChildSessionID:  child.ID,
+		AgentType:       "implementer",
+		Status:          api.WorkerStatusComplete,
+		MergeStatus:     api.WorkerMergeStatusPending,
+		Scope:           &scope,
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
-	bindWorkerFixture(t, mem.DB(), jobID, overlay, baseline, api.WorkerMergeStatusPending)
+	bindWorkerFixture(t, mem.DB(), jobID, overlay, primary, api.WorkerMergeStatusPending)
 	revision, digest := sourceledger.VerificationState(ctx, ledger.Inventory, overlay)
 	testutil.FailErr(t, "AppendMessages", mem.AppendMessages(ctx, child.ID, api.Message{
 		Role: api.MessageRoleTool, WorkerID: jobID,

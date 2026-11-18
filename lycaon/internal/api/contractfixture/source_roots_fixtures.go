@@ -50,9 +50,6 @@ func DeleteProject(t *testing.T, srv *hostapi.Server, projectID string) {
 	DrainBackground(t, srv)
 }
 
-// newSnapshotTestServer serves a source ledger and keeps the project registry
-// in the ledger's database.
-
 func EnqueueBranchJob(t *testing.T, q *worker.SQLQueue, database db.Handle, projectID, branchRoot string) string {
 	t.Helper()
 	id, err := q.EnqueueWithProjectID(context.Background(), projectID, wire.WorkerTask{
@@ -73,8 +70,7 @@ func EnqueueBranchJob(t *testing.T, q *worker.SQLQueue, database db.Handle, proj
 func NewSnapshotTestServer(t *testing.T) *hostapi.Server {
 	t.Helper()
 	_, ledgerDB, withLedger := TestSourceLedger(t)
-	// Production keeps the project registry and snapshots in one database, so
-	// deletion also cascades the inventory row that may pin this snapshot.
+	// Shared persistence lets deletion cascade snapshot pins.
 	return NewTestServer(t, withLedger, func(d *hostapi.Dependencies) {
 		d.Core.Projects = project.NewSQLRegistry(ledgerDB)
 		if d.Core.Sessions != nil {

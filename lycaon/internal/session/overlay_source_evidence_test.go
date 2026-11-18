@@ -46,7 +46,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func overlaySourceFixture(t *testing.T, database db.Handle) (primary, overlay string, scope api.TaskScope, baseline string) {
+func overlaySourceFixture(t *testing.T, database db.Handle) (primary, overlay string, scope api.TaskScope) {
 	t.Helper()
 	primary = t.TempDir()
 	overlay = workertest.NewBranch(t, database)
@@ -65,11 +65,7 @@ func overlaySourceFixture(t *testing.T, database db.Handle) (primary, overlay st
 		Roots:            []workspace.JobMetaRoot{{ID: "primary", Label: "primary", Path: primary, IsPrimary: true}},
 	}))
 	scope = api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py", "dirty_upper.py", "pkg/dep.py"}}
-	root := db.DataDir(database)
-	baselines := workspacebaseline.New(database, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "worker-baselines"))
-	snap, err := baselines.Capture(t.Context(), "fixture", workspacebaseline.Branch([]projectroot.RootRef{{ID: "primary", Label: "primary", Path: primary, IsPrimary: true}}, primary))
-	testutil.FailErr(t, "capture baseline", err)
-	return primary, overlay, scope, snap
+	return primary, overlay, scope
 }
 
 func currentVerifyPassedMessage(root string) api.Message {
@@ -101,12 +97,12 @@ func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 
-	primary, overlay, scope, baseline := overlaySourceFixture(t, mem.DB())
+	primary, overlay, scope := overlaySourceFixture(t, mem.DB())
 	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild", err)
 	testutil.FailErr(t, "AppendMessages", mem.AppendMessages(ctx, child.ID, currentVerifyPassedMessage(overlay)))
 
-	uncheckedPrimary, uncheckedOverlay, uncheckedScope, uncheckedBaseline := overlaySourceFixture(t, mem.DB())
+	uncheckedPrimary, uncheckedOverlay, uncheckedScope := overlaySourceFixture(t, mem.DB())
 	uncheckedChild, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild unchecked", err)
 
@@ -116,20 +112,20 @@ func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 		ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: primary, WorkspaceRoot: overlay, ChildSessionID: child.ID,
 		AgentType: "implementer", Status: api.WorkerStatusComplete,
-		MergeStatus: api.WorkerMergeStatusPending, Scope: &scope, WorkspaceBaselinePath: baseline,
+		MergeStatus: api.WorkerMergeStatusPending, Scope: &scope,
 	})
 	testutil.FailErr(t, "enqueue checked", err)
-	bindWorkerFixture(t, mem.DB(), checkedID, overlay, baseline, api.WorkerMergeStatusPending)
+	bindWorkerFixture(t, mem.DB(), checkedID, overlay, primary, api.WorkerMergeStatusPending)
 	uncheckedID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",
 		ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: uncheckedPrimary, WorkspaceRoot: uncheckedOverlay, ChildSessionID: uncheckedChild.ID,
 		AgentType: "implementer", Status: api.WorkerStatusComplete,
-		MergeStatus: api.WorkerMergeStatusPending, Scope: &uncheckedScope, WorkspaceBaselinePath: uncheckedBaseline,
+		MergeStatus: api.WorkerMergeStatusPending, Scope: &uncheckedScope,
 	})
 	testutil.FailErr(t, "enqueue unchecked", err)
-	bindWorkerFixture(t, mem.DB(), uncheckedID, uncheckedOverlay, uncheckedBaseline, api.WorkerMergeStatusPending)
+	bindWorkerFixture(t, mem.DB(), uncheckedID, uncheckedOverlay, uncheckedPrimary, api.WorkerMergeStatusPending)
 
 	state := mgr.Workers.State.ForSession(ctx, parent)
 	if len(state.PendingOverlayIDs) != 2 {
@@ -149,17 +145,17 @@ func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 
-	primary, overlay, scope, baseline := overlaySourceFixture(t, mem.DB())
+	primary, overlay, scope := overlaySourceFixture(t, mem.DB())
 	jobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",
 		ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: primary, WorkspaceRoot: overlay,
 		AgentType: "implementer", Status: api.WorkerStatusPending,
-		Scope: &scope, WorkspaceBaselinePath: baseline,
+		Scope: &scope,
 	})
 	testutil.FailErr(t, "enqueue worker", err)
-	bindWorkerFixture(t, mem.DB(), jobID, overlay, baseline, "")
+	bindWorkerFixture(t, mem.DB(), jobID, overlay, primary, "")
 	claimed, err := q.ClaimNext(ctx, worker.ClaimRequest{ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "claim worker", err)
 	won, err := q.Complete(ctx, claimed, api.WorkerResult{Status: "partial", Summary: "unmet verify"})
@@ -435,7 +431,7 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 
-	primary, overlay, scope, baseline := overlaySourceFixture(t, mem.DB())
+	primary, overlay, scope := overlaySourceFixture(t, mem.DB())
 	rev, rootDigest := invocation.SourceRevisionForRoot(overlay)
 	curRev := workercompletion.SourceRevision{Revision: rev, RootDigest: rootDigest}
 	mgr.Verification.SetRevisionSource(func(context.Context, string) (string, string) {
@@ -450,10 +446,10 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	jobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: primary, WorkspaceRoot: overlay, ChildSessionID: child.ID,
-		AgentType: "implementer", Status: api.WorkerStatusRunning, Scope: &scope, WorkspaceBaselinePath: baseline,
+		AgentType: "implementer", Status: api.WorkerStatusRunning, Scope: &scope,
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
-	bindWorkerFixture(t, mem.DB(), jobID, overlay, baseline, "")
+	bindWorkerFixture(t, mem.DB(), jobID, overlay, primary, "")
 	task, ok := q.Get(jobID)
 	if !ok || task == nil {
 		t.Fatalf("expected task %s in queue", jobID)
@@ -638,7 +634,7 @@ func provisionUnrelatedWorker(
 	rev, rootDigest string,
 ) unrelatedWorker {
 	t.Helper()
-	otherPrimary, otherOverlay, otherScope, otherBaseline := overlaySourceFixture(t, mem.DB())
+	otherPrimary, otherOverlay, otherScope := overlaySourceFixture(t, mem.DB())
 	otherChild, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild other", err)
 	otherChild.WorkspacePath = otherPrimary
@@ -646,10 +642,10 @@ func provisionUnrelatedWorker(
 	otherJobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt: "other", Brief: "other", ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: otherPrimary, WorkspaceRoot: otherOverlay, ChildSessionID: otherChild.ID,
-		AgentType: "implementer", Status: api.WorkerStatusRunning, Scope: &otherScope, WorkspaceBaselinePath: otherBaseline,
+		AgentType: "implementer", Status: api.WorkerStatusRunning, Scope: &otherScope,
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID other", err)
-	bindWorkerFixture(t, mem.DB(), otherJobID, otherOverlay, otherBaseline, "")
+	bindWorkerFixture(t, mem.DB(), otherJobID, otherOverlay, otherPrimary, "")
 	otherTask, _ := q.Get(otherJobID)
 	otherCtx := workercontext.WithJob(ctx, otherJobID)
 	_, err = mgr.Workers.Workspaces.BindViewCapabilities(
@@ -799,8 +795,12 @@ func TestWorkerReadAndWriteStructuredFactsWithoutSecondReadAndUnknownEvidence(t 
 	}
 }
 
-func bindWorkerFixture(t *testing.T, database db.Handle, jobID, branch, baseline string, merge api.WorkerMergeStatus) {
+func bindWorkerFixture(t *testing.T, database db.Handle, jobID, branch, primary string, merge api.WorkerMergeStatus) {
 	t.Helper()
+	root := db.DataDir(database)
+	baselines := workspacebaseline.New(database, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "worker-baselines"))
+	baseline, err := baselines.Capture(t.Context(), jobID, workspacebaseline.Branch([]projectroot.RootRef{{ID: "primary", Label: "primary", Path: primary, IsPrimary: true}}, primary))
+	testutil.FailErr(t, "capture baseline", err)
 	jobs := worker.NewSQLStore(database)
 	bound, err := jobs.SetWorkerWorkspace(t.Context(), jobID, branch, baseline)
 	testutil.FailErr(t, "bind worker baseline", err)
