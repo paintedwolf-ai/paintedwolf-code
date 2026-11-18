@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,14 +18,13 @@ import (
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestBeforeWorkerWriteRejectsReadScopedMutation(t *testing.T) {
 	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent")
 	mgr.SetWorkerQueue(q)
 	dir := t.TempDir()
 	readScope := api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"internal/**"}}
@@ -55,7 +55,7 @@ func TestBeforeWorkerWriteRejectsReadScopedMutation(t *testing.T) {
 
 func TestBeforeWorkerWriteAllowsPathOutsideSuggestion(t *testing.T) {
 	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent")
 	mgr.SetWorkerQueue(q)
 	writeScope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"src/allowed/**"}}
 	_, err := q.Enqueue(context.Background(), api.WorkerTask{
@@ -93,7 +93,7 @@ func TestEnsureWorkerBranchFailsWriteScopeWithoutWorkspace(t *testing.T) {
 func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 	ctx := context.Background()
 	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
-	queue := worker.NewInMemoryQueue(8)
+	queue := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent", "child-read-discovery")
 	mgr.SetWorkerQueue(queue)
 	scope := api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"docs/README.md"}}
 	child := api.Session{ID: "child-read-discovery", ParentSessionID: "parent"}
@@ -134,7 +134,7 @@ func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 func readScopedWorkerManager(t *testing.T, jobID string, mode api.TaskScopeMode) (*session.Host, context.Context) {
 	t.Helper()
 	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent")
 	mgr.SetWorkerQueue(q)
 	scope := api.TaskScope{Mode: mode, Paths: []string{"."}}
 	ctx := context.Background()

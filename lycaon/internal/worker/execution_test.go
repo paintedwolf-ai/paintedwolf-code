@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/db"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -47,13 +48,14 @@ func wireExecutionCloseoutPolicy(t *testing.T, manager *session.Host) {
 	manager.SetOARPipeline(pipeline, oar.NewRenderer(formatter, nil))
 }
 
-func newExecutionStack(t *testing.T) (*session.Host, *InMemoryQueue, *LocalWorkerExecutor, *LocalWorkerPoller) {
+func newExecutionStack(t *testing.T) (*session.Host, *SQLQueue, *LocalWorkerExecutor, *LocalWorkerPoller) {
 	t.Helper()
-	store := store.NewMemory()
+	queue := newTestQueue(t, DefaultWorkersConfig().Poller.MaxConcurrency, testdbseed.DefaultProjectID)
+	testdbseed.InsertProjectRoot(t, queue.db, testdbseed.DefaultProjectID, t.TempDir())
+	store := store.NewSQL(queue.db.(db.ReadHandle))
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wireExecutionCloseoutPolicy(t, mgr)
 	cfg := DefaultWorkersConfig()
-	queue := NewInMemoryQueue(cfg.Poller.MaxConcurrency)
 	queue.SetWorkersConfig(cfg)
 	exec := NewLocalWorkerExecutor(mgr.Workers, queue, mgr.Workspace, mgr.Submissions, mgr.Runner.Transcript, mgr.Runner.Execution, mgr.Workers.Cancel, mgr.Workers.Cancellations)
 	exec.SetPromptInjects(promptstest.InjectRenderer(t))
@@ -63,7 +65,7 @@ func newExecutionStack(t *testing.T) (*session.Host, *InMemoryQueue, *LocalWorke
 }
 
 func TestCancelMidRun(t *testing.T) {
-	queue := NewInMemoryQueue(2)
+	queue := newTestQueue(t, 2, testdbseed.DefaultProjectID, "parent")
 	exec := newBlockExecutor()
 	cfg := DefaultWorkersConfig()
 	poller := NewLocalWorkerPoller(queue, exec, cfg, discardOutcomeRecorder{})
@@ -125,7 +127,7 @@ func (b *blockExecutor) Execute(ctx context.Context, task api.WorkerTask, run Wo
 func TestConcurrencyCapEnforced(t *testing.T) {
 	cfg := DefaultWorkersConfig()
 	cfg.Poller.MaxConcurrency = 2
-	queue := NewInMemoryQueue(cfg.Poller.MaxConcurrency)
+	queue := newTestQueue(t, cfg.Poller.MaxConcurrency, testdbseed.DefaultProjectID, "s")
 	queue.SetWorkersConfig(cfg)
 
 	var running int32
@@ -212,7 +214,7 @@ func TestParentMessageCapAfterWorkers(t *testing.T) {
 }
 
 func TestLocalWorkerPollerRunWaitsForInflightOnCancel(t *testing.T) {
-	queue := NewInMemoryQueue(2)
+	queue := newTestQueue(t, 2, testdbseed.DefaultProjectID, "parent")
 	block := newBlockExecutor()
 	cfg := DefaultWorkersConfig()
 	poller := NewLocalWorkerPoller(queue, block, cfg, discardOutcomeRecorder{})

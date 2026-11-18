@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -197,7 +198,7 @@ func wireToolpolicyMatrixContract(
 		contractcheck.FailErr(t, "workflowinputs.RegisterAskUserTool failed", err)
 	}
 
-	queue := worker.NewInMemoryQueue(4)
+	queue := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
 	planDeps := plantest.Deps(workerrecords.New(sqlDB))
 	planDeps.Plans, planDeps.Approvals = blueprintMgr, blueprintMgr
 	planSvc := plantest.New(t, planDeps)
