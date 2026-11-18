@@ -5,7 +5,7 @@ import { expect, type APIRequestContext, type Page } from "@playwright/test";
 import type { CheckpointListResponse, SourceWalkResponse, ToolResult } from "../src/api/types.ts";
 import {
   apiConfig, apiPostPrompt, bootstrapActiveProject, e2eTempDir, e2eUniqueLabel,
-  settledChatSessionId, waitForChatComposerReady, webE2e,
+  liveChatStage, settledChatSessionId, waitForChatComposerReady, webE2e,
 } from "./helpers.ts";
 import { manualHarnessTools } from "./manual-harness-tools.ts";
 
@@ -95,15 +95,24 @@ webE2e("outside command changes reach chat Files and Review with explicit covera
       capability_request: { write_root: unreadable },
     });
     const gap = await allowOutsideCommand(request, sessionId, chmod);
+    const resume = await request.post(`${apiUrl}/harness/llm/auto`, { headers, data: { enabled: true } });
+    expect(resume.ok(), await resume.text()).toBeTruthy();
     expect(gap.card_facts).toContainEqual(expect.objectContaining({
       kind: "source_observation",
       source_coverage: expect.arrayContaining([expect.objectContaining({
         folder: unreadable, coverage: "not_observed", reason: "io_error",
       })]),
     }));
-    const action = page.getByTestId("action-card").filter({ hasText: "File observation incomplete" }).last();
-    await expect(action).toBeVisible();
-    await action.locator(":scope > button").click();
+    const activity = liveChatStage(page).getByTestId("activity-span-card").last();
+    await expect(activity).toBeVisible();
+    if (await activity.getAttribute("data-expanded") !== "true") {
+      await activity.locator(":scope > .den-transcript-disclosure-header").click();
+    }
+    const action = activity.locator(`[data-testid="action-card"][data-tool-call-id="${chmod}"]`).last();
+    await expect(action).toContainText("File observation incomplete");
+    if (await action.getAttribute("data-expanded") !== "true") {
+      await action.locator(":scope > .den-transcript-disclosure-header").click();
+    }
     await expect(action).toContainText(`${unreadable} was not observed`);
 
     const response = await request.get(`${apiUrl}/v1/projects/${project.id}/source/walk`, {
@@ -126,10 +135,10 @@ webE2e("outside command changes reach chat Files and Review with explicit covera
 
     await page.getByTestId("files-pane-files").click();
     await expect(page.getByTestId("files-tree-outside-tag")).toBeVisible();
-    const location = page.getByRole("button", { name: `Expand ${path.basename(observed)}`, exact: true });
+    const location = page.getByRole("button", { name: new RegExp(`^(Expand|Collapse) ${path.basename(observed)}$`) });
     const locationId = await location.getAttribute("data-root");
     expect(locationId).toBeTruthy();
-    await location.click();
+    if (await location.getAttribute("aria-expanded") !== "true") await location.click();
     const row = page.locator(`[data-testid="files-tree-file"][data-root="${locationId}"]`).filter({ hasText: file });
     await expect(row.getByTestId("files-tree-scope-mark")).toHaveAttribute("data-kind", "changed");
     await row.click();
