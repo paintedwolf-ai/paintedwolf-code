@@ -43,11 +43,9 @@ func TestHintWhenExpressionsValidate(t *testing.T) {
 		if !conditions.IsForbidden(id) {
 			t.Fatalf("%q is not a forbidden condition id", id)
 		}
-		err := loader.ValidateCondition(id)
-		var loadErr *oarcore.LoadError
-		var syntaxErr *oarcore.SyntaxError
-		if !errors.As(err, &loadErr) && !errors.As(err, &syntaxErr) {
-			t.Errorf("when %q: error = %v, want a typed condition refusal", id, err)
+		var unknown *oarcore.TypeError
+		if err := loader.ValidateCondition(id); !errors.As(err, &unknown) || unknown.Clause != "OAR-EXPR-2" {
+			t.Errorf("when %q: error = %v, want the unknown-identifier refusal OAR-EXPR-2", id, err)
 		}
 	}
 }
