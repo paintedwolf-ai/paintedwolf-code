@@ -2,6 +2,8 @@ package laws
 
 import (
 	"bytes"
+	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -29,6 +31,7 @@ type Corpus struct {
 	parses  atomic.Int64
 	typings atomic.Int64
 	scratch onceValue[string]
+	schema  onceValue[*sql.DB]
 }
 
 // Stats counts the expensive loads one Corpus performed.
@@ -107,12 +110,17 @@ func (c *Corpus) Scratch() string {
 	return dir
 }
 
-// Close removes the scratch directory, if one was made.
+// Close closes the live schema and removes the scratch directory, if either
+// was made.
 func (c *Corpus) Close() error {
-	if c.scratch.value == "" {
-		return nil
+	var errs []error
+	if c.schema.value != nil {
+		errs = append(errs, c.schema.value.Close())
 	}
-	return os.RemoveAll(c.scratch.value)
+	if c.scratch.value != "" {
+		errs = append(errs, os.RemoveAll(c.scratch.value))
+	}
+	return errors.Join(errs...)
 }
 
 // Path joins a repository-relative path onto the root.
