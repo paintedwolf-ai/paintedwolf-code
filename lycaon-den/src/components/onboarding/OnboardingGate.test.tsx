@@ -5,8 +5,12 @@ import type { ModelPolicy, ProviderMeta } from "../../api/types.ts";
 import { createSettingsStore } from "../../store/settings-store.ts";
 import {
   resetDispatcherForTests,
+  registerCommandHandler,
+  dispatchKeyboardEvent,
   setDispatcherPlatformForTests,
 } from "../../shortcuts/dispatcher.ts";
+import { tryDismissOnboardingWelcome } from "./onboarding-welcome-dismiss.ts";
+import { MODELS_SETTINGS_COPY } from "../../settings/providers/models-settings-copy.ts";
 import { OnboardingGate } from "./OnboardingGate.tsx";
 import { resetLayoutForTests } from "../../layout/layout-test-support.ts";
 import {
@@ -111,6 +115,18 @@ async function advanceToWelcome(): Promise<void> {
   });
 }
 
+function pressEscape(): void {
+  dispatchKeyboardEvent({
+    key: "Escape",
+    code: "Escape",
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    target: document.body,
+  });
+}
+
 afterEach(() => {
   cleanup();
   customChrome = true;
@@ -141,6 +157,211 @@ describe("Local model setup", () => {
     expect(screen.getByTestId("onboarding-progress").textContent).toBe("1 / 1");
     fireEvent.click(screen.getByRole("button", {name: "Continue without a local model"}));
     expect(completeFirstRunSetup).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Setup navigation and accessibility", () => {
+  it("is a labelled modal landmark that takes focus on mount", async () => {
+    const settingsStore = createSettingsStore({
+      providers: [],
+      modelPolicy: {
+        coordinator: { provider_id: "", model: "" },
+        lite: { provider_id: "", model: "" },
+        agent_pool: { selection: "first", models: [] },
+      },
+    });
+    const { getByTestId, container } = render(() => (
+      <OnboardingGate
+        client={mockClient()}
+        settingsStore={settingsStore}
+        settingsChecked={true}
+      />
+    ));
+
+    const gate = getByTestId("onboarding-gate");
+    expect(gate.getAttribute("role")).toBe("dialog");
+    expect(gate.getAttribute("aria-modal")).toBe("true");
+    expect(gate.getAttribute("aria-labelledby")).toBe("onboarding-local_model-title");
+    expect(container.querySelector("main")).toBeTruthy();
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        gate.querySelector(":scope > .den-scrollport__viewport"),
+      );
+    });
+  });
+
+  it("welcome fades in the stage wash background", async () => {
+    const settingsStore = createSettingsStore({
+      providers: [readyProvider],
+      modelPolicy: policyWithDefault,
+    });
+    const { getByTestId, queryByTestId } = render(() => (
+      <OnboardingGate
+        client={mockClient()}
+        settingsStore={settingsStore}
+        settingsChecked={true}
+      />
+    ));
+    await advanceToWelcome();
+    expect(getByTestId("onboarding-welcome-wash")).toBeTruthy();
+    expect(queryByTestId("onboarding-local-model")).toBeNull();
+    expect(
+      getByTestId("onboarding-gate").classList.contains(
+        "onboarding-gate--welcome",
+      ),
+    ).toBe(true);
+  });
+
+  it("welcome teach reuses Settings dock chrome with AI providers selected and the nav dot", async () => {
+    const settingsStore = createSettingsStore({
+      providers: [readyProvider],
+      modelPolicy: policyWithDefault,
+    });
+    const { getByTestId } = render(() => (
+      <OnboardingGate
+        client={mockClient()}
+        settingsStore={settingsStore}
+        settingsChecked={true}
+      />
+    ));
+    await advanceToWelcome();
+    expect(getByTestId("onboarding-welcome").textContent).toContain(
+      MODELS_SETTINGS_COPY.onboardingWelcomeSettingsHint,
+    );
+    expect(getByTestId("onboarding-welcome").textContent).toContain(
+      MODELS_SETTINGS_COPY.onboardingWelcomeSettingsHintSub,
+    );
+    const dock = getByTestId("onboarding-welcome-settings-dock");
+    expect(dock.hasAttribute("inert")).toBe(true);
+    expect(dock.querySelectorAll(".den-nav-marker")).toHaveLength(1);
+    const providers = getByTestId("settings-nav-providers");
+    expect(providers.classList.contains("den-shell-nav-sub-link-active")).toBe(
+      true,
+    );
+    expect(dock.querySelector(".den-shell-dock-link-active")?.textContent).toContain(
+      "Settings",
+    );
+    fireEvent.click(getByTestId("settings-nav-approvals"));
+    expect(providers.classList.contains("den-shell-nav-sub-link-active")).toBe(
+      true,
+    );
+    expect(
+      getByTestId("settings-nav-approvals").classList.contains(
+        "den-shell-nav-sub-link-active",
+      ),
+    ).toBe(false);
+  });
+
+  it("Back walks welcome → layout → summarizer → model choice without latching", async () => {
+    const settingsStore = createSettingsStore({
+      providers: [readyProvider],
+      modelPolicy: policyWithDefault,
+    });
+    const { getByTestId, queryByTestId } = render(() => (
+      <OnboardingGate
+        client={mockClient()}
+        settingsStore={settingsStore}
+        settingsChecked={true}
+      />
+    ));
+    await advanceToWelcome();
+    expect(queryByTestId("onboarding-welcome-skip")).toBeNull();
+    fireEvent.click(getByTestId("onboarding-welcome-back"));
+    await waitFor(() => {
+      expect(getByTestId("onboarding-layout")).toBeTruthy();
+    });
+    expect(queryByTestId("onboarding-welcome")).toBeNull();
+    expect(queryByTestId("onboarding-layout-skip")).toBeNull();
+
+    fireEvent.click(getByTestId("onboarding-layout-back"));
+    await waitFor(() => {
+      expect(getByTestId("onboarding-summarizer")).toBeTruthy();
+    });
+
+    fireEvent.click(getByTestId("onboarding-summarizer-back"));
+    await waitFor(() => {
+      expect(getByTestId("onboarding-local-model")).toBeTruthy();
+    });
+    expect(queryByTestId("onboarding-setup-back")).toBeNull();
+    expect(completeFirstRunSetup).not.toHaveBeenCalled();
+  });
+
+  it("Escape steps summarizer → layout → welcome without latching", async () => {
+    setDispatcherPlatformForTests("macos");
+    registerCommandHandler("overlay.dismiss", () => {
+      tryDismissOnboardingWelcome();
+    });
+    const settingsStore = createSettingsStore({
+      providers: [readyProvider],
+      modelPolicy: policyWithDefault,
+    });
+    const { getByTestId } = render(() => (
+      <OnboardingGate
+        client={mockClient()}
+        settingsStore={settingsStore}
+        settingsChecked={true}
+      />
+    ));
+    fireEvent.click(screen.getByRole("button", {name: "Continue without a local model"}));
+    expect(getByTestId("onboarding-summarizer")).toBeTruthy();
+    pressEscape();
+    await waitFor(() => {
+      expect(getByTestId("onboarding-layout")).toBeTruthy();
+    });
+    pressEscape();
+    await waitFor(() => {
+      expect(getByTestId("onboarding-welcome")).toBeTruthy();
+    });
+    expect(completeFirstRunSetup).not.toHaveBeenCalled();
+    // Stepping past the layout page keeps the default.
+    expect(startupCompanionPref()).toBeNull();
+  });
+
+  it("dismisses welcome via Escape through overlay.dismiss", async () => {
+    setDispatcherPlatformForTests("macos");
+    registerCommandHandler("overlay.dismiss", () => {
+      tryDismissOnboardingWelcome();
+    });
+    const settingsStore = createSettingsStore({
+      providers: [readyProvider],
+      modelPolicy: policyWithDefault,
+    });
+    const { getByTestId } = render(() => (
+      <OnboardingGate
+        client={mockClient()}
+        settingsStore={settingsStore}
+        settingsChecked={true}
+      />
+    ));
+    await advanceToWelcome();
+    expect(getByTestId("onboarding-welcome")).toBeTruthy();
+    await waitFor(() => {
+      dispatchKeyboardEvent({
+        key: "Escape",
+        code: "Escape",
+        metaKey: false,
+        ctrlKey: false,
+        altKey: false,
+        shiftKey: false,
+        target: document.body,
+      });
+      expect(completeFirstRunSetup).toHaveBeenCalledOnce();
+    });
+  });
+
+  it("omits the drag strip when custom chrome is off", () => {
+    customChrome = false;
+    const settingsStore = createSettingsStore({
+      providers: [],
+    });
+    const { container } = render(() => (
+      <OnboardingGate
+        client={mockClient()}
+        settingsStore={settingsStore}
+        settingsChecked={true}
+      />
+    ));
+    expect(container.querySelector(".onboarding-gate__chrome-drag")).toBeNull();
   });
 });
 
