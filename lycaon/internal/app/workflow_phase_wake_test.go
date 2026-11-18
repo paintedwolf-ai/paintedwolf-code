@@ -260,10 +260,12 @@ func TestPhaseHandoffCarriesDurableEvidenceAndResetsPreviousRunProgress(t *testi
 			t.Fatalf("topology handoff used wrong run:%q,%+v", id, snapshot)
 		}
 	}})
-	runtime.OnWorkflowPhaseEnter(ctx, &workflowphases.RunContext{SessionID: "chat", RunID: run.ID, WorkflowID: run.WorkflowID, WorkflowVersion: run.WorkflowVersion, PreviousPhase: "execute", Phase: "claims"}, workflowdef.PhaseDef{ID: "claims", BindTopologyStage: "claims"})
+	previous, err := progressStore.Snapshot(ctx, "chat")
+	testutil.FailErr(t, "read previous run progress", err)
+	testutil.FailErr(t, "enter phase", runtime.OnWorkflowPhaseEnter(ctx, &workflowphases.RunContext{SessionID: "chat", RunID: run.ID, WorkflowID: run.WorkflowID, WorkflowVersion: run.WorkflowVersion, PreviousPhase: "execute", Phase: "claims"}, workflowdef.PhaseDef{ID: "claims", BindTopologyStage: "claims"}))
 	snapshot, err := progressStore.Snapshot(ctx, "chat")
 	testutil.FailErr(t, "read adopted run", err)
-	if topologyCalls != 1 || snapshot.RunID != run.ID || strings.Contains(progressStore.Get(ctx, "chat"), "old run checklist") {
+	if topologyCalls != 1 || snapshot.RunID != run.ID || snapshot.Content == previous.Content {
 		t.Fatal("phase handoff retained previous run progress or missed topology")
 	}
 	kicks.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()}))

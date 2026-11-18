@@ -23,7 +23,7 @@ func (s interruptedTransaction) AppendMessagesWith(ctx context.Context, id strin
 		if err != nil {
 			return nil, err
 		}
-		if err = s.after(tx); err != nil {
+		if err := s.after(tx); err != nil {
 			return nil, err
 		}
 		return rows, nil
