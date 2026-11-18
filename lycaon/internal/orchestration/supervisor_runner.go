@@ -12,9 +12,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-const supervisorLegTitle = "Supervisor"
+const supervisorWorkID = "Supervisor"
 
-// effectiveSupervisorMaxAgents returns the tighter of YAML max_agents and MaxTeamAgents.
 func effectiveSupervisorMaxAgents(spec SupervisorSpec) int {
 	max := MaxTeamAgents
 	if spec.MaxAgents > 0 && spec.MaxAgents < max {
@@ -35,7 +34,7 @@ func validateSupervisorSpec(spec SupervisorSpec) error {
 }
 
 func (o *OrchestratorImpl) runSupervisor(ctx context.Context, req RunRequest) (*RunResult, error) {
-	if o.delegation == nil || o.store == nil || o.agents == nil {
+	if o.workers == nil || o.agents == nil {
 		return nil, fmt.Errorf("orchestrator supervisor dependencies not configured")
 	}
 	if req.Topology.Supervisor == nil {
@@ -65,12 +64,12 @@ func (o *OrchestratorImpl) runSupervisor(ctx context.Context, req RunRequest) (*
 
 	runID := uuid.NewString()
 	state := &runState{
-		runID:     runID,
-		completed: make(map[string]bool),
-		outputs:   make(map[string]string),
-		stageLegs: make(map[string]string),
-		phase:     "supervisor",
-		active:    true,
+		runID:      runID,
+		completed:  make(map[string]bool),
+		outputs:    make(map[string]string),
+		stageUnits: make(map[string]string),
+		phase:      "supervisor",
+		active:     true,
 	}
 	o.registerRun(runID, state)
 	defer func() {
@@ -94,46 +93,47 @@ func (o *OrchestratorImpl) runSupervisor(ctx context.Context, req RunRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	supervisorLeg := buildSupervisorLeg(supervisorProfileID, task)
-	delegation := api.Delegation{
+	supervisorUnit := buildSupervisorUnit(supervisorProfileID, task)
+	units := make([]TopologyUnit, 1, len(workerProfileIDs)+1)
+	units[0] = supervisorUnit
+	for _, profileID := range workerProfileIDs {
+		units = append(units, buildSupervisorWorkerUnit(profileID, supervisorUnit.ID, task))
+	}
+	created, createdUnits, err := o.workers.CreateBatch(ctx, TopologyBatch{
+		SessionID:     sessionID,
 		ProjectID:     projectID,
 		WorkspacePath: projectDir,
 		Task:          task,
-		Strategy:      api.HuntStrategyFileBased,
-		Status:        "active",
-		Phase:         api.DelegationPhaseSetup,
-	}
-	workerLegIDs := make([]string, len(workerProfileIDs))
-	legs := make([]api.Leg, 1, len(workerProfileIDs)+1)
-	legs[0] = supervisorLeg
-	for i, profileID := range workerProfileIDs {
-		leg := buildSupervisorWorkerLeg(profileID, supervisorLeg.ID, task)
-		legs = append(legs, leg)
-		workerLegIDs[i] = leg.ID
-		state.stageLegs[profileID] = leg.ID
-	}
-	created, err := o.store.Create(ctx, delegation, sessionID, legs)
+		Pattern:       TopologySupervisor,
+		Status:        TopologyBatchActive,
+	}, units)
 	if err != nil {
 		return nil, err
 	}
-	delegationID := created.ID
-	if err := o.bindRunDelegation(ctx, state, delegationID); err != nil {
+	batchID := created.ID
+	if err := o.bindRunBatch(ctx, state, batchID); err != nil {
 		return nil, err
 	}
-	state.stageLegs[supervisorLegTitle] = supervisorLeg.ID
+	supervisorUnitID := createdUnits[0].ID
+	state.stageUnits[supervisorWorkID] = supervisorUnitID
+	workerUnitIDs := make([]string, len(workerProfileIDs))
+	for i, profileID := range workerProfileIDs {
+		workerUnitIDs[i] = createdUnits[i+1].ID
+		state.stageUnits[profileID] = createdUnits[i+1].ID
+	}
 
-	if err := o.dispatchSupervisorLeg(ctx, req, runID, delegationID, supervisorLeg.ID, supervisorProfileID); err != nil {
+	if _, err := o.workers.DispatchUnit(ctx, batchID, supervisorUnitID); err != nil {
 		return nil, err
 	}
 
 	switch strategy {
 	case TeamStrategyParallel:
-		if err := o.dispatchSupervisorWorkersParallel(ctx, req, runID, delegationID, workerProfileIDs, workerLegIDs); err != nil {
+		if err := o.dispatchSupervisorWorkersParallel(ctx, batchID, workerUnitIDs); err != nil {
 			return nil, err
 		}
 	case TeamStrategySequential:
-		for i, profileID := range workerProfileIDs {
-			if err := o.dispatchSupervisorWorkerLeg(ctx, req, runID, delegationID, workerLegIDs[i], profileID); err != nil {
+		for _, unitID := range workerUnitIDs {
+			if _, err := o.workers.DispatchUnit(ctx, batchID, unitID); err != nil {
 				return nil, err
 			}
 		}
@@ -141,22 +141,22 @@ func (o *OrchestratorImpl) runSupervisor(ctx context.Context, req RunRequest) (*
 		return nil, fmt.Errorf("unsupported supervisor strategy %q", strategy)
 	}
 
-	allLegIDs := append([]string{supervisorLeg.ID}, workerLegIDs...)
-	settled, err := o.settleLegs(ctx, delegationID, allLegIDs, string(TopologySupervisor))
+	allUnitIDs := append([]string{supervisorUnitID}, workerUnitIDs...)
+	settled, err := o.settleUnits(ctx, batchID, allUnitIDs)
 	if err != nil {
 		return nil, err
 	}
-	for _, leg := range settled {
-		if leg.Status == api.LegStatusFailed || leg.Status == api.LegStatusCanceled {
-			return nil, fmt.Errorf("supervisor leg %q failed", leg.Title)
+	for _, unit := range settled {
+		if unit.Status == api.LegStatusFailed || unit.Status == api.LegStatusCanceled {
+			return nil, fmt.Errorf("supervisor unit %q failed", unit.WorkID)
 		}
-		key := leg.Title
-		if key == supervisorLegTitle {
+		key := unit.WorkID
+		if key == supervisorWorkID {
 			key = supervisorProfileID
 		}
 		output := key + " complete"
-		if leg.Result != nil && strings.TrimSpace(leg.Result.Summary) != "" {
-			output = leg.Result.Summary
+		if strings.TrimSpace(unit.Summary) != "" {
+			output = unit.Summary
 		}
 		state.outputs[key] = output
 	}
@@ -182,71 +182,50 @@ func (o *OrchestratorImpl) runSupervisor(ctx context.Context, req RunRequest) (*
 	}, nil
 }
 
-func buildSupervisorLeg(profileID, task string) api.Leg {
-	return api.Leg{
+func buildSupervisorUnit(profileID, task string) TopologyUnit {
+	return TopologyUnit{
 		ID:        uuid.NewString(),
-		Title:     supervisorLegTitle,
+		WorkID:    supervisorWorkID,
 		AgentType: profileID,
 		Prompt:    task,
-		Files:     []string{wholeProjectScopeGlob},
 		Status:    api.LegStatusPending,
-		CreatedAt: time.Now().UTC(),
 	}
 }
 
-func buildSupervisorWorkerLeg(profileID, supervisorLegID, task string) api.Leg {
-	return api.Leg{
+func buildSupervisorWorkerUnit(profileID, supervisorUnitID, task string) TopologyUnit {
+	return TopologyUnit{
 		ID:        uuid.NewString(),
-		Title:     profileID,
+		WorkID:    profileID,
 		AgentType: profileID,
-		ParentID:  supervisorLegID,
+		ParentID:  supervisorUnitID,
 		Prompt:    task,
-		Files:     []string{wholeProjectScopeGlob},
 		Status:    api.LegStatusPending,
-		CreatedAt: time.Now().UTC(),
 	}
-}
-
-func (o *OrchestratorImpl) dispatchSupervisorLeg(ctx context.Context, req RunRequest, runID, delegationID, legID, profileID string) error {
-	taskID := runID + ":supervisor"
-	if _, err := o.iterationCap.Track(ctx, profileID, taskID); err != nil {
-		return err
-	}
-	if err := o.checkIteration(ctx, req.Topology, profileID, taskID, TerminationContext{
-		AgentID: profileID,
-		TaskID:  taskID,
-	}); err != nil {
-		return err
-	}
-	_, err := o.delegation.DispatchLeg(ctx, delegationID, legID, "")
-	return err
 }
 
 func (o *OrchestratorImpl) dispatchSupervisorWorkersParallel(
 	ctx context.Context,
-	req RunRequest,
-	runID, delegationID string,
-	profileIDs, legIDs []string,
+	batchID string,
+	unitIDs []string,
 ) error {
 	var wg sync.WaitGroup
-	errCh := make(chan error, len(legIDs))
-	for i, profileID := range profileIDs {
+	errCh := make(chan error, len(unitIDs))
+	for _, unitID := range unitIDs {
 		wg.Add(1)
-		go func(profileID, legID string) {
+		go func(unitID string) {
 			defer wg.Done()
-			// A panicking leg fails its own dispatch, not the engine.
 			defer func() {
 				r := recover()
 				if r == nil {
 					return
 				}
-				observability.LogRecoveredPanic("orchestration.supervisor_leg", r, "leg_id", legID)
-				errCh <- fmt.Errorf("leg %s panicked: %v", legID, r)
+				observability.LogRecoveredPanic("orchestration.supervisor_unit", r, "unit_id", unitID)
+				errCh <- fmt.Errorf("unit %s panicked: %v", unitID, r)
 			}()
-			if err := o.dispatchSupervisorWorkerLeg(ctx, req, runID, delegationID, legID, profileID); err != nil {
+			if _, err := o.workers.DispatchUnit(ctx, batchID, unitID); err != nil {
 				errCh <- err
 			}
-		}(profileID, legIDs[i])
+		}(unitID)
 	}
 	wg.Wait()
 	close(errCh)
@@ -256,19 +235,4 @@ func (o *OrchestratorImpl) dispatchSupervisorWorkersParallel(
 		}
 	}
 	return nil
-}
-
-func (o *OrchestratorImpl) dispatchSupervisorWorkerLeg(ctx context.Context, req RunRequest, runID, delegationID, legID, profileID string) error {
-	taskID := runID + ":worker:" + profileID
-	if _, err := o.iterationCap.Track(ctx, profileID, taskID); err != nil {
-		return err
-	}
-	if err := o.checkIteration(ctx, req.Topology, profileID, taskID, TerminationContext{
-		AgentID: profileID,
-		TaskID:  taskID,
-	}); err != nil {
-		return err
-	}
-	_, err := o.delegation.DispatchLeg(ctx, delegationID, legID, "")
-	return err
 }

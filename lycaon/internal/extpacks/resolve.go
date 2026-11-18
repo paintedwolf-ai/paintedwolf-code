@@ -532,7 +532,7 @@ func resolveOneUnit(
 	}
 	if ue.Kind == "" {
 		// Selector-only ids retain their encoded kind.
-		ue.Kind = kindRootForRel(id)
+		ue.Kind = KindRootForUnitID(id)
 	}
 	var diags []Diagnostic
 

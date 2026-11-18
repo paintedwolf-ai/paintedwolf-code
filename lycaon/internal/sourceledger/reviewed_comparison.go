@@ -37,7 +37,7 @@ func (s *Comparisons) CompareReviewed(ctx context.Context, projectID, fileID str
 	if err != nil {
 		return Comparison{}, err
 	}
-	out, err := s.compareVersions(ctx, projectID, first.BeforeVersionID, last.AfterVersionID)
+	out, err := s.CompareVersionPair(ctx, projectID, first.BeforeVersionID, last.AfterVersionID)
 	if err != nil {
 		return Comparison{}, err
 	}

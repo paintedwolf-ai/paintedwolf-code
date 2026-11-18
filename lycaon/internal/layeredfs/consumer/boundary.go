@@ -119,9 +119,9 @@ func NewEngine(cfg EngineConfig) (*Engine, error) {
 	if tracker == nil {
 		facts := observation.UnknownVisibilityFacts("unbound")
 		if cfg.PreparedView != nil {
-			facts = observation.VisibilityFactsFromDescriptor(observation.ViewCapabilitiesFromPreparedView(cfg.PreparedView))
+			facts = observation.VisibilityFactsFromAdapter(cfg.PreparedView.Facts)
 		} else if cfg.Adapter != nil {
-			facts = observation.VisibilityFactsFromDescriptor(observation.ViewCapabilitiesFromAdapterFacts(viewID, cfg.Adapter.Facts()))
+			facts = observation.VisibilityFactsFromAdapter(cfg.Adapter.Facts())
 		}
 		var rootSpecs []layeredfs.RootSpec
 		for _, id := range rootOrder {
@@ -164,7 +164,7 @@ func (e *Engine) VisibilityFacts() observation.VisibilityFacts {
 	if e.tracker == nil {
 		return observation.UnknownVisibilityFacts("unbound")
 	}
-	return e.tracker.VisibilityFacts()
+	return e.tracker.Facts()
 }
 
 // GuardLiveConsumerPath enforces the structural contract that live consumers must read

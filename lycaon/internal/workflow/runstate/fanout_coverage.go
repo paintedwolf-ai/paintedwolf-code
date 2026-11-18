@@ -1,8 +1,10 @@
 package runstate
 
 import (
-	"github.com/lycaon/lycaon/pkg/api"
 	"sort"
+	"strings"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type FanoutLegCoverage struct {
@@ -12,6 +14,13 @@ type FanoutLegCoverage struct {
 	Attempts  []string `json:"attempts"`
 	Status    string   `json:"status"`
 	Settled   bool     `json:"settled"`
+}
+
+func taskLineageKey(task api.WorkerTask) string {
+	if child := strings.TrimSpace(task.ChildSessionID); child != "" {
+		return "session:" + child
+	}
+	return "job:" + task.ID
 }
 
 func FanoutCoverage(plan FanoutPlan, tasks []api.WorkerTask, phase string) []FanoutLegCoverage {
@@ -25,11 +34,18 @@ func FanoutCoverage(plan FanoutPlan, tasks []api.WorkerTask, phase string) []Fan
 	out := make([]FanoutLegCoverage, 0, len(plan.Legs))
 	for _, leg := range plan.Legs {
 		entry := FanoutLegCoverage{ID: leg.ID, AgentType: leg.AgentType, Subject: leg.Subject, Status: "not_started"}
+		lineageIndex := map[string]int{}
 		for _, task := range tasks {
 			if task.WorkflowWorkID != leg.ID || task.WorkflowPhase != phase {
 				continue
 			}
-			entry.Attempts = append(entry.Attempts, task.ID)
+			key := taskLineageKey(task)
+			if idx, exists := lineageIndex[key]; exists {
+				entry.Attempts[idx] = task.ID
+			} else {
+				lineageIndex[key] = len(entry.Attempts)
+				entry.Attempts = append(entry.Attempts, task.ID)
+			}
 			entry.Status = api.WorkerTaskLegStatus(task)
 			entry.Settled = false
 			if task.Status.IsTerminal() {

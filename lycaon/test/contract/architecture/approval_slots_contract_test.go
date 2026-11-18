@@ -15,7 +15,7 @@ import (
 func TestEveryGateOffersTheFixedSlots(t *testing.T) {
 	t.Parallel()
 	approvals := settings.NewRuleApprovalGate(mustApprovalStore(t), settings.NoSources())
-	for _, g := range gate.All() {
+	for _, g := range api.AllApprovalGateValues() {
 		reuse := gate.ReuseFor(g)
 		if !reuse.Offered() || g == api.GateSecretOutbound {
 			// The secret ladder is minted by the secret screen, not the gate;
@@ -136,7 +136,7 @@ func TestQuietIsOneRowOnEveryDiscretionaryGate(t *testing.T) {
 			Command: "echo",
 		},
 	}
-	for _, g := range gate.All() {
+	for _, g := range api.AllApprovalGateValues() {
 		decision := &gate.Decision{Primary: g, ReasonKey: string(g) + ":subject"}
 		quiet := hitl.QuietOptions(action, decision, nil, nil)
 		if g == api.GateAgentPolicyChange {

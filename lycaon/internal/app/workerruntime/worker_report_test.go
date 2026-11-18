@@ -1,0 +1,170 @@
+package workerruntime
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/app/persistence"
+	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerrecords"
+	"github.com/lycaon/lycaon/pkg/api"
+)
+
+func TestWorkerReportPartialLegSkipsCoverageValidation(t *testing.T) {
+	database := testdbfixture.Open(t, "worker-report-partial.db")
+	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
+	runtime := New(database, nil, worker.WorkersConfig{})
+	id, err := runtime.Queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{ParentSessionID: "parent", AgentType: "implementer", Prompt: "Inspect source", Brief: "Inspect source", ExecutionTarget: api.ExecutionTargetLocal})
+	testutil.FailErr(t, "enqueue partial-leg worker", err)
+	calls := 0
+	validate := func(ctx context.Context, task *api.WorkerTask, review *api.CoverageReview) error {
+		calls++
+		return errors.New("coverage validation must be skipped for partial legs")
+	}
+	invocation := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: id, SessionID: "child"}}
+	record, err := runtime.DecodeCompleteLeg(t.Context(), map[string]any{"leg_status": "partial", "brief": "Observed result"}, invocation, validate)
+	if record != nil || err == nil || !strings.Contains(err.Error(), "worker report services unavailable") || calls != 0 {
+		t.Fatalf("partial leg misrouted: %+v, %v, calls=%d", record, err, calls)
+	}
+}
+
+func TestWorkerReportRejectsForeignChildSession(t *testing.T) {
+	database := testdbfixture.Open(t, "worker-report-identity.db")
+	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, database, "child", testdbseed.DefaultProjectID)
+	runtime := New(database, nil, worker.WorkersConfig{})
+	id, err := runtime.Queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{ParentSessionID: "parent", AgentType: "implementer", Prompt: "Inspect source", Brief: "Inspect source", ExecutionTarget: api.ExecutionTargetLocal})
+	testutil.FailErr(t, "enqueue mismatch worker", err)
+	runtime.SetDependencies(Dependencies{
+		Storage:  persistence.Runtime{Sessions: sessionstore.NewSQL(database)},
+		Sessions: &sessions.Runtime{Manager: &session.Host{}},
+	})
+	invocation := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: id, SessionID: "child"}}
+	record, err := runtime.DecodeCompleteLeg(t.Context(), map[string]any{"leg_status": "partial", "brief": "Observed result"}, invocation, nil)
+	if record != nil || err == nil || !strings.Contains(err.Error(), "does not match job") {
+		t.Fatalf("foreign child session accepted: %+v, %v", record, err)
+	}
+}
+
+func TestWorkerReportRequiresDurableChildSession(t *testing.T) {
+	database := testdbfixture.Open(t, "worker-report-ghost.db")
+	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
+	runtime := New(database, nil, worker.WorkersConfig{})
+	id, err := runtime.Queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{ParentSessionID: "parent", AgentType: "implementer", Prompt: "Inspect source", Brief: "Inspect source", ExecutionTarget: api.ExecutionTargetLocal})
+	testutil.FailErr(t, "enqueue ghost worker", err)
+	runtime.SetDependencies(Dependencies{
+		Storage:  persistence.Runtime{Sessions: sessionstore.NewSQL(database)},
+		Sessions: &sessions.Runtime{Manager: &session.Host{}},
+	})
+	invocation := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: id, SessionID: "ghost"}}
+	record, err := runtime.DecodeCompleteLeg(t.Context(), map[string]any{"leg_status": "partial", "brief": "Observed result"}, invocation, nil)
+	if record != nil || !errors.Is(err, sessionstore.ErrSessionNotFound) {
+		t.Fatalf("missing child session misreported: %+v, %v", record, err)
+	}
+}
+
+func TestWorkerReportAssemblesSummaryInputFromDurableChild(t *testing.T) {
+	database := testdbfixture.Open(t, "worker-report-deep.db")
+	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
+	store := sessionstore.NewSQL(database)
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	child, err := store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create child session", err)
+	host := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	runtime := New(database, nil, worker.WorkersConfig{})
+	id, err := runtime.Queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{ParentSessionID: "parent", AgentType: "implementer", Prompt: "Inspect source", Brief: "Inspect source", ExecutionTarget: api.ExecutionTargetLocal})
+	testutil.FailErr(t, "enqueue deep worker", err)
+	testutil.FailErr(t, "bind child session", runtime.Queue.SetChildSessionID(t.Context(), id, child.ID))
+	runtime.SetDependencies(Dependencies{
+		Storage:  persistence.Runtime{Sessions: store},
+		Sessions: &sessions.Runtime{Manager: host},
+	})
+	invocation := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: id, SessionID: child.ID}}
+	record, err := runtime.DecodeCompleteLeg(t.Context(), map[string]any{"leg_status": "partial", "brief": "Observed result"}, invocation, nil)
+	if err != nil && (strings.Contains(err.Error(), "services unavailable") || strings.Contains(err.Error(), "does not match job") || errors.Is(err, sessionstore.ErrSessionNotFound)) {
+		t.Fatalf("durable input assembly failed: %v", err)
+	}
+	if err == nil && record == nil {
+		t.Fatalf("acceptance returned neither record nor error: %+v", record)
+	}
+}
+
+func TestWorkerReportRefusesAResultThatIsNotTheWorkersEarlier(t *testing.T) {
+	database := testdbfixture.Open(t, "worker-report-cited-results.db")
+	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
+	runtime := New(database, nil, worker.WorkersConfig{})
+	runtime.Records = workerrecords.New(database)
+	id, err := runtime.Queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{ParentSessionID: "parent", AgentType: "implementer", Prompt: "Inspect source", Brief: "Inspect source", ExecutionTarget: api.ExecutionTargetLocal})
+	testutil.FailErr(t, "enqueue citing worker", err)
+	invocation := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: id, SessionID: "child"}}
+	record, err := runtime.DecodeCompleteLeg(t.Context(), map[string]any{"leg_status": "partial", "brief": "Observed result", "cited_results": []any{"res-9"}}, invocation, nil)
+	var reject *toolrejection.ToolReject
+	if record != nil || !errors.As(err, &reject) || reject.Code != workercompletion.ResultNotEarlierCode {
+		t.Fatalf("foreign result citation accepted: %+v, %v", record, err)
+	}
+}
+
+func TestReviewSubjectNamesResolvesSubjectWorkerAndResult(t *testing.T) {
+	database := testdbfixture.Open(t, "worker-review-subject-names.db")
+	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
+	runtime := New(database, nil, worker.WorkersConfig{})
+	records := workerrecords.New(database)
+	actor := workerrecords.Actor{SessionID: "parent", Role: workerrecords.RoleCoordinator, PrincipalID: "parent"}
+
+	if w, r, ok, err := reviewSubjectNames(t.Context(), records, "missing-job"); err != nil || ok || w != "" || r != "" {
+		t.Fatalf("missing job misreported: w=%q r=%q ok=%v err=%v", w, r, ok, err)
+	}
+
+	prodJob, err := runtime.Queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
+		ParentSessionID: "parent", AgentType: "implementer", Prompt: "Write parser", Brief: "Write parser", ExecutionTarget: api.ExecutionTargetLocal,
+	})
+	testutil.FailErr(t, "enqueue producer job", err)
+	prod, err := records.CreateWorker(t.Context(), actor, workerrecords.Op{ID: "op-prod"}, workerrecords.WorkerSpec{
+		Name: "parser", AgentType: "implementer", ScopeMode: workerrecords.ScopeWrite, Brief: "Write parser",
+	})
+	testutil.FailErr(t, "create producer worker", err)
+	_, err = records.AdmitRound(t.Context(), actor, workerrecords.Op{ID: "op-prod-r1"}, prod.WorkerID, workerrecords.RoundSpec{
+		JobID: prodJob, ExecutionTarget: "local",
+	})
+	testutil.FailErr(t, "admit producer round", err)
+
+	if w, r, ok, err := reviewSubjectNames(t.Context(), records, prodJob); err != nil || ok || w != "" || r != "" {
+		t.Fatalf("non-reviewer round misreported: w=%q r=%q ok=%v err=%v", w, r, ok, err)
+	}
+
+	revJob, err := runtime.Queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
+		ParentSessionID: "parent", AgentType: "reviewer", Prompt: "Review parser", Brief: "Review parser", ExecutionTarget: api.ExecutionTargetLocal,
+	})
+	testutil.FailErr(t, "enqueue reviewer job", err)
+	rev, err := records.CreateWorker(t.Context(), actor, workerrecords.Op{ID: "op-rev"}, workerrecords.WorkerSpec{
+		Name: "checker", AgentType: "reviewer", ScopeMode: workerrecords.ScopeRead, Brief: "Review parser",
+	})
+	testutil.FailErr(t, "create reviewer worker", err)
+	subjectJSON, err := json.Marshal(workerrecords.ReviewSubject{
+		ResultID: "res-1", WorkerID: prod.WorkerID, JobID: prodJob, CheckpointID: "cp-1",
+	})
+	testutil.FailErr(t, "marshal review subject", err)
+	_, err = records.AdmitRound(t.Context(), actor, workerrecords.Op{ID: "op-rev-r1"}, rev.WorkerID, workerrecords.RoundSpec{
+		JobID: revJob, ExecutionTarget: "local", ReviewSubject: subjectJSON,
+	})
+	testutil.FailErr(t, "admit reviewer round", err)
+
+	workerName, resultID, ok, err := reviewSubjectNames(t.Context(), records, revJob)
+	testutil.FailErr(t, "resolve review subject names", err)
+	if !ok || workerName != "parser" || resultID != "res-1" {
+		t.Fatalf("review subject names mismatch: worker=%q result=%q ok=%v", workerName, resultID, ok)
+	}
+}

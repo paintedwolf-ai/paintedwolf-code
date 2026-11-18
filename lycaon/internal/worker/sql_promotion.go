@@ -5,11 +5,12 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
-	"github.com/lycaon/lycaon/internal/worker/jobstate"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,7 +27,7 @@ func (s *SQLStore) SetMergeStatus(ctx context.Context, jobID string, status api.
 		if n != 1 {
 			return fmt.Errorf("worker %s not found for merge status update", jobID)
 		}
-		return jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, jobID)
+		return s.jobs.EnqueueJobEventTx(ctx, tx, s.outbox, jobID)
 	})
 }
 
@@ -56,6 +57,9 @@ func (s *SQLStore) SetMergeStatuses(ctx context.Context, updates []MergeStatusUp
 			if n != 1 {
 				return fmt.Errorf("worker %s not found for merge status update", jobID)
 			}
+			if err := disposeWorkerRound(ctx, q, jobID, update.Status, ""); err != nil {
+				return err
+			}
 			if mergeStatusTerminal(update.Status) && worker.ParentSessionID.Valid {
 				if err := q.DeleteAgentCallReservations(ctx, db.DeleteAgentCallReservationsParams{
 					SessionID: worker.ParentSessionID, Agent: jobID,
@@ -63,12 +67,26 @@ func (s *SQLStore) SetMergeStatuses(ctx context.Context, updates []MergeStatusUp
 					return err
 				}
 			}
-			if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, jobID); err != nil {
+			if err := s.jobs.EnqueueJobEventTx(ctx, tx, s.outbox, jobID); err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+}
+
+// LaterRounds reports the worker's later rounds carrying this job's changes.
+func (s *SQLStore) LaterRounds(ctx context.Context, jobID string) ([]string, bool, error) {
+	q := s.queries
+	pending, err := q.ListWorkerLaterPendingJobs(ctx, jobID)
+	if err != nil {
+		return nil, false, err
+	}
+	running, err := q.CountWorkerLaterUnsettledRounds(ctx, jobID)
+	if err != nil {
+		return nil, false, err
+	}
+	return pending, running > 0, nil
 }
 
 // CommitPromotion finalizes one landed promotion under its lease.
@@ -80,35 +98,10 @@ func (s *SQLStore) CommitPromotion(ctx context.Context, jobID, claimToken string
 	if s == nil || s.db == nil {
 		return fmt.Errorf("worker store not configured")
 	}
+	if err := validatePromotionCommit(jobID, commit); err != nil {
+		return err
+	}
 	plan := commit.Plan
-	if !plan.Empty() {
-		if strings.TrimSpace(plan.ID) == "" {
-			return fmt.Errorf("landed change id required")
-		}
-		if plan.WorkerJobID != jobID {
-			return fmt.Errorf("landed change worker %q does not match %q", plan.WorkerJobID, jobID)
-		}
-		if strings.TrimSpace(plan.CanonicalPath) == "" {
-			return fmt.Errorf("landed change canonical path required")
-		}
-		if !plan.Required && strings.TrimSpace(plan.ScanID) != "" {
-			return fmt.Errorf("optional landed change cannot carry a scan id")
-		}
-	}
-	childIDs := make(map[string]struct{}, len(commit.ChildStatuses))
-	for _, update := range commit.ChildStatuses {
-		childID := strings.TrimSpace(update.JobID)
-		if childID == "" || childID == jobID {
-			return fmt.Errorf("invalid promotion child overlay %q", childID)
-		}
-		if _, duplicate := childIDs[childID]; duplicate {
-			return fmt.Errorf("duplicate promotion child overlay %s", childID)
-		}
-		childIDs[childID] = struct{}{}
-		if update.Status != api.WorkerMergeStatusPending && update.Status != api.WorkerMergeStatusRebasing {
-			return fmt.Errorf("invalid promotion child status %q", update.Status)
-		}
-	}
 	var prepared sourceledger.PreparedRecording
 	if len(commit.Records) > 0 {
 		if commit.Recorder == nil {
@@ -195,7 +188,7 @@ func (s *SQLStore) CommitPromotion(ctx context.Context, jobID, claimToken string
 		if n != 1 {
 			return fmt.Errorf("child overlay %s missing during promotion", update.JobID)
 		}
-		if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, update.JobID); err != nil {
+		if err := s.jobs.EnqueueJobEventTx(ctx, tx, s.outbox, update.JobID); err != nil {
 			return err
 		}
 	}
@@ -210,7 +203,22 @@ func (s *SQLStore) CommitPromotion(ctx context.Context, jobID, claimToken string
 	if n != 1 {
 		return fmt.Errorf("worker %s is not applying under this claim", jobID)
 	}
-	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, jobID); err != nil {
+	if err := disposeWorkerRound(ctx, q, jobID, api.WorkerMergeStatusMerged, plan.ID); err != nil {
+		return err
+	}
+	ancestors, err := q.ListWorkerAncestorPendingJobs(ctx, jobID)
+	if err != nil {
+		return err
+	}
+	for _, ancestor := range ancestors {
+		if err := landAncestorRound(ctx, q, ancestor, plan.ID); err != nil {
+			return err
+		}
+		if err := s.jobs.EnqueueJobEventTx(ctx, tx, s.outbox, ancestor); err != nil {
+			return err
+		}
+	}
+	if err := s.jobs.EnqueueJobEventTx(ctx, tx, s.outbox, jobID); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -218,6 +226,39 @@ func (s *SQLStore) CommitPromotion(ctx context.Context, jobID, claimToken string
 	}
 	s.notify()
 	delivery.DeliverCommitted()
+	return nil
+}
+
+func validatePromotionCommit(jobID string, commit PromotionCommit) error {
+	plan := commit.Plan
+	if !plan.Empty() {
+		if strings.TrimSpace(plan.ID) == "" {
+			return fmt.Errorf("landed change id required")
+		}
+		if plan.WorkerJobID != jobID {
+			return fmt.Errorf("landed change worker %q does not match %q", plan.WorkerJobID, jobID)
+		}
+		if strings.TrimSpace(plan.CanonicalPath) == "" {
+			return fmt.Errorf("landed change canonical path required")
+		}
+		if !plan.Required && strings.TrimSpace(plan.ScanID) != "" {
+			return fmt.Errorf("optional landed change cannot carry a scan id")
+		}
+	}
+	childIDs := make(map[string]struct{}, len(commit.ChildStatuses))
+	for _, update := range commit.ChildStatuses {
+		childID := strings.TrimSpace(update.JobID)
+		if childID == "" || childID == jobID {
+			return fmt.Errorf("invalid promotion child overlay %q", childID)
+		}
+		if _, duplicate := childIDs[childID]; duplicate {
+			return fmt.Errorf("duplicate promotion child overlay %s", childID)
+		}
+		childIDs[childID] = struct{}{}
+		if update.Status != api.WorkerMergeStatusPending && update.Status != api.WorkerMergeStatusRebasing {
+			return fmt.Errorf("invalid promotion child status %q", update.Status)
+		}
+	}
 	return nil
 }
 
@@ -229,4 +270,43 @@ func mergeStatusTerminal(status api.WorkerMergeStatus) bool {
 	default:
 		return false
 	}
+}
+
+// disposeWorkerRound records on a worker round's result what a merge status
+// did to its changes. Rejecting a result accounts for it, since its
+// deliverable stays open; a landing does not, and an orphaned stacked result
+// lost its changes with its parent. Jobs that run no worker round are
+// untouched.
+func disposeWorkerRound(ctx context.Context, q *db.Queries, jobID string, status api.WorkerMergeStatus, landedChangeID string) error {
+	now := db.NullString(timelayout.Format(time.Now().UTC()))
+	params := db.DisposeWorkerResultsByJobParams{
+		JobID: jobID, OperationID: "merge_status:" + jobID + ":" + string(status), ChangedAt: now,
+	}
+	switch status {
+	case api.WorkerMergeStatusMerged:
+		params.ChangeState, params.LandedChangeID = "landed", db.NullString(landedChangeID)
+	case api.WorkerMergeStatusRejected:
+		params.ChangeState, params.AccountedAt = "rejected", now
+	case api.WorkerMergeStatusOrphaned:
+		params.ChangeState = "rejected"
+	default:
+		return nil
+	}
+	_, err := q.DisposeWorkerResultsByJob(ctx, params)
+	return err
+}
+
+// landAncestorRound records that a later round of the same worker landed an
+// earlier round's changes: its lane carried them forward.
+func landAncestorRound(ctx context.Context, q *db.Queries, jobID, landedChangeID string) error {
+	n, err := q.SetLiveWorkerJobMergeStatus(ctx, db.SetLiveWorkerJobMergeStatusParams{
+		MergeStatus: db.NullString(string(api.WorkerMergeStatusMerged)), ID: jobID,
+	})
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return fmt.Errorf("earlier round %s is no longer pending", jobID)
+	}
+	return disposeWorkerRound(ctx, q, jobID, api.WorkerMergeStatusMerged, landedChangeID)
 }

@@ -10,8 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hostlock"
 )
 
-const gcBatchSize = db.DefaultRetentionBatchSize
-
 // Reclaim work is trigger-driven and uses an independent cadence.
 const gcPollInterval = 5 * time.Minute
 
@@ -61,7 +59,7 @@ func runGCPass(ctx context.Context, deps GCDeps) error {
 		if err != nil {
 			return err
 		}
-		if processed < gcBatchSize {
+		if processed < db.DefaultRetentionBatchSize {
 			return nil
 		}
 	}
@@ -83,7 +81,7 @@ func RunGCBatch(ctx context.Context, deps GCDeps) (processed int, err error) {
 	}
 	defer func() { _ = tx.Rollback() }()
 	deps.Queries = db.New(tx)
-	candidates, err := deps.Queries.ListContentBlobReclaimCandidates(ctx, gcBatchSize)
+	candidates, err := deps.Queries.ListContentBlobReclaimCandidates(ctx, db.DefaultRetentionBatchSize)
 	if err != nil {
 		return 0, fmt.Errorf("list content blob reclaim candidates: %w", err)
 	}

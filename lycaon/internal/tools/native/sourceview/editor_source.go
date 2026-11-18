@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
 )
 
 // The receipt note for text served from an unsaved document.
@@ -144,7 +143,7 @@ func observeWorkerSourceRead(ctx context.Context, tctx tools.ToolContext, resolv
 		rootID = root.ID
 		rel = locRel
 	}
-	if rootID == "" || rootID == "worker-branch" {
+	if rootID == "" || rootID == projectroot.WorkerBranchRootID {
 		rootID = "primary"
 	}
 	if rel == "" {
@@ -160,27 +159,6 @@ func observeWorkerSourceRead(ctx context.Context, tctx tools.ToolContext, resolv
 		SHA256: sha, Size: size, ModTimeNS: st.Stat.ModTimeNS,
 		Ino: st.Stat.Ino, Dev: st.Stat.Dev, Complete: sha != "",
 	})
-}
-
-// Unsaved editor text has no recorded source version.
-func Stamp(ctx context.Context, tctx tools.ToolContext, absPath string, st Text) *surveyreceipt.SourceContext {
-	stamp := ReadStamp(ctx, tctx, absPath, st.SHA256())
-	if st.Editor == nil {
-		return stamp
-	}
-	if stamp == nil {
-		stamp = &surveyreceipt.SourceContext{SHA256Short: ShortSHA(st.SHA256())}
-	}
-	stamp.Editor = &surveyreceipt.EditorContext{Revision: st.Editor.Revision, Dirty: st.Editor.Dirty, Diverged: st.Editor.Diverged, Absent: st.Editor.Absent}
-	if st.Editor.Dirty {
-		stamp.Recorded = false
-		stamp.VersionID = ""
-		stamp.Note = EditorDraftNote
-	}
-	if st.Editor.Absent {
-		stamp.Note = EditorAbsentNote
-	}
-	return stamp
 }
 
 // The receipt note for a draft whose file no longer exists on disk.

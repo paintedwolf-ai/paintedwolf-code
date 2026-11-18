@@ -22,11 +22,6 @@ func fixtureSnapshot() api.BoardSnapshot {
 				StartedAt: ptrTime(time.Date(2026, 5, 31, 13, 52, 0, 0, time.UTC)),
 			}},
 		},
-		Delegation: &api.BoardDelegationSlice{
-			"delegations": []api.Delegation{{
-				ID: "delegation-abc12345", Phase: api.DelegationPhaseWorker,
-			}},
-		},
 		DetailLevel: api.BoardDetailLevelCompact,
 	}
 }
@@ -77,14 +72,6 @@ func TestCompactFormatterWorkRelative(t *testing.T) {
 	f := &CompactFormatter{}
 	got := f.FormatWithOpts(fixtureSnapshot(), FormatOpts{MaxChars: 480, Now: now})
 	if !strings.Contains(got, "Work: 1 in flight") || !strings.Contains(got, "started 8m ago") {
-		t.Fatalf("got %q", got)
-	}
-}
-
-func TestCompactFormatterOmitsDelegationWhenRequested(t *testing.T) {
-	f := &CompactFormatter{}
-	got := f.FormatWithOpts(fixtureSnapshot(), FormatOpts{MaxChars: 480, Now: time.Now().UTC(), OmitDelegation: true})
-	if strings.Contains(got, "Delegation:") {
 		t.Fatalf("got %q", got)
 	}
 }

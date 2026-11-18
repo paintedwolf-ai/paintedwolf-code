@@ -4,7 +4,6 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -32,16 +31,10 @@ func TestWriteTool_EmitsWorktreeChanged(t *testing.T) {
 	}, nativefixture.Context(dir))
 	testutil.FailErr(t, "write", err)
 
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the write tool reports WorktreeChanged", func() bool {
 		repochange.ResetDebouncerForTest(t.Context())
-		if got.Kind == repochange.WorktreeChanged {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if got.Kind != repochange.WorktreeChanged {
-		t.Fatal("expected WorktreeChanged from write tool")
-	}
+		return got.Kind == repochange.WorktreeChanged
+	})
 	if got.Source != repochange.SourceMutation {
 		t.Fatalf("source=%q", got.Source)
 	}

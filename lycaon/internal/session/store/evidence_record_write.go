@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -79,7 +80,7 @@ func marshalEvidenceBody(ctx context.Context, q *db.Queries, dataDir, projectID 
 	}
 	if err := q.UpsertContentBlobObject(ctx, db.UpsertContentBlobObjectParams{
 		ProjectID: projectID, Sha256: sha, ByteSize: byteSize, StoredSize: storedSize,
-		CreatedAt: db.FormatTime(time.Now().UTC()),
+		CreatedAt: timelayout.Format(time.Now().UTC()),
 	}); err != nil {
 		return "", fmt.Errorf("upsert content blob object: %w", err)
 	}

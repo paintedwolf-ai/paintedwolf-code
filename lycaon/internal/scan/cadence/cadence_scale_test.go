@@ -55,7 +55,7 @@ func TestCadenceHeartbeatKeepsALiveClaimFromBeingRecovered(t *testing.T) {
 	go func() {
 		done <- cadence.BaselineRoot(context.Background(), dir)
 	}()
-	waitFor(t, func() bool {
+	testutil.WaitFor(t, "a baseline waits on the coordinator", func() bool {
 		coord.mu.Lock()
 		defer coord.mu.Unlock()
 		return coord.waited > 0
@@ -99,7 +99,7 @@ func TestCadenceWritesDuringAClaimAccumulateWithoutBecomingDue(t *testing.T) {
 		_ = cadence.BaselineRoot(context.Background(), dir)
 		close(done)
 	}()
-	waitFor(t, func() bool {
+	testutil.WaitFor(t, "a baseline waits on the coordinator", func() bool {
 		coord.mu.Lock()
 		defer coord.mu.Unlock()
 		return coord.waited > 0
@@ -166,7 +166,7 @@ func TestCanceledDispatchReturnsClaimsWithoutWaitingForExpiry(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- cadence.BaselineRoot(ctx, dir) }()
-	waitFor(t, func() bool { coord.mu.Lock(); defer coord.mu.Unlock(); return coord.waited > 0 })
+	testutil.WaitFor(t, "a scan waits on the coordinator", func() bool { coord.mu.Lock(); defer coord.mu.Unlock(); return coord.waited > 0 })
 	cancel()
 	if err := <-done; err == nil {
 		t.Fatal("canceled publication succeeded")
@@ -201,8 +201,7 @@ func TestTerminalSettlementDoesNotPublishTheNextGeneration(t *testing.T) {
 	testutil.FailErr(t, "read completion", err)
 	coord := &blockingCoordinator{CoordinatorImpl: cadence.Coordinator.(*scanbase.CoordinatorImpl), release: make(chan struct{})}
 	cadence.Coordinator = coord
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	cadence.OnTerminal(ctx, *completed)
 	if ctx.Err() != nil || coord.waited != 0 {
 		t.Fatalf("terminal settlement started source preparation: error=%v calls=%d", ctx.Err(), coord.waited)

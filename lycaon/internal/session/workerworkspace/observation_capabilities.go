@@ -8,10 +8,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workspace"
 )
 
-// ViewCapabilityDescriptor describes the selected workspace view adapter and its
-// declared visibility, cache invalidation, and read-attribution capabilities.
-type ViewCapabilityDescriptor = observation.ViewCapabilityDescriptor
-
 // SetViewCapabilitiesResolver configures an optional resolver that supplies the bound
 // ViewCapabilityDescriptor for a worker workspace when EnsureTracker is called.
 func (r *WorkspaceTrackerRegistry) SetViewCapabilitiesResolver(
@@ -25,8 +21,7 @@ func (r *WorkspaceTrackerRegistry) SetViewCapabilitiesResolver(
 	r.capsResolver = resolver
 }
 
-// BindPreparedView binds a host-prepared *adapter.PreparedView (#1658) and its Core/AdapterFacts
-// to the workspace tracker for keys.
+// BindPreparedView binds a host-prepared view and its adapter facts to the workspace tracker for keys.
 func (r *WorkspaceTrackerRegistry) BindPreparedView(
 	view *adapter.PreparedView,
 	keys ...string,
@@ -45,8 +40,8 @@ func (r *WorkspaceTrackerRegistry) BindPreparedView(
 	return tr, nil
 }
 
-// BindPreparedBranch resolves any prepared workspace view or durable AdapterFacts recorded
-// for branchRoot (#1658) and binds its capability facts to the workspace tracker.
+// BindPreparedBranch binds the prepared view or recorded adapter facts for branchRoot to the
+// workspace tracker.
 func (r *WorkspaceTrackerRegistry) BindPreparedBranch(
 	branchRoot string,
 	keys ...string,
@@ -73,7 +68,7 @@ func (r *WorkspaceTrackerRegistry) BindViewCapabilities(
 	if r == nil {
 		return nil, nil
 	}
-	facts := observation.VisibilityFactsFromDescriptor(caps)
+	facts := caps.Facts
 	if err := observation.ValidateVisibilityFacts(facts); err != nil {
 		return nil, err
 	}
@@ -116,7 +111,7 @@ func (r *WorkspaceTrackerRegistry) BindViewCapabilities(
 		tr, err := observation.NewTracker(observation.TrackerConfig{
 			ViewID: viewID,
 			Facts:  facts,
-			Roots:  buildRootSpecs(st.WorkspacePath, st.Roots),
+			Roots:  buildRootSpecs(st.Roots),
 		})
 		if err != nil {
 			return nil, err
@@ -128,30 +123,6 @@ func (r *WorkspaceTrackerRegistry) BindViewCapabilities(
 	indexStateLocked(r, st, allKeys...)
 	indexCapabilitiesLocked(r, caps, st.JobID, st.ChildSessionID, st.BranchRoot)
 	return st.Tracker, nil
-}
-
-// BindVisibilityFacts binds explicit observation.VisibilityFacts to the workspace tracker for keys.
-func (r *WorkspaceTrackerRegistry) BindVisibilityFacts(
-	facts observation.VisibilityFacts,
-	keys ...string,
-) (*observation.Tracker, error) {
-	facts = observation.NormalizeVisibilityFacts(facts)
-	if err := observation.ValidateVisibilityFacts(facts); err != nil {
-		return nil, err
-	}
-	return r.BindViewCapabilities(observation.ViewCapabilityDescriptor{
-		AdapterName:                        facts.AdapterName,
-		Mode:                               facts.Mode,
-		UntouchedVisibility:                facts.UntouchedVisibility,
-		LiveVisible:                        facts.LiveVisible,
-		SupportsInvalidation:               facts.SupportsInvalidation,
-		SupportsInvalidationUpcall:         facts.SupportsInvalidationUpcall,
-		SupportsNegativeLookupInvalidation: facts.SupportsNegativeLookupInvalidation,
-		SupportsDirCookieInvalidation:      facts.SupportsDirCookieInvalidation,
-		InvalidationVerified:               facts.InvalidationVerified,
-		Completeness:                       facts.Completeness,
-		AttributionCompleteness:            facts.AttributionCompleteness,
-	}, keys...)
 }
 
 func resolvePreparedBranchViewCapabilities(

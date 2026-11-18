@@ -167,6 +167,11 @@ candidates actually scored. The released tool head encodes each option separatel
 so adding or removing another permitted option does not change its representation.
 Joint heads require a matching joint release and retain their roster sensitivity.
 
+A release's vocabulary is the one its turn-load head was trained with.
+`scripts/bialy/preload.py` derives it from the training corpus, and
+`scripts/bialy/adopt_heads.py` writes it into the release together with the
+head pins, so weights and option texts never change apart.
+
 ## The standing surface and the prompt cache
 
 The tools a chat offers beyond its floor and the units it leaves out are part
@@ -194,6 +199,16 @@ guidance and explicitly requested tools without inferring a task from host prose
 Missing route policy or call history does not establish a cold cache. Tools
 that become unavailable on the active surface leave immediately, and the
 final schema list has canonical name order.
+
+Copy lifetimes follow the same boundary. Standing persona prompts, shared
+partials, skills, and skill references render from slow facts only (role,
+profile, tool reachability, workspace Git/branch shape, posture, and workflow
+obligations). Volatile facts (worker states, result dispositions, pending
+questions, queued instructions, workspace preparation, and spend or round
+notices) render in the per-request turn-state frame and OAR guidance after
+fitted history. That separation keeps the cached prefix byte-identical across
+worker state changes and ensures a skill read into transcript history through
+`skills_read` never carries a volatile claim that later events make false.
 
 Every decision leaves a receipt: the state the engine read, the answers, the
 catalog revision, the cache boundary the turn opened on, and the standing

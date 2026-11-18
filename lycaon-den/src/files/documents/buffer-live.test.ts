@@ -1,4 +1,4 @@
-import { filesBufferText } from "./project-files-buffers.ts";
+import { filesBufferText } from "./files-buffer-state.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SourceChange } from "../../api/types.ts";
 import {
@@ -6,7 +6,8 @@ import {
   applyBufferSourceResync,
   setBufferLiveHandlers,
 } from "./buffer-live.ts";
-import { applyFilesBufferDraft, applyFilesBufferLoad, openFilesBuffer, resetProjectFilesForTests } from "./project-files-buffers.ts";
+import { applyFilesBufferDraft, applyFilesBufferLoad } from "./project-files-buffer-io.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "./project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "./files-buffer-state.ts";
 import { scheduleFilesDraftSync } from "./files-draft-sync.ts";
 

@@ -2,7 +2,6 @@ package survey
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/fileoutline"
 	"github.com/lycaon/lycaon/internal/logoutline"
@@ -43,13 +42,11 @@ type ReadResponse struct {
 	Gloss             []readGlossLine                `json:"gloss,omitempty"`
 	Selected          int                            `json:"selected,omitempty"`
 	Total             int                            `json:"total,omitempty"`
-	Candidates        []readSymbolCandidate          `json:"candidates,omitempty"`
 	StartLine         int                            `json:"start_line,omitempty"`
 	EndLine           int                            `json:"end_line,omitempty"`
 	TotalLines        int                            `json:"total_lines"`
 	Offset            int                            `json:"offset,omitempty"`
 	Limit             int                            `json:"limit,omitempty"`
-	Ranges            []readRangeBlock               `json:"ranges,omitempty"`
 	Clamped           string                         `json:"clamped,omitempty"`
 	Truncated         bool                           `json:"truncated"`
 	NextOffset        *int                           `json:"next_offset,omitempty"`
@@ -63,43 +60,6 @@ type ReadResponse struct {
 	ParseFailure      *tsparse.Failure               `json:"parse_failure,omitempty"`
 	Diagnostics       *repomap.Diagnostics           `json:"diagnostics,omitempty"`
 	SurveyRecommended bool                           `json:"survey_recommended,omitempty"`
-}
-
-func readModeArg(args map[string]any) string {
-	raw, ok := args["mode"].(string)
-	if !ok {
-		return ""
-	}
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "outline":
-		return "outline"
-	case "content":
-		return "content"
-	default:
-		return strings.ToLower(strings.TrimSpace(raw))
-	}
-}
-
-func readWantsOutline(mode string, args map[string]any, totalLines int) bool {
-	if readSymbolArg(args) != "" {
-		return false
-	}
-	if readHasRanges(args) {
-		return false
-	}
-	if mode == "content" {
-		return false
-	}
-	if mode == "outline" {
-		return true
-	}
-	if _, ok := args["offset"]; ok {
-		return false
-	}
-	if _, ok := args["limit"]; ok {
-		return false
-	}
-	return totalLines > readcaps.AutoOutlineThreshold
 }
 
 // OutlineResponse is the outline presentation shared by the read tool and

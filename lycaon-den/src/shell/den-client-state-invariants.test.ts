@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  INVARIANT_CATALOG,
-  assertInvariant,
-} from "./den-client-state-invariants.ts";
+import { INVARIANT_CATALOG } from "./den-client-state-invariants.ts";
+import { assertInvariant } from "./invariants/common.ts";
 
 describe("den client state invariants", () => {
   it("keeps the catalog populated across its protected surfaces", () => {

@@ -53,7 +53,7 @@ func TestRegisterWaitToolParksWithHostCompletion(t *testing.T) {
 	loop := NewLoopEngine()
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), "s1") })
 	loop.SetDeps(busyWaitLoopDeps())
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	outcome := &tools.ToolInvocationOut{}
@@ -93,7 +93,7 @@ func TestWaitParksEveryPublishedAgentRole(t *testing.T) {
 	loop := NewLoopEngine()
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), "s1") })
 	loop.SetDeps(busyWaitLoopDeps())
-	if err := RegisterWaitTool(registry, loop.Subscriptions, WaitToolDeps{ProfileConditions: allowed}); err != nil {
+	if err := RegisterWaitTool(registry, loop.Subscriptions, WaitToolDeps{ProfileConditions: allowed, WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	for i, profile := range profiles {
@@ -121,7 +121,7 @@ func TestWaitRejectsConditionShapeWithStructuredCode(t *testing.T) {
 	loop := NewLoopEngine()
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), "s1") })
 	loop.SetDeps(busyWaitLoopDeps())
-	if err := RegisterWaitTool(registry, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(registry, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	_, err := registry.Run(t.Context(), "wait", map[string]any{
@@ -130,6 +130,26 @@ func TestWaitRejectsConditionShapeWithStructuredCode(t *testing.T) {
 	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("error = %#v, want TOOL_ARGS_INVALID", err)
+	}
+}
+
+// A wait on a worker the session does not have is refused instead of
+// sleeping until its timeout.
+func TestWaitRefusesAnUnknownWorker(t *testing.T) {
+	registry := tools.NewDefaultRegistry()
+	loop := NewLoopEngine()
+	t.Cleanup(func() { loop.ForgetSession(context.Background(), "s1") })
+	loop.SetDeps(busyWaitLoopDeps())
+	known := func(_ context.Context, _, handle string) bool { return handle == "parser-fix" }
+	if err := RegisterWaitTool(registry, loop.Subscriptions, WaitToolDeps{WorkerKnown: known}); err != nil {
+		t.Fatalf("RegisterWaitTool: %v", err)
+	}
+	_, err := registry.Run(t.Context(), "wait", map[string]any{
+		"conditions": []any{map[string]any{"kind": "next_worker_done", "handles": []any{"parser-fx"}}},
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s1", Agent: orchestration.ProfileCoordinator}})
+	reject := toolrejection.AsToolReject(err)
+	if reject == nil || reject.Code != "WORKER_NAME_UNKNOWN" || reject.Data["worker"] != "parser-fx" {
+		t.Fatalf("error = %#v, want WORKER_NAME_UNKNOWN", err)
 	}
 }
 
@@ -142,7 +162,7 @@ func TestWaitResumeRearmsInterruptedSleep(t *testing.T) {
 	loop.Waits.breakSleep(t.Context(), "s1", "worker_task_finished", true)
 
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
@@ -176,7 +196,7 @@ func TestWaitResumeUsesExplicitConditions(t *testing.T) {
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), "s1") })
 	loop.SetDeps(busyWaitLoopDeps())
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	outcome := &tools.ToolInvocationOut{}
@@ -207,7 +227,7 @@ func TestWaitResumeFallsBackWithoutInterruptedSleep(t *testing.T) {
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), "s1") })
 	loop.SetDeps(busyWaitLoopDeps())
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	before := time.Now().UTC()
@@ -303,7 +323,7 @@ func TestWaitAllWorkersIdleAlreadySatisfied(t *testing.T) {
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), "s1") })
 	loop.SetDeps(idleWaitLoopDeps())
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	outcome := &tools.ToolInvocationOut{}
@@ -331,7 +351,7 @@ func TestWaitTimerOnlyParksWhenCycleIdle(t *testing.T) {
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), "s1") })
 	loop.SetDeps(idleWaitLoopDeps())
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	outcome := &tools.ToolInvocationOut{}
@@ -352,7 +372,7 @@ func TestWaitParksWhileUserInputPending(t *testing.T) {
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), "s1") })
 	loop.SetDeps(pendingAskIdleWaitLoopDeps())
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	outcome := &tools.ToolInvocationOut{}

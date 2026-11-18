@@ -31,7 +31,7 @@ func TestReconcileProjectSandboxesRetainsActiveWriteSandboxes(t *testing.T) {
 		{ID: "merged", Status: api.WorkerStatusComplete, WorkspaceRoot: merged, Scope: writeScope(), MergeStatus: api.WorkerMergeStatusMerged},
 	}
 
-	removed, err := worker.ReconcileProjectSandboxes(context.Background(), sandboxRoot, primary, nil, loadTasks(tasks))
+	removed, err := worker.ReconcileProjectSandboxes(context.Background(), sandboxRoot, primary, nil, loadTasks(tasks), nil)
 	testutil.FailErr(t, "ReconcileProjectSandboxes", err)
 	if removed != 1 {
 		t.Fatalf("removed = %d want 1 terminal sandbox", removed)
@@ -61,12 +61,44 @@ func TestReconcileProjectSandboxesRetainsWorkersFromOtherProjectID(t *testing.T)
 		Scope:         writeScope(),
 	}}
 
-	removed, err := worker.ReconcileProjectSandboxes(context.Background(), sandboxRoot, primary, nil, loadTasks(tasks))
+	removed, err := worker.ReconcileProjectSandboxes(context.Background(), sandboxRoot, primary, nil, loadTasks(tasks), nil)
 	testutil.FailErr(t, "ReconcileProjectSandboxes", err)
 	if removed != 0 {
 		t.Fatalf("removed = %d want 0 when active write worker retains sandbox", removed)
 	}
 	if _, err := os.Stat(live); err != nil {
 		testutil.FailErr(t, "live sandbox", err)
+	}
+}
+
+// An open worker's current lane and the lane a pending result names survive
+// reconciliation although no job is named for them; a lane no state names is
+// removed.
+func TestReconcileProjectSandboxesRetainsWorkerLanes(t *testing.T) {
+	sandboxRoot := t.TempDir()
+	primary := t.TempDir()
+	current := enginepaths.JobBranchDir(sandboxRoot, primary, "worker-a.2")
+	pending := enginepaths.JobBranchDir(sandboxRoot, primary, "worker-a.1")
+	stale := enginepaths.JobBranchDir(sandboxRoot, primary, "worker-b.1")
+	for _, dir := range []string{current, pending, stale} {
+		testutil.FailErr(t, "mkdir lane", os.MkdirAll(dir, 0o755))
+	}
+	tasks := []api.WorkerTask{{
+		ID: "job-1", Status: api.WorkerStatusComplete, WorkspaceRoot: pending, Scope: writeScope(), MergeStatus: api.WorkerMergeStatusPending,
+	}}
+	lanes := func(context.Context) ([]string, error) { return []string{current}, nil }
+
+	removed, err := worker.ReconcileProjectSandboxes(context.Background(), sandboxRoot, primary, nil, loadTasks(tasks), lanes)
+	testutil.FailErr(t, "ReconcileProjectSandboxes", err)
+	if removed != 1 {
+		t.Fatalf("removed = %d want only the unnamed lane", removed)
+	}
+	for _, kept := range []string{current, pending} {
+		if _, err := os.Stat(kept); err != nil {
+			testutil.FailErr(t, "retained lane", err)
+		}
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatal("a lane no state names should be removed")
 	}
 }

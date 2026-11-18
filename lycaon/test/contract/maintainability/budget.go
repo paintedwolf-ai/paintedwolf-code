@@ -7,8 +7,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lycaon/lycaon/test/contract/internal/sizebudget"
 	"gopkg.in/yaml.v3"
+
+	"github.com/lycaon/lycaon/test/contract/internal/sizebudget"
 )
 
 const policyPath = "lycaon/test/contract/maintainability-budgets.yaml"
@@ -28,11 +29,8 @@ var suite = sizebudget.Suite{
 	},
 }
 
-// measurements maps category → artifact ID → measured value.
-type measurements = sizebudget.Measurements
-
-func newMeasurements() measurements {
-	out := measurements{}
+func newMeasurements() sizebudget.Measurements {
+	out := sizebudget.Measurements{}
 	for name := range suite.Categories {
 		out[name] = map[string]int{}
 	}

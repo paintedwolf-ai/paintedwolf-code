@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"github.com/lycaon/lycaon/pkg/api"
 	"slices"
 	"strings"
 	"testing"
@@ -120,8 +121,8 @@ func TestResolveNextStepsLoadsADeferredCallFirst(t *testing.T) {
 
 func TestNextCallsDetailsLeavesOtherDetailsAlone(t *testing.T) {
 	base := map[string]any{"path": "a"}
-	merged := NextCallsDetails(base, map[string]any{NextCallsDataKey: []toolreach.Call{{Tool: "recall"}}})
-	if _, leaked := base[NextCallsDataKey]; leaked || merged["path"] != "a" || merged[NextCallsDataKey] == nil {
+	merged := NextCallsDetails(base, map[string]any{api.ToolFeedbackNextCalls: []toolreach.Call{{Tool: "recall"}}})
+	if _, leaked := base[api.ToolFeedbackNextCalls]; leaked || merged["path"] != "a" || merged[api.ToolFeedbackNextCalls] == nil {
 		t.Fatalf("base = %v merged = %v", base, merged)
 	}
 	if got := NextCallsDetails(base, nil); got["path"] != "a" || len(got) != 1 {

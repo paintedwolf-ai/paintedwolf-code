@@ -2,6 +2,7 @@ package worker
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
@@ -36,11 +37,11 @@ func TestWorkflowCancellationPreservesClaimsUntilRuntimeSettlement(t *testing.T)
 			queries := db.New(database)
 			if scope == "all" {
 				err = queries.RequestWorkflowWorkerCancellation(t.Context(), db.RequestWorkflowWorkerCancellationParams{
-					WorkflowRunID: db.NullString("run"), RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+					WorkflowRunID: db.NullString("run"), RequestedAt: db.NullString(timelayout.Format(time.Now().UTC())),
 				})
 			} else {
 				err = queries.RequestRunningWorkflowWorkerCancellation(t.Context(), db.RequestRunningWorkflowWorkerCancellationParams{
-					WorkflowRunID: db.NullString("run"), RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+					WorkflowRunID: db.NullString("run"), RequestedAt: db.NullString(timelayout.Format(time.Now().UTC())),
 				})
 			}
 			testutil.FailErr(t, "commit workflow stop intent", err)

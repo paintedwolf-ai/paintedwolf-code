@@ -52,17 +52,11 @@ func (s *Store) RecordBatch(ctx context.Context, inputs []RecordInput) error {
 }
 
 func (s *Store) recordBatchTx(ctx context.Context, q *db.Queries, inputs []preparedRecord) error {
-	_, err := s.recordBatchIdentityTx(ctx, q, inputs)
+	_, err := s.recordBatchIdentityTx(ctx, q, inputs, nil)
 	return err
 }
 
-// recordBatchIdentityTx records the batch and answers the last effect's file
-// identity. A replayed operation key answers an empty identity.
-func (s *Store) recordBatchIdentityTx(ctx context.Context, q *db.Queries, inputs []preparedRecord) (TrackedFile, error) {
-	return s.recordBatchIdentityTxWithCache(ctx, q, inputs, nil)
-}
-
-func (s *Store) recordBatchIdentityTxWithCache(ctx context.Context, q *db.Queries, inputs []preparedRecord, cache *TxBatchCache) (TrackedFile, error) {
+func (s *Store) recordBatchIdentityTx(ctx context.Context, q *db.Queries, inputs []preparedRecord, cache *TxBatchCache) (TrackedFile, error) {
 	if cache != nil && cache.tx != nil && cache.freshOperations && len(inputs) == 1 {
 		if recorded, ok, err := s.bufferCreateEffect(ctx, q, inputs[0], cache); ok || err != nil {
 			return recorded, err
@@ -129,7 +123,7 @@ func (s *Store) bufferCreateEffect(ctx context.Context, q *db.Queries, in prepar
 	if obj == nil {
 		return TrackedFile{}, false, nil
 	}
-	parent, err := directoryPathWithCache(ctx, q, in.ProjectID, in.BranchID.String(), in.RootID, path.Dir(in.Path), cache)
+	parent, err := directoryPath(ctx, q, in.ProjectID, in.BranchID.String(), in.RootID, path.Dir(in.Path), cache)
 	if err != nil {
 		return TrackedFile{}, false, err
 	}
@@ -332,7 +326,7 @@ func (s *Store) recordEffectWithCache(ctx context.Context, q *db.Queries, operat
 		state = "link"
 	}
 
-	afterVersionID, err := s.insertVersionWithCache(ctx, q, versionSpec{
+	afterVersionID, err := s.insertVersion(ctx, q, versionSpec{
 
 		FileID: fileID, ProjectID: in.ProjectID, BranchID: in.BranchID,
 		ParentVersionID:      parentVersionID,
@@ -368,7 +362,7 @@ func (s *Store) recordEffectWithCache(ctx context.Context, q *db.Queries, operat
 	if err := transitionDirectoryWithCache(ctx, q, in.RecordInput, ordinal, cache); err != nil {
 		return err
 	}
-	if err := upsertSourceHeadWithCache(ctx, q, db.SourceBranchHeads{
+	if err := upsertSourceHead(ctx, q, db.SourceBranchHeads{
 		ProjectID: in.ProjectID, BranchID: in.BranchID.String(),
 		FileID: fileID, VersionID: afterVersionID,
 		RootID: in.RootID, Path: in.Path, State: state, ContentSha256: afterSHA,

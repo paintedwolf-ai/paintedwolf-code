@@ -1,3 +1,4 @@
+import { expectPaneChrome } from "../../test/files-pane-chrome.ts";
 import { sourceEffectFixture } from "../source/source-effect-fixture.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
@@ -5,7 +6,7 @@ import { selectProjectNoticeGroups } from "../../notices/notice-select.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SourceWalkEffect } from "../../api/types.ts";
 import { WalkStepPage, walkPageTitle } from "./WalkStepPage.tsx";
-import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import type { WalkCommandStep, WalkGitStep, WalkGroupStep, WalkOutsideStep } from "./walk-model.ts";
 import { resetWalkForTests } from "./walk-store.ts";
@@ -101,6 +102,7 @@ describe("WalkStepPage", () => {
   it("keeps a group page mounted when the same step receives fresh facts", () => {
     const first = outsideStep([effectOf("o1", "a.ts")]);
     mount(first);
+    expectPaneChrome(document.body, "walk");
     const article = screen.getByTestId("walk-page").querySelector("article");
     const heading = screen.getByTestId("walk-page-title");
     const updated = { ...first, effects: [...first.effects, effectOf("o2", "b.ts")] };

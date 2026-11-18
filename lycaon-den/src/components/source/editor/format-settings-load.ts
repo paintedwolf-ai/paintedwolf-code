@@ -2,7 +2,7 @@
 
 import type { LycaonClient } from "../../../api/client.ts";
 import { rememberFormatConfigNames, type FormatSources } from "./format-settings.ts";
-import { setFilesBufferFormatSettings } from "../../../files/documents/project-files-buffers.ts";
+import { setFilesBufferFormatSettings } from "../../../files/documents/project-files-buffer-io.ts";
 import { projectFilesState, type FileBuffer } from "../../../files/documents/files-buffer-state.ts";
 import type { FileBufferKey } from "../../../files/components/project-files-model.ts";
 

@@ -14,10 +14,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// PhaseVerdict is one review phase's last decided record, with the schema it
-// was recorded under.
-type PhaseVerdict = runstate.PhaseVerdict
-
 // RunClaim is one claim as the run's review phases left it.
 type RunClaim struct {
 	ID string
@@ -62,12 +58,12 @@ type ReviewEvidenceLister interface {
 // ReviewVerdicts reads every review phase's last decided record, in manifest
 // phase order. A later phase's verdict is a further decision, never a
 // replacement for an earlier one.
-func ReviewVerdicts(ctx context.Context, lister ReviewEvidenceLister, run *api.WorkflowRun, manifest workflowdef.Manifest) ([]PhaseVerdict, error) {
+func ReviewVerdicts(ctx context.Context, lister ReviewEvidenceLister, run *api.WorkflowRun, manifest workflowdef.Manifest) ([]runstate.PhaseVerdict, error) {
 	if lister == nil || run == nil {
 		return nil, nil
 	}
 	seen := map[string]struct{}{}
-	var out []PhaseVerdict
+	var out []runstate.PhaseVerdict
 	for _, def := range manifest.PhaseDefs {
 		if def.ReviewLoop == nil {
 			continue
@@ -87,7 +83,7 @@ func ReviewVerdicts(ctx context.Context, lister ReviewEvidenceLister, run *api.W
 		if !ok {
 			continue
 		}
-		out = append(out, PhaseVerdict{Phase: id, Label: def.ActivityLabel, Def: *def.ReviewLoop, Record: rec})
+		out = append(out, runstate.PhaseVerdict{Phase: id, Label: def.ActivityLabel, Def: *def.ReviewLoop, Record: rec})
 	}
 	return out, nil
 }
@@ -110,7 +106,7 @@ func lastDecidedRecord(ctx context.Context, lister ReviewEvidenceLister, run *ap
 
 // RunSetAsides are the set-asides the run's review phases recorded, in phase
 // order: scanner groups a review accounted for without assessing one by one.
-func RunSetAsides(verdicts []PhaseVerdict) []scanfindings.SetAside {
+func RunSetAsides(verdicts []runstate.PhaseVerdict) []scanfindings.SetAside {
 	var out []scanfindings.SetAside
 	for _, v := range verdicts {
 		setAsides, err := workflowvalidation.ParseVerdictSetAsides(v.Def, VerdictMembers(v.Record.Artifacts))
@@ -126,7 +122,7 @@ func RunSetAsides(verdicts []PhaseVerdict) []scanfindings.SetAside {
 // that introduces a claim titles it; each later phase that restates it settles
 // its status; a reconciling phase that leaves an earlier claim out leaves it
 // open.
-func ReconcileClaims(verdicts []PhaseVerdict) []RunClaim {
+func ReconcileClaims(verdicts []runstate.PhaseVerdict) []RunClaim {
 	var out []RunClaim
 	index := map[string]int{}
 	byPhase := map[string][]string{}

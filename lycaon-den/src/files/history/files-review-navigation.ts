@@ -5,7 +5,7 @@ import { type FileBriefingTarget } from "../components/file-briefing-target.ts";
 import { recordInventoryOpen } from "../tree/file-inventory.ts";
 import { walkVersionFromComparison } from "./file-version.ts";
 import { setSelectedFileVersion } from "./files-version-selection.ts";
-import { openFilesBuffer } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { pushProjectJump } from "../components/project-files-jump-bridge.ts";
 import { fileBufferKey } from "../components/project-files-model.ts";
 import { loadSourceComparison } from "../source/source-comparison-cache.ts";

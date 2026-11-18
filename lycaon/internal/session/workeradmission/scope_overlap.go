@@ -1,7 +1,6 @@
 package workeradmission
 
 import (
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -9,7 +8,6 @@ import (
 const (
 	TaskScopeWriteRequiredCode   = "TASK_SCOPE_WRITE_REQUIRED"
 	TaskScopeProfileReadOnlyCode = "TASK_SCOPE_PROFILE_READ_ONLY"
-	TaskMaxToolLoopsInvalidCode  = "TASK_MAX_TOOL_LOOPS_INVALID"
 	RepoEmptyReadOnlyWorkerCode  = "REPO_EMPTY_READ_ONLY_WORKER"
 )
 
@@ -47,12 +45,6 @@ func ValidateTaskScopeForProfile(mutationCapable, known bool, scope api.TaskScop
 		return TaskScopeProfileReadOnlyCode
 	}
 	return ""
-}
-
-// ValidateTaskScopeForAgent checks task mode against the agent profile.
-func ValidateTaskScopeForAgent(agentType string, scope api.TaskScope) string {
-	capable, known := prompts.AgentMutationCapable(agentType)
-	return ValidateTaskScopeForProfile(capable, known, scope)
 }
 
 // CountInFlightByMode counts read and write scopes among active jobs.

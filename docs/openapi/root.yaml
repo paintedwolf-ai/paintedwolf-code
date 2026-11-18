@@ -31,8 +31,6 @@ tags:
   description: Project identity, roots, source access, and project-scoped history.
 - name: blueprints
   description: Reusable project and workflow launch configurations.
-- name: delegations
-  description: Coordinator work delegation and leg lifecycle.
 - name: workers
   description: Background worker tasks and cancellation.
 - name: board
@@ -373,16 +371,6 @@ paths:
     $ref: paths/blueprints.yaml#/paths/~1v1~1projects~1{id}~1blueprints~1{blueprint_id}~1approve
   /v1/projects/{id}/blueprints/{blueprint_id}/launch:
     $ref: paths/blueprints.yaml#/paths/~1v1~1projects~1{id}~1blueprints~1{blueprint_id}~1launch
-  /v1/delegations:
-    $ref: paths/delegations.yaml#/paths/~1v1~1delegations
-  /v1/delegations/{id}:
-    $ref: paths/delegations.yaml#/paths/~1v1~1delegations~1{id}
-  /v1/delegations/{id}/legs:
-    $ref: paths/delegations.yaml#/paths/~1v1~1delegations~1{id}~1legs
-  /v1/delegations/{id}/dispatch:
-    $ref: paths/delegations.yaml#/paths/~1v1~1delegations~1{id}~1dispatch
-  /v1/delegations/{id}/abort:
-    $ref: paths/delegations.yaml#/paths/~1v1~1delegations~1{id}~1abort
   /v1/workflows:
     $ref: paths/workflows.yaml#/paths/~1v1~1workflows
   /v1/sessions/{id}/workflows/compose:
@@ -421,6 +409,8 @@ paths:
     $ref: paths/workflows.yaml#/paths/~1v1~1workflow-runs~1{id}~1feedback~1{phase_id}~1secret
   /v1/workers:
     $ref: paths/workers.yaml#/paths/~1v1~1workers
+  /v1/workers/history:
+    $ref: paths/workers.yaml#/paths/~1v1~1workers~1history
   /v1/workers/{id}/cancel:
     $ref: paths/workers.yaml#/paths/~1v1~1workers~1{id}~1cancel
   /v1/projects/{id}/board:
@@ -697,8 +687,6 @@ components:
       $ref: components/schemas/host-resources.yaml#/components/schemas/HostResourceDiagnostic
     HostResourcesResponse:
       $ref: components/schemas/host-resources.yaml#/components/schemas/HostResourcesResponse
-    BoardDelegationEntry:
-      $ref: components/schemas/board.yaml#/components/schemas/BoardDelegationEntry
     BoardDetailLevel:
       $ref: components/schemas/board.yaml#/components/schemas/BoardDetailLevel
     BoardForensicWorkers:
@@ -719,8 +707,8 @@ components:
       $ref: components/schemas/board.yaml#/components/schemas/BoardScanSummary
     BoardView:
       $ref: components/schemas/board.yaml#/components/schemas/BoardView
-    BoardWorkerRosterEntry:
-      $ref: components/schemas/board.yaml#/components/schemas/BoardWorkerRosterEntry
+    BoardWorker:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardWorker
     RepoBrief:
       $ref: components/schemas/board.yaml#/components/schemas/RepoBrief
     RepoLayout:
@@ -741,8 +729,6 @@ components:
       $ref: components/schemas/events.yaml#/components/schemas/WorkerEvent
     BoardEvent:
       $ref: components/schemas/events.yaml#/components/schemas/BoardEvent
-    DelegationEvent:
-      $ref: components/schemas/events.yaml#/components/schemas/DelegationEvent
     LLMTokenCounts:
       $ref: components/schemas/events.yaml#/components/schemas/LLMTokenCounts
     CoordinatorLoopProgress:
@@ -829,26 +815,8 @@ components:
       $ref: components/schemas/summarize.yaml#/components/schemas/SummarizeResponse
     TokenTotals:
       $ref: components/schemas/cost.yaml#/components/schemas/TokenTotals
-    AbortDelegationRequest:
-      $ref: components/schemas/delegation.yaml#/components/schemas/AbortDelegationRequest
-    CreateDelegationRequest:
-      $ref: components/schemas/delegation.yaml#/components/schemas/CreateDelegationRequest
-    Delegation:
-      $ref: components/schemas/delegation.yaml#/components/schemas/Delegation
-    DelegationPhase:
-      $ref: components/schemas/delegation.yaml#/components/schemas/DelegationPhase
-    DispatchRequest:
-      $ref: components/schemas/delegation.yaml#/components/schemas/DispatchRequest
-    HuntStrategy:
-      $ref: components/schemas/delegation.yaml#/components/schemas/HuntStrategy
-    InspectMode:
-      $ref: components/schemas/delegation.yaml#/components/schemas/InspectMode
-    Leg:
-      $ref: components/schemas/delegation.yaml#/components/schemas/Leg
     LegStatus:
       $ref: components/schemas/delegation.yaml#/components/schemas/LegStatus
-    DelegationStatus:
-      $ref: components/schemas/delegation.yaml#/components/schemas/DelegationStatus
     LogDigest:
       $ref: components/schemas/log_outline.yaml#/components/schemas/LogDigest
     LogDigestCluster:
@@ -1211,6 +1179,24 @@ components:
       $ref: components/schemas/checkpoint.yaml#/components/schemas/ToolApprovalRejectBody
     ToolResult:
       $ref: components/schemas/session/tool-results.yaml#/components/schemas/ToolResult
+    ActionDescriptor:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionDescriptor
+    ActionRan:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionRan
+    ActionFactKind:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionFactKind
+    ActionFact:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionFact
+    ActionPreview:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionPreview
+    ActionPreviewLine:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionPreviewLine
+    ActionLink:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionLink
+    ActionReceiptScope:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionReceiptScope
+    ActionOpener:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionOpener
     ExternalAccess:
       $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccess
     ExternalAccessVisibility:
@@ -1523,6 +1509,12 @@ components:
       $ref: components/schemas/worker.yaml#/components/schemas/SpawnReason
     WorkerStatus:
       $ref: components/schemas/worker.yaml#/components/schemas/WorkerStatus
+    WorkerState:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerState
+    WorkerStateReason:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerStateReason
+    WorkerResultDisposition:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerResultDisposition
     WorkerMergeStatus:
       $ref: components/schemas/worker.yaml#/components/schemas/WorkerMergeStatus
     WorkerPromotePathOutcome:
@@ -1557,6 +1549,16 @@ components:
       $ref: components/schemas/worker.yaml#/components/schemas/WorkerPromoteJobPathStatus
     WorkerTask:
       $ref: components/schemas/worker.yaml#/components/schemas/WorkerTask
+    WorkerMessageSenderRole:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerMessageSenderRole
+    WorkerInstructionStatus:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerInstructionStatus
+    WorkerHistoryRound:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerHistoryRound
+    WorkerHistoryMessage:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerHistoryMessage
+    WorkerHistoryResponse:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerHistoryResponse
     ComposeDecisionPhase:
       $ref: components/schemas/workflow.yaml#/components/schemas/ComposeDecisionPhase
     ComposeEffectiveSummary:

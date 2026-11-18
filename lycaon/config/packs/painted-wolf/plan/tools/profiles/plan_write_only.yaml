@@ -10,8 +10,10 @@ tools:
   recall: sticky
   record_finding: sticky
   pack_board: sticky
+  read_findings: sticky
+  read_review: sticky
   request_decision: sticky
-  request_budget: sticky
+  message_coordinator: sticky
   restore_version: sticky
   render_view: sticky
   wait: sticky
@@ -20,8 +22,8 @@ tools:
   secret_list: true
   secret_revoke: true
 deny_tools:
-  - delegate_*
+  - plan_from_blueprint
   - state_*
   - handoff_*
 write_scope: plan_write
-wait_conditions: [http_ready, port_ready]
+wait_conditions: [process_done, http_ready, port_ready]

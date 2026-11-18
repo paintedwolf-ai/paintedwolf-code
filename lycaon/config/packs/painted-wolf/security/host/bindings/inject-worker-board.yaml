@@ -1,4 +1,4 @@
-# Inform Binding — Emit-only inject.
+# Inform Binding — Emit-only worker board inject (roster-only board, findings via read_findings).
 'on': inject.worker_board
 selector:
   surface: worker

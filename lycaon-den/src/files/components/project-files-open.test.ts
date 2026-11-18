@@ -1,7 +1,8 @@
 import { required } from "../../test/at.ts";
-import { filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { applyFilesBufferLoad, applyFilesBufferDraft, resetProjectFilesForTests } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferLoad, applyFilesBufferDraft } from "../documents/project-files-buffer-io.ts";
+import { resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { beginFileVersionSelection } from "../history/files-version-selection.ts";
 import { openSourceInFilesStage } from "./project-files-open.ts";

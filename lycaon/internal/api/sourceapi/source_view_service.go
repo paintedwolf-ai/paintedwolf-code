@@ -312,5 +312,3 @@ func (view *sourceView) touch() {
 	view.expires = time.Now().Add(sourceViewLifetime)
 	view.mu.Unlock()
 }
-
-func sourceViewCanonical(value any) ([]byte, error) { return json.Marshal(value) }

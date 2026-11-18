@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -48,7 +47,7 @@ func TestPollerClaimsCommittedEnqueueWithoutWaitingForMaintenance(t *testing.T) 
 		ProjectID: testdbseed.DefaultProjectID, ExecutionTarget: api.ExecutionTargetLocal,
 	})
 	testutil.FailErr(t, "enqueue signaled worker", err)
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the task completes", func() bool {
 		task, ok := queue.Get(id)
 		return ok && task.Status == api.WorkerStatusComplete
 	})
@@ -212,11 +211,12 @@ func TestPollerRecoversExecutorPanic(t *testing.T) {
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
 
-	pollCtx, cancel := context.WithTimeout(ctx, testutil.Timeout(time.Minute))
-	defer cancel()
-	go poller.Run(pollCtx)
+	pollCtx, stopPolling := context.WithCancel(ctx)
+	polled := make(chan struct{})
+	go func() { poller.Run(pollCtx); close(polled) }()
+	t.Cleanup(func() { stopPolling(); <-polled })
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the task fails", func() bool {
 		got, ok := queue.Get(id)
 		return ok && got.Status == api.WorkerStatusFailed
 	})
@@ -294,7 +294,7 @@ func TestPollerReplaysUnacknowledgedTerminalOutcome(t *testing.T) {
 	}
 }
 
-func TestPollerDeliversTerminalOutcomeBeforeParentBecomesIdle(t *testing.T) {
+func TestPollerDeliversTerminalOutcomeOutsideTheCanceledExecution(t *testing.T) {
 	queue := NewInMemoryQueue(1)
 	parent := "parent-outcome-order"
 	_, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
@@ -309,9 +309,7 @@ func TestPollerDeliversTerminalOutcomeBeforeParentBecomesIdle(t *testing.T) {
 
 	parentCtx, cancelParent := context.WithCancel(t.Context())
 	recorder := &blockingOutcomeRecorder{started: make(chan struct{}), release: make(chan struct{})}
-	waiter := NewParentWorkerWaiter()
 	poller := NewLocalWorkerPoller(queue, cancelThenCompleteExecutor{cancel: cancelParent}, DefaultWorkersConfig(), recorder)
-	poller.ParentWaiter = waiter
 	executeDone := make(chan struct{})
 	go func() {
 		poller.execute(parentCtx, task)
@@ -323,33 +321,7 @@ func TestPollerDeliversTerminalOutcomeBeforeParentBecomesIdle(t *testing.T) {
 		t.Fatal("terminal outcome delivery did not start")
 	}
 
-	waitCtx, cancelWait := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancelWait()
-	waitDone := make(chan error, 1)
-	go func() {
-		waitDone <- AwaitParentSessionWorkers(waitCtx, queue, waiter, testdbseed.DefaultProjectID, parent, settings.DefaultSessionLimits())
-	}()
-	for t.Context().Err() == nil {
-		waiter.mu.Lock()
-		n := len(waiter.waiters[parent])
-		waiter.mu.Unlock()
-		if n == 1 {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
-	select {
-	case err := <-waitDone:
-		t.Fatalf("parent became idle before terminal projection: %v", err)
-	default:
-	}
 	close(recorder.release)
-	select {
-	case err := <-waitDone:
-		testutil.FailErr(t, "await delivered outcome", err)
-	case <-t.Context().Done():
-		t.Fatal("parent did not resume after terminal outcome acknowledgement")
-	}
 	<-executeDone
 	if recorder.sawCanceled.Load() {
 		t.Fatal("terminal outcome inherited the canceled worker execution context")
@@ -419,7 +391,7 @@ func TestPollerKeepsRunningUntilDeferredOutcomeSucceeds(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
-	testutil.WaitFor(t, func() bool { return recorder.attempts.Load() >= 2 })
+	testutil.WaitFor(t, "the outcome is recorded twice", func() bool { return recorder.attempts.Load() >= 2 })
 	pending, err := queue.ListPendingOutcomes(t.Context())
 	testutil.FailErr(t, "list acknowledged outcomes", err)
 	if len(pending) != 0 {
@@ -472,11 +444,12 @@ func TestPollerTransitionsToRetryWhenCompletionCommitFailsWithAttemptsRemaining(
 
 	cfg := DefaultWorkersConfig()
 	poller := NewLocalWorkerPoller(queue, completeExecutor{}, cfg, discardOutcomeRecorder{})
+	poller.terminalRetryMin = time.Millisecond
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the task reaches its second attempt", func() bool {
 		task, ok := queue.Get(id)
 		return ok && task.Attempt >= 2
 	})
@@ -500,11 +473,12 @@ func TestPollerTransitionsToFailureWhenCompletionCommitFailsExhausted(t *testing
 
 	cfg := DefaultWorkersConfig()
 	poller := NewLocalWorkerPoller(queue, completeExecutor{}, cfg, discardOutcomeRecorder{})
+	poller.terminalRetryMin = time.Millisecond
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the task fails", func() bool {
 		task, ok := queue.Get(id)
 		return ok && task.Status == api.WorkerStatusFailed
 	})

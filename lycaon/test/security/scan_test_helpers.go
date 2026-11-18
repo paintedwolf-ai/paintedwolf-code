@@ -49,11 +49,13 @@ func commitSecurityLanding(t *testing.T, sqlDB db.Handle, projectDir, delegation
 	t.Helper()
 	jobID := uuid.NewString()
 	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, "sess-closeout", testdbseed.DefaultProjectID)
 	workerStore := worker.NewSQLStore(sqlDB)
 	testutil.FailErr(t, "InsertTask", workerStore.InsertTask(t.Context(), wire.WorkerTask{
 		ID: jobID, Prompt: "security fixture", Brief: "security fixture",
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: projectDir,
-		DelegationID: delegationID, AgentType: "implementer", ExecutionTarget: wire.ExecutionTargetLocal,
+		ParentSessionID: "sess-closeout",
+		DelegationID:    delegationID, AgentType: "implementer", ExecutionTarget: wire.ExecutionTargetLocal,
 		Status: wire.WorkerStatusComplete,
 	}))
 	branch := enginepaths.JobBranchDir(enginepaths.WorkerBranchesRootUnder(testbaseline.DataDir(t, sqlDB)), projectDir, jobID)
@@ -70,7 +72,7 @@ func commitSecurityLanding(t *testing.T, sqlDB db.Handle, projectDir, delegation
 	}
 	plan := obligation.Plan{
 		ID: uuid.NewString(), ScanID: uuid.NewString(), AssessmentID: uuid.NewString(), WorkerJobID: jobID, CanonicalPath: projectDir,
-		DelegationID: delegationID, ScannerID: "sast-one", ChangedPaths: []string{"main.go"},
+		SessionID: "sess-closeout", DelegationID: delegationID, ScannerID: "sast-one", ChangedPaths: []string{"main.go"},
 		ExecutionManifest: wire.ScanExecutionManifest{
 			SchemaVersion: "v1", ScannerID: "sast-one", Engine: "security-test", Driver: "security-test",
 			ScopeKind: "source_driver", DefinitionFingerprint: strings.Repeat("a", 64),
@@ -221,7 +223,7 @@ func enqueueSingleScanner(t *testing.T, srv *api.Server, projectID string, categ
 func waitFullPassMemberScan(t *testing.T, srv *api.Server, projectID string, pass wire.SecurityFullPass) wire.CodeScan {
 	t.Helper()
 	member := pass.Members[0]
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the pass member's scan starts", func() bool {
 		switch member.Phase {
 		case wire.FullPassMemberStarted:
 			if member.Scan == nil {
@@ -252,7 +254,7 @@ func waitFullPassMemberScan(t *testing.T, srv *api.Server, projectID string, pas
 func waitScanComplete(t *testing.T, srv *api.Server, projectID, scanID string) wire.CodeScan {
 	t.Helper()
 	var got wire.CodeScan
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the scan completes", func() bool {
 		getReq := authedRequest(t, http.MethodGet, scanURL(projectID, scanID)+"?view=full", nil)
 		getW := httptest.NewRecorder()
 		srv.ServeHTTP(getW, getReq)

@@ -216,17 +216,17 @@ func parallelWorkersHarness(t *testing.T, fix workerpeercoord.ParallelWorkersRep
 	}
 	testutil.FailErr(t, "defaults", worker.ApplyEnqueueDefaults(&taskA, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
 	testutil.FailErr(t, "defaults", worker.ApplyEnqueueDefaults(&taskB, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
-	_, err = h.Delegations.Queue.Enqueue(ctx, taskA)
+	_, err = h.Workers.Queue.Enqueue(ctx, taskA)
 	testutil.FailErr(t, "enqueue a", err)
-	_, err = h.Delegations.Queue.Enqueue(ctx, taskB)
+	_, err = h.Workers.Queue.Enqueue(ctx, taskB)
 	testutil.FailErr(t, "enqueue b", err)
 
 	childA, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "leg a"})
 	testutil.FailErr(t, "create child a", err)
 	childB, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "leg b"})
 	testutil.FailErr(t, "create child b", err)
-	testutil.FailErr(t, "link a", h.Delegations.Queue.SetChildSessionID(ctx, taskA.ID, childA.ID))
-	testutil.FailErr(t, "link b", h.Delegations.Queue.SetChildSessionID(ctx, taskB.ID, childB.ID))
+	testutil.FailErr(t, "link a", h.Workers.Queue.SetChildSessionID(ctx, taskA.ID, childA.ID))
+	testutil.FailErr(t, "link b", h.Workers.Queue.SetChildSessionID(ctx, taskB.ID, childB.ID))
 	seedReplayFindingEvidence(t, h, ctx, childA.ID, fix.NoteRef, "pkg/foo.go", "pkg/new.go")
 
 	return h, ctx, dir, childA, childB, overlayA

@@ -1,10 +1,10 @@
 package sourceledger
 
 import (
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -62,7 +62,7 @@ func TestFileHistorySurvivesAnUnrelatedRootAttaching(t *testing.T) {
 	_, err := store.sqlDB.ExecContext(ctx, `
 		INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
 		VALUES ('r2', 'p1', ?, 'secondary', 0, ?, 'attached')
-	`, t.TempDir(), db.FormatTime(time.Now().UTC()))
+	`, t.TempDir(), timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "attach a second root", err)
 
 	afterAttach, _ := mustResolve(t, store, ctx, "a.txt")

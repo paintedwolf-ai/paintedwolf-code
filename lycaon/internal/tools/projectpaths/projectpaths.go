@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -71,7 +72,7 @@ func ResolveWrite(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolConte
 	if err != nil {
 		return Resolved{}, err
 	}
-	recordPrimaryMutation(ctx, tctx, resolved)
+	RecordResolvedMutation(ctx, tctx, resolved)
 	return resolved, nil
 }
 
@@ -118,11 +119,6 @@ func ChildResolved(tctx tools.ToolContext, parent Resolved, rel string) Resolved
 	}
 }
 
-// RecordResolvedMutation records a primary-tree write for an already-resolved path.
-func RecordResolvedMutation(ctx context.Context, tctx tools.ToolContext, resolved Resolved) {
-	recordPrimaryMutation(ctx, tctx, resolved)
-}
-
 // IsSpecialMutationRel reports whether rel names repository metadata or recovery paths.
 func IsSpecialMutationRel(rel string) bool {
 	if _, denied := repositoryMetadataClass(rel); denied {
@@ -131,9 +127,8 @@ func IsSpecialMutationRel(rel string) bool {
 	return settingsoverlay.IsRecoveryRelPath(rel) || settingsoverlay.HasRecoverySegment(rel)
 }
 
-// recordPrimaryMutation records a primary-tree write for the open rewind checkpoint.
-// Worker-branch writes are skipped; promote records those touches.
-func recordPrimaryMutation(ctx context.Context, tctx tools.ToolContext, resolved Resolved) {
+// RecordResolvedMutation records a primary-tree write for an already-resolved path.
+func RecordResolvedMutation(ctx context.Context, tctx tools.ToolContext, resolved Resolved) {
 	if tctx.Source.MutationRecorder == nil || resolved.External || strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
 		return
 	}
@@ -197,7 +192,10 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 		}
 		return scratchResolved, nil
 	}
-	// WorkerJobID without WorkerBranchRoot: reject non-reads (no mutation).
+	if op != sandbox.PathOpRead && tctx.Source.ReadOnly {
+		return Resolved{}, readOnlyWriteReject(modelPath)
+	}
+	// A worker writes only its own branch, never without one.
 	if op != sandbox.PathOpRead && strings.TrimSpace(tctx.Identity.WorkerJobID) != "" && strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" {
 		return Resolved{}, workerWriteWithoutBranchReject(modelPath)
 	}
@@ -275,22 +273,6 @@ func actionRootPaths(tctx tools.ToolContext) []string {
 	return workspaceRoots(tctx)
 }
 
-// ResolveMisplacedSpill resolves a read path that embeds one exact
-// content-addressed spill reference under another prefix, such as a root
-// label, to that spill. The digest names the content, so the reference is
-// unambiguous wherever it appears.
-func ResolveMisplacedSpill(tctx tools.ToolContext, modelPath string) (Resolved, bool) {
-	refs := tooloutput.SpillPaths(filepath.ToSlash(modelPath))
-	if len(refs) != 1 || refs[0] == filepath.ToSlash(strings.TrimSpace(modelPath)) {
-		return Resolved{}, false
-	}
-	resolved, ok, err := resolveHostDataRead(tctx, refs[0])
-	if !ok || err != nil {
-		return Resolved{}, false
-	}
-	return resolved, true
-}
-
 // resolveHostDataRead exposes allowlisted host spill paths.
 func resolveHostDataRead(tctx tools.ToolContext, modelPath string) (Resolved, bool, error) {
 	host := strings.TrimSpace(tctx.Host.HostDataDir)
@@ -344,6 +326,14 @@ func workerWriteWithoutBranchReject(path string) error {
 	return &toolrejection.ToolReject{Code: "WORKER_WRITE_WITHOUT_BRANCH", Data: map[string]any{"path": filepath.ToSlash(strings.TrimSpace(path))}}
 }
 
+// ReadOnlyWriteDeniedCode refuses a write by an invocation that may not
+// change project files.
+const ReadOnlyWriteDeniedCode = "READ_ONLY_WRITE_DENIED"
+
+func readOnlyWriteReject(path string) error {
+	return &toolrejection.ToolReject{Code: ReadOnlyWriteDeniedCode, Data: map[string]any{"path": filepath.ToSlash(strings.TrimSpace(path))}}
+}
+
 // UnionDiscoveryRoots returns roots for a union walk when modelPath is a union sentinel.
 func UnionDiscoveryRoots(ctx context.Context, tctx tools.ToolContext, modelPath string) ([]projectroot.RootRef, error) {
 	if reject := tools.ValidateAttachedRootsForAction(actionRootPaths(tctx)); reject != nil {
@@ -369,7 +359,7 @@ func UnionDiscoveryRoots(ctx context.Context, tctx tools.ToolContext, modelPath 
 					return refs, nil
 				}
 			}
-			return []projectroot.RootRef{{ID: "worker-branch", Path: branch, IsPrimary: true}}, nil
+			return []projectroot.RootRef{{ID: projectroot.WorkerBranchRootID, Path: branch, IsPrimary: true}}, nil
 		}
 		return tctx.Source.Roots, nil
 	}

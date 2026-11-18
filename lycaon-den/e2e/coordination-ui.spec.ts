@@ -12,6 +12,7 @@ import {
   coordinationSseStream,
   coordinationWorkersFixture,
 } from "./coordination-fixtures.ts";
+import type { SessionBootstrap } from "../src/api/types.ts";
 
 async function installCoordinationUiRoutes(page: Page) {
   let sessionId = "";
@@ -27,6 +28,21 @@ async function installCoordinationUiRoutes(page: Page) {
       return;
     }
     await route.continue();
+  });
+
+  // Opening a session reads these views from its bootstrap, not the per-view routes.
+  await page.route("**/v1/sessions/*/bootstrap*", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as SessionBootstrap;
+    await route.fulfill({
+      response,
+      json: {
+        ...body,
+        progress: coordinationProgressFixture,
+        findings: coordinationFindingsFixture,
+        coordinator: coordinationCoordinatorContextFixture,
+      } satisfies SessionBootstrap,
+    });
   });
 
   await page.route("**/v1/sessions/*/progress", async (route) => {

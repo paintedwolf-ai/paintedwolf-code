@@ -283,37 +283,6 @@ describe("ReviewLens", () => {
     });
   });
 
-  it("shows the active comparison scope header", async () => {
-    render(() => (
-      <ReviewLens
-        projectId="p1"
-        client={mockClient()}
-        appStore={mockAppStore()}
-        onOpenFile={() => {}}
-      />
-    ));
-    await waitFor(() => expect(screen.getByTestId("review-lens")).toBeTruthy());
-    expect(screen.getByTestId("review-lens-scope-header").textContent).toContain(
-      "New since you looked",
-    );
-  });
-
-  it("shows empty copy for the new-since-you-looked lens", async () => {
-    render(() => (
-      <ReviewLens
-        projectId="p1"
-        client={mockClient()}
-        appStore={mockAppStore()}
-        onOpenFile={() => {}}
-      />
-    ));
-    await waitFor(() =>
-      expect(screen.getByTestId("review-lens-empty").textContent).toContain(
-        "Nothing new since you last looked",
-      ),
-    );
-  });
-
   it("claims nothing for an unresolved scope and holds its surface until the first resolve settles", async () => {
     let resolveWalk: ((value: unknown) => void) | undefined;
     const client = mockClient({

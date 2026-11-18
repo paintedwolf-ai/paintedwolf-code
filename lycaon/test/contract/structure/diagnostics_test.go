@@ -45,7 +45,7 @@ func TestIsolatedMembersSharedConsumers(t *testing.T) {
 		"internal/session":       {"app"},
 		"internal/session/store": {"app"},
 	}, nil)
-	d, err := analyze(g, "internal/session", declaration{Kind: container, Description: "hub"})
+	d, err := Analyze(g, "internal/session", Declaration{Kind: container, Description: "hub"})
 	if err != nil {
 		t.Fatalf("analyze: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestIsolatedMemberOnlyConsumer(t *testing.T) {
 		"internal/session":       {"app"},
 		"internal/session/store": {"search"},
 	}, nil)
-	d, err := analyze(g, "internal/session", declaration{Kind: container, Description: "hub"})
+	d, err := Analyze(g, "internal/session", Declaration{Kind: container, Description: "hub"})
 	if err != nil {
 		t.Fatalf("analyze: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestDisconnectedGroupsViaIntermediate(t *testing.T) {
 	}, map[string][]string{
 		"internal/m": {"internal/a", "internal/b"},
 	})
-	d, err := analyze(g, "internal", declaration{Kind: container, Description: "boundary"})
+	d, err := Analyze(g, "internal", Declaration{Kind: container, Description: "boundary"})
 	if err != nil {
 		t.Fatalf("analyze: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestSubsystemUnusedEntryPointReported(t *testing.T) {
 	g := graphFor(map[string][]string{
 		"internal/db": {"app"},
 	}, nil)
-	d, err := analyze(g, "internal/db", declaration{
+	d, err := Analyze(g, "internal/db", Declaration{
 		Kind:        subsystem,
 		Description: "SQL adapter.",
 		EntryPoints: []string{module + "/internal/db"},
@@ -124,7 +124,7 @@ func TestDescribeContainerNamesIsolatedMembers(t *testing.T) {
 		"internal/a": {"app"},
 		"internal/b": {"search"},
 	}, nil)
-	d, err := analyze(g, "internal", declaration{Kind: container, Description: "boundary"})
+	d, err := Analyze(g, "internal", Declaration{Kind: container, Description: "boundary"})
 	if err != nil {
 		t.Fatalf("analyze: %v", err)
 	}

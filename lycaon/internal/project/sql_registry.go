@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -51,8 +52,8 @@ func (r *SQLRegistry) Create(ctx context.Context, params CreateParams) (*Project
 	if err := q.CreateProject(ctx, db.CreateProjectParams{
 		ID:              id,
 		Name:            name,
-		LastOpenedAt:    db.FormatTime(now),
-		CreatedAt:       db.FormatTime(now),
+		LastOpenedAt:    timelayout.Format(now),
+		CreatedAt:       timelayout.Format(now),
 		RootsGeneration: 0,
 		Starred:         0,
 	}); err != nil {
@@ -257,7 +258,7 @@ func (r *SQLRegistry) SetCover(ctx context.Context, id, artifactID, rootSessionI
 		CoverArtifactID:    db.NullString(strings.TrimSpace(artifactID)),
 		CoverRootSessionID: db.NullString(strings.TrimSpace(rootSessionID)),
 		CoverSource:        db.NullString(strings.TrimSpace(source)),
-		CoverUpdatedAt:     db.NullString(db.FormatTime(updatedAt.UTC())),
+		CoverUpdatedAt:     db.NullString(timelayout.Format(updatedAt.UTC())),
 		ID:                 id,
 	}); err != nil {
 		return nil, err

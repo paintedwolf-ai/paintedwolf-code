@@ -26,8 +26,6 @@ tags:
     description: Project identity, roots, source access, and project-scoped history.
   - name: blueprints
     description: Reusable project and workflow launch configurations.
-  - name: delegations
-    description: Coordinator work delegation and leg lifecycle.
   - name: workers
     description: Background worker tasks and cancellation.
   - name: board
@@ -7710,158 +7708,6 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         default:
           $ref: '#/components/responses/Error'
-  /v1/delegations:
-    post:
-      tags:
-        - delegations
-      operationId: createDelegation
-      x-person-action: record
-      summary: Create a delegation
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateDelegationRequest'
-      responses:
-        '201':
-          description: Delegation created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Delegation'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '413':
-          $ref: '#/components/responses/ContentTooLarge'
-        '415':
-          $ref: '#/components/responses/UnsupportedMediaType'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-        default:
-          $ref: '#/components/responses/Error'
-  /v1/delegations/{id}:
-    get:
-      tags:
-        - delegations
-      operationId: getDelegation
-      summary: Get delegation by ID
-      parameters:
-        - $ref: '#/components/parameters/DelegationId'
-      responses:
-        '200':
-          description: Delegation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Delegation'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        default:
-          $ref: '#/components/responses/Error'
-  /v1/delegations/{id}/legs:
-    get:
-      tags:
-        - delegations
-      operationId: listDelegationLegs
-      summary: List legs for a delegation
-      parameters:
-        - $ref: '#/components/parameters/DelegationId'
-      responses:
-        '200':
-          description: Legs
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DelegationLegListResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        default:
-          $ref: '#/components/responses/Error'
-  /v1/delegations/{id}/dispatch:
-    post:
-      tags:
-        - delegations
-      operationId: dispatchDelegationLeg
-      x-person-action: record
-      summary: Dispatch a delegation leg to a worker
-      parameters:
-        - $ref: '#/components/parameters/DelegationId'
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DispatchRequest'
-      responses:
-        '200':
-          description: Dispatched leg
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Leg'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '413':
-          $ref: '#/components/responses/ContentTooLarge'
-        '415':
-          $ref: '#/components/responses/UnsupportedMediaType'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-        default:
-          $ref: '#/components/responses/Error'
-  /v1/delegations/{id}/abort:
-    post:
-      tags:
-        - delegations
-      operationId: abortDelegation
-      x-person-action: record
-      summary: Abort a delegation
-      parameters:
-        - $ref: '#/components/parameters/DelegationId'
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AbortDelegationRequest'
-      responses:
-        '200':
-          description: Aborted delegation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Delegation'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '413':
-          $ref: '#/components/responses/ContentTooLarge'
-        '415':
-          $ref: '#/components/responses/UnsupportedMediaType'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-        default:
-          $ref: '#/components/responses/Error'
   /v1/workflows:
     get:
       tags:
@@ -8735,6 +8581,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkerListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/workers/history:
+    get:
+      tags:
+        - workers
+      operationId: getWorkerHistory
+      x-multi-stream-list: true
+      summary: Read bounded round and message history for a session worker
+      parameters:
+        - $ref: '#/components/parameters/ProjectIDQuery'
+        - name: session_id
+          in: query
+          required: true
+          description: Coordinator session that owns the worker.
+          schema:
+            type: string
+            format: uuid
+        - name: worker
+          in: query
+          required: true
+          description: Worker name or round job id on the session roster.
+          schema:
+            type: string
+            minLength: 1
+        - name: before
+          in: query
+          required: false
+          description: Exclusive message sequence cursor for older messages.
+          schema:
+            type: integer
+            minimum: 1
+        - name: before_round
+          in: query
+          required: false
+          description: Exclusive 1-based round ordinal cursor for older rounds.
+          schema:
+            type: integer
+            minimum: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Bounded worker collaboration history page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerHistoryResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -14732,13 +14640,6 @@ components:
       schema:
         type: string
         format: uuid
-    DelegationId:
-      name: id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
     ProjectIDQuery:
       name: project_id
       in: query
@@ -15226,21 +15127,6 @@ components:
         fingerprint:
           type: string
       additionalProperties: false
-    BoardDelegationEntry:
-      x-go-generate: true
-      type: object
-      required:
-        - id
-        - phase
-      additionalProperties: false
-      properties:
-        id:
-          type: string
-          format: uuid
-        phase:
-          $ref: '#/components/schemas/DelegationPhase'
-        task:
-          type: string
     BoardDetailLevel:
       type: string
       enum:
@@ -15543,10 +15429,19 @@ components:
         scans:
           x-go-pointer: true
           $ref: '#/components/schemas/BoardScansSlice'
-        roster:
+        workers:
           type: array
+          description: Open workers in the session, needing the coordinator and most recent first.
           items:
-            $ref: '#/components/schemas/BoardWorkerRosterEntry'
+            $ref: '#/components/schemas/BoardWorker'
+        workers_next_cursor:
+          type: string
+          description: Opaque cursor for the next page of workers when workers_has_more is true.
+        workers_has_more:
+          type: boolean
+        workers_omitted:
+          type: integer
+          minimum: 0
         promote_paths:
           type: array
           items:
@@ -15554,10 +15449,6 @@ components:
         overlay_merge_plan:
           x-go-pointer: true
           $ref: '#/components/schemas/OverlayMergePlan'
-        delegation:
-          type: array
-          items:
-            $ref: '#/components/schemas/BoardDelegationEntry'
         active_workflow_run:
           x-go-pointer: true
           $ref: '#/components/schemas/WorkflowRun'
@@ -15590,67 +15481,104 @@ components:
           format: date-time
         now_line:
           type: string
-    BoardWorkerRosterEntry:
+    BoardWorker:
       x-go-generate: true
       type: object
+      description: One worker as its coordinator sees it, with the state admission reads.
       required:
-        - worker_id
+        - name
         - agent_type
-        - status
+        - state
       additionalProperties: false
       properties:
-        dependencies:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkerDependency'
         worker_id:
           type: string
           format: uuid
+          description: Durable worker record identity across rounds.
+        name:
+          type: string
         agent_type:
           type: string
-        status:
-          $ref: '#/components/schemas/WorkerStatus'
-        merge_status:
-          $ref: '#/components/schemas/WorkerMergeStatus'
-        overlay_id:
+        child_session_id:
           type: string
-          pattern: ^[a-zA-Z0-9_.:/-]+$
-        scope_summary:
+          format: uuid
+          description: Child session reused across rounds once spawned.
+        latest_job_id:
           type: string
+          format: uuid
+          description: Latest round job identity when at least one round exists.
+        round:
+          type: integer
+          minimum: 1
+          description: Latest 1-based round ordinal when at least one round exists.
+        scope_mode:
+          type: string
+        workspace_state:
+          type: string
+          description: Derived workspace state for this worker (shared, retained, preparing, refreshed, reset, recovering).
+        state:
+          $ref: '#/components/schemas/WorkerState'
+        reason:
+          $ref: '#/components/schemas/WorkerStateReason'
+        state_label:
+          type: string
+          description: Derived display label for state and reason.
+        about:
+          type: string
+          description: The worker's latest instruction, else its brief, clipped to one line.
+        question:
+          type: string
+          description: The pending decision an asking worker waits on.
+        parked_reason:
+          type: string
+          description: Active wait lease reason when the round is parked.
+        parked_until_at:
+          x-go-type: string
+          type: string
+          format: date-time
+          description: Active wait lease deadline when the round is parked.
+        result_handle:
+          type: string
+          description: Handle of the worker's latest result.
+        result_disposition:
+          $ref: '#/components/schemas/WorkerResultDisposition'
+        shelve_reason:
+          type: string
+          description: Coordinator reason recorded when the latest result is shelved.
+        disposition_label:
+          type: string
+          description: Derived display label for result_disposition.
+        workspace_label:
+          type: string
+          description: Derived display label for workspace_state.
+        unread_message_count:
+          type: integer
+          minimum: 0
+          description: Worker messages not yet delivered to a coordinator turn.
+        updated_at:
+          x-go-type: string
+          type: string
+          format: date-time
+          description: Most recent activity timestamp for recency ordering.
+        read_paths:
+          type: array
+          items:
+            type: string
+        read_omitted:
+          type: integer
+          minimum: 0
         changed_paths:
           type: array
           items:
             type: string
-        touched_paths:
-          type: array
-          items:
-            type: string
-        brief:
-          type: string
-          description: Worker assignment goal included in full board detail.
-        error:
-          type: string
-        max_tool_loops:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Effective worker tool-round ceiling when known (host default 20, maximum 120)
-        budget_request:
-          x-go-pointer: true
-          $ref: '#/components/schemas/WorkerBudgetRequest'
-          description: The worker's unanswered request for more tool rounds; grant it with extend_worker_budget
-        tool_loops_used:
+        changed_omitted:
           type: integer
           minimum: 0
-          description: Completed tool rounds this worker run
         reservations:
           type: array
           items:
             type: string
-          description: Repo-relative paths held by handoff_reserve for this worker
-        blocked_on_approval:
-          type: boolean
-          description: True when checkpoint SSE reports a pending human checkpoint for this worker child session
+          description: Repo-relative paths the worker's live round holds with handoff_reserve.
     RepoBrief:
       x-go-generate: true
       x-go-field-order:
@@ -15797,7 +15725,6 @@ components:
         - worker
         - checkpoint
         - board
-        - delegation
         - cost
         - llm
         - activity
@@ -15837,7 +15764,6 @@ components:
         - $ref: '#/components/schemas/EventEnvelopeWorker'
         - $ref: '#/components/schemas/EventEnvelopeCheckpoint'
         - $ref: '#/components/schemas/EventEnvelopeBoard'
-        - $ref: '#/components/schemas/EventEnvelopeDelegation'
         - $ref: '#/components/schemas/EventEnvelopeCost'
         - $ref: '#/components/schemas/EventEnvelopeLlm'
         - $ref: '#/components/schemas/EventEnvelopeActivity'
@@ -15877,7 +15803,6 @@ components:
           worker: '#/components/schemas/EventEnvelopeWorker'
           checkpoint: '#/components/schemas/EventEnvelopeCheckpoint'
           board: '#/components/schemas/EventEnvelopeBoard'
-          delegation: '#/components/schemas/EventEnvelopeDelegation'
           cost: '#/components/schemas/EventEnvelopeCost'
           llm: '#/components/schemas/EventEnvelopeLlm'
           activity: '#/components/schemas/EventEnvelopeActivity'
@@ -15944,6 +15869,30 @@ components:
         worker_id:
           type: string
           format: uuid
+        worker_record_id:
+          type: string
+          format: uuid
+        worker_name:
+          type: string
+        round:
+          type: integer
+          minimum: 1
+        result_handle:
+          type: string
+          format: uuid
+        result_disposition:
+          $ref: '#/components/schemas/WorkerResultDisposition'
+        shelve_reason:
+          type: string
+        review_of:
+          type: string
+          format: uuid
+        parked_reason:
+          type: string
+        parked_until_at:
+          x-go-type: string
+          type: string
+          format: date-time
         status:
           $ref: '#/components/schemas/WorkerStatus'
         agent_type:
@@ -15959,13 +15908,6 @@ components:
           description: Worker assignment goal used for card titles.
         merge_status:
           $ref: '#/components/schemas/WorkerMergeStatus'
-        max_tool_loops:
-          type: integer
-          minimum: 0
-        budget_request:
-          x-go-pointer: true
-          $ref: '#/components/schemas/WorkerBudgetRequest'
-          description: The worker's unanswered request for more tool rounds; absent once granted
         tool_loops_used:
           type: integer
           minimum: 0
@@ -16011,26 +15953,6 @@ components:
           $ref: '#/components/schemas/BoardView'
         detail_level:
           $ref: '#/components/schemas/BoardDetailLevel'
-    DelegationEvent:
-      x-go-generate: true
-      type: object
-      required:
-        - delegation_id
-        - status
-        - leg_id
-        - phase
-      additionalProperties: false
-      properties:
-        delegation_id:
-          type: string
-          format: uuid
-        status:
-          $ref: '#/components/schemas/DelegationStatus'
-        leg_id:
-          type: string
-          format: uuid
-        phase:
-          $ref: '#/components/schemas/DelegationPhase'
     LLMTokenCounts:
       x-go-generate: true
       type: object
@@ -17207,194 +17129,6 @@ components:
         completion:
           type: integer
           minimum: 0
-    AbortDelegationRequest:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      properties:
-        reason:
-          type: string
-    CreateDelegationRequest:
-      x-go-generate: true
-      type: object
-      required:
-        - operation_id
-        - project_id
-        - task
-      additionalProperties: false
-      properties:
-        operation_id:
-          type: string
-          format: uuid
-          description: Idempotency key. Repeating a create with the same key and body answers the delegation the first create made; the same key with a different body is an idempotency_conflict.
-        project_id:
-          type: string
-          format: uuid
-        task:
-          type: string
-        strategy:
-          $ref: '#/components/schemas/HuntStrategy'
-          description: Decomposition strategy. The host uses file-based when the request omits it.
-        inspect_mode:
-          $ref: '#/components/schemas/InspectMode'
-        workflow_id:
-          type: string
-          pattern: ^[a-z0-9_-]+$
-        workflow_version:
-          type: string
-        workflow_run_id:
-          type: string
-          format: uuid
-        blueprint_path:
-          type: string
-          description: Project-relative path under the overlay blueprints/ directory
-    Delegation:
-      x-go-generate: true
-      type: object
-      required:
-        - id
-        - project_id
-        - task
-        - strategy
-        - status
-        - created_at
-      additionalProperties: false
-      properties:
-        id:
-          type: string
-          format: uuid
-        project_id:
-          type: string
-          format: uuid
-        workspace_root_id:
-          type: string
-          format: uuid
-        workspace_path:
-          type: string
-        coordinator_session_id:
-          type: string
-          format: uuid
-          description: Coordinator session created with the delegation (for prompts and grounding)
-        task:
-          type: string
-        strategy:
-          $ref: '#/components/schemas/HuntStrategy'
-        inspect_mode:
-          $ref: '#/components/schemas/InspectMode'
-        workflow_id:
-          type: string
-          pattern: ^[a-z0-9_-]+$
-        workflow_version:
-          type: string
-        workflow_run_id:
-          type: string
-          format: uuid
-        blueprint_path:
-          type: string
-          description: Project-relative path under the overlay blueprints/ directory
-        base_head_sha:
-          type: string
-        status:
-          $ref: '#/components/schemas/DelegationStatus'
-        reason:
-          type: string
-        phase:
-          $ref: '#/components/schemas/DelegationPhase'
-        legs:
-          type: array
-          items:
-            $ref: '#/components/schemas/Leg'
-        created_at:
-          type: string
-          format: date-time
-    DelegationPhase:
-      type: string
-      enum:
-        - setup
-        - worker
-        - closeout
-        - done
-    DispatchRequest:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      properties:
-        leg_id:
-          type: string
-          format: uuid
-    HuntStrategy:
-      type: string
-      enum:
-        - file-based
-        - feature-based
-        - risk-based
-        - research-based
-    InspectMode:
-      type: string
-      enum:
-        - standard
-        - turbo
-        - full
-    Leg:
-      type: object
-      required:
-        - id
-        - delegation_id
-        - title
-        - status
-        - created_at
-      additionalProperties: false
-      properties:
-        id:
-          type: string
-          format: uuid
-        delegation_id:
-          type: string
-          format: uuid
-        title:
-          type: string
-        agent_type:
-          type: string
-          description: Functional worker agent id stamped at dispatch
-        status:
-          $ref: '#/components/schemas/LegStatus'
-        worker_id:
-          type: string
-          format: uuid
-        parent_id:
-          type: string
-          format: uuid
-        depends_on:
-          type: array
-          description: Leg ids that must complete before this leg can dispatch.
-          items:
-            type: string
-            format: uuid
-        files:
-          type: array
-          items:
-            type: string
-        prompt:
-          type: string
-        completion_criteria:
-          type: array
-          items:
-            type: string
-        workspace_id:
-          type: string
-          pattern: ^[a-zA-Z0-9_.:/-]+$
-          description: Stable workspace binding id for scoped evidence
-        result:
-          $ref: '#/components/schemas/WorkerResult'
-        created_at:
-          type: string
-          format: date-time
-        started_at:
-          type: string
-          format: date-time
-        completed_at:
-          type: string
-          format: date-time
     LegStatus:
       type: string
       enum:
@@ -17405,14 +17139,6 @@ components:
         - complete
         - failed
         - held
-        - canceled
-    DelegationStatus:
-      type: string
-      enum:
-        - active
-        - done
-        - failed
-        - aborted
         - canceled
     LogDigest:
       x-go-generate: true
@@ -18325,16 +18051,13 @@ components:
       x-go-generate: true
       type: object
       required:
-        - worker_id
-        - result_revision
+        - result_handle
       additionalProperties: false
       properties:
-        worker_id:
+        result_handle:
           type: string
           format: uuid
-        result_revision:
-          type: string
-          description: The worker's completion time; a rerun is a new revision.
+          description: Settled worker round result handle.
     BriefingRequest:
       x-go-generate: true
       type: object
@@ -21404,7 +21127,6 @@ components:
         - model
         - status
         - parent_session_id
-        - max_tool_loops
         - compaction_generation
         - untrusted_content
         - current_turn
@@ -21473,11 +21195,6 @@ components:
         parent_session_id:
           type: string
           format: uuid
-        max_tool_loops:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Effective worker tool-loop cap. Omitted task budgets default to 12 for read scope and 20 for write scope; maximum 120. The final iteration is prose-only.
         compaction_generation:
           type: integer
           minimum: 0
@@ -21888,6 +21605,10 @@ components:
           type: object
           additionalProperties: true
           description: Provider-specific tool-call metadata required on replay.
+        action:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ActionDescriptor'
+          description: Card for the call before its result arrives; projected on read, never stored.
     ToolApprovalPayload:
       x-go-generate: true
       type: object
@@ -22044,6 +21765,16 @@ components:
           description: Structured facts for every raised guidance code, in the same order as codes. Agents branch on code and details, never on rendered content.
           items:
             $ref: '#/components/schemas/ToolFeedback'
+        action:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ActionDescriptor'
+          description: Card for a settled call that is not a command program; projected on read, never stored.
+        card_facts:
+          type: array
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/ActionFact'
+          description: Facts the tool's handler stated for its action card, such as what it found or the HTTP status it got. Stored with the result; never part of the model's tool result.
         ui_visibility:
           x-go-name: UiVisibility
           $ref: '#/components/schemas/ToolResultUiVisibility'
@@ -22114,6 +21845,418 @@ components:
           $ref: '#/components/schemas/LoopbackListenerFact'
           description: |
             Host-observed loopback listener attribution for an http_request whose first hop connected to a loopback address.
+    ActionDescriptor:
+      x-go-generate: true
+      type: object
+      description: The host's account of one visible action, composed from typed facts on the call, its result or its command activity. Den draws every action card from this and owns only copy and formatting.
+      additionalProperties: false
+      required:
+        - label
+        - status
+        - ran
+        - facts
+        - row
+        - links
+      properties:
+        label:
+          type: string
+          description: Verb-first action name from the tool presentation catalog.
+        status:
+          type: string
+          enum:
+            - running
+            - done
+            - error
+        ran:
+          $ref: '#/components/schemas/ActionRan'
+        facts:
+          type: array
+          maxItems: 4
+          description: At most four facts, in vocabulary order, at most one of each kind.
+          items:
+            $ref: '#/components/schemas/ActionFact'
+        row:
+          type: array
+          maxItems: 2
+          description: Fact kinds whose compact form makes the row's outcome text, in order.
+          items:
+            $ref: '#/components/schemas/ActionFactKind'
+        preview:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ActionPreview'
+        links:
+          type: array
+          maxItems: 3
+          description: Records the action has, in the order Input, Output, Receipt; absent kinds are omitted.
+          items:
+            $ref: '#/components/schemas/ActionLink'
+        opener:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ActionOpener'
+        fold_key:
+          type: string
+          description: 'Actions sharing a key render as one card: one terminal session, one page session, repeated reads of one path, or a burst of one coordination family. Empty for an action that stands alone.'
+    ActionRan:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - text
+        - noun
+      properties:
+        text:
+          type: string
+          description: What the action ran or addressed, already screened for secrets.
+        noun:
+          type: string
+          description: What the text is, for the copy control's name.
+          enum:
+            - command
+            - path
+            - pattern
+            - query
+            - url
+            - request
+            - message
+            - transition
+            - skill
+            - phase
+            - scan
+            - brief
+            - need
+            - target
+        redaction:
+          x-go-pointer: true
+          $ref: '#/components/schemas/HostSecretRedactionMeta'
+    ActionFactKind:
+      type: string
+      enum:
+        - result
+        - changed
+        - found
+        - took
+        - steps
+        - stopped_by
+        - network
+        - worker
+        - budget
+        - process
+        - captured
+        - containment
+        - loaded_by
+    ActionFact:
+      x-go-generate: true
+      type: object
+      description: One typed fact. The fields a kind uses are listed on each field; Den formats the values and owns the label for each kind.
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          $ref: '#/components/schemas/ActionFactKind'
+        outcome:
+          type: string
+          description: 'result: how the action ended.'
+          enum:
+            - passed
+            - failed
+            - refused
+            - interrupted
+            - completed
+            - created
+            - updated
+            - deleted
+            - moved
+            - copied
+            - committed
+            - merged
+            - checked_out
+            - answered
+            - approved
+            - declined
+            - pass
+            - fail
+            - captured
+            - loaded
+            - canceled
+        exit_code:
+          type: integer
+          x-go-pointer: true
+          description: 'result: process exit status.'
+        http_status:
+          type: integer
+          x-go-pointer: true
+          description: 'result: HTTP response status.'
+        ref:
+          type: string
+          description: 'result: a short identifier the outcome produced, such as a commit.'
+        files:
+          type: integer
+          description: 'changed: files touched. found: files the matches are in.'
+        added:
+          type: integer
+          description: 'changed: lines added.'
+        removed:
+          type: integer
+          description: 'changed: lines removed.'
+        hunks:
+          type: integer
+          description: 'changed: hunks.'
+        created:
+          type: integer
+          description: 'changed: new files.'
+        count:
+          type: integer
+          description: 'found: how many. steps: how many members.'
+        noun:
+          type: string
+          description: 'found: what was counted.'
+          enum:
+            - matches
+            - files
+            - entries
+            - lines
+            - results
+            - tools
+            - findings
+            - citations
+            - items
+            - bytes
+            - processes
+            - secrets
+            - refs
+            - commits
+        items:
+          type: array
+          maxItems: 3
+          description: 'found: up to three named items, such as loaded tools.'
+          items:
+            type: string
+        high:
+          type: integer
+          description: 'found: high-severity findings.'
+        medium:
+          type: integer
+          description: 'found: medium-severity findings.'
+        low:
+          type: integer
+          description: 'found: low-severity findings.'
+        duration_ms:
+          type: integer
+          format: int64
+          description: 'took: elapsed time of a settled action.'
+        failed:
+          type: integer
+          description: 'steps: members that failed, were refused or were interrupted.'
+        unit:
+          type: string
+          description: 'steps: what a member is.'
+          enum:
+            - executions
+            - calls
+            - actions
+        sequence:
+          type: array
+          maxItems: 8
+          description: 'steps: the members'' actions in order, for a session such as a terminal.'
+          items:
+            type: string
+        by:
+          type: string
+          description: 'stopped_by: what stopped or approved the action. loaded_by: how a tool or skill was resolved.'
+          enum:
+            - host_stop
+            - approval
+            - policy
+            - budget
+            - engine
+            - name
+            - none
+        code:
+          type: string
+          description: 'stopped_by: the host stop or rejection code.'
+        decided_by:
+          type: string
+          description: 'stopped_by: who decided an approval.'
+          enum:
+            - person
+            - policy
+        decided_at:
+          type: string
+          format: date-time
+          x-go-pointer: true
+          description: 'stopped_by: when an approval was decided.'
+        hosts:
+          type: array
+          maxItems: 3
+          description: 'network: hosts reached.'
+          items:
+            type: string
+        egress:
+          type: string
+          description: 'network: how traffic left the host.'
+          enum:
+            - proxy_only
+            - direct
+            - local_only
+        role:
+          type: string
+          description: 'worker: the worker''s role.'
+        state:
+          type: string
+          description: 'worker: the worker''s state. process: the process state.'
+        used:
+          type: integer
+          format: int64
+          description: 'budget: amount used.'
+        limit:
+          type: integer
+          format: int64
+          description: 'budget: amount allowed.'
+        port:
+          type: integer
+          x-go-pointer: true
+          description: 'process: listening port.'
+        caption:
+          type: string
+          description: 'captured: the artifact''s caption.'
+        artifact_id:
+          type: string
+          format: uuid
+          description: 'captured: the artifact.'
+        mode:
+          type: string
+          description: 'containment: the confinement mode.'
+    ActionPreview:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - output
+            - diff
+            - hits
+            - steps
+            - image
+        lines:
+          type: array
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/ActionPreviewLine'
+        lines_omitted:
+          type: integer
+          description: Further lines not shown.
+        tail:
+          type: boolean
+          description: 'output: the lines are the end of the stream.'
+        receipts:
+          type: array
+          description: 'output: the lines are in these activities'' execution receipts, which Den reads when the card opens; head for a success, tail for a failure or a running activity.'
+          items:
+            $ref: '#/components/schemas/ActionReceiptScope'
+        artifact_id:
+          type: string
+          format: uuid
+          description: 'image: the artifact to show.'
+        caption:
+          type: string
+          description: 'image: the artifact''s caption.'
+    ActionPreviewLine:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - text
+      properties:
+        text:
+          type: string
+        stream:
+          type: string
+          enum:
+            - stdout
+            - stderr
+        sign:
+          type: string
+          description: 'diff: added or removed.'
+          enum:
+            - added
+            - removed
+        location:
+          type: string
+          description: 'hits: where the line is.'
+        state:
+          type: string
+          description: 'steps: how the step ended.'
+    ActionLink:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - input
+            - output
+            - receipt
+        content_ref:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ChatContentReference'
+        process_handle:
+          type: string
+          description: 'output: a background process whose output is the record.'
+        receipts:
+          type: array
+          description: 'receipt: the program activities the receipt document covers.'
+          items:
+            $ref: '#/components/schemas/ActionReceiptScope'
+    ActionReceiptScope:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - program_id
+        - activity_id
+      properties:
+        program_id:
+          type: string
+          format: uuid
+        activity_id:
+          type: string
+          format: uuid
+    ActionOpener:
+      x-go-generate: true
+      type: object
+      description: Where the action's subject opens, beyond its records.
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - file
+            - terminal
+            - running
+            - search
+        path:
+          type: string
+          description: 'file: the path, as the action named it.'
+        line:
+          type: integer
+          x-go-pointer: true
+          description: 'file: the line to open at.'
+        query:
+          type: string
+          description: 'search: what to search for.'
+        process_handle:
+          type: string
+          description: 'terminal: the session whose output opens.'
     ExternalAccess:
       x-go-generate: true
       type: object
@@ -22481,6 +22624,20 @@ components:
           type: string
           format: uuid
         leg_id:
+          type: string
+          format: uuid
+        worker_record_id:
+          type: string
+          format: uuid
+        worker_name:
+          type: string
+        round:
+          type: integer
+          minimum: 1
+        result_handle:
+          type: string
+          format: uuid
+        review_of:
           type: string
           format: uuid
         worker_id:
@@ -24813,27 +24970,6 @@ components:
           minimum: 1000
           multipleOf: 1000
           description: Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds.
-        worker_tool_budget_default:
-          type:
-            - integer
-            - 'null'
-          minimum: 2
-          maximum: 120
-          description: Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget.
-        worker_tool_budget_min:
-          type:
-            - integer
-            - 'null'
-          minimum: 2
-          maximum: 120
-          description: Smallest worker tool-round ceiling the coordinator may set (host floor is 2).
-        worker_tool_budget_max:
-          type:
-            - integer
-            - 'null'
-          minimum: 2
-          maximum: 120
-          description: Largest worker tool-round ceiling the coordinator may set or grant.
         session_spend_ceiling_nano_usd:
           x-go-name: SessionSpendCeilingNanoUSD
           type:
@@ -24872,9 +25008,6 @@ components:
         - coordinator_host_turn_timeout_ms
         - coordinator_max_sleep_ms
         - await_parent_workers_timeout_ms
-        - worker_tool_budget_default
-        - worker_tool_budget_min
-        - worker_tool_budget_max
         - spend_soft_stop
         - merged_from
       additionalProperties: false
@@ -24917,21 +25050,6 @@ components:
           minimum: 1000
           multipleOf: 1000
           description: Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds.
-        worker_tool_budget_default:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget.
-        worker_tool_budget_min:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Smallest worker tool-round ceiling the coordinator may set (host floor is 2).
-        worker_tool_budget_max:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Largest worker tool-round ceiling the coordinator may set or grant.
         session_spend_ceiling_nano_usd:
           x-go-name: SessionSpendCeilingNanoUSD
           type: integer
@@ -24954,6 +25072,12 @@ components:
           type: array
           items:
             type: string
+        rejected:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectSettingsRejectedRow'
+          description: |
+            Present on project scope when the project's limits.yaml could not be applied. The limits shown are the device's, and the project's limits cannot be saved until the file is fixed.
     ContentReviewRule:
       x-go-generate: true
       type: object
@@ -24991,6 +25115,12 @@ components:
           type: array
           items:
             type: string
+        rejected:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectSettingsRejectedRow'
+          description: |
+            Present on project scope when the project's review.yaml could not be applied. Every edit asks for review until it is fixed, and the project's review settings cannot be saved until then.
     UpdateReviewSettingsRequest:
       x-go-generate: true
       type: object
@@ -25026,6 +25156,12 @@ components:
           $ref: '#/components/schemas/VerifySuggestionState'
         dismissed:
           type: boolean
+        rejected:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectSettingsRejectedRow'
+          description: |
+            Present on project scope when the project's verify.yaml could not be applied. No test command is declared while it stands, and the project's verify settings cannot be saved until the file is fixed.
     UpdateVerifySettingsRequest:
       x-go-generate: true
       type: object
@@ -25773,8 +25909,6 @@ components:
         policy_feedback:
           x-go-pointer: true
           $ref: '#/components/schemas/WorkerPolicyFeedback'
-        host_assembled:
-          type: boolean
     ExecutionTarget:
       type: string
       enum:
@@ -25797,6 +25931,43 @@ components:
         - failed
         - canceled
         - held
+    WorkerState:
+      type: string
+      description: A worker's derived state.
+      enum:
+        - planned
+        - waiting
+        - working
+        - asking
+        - delivered
+        - idle
+        - failed
+        - recovering
+        - closed
+    WorkerStateReason:
+      type: string
+      description: What qualifies a worker's state.
+      enum:
+        - queued
+        - parked
+        - approval_wait
+        - prerequisite
+        - result_unaccounted
+        - changes_unresolved
+        - no_report
+        - recovery_required
+        - withdrawn
+        - session_unusable
+    WorkerResultDisposition:
+      type: string
+      description: What became of a worker's latest result.
+      enum:
+        - unaccounted
+        - accounted
+        - open
+        - landed
+        - rejected
+        - shelved
     WorkerMergeStatus:
       type: string
       description: |
@@ -26007,13 +26178,13 @@ components:
       description: The promote_overlay and preview_overlay tool result.
       type: object
       required:
-        - job_id
+        - result_handle
         - mode
       additionalProperties: false
       properties:
-        job_id:
+        result_handle:
           type: string
-          format: uuid
+          description: The result these changes belong to.
         mode:
           type: string
         merge_status:
@@ -26040,17 +26211,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkerPromotePathStatus'
-        overlap_job_ids:
+        overlap_overlay_ids:
           type: array
           items:
             type: string
         promote_order:
           $ref: '#/components/schemas/WorkerPromoteOrderKind'
         promote_after:
+          description: Handles of results that must land before these changes are clean.
           type: array
           items:
             type: string
         blocked_by:
+          description: Handles of results these changes must land before.
           type: array
           items:
             type: string
@@ -26124,10 +26297,12 @@ components:
         promote_order:
           $ref: '#/components/schemas/WorkerPromoteOrderKind'
         promote_after:
+          description: Handles of results that must land before this path is clean.
           type: array
           items:
             type: string
         blocked_by:
+          description: Handles of results this path must land before.
           type: array
           items:
             type: string
@@ -26170,6 +26345,38 @@ components:
         id:
           type: string
           format: uuid
+        worker_record_id:
+          type: string
+          format: uuid
+          description: Durable worker record identity across rounds.
+        worker_name:
+          type: string
+          description: Canonical worker name on the session roster.
+        round:
+          type: integer
+          minimum: 1
+          description: 1-based round ordinal within the worker record.
+        result_handle:
+          type: string
+          format: uuid
+          description: Settled result handle recorded for this round.
+        result_disposition:
+          $ref: '#/components/schemas/WorkerResultDisposition'
+          description: Disposition of this round's settled result.
+        shelve_reason:
+          type: string
+          description: Coordinator reason recorded when this round's result is shelved.
+        review_of:
+          type: string
+          format: uuid
+          description: Sealed result handle reviewed by this round when it is a reviewer round.
+        parked_reason:
+          type: string
+          description: Active wait lease reason while this round is parked.
+        parked_until_at:
+          type: string
+          format: date-time
+          description: Active wait lease deadline while this round is parked.
         child_session_id:
           type: string
           format: uuid
@@ -26208,14 +26415,6 @@ components:
             Stable identifier for this write overlay; other dispatches may stack
             on it by setting scope.base_overlay_id to this value. Empty for read
             scopes.
-        max_tool_loops:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Worker tool-round ceiling (host default 20, range 2–120); raised only when the coordinator grants a request; final iteration is prose-only
-        budget_request:
-          $ref: '#/components/schemas/WorkerBudgetRequest'
-          description: The worker's unanswered request for more tool rounds; absent once granted or when none was made
         tool_loops_used:
           type: integer
           minimum: 0
@@ -26232,6 +26431,15 @@ components:
           type: integer
           minimum: 0
           description: Calls already settled in that in-flight batch; never exceeds turn_tool_calls
+        turn_tools:
+          type: array
+          items:
+            type: string
+          description: Distinct tool names in the in-flight batch, in call order; empty between turns
+        turn_started_at:
+          type: string
+          format: date-time
+          description: When the in-flight batch began; absent between turns
         context_usage:
           $ref: '#/components/schemas/WorkerContextUsage'
           description: Live per-worker context occupancy for the Den worker-card ring; absent until the first turn completes
@@ -26281,6 +26489,148 @@ components:
         completed_at:
           type: string
           format: date-time
+    WorkerMessageSenderRole:
+      type: string
+      enum:
+        - coordinator
+        - worker
+        - person
+        - host
+    WorkerInstructionStatus:
+      type: string
+      enum:
+        - applied
+        - queued
+        - not_applied
+    WorkerHistoryRound:
+      x-go-generate: true
+      type: object
+      required:
+        - ordinal
+        - worker_id
+        - created_at
+      additionalProperties: false
+      properties:
+        ordinal:
+          type: integer
+          minimum: 1
+        worker_id:
+          type: string
+          format: uuid
+          description: Worker job identity for this round.
+        status:
+          $ref: '#/components/schemas/WorkerStatus'
+        instruction_first_seq:
+          type: integer
+          minimum: 1
+        instruction_last_seq:
+          type: integer
+          minimum: 1
+        result_handle:
+          type: string
+          format: uuid
+        result_disposition:
+          $ref: '#/components/schemas/WorkerResultDisposition'
+        shelve_reason:
+          type: string
+        checkpoint_id:
+          type: string
+          pattern: ^\S*$
+        review_of:
+          type: string
+          format: uuid
+        result:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WorkerResult'
+        failure:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WorkerFailure'
+        created_at:
+          x-go-type: string
+          type: string
+          format: date-time
+        settled_at:
+          x-go-type: string
+          type: string
+          format: date-time
+    WorkerHistoryMessage:
+      x-go-generate: true
+      type: object
+      required:
+        - seq
+        - sender_role
+        - body
+        - delivered
+        - created_at
+      additionalProperties: false
+      properties:
+        seq:
+          type: integer
+          minimum: 1
+        sender_role:
+          $ref: '#/components/schemas/WorkerMessageSenderRole'
+        round_ordinal:
+          type: integer
+          minimum: 1
+        body:
+          type: string
+        artifact_ref:
+          type: string
+        needs_reply:
+          type: boolean
+        reply_to_seq:
+          type: integer
+          minimum: 1
+        delivered:
+          type: boolean
+        instruction_status:
+          $ref: '#/components/schemas/WorkerInstructionStatus'
+        created_at:
+          x-go-type: string
+          type: string
+          format: date-time
+    WorkerHistoryResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - worker_id
+        - name
+        - agent_type
+        - state
+        - rounds
+        - messages
+      additionalProperties: false
+      properties:
+        worker_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        agent_type:
+          type: string
+        brief:
+          type: string
+        child_session_id:
+          type: string
+          format: uuid
+        state:
+          $ref: '#/components/schemas/WorkerState'
+        reason:
+          $ref: '#/components/schemas/WorkerStateReason'
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerHistoryRound'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerHistoryMessage'
+        before:
+          type: integer
+          minimum: 0
+        before_round:
+          type: integer
+          minimum: 0
     ComposeDecisionPhase:
       x-go-generate: true
       type: object
@@ -27109,8 +27459,6 @@ components:
         - draft_root_immutable
         - project_busy
         - checkpoint_not_pending
-        - delegation_not_found
-        - delegation_leg_not_found
         - feedback_not_pending
         - feedback_response_required
         - briefing_disabled
@@ -27192,6 +27540,7 @@ components:
         - extension_suggestion_invalid
         - overlay_format_unsupported
         - overlay_format_invalid
+        - project_settings_need_repair
         - project_approvals_need_repair
         - root_not_found
         - root_busy
@@ -27322,7 +27671,7 @@ components:
         - prompt_failed
         - turn_closeout_tool_call
         - host_fault
-        - worker_closeout_exhausted
+        - worker_model_timeout
         - worker_execute_failed
         - worker_workspace_disk_full
         - worker_owner_unsettled
@@ -27338,7 +27687,6 @@ components:
         - forbidden
         - worker_not_found
         - worker_not_cancelable
-        - leg_not_pending
         - decision_not_pending
         - workflow_active
         - workflow_revision_conflict
@@ -27908,6 +28256,127 @@ components:
           type: integer
         end_byte:
           type: integer
+    RedactionKind:
+      type: string
+      description: |
+        What a replacement claims. A secret was detected and removed; a managed_reference is a protected value written as its capability reference, so the source still holds the value the reference names; an observer_mask is a standing policy that never showed the value to observers and asserts nothing about its content.
+      enum:
+        - secret
+        - managed_reference
+        - observer_mask
+    RedactionSource:
+      type: string
+      description: |
+        The evidence lens that justified one replacement. policy accompanies observer_mask, where no detection took place.
+      enum:
+        - shape_rule
+        - container_harvest
+        - remembered_match
+        - policy
+    RedactedSpan:
+      x-go-generate: true
+      type: object
+      required:
+        - field
+        - start
+        - length
+        - kind
+      additionalProperties: false
+      description: |
+        One replacement in this message copy. Offsets index the redacted string, and length is the marker's own width — the placeholder or the capability reference — never the width of the value it replaced, so a span can be marked without disclosing how long the original was.
+      properties:
+        field:
+          type: string
+          description: |
+            Dotted path of the redacted field within this message, such as content, tool_result.content, or tool_calls.0.args.command.
+        start:
+          type: integer
+          minimum: 0
+          description: Rune offset of the marker within the redacted field value.
+        length:
+          type: integer
+          minimum: 1
+          description: Rune length of the marker.
+        kind:
+          $ref: '#/components/schemas/RedactionKind'
+        source:
+          $ref: '#/components/schemas/RedactionSource'
+        rule_id:
+          type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+          description: Catalog rule identity, when a shape rule named the value.
+        rule_title:
+          type: string
+          description: Human-readable rule name for presentation.
+    HostSecretRedactionMeta:
+      x-go-generate: true
+      type: object
+      required:
+        - spans
+      additionalProperties: false
+      description: |
+        Host-recorded provenance for spans replaced in this message copy. Presence is authoritative; literal marker text in content is not a redaction signal. Every replacement in this copy is listed, so a client renders from the list rather than by searching content, and the list describes this copy alone rather than accumulating across projections of one message.
+      properties:
+        spans:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RedactedSpan'
+    ChatContentRow:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - index
+        - offset
+        - text
+        - spans
+      properties:
+        index:
+          type: integer
+        offset:
+          type: integer
+        text:
+          type: string
+        spans:
+          type: array
+          items:
+            $ref: '#/components/schemas/RedactedSpan'
+    ChatContentReference:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - field
+        - sha256
+        - total_runes
+        - size_bytes
+        - rows
+      description: Retained screened content; the inline field is a bounded preview, never a replacement for this revision.
+      properties:
+        field:
+          type: string
+          enum:
+            - content
+            - tool_output
+            - tool_args
+        tool_call_id:
+          type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        total_runes:
+          type: integer
+        size_bytes:
+          type: integer
+        rows:
+          type: integer
+          description: Number of display rows in this revision.
+        preview_rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatContentRow'
     CommandActivity:
       x-go-generate: true
       type: object
@@ -27987,6 +28456,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CommandActivitySpan'
+        action:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ActionDescriptor'
+          description: Card for this activity; projected on read and in live snapshots, never stored.
     CommandProgramOutputLimit:
       x-go-generate: true
       type: object
@@ -28302,72 +28775,6 @@ components:
           type: integer
           minimum: 1
           description: Inclusive 1-based last line of a path_file reference's scope.
-    RedactionKind:
-      type: string
-      description: |
-        What a replacement claims. A secret was detected and removed; a managed_reference is a protected value written as its capability reference, so the source still holds the value the reference names; an observer_mask is a standing policy that never showed the value to observers and asserts nothing about its content.
-      enum:
-        - secret
-        - managed_reference
-        - observer_mask
-    RedactionSource:
-      type: string
-      description: |
-        The evidence lens that justified one replacement. policy accompanies observer_mask, where no detection took place.
-      enum:
-        - shape_rule
-        - container_harvest
-        - remembered_match
-        - policy
-    RedactedSpan:
-      x-go-generate: true
-      type: object
-      required:
-        - field
-        - start
-        - length
-        - kind
-      additionalProperties: false
-      description: |
-        One replacement in this message copy. Offsets index the redacted string, and length is the marker's own width — the placeholder or the capability reference — never the width of the value it replaced, so a span can be marked without disclosing how long the original was.
-      properties:
-        field:
-          type: string
-          description: |
-            Dotted path of the redacted field within this message, such as content, tool_result.content, or tool_calls.0.args.command.
-        start:
-          type: integer
-          minimum: 0
-          description: Rune offset of the marker within the redacted field value.
-        length:
-          type: integer
-          minimum: 1
-          description: Rune length of the marker.
-        kind:
-          $ref: '#/components/schemas/RedactionKind'
-        source:
-          $ref: '#/components/schemas/RedactionSource'
-        rule_id:
-          type: string
-          pattern: ^[A-Za-z0-9_.:-]+$
-          description: Catalog rule identity, when a shape rule named the value.
-        rule_title:
-          type: string
-          description: Human-readable rule name for presentation.
-    HostSecretRedactionMeta:
-      x-go-generate: true
-      type: object
-      required:
-        - spans
-      additionalProperties: false
-      description: |
-        Host-recorded provenance for spans replaced in this message copy. Presence is authoritative; literal marker text in content is not a redaction signal. Every replacement in this copy is listed, so a client renders from the list rather than by searching content, and the list describes this copy alone rather than accumulating across projections of one message.
-      properties:
-        spans:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/RedactedSpan'
     ProgressState:
       type: string
       description: State of one checklist row. Derived by the host from the coordinator's markdown markers; the coordinator never writes these strings directly.
@@ -28421,7 +28828,7 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      description: Aggregate progress update; the full checklist remains in ProgressDigest.
+      description: The plan's state after a progress update; the full checklist remains in ProgressDigest.
       properties:
         change_count:
           type: integer
@@ -28444,7 +28851,7 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      description: Incremental progress update with a plan, delta, or aggregate summary.
+      description: Incremental progress update. `summary` states the plan it leaves; `steps` or `changes` list its rows unless they are too many to show.
       properties:
         changes:
           type: array
@@ -28901,61 +29308,6 @@ components:
           format: int64
         skip_reason:
           type: string
-    ChatContentRow:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - index
-        - offset
-        - text
-        - spans
-      properties:
-        index:
-          type: integer
-        offset:
-          type: integer
-        text:
-          type: string
-        spans:
-          type: array
-          items:
-            $ref: '#/components/schemas/RedactedSpan'
-    ChatContentReference:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - field
-        - sha256
-        - total_runes
-        - size_bytes
-        - rows
-      description: Retained screened content; the inline field is a bounded preview, never a replacement for this revision.
-      properties:
-        field:
-          type: string
-          enum:
-            - content
-            - tool_output
-            - tool_args
-        tool_call_id:
-          type: string
-          pattern: ^[A-Za-z0-9_.:-]+$
-        sha256:
-          type: string
-          pattern: ^[0-9a-f]{64}$
-        total_runes:
-          type: integer
-        size_bytes:
-          type: integer
-        rows:
-          type: integer
-          description: Number of display rows in this revision.
-        preview_rows:
-          type: array
-          items:
-            $ref: '#/components/schemas/ChatContentRow'
     InvocationStatus:
       type: string
       enum:
@@ -29408,6 +29760,11 @@ components:
             $ref: '#/components/schemas/WorkerCompletionFinding'
         cited_urls:
           x-go-name: CitedURLs
+          type: array
+          items:
+            type: string
+        cited_results:
+          description: Handles of the worker's own earlier results this report builds on, cited as historical evidence.
           type: array
           items:
             type: string
@@ -30156,41 +30513,6 @@ components:
             - ready
             - waiting
             - blocked
-    WorkerBudgetRequest:
-      x-go-generate: true
-      type: object
-      description: A running worker's request that its coordinator raise its tool-round ceiling.
-      required:
-        - rounds
-        - requested_max
-        - remaining_work
-        - tool_loops_used
-        - requested_at
-      additionalProperties: false
-      properties:
-        rounds:
-          type: integer
-          minimum: 1
-          description: Additional tool rounds the worker asked for beyond its ceiling at request time
-        requested_max:
-          type: integer
-          minimum: 3
-          maximum: 120
-          description: Ceiling the worker asked for, bounded by the host maximum
-        remaining_work:
-          type: array
-          minItems: 1
-          maxItems: 6
-          items:
-            type: string
-          description: Worker-authored work the extra rounds would cover; data for the coordinator, not instructions
-        tool_loops_used:
-          type: integer
-          minimum: 0
-          description: Rounds the worker had completed when it asked
-        requested_at:
-          type: string
-          format: date-time
     WorkerContextUsage:
       x-go-generate: true
       type: object
@@ -37869,17 +38191,6 @@ components:
         truncated:
           type: boolean
           description: Present and true when older blueprints were cut from this answer.
-    DelegationLegListResponse:
-      x-go-generate: true
-      type: object
-      required:
-        - legs
-      additionalProperties: false
-      properties:
-        legs:
-          type: array
-          items:
-            $ref: '#/components/schemas/Leg'
     WorkflowRequestSpec:
       x-go-generate: true
       type: object
@@ -38151,27 +38462,35 @@ components:
       type: object
       required:
         - path
-        - worker_ids
+        - overlay_ids
       additionalProperties: false
       properties:
         path:
           type: string
-        worker_ids:
-          x-go-name: WorkerIDs
+        overlay_ids:
+          x-go-name: OverlayIDs
+          description: Handles of the pending results that change this path.
           type: array
           items:
             type: string
             format: uuid
     OverlayMergePlanEntry:
       x-go-generate: true
+      description: One worker's latest pending result.
       type: object
       required:
-        - worker_id
+        - overlay_id
+        - worker
       additionalProperties: false
       properties:
-        worker_id:
+        overlay_id:
+          x-go-name: OverlayID
+          description: Handle of the result.
           type: string
           format: uuid
+        worker:
+          description: Name of the worker that delivered it.
+          type: string
         agent_type:
           type: string
         changed_paths:
@@ -38189,11 +38508,13 @@ components:
         promote_order:
           $ref: '#/components/schemas/WorkerPromoteOrderKind'
         promote_after:
+          description: Handles of results that must land before this one is clean.
           type: array
           items:
             type: string
             format: uuid
         blocked_by:
+          description: Handles of results this one must land before.
           type: array
           items:
             type: string
@@ -38211,6 +38532,7 @@ components:
           type: integer
           minimum: 0
         promote_sequence:
+          description: Result handles in landing order.
           type: array
           items:
             type: string
@@ -39302,6 +39624,23 @@ components:
         detail:
           type: string
           description: What was wrong, for display beside the row.
+    ProjectSettingsRejectedRow:
+      x-go-generate: true
+      type: object
+      required:
+        - code
+        - detail
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum:
+            - project_unreadable
+          description: |
+            Why the project's file was not applied. project_unreadable means the file could not be read or holds a key or value the host does not accept, so none of it applied. Clients branch on this rather than on detail.
+        detail:
+          type: string
+          description: What was wrong, naming the file.
     FileSummariesSettingsResponse:
       x-go-generate: true
       type: object
@@ -43157,18 +43496,6 @@ components:
               const: board
             data:
               $ref: '#/components/schemas/BoardEvent'
-    EventEnvelopeDelegation:
-      allOf:
-        - $ref: '#/components/schemas/EventEnvelopeBase'
-        - type: object
-          required:
-            - topic
-            - data
-          properties:
-            topic:
-              const: delegation
-            data:
-              $ref: '#/components/schemas/DelegationEvent'
     EventEnvelopeCost:
       allOf:
         - $ref: '#/components/schemas/EventEnvelopeBase'

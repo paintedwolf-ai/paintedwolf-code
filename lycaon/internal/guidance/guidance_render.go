@@ -3,9 +3,10 @@ package guidance
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"strings"
 	"sync"
+
+	"github.com/lycaon/lycaon/internal/prompts"
 )
 
 var (

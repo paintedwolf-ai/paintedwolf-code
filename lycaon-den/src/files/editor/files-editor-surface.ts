@@ -4,7 +4,7 @@ import { inlineEditOpen } from "../../components/source/inline-edit/inline-edit-
 import { bindFindableView } from "../../find/use-findable-view.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
-import { filesBufferKeyAtAddress } from "../documents/project-files-buffers.ts";
+import { filesBufferKeyAtAddress } from "../documents/files-buffer-state.ts";
 import { flushFilesDraftSyncFor } from "../documents/files-draft-sync.ts";
 import { getFilesEditorView } from "./files-editor-host.ts";
 import type { FilesScope } from "../components/files-scope.ts";

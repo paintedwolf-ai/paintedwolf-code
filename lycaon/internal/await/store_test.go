@@ -207,3 +207,33 @@ func TestBoundedCompletionLeaseKeepsModeAndDeadline(t *testing.T) {
 		t.Fatalf("bounded completion resume = %+v found=%v", got, found)
 	}
 }
+
+// An instruction settles a parked worker's wait with its own winner, which
+// the worker's resume then reads; a worker with no armed wait is untouched.
+func TestSettleWorkerWaitResolvesOnlyThatWorkersWait(t *testing.T) {
+	store := testStore(t)
+	_, err := store.DB.ExecContext(t.Context(), `INSERT INTO worker_jobs (id, project_id, parent_session_id, agent_type, status, prompt, brief, created_at)
+		VALUES ('job-1', ?, 'session-1', 'implementer', 'waiting', 'p', 'b', '2026-11-14T00:00:00Z')`, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "insert job", err)
+	_, err = store.Arm(t.Context(), Lease{
+		SessionID: "session-1", ProjectID: testdbseed.DefaultProjectID, ToolCallID: "call-w", ProfileID: "implement",
+		WorkerJobID: "job-1", Reason: "server", Deadline: time.Now().UTC().Add(10 * time.Minute),
+		Conditions: []Condition{{Kind: "port_ready", Host: "127.0.0.1", Port: 8080}}, LoopbackPorts: []uint16{8080},
+	})
+	testutil.FailErr(t, "arm worker wait", err)
+	won, err := store.SettleWorkerWait(t.Context(), "job-other", Condition{Kind: "instruction", Outcome: "received"})
+	testutil.FailErr(t, "settle another job", err)
+	if won {
+		t.Fatal("settled a wait the job does not hold")
+	}
+	won, err = store.SettleWorkerWait(t.Context(), "job-1", Condition{Kind: "instruction", Outcome: "received"})
+	testutil.FailErr(t, "settle", err)
+	if !won {
+		t.Fatal("parked wait was not settled")
+	}
+	_, winner, ok, err := store.PendingWorkerResume(t.Context(), "job-1")
+	testutil.FailErr(t, "pending resume", err)
+	if !ok || winner.Kind != "instruction" || winner.Outcome != "received" {
+		t.Fatalf("resume = %v %+v", ok, winner)
+	}
+}

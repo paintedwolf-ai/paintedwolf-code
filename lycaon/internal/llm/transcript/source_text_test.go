@@ -2,9 +2,14 @@ package transcript_test
 
 import (
 	"encoding/json"
+	"maps"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -45,15 +50,51 @@ func TestSourceProjectionPreservesFeedbackSuffix(t *testing.T) {
 	}
 }
 
-// A retired tool's stored row reaches the model with its bytes intact.
-func TestStoredRetiredReadRowsStayAsStored(t *testing.T) {
-	for _, tool := range []string{"read", "summarize"} {
-		body := `{"mode":"content","offset":1,"end_line":1,"content":"     1: first","receipt":{"tool":"read"}}`
-		message := sourceReadMessage(body)
-		message.ToolResult.Tool = tool
-		got := transcript.Project([]api.Message{message})
-		if content := got[len(got)-1].Content; !strings.Contains(content, "     1: first") || strings.Contains(content, "File contents") {
-			t.Fatalf("%s: stored row was rewritten: %s", tool, content)
+// retiredToolNames reads the tools published releases offered and later retired.
+func retiredToolNames(t *testing.T) []string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(configlayout.FindModuleRoot()), "schemas", "agent-public-retirements.json"))
+	testutil.FailErr(t, "read retirement catalog", err)
+	var catalog struct {
+		Vocabularies struct {
+			Tools map[string]json.RawMessage `json:"tools"`
+		} `json:"vocabularies"`
+	}
+	testutil.FailErr(t, "decode retirement catalog", json.Unmarshal(raw, &catalog))
+	names := slices.Sorted(maps.Keys(catalog.Vocabularies.Tools))
+	if len(names) == 0 {
+		t.Fatal("retirement catalog lists no tools")
+	}
+	return names
+}
+
+// A stored call and result of every retired tool reach each audience paired,
+// with the result bytes intact.
+func TestStoredRetiredToolRowsStayAsStored(t *testing.T) {
+	body := `{"mode":"content","offset":1,"end_line":1,"content":"     1: first","receipt":{"tool":"read"}}`
+	for _, tool := range retiredToolNames(t) {
+		call := api.Message{ID: "a-" + tool, Role: api.MessageRoleAssistant, Origin: api.MessageOriginModel,
+			Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
+			ToolCalls: []api.ToolCall{{ID: "tc-" + tool, Name: tool, Args: map[string]any{}}},
+		}
+		result := sourceReadMessage(body)
+		result.ToolResult.Tool = tool
+		result.ToolResult.ToolCallID = "tc-" + tool
+		result.ToolResult.AssistantMessageID = call.ID
+		for _, audience := range []transcript.ContentAudience{transcript.AudienceUtility, transcript.AudiencePublisher, transcript.AudiencePrivate} {
+			got := transcript.ProjectFor(audience, []api.Message{call, result})
+			var called, answered bool
+			for _, message := range got {
+				for _, projected := range message.ToolCalls {
+					called = called || projected.ID == "tc-"+tool && projected.Name == tool
+				}
+				if message.ToolResult != nil && message.ToolResult.ToolCallID == "tc-"+tool {
+					answered = strings.Contains(message.Content, "     1: first") && !strings.Contains(message.Content, "File contents")
+				}
+			}
+			if !called || !answered {
+				t.Fatalf("%s for %s: call kept=%v, result kept as stored=%v: %+v", tool, audience, called, answered, got)
+			}
 		}
 	}
 }

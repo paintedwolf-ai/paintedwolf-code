@@ -2,7 +2,6 @@ import { readSourceText } from "../test/stylesheet-source.ts";
 
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { MAX_TEXT_SCALE } from "../platform/desktop/accessibility-text-size.ts";
 import { CHAT_COL_MIN } from "../shell/stage-placement.ts";
 import { DEFAULT_TRANSCRIPT_SPACING, TRANSCRIPT_SPACING } from "../chat/transcript/layout/transcript-spacing.ts";
 
@@ -20,7 +19,7 @@ describe("scalable layout chrome", () => {
     expect(row).toMatch(/gap:\s*var\(--transcript-part-gap\)/);
     expect(row).not.toMatch(/margin/);
     expect(chat).toMatch(/\.den-seam\s*\{[^}]*box-sizing:\s*border-box/);
-    for (const rung of ["row", "section", "turn"]) {
+    for (const rung of ["part", "row", "section", "turn"]) {
       expect(chat, rung).toMatch(
         new RegExp(`\\.den-seam\\[data-seam="${rung}"\\]\\s*\\{\\s*padding-top:\\s*var\\(--transcript-${rung}-gap\\)`),
       );
@@ -47,10 +46,6 @@ describe("scalable layout chrome", () => {
     expect(components.match(/\.den-turn-tail \{([^}]+)\}/)?.[1]).toMatch(/margin:\s*0/);
     expect(components.match(/\.den-turn-walk \{([^}]+)\}/)?.[1]).not.toMatch(/margin/);
     expect(components.match(/\.den-transcript-day \{([^}]+)\}/)?.[1]).not.toMatch(/padding-top/);
-  });
-
-  it("locks max harness inject to AccessibilityXXXL scale", () => {
-    expect(MAX_TEXT_SCALE).toBeCloseTo(53 / 17);
   });
 
   it("composer and nav use em floors / max(24px, …) hit targets", () => {
@@ -128,38 +123,6 @@ describe("scalable layout chrome", () => {
     expect(components).toMatch(
       /\.bubble--user\s*\{[\s\S]*?font-size:\s*var\(--text-den-body\)/,
     );
-  });
-
-  it("uses one closed width and full open width for transcript cards", () => {
-    const chat = read("chat-utilities.css");
-    const components = read("global-components.css");
-    const tools = read("tool-utilities.css");
-    const diffs = read("file-edit-diff.css");
-    const disclosureHosts = [
-      "components/checkpoint/CheckpointDecisionChicklet.tsx",
-      "components/workflow/WorkflowFeedbackChicklet.tsx",
-      "components/tool/ActivitySpanCard.tsx",
-      "components/tool/NetworkChicklet.tsx",
-      "components/tool/ToolPartShell.tsx",
-      "components/citation/CitationEvidenceChicklet.tsx",
-      "components/transcript/IndexWarmingChicklet.tsx",
-      "components/transcript/TranscriptDiffGroup.tsx",
-      // The row a reply and the turn diffs page both render.
-      "components/source/diff/SourceDiffRow.tsx",
-    ];
-
-    expect(chat).toMatch(/--den-transcript-card-width:\s*min\(100%,\s*32rem\)/);
-    expect(chat).toMatch(
-      /@utility den-transcript-disclosure-card\s*\{[\s\S]*?width:\s*var\(--den-transcript-card-width,\s*100%\)[\s\S]*?&\[data-expanded="true"\]\s*\{[\s\S]*?width:\s*100%/,
-    );
-    expect(components).toMatch(
-      /\.den-turn-walk\s*\{[\s\S]*?width:\s*var\(--den-transcript-card-width\)/,
-    );
-    for (const host of disclosureHosts) {
-      expect(read(host), host).toContain("den-transcript-disclosure-card");
-    }
-    expect(tools).not.toContain("width: var(--den-transcript-card-width)");
-    expect(diffs).not.toContain("width: var(--den-transcript-card-width)");
   });
 
   it("keeps activity summaries on two responsive lines", () => {

@@ -1,10 +1,10 @@
 package sourceledger
 
 import (
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -55,7 +55,7 @@ func TestSessionWalkWithOutsideChangesEndsAtArchive(t *testing.T) {
 		RecordLocation: RecordLocation{RootID: "r1", Path: "during.txt"}, ProjectID: "p1",
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal, After: []byte("a")})
 	_, err := store.sqlDB.ExecContext(ctx, `UPDATE sessions SET archived_at = ? WHERE id = 's1'`,
-		db.FormatTime(time.Now().UTC()))
+		timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "archive session", err)
 	mustRecord(t, store, ctx, RecordInput{
 		RecordLocation: RecordLocation{RootID: "r1", Path: "after.txt"}, ProjectID: "p1",

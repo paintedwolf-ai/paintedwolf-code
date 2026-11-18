@@ -1,11 +1,3 @@
-export * from "./invariants/common.ts";
-export * from "./invariants/nav-invariants.ts";
-export * from "./invariants/focus-invariants.ts";
-export * from "./invariants/cache-invariants.ts";
-export * from "./invariants/placement-invariants.ts";
-export * from "./invariants/split-invariants.ts";
-export * from "./invariants/lifecycle-invariants.ts";
-
 import type { InvariantEntry } from "./invariants/common.ts";
 import { NAV_INVARIANTS } from "./invariants/nav-invariants.ts";
 import { FOCUS_INVARIANTS } from "./invariants/focus-invariants.ts";

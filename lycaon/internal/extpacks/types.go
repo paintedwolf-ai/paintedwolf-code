@@ -168,6 +168,7 @@ var diagnosticSeverity = map[string]DiagnosticSeverity{
 	DiagDetectionPackIDTaken:      SeverityError,
 	DiagDetectionRehearsalFailed:  SeverityError,
 	DiagUnitNotRegular:            SeverityError,
+	DiagPolicyCandidateRefused:    SeverityError,
 	DiagSkillNameInvalid:          SeverityError,
 	DiagSkillNameMismatch:         SeverityError,
 	DiagSkillFrontmatterInvalid:   SeverityError,
@@ -324,6 +325,7 @@ var allDiagnosticCodes = []string{
 	DiagDetectionRehearsalFailed,
 	DiagProjectPackSuggested,
 	DiagUnitNotRegular,
+	DiagPolicyCandidateRefused,
 	DiagMemberMissing,
 	DiagMemberDisabled,
 	DiagSuiteConflict,
@@ -332,11 +334,6 @@ var allDiagnosticCodes = []string{
 	DiagMetaDuplicateID,
 	DiagExtendsUnresolved,
 	DiagExtendsCoResolve,
-}
-
-// AllDiagnosticCodes returns a copy of the resolve diagnostic code registry.
-func AllDiagnosticCodes() []string {
-	return append([]string(nil), allDiagnosticCodes...)
 }
 
 // Manifest is extension.yaml (author-facing).

@@ -267,7 +267,7 @@ func TestHoldAbandonedDuringReanchorLeavesTheWindowIdle(t *testing.T) {
 		t.Fatalf("abandoned hold = %v", err)
 	}
 	close(gate.release)
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the window stops anchoring", func() bool {
 		store.Commands.windowsMu.Lock()
 		defer store.Commands.windowsMu.Unlock()
 		return window.window.anchoring == nil
@@ -532,7 +532,7 @@ func TestUntrustedCoverageConvergesOnAPassLongerThanTheBudget(t *testing.T) {
 	}
 
 	close(gate.release)
-	testutil.WaitFor(t, func() bool { return store.Commands.overduePassCount() == 0 })
+	testutil.WaitFor(t, "no pass is overdue", func() bool { return store.Commands.overduePassCount() == 0 })
 	if gate.canceled.Load() {
 		t.Fatal("the open's expired budget canceled the pass")
 	}
@@ -711,6 +711,7 @@ func TestFailedWindowRecoveryReportsAndRetriesBeforeAnyWindowOpens(t *testing.T)
 
 	fresh := New(ledger.sqlDB, ledger.contentDir)
 	fresh.Commands.SetWindowSettleForTest(0)
+	fresh.Commands.SetWindowStartQuietForTest(0, 0)
 	_, err := ledger.sqlDB.ExecContext(ctx, `CREATE TRIGGER refuse_recovery BEFORE UPDATE ON source_command_windows BEGIN SELECT RAISE(ABORT, 'recovery refused'); END`)
 	testutil.FailErr(t, "create trigger", err)
 	if err := fresh.Commands.RecoverInterruptedWindows(ctx); err == nil {

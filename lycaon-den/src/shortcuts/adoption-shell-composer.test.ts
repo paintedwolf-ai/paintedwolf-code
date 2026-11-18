@@ -29,13 +29,14 @@ afterEach(() => {
 });
 
 describe("overlay.dismiss stack order", () => {
-  it("closes find before search before launcher before workers before settings", () => {
+  it("closes find before search before launcher before workers before a stage tab panel before settings", () => {
     setDispatcherPlatformForTests("macos");
     const order: string[] = [];
     let find = true;
     let search = true;
     let launcher = true;
     let workers = true;
+    let stageTab: string | null = "git";
     let settings = true;
 
     registerEscapeLadderLayer("findBar", {
@@ -56,15 +57,19 @@ describe("overlay.dismiss stack order", () => {
       dockTray: () => null,
       closeLayoutTray: vi.fn(),
       layoutTrigger: () => undefined,
-      workersOpen: () => workers,
-      closeWorkers: () => { workers = false; order.push("workers"); },
+      drawerContent: () => (workers ? "worker" : null),
+      closeDrawer: () => { workers = false; order.push("workers"); },
+      stageTabs: {
+        openTab: () => stageTab as never,
+        selectTab: (next) => { stageTab = next; order.push("stage tab"); },
+      },
       isSettingsNav: () => settings,
       splitLive: () => false,
       closeSettingsNav: () => { settings = false; order.push("settings"); },
       activeProjectId: () => null,
     });
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 6; i++) {
       dispatchKeyboardEvent({
         key: "Escape",
         code: "Escape",
@@ -75,7 +80,8 @@ describe("overlay.dismiss stack order", () => {
       });
     }
 
-    expect(order).toEqual(["find", "search", "launcher", "workers", "settings"]);
+    expect(order).toEqual(["find", "search", "launcher", "workers", "stage tab", "settings"]);
+    expect(stageTab).toBeNull();
     detachDismiss();
     search = true;
     dispatchKeyboardEvent({
@@ -104,8 +110,9 @@ describe("the files floor of the dismissal chain", () => {
     dockTray: () => null,
     closeLayoutTray: vi.fn(),
     layoutTrigger: () => undefined,
-    workersOpen: () => false,
-    closeWorkers: vi.fn(),
+    drawerContent: () => null,
+    closeDrawer: vi.fn(),
+    stageTabs: { openTab: () => null, selectTab: vi.fn() },
     isSettingsNav: () => false,
     splitLive: () => false,
     closeSettingsNav: vi.fn(),

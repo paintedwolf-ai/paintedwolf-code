@@ -5,7 +5,8 @@ import { filesControllerFixture, controllerSource } from "../../test/files-contr
 import { createBufferRefresh } from "./files-buffer-refresh.ts";
 import { editorReplica, evictEditorDocument, observeEditorDocument } from "./editor-document.ts";
 import { setFilesStore } from "./files-buffer-state.ts";
-import { filesBufferText, resetProjectFilesForTests } from "./project-files-buffers.ts";
+import { filesBufferText } from "./files-buffer-state.ts";
+import { resetProjectFilesForTests } from "./project-files-buffer-lifecycle.ts";
 vi.mock("./editor-document.ts", async original => ({ ...await original<typeof import("./editor-document.ts")>(),
   editorReplica: vi.fn(), evictEditorDocument: vi.fn(), observeEditorDocument: vi.fn() }));
 afterEach(() => { resetProjectFilesForTests(); vi.clearAllMocks(); });

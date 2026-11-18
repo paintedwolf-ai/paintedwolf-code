@@ -19,7 +19,7 @@ import {
   workspaceRetryMessage,
 } from "./files-workspace-fault.ts";
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
-import { dropFilesBuffersForRoot, switchFilesRootBranches } from "../documents/project-files-buffers.ts";
+import { dropFilesBuffersForRoot, switchFilesRootBranches } from "../documents/project-files-buffer-lifecycle.ts";
 import { type FileBuffer } from "../documents/files-buffer-state.ts";
 import { connectSourceTreeWorkspace, prepareSourceTreeWorkspace, type SourceTreeConnection } from "../tree/source-tree-store.ts";
 import { sourceWatchNotice } from "./source-watch-notice.ts";

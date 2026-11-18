@@ -38,7 +38,7 @@ func (m *Service) Assemble(
 	if err != nil {
 		ev = guidance.CloseoutEvidence{Ledger: evidence.InitLedger()}
 	}
-	legs := m.terminalLegCloseouts(ctx, root, history)
+	legs := terminalWorkerSummaryCloseouts(history)
 	return assembleGroundedLedgerCloseout(roots, surfaceID, ev, legs, draft, guidance.SessionPresentableArtifactIDs(history), forcedBy, retryCount)
 }
 
@@ -49,54 +49,6 @@ type legCloseout struct {
 	brief string
 	cited []api.CitationGroundingCitedEvidence
 	urls  []string
-}
-
-func (m *Service) terminalLegCloseouts(ctx context.Context, root string, history []api.Message) []legCloseout {
-	out := terminalWorkerSummaryCloseouts(history)
-	seen := make(map[string]struct{}, len(out))
-	for _, leg := range out {
-		seen[leg.key] = struct{}{}
-	}
-	if m.delegations == nil {
-		return out
-	}
-	delegationID, ok := m.delegations.DelegationBySessionID(root)
-	if !ok {
-		return out
-	}
-	legs, err := m.delegations.ListLegs(ctx, delegationID)
-	if err != nil {
-		return out
-	}
-	for _, leg := range legs {
-		if leg.Status != api.LegStatusComplete || leg.Result == nil {
-			continue
-		}
-		key := strings.TrimSpace(leg.WorkerID)
-		if key == "" {
-			key = strings.TrimSpace(leg.ID)
-		}
-		if _, dup := seen[key]; dup {
-			continue
-		}
-		brief := strings.TrimSpace(leg.Result.Summary)
-		if brief == "" {
-			continue
-		}
-		item := legCloseout{
-			key:   key,
-			legID: strings.TrimSpace(leg.ID),
-			title: strings.TrimSpace(leg.Title),
-			brief: brief,
-		}
-		if leg.Result.Grounding != nil {
-			item.cited = append([]api.CitationGroundingCitedEvidence(nil), leg.Result.Grounding.CitedEvidence...)
-			item.urls = append([]string(nil), leg.Result.Grounding.CitedURLs...)
-		}
-		seen[key] = struct{}{}
-		out = append(out, item)
-	}
-	return out
 }
 
 func terminalWorkerSummaryCloseouts(history []api.Message) []legCloseout {

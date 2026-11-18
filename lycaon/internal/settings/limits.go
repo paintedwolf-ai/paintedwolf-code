@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"gopkg.in/yaml.v3"
 )
 
@@ -57,8 +58,8 @@ func loadLimitsFile(path string) (SessionLimits, error) {
 		return SessionLimits{}, err
 	}
 	var lim SessionLimits
-	if err := yaml.Unmarshal(data, &lim); err != nil {
-		return SessionLimits{}, fmt.Errorf("parse limits %s: %w", path, err)
+	if err := decodeProjectFile(data, &lim); err != nil {
+		return SessionLimits{}, err
 	}
 	return lim, nil
 }
@@ -80,11 +81,24 @@ func (s *LimitsStore) Get(scope llm.SettingsScope, projectDir string) SessionLim
 	if scope == llm.SettingsScopeProject && projectDir != "" {
 		if cached, ok := s.projectCache[projectDir]; ok {
 			lim = MergeSessionLimits(lim, cached)
-		} else if proj, err := loadLimitsFile(projectLimitsPath(projectDir)); err == nil {
+		} else if proj, ok, _ := readProjectFile(projectDir, settingsoverlay.BasenameLimits, loadLimitsFile); ok {
 			lim = MergeSessionLimits(lim, proj)
 		}
 	}
 	return lim
+}
+
+// ProjectRejected reports a project limits.yaml the host could not apply; the
+// device's limits stand in for it.
+func (s *LimitsStore) ProjectRejected(projectDir string) []ProjectRejection {
+	s.mu.RLock()
+	_, cached := s.projectCache[projectDir]
+	s.mu.RUnlock()
+	if cached || projectDir == "" {
+		return nil
+	}
+	_, _, rejected := readProjectFile(projectDir, settingsoverlay.BasenameLimits, loadLimitsFile)
+	return rejections(rejected)
 }
 
 // SessionLimits returns merged limits for project scope.
@@ -117,7 +131,7 @@ func (s *LimitsStore) MergedFrom(scope llm.SettingsScope, projectDir string) []s
 	if scope == llm.SettingsScopeProject && projectDir != "" {
 		if _, ok := s.projectCache[projectDir]; ok {
 			layers = append(layers, "project")
-		} else if _, err := os.Stat(projectLimitsPath(projectDir)); err == nil {
+		} else if _, ok, _ := readProjectFile(projectDir, settingsoverlay.BasenameLimits, loadLimitsFile); ok {
 			layers = append(layers, "project")
 		}
 	}
@@ -143,6 +157,9 @@ func (s *LimitsStore) PutGlobal(lim SessionLimits) error {
 
 // PutProject persists project overlay at <overlay>/limits.yaml.
 func (s *LimitsStore) PutProject(projectDir string, lim SessionLimits) error {
+	if len(s.ProjectRejected(projectDir)) > 0 {
+		return ErrProjectSettingsNeedRepair
+	}
 	path := projectLimitsPath(projectDir)
 	if lim == (SessionLimits{}) {
 		if err := fseffect.Remove(fseffect.RemoveRequest{Location: fseffect.PathLocation(path)}); err != nil && !errors.Is(err, os.ErrNotExist) {

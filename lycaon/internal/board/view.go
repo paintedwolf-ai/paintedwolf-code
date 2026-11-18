@@ -65,11 +65,8 @@ func BuildBoardView(snapshot *api.BoardSnapshot, sessionID string, level api.Boa
 		NowLine:           packboard.FormatNowLine(now),
 	}
 	if level != api.BoardDetailLevelStatus {
-		roster := BuildWorkerRoster(tasks, level)
-		roster = AttachRosterReservations(roster, packboard.ReservationsFromSnapshot(snap))
-		view.Roster = roster
+		view.Workers = attachWorkerReservations(packboard.NamedWorkersFromSnapshot(snap), packboard.ReservationsFromSnapshot(snap))
 		view.PromotePaths = packboard.PromotePathsFromSnapshot(snap)
-		view.Delegation = BuildDelegationRoster(packboard.DelegationsFromSnapshot(snap), level)
 		view.ActiveWorkflowRun = snap.ActiveWorkflowRun
 	}
 	if level == api.BoardDetailLevelForensic && len(tasks) > 0 {

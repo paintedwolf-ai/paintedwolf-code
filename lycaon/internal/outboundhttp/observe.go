@@ -147,12 +147,14 @@ func (t *hopTracer) observation(begun, resolved time.Time, method, target string
 // Neither event claims the recipient received anything.
 type dispatchObserver struct {
 	mu          sync.Mutex
+	inFlight    sync.WaitGroup
+	conns       []net.Conn
 	connReady   bool
 	onHeaders   func()
 	onBody      func()
-	headersOut  bool
+	headersOnce sync.Once
+	bodyOnce    sync.Once
 	bodyPending bool
-	bodyOut     bool
 }
 
 func observeDispatch(transport *http.Transport, onHeaders, onBody func()) *dispatchObserver {
@@ -167,6 +169,9 @@ func observeDispatch(transport *http.Transport, onHeaders, onBody func()) *dispa
 		if err != nil {
 			return nil, err
 		}
+		obs.mu.Lock()
+		obs.conns = append(obs.conns, conn)
+		obs.mu.Unlock()
 		return &dispatchConn{Conn: conn, obs: obs}, nil
 	}
 	return obs
@@ -183,21 +188,30 @@ func (o *dispatchObserver) gotConn() {
 
 func (o *dispatchObserver) wrote() {
 	o.mu.Lock()
-	headers := o.connReady && !o.headersOut
-	if headers {
-		o.headersOut = true
-	}
-	body := o.connReady && o.bodyPending && !o.bodyOut
-	if body {
-		o.bodyOut = true
-	}
+	headers := o.connReady
+	body := o.connReady && o.bodyPending
 	o.mu.Unlock()
 	if headers && o.onHeaders != nil {
-		o.onHeaders()
+		o.headersOnce.Do(o.onHeaders)
 	}
 	if body && o.onBody != nil {
-		o.onBody()
+		o.bodyOnce.Do(o.onBody)
 	}
+}
+
+// finish closes hop connections and waits for any in-flight write callback to
+// finish before the hop returns or advances to a redirect.
+func (o *dispatchObserver) finish() {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	conns := append([]net.Conn(nil), o.conns...)
+	o.mu.Unlock()
+	for _, conn := range conns {
+		_ = conn.Close()
+	}
+	o.inFlight.Wait()
 }
 
 func (o *dispatchObserver) bodyRead() {
@@ -211,12 +225,16 @@ type dispatchConn struct {
 	obs *dispatchObserver
 }
 
+// Write records the hand-off before the bytes can leave. The response can
+// settle the request while a write is still returning, and a value that may
+// have reached the server must never be recorded as undispatched.
 func (c *dispatchConn) Write(p []byte) (int, error) {
-	n, err := c.Conn.Write(p)
-	if n > 0 {
+	c.obs.inFlight.Add(1)
+	defer c.obs.inFlight.Done()
+	if len(p) > 0 {
 		c.obs.wrote()
 	}
-	return n, err
+	return c.Conn.Write(p)
 }
 
 type dispatchBody struct {

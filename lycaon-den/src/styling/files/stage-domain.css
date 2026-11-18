@@ -1,6 +1,5 @@
 .project-files-view {
   --den-files-pane-chrome-h: 44px;
-  --den-files-tab-strip-inset: 5px;
   --den-files-tab-strip-rule: calc(var(--den-files-tab-strip-inset) + var(--den-files-tab-drag-band));
   --den-files-footer-h: 1.8571rem;
   /* One height for the pickers and the view toggle they sit beside. */

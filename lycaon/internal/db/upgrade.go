@@ -41,7 +41,7 @@ func schemaRegistry(ctx context.Context) (*migrations.Registry, error) {
 	resultPaths := migrations.ToolResultPaths()
 	steps := []migrations.Step{
 		migrations.SourceNamespace(), migrations.PresenceAuthenticators(resultPaths.From), resultPaths,
-		migrations.Revision5(migrations.Revision5Release()), migrations.Revision6(current),
+		migrations.Revision5(current),
 	}
 	return migrations.New(current, released, steps)
 }
@@ -133,7 +133,7 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 			}
 		}()
 	}
-	reader, err := openReader(ctx, path)
+	reader, err := OpenReadOnly(ctx, path)
 	if err != nil {
 		return ClassifyStoreFailure(err)
 	}

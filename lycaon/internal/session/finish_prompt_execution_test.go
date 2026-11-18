@@ -32,7 +32,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -76,7 +75,7 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 	}
 
 	finishExecution := mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
-	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, runstate.ImplementWorkLegKey(sess.ID), anchor.Envelope{})
+	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg:"+sess.ID, anchor.Envelope{})
 	if _, ok := mgr.Runner.Coordinator.CoordinatorLoop().Nudges.Pending(sess.ID); !ok {
 		t.Fatal("expected deferred loop wake while prompt execution is active")
 	}
@@ -89,7 +88,7 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 		_ = mgr.Runner.Settlement.Drain(canceled, sess.ID)
 	}()
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the loop wake message is stored", func() bool {
 		msgs, err := store.GetMessages(ctx, sess.ID)
 		if err != nil {
 			return false
@@ -267,14 +266,14 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 
 	finishExecution := mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
 	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished,
-		runstate.ImplementWorkLegKey(sess.ID), anchor.Envelope{})
+		"leg:"+sess.ID, anchor.Envelope{})
 	if _, ok := mgr.Runner.Coordinator.CoordinatorLoop().Nudges.Pending(sess.ID); !ok {
 		t.Fatal("expected a deferred loop wake while prompt execution is active")
 	}
 	finishExecution()
 	mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the failed turn is reported", func() bool {
 		mu.Lock()
 		defer mu.Unlock()
 		return len(reported) > 0

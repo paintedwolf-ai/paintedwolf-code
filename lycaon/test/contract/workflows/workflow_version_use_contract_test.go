@@ -10,8 +10,8 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// TestWorkflowVersionUsageGuardrail enforces that production code outside the 3 approved
-// catalog, matcher, and run-creation packages never branches on or parses workflow versions.
+// TestWorkflowVersionUsageGuardrail enforces that production code outside the approved
+// catalog, matcher, run-creation and release-contract packages never branches on or parses workflow versions.
 // Pass-through assignments, persistence, logging, and UI displays are permitted.
 func TestWorkflowVersionUsageGuardrail(t *testing.T) {
 	t.Parallel()
@@ -103,6 +103,10 @@ func isVersionUseExempt(relPath string) bool {
 	}
 	// run creation
 	if strings.HasSuffix(clean, "workflow/run_start.go") || strings.HasSuffix(clean, "workflow/invoke_child.go") {
+		return true
+	}
+	// release contracts compare a released workflow's version with its sealed archive
+	if strings.HasPrefix(clean, "releasecontract/") {
 		return true
 	}
 	// eval / test suites

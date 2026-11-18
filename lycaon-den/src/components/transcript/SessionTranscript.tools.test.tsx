@@ -211,6 +211,47 @@ describe("SessionTranscript tools and progress", () => {
     expect(container.textContent).not.toContain("Worker ·");
   });
 
+  it("shows the plan as a box and each later progress row as one line", () => {
+    const host = { role: "system", origin: "host", authority: "system", trust_tier: "trusted", content: "" } as const;
+    const messages: Message[] = [
+      {
+        ...host,
+        id: "pu-plan",
+        kind: "progress_update",
+        progress_update: {
+          initial: true,
+          seq: 1,
+          steps: [{ state: "pending", label: "Ship auth" }, { state: "pending", label: "Verify build" }],
+        },
+        created_at: "2026-06-28T04:45:10.000Z",
+      },
+      {
+        ...host,
+        id: "pu-change",
+        kind: "progress_update",
+        progress_update: { seq: 2, changes: [{ kind: "done", label: "Ship auth", state: "done" }] },
+        created_at: "2026-06-28T04:45:11.000Z",
+      },
+      {
+        ...host,
+        id: "pc-done",
+        kind: "progress_complete",
+        progress_complete: {
+          seq: 3,
+          steps: [{ state: "done", label: "Ship auth" }, { state: "done", label: "Verify build" }],
+        },
+        created_at: "2026-06-28T04:45:12.000Z",
+      },
+    ];
+    render(() => <SessionTranscript layout="chat" sessionId="s-progress-lines" messages={messages} />);
+
+    const visible = (rows: HTMLElement[]) => rows.filter((row) => !row.closest("[hidden]"));
+    expect(visible(screen.getAllByTestId("progress-strip-item")).map((row) => row.textContent))
+      .toEqual(["○Ship auth", "○Verify build"]);
+    expect(screen.getAllByTestId("progress-strip-rest").map((line) => line.textContent).sort())
+      .toEqual(["✓All 2 steps done", "✓Ship auth"]);
+  });
+
   it("keeps progress snapshot DOM stable while unrelated messages arrive", async () => {
     const progress: Message = {
       id: "pu-stable",
@@ -382,14 +423,14 @@ describe("SessionTranscript tools and progress", () => {
       />
     ));
     expect(container.querySelectorAll('[data-testid="task-card"]').length).toBe(1);
-    expect(container.querySelectorAll('[data-testid="tool-part-card"]').length).toBe(1);
+    expect(container.querySelectorAll('[data-testid="action-card"]').length).toBe(1);
     expect(container.textContent).toContain("Worker · web-researcher");
     expect(container.textContent).toContain(
       "Research the latest cutting-edge AI trends",
     );
   });
 
-  it("updates task card progress when the matched worker budget ticks", async () => {
+  it("updates the task card turns chip when the matched worker advances", async () => {
     const sessionId = "2464e5bf-18f9-4995-8c6b-740347362a49";
     const jobId = "fd5c17f1-e76a-48d1-845e-9a9f35b0e8f4";
     const messages: Message[] = [
@@ -404,7 +445,6 @@ describe("SessionTranscript tools and progress", () => {
             args: {
               agent_type: "web-researcher",
               brief: { goal: "Research AI trends", done_when: ["Return results."] },
-              max_tool_loops: 10,
             },
           },
         ],
@@ -432,7 +472,6 @@ describe("SessionTranscript tools and progress", () => {
           tool_args: {
             agent_type: "web-researcher",
             brief: { goal: "Research AI trends", done_when: ["Return results."] },
-            max_tool_loops: 10,
           },
         },
         created_at: "2026-06-06T13:14:29.063328Z",
@@ -444,7 +483,6 @@ describe("SessionTranscript tools and progress", () => {
         parent_session_id: sessionId,
         agent_type: "web-researcher",
         status: "running",
-        max_tool_loops: 10,
         tool_loops_used: 1,
         created_at: "2026-06-06T13:14:29.024243Z",
       },
@@ -457,9 +495,8 @@ describe("SessionTranscript tools and progress", () => {
         workers={workers()}
       />
     ));
-    const fill = () =>
-      container.querySelector(".den-task-card-progress-fill") as HTMLElement;
-    expect(fill()?.style.width).toBe("10%");
+    const turns = () => container.querySelector(".den-worker-turns")?.textContent;
+    expect(turns()).toBe("1 turn");
 
     setWorkers([
       {
@@ -468,7 +505,7 @@ describe("SessionTranscript tools and progress", () => {
       },
     ]);
     await Promise.resolve();
-    expect(fill()?.style.width).toBe("40%");
+    expect(turns()).toBe("4 turns");
   });
 
 });

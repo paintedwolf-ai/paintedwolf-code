@@ -10,12 +10,12 @@ agents:
     must_substrings_rendered:
       - "plan"
       - "PLAN_MODE"
-      - "Leg tools"
+      - "Assignment tools"
     delta:
       role_title: Plan Writer
       focus: "Author plan files; do not implement product code."
       process:
-        - "Write or edit `${overlay_dir}/blueprints/**/*.md` per leg brief."
+        - "Write or edit `${overlay_dir}/blueprints/**/*.md` per worker brief."
         - "Branch on structured reject codes when tools reject."
 
   plan-reviewer:
@@ -29,7 +29,7 @@ agents:
       role_title: Plan Reviewer
       focus: "Critique plans; output is advisory only."
       process:
-        - "Read plan and leg context; do not edit plan files."
+        - "Read plan and worker context; do not edit plan files."
         - "Report risks and gaps; never claim gates satisfied."
 
   plan-reviewer-alt:

@@ -1,9 +1,10 @@
 package guard
 
 import (
-	anchortestsetup "github.com/lycaon/lycaon/internal/testsetup/anchor"
 	"os"
 	"testing"
+
+	anchortestsetup "github.com/lycaon/lycaon/internal/testsetup/anchor"
 )
 
 func TestMain(m *testing.M) {

@@ -387,9 +387,10 @@ func TestLinuxLocalListenDatagramGrantIsReachableFromTheHost(t *testing.T) {
 		out.await(t, "listening ")
 		reached := ""
 		if granted {
-			for t.Context().Err() == nil && reached == "" {
+			testutil.WaitFor(t, "the granted datagram listener answers", func() bool {
 				reached = askDatagram(addr)
-			}
+				return reached != ""
+			})
 		} else {
 			reached = askDatagram(addr)
 		}
@@ -411,7 +412,6 @@ func TestLinuxLocalListenDatagramGrantIsReachableFromTheHost(t *testing.T) {
 func askDatagram(addr string) string {
 	conn, err := net.Dial("udp", addr)
 	if err != nil {
-		time.Sleep(100 * time.Millisecond)
 		return ""
 	}
 	defer conn.Close()
@@ -423,7 +423,6 @@ func askDatagram(addr string) string {
 	buf := make([]byte, 64)
 	n, err := conn.Read(buf)
 	if err != nil {
-		time.Sleep(100 * time.Millisecond)
 		return ""
 	}
 	return string(buf[:n])

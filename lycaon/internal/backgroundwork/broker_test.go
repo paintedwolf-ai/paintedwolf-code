@@ -2,6 +2,7 @@ package backgroundwork
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,16 +11,11 @@ import (
 
 func waitForPending(t *testing.T, broker *Broker, want int) {
 	t.Helper()
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, fmt.Sprintf("pending work reaches %d", want), func() bool {
 		broker.mu.Lock()
-		got := len(broker.pending)
-		broker.mu.Unlock()
-		if got == want {
-			return
-		}
-		time.Sleep(time.Millisecond)
-	}
-	t.Fatalf("pending work did not reach %d", want)
+		defer broker.mu.Unlock()
+		return len(broker.pending) == want
+	})
 }
 
 func TestBrokerPrioritizesInteractiveWaiter(t *testing.T) {

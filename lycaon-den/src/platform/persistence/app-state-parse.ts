@@ -34,7 +34,7 @@ import {
   type DenListPanePrefs,
   type DenListPanesPrefs,
   type RecentSession,
-  type NarrowSplitSurvivor,
+  type SplitPane,
   type StagePlacement,
 } from "../../../shared/app-state-types.ts";
 import { SYSTEM_FONT, sanitizeFontFamily } from "../../fonts/font-catalog.ts";
@@ -403,7 +403,7 @@ function isStagePlacement(value: string): value is StagePlacement {
   return value === "inline" || value === "split";
 }
 
-function isNarrowSplitSurvivor(value: unknown): value is NarrowSplitSurvivor {
+function isSplitPaneValue(value: unknown): value is SplitPane {
   return value === "conversation" || value === "stage";
 }
 
@@ -454,7 +454,7 @@ export function parseLayout(
   ) {
     prefs.startupCompanion = row.startupCompanion as ContextNavItemId;
   }
-  if (isNarrowSplitSurvivor(row.narrowSurvivor)) {
+  if (isSplitPaneValue(row.narrowSurvivor)) {
     prefs.narrowSurvivor = row.narrowSurvivor;
   }
   return Object.keys(prefs).length > 0 ? prefs : undefined;

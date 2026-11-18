@@ -46,8 +46,8 @@ anchors:
         worker_digest: { type: string }
         evidence_digest: { type: string }
         batch_phase: { type: string }
-        pending_overlay_jobs: { type: "string[]" }
-        partial_worker_jobs: { type: "string[]" }
+        pending_overlays: { type: int }
+        partial_workers: { type: int }
     dedup:
       key: leg_finished
       omit_inform_when: [board_reinjected]
@@ -64,17 +64,9 @@ anchors:
         worker_digest: { type: string }
         evidence_digest: { type: string }
         last_worker_decision_request: { type: object }
+        worker_result: { type: object }
         job_id: { type: string }
         child_session_id: { type: string }
-        tool_loops_used: { type: int }
-        max_tool_loops: { type: int }
-        host_max_tool_loops: { type: int }
-        worker_budget_exhausted: { type: bool }
-        suggested_resume_max: { type: int }
-        budget_request_open: { type: bool }
-        requested_max: { type: int }
-        requested_rounds: { type: int }
-        remaining_work: { type: "string[]" }
 
   - id: phase.advanced
     title: Phase advanced
@@ -151,15 +143,6 @@ anchors:
     envelope:
       vars: {}
 
-  - id: worker.leg.started
-    title: Worker leg started
-    description: Delegation leg spawns a worker child.
-    trigger_class: host_api
-    surface: worker
-    planes: [inform]
-    envelope:
-      vars: {}
-
   - id: wait.timer.fired
     title: Wait timer fired
     description: A wait() deadline expires.
@@ -171,7 +154,7 @@ anchors:
 
   - id: overlay.promote.complete
     title: Overlay promote complete
-    description: All write overlays integrated (zero pending).
+    description: No unresolved worker changes remain.
     trigger_class: overlay_state
     surface: coordinator
     planes: [inform]
@@ -230,46 +213,51 @@ anchors:
     envelope:
       vars: {}
 
-  - id: worker.budget.requested
-    title: Worker budget requested
-    description: A running worker asked its coordinator for more tool rounds with request_budget.
+  - id: worker.round.notice
+    title: Worker round notice
+    description: A running worker round crossed a consumption or quiet threshold; the notice informs and stops nothing.
     trigger_class: wait_trigger
     surface: coordinator
     planes: [inform]
     envelope:
       vars:
-        job_id: { type: string, required: true }
-        tool_loops_used: { type: int, required: true }
-        max_tool_loops: { type: int, required: true }
-        host_max_tool_loops: { type: int, required: true }
-        budget_request_open: { type: bool, required: true }
-        requested_max: { type: int, required: true }
-        requested_rounds: { type: int, required: true }
-        remaining_work: { type: "string[]", required: true }
+        worker: { type: string }
+        agent_type: { type: string, required: true }
+        round_ordinal: { type: int }
+        workflow_work_id: { type: string }
+        notice_kind: { type: string, required: true }
+        model_calls: { type: int, required: true }
+        tokens: { type: int, required: true }
+        spend_under_cent: { type: bool }
+        estimated_spend_usd: { type: string }
+        quiet_minutes: { type: int }
+        in_flight: { type: string }
+        tool_calls: { type: int }
+        tools_done: { type: int }
+        tools: { type: "string[]" }
+        tools_minutes: { type: int }
+        latest_message_seq: { type: int }
 
-  - id: worker.budget.raised
-    title: Worker budget raised
-    description: The coordinator raised a running worker's tool-round ceiling.
-    trigger_class: host_api
-    surface: worker
+  - id: worker.prerequisite.blocked
+    title: Worker prerequisite blocked
+    description: A waiting worker's prerequisite can no longer be met because its producer was closed or its changes were rejected; the worker keeps waiting until the coordinator replaces or withdraws it.
+    trigger_class: wait_trigger
+    surface: coordinator
     planes: [inform]
     envelope:
       vars:
-        tool_loops_used: { type: int, required: true }
-        max_tool_loops: { type: int, required: true }
-        remaining: { type: int, required: true }
+        worker: { type: string }
+        producer: { type: string }
+        producer_state: { type: string, required: true }
 
-  - id: worker.budget.declined
-    title: Worker budget declined
-    description: The coordinator declined a running worker's open request for more tool rounds.
-    trigger_class: host_api
-    surface: worker
+  - id: worker.message.received
+    title: Worker message received
+    description: A running worker sent its coordinator a message that needs a reply. Non-content Anchor — the message reaches the coordinator through its message page, so there is no inform Binding.
+    trigger_class: wait_trigger
+    surface: coordinator
     planes: [inform]
     envelope:
-      vars:
-        tool_loops_used: { type: int, required: true }
-        max_tool_loops: { type: int, required: true }
-        remaining: { type: int, required: true }
+      vars: {}
 
   - id: edit.follow_up.repeat
     title: Edit follow-up repeat
@@ -357,19 +345,6 @@ anchors:
     planes: [inform]
     envelope:
       vars: {}
-
-  - id: worker.iterations.low
-    title: Worker iterations low
-    description: Any worker is told once per ceiling when its runway reaches the host threshold.
-    trigger_class: host_api
-    surface: worker
-    planes: [inform]
-    envelope:
-      vars:
-        remaining: { type: int, required: true }
-        max_tool_loops: { type: int, required: true }
-        at_host_max: { type: bool, required: true }
-        request_open: { type: bool, required: true }
 
   - id: worker.cancel.closeout
     title: Worker cancel closeout
@@ -549,7 +524,7 @@ anchors:
 
   - id: inject.worker_leg
     title: Worker leg inject
-    description: L3 worker-leg.md inject for delegation legs.
+    description: L3 worker-leg.md context inject for worker sessions.
     trigger_class: assembly_inject
     surface: worker
     planes: [inform]
@@ -636,8 +611,8 @@ anchors:
         progress_missing: { type: bool }
         profile_has_update_progress: { type: bool }
         verify_required: { type: bool }
-        pending_overlay_jobs: { type: "string[]" }
-        partial_worker_jobs: { type: "string[]" }
+        pending_overlays: { type: int }
+        partial_workers: { type: int }
 
   - id: inject.command_jobs
     title: Live handles inject
@@ -654,6 +629,41 @@ anchors:
         has_running: { type: "bool", required: true }
         has_exited: { type: "bool", required: true }
         has_held: { type: "bool", required: true }
+
+  - id: inject.worker_messages
+    title: Worker messages inject
+    description: >-
+      The oldest undelivered page of messages for this session: what its
+      workers said to the coordinator, or what the coordinator instructed this
+      worker. Delivery commits only after a successful response.
+    trigger_class: assembly_inject
+    surface: agent
+    planes: [inform]
+    envelope:
+      vars:
+        recipient: { type: string, required: true }
+        message_count: { type: int, required: true }
+        has_needs_reply: { type: bool, required: true }
+        more: { type: bool, required: true }
+
+  - id: inject.worker_round
+    title: Worker round inject
+    description: >-
+      A worker's running round on every request: its standing brief and the
+      instructions the round received, kept after delivery and compaction
+      until the round delivers, and on a later round how its workspace was
+      prepared and what became of its last changes.
+    trigger_class: assembly_inject
+    surface: agent
+    planes: [inform]
+    envelope:
+      vars:
+        round: { type: int, required: true }
+        has_brief: { type: bool, required: true }
+        instruction_count: { type: int, required: true }
+        workspace: { type: string }
+        prior_change: { type: string }
+        earlier_results: { type: "string[]" }
 
   - id: inject.source_changes
     title: Source change brief inject

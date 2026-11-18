@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -41,7 +42,7 @@ func (s *SQLStore) Set(sessionID, content string) error {
 		SessionID:     key,
 		WorkflowRunID: runID,
 		Content:       clamped,
-		UpdatedAt:     db.FormatTime(time.Now().UTC()),
+		UpdatedAt:     timelayout.Format(time.Now().UTC()),
 		ItemIdsJson:   string(itemIDsJSON),
 	})
 }
@@ -80,7 +81,7 @@ func (s *SQLStore) BindRun(sessionID, workflowRunID string) {
 	_ = s.queries.BindSessionProgressRun(context.Background(), db.BindSessionProgressRunParams{
 		SessionID:     key,
 		WorkflowRunID: workflowRunID,
-		UpdatedAt:     db.FormatTime(time.Now().UTC()),
+		UpdatedAt:     timelayout.Format(time.Now().UTC()),
 	})
 }
 
@@ -97,7 +98,7 @@ func (s *SQLStore) EnsureRun(sessionID, workflowRunID, goal string) (refreshed b
 		SessionID:     key,
 		WorkflowRunID: workflowRunID,
 		Content:       clampContent(formatBootstrapContent(goal)),
-		UpdatedAt:     db.FormatTime(time.Now().UTC()),
+		UpdatedAt:     timelayout.Format(time.Now().UTC()),
 	})
 	return true
 }

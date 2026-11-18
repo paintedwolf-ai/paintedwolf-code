@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
@@ -24,7 +23,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -37,33 +39,59 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 	evidenceStore := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 
 	sqlDB := testdbfixture.Open(t, "store.db")
-	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
+	_ = testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
+	testdbseed.InsertWorkflowRun(t, sqlDB, "run-closeout", "sess-closeout", testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, "child-closeout", testdbseed.DefaultProjectID)
+	_, err := sqlDB.ExecContext(context.Background(), `UPDATE sessions SET parent_session_id = 'sess-closeout' WHERE id = 'child-closeout'`)
+	testutil.FailErr(t, "bind child-closeout parent", err)
 
 	store := scan.NewSQLStore(sqlDB)
 	coord := scantest.Coordinator(t, store, staticHeadSHA{sha: "closeout-head"})
 	proactive := scancfg.DefaultGatesConfig().Gates.ProactiveCategories
 
-	depStore := delegation.NewMemoryStore()
-	if _, err := depStore.Create(context.Background(), api.Delegation{
-		ID:        "dep-closeout",
-		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: projectDir,
-		Phase: api.DelegationPhaseWorker, Strategy: api.HuntStrategyFileBased, Task: "Verify landed security evidence",
-	}, "sess-closeout", []api.Leg{{
-		ID: "leg-1", Title: "Verify landed source",
-		Status: api.LegStatusComplete,
-	}}); err != nil {
-		testutil.FailErr(t, "create delegation", err)
-	}
-	settled, err := depStore.Settle(t.Context(), "dep-closeout")
-	testutil.FailErr(t, "settle completed delegation", err)
-	if !settled {
-		t.Fatal("completed delegation did not settle")
-	}
+	records := workerrecords.New(sqlDB)
+	actor := workerrecords.Actor{SessionID: "sess-closeout", Role: workerrecords.RoleCoordinator, PrincipalID: "sess-closeout"}
+	planned, err := records.CreateWorker(context.Background(), actor, workerrecords.Op{ID: "create-leg-1"}, workerrecords.WorkerSpec{
+		Name:           "leg-1",
+		AgentType:      "implementer",
+		ScopeMode:      workerrecords.ScopeWrite,
+		Brief:          "Verify landed source",
+		ChildSessionID: "child-closeout",
+		BlueprintPath:  "plans/test.md",
+		WorkflowRunID:  "run-closeout",
+		WorkflowWorkID: "leg-1",
+	})
+	testutil.FailErr(t, "CreateWorker", err)
+	now := timelayout.Format(time.Now().UTC())
+	_, err = sqlDB.ExecContext(
+		context.Background(),
+		`INSERT INTO worker_jobs (id, project_id, workspace_path, parent_session_id, child_session_id, agent_type, prompt, brief, execution_target, status, created_at)
+		 VALUES ('job-leg-1', ?, ?, 'sess-closeout', 'child-closeout', 'implementer', 'fixture', 'fixture', 'local', 'complete', ?)`,
+		testdbseed.DefaultProjectID, projectDir, now,
+	)
+	testutil.FailErr(t, "insert settled plan job", err)
+	_, err = records.AdmitRound(context.Background(), actor, workerrecords.Op{ID: "round-leg-1"}, planned.WorkerID, workerrecords.RoundSpec{
+		JobID: "job-leg-1", ExecutionTarget: "local",
+	})
+	testutil.FailErr(t, "AdmitRound", err)
+	_, err = sqlDB.ExecContext(context.Background(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES ('res-leg-1', 'job-leg-1', 'complete', ?)`, now)
+	testutil.FailErr(t, "insert worker_results", err)
+	_, err = db.New(sqlDB).SettleWorkerRoundByJob(context.Background(), db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(now), JobID: "job-leg-1"})
+	testutil.FailErr(t, "SettleWorkerRoundByJob", err)
+	_, err = sqlDB.ExecContext(context.Background(), `INSERT INTO landed_changes (id, worker_job_id, canonical_path, created_at) VALUES ('land-leg-1', 'job-leg-1', ?, ?)`, projectDir, now)
+	testutil.FailErr(t, "insert landed_changes", err)
+	_, err = records.SetChange(context.Background(), actor, workerrecords.Op{ID: "land-leg-1-op"}, "res-leg-1", workerrecords.Change{
+		State: workerrecords.ChangeLanded, LandedChangeID: "land-leg-1",
+	})
+	testutil.FailErr(t, "SetChange landed", err)
+	planDeps := plantest.Deps(records)
+	planDeps.Jobs = worker.NewSQLQueue(sqlDB, 1)
+	planSvc := plantest.New(t, planDeps)
 
 	verifyRec := evidence.Record{
 		GateType:    string(evidence.GateTypeVerify),
 		Slot:        "leg-1",
-		RunID:       "dep-closeout",
+		RunID:       "sess-closeout",
 		GateVerdict: string(evidence.GateVerdictPassed),
 		Artifacts: map[string]any{
 			"exit_code": 0,
@@ -75,9 +103,9 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 	}
 
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		DelegationStore:         depStore,
+		SessionWorkIDs:          planSvc.SessionWorkIDs,
 		Evidence:                conditions.StoreEvidenceReader{Store: evidenceStore},
-		DelegationCloseout:      delegation.CloseoutComplete(depStore),
+		PlanCloseout:            planSvc.CloseoutComplete,
 		ScanLedger:              store,
 		SourceSnapshots:         coord.SnapshotStore(),
 		ScanProactiveCategories: proactive,
@@ -164,7 +192,8 @@ func commitRequiredSecurityLanding(
 		Prompt: "fixture",
 		Brief:  "fixture",
 		ID:     jobID, ProjectID: testdbseed.DefaultProjectID, WorkspacePath: projectDir,
-		DelegationID: delegationID, WorkflowRunID: "run-closeout", AgentType: "implementer",
+		ParentSessionID: "sess-closeout",
+		DelegationID:    delegationID, WorkflowRunID: "run-closeout", AgentType: "implementer",
 		ExecutionTarget: api.ExecutionTargetLocal, Status: api.WorkerStatusComplete,
 	}))
 	branch := enginepaths.JobBranchDir(enginepaths.WorkerBranchesRootUnder(testbaseline.DataDir(t, sqlDB)), projectDir, jobID)
@@ -184,7 +213,7 @@ func commitRequiredSecurityLanding(
 	// The first assessment needs a full scan because no incremental baseline exists.
 	plan := obligation.Plan{
 		ID: uuid.NewString(), ScanID: uuid.NewString(), AssessmentID: uuid.NewString(), WorkerJobID: jobID,
-		CanonicalPath: projectDir, DelegationID: delegationID,
+		CanonicalPath: projectDir, SessionID: "sess-closeout", DelegationID: delegationID, WorkflowRunID: "run-closeout",
 		ScannerID: "sast-one", ChangedPaths: []string{"main.go"},
 		ExecutionManifest: manifest, ExecutionFingerprint: fingerprint, FingerprintScheme: api.ScanFingerprintScheme,
 		Required: true, CreatedAt: time.Now().UTC(),

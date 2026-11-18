@@ -134,10 +134,6 @@ const (
 	// ApiErrorCodeCheckpointNotPending checkpoint resolve targeted a non-pending
 	// record
 	ApiErrorCodeCheckpointNotPending ApiErrorCode = "checkpoint_not_pending"
-	// ApiErrorCodeDelegationNotFound delegation id not found
-	ApiErrorCodeDelegationNotFound ApiErrorCode = "delegation_not_found"
-	// ApiErrorCodeDelegationLegNotFound delegation leg id not found
-	ApiErrorCodeDelegationLegNotFound ApiErrorCode = "delegation_leg_not_found"
 	// ApiErrorCodeFeedbackNotPending feedback resolve targeted a non-pending phase
 	ApiErrorCodeFeedbackNotPending ApiErrorCode = "feedback_not_pending"
 	// ApiErrorCodeFeedbackResponseRequired feedback resolve had empty response
@@ -363,6 +359,10 @@ const (
 	// ApiErrorCodeOverlayFormatInvalid workspace .paintedwolf/overlay.yaml has a
 	// missing or invalid overlay_format
 	ApiErrorCodeOverlayFormatInvalid ApiErrorCode = "overlay_format_invalid"
+	// ApiErrorCodeProjectSettingsNeedRepair the project's
+	// .paintedwolf/limits.yaml, verify.yaml, or review.yaml could not be read;
+	// saving would replace it, so the file must be fixed first
+	ApiErrorCodeProjectSettingsNeedRepair ApiErrorCode = "project_settings_need_repair"
 	// ApiErrorCodeProjectApprovalsNeedRepair the project's
 	// .paintedwolf/approvals.yaml has parts the host did not apply; saving would
 	// replace them, so the file must be fixed first
@@ -718,9 +718,9 @@ const (
 	// ApiErrorCodeHostFault the host could not record a tool call's outcome and
 	// stopped the turn (SSE host_error)
 	ApiErrorCodeHostFault ApiErrorCode = "host_fault"
-	// ApiErrorCodeWorkerCloseoutExhausted worker hit LLM turn limit after
-	// scheduled and recovery closeout (SSE worker.failure)
-	ApiErrorCodeWorkerCloseoutExhausted ApiErrorCode = "worker_closeout_exhausted"
+	// ApiErrorCodeWorkerModelTimeout the model did not answer a worker within the
+	// turn time limit (SSE worker.failure)
+	ApiErrorCodeWorkerModelTimeout ApiErrorCode = "worker_model_timeout"
 	// ApiErrorCodeWorkerExecuteFailed generic worker execute failure (SSE
 	// worker.failure)
 	ApiErrorCodeWorkerExecuteFailed ApiErrorCode = "worker_execute_failed"
@@ -758,9 +758,6 @@ const (
 	ApiErrorCodeWorkerNotFound ApiErrorCode = "worker_not_found"
 	// ApiErrorCodeWorkerNotCancelable worker cancel targeted a terminal job
 	ApiErrorCodeWorkerNotCancelable ApiErrorCode = "worker_not_cancelable"
-	// ApiErrorCodeLegNotPending delegation dispatch targeted a leg that already
-	// left pending
-	ApiErrorCodeLegNotPending ApiErrorCode = "leg_not_pending"
 	// ApiErrorCodeDecisionNotPending no pending needs_decision for the worker job
 	ApiErrorCodeDecisionNotPending ApiErrorCode = "decision_not_pending"
 	// ApiErrorCodeWorkflowActive cannot start workflow while another is active
@@ -999,8 +996,6 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeDraftRootImmutable,
 	ApiErrorCodeProjectBusy,
 	ApiErrorCodeCheckpointNotPending,
-	ApiErrorCodeDelegationNotFound,
-	ApiErrorCodeDelegationLegNotFound,
 	ApiErrorCodeFeedbackNotPending,
 	ApiErrorCodeFeedbackResponseRequired,
 	ApiErrorCodeBriefingDisabled,
@@ -1082,6 +1077,7 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeExtensionSuggestionInvalid,
 	ApiErrorCodeOverlayFormatUnsupported,
 	ApiErrorCodeOverlayFormatInvalid,
+	ApiErrorCodeProjectSettingsNeedRepair,
 	ApiErrorCodeProjectApprovalsNeedRepair,
 	ApiErrorCodeRootNotFound,
 	ApiErrorCodeRootBusy,
@@ -1212,7 +1208,7 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodePromptFailed,
 	ApiErrorCodeTurnCloseoutToolCall,
 	ApiErrorCodeHostFault,
-	ApiErrorCodeWorkerCloseoutExhausted,
+	ApiErrorCodeWorkerModelTimeout,
 	ApiErrorCodeWorkerExecuteFailed,
 	ApiErrorCodeWorkerWorkspaceDiskFull,
 	ApiErrorCodeWorkerOwnerUnsettled,
@@ -1228,7 +1224,6 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeForbidden,
 	ApiErrorCodeWorkerNotFound,
 	ApiErrorCodeWorkerNotCancelable,
-	ApiErrorCodeLegNotPending,
 	ApiErrorCodeDecisionNotPending,
 	ApiErrorCodeWorkflowActive,
 	ApiErrorCodeWorkflowRevisionConflict,
@@ -1393,8 +1388,6 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeApprovalGrantNotFound,
 		ApiErrorCodeRewindAnchorNotFound,
 		ApiErrorCodePromotionNotFound,
-		ApiErrorCodeDelegationNotFound,
-		ApiErrorCodeDelegationLegNotFound,
 		ApiErrorCodeBriefingRecordNotFound,
 		ApiErrorCodeFileBriefingNotFound,
 		ApiErrorCodeChoiceTransitionNotFound,
@@ -1506,6 +1499,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeExtensionSuggestionInvalid,
 		ApiErrorCodeOverlayFormatUnsupported,
 		ApiErrorCodeOverlayFormatInvalid,
+		ApiErrorCodeProjectSettingsNeedRepair,
 		ApiErrorCodeProjectApprovalsNeedRepair,
 		ApiErrorCodeRootBusy,
 		ApiErrorCodeDuplicateRoot,
@@ -1547,7 +1541,6 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeSessionPreparing,
 		ApiErrorCodeSessionStopping,
 		ApiErrorCodeWorkerNotCancelable,
-		ApiErrorCodeLegNotPending,
 		ApiErrorCodeDecisionNotPending,
 		ApiErrorCodeWorkflowActive,
 		ApiErrorCodeWorkflowRevisionConflict,
@@ -1628,7 +1621,6 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodePromptFailed,
 		ApiErrorCodeTurnCloseoutToolCall,
 		ApiErrorCodeHostFault,
-		ApiErrorCodeWorkerCloseoutExhausted,
 		ApiErrorCodeWorkerExecuteFailed,
 		ApiErrorCodeWorkerOwnerUnsettled,
 		ApiErrorCodeSessionPreparationFailed:
@@ -1674,7 +1666,8 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodePresenceUnavailable,
 		ApiErrorCodeAuthUnavailable:
 		return 503
-	case ApiErrorCodeProviderSilent:
+	case ApiErrorCodeProviderSilent,
+		ApiErrorCodeWorkerModelTimeout:
 		return 504
 	case ApiErrorCodeWorkerWorkspaceDiskFull:
 		return 507
