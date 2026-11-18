@@ -35,6 +35,14 @@ describe("incremental block facts", () => {
     compare(completed, { from: at, to: at + 2 });
   });
 
+  it("rewinds past JSX disambiguation that read across a checkpoint", () => {
+    const generic = "Type".repeat(1500);
+    const text = `const id=<${generic},>(x)=>x;const lookup={${fields}result:1}`;
+    const comma = text.indexOf(",");
+    const tag = compare(open(text, "component.tsx"), { from: comma, to: comma + 1 }, "component.tsx");
+    compare(tag, { from: comma, insert: "," }, "component.tsx");
+  });
+
   it("maps delimiter dependencies across replacements, line edits and disjoint changes", () => {
     const semicolon = source.indexOf(";");
     const close = source.indexOf("}", semicolon);

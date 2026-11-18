@@ -313,6 +313,7 @@ function blockFact(cursor: ScanCursor, openPos: number): boolean {
   const facts = cursor.options.facts;
   const known = facts.get(openPos);
   if (known !== undefined) return known;
+  const readTo = text.readTo;
   const lineEnd = state.lineEnd;
   const lexer = state.lexer!.copy();
   const stack: Array<{ kind: number; open: number; semicolon: boolean }> = [{ kind: OPEN_BRACE, open: openPos, semicolon: false }];
@@ -339,5 +340,7 @@ function blockFact(cursor: ScanCursor, openPos: number): boolean {
   }
   // A group still open at the line end lays out as a container would.
   for (const frame of stack) if (frame.kind === OPEN_BRACE) facts.set(frame.open, lineEnd, false);
+  // The fact range tracks these reads independently of the lexical checkpoint.
+  text.readTo = readTo;
   return facts.get(openPos) ?? false;
 }

@@ -192,7 +192,9 @@ export function buildLayout(state: EditorState, config: PrettyConfig): PrettyLay
     if (added > PRETTY_MAX_DECORATIONS) reason = "decorations";
     else if (scanner.visits > limit) reason = "work";
     if (reason) return -1;
-    if (plan.kind !== "spans") checkpoints.add(pos, pos, new Checkpoint(scanner.snapshot(pos)));
+    if (plan.kind !== "spans" && scanner.text.readTo <= pos + lookbehind(config)) {
+      checkpoints.add(pos, pos, new Checkpoint(scanner.snapshot(pos)));
+    }
     return pos + PRETTY_CHECKPOINT_INTERVAL;
   }, end);
   if (scanner.failure === "depth") reason = "depth";
@@ -314,6 +316,8 @@ function rescan(prev: PrettyLayoutState, job: Rescan): PrettyLayoutState {
       reason = "work";
       return -1;
     }
+    // An edit in lexical lookahead can change the state before the checkpoint.
+    if (scanner.text.readTo > pos + lookbehind(prev.config)) return nextStop(pos);
     const snapshot = scanner.snapshot(pos);
     if (pos >= compareFrom) {
       const old = checkpointAt(checkpoints, pos);
