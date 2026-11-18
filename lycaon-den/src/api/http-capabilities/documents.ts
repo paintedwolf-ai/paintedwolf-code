@@ -1,4 +1,5 @@
 import { formatQuery, type JsonRequester, jsonRequest } from "../http.ts";
+import { operationPath } from "../operations.generated.ts";
 import type {
   EditorReplicaFrame,
   EditorDocument,
@@ -58,48 +59,48 @@ export interface DocumentsClient {
 export function createDocumentsClient(j: JsonRequester): DocumentsClient {
   return {
     replaceEditorDocumentRetention: (projectId, clientId, documentIds, retainedClients) =>
-      j(`/v1/projects/${projectId}/editor-documents/retention`, { ...jsonRequest("PUT", { client_id: clientId, document_ids: documentIds, retained_clients: retainedClients }), signal: AbortSignal.timeout(30_000) }),
+      j(operationPath("replaceEditorDocumentRetention", { id: projectId }), { ...jsonRequest("PUT", { client_id: clientId, document_ids: documentIds, retained_clients: retainedClients }), signal: AbortSignal.timeout(30_000) }),
     replaceProjectView: (projectId, req) =>
-      j(`/v1/projects/${projectId}/view`, { ...jsonRequest("PUT", req), keepalive: true, signal: AbortSignal.timeout(30_000) }),
+      j(operationPath("replaceProjectView", { id: projectId }), { ...jsonRequest("PUT", req), keepalive: true, signal: AbortSignal.timeout(30_000) }),
     readEditorDocumentStatuses: (projectId, documentIds) =>
-      j(`/v1/projects/${projectId}/editor-documents/status`, { ...jsonRequest("POST", { document_ids: documentIds }), signal: AbortSignal.timeout(30_000) }),
+      j(operationPath("readEditorDocumentStatuses", { id: projectId }), { ...jsonRequest("POST", { document_ids: documentIds }), signal: AbortSignal.timeout(30_000) }),
     openEditorDocument: (projectId, req, sessionId) =>
-      j(`/v1/projects/${projectId}/editor-documents${formatQuery({ session_id: sessionId })}`, { ...jsonRequest("POST", req), signal: AbortSignal.timeout(30_000) }),
+      j(`${operationPath("openEditorDocument", { id: projectId })}${formatQuery({ session_id: sessionId })}`, { ...jsonRequest("POST", req), signal: AbortSignal.timeout(30_000) }),
     replaceEditorDocument: (projectId, documentId, req) =>
-      j(`/v1/projects/${projectId}/editor-documents/${documentId}`, { method: "PUT", body: JSON.stringify(req) }),
+      j(operationPath("replaceEditorDocument", { id: projectId, document_id: documentId }), { method: "PUT", body: JSON.stringify(req) }),
     submitEditorDocumentUpdate: (projectId, documentId, req) =>
-      j(`/v1/projects/${projectId}/editor-documents/${documentId}/updates`, { ...jsonRequest("POST", req), signal: AbortSignal.timeout(30_000) }),
+      j(operationPath("submitEditorDocumentUpdate", { id: projectId, document_id: documentId }), { ...jsonRequest("POST", req), signal: AbortSignal.timeout(30_000) }),
     publishEditorDocumentPresence: (projectId, documentId, req) =>
-      j(`/v1/projects/${projectId}/editor-documents/${documentId}/presence`, { ...jsonRequest("POST", req), signal: AbortSignal.timeout(30_000) }),
+      j(operationPath("publishEditorDocumentPresence", { id: projectId, document_id: documentId }), { ...jsonRequest("POST", req), signal: AbortSignal.timeout(30_000) }),
     listEditorDocumentChanges: (projectId, documentId, cursor) =>
-      j(`/v1/projects/${projectId}/editor-documents/${documentId}/changes${formatQuery({ cursor })}`),
+      j(`${operationPath("listEditorDocumentChanges", { id: projectId, document_id: documentId })}${formatQuery({ cursor })}`),
     revertEditorDocumentChange: (projectId, documentId, changeId, req) =>
-      j(`/v1/projects/${projectId}/editor-documents/${documentId}/changes/${encodeURIComponent(changeId)}/revert`, jsonRequest("POST", req)),
+      j(operationPath("revertEditorDocumentChange", { id: projectId, document_id: documentId, change_id: changeId }), jsonRequest("POST", req)),
     createEditorDocumentSnapshot: (projectId, documentId, req) =>
-      j(`/v1/projects/${projectId}/editor-documents/${documentId}/snapshots`, { ...jsonRequest("POST", req), signal: AbortSignal.timeout(30_000) }),
+      j(operationPath("createEditorDocumentSnapshot", { id: projectId, document_id: documentId }), { ...jsonRequest("POST", req), signal: AbortSignal.timeout(30_000) }),
     resolveEditorDocumentConflict: (projectId, documentId, req, sessionId) =>
-      j(`/v1/projects/${projectId}/editor-documents/${documentId}/resolve${formatQuery({ session_id: sessionId })}`, jsonRequest("POST", req)),
+      j(`${operationPath("resolveEditorDocumentConflict", { id: projectId, document_id: documentId })}${formatQuery({ session_id: sessionId })}`, jsonRequest("POST", req)),
     syncEditorDocument: (projectId, documentId, req) =>
-      j(`/v1/projects/${projectId}/editor-documents/${documentId}/sync`, { ...jsonRequest("POST", req), signal: AbortSignal.timeout(30_000) }),
+      j(operationPath("syncEditorDocument", { id: projectId, document_id: documentId }), { ...jsonRequest("POST", req), signal: AbortSignal.timeout(30_000) }),
     leaveEditorDocument: (projectId, documentId, req) =>
       // Keepalive lets a leave sent while the page unloads still arrive.
-      j(`/v1/projects/${projectId}/editor-documents/${documentId}/leave`, { ...jsonRequest("POST", req), keepalive: true, signal: AbortSignal.timeout(30_000) }),
+      j(operationPath("leaveEditorDocument", { id: projectId, document_id: documentId }), { ...jsonRequest("POST", req), keepalive: true, signal: AbortSignal.timeout(30_000) }),
     discardEditorDocument: (projectId, documentId, req) =>
-      j(`/v1/projects/${projectId}/editor-documents/${documentId}/discard`, jsonRequest("POST", req)),
+      j(operationPath("discardEditorDocument", { id: projectId, document_id: documentId }), jsonRequest("POST", req)),
     reloadEditorDocument: (projectId, documentId, req, sessionId) =>
-      j(`/v1/projects/${projectId}/editor-documents/${documentId}/reload${formatQuery({ session_id: sessionId })}`, jsonRequest("POST", req)),
+      j(`${operationPath("reloadEditorDocument", { id: projectId, document_id: documentId })}${formatQuery({ session_id: sessionId })}`, jsonRequest("POST", req)),
     observeEditorDocument: (projectId, documentId, req) =>
-      j(`/v1/projects/${projectId}/editor-documents/${documentId}/observe`, jsonRequest("POST", req)),
+      j(operationPath("observeEditorDocument", { id: projectId, document_id: documentId }), jsonRequest("POST", req)),
     saveEditorDocument: (projectId, documentId, req, sessionId) =>
-      j(`/v1/projects/${projectId}/editor-documents/${documentId}/save${formatQuery({ session_id: sessionId })}`, jsonRequest("POST", req)),
+      j(`${operationPath("saveEditorDocument", { id: projectId, document_id: documentId })}${formatQuery({ session_id: sessionId })}`, jsonRequest("POST", req)),
     previewEditorSecretMark: (projectId, documentId, range) =>
       j(
-        `/v1/projects/${projectId}/editor-documents/${documentId}/secret-spans/preview`,
+        operationPath("previewEditorSecretMark", { id: projectId, document_id: documentId }),
         jsonRequest("POST", range),
       ),
     markEditorSecret: (projectId, documentId, req) =>
       j(
-        `/v1/projects/${projectId}/editor-documents/${documentId}/secret-spans/mark`,
+        operationPath("markEditorSecret", { id: projectId, document_id: documentId }),
         jsonRequest("POST", req),
       ),
   };

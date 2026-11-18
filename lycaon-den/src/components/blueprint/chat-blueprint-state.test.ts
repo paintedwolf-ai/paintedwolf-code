@@ -236,7 +236,15 @@ describe("createChatBlueprintState", () => {
     const [run, setRun] = createSignal<WorkflowRun | null>(
       { ...planRun, ui: { ...planUi, plan_revision_at: "r1" } } as WorkflowRun,
     );
-    const { state, dispose } = createBlueprintState({ catalogRun: run });
+    const { state, dispose } = createBlueprintState({
+      catalogRun: run,
+      appStore: minimalStore({
+        currentSession: {
+          id: "sess-1",
+          project_id: "project-1",
+        } as AppStore["state"]["currentSession"],
+      }),
+    });
     try {
       expect(state.blueprintLoadingFor(BLUEPRINT_PATH)).toBe(true);
       await vi.waitFor(() => expect(state.blueprintContentFor(BLUEPRINT_PATH)).toBe("# Plan\n"));

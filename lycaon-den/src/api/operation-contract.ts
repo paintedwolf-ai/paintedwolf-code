@@ -29,16 +29,23 @@ export function operationPattern(template: string): RegExp {
   return new RegExp(`^${escaped.replace(/\\\{[^{}]+\\\}/g, "[^/]+")}$`);
 }
 
+type TemplatedOperation = { operation: Operation; pattern: RegExp; specificity: string };
 const exactOperations = new Map<string, Operation>();
-const templatedOperations = new Map<string, { operation: Operation; pattern: RegExp }[]>();
+const templatedOperations = new Map<string, TemplatedOperation[]>();
 for (const operation of Object.values(API_OPERATIONS)) {
   if (!operation.path.includes("{")) {
     exactOperations.set(`${operation.method} ${operation.path}`, operation);
     continue;
   }
   const templates = templatedOperations.get(operation.method) ?? [];
-  templates.push({ operation, pattern: operationPattern(operation.path) });
+  const specificity = operation.path.split("/").map((segment) => segment.includes("{") ? "0" : "1").join("");
+  templates.push({ operation, pattern: operationPattern(operation.path), specificity });
   templatedOperations.set(operation.method, templates);
+}
+
+// At the first differing segment, a literal route takes precedence.
+for (const templates of templatedOperations.values()) {
+  templates.sort((a, b) => b.specificity.localeCompare(a.specificity));
 }
 
 let observer: ((error: OperationContractError) => void) | undefined;
