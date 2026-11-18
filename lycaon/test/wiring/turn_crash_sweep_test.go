@@ -319,6 +319,8 @@ func TestTurnSurvivesKillAtEveryCommitPoint(t *testing.T) {
 		runBootChild(t, os.Getenv(crashDirEnv))
 		return
 	}
+	// Hosts run in child processes, so the parent shares nothing with other tests.
+	t.Parallel()
 	dir := t.TempDir()
 	if code, output := startCrashChild(t, "turn", dir, ""); code != finishedExit {
 		t.Fatalf("uninterrupted turn exited %d\n%s", code, output)
