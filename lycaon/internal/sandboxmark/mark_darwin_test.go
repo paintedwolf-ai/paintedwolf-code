@@ -62,3 +62,20 @@ func TestProcessesFindADetachedDaemonUnderTheMarkAndNothingElse(t *testing.T) {
 		}
 	}
 }
+
+func TestOwnPathNamesTheCurrentMarkOnly(t *testing.T) {
+	current.mu.Lock()
+	saved := current.dir
+	current.dir = ""
+	current.mu.Unlock()
+	t.Cleanup(func() { current.mu.Lock(); current.dir = saved; current.mu.Unlock() })
+	if own := OwnPath(); own != "" {
+		t.Fatalf("OwnPath = %q with no mark enabled", own)
+	}
+	current.mu.Lock()
+	current.dir = "/marks/7-x"
+	current.mu.Unlock()
+	if own := OwnPath(); own != filepath.Join("/marks/7-x", ownName) {
+		t.Fatalf("OwnPath = %q", own)
+	}
+}
