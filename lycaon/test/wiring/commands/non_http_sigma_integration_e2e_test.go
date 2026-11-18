@@ -48,7 +48,7 @@ func sigmaWiringActions(rows []visibilityAuthzRow) map[authzcontext.EventAction]
 // card before any dial: the host does not resolve, so only the pre-dial match
 // can raise it.
 func TestNonHTTPContractHTTPSocksStillReachPreDialMatch(t *testing.T) {
-	s := newCommandProgramSession(t, "curl -s --max-time 5 http://"+sigmaWiringEgressHost+"/", "")
+	s := newProgramHost(t).program(t, "curl -s --max-time 5 http://"+sigmaWiringEgressHost+"/", "")
 	sigmaWiringInstallDetections(t, s)
 	cards := runCommandWithApprovals(t, s, "decline")
 	detection := cards[0].ToolApproval.Plan.Presentation.Detection
@@ -59,7 +59,7 @@ func TestNonHTTPContractHTTPSocksStillReachPreDialMatch(t *testing.T) {
 
 // Detection resolution and capability grants are separate ledger records.
 func TestNonHTTPContractCapabilityAndDetectionRemainSeparateRecords(t *testing.T) {
-	detected := newCommandProgramSession(t, "curl -s --max-time 5 http://"+sigmaWiringEgressHost+"/", "")
+	detected := newProgramHost(t).program(t, "curl -s --max-time 5 http://"+sigmaWiringEgressHost+"/", "")
 	sigmaWiringInstallDetections(t, detected)
 	cards := runCommandWithApprovals(t, detected, "recommended")
 	if d := cards[0].ToolApproval.Plan.Presentation.Detection; d == nil || d.RuleID != sigmaWiringEgressRuleID {
@@ -72,7 +72,7 @@ func TestNonHTTPContractCapabilityAndDetectionRemainSeparateRecords(t *testing.T
 	}
 
 	path, _ := serveDaemonSocket(t)
-	granted := newCommandProgramSessionWithArgs(t, map[string]any{
+	granted := newProgramHost(t).programWithArgs(t, map[string]any{
 		"command": "curl -s --max-time 5 --unix-socket '" + path + "' http://localhost/version",
 	}, wire.CreateSessionRequest{}, "")
 	runCommandWithApprovals(t, granted, "recommended")

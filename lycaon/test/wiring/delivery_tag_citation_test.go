@@ -205,8 +205,8 @@ func TestPipelineCoordinateRepairsThroughACommandExcerpt(t *testing.T) {
 	h, session := deliveryTagSession(t, script)
 	_, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), session, "read the file")
 	testutil.FailErr(t, "prompt", err)
-	if script.next != len(script.steps) {
-		t.Fatalf("the bare coordinate was accepted after %d of %d steps", script.next, len(script.steps))
+	if script.next != len(script.Steps) {
+		t.Fatalf("the bare coordinate was accepted after %d of %d steps", script.next, len(script.Steps))
 	}
 	g := lastAnswerGrounding(t, h, session)
 	if g == nil || !g.Traced || g.HostAssembled || len(g.CitedEvidence) != 1 {

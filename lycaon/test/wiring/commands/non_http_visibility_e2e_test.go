@@ -50,7 +50,7 @@ func visibilityAuthzRowFor(rows []visibilityAuthzRow, action authzcontext.EventA
 // An applied socket grant leaves a capability_applied row naming the socket.
 func TestNonHTTPContractMandatoryAuthzDetailForSocket(t *testing.T) {
 	path, hits := serveDaemonSocket(t)
-	s := newCommandProgramSessionWithArgs(t, map[string]any{
+	s := newProgramHost(t).programWithArgs(t, map[string]any{
 		"command": "curl -s --max-time 5 --unix-socket '" + path + "' http://localhost/version",
 	}, wire.CreateSessionRequest{}, "")
 	runCommandWithApprovals(t, s, "recommended")
@@ -76,7 +76,7 @@ func TestNonHTTPContractMandatoryAuthzDetailForSocket(t *testing.T) {
 // direct-IP ask reaches a card.
 func directIPCommandSession(t *testing.T, quieted bool) *commandProgramSession {
 	t.Helper()
-	s := newCommandProgramSessionWithArgs(t, map[string]any{
+	s := newProgramHost(t).programWithArgs(t, map[string]any{
 		"command":            "go version",
 		"capability_request": map[string]any{"direct_ip": true},
 	}, wire.CreateSessionRequest{}, "")
