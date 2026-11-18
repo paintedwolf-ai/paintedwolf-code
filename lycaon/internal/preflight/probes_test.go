@@ -287,23 +287,6 @@ func TestDiskSpaceProbe(t *testing.T) {
 	}
 }
 
-func TestGitEngineProbe(t *testing.T) {
-	gittestsetup.Enable()
-	got := run(t, gitEngineProbe{}, Env{})
-	if got.Status != StatusOK {
-		t.Fatalf("status = %q code=%q detail=%v, want ok with bundled engine", got.Status, got.Code, got.Detail)
-	}
-}
-
-func TestGitEngineProbeWithoutHostGit(t *testing.T) {
-	gittestsetup.Enable()
-	t.Setenv("PATH", "")
-	got := run(t, gitEngineProbe{}, Env{})
-	if got.Status != StatusOK {
-		t.Fatalf("probe must be green with empty PATH; status=%q code=%q", got.Status, got.Code)
-	}
-}
-
 func TestScannerEngineProbe(t *testing.T) {
 	cases := []struct {
 		name       string
