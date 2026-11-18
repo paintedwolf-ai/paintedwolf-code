@@ -44,7 +44,7 @@ func TestPipelineTopologyLegAgentTypes(t *testing.T) {
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 
 	reg := orchestration.NewMemoryAgentRegistryForTest()
-	rec := &recordingWorkers{TopologyWorkers: orchestration.NewMemoryTopologyWorkers()}
+	rec := &recordingWorkers{MemoryTopologyWorkers: orchestration.NewMemoryTopologyWorkers()}
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
 		Workers: rec,
 		Agents:  reg,
@@ -135,8 +135,8 @@ func newPipelineIntegrationOrchestrator(t *testing.T) (*orchestration.Orchestrat
 	sessStore := store.NewMemory()
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	rec := &recordingWorkers{
-		TopologyWorkers: orchestration.NewMemoryTopologyWorkers(),
-		order:           make([]string, 0, 8),
+		MemoryTopologyWorkers: orchestration.NewMemoryTopologyWorkers(),
+		order:                 make([]string, 0, 8),
 	}
 
 	reg := loadAgentRegistryFromConfig(t)
@@ -244,7 +244,7 @@ func TestPipelineFullDefaultPipelineMockRun(t *testing.T) {
 }
 
 type recordingWorkers struct {
-	orchestration.TopologyWorkers
+	*orchestration.MemoryTopologyWorkers
 	mu           sync.Mutex
 	units        map[string]orchestration.TopologyUnit
 	order        []string
@@ -293,40 +293,21 @@ func (r *recordingWorkers) DispatchUnit(ctx context.Context, batchID, unitID str
 			return nil, ctx.Err()
 		}
 	}
+	if _, err := r.MemoryTopologyWorkers.DispatchUnit(ctx, batchID, unitID); err != nil {
+		return nil, err
+	}
 	if r.holdOutcomes != nil {
-		if _, err := r.TopologyWorkers.DispatchUnit(ctx, batchID, unitID); err != nil {
-			return nil, err
-		}
 		select {
 		case <-r.holdOutcomes:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
-		if setter, ok := r.TopologyWorkers.(interface {
-			SettleUnit(string, string, api.WorkerResult) (*orchestration.TopologyUnit, error)
-		}); ok {
-			status := "complete"
-			if r.shouldFail(unit.WorkID) {
-				status = "failed"
-			}
-			settled, sErr := setter.SettleUnit(batchID, unitID, api.WorkerResult{Status: status, Summary: unit.WorkID + " done"})
-			if sErr != nil {
-				return nil, sErr
-			}
-			return r.afterSettle(ctx, settled)
-		}
-		return r.GetUnit(ctx, batchID, unitID)
-	}
-
-	settler, ok := r.TopologyWorkers.(orchestration.TopologyDirectSettler)
-	if !ok {
-		return r.TopologyWorkers.DispatchUnit(ctx, batchID, unitID)
 	}
 	status := "complete"
 	if r.shouldFail(unit.WorkID) {
 		status = "failed"
 	}
-	updated, err := settler.DispatchSettled(ctx, batchID, unitID, api.WorkerResult{
+	updated, err := r.SettleUnit(batchID, unitID, api.WorkerResult{
 		Status:  status,
 		Summary: unit.WorkID + " done",
 	})
