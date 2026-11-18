@@ -29,14 +29,14 @@ func TestTrackingIncludesUntouchedAndExceptedDebtAboveWarning(t *testing.T) {
 	if got := report.Artifacts[0].Spans; len(got) != 2 || got[0].File != "pkg/a.go" || got[0].First != 2 || got[0].Last != 10 {
 		t.Fatalf("tracking spans: %+v", got)
 	}
-	if got := report.Artifacts[2]; got.ID != "excepted.go" || got.EffectiveCap != 40 || got.ExceptionReason != "composition root" {
+	if got := report.Artifacts[2]; got.ID != "excepted.go" || got.EffectiveCap == nil || *got.EffectiveCap != 40 || got.ExceptionReason != "composition root" {
 		t.Fatalf("exception tracking: %+v", got)
 	}
 	for _, row := range report.Artifacts {
 		if row.Touched != (row.ID == "above.go") {
 			t.Fatalf("tracking touch status: %+v", row)
 		}
-		if row.Warn != 10 || row.Limit != 20 || row.Measured <= row.Warn {
+		if row.Warn != 10 || row.Limit == nil || *row.Limit != 20 || row.Measured <= row.Warn {
 			t.Fatalf("invalid tracking bounds: %+v", row)
 		}
 	}
@@ -63,5 +63,23 @@ func TestTrackingStructFieldsUseDeclarationSpans(t *testing.T) {
 	report := trackingReport(policy, inv, func(_, _ string) bool { return true })
 	if len(report.Artifacts) != 1 || len(report.Artifacts[0].Spans) != 1 || report.Artifacts[0].Spans[0].First != 3 {
 		t.Fatalf("struct tracking must use the declaration: %+v", report)
+	}
+}
+
+func TestTrackingCarriesNoHardLimitForAWarningOnlyCategory(t *testing.T) {
+	policy := sizebudget.Policy{Limits: map[string]sizebudget.Limit{"test_files": {Warn: 10}}}
+	inv := &inventory{measured: newMeasurements(), sources: map[string][]string{"long_test.go": {"long_test.go"}}}
+	inv.measured["test_files"] = map[string]int{"long_test.go": 5000}
+	report := trackingReport(policy, inv, func(_, _ string) bool { return true })
+	body, err := json.Marshal(report.Artifacts)
+	if err != nil {
+		t.Fatalf("encode tracking rows: %v", err)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(body, &rows); err != nil {
+		t.Fatalf("decode tracking rows: %v", err)
+	}
+	if len(rows) != 1 || rows[0]["limit"] != nil || rows[0]["effective_cap"] != nil || rows[0]["warn"] != float64(10) {
+		t.Fatalf("warning-only row: %s", body)
 	}
 }

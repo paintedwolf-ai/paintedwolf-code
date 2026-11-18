@@ -16,11 +16,15 @@ func trackingReport(policy sizebudget.Policy, inv *inventory, touched sizebudget
 			if value <= limit.Warn {
 				continue
 			}
-			cap, _ := policy.Cap(category, id)
+			var bound, cap *int
+			if limit.Bounded() {
+				value, _ := policy.Cap(category, id)
+				bound, cap = &limit.Limit, &value
+			}
 			files := slices.Clone(sources[category][id])
 			slices.Sort(files)
 			report.Artifacts = append(report.Artifacts, sizebudget.TrackingArtifact{
-				Category: category, ID: id, Touched: touched(category, id), Measured: value, Warn: limit.Warn, Limit: limit.Limit,
+				Category: category, ID: id, Touched: touched(category, id), Measured: value, Warn: limit.Warn, Limit: bound,
 				Spans: trackingSpans(inv, category, id), EffectiveCap: cap, ExceptionReason: policy.Exceptions[category][id].Reason, Sources: files,
 			})
 		}

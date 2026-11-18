@@ -22,6 +22,13 @@ class ArchitecturalReviewTests(unittest.TestCase):
         self.assertEqual(entry['review']['state'], 'retained')
         self.assertEqual(entry['effective_cap'], 900)
 
+    def test_a_warning_only_artifact_takes_any_ceiling_above_its_warning(self):
+        entry = reviewed(measured=5000)
+        entry.update(category='test_files', limit=None, effective_cap=None)
+        entry['review']['ceiling'] = 6000
+        _, entries = snapshot.validate(report([entry]), 'a' * 40, 'b' * 40)
+        self.assertEqual(next(iter(entries.values()))['review']['ceiling'], 6000)
+
     def test_invalid_review_refuses_entire_snapshot(self):
         changes = [{'kind': 'owner'}, {'workstream': 'unsafe\nvalue'}, {'disposition': 'ignore'},
                    {'reason': ''}, {'reviewed_commit': 'main'}, {'ceiling': 1000},

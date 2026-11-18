@@ -34,7 +34,8 @@ def validate_review(review, row, relative):
         if review['ceiling'] or review['boundaries'] or review['reviewed_shape'] or review['state'] != 'refactor':
             raise ValueError('refactor review cannot accept a warning')
         return
-    if not row['warn'] < review['ceiling'] <= row['limit'] or not 1 <= len(review['boundaries']) <= 32:
+    if (not row['warn'] < review['ceiling'] or row['limit'] is not None and review['ceiling'] > row['limit']
+            or not 1 <= len(review['boundaries']) <= 32):
         raise ValueError('retained warning exceeds admission limit or lacks boundaries')
     for path, digest in review['boundaries'].items():
         if not relative(path) or not isinstance(digest, str) or not re.fullmatch('[0-9a-f]{64}', digest):

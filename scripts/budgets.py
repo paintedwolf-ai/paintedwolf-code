@@ -60,7 +60,7 @@ def suite_findings(name, report):
     tracked = {(r["category"], r["id"]): r for r in report.get("tracking", {}).get("artifacts", [])}
     for f in report["findings"]:
         kind, label = f["kind"], f'{f["category"]} {f["id"]}'
-        limit = report["categories"][f["category"]]["limit"]
+        limit = report["categories"][f["category"]].get("limit")
         source = f["sources"][0] if f["sources"] else None
         if kind == "over_limit":
             failed = True
