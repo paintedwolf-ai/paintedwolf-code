@@ -66,7 +66,7 @@ func TestCheckpointHandlersListAndResolve(t *testing.T) {
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sess.ID+"/checkpoints", nil)
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -88,7 +88,7 @@ func TestCheckpointHandlersListAndResolve(t *testing.T) {
 
 	body := `{"kind":"tool_approval","action":"approve","option_id":"approve_current_action"}`
 	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID, strings.NewReader(body))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -97,7 +97,7 @@ func TestCheckpointHandlersListAndResolve(t *testing.T) {
 	}
 
 	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/unknown", strings.NewReader(body))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -123,7 +123,7 @@ func TestCheckpointHandlersRejectWithGuidance(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID,
 		strings.NewReader(`{"kind":"tool_approval","action":"reject","guidance":"Use the read tool instead."}`))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -174,7 +174,7 @@ func TestCheckpointHandlersValidationErrors(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID, strings.NewReader(tc.body))
-			api.WithTestAuth(req)
+			req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			srv.ServeHTTP(w, req)
@@ -204,7 +204,7 @@ func TestCheckpointHandlersResolveExactReplay(t *testing.T) {
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	body := `{"kind":"tool_approval","action":"approve","option_id":"approve_current_action"}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID, strings.NewReader(body))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -213,7 +213,7 @@ func TestCheckpointHandlersResolveExactReplay(t *testing.T) {
 	}
 
 	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID, strings.NewReader(body))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -289,7 +289,7 @@ func TestCheckpointGrantOfferCreatesProjectLease(t *testing.T) {
 
 	body := `{"kind":"tool_approval","action":"approve","option_id":"` + selected.ID + `"}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID, strings.NewReader(body))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -298,7 +298,7 @@ func TestCheckpointGrantOfferCreatesProjectLease(t *testing.T) {
 	}
 
 	listReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/approval-grants?session_id="+sess.ID, nil)
-	api.WithTestAuth(listReq)
+	listReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	listW := httptest.NewRecorder()
 	srv.ServeHTTP(listW, listReq)
 	if listW.Code != http.StatusOK {
@@ -411,7 +411,7 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 
 	body := `{"kind":"tool_approval","action":"approve","option_id":"` + selected.ID + `"}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID, strings.NewReader(body))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -428,7 +428,7 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 	}
 
 	listReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/approval-grants", nil)
-	api.WithTestAuth(listReq)
+	listReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	listW := httptest.NewRecorder()
 	srv.ServeHTTP(listW, listReq)
 	if listW.Code != http.StatusOK {
@@ -453,7 +453,7 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 
 	revokeBody := `{"ids":["` + chatGrant.ID + `","` + selected.ID + `"]}`
 	revokeReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/approval-grants/revoke", strings.NewReader(revokeBody))
-	api.WithTestAuth(revokeReq)
+	revokeReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	revokeReq.Header.Set("Content-Type", "application/json")
 	revokeW := httptest.NewRecorder()
 	srv.ServeHTTP(revokeW, revokeReq)
@@ -485,7 +485,7 @@ func TestCheckpointRejectsClientAuthoredGrantPredicate(t *testing.T) {
 
 	body := `{"kind":"tool_approval","action":"approve","grant":{"predicate":{"category":"tool","pattern":"*"}}}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID, strings.NewReader(body))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

@@ -102,7 +102,7 @@ func TestScanSummaryHTTPIntegration(t *testing.T) {
 	var summary wire.CodeScan
 	testutil.WaitFor(t, "the scan summary is complete", func() bool {
 		sumReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, scanURL+"?view=summary", nil)
-		sumReq.Header.Set("Authorization", api.TestAuthHeader())
+		sumReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 		sumW := httptest.NewRecorder()
 		srv.ServeHTTP(sumW, sumReq)
 		if sumW.Code != http.StatusOK {
@@ -134,7 +134,7 @@ func TestScanSummaryHTTPIntegration(t *testing.T) {
 	}
 
 	fullReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, scanURL+"?view=full", nil)
-	fullReq.Header.Set("Authorization", api.TestAuthHeader())
+	fullReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	fullW := httptest.NewRecorder()
 	srv.ServeHTTP(fullW, fullReq)
 	var full wire.CodeScan
@@ -146,7 +146,7 @@ func TestScanSummaryHTTPIntegration(t *testing.T) {
 	}
 
 	badViewReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, scanURL+"?view=invalid_view", nil)
-	badViewReq.Header.Set("Authorization", api.TestAuthHeader())
+	badViewReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	badViewW := httptest.NewRecorder()
 	srv.ServeHTTP(badViewW, badViewReq)
 	if badViewW.Code != http.StatusBadRequest {

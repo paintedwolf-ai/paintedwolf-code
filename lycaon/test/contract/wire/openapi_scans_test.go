@@ -112,7 +112,7 @@ func TestOpenAPIScansRealServer(t *testing.T) {
 
 	testutil.WaitFor(t, "the scan completes", func() bool {
 		getReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/projects/"+proj.ID+"/scans/"+created.ID, nil)
-		getReq.Header.Set("Authorization", api.TestAuthHeader())
+		getReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 		getW := httptest.NewRecorder()
 		srv.ServeHTTP(getW, getReq)
 		if getW.Code != http.StatusOK {

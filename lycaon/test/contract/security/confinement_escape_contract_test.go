@@ -269,7 +269,7 @@ func TestConfinementIntegrityProjectRootStateAncestorRefused(t *testing.T) {
 	ancestor := rootfacts.Install(t).ContainsState
 	body := `{"roots":[{"path":` + jsonQuote(ancestor) + `}]}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects", strings.NewReader(body))
-	req.Header.Set("Authorization", api.TestAuthHeader())
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -288,7 +288,7 @@ func TestConfinementIntegrityProjectRootStateAncestorRefused(t *testing.T) {
 	okDir := t.TempDir()
 	okBody := `{"roots":[{"path":` + jsonQuote(okDir) + `}]}`
 	okReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects", strings.NewReader(okBody))
-	okReq.Header.Set("Authorization", api.TestAuthHeader())
+	okReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	okReq.Header.Set("Content-Type", "application/json")
 	okW := httptest.NewRecorder()
 	srv.ServeHTTP(okW, okReq)
@@ -317,7 +317,7 @@ func TestConfinementIntegrityCompositeChain(t *testing.T) {
 		cfg := os.Getenv("LYCAON_CONFIG_DIR")
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects",
 			strings.NewReader(`{"roots":[{"path":`+jsonQuote(cfg)+`}]}`))
-		req.Header.Set("Authorization", api.TestAuthHeader())
+		req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)

@@ -53,8 +53,6 @@ func TestExternalWatchRevalidatesDirectoriesAndHeadOnlyBatches(t *testing.T) {
 	}
 }
 
-// Observation is live before any walk: the watcher binds while the catalog
-// walk that seeds per-directory coverage is still running.
 func TestEnsureSourceWatchBindsBeforeTheCatalogWalk(t *testing.T) {
 	walkStarted := make(chan struct{})
 	release := make(chan struct{})
@@ -84,10 +82,8 @@ func TestEnsureSourceWatchBindsBeforeTheCatalogWalk(t *testing.T) {
 	case <-t.Context().Done():
 		t.Fatal("catalog walk never started")
 	}
-	// The walk is blocked; the root must already be observed.
-	coverage := repochange.Coverage(p.Roots[0].Path)
-	if !coverage.Watching {
-		t.Fatalf("root is not watched while the catalog walk runs: %+v", coverage)
+	if !repochange.DirWatched(p.Roots[0].Path, ".") {
+		t.Fatal("root is not registered while the catalog walk runs")
 	}
 	close(release)
 	select {

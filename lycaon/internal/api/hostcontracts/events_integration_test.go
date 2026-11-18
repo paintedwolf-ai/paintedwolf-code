@@ -50,7 +50,7 @@ func TestSSEEndToEnd(t *testing.T) {
 	baseURL := fmt.Sprintf("http://%s", ln.Addr().String())
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/events?project_id="+p.ID, nil)
 	testutil.FailErr(t, "http.NewRequest failed", err)
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	testutil.FailErr(t, "http.DefaultClient.Do failed", err)
@@ -106,7 +106,7 @@ func TestSSEDeviceWideSubscription(t *testing.T) {
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, fmt.Sprintf("http://%s/v1/events", ln.Addr()), nil)
 	testutil.FailErr(t, "http.NewRequest failed", err)
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	testutil.FailErr(t, "http.DefaultClient.Do failed", err)
@@ -161,7 +161,7 @@ func TestSSEStreamEndReleasesTheClientsLeases(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1/events?client_id=window-a", ln.Addr()), nil)
 	testutil.FailErr(t, "http.NewRequest failed", err)
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 	resp, err := http.DefaultClient.Do(req)
 	testutil.FailErr(t, "http.DefaultClient.Do failed", err)
 	defer resp.Body.Close()
@@ -248,7 +248,7 @@ func TestSSEHeartbeat(t *testing.T) {
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, fmt.Sprintf("http://%s/v1/events?project_id=%s", ln.Addr(), p.ID), nil)
 	testutil.FailErr(t, "http.NewRequest failed", err)
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	testutil.FailErr(t, "http.DefaultClient.Do failed", err)

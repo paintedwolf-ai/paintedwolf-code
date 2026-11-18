@@ -40,7 +40,7 @@ func newAuthedRequest(method, target string, body io.Reader) *http.Request {
 		req.Header.Set("Content-Type", httpio.MediaTypeJSON)
 	}
 	if strings.HasPrefix(target, "/v1") {
-		WithTestAuth(req)
+		req.Header.Set("Authorization", "Bearer "+TestAPIToken)
 	}
 	return req
 }
