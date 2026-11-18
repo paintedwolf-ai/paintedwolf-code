@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/layeredfs/privategit/privategit_test.go",
+  "kind": "test_suite",
+  "workstream": "privategit-command-fixtures",
+  "disposition": "retain",
+  "reason": "Private Git operation, confinement and capture assertions share the same mounted/materialized fixture and verify the production Run path. Retain the existing matrix at its measured size; splitting it would separate initial Git state from the isolation assertions.",
+  "reviewed_commit": "54ad1deb254aec3533c9ced5d1c22be62bf3e87a",
+  "ceiling": 402,
+  "boundaries": {
+    "lycaon/internal/layeredfs/privategit/privategit_test.go": "92457d4c59d2e655157958875fd53363060d796e194d18920798ec5312b2b269"
+  }
+}

@@ -347,7 +347,7 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 	gitExec := privategit.NewGitExecutor(privateGit, privategit.SecondaryViewID(binding.ID, "s"), privategit.RemotePolicy{})
 	_, err = gitExec.Run(t.Context(), ".", "add", "added.txt")
 	testutil.FailErr(t, "add", err)
-	_, err = gitExec.Commit(t.Context(), "worker commit")
+	_, err = gitExec.Run(t.Context(), ".", "commit", "-m", "worker commit")
 	testutil.FailErr(t, "commit", err)
 	out, err := gitExec.Run(t.Context(), ".", "rev-parse", "HEAD")
 	testutil.FailErr(t, "rev-parse", err)

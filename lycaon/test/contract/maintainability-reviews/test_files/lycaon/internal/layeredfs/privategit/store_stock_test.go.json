@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/layeredfs/privategit/store_stock_test.go",
+  "kind": "test_suite",
+  "workstream": "privategit-command-fixtures",
+  "disposition": "retain",
+  "reason": "Retained-object stock tests cover checkpoint-created objects, restart, corruption, cancellation and interrupted GC together. Their shared durable-state fixtures preserve a reviewable recovery matrix at the current measured size.",
+  "reviewed_commit": "54ad1deb254aec3533c9ced5d1c22be62bf3e87a",
+  "ceiling": 543,
+  "boundaries": {
+    "lycaon/internal/layeredfs/privategit/store_stock_test.go": "4ed6c2709f58be1d69da1fe84265451d75c5c32a3d19d9aebb1d5f0e9900711a"
+  }
+}
