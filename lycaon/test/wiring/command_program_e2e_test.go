@@ -89,10 +89,16 @@ func programModel(args map[string]any) modelcall.LLMClient {
 // given model answers.
 func (p *programHost) withClient(t *testing.T, model modelcall.LLMClient, request wire.CreateSessionRequest, approvals string) *commandProgramSession {
 	t.Helper()
-	h := p.h
 	dir := t.TempDir()
 	testutil.FailErr(t, "seed sub dir", os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
 	testutil.FailErr(t, "seed notes", os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("first note\nsecond note\n"), 0o644))
+	return p.withClientAt(t, dir, model, request, approvals)
+}
+
+// withClientAt starts an implementer session on an existing project directory.
+func (p *programHost) withClientAt(t *testing.T, dir string, model modelcall.LLMClient, request wire.CreateSessionRequest, approvals string) *commandProgramSession {
+	t.Helper()
+	h := p.h
 	overlay := filepath.Join(dir, settingsoverlay.DirName())
 	testutil.FailErr(t, "create overlay", os.MkdirAll(overlay, 0o700))
 	rules := "rules:\n  - category: tool\n    pattern: command\n    effect: allow\n  - category: tool\n    pattern: write\n    effect: allow\n" + approvals
