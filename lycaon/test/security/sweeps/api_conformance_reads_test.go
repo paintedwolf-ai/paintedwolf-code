@@ -48,8 +48,12 @@ func (s *conformanceSweep) sweepReads(ctx context.Context) {
 	}
 	sort.SliceStable(reads, func(i, j int) bool { return len(reads[i].PathParams) < len(reads[j].PathParams) })
 	for _, op := range reads {
-		params, _ := s.values.pathParams(op)
-		req := conformanceRequest{op: op, probe: "read", params: params, query: s.values.requiredQuery(op)}
+		req, err := s.successRequest(ctx, op)
+		if err != nil {
+			s.findings.add(ruleOperationsSucceed, op.ID, "read", "could not prepare: %v", err)
+			continue
+		}
+		req.probe = "read"
 		var ex conformanceExchange
 		if s.readObserved[op.ID] {
 			ex = s.send(ctx, req)
@@ -74,7 +78,7 @@ func (s *conformanceSweep) observedRead(ctx context.Context, req conformanceRequ
 	}
 	mark, err := s.effects.mark(ctx)
 	if err != nil {
-		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not observe host state: %v", err)
+		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not observe host state after %s: %v", s.lastMutation, err)
 		return s.send(ctx, req), nil
 	}
 	ex := s.send(ctx, req)
@@ -152,6 +156,10 @@ type hostEffects struct {
 	quietGrace time.Duration
 	// barrierStep makes every barrier write change the file's content.
 	barrierStep int
+	// textColumns lists each table's text columns, read once.
+	textColumns map[string][]string
+	// silent is set once the watcher stops reporting; later reads fail at once.
+	silent error
 }
 
 // conformanceDebounce is the change coalesce window the sweep's host runs
@@ -185,11 +193,18 @@ func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryH
 		_ = conn.Close()
 		_ = database.Close()
 	})
-	return &hostEffects{conn: conn, hub: hub, events: ch, settle: h.Server.WaitForBackground, projectDir: projectDir, quietGrace: 2 * debounce}
+	return &hostEffects{conn: conn, hub: hub, events: ch, settle: hostSettle(h), projectDir: projectDir, quietGrace: 2 * debounce}
 }
 
 func (e *hostEffects) mark(ctx context.Context) (int64, error) {
+	if _, err := os.Stat(e.projectDir); err != nil {
+		return 0, fmt.Errorf("the fixture project folder is gone: %w", err)
+	}
+	if e.silent != nil {
+		return 0, e.silent
+	}
 	if err := e.awaitWatcherBarrier(ctx); err != nil {
+		e.silent = err
 		return 0, err
 	}
 	e.quiesce(ctx)
@@ -203,15 +218,22 @@ func (e *hostEffects) mark(ctx context.Context) (int64, error) {
 // later report outstanding, which the read that follows would be charged with, so
 // only a round that wrote once proves the pipeline empty.
 func (e *hostEffects) awaitWatcherBarrier(ctx context.Context) error {
-	for patience := time.Second; ; patience *= 2 {
+	patience := time.Second
+	for range watcherBarrierRounds {
 		rewrote, err := e.watcherBarrierRound(ctx, patience)
 		if err != nil || !rewrote {
 			return err
 		}
 		e.quiesce(ctx)
 		e.drain()
+		patience *= 2
 	}
+	return fmt.Errorf("the watcher reported none of %d barrier rounds in %s", watcherBarrierRounds, e.projectDir)
 }
+
+// watcherBarrierRounds bounds the rewrites of an unanswered barrier, so a
+// watcher that stopped reporting fails each read instead of hanging the sweep.
+const watcherBarrierRounds = 6
 
 func (e *hostEffects) watcherBarrierRound(ctx context.Context, patience time.Duration) (bool, error) {
 	path := filepath.Join(e.projectDir, watcherBarrierFile)
@@ -246,11 +268,7 @@ func (e *hostEffects) watcherBarrierRound(ctx context.Context, patience time.Dur
 				}
 			}
 		case <-retry.C:
-			rewrote = true
-			e.barrierStep++
-			if err := write(); err != nil {
-				return rewrote, err
-			}
+			return true, nil
 		case <-ctx.Done():
 			return rewrote, ctx.Err()
 		}
@@ -415,6 +433,70 @@ func sourceChangeNamed(published <-chan wire.EventEnvelope, path string) bool {
 			}
 		default:
 			return false
+		}
+	}
+}
+
+// keyRows counts, per table, the rows any text column of which equals key,
+// once the work earlier requests started has settled.
+func (e *hostEffects) keyRows(ctx context.Context, key string) (map[string]int, error) {
+	e.quiesce(ctx)
+	if e.textColumns == nil {
+		columns, err := storeTextColumns(ctx, e.conn)
+		if err != nil {
+			return nil, err
+		}
+		e.textColumns = columns
+	}
+	counts := map[string]int{}
+	for table, columns := range e.textColumns {
+		conditions := make([]string, len(columns))
+		args := make([]any, len(columns))
+		for i, column := range columns {
+			conditions[i] = fmt.Sprintf("%q = ?", column)
+			args[i] = key
+		}
+		var n int
+		query := fmt.Sprintf("SELECT COUNT(*) FROM %q WHERE %s", table, strings.Join(conditions, " OR "))
+		if err := e.conn.QueryRowContext(ctx, query, args...).Scan(&n); err != nil {
+			return nil, fmt.Errorf("count %s: %w", table, err)
+		}
+		if n > 0 {
+			counts[table] = n
+		}
+	}
+	return counts, nil
+}
+
+// storeTextColumns lists the text columns of every ordinary table.
+func storeTextColumns(ctx context.Context, conn *sql.Conn) (map[string][]string, error) {
+	rows, err := conn.QueryContext(ctx, `SELECT m.name, p.name FROM sqlite_schema m JOIN pragma_table_info(m.name) p
+		WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' AND upper(p.type) LIKE '%TEXT%'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]string{}
+	for rows.Next() {
+		var table, column string
+		if err := rows.Scan(&table, &column); err != nil {
+			return nil, err
+		}
+		out[table] = append(out[table], column)
+	}
+	if len(out) == 0 && rows.Err() == nil {
+		return nil, errors.New("the store has no text columns")
+	}
+	return out, rows.Err()
+}
+
+// hostSettle waits for the server's detached work and for briefing
+// generations, which run on their own scheduler.
+func hostSettle(h *wiring.Harness) func(context.Context) {
+	return func(ctx context.Context) {
+		h.Server.WaitForBackground(ctx)
+		if briefings := h.Server.Sources.Briefings; briefings != nil && briefings.Engine != nil && briefings.Engine.Host() != nil {
+			briefings.Engine.Host().Scheduler.Wait(ctx)
 		}
 	}
 }

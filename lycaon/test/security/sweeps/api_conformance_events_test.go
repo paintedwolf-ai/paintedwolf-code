@@ -12,10 +12,13 @@ import (
 	"github.com/lycaon/lycaon/test/wiring"
 )
 
-// conformanceHostIDs answers whether an id names a registered project or chat.
+// conformanceHostIDs answers whether an id names a registered project or
+// chat; remember, when set, keeps every id registered so far, so an event
+// about a resource the sweep deletes later still names a real one.
 type conformanceHostIDs struct {
-	project func(ctx context.Context, id string) (bool, error)
-	session func(ctx context.Context, id string) (bool, error)
+	project  func(ctx context.Context, id string) (bool, error)
+	session  func(ctx context.Context, id string) (bool, error)
+	remember func(ctx context.Context)
 }
 
 // checkEventScopes: every event scoped to a project carries a UUID naming a
@@ -57,17 +60,37 @@ func (s *conformanceSweep) checkScopeID(ctx context.Context, topic, field, id st
 // conformanceHostLookup reads the durable store the server writes.
 func conformanceHostLookup(t *testing.T, h *wiring.Harness) conformanceHostIDs {
 	t.Helper()
-	exists := func(query string) func(context.Context, string) (bool, error) {
+	var mu sync.Mutex
+	remembered := map[string]bool{}
+	exists := func(table string) func(context.Context, string) (bool, error) {
 		return func(ctx context.Context, id string) (bool, error) {
+			mu.Lock()
+			known := remembered[table+"/"+id]
+			mu.Unlock()
+			if known {
+				return true, nil
+			}
 			var found bool
-			err := h.DB.QueryRowContext(ctx, query, id).Scan(&found)
+			err := h.DB.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM `+table+` WHERE id = ?)`, id).Scan(&found)
 			return found, err
 		}
 	}
-	return conformanceHostIDs{
-		project: exists(`SELECT EXISTS (SELECT 1 FROM projects WHERE id = ?)`),
-		session: exists(`SELECT EXISTS (SELECT 1 FROM sessions WHERE id = ?)`),
+	remember := func(ctx context.Context) {
+		for _, table := range []string{"projects", "sessions"} {
+			rows, err := h.DB.QueryContext(ctx, `SELECT id FROM `+table)
+			testutil.FailErr(t, "list registered "+table, err)
+			for rows.Next() {
+				var id string
+				testutil.FailErr(t, "read a registered id", rows.Scan(&id))
+				mu.Lock()
+				remembered[table+"/"+id] = true
+				mu.Unlock()
+			}
+			testutil.FailErr(t, "list registered "+table, rows.Err())
+			_ = rows.Close()
+		}
 	}
+	return conformanceHostIDs{project: exists("projects"), session: exists("sessions"), remember: remember}
 }
 
 // conformanceEventCapture records every event the hub delivers while the

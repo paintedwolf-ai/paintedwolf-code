@@ -2,8 +2,11 @@ package sweeps
 
 import (
 	"context"
+	"encoding/json"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -23,8 +26,12 @@ func (s *conformanceSweep) probePagination(ctx context.Context) {
 		if len(pages) == 0 {
 			continue
 		}
-		params, _ := s.values.pathParams(op)
-		base := s.values.requiredQuery(op)
+		prepared, err := s.successRequest(ctx, op)
+		if err != nil {
+			s.findings.add(rulePagination, op.ID, "page inputs", "could not prepare: %v", err)
+			continue
+		}
+		params, base := prepared.params, prepared.query
 		add := func(probe, param, value, code string) {
 			query := url.Values{}
 			for k, v := range base {
@@ -74,4 +81,164 @@ func detailString(ex conformanceExchange, key string) (string, bool) {
 	}
 	value, ok := ex.apiErr.Details[key].(string)
 	return value, ok
+}
+
+// pageWalkBound stops a walk whose cursor never ends.
+const pageWalkBound = 256
+
+// continuationField names the response field that carries the cursor a page
+// parameter takes.
+func continuationField(param string) string {
+	if param == "cursor" {
+		return "next_cursor"
+	}
+	return param + "_cursor"
+}
+
+// walkPages checks every paged list against its own rows: the declared
+// maximum is accepted, and pages of one row each, followed by their
+// continuation, visit every row exactly once. A list holding fewer than two
+// rows is seeded by its collection's create first.
+func (s *conformanceSweep) walkPages(ctx context.Context) {
+	for _, op := range s.ops {
+		pages := op.pageParams()
+		limit := paramSchema(op.query("limit"))
+		if len(pages) == 0 || limit == nil || limit.Max == nil {
+			continue
+		}
+		base, err := s.successRequest(ctx, op)
+		if err != nil {
+			s.findings.add(rulePagination, op.ID, "walk", "could not prepare: %v", err)
+			continue
+		}
+		params := base.params
+		page := func(probe string, n int64, param, cursor string) (conformanceExchange, []any) {
+			query := url.Values{}
+			for k, v := range base.query {
+				query[k] = append([]string(nil), v...)
+			}
+			query.Set("limit", strconv.FormatInt(n, 10))
+			if cursor != "" {
+				query.Set(param, cursor)
+			}
+			ex := s.send(ctx, conformanceRequest{op: op, probe: probe, params: params, query: query})
+			return ex, listMembers(op.Path, ex.body)
+		}
+		whole, members := page("limit at maximum", int64(*limit.Max), "", "")
+		if whole.status/100 != 2 {
+			s.findings.add(rulePagination, op.ID, "limit at maximum", "answered %s, want a page", whole.outcome())
+			continue
+		}
+		if len(members) < 2 {
+			s.seedCollection(ctx, op)
+			whole, members = page("limit at maximum", int64(*limit.Max), "", "")
+		}
+		if len(members) < 2 {
+			s.findings.add(rulePagination, op.ID, "walk", "holds %d rows; paging needs at least 2", len(members))
+			continue
+		}
+		s.outcomes.paged++
+		param := pages[0]
+		seen := map[string]bool{}
+		cursor := ""
+		for step := 0; ; step++ {
+			if step == pageWalkBound {
+				s.findings.add(rulePagination, op.ID, "walk", "still continuing after %d pages", step)
+				break
+			}
+			ex, rows := page("walk", 1, param, cursor)
+			if ex.status/100 != 2 {
+				s.findings.add(rulePagination, op.ID, "walk", "page %d answered %s", step, ex.outcome())
+				break
+			}
+			if len(rows) > 1 {
+				s.findings.add(rulePagination, op.ID, "walk", "limit 1 answered %d rows", len(rows))
+			}
+			for _, row := range rows {
+				id := memberIdentity(row)
+				if seen[id] {
+					s.findings.add(rulePagination, op.ID, "walk", "row %s appeared twice", id)
+				}
+				seen[id] = true
+			}
+			cursor = continuation(ex.body, param)
+			if cursor == "" {
+				break
+			}
+		}
+		if hasMore := continuation(whole.body, param) != ""; !hasMore && len(seen) != len(members) {
+			s.findings.add(rulePagination, op.ID, "walk", "visited %d rows; one page at the maximum holds %d", len(seen), len(members))
+		}
+	}
+}
+
+// seedCollection runs op's seed recipe, or repeats the create that adds
+// members to op's collection.
+func (s *conformanceSweep) seedCollection(ctx context.Context, op *conformanceOp) {
+	if seed := successRecipes[op.ID].seed; seed != nil {
+		if err := seed(ctx, s); err != nil {
+			s.findings.add(rulePagination, op.ID, "seed", "%v", err)
+		}
+		return
+	}
+	for _, create := range s.ops {
+		if create.Method != http.MethodPost || create.Path != op.Path {
+			continue
+		}
+		for range 2 {
+			req, err := s.successRequest(ctx, create)
+			if err != nil {
+				return
+			}
+			req.probe = "seed " + op.ID
+			if ex := s.send(ctx, req); ex.status/100 == 2 {
+				s.bindCreated(create, ex)
+			}
+		}
+	}
+}
+
+// listMembers is the list envelope's array, preferring the one named for the
+// collection's last segment.
+func listMembers(path string, body []byte) []any {
+	var envelope map[string]any
+	if json.Unmarshal(body, &envelope) != nil {
+		return nil
+	}
+	segments := strings.Split(path, "/")
+	if list, ok := envelope[strings.ReplaceAll(segments[len(segments)-1], "-", "_")].([]any); ok {
+		return list
+	}
+	// Otherwise the only non-empty array, so an always-empty side list
+	// cannot stand in for the rows.
+	var rows []any
+	for _, key := range slices.Sorted(maps.Keys(envelope)) {
+		if list, ok := envelope[key].([]any); ok && len(list) > 0 {
+			if rows != nil {
+				return nil
+			}
+			rows = list
+		}
+	}
+	return rows
+}
+
+// memberIdentity names a row by its id, or by its whole value.
+func memberIdentity(row any) string {
+	if fields, ok := row.(map[string]any); ok {
+		if id, ok := fields["id"].(string); ok && id != "" {
+			return id
+		}
+	}
+	raw, _ := json.Marshal(row)
+	return string(raw)
+}
+
+func continuation(body []byte, param string) string {
+	var envelope map[string]any
+	if json.Unmarshal(body, &envelope) != nil {
+		return ""
+	}
+	cursor, _ := envelope[continuationField(param)].(string)
+	return cursor
 }
