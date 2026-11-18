@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/processfixture"
 )
 
 func catalogPath(t *testing.T) string {
@@ -43,9 +44,9 @@ func TestLoadAndInstall(t *testing.T) {
 }
 
 func TestRequireBeforeInstall(t *testing.T) {
-	path := catalogPath(t)
-	anchorcatalog.Clear()
-	t.Cleanup(func() { _ = anchorcatalog.InstallFile(path) })
+	if !processfixture.Startup(t) {
+		return
+	}
 	err := anchorcatalog.Require("leg.finished")
 	if err == nil || !strings.Contains(err.Error(), "not installed") {
 		t.Fatalf("want not installed, got %v", err)
