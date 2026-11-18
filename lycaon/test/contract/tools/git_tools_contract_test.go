@@ -3,13 +3,12 @@ package contract
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	lyexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -79,28 +78,12 @@ func TestGitStatusListsLargeTreeAndNarrowsPathsContract(t *testing.T) {
 func contractGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	git := func(args ...string) {
-		t.Helper()
-		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Skipf("git %v: %v %s", args, err, out)
-		}
-	}
-	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
-	if out, err := initCmd.CombinedOutput(); err != nil {
-		t.Skipf("git init: %v %s", err, out)
-	}
-	git("config", "user.email", "test@example.com")
-	git("config", "user.name", "Test")
 	contractcheck.FailErr(t, "mkdir src", os.MkdirAll(filepath.Join(dir, "src"), 0o755))
 	for i := range 12 {
 		rel := filepath.Join("src", fmt.Sprintf("f%02d.go", i))
 		contractcheck.FailErr(t, "write "+rel, os.WriteFile(filepath.Join(dir, rel), []byte("package src\n\nvar v = 0\n"), 0o644))
 	}
-	git("add", "-A")
-	git("commit", "-m", "init")
+	gittest.InitCommit(t, dir, "init")
 	return dir
 }
 

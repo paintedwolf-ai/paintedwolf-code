@@ -12,7 +12,7 @@ How Painted Wolf Code proves v1 behavior.
 |-------|----------|------|
 | Unit and component | `lycaon/internal/<pkg>/*_test.go` | Parsers, registries, evaluators, merge rules, and domain logic |
 | Integration | `*_integration_test.go` (the `integration` build tag), `lycaon/test/wiring/` | SQLite, assembled managers, and the real application graph |
-| Contract | `lycaon/test/contract/<domain>/` | OpenAPI, generated artifacts, catalog invariants, package boundaries, and forbidden shapes |
+| Contract | `lycaon/test/contract/<domain>/` | OpenAPI, generated artifacts, catalog invariants, package boundaries, and forbidden shapes; cross-tree invariants as table rows in `lycaon/test/contract/invariants/` |
 | HTTP journey | `lycaon/test/security/` | Authenticated routes, project policy, sessions, workflows, tools, and recovery |
 | Den | `lycaon-den/src/**/*.test.*` | Stores, components, projections, accessibility, and client behavior |
 | Browser and desktop | `lycaon-den/e2e/` | Complete user journeys through the web harness and Tauri shell |
@@ -104,6 +104,15 @@ and an explicit non-empty assertion. Contract tests share cached loaders in
 `lycaon/test/contract/internal/check/source_corpus.go` and `go_ast_corpus.go`;
 Den source contracts use the matching snapshot API in
 `lycaon-den/src/test/source-corpus.ts`.
+
+The invariants repository contract, `lycaon/test/contract/invariants/`, runs
+in `test:contract` as one test binary over one fail-closed corpus that loads
+the Go tree, its type-checked program, `schema.sql` and the catalogs once.
+Each invariant is a row in its family's table, reported as `family/name`: it
+names anchors that must exist, exemptions that must each match, and
+selections that must not be empty. Every family carries a fixture self-test
+that seeds a violation, renames an anchor, adds a stale exemption, empties
+the selection and breaks a source file, and each must fail.
 
 Use the narrow fixture at the boundary being exercised:
 

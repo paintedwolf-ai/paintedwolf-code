@@ -155,20 +155,6 @@ func TestLinuxConfineScriptHasNoOptInLegs(t *testing.T) {
 	contractcheck.FailViolations(t, linuxConfineScript+" runs legs outside its default set", optIn)
 }
 
-// HTTP journeys live in test/security; a suite that qualifies installed bytes
-// does not, so a security digest never selects it or skips around it.
-func TestInstalledHelperSuiteIsNotASecurityJourney(t *testing.T) {
-	t.Parallel()
-	var misplaced []string
-	walkTestFiles(t, contractcheck.RepoRoot(t), func(pkg string, _ *token.FileSet, _ *ast.File, src []byte) {
-		if strings.HasPrefix(pkg, "./test/security") && strings.Contains(string(src), "installedhelper") {
-			misplaced = append(misplaced, pkg)
-		}
-	})
-	slices.Sort(misplaced)
-	contractcheck.FailViolations(t, "installed helper qualification inside the HTTP journey layer", slices.Compact(misplaced))
-}
-
 // amd64 runs the target in platform qualification, and an arm64 lane runs the same target.
 func TestLinuxConfineRunsOnBothArchitectures(t *testing.T) {
 	t.Parallel()

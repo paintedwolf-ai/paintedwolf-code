@@ -23,57 +23,6 @@ func bundledProvider(t *testing.T, id string) llm.ProviderEntry {
 	return llm.ProviderEntry{}
 }
 
-// TestBundledProvidersShipKindTemplates locks the ship-catalog shape for the
-// first-party hosted providers. Ship YAML carries kind templates only —
-// models: [] on every provider; usable models come from live discovery once a
-// provider is configured.
-func TestBundledProvidersShipKindTemplates(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		id          string
-		kind        string
-		baseURL     string // asserted only when set
-		apiKeyEnv   string
-		label       string // asserted only when set
-		ambientAuth string
-	}{
-		{id: "anthropic", kind: "anthropic", baseURL: "https://api.anthropic.com/v1", apiKeyEnv: "ANTHROPIC_API_KEY", label: "Anthropic"},
-		{id: "together", kind: "together", baseURL: "https://api.together.xyz/v1", apiKeyEnv: "TOGETHER_API_KEY"},
-		{id: "doubleword", kind: "doubleword", baseURL: "https://api.doubleword.ai/v1", apiKeyEnv: "DOUBLEWORD_API_KEY", label: "Doubleword"},
-		{id: "azure", kind: "azure", apiKeyEnv: "AZURE_OPENAI_API_KEY"},
-		// Bedrock takes a pasteable API key by default and names the AWS SDK
-		// chain as the opt-in alternative; Vertex has no pasteable credential
-		// covering the same models, so it stays ambient-only.
-		{id: "bedrock", kind: "bedrock", apiKeyEnv: "AWS_BEARER_TOKEN_BEDROCK", ambientAuth: "aws-sdk-chain"},
-		{id: "vertex", kind: "vertex", apiKeyEnv: "", ambientAuth: "google-adc"},
-		// Express mode uses a separate credential shape.
-		{id: "vertex-express", kind: "vertex-express", baseURL: "https://aiplatform.googleapis.com/v1", apiKeyEnv: "GOOGLE_API_KEY", ambientAuth: ""},
-	} {
-		t.Run(tc.id, func(t *testing.T) {
-			t.Parallel()
-			p := bundledProvider(t, tc.id)
-			if p.Kind != tc.kind {
-				t.Errorf("kind = %q, want %q", p.Kind, tc.kind)
-			}
-			if tc.baseURL != "" && p.BaseURL != tc.baseURL {
-				t.Errorf("base_url = %q, want %q", p.BaseURL, tc.baseURL)
-			}
-			if p.APIKeyEnv != tc.apiKeyEnv {
-				t.Errorf("api_key_env = %q, want %q", p.APIKeyEnv, tc.apiKeyEnv)
-			}
-			if tc.label != "" && p.Label != tc.label {
-				t.Errorf("label = %q, want %q", p.Label, tc.label)
-			}
-			if p.AmbientAuth != tc.ambientAuth {
-				t.Errorf("ambient_auth = %q, want %q", p.AmbientAuth, tc.ambientAuth)
-			}
-			if len(p.Models) != 0 {
-				t.Errorf("ship models = %d, want 0 (live discovery only)", len(p.Models))
-			}
-		})
-	}
-}
-
 func TestAnthropicRegistryConfiguredWithKey(t *testing.T) {
 	t.Parallel()
 	catalog := liveCatalogForShipIDs(t, "anthropic")

@@ -197,22 +197,6 @@ func exprText(expr ast.Expr) string {
 	return "a non-field expression"
 }
 
-// receiverTypeName is shared with the pongo template owner contract.
-func receiverTypeName(expr ast.Expr) string {
-	switch typ := expr.(type) {
-	case *ast.StarExpr:
-		return receiverTypeName(typ.X)
-	case *ast.SelectorExpr:
-		if pkg, ok := typ.X.(*ast.Ident); ok {
-			return pkg.Name + "." + typ.Sel.Name
-		}
-		return typ.Sel.Name
-	case *ast.Ident:
-		return typ.Name
-	}
-	return ""
-}
-
 // Interface peers count only when their actual constructor binds a concrete
 // store to the selected field. Merely implementing the interface is not wiring.
 func concreteOutboxOwner(t *testing.T, pkg *packages.Package, method *ast.SelectorExpr) string {

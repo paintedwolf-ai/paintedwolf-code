@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/isolation"
-	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -65,16 +63,5 @@ func TestInvariantProductionGateWiresContainment(t *testing.T) {
 	authority := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/toolhost/authority_services.go")
 	if !strings.Contains(authority, "func (r *AuthorityServices) SealApprovalGate()") {
 		t.Fatal("toolhost authority service must expose SealApprovalGate so boot can install the built gate")
-	}
-}
-
-// Active sandbox reject codes must exist in the catalog.
-func TestInvariantSandboxHintCatalogPresent(t *testing.T) {
-	t.Parallel()
-	for _, outcome := range isolation.Outcomes() {
-		catalogfixture.FindStockPolicyFile(t, outcome.Code)
-	}
-	for _, code := range []string{"VERIFY_UNVERIFIABLE", "WEB_SEARCH_HOST_DENIED"} {
-		catalogfixture.FindStockPolicyFile(t, code)
 	}
 }

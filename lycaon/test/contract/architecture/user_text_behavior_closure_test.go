@@ -20,28 +20,6 @@ func TestPromptPathKickHooksRegistered(t *testing.T) {
 	}
 }
 
-func TestNoUserTextNLProbeToBehaviorSink(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	scan, err := scanUserTextBehaviorClosure(filepath.Join(root, "lycaon"))
-	contractcheck.FailErr(t, "scan user-text behavior closure", err)
-	if len(scan.NLProbeToSinkViolations) > 0 {
-		t.Fatalf("user-text string probe must not reach behavior sinks:\n%s",
-			strings.Join(scan.NLProbeToSinkViolations, "\n"))
-	}
-}
-
-func TestNoErrErrorStringParsingInCoordinatorPackages(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	scan, err := scanUserTextBehaviorClosure(filepath.Join(root, "lycaon"))
-	contractcheck.FailErr(t, "scan user-text behavior closure", err)
-	if len(scan.ErrTextParseViolations) > 0 {
-		t.Fatalf("forbidden err.Error() string parsing in session/coordinator/workflow production code:\n%s",
-			strings.Join(scan.ErrTextParseViolations, "\n"))
-	}
-}
-
 func TestCoordinatorPromptBooleanGatesRegistered(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)

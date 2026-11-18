@@ -1,15 +1,9 @@
 package contract
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/detectionpack"
-	"github.com/lycaon/lycaon/internal/testutil"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // TestDetectionPackRetainedPreciseRulesMatch pins the point-rule table.
@@ -117,52 +111,6 @@ func TestDetectionPackReadOnlySilent(t *testing.T) {
 	}
 }
 
-// TestDetectionPackEquivalenceClassesComplete: any Image list that names one
-// equivalents-class member names them all.
-func TestDetectionPackEquivalenceClassesComplete(t *testing.T) {
-	t.Parallel()
-	root := detectionPackConfigRoot(t)
-	cat := loadBundledDetectionCatalog(t)
-	for _, p := range cat.Packs {
-		if len(p.Equivalents) == 0 {
-			continue
-		}
-		for _, r := range p.Rules {
-			images := ruleImageEqualsFromDisk(t, root, p.ID, r.Slug)
-			if len(images) == 0 {
-				continue
-			}
-			for canon, alts := range p.Equivalents {
-				members := append([]string{canon}, alts...)
-				var hit bool
-				for _, img := range images {
-					for _, m := range members {
-						if img == m {
-							hit = true
-						}
-					}
-				}
-				if !hit {
-					continue
-				}
-				have := map[string]bool{}
-				for _, img := range images {
-					have[img] = true
-				}
-				var missing []string
-				for _, m := range members {
-					if !have[m] {
-						missing = append(missing, m)
-					}
-				}
-				if len(missing) > 0 {
-					t.Errorf("%s/%s Image list missing equivalents %v (have %v)", p.ID, r.Slug, missing, images)
-				}
-			}
-		}
-	}
-}
-
 // TestDetectionPackMultiStageMatchesSingleStage pins per-stage image/ApiAction resolution.
 func TestDetectionPackMultiStageMatchesSingleStage(t *testing.T) {
 	t.Parallel()
@@ -217,28 +165,5 @@ detection:
 	hit, ok := m.Match(contractToolEvent("command", "do boom now", "/p", true, "proxy", "s"))
 	if !ok || hit.Level != detectionpack.LevelCritical || hit.PackID != "zzz-critical" {
 		t.Fatalf("hit=%+v ok=%v", hit, ok)
-	}
-}
-
-// TestDetectionPackEquivalentsNotReadByMatcherAST: Pack.Equivalents unused in matcher/selection/rule.
-func TestDetectionPackEquivalentsNotReadByMatcherAST(t *testing.T) {
-	t.Parallel()
-	dir := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "detectionpack")
-	for _, name := range []string{"matcher.go", "selection.go", "rule.go"} {
-		path := filepath.Join(dir, name)
-		fset := token.NewFileSet()
-		f, err := parser.ParseFile(fset, path, nil, 0)
-		testutil.FailErr(t, "ParseFile "+name, err)
-		ast.Inspect(f, func(n ast.Node) bool {
-			id, ok := n.(*ast.Ident)
-			if ok && id.Name == "Equivalents" {
-				t.Errorf("%s must not reference Equivalents", name)
-			}
-			sel, ok := n.(*ast.SelectorExpr)
-			if ok && sel.Sel != nil && sel.Sel.Name == "Equivalents" {
-				t.Errorf("%s must not select Equivalents", name)
-			}
-			return true
-		})
 	}
 }

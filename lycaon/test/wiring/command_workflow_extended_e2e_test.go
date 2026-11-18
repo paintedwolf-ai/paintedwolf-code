@@ -2,7 +2,6 @@ package wiring
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -120,9 +120,7 @@ func TestWorkflowGitFreshRepositoryIgnoresUnrelatedNestedRepository(t *testing.T
 	f.seed(t, "README.txt", "hello\n")
 	nested := filepath.Join(f.dir, "vendor", "nested")
 	testutil.FailErr(t, "create nested repository", os.MkdirAll(nested, 0o755))
-	if output, err := exec.CommandContext(t.Context(), "git", "init", "-q", nested).CombinedOutput(); err != nil {
-		t.Fatalf("initialize nested repository: %v: %s", err, output)
-	}
+	gittest.Init(t, nested)
 	f.seed(t, "vendor/nested/file.txt", "unrelated\n")
 	f.run(t)
 	for _, callID := range []string{"git-init", "git-commit", "git-inspect"} {

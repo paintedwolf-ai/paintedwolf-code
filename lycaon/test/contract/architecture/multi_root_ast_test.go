@@ -12,19 +12,6 @@ import (
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
 
-func TestMultiRootASTNoSingleRootJoinAntiPatterns(t *testing.T) {
-	t.Parallel()
-	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon")
-	scan, err := scanMultiRootAST(root)
-	contractcheck.FailErr(t, "scanMultiRootAST", err)
-	if len(scan.SingleRootJoins) > 0 {
-		t.Fatalf("single-root join anti-patterns:\n%s", strings.Join(scan.SingleRootJoins, "\n"))
-	}
-	if len(scan.ActiveRootPathJoins) > 0 {
-		t.Fatalf("ActiveRootPath join anti-patterns:\n%s", strings.Join(scan.ActiveRootPathJoins, "\n"))
-	}
-}
-
 func TestMultiRootASTAddressingCopySingleSource(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon")
