@@ -319,7 +319,9 @@ do not activate the later command-entry integration by themselves.
 
 Native utilities and input redirections read a path the person has open with
 unsaved text as that text, pinned at the document's revision; other paths pin
-published disk. Git and external programs read the saved file. After a reached
+published disk. Git and external programs read the saved file, and the person's
+unsaved documents are saved before one starts
+([The open document is the file](#the-open-document-is-the-file)). After a reached
 operation is admitted, accepted changes authored only by that chat can publish
 through separate write admission, current review and the editor save path.
 Each preparation write has its own receipt. Read-only profiles read without
@@ -904,7 +906,7 @@ Results count searched text files, binary skips, unreadable files, byte-capped f
 
 ## The open document is the file
 
-A file the person has open in the editor is its editor document, for the agent as for the person. Agent reads of that path serve the document's draft, unsaved edits included; agent writes land in the document and save it. Inside `command` the native utilities follow the same rule; installed programs read disk. There is one text per open file, and it is the one the person is looking at.
+A file the person has open in the editor is its editor document, for the agent as for the person. Agent reads of that path serve the document's draft, unsaved edits included; agent writes land in the document and save it. Inside `command` the native utilities follow the same rule. Whatever the agent launches that reads the tree from disk starts from the person's saved drafts. There is one text per open file, and it is the one the person is looking at.
 
 | Tool | With an open document |
 |------|-----------------------|
@@ -912,7 +914,16 @@ A file the person has open in the editor is its editor document, for the agent a
 | Structured `grep`, `wc` | Search or count the unsaved text for open dirty files; `files_from_editor` and `in_editor` say how many were served that way |
 | `write`, `edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `restore_version` | Compute against the draft, land in the document, and save through the person's own journaled save door, recorded as the agent's write. One save publishes every contribution the draft holds, the person's unsaved typing included, and the ledger records each contributor, so such a publication reads as mixed authorship rather than the agent's alone. `EDITOR_DOCUMENT_CHANGING` rejects a document that kept moving under the write. A document diverged from disk, or a publication that fails after acceptance, holds the edit unsaved in the document: the receipt says the file was not written and why, that the disk still holds its earlier bytes for commands and tests, and names the retained state |
 | Native utilities inside `command` | Read the draft. An operation that changes, moves or removes the path saves the draft first, then acts on the file |
-| Installed programs, `verify`, processes | Read saved bytes. An accepted edit whose publication failed remains unsaved and does not change those inputs |
+| Installed programs in `command` and `verify`, Git forms that read or stage the working tree, `terminal_open`, `terminal_send` | Read saved bytes. Once the launch is admitted and before the process starts, every unsaved document of the project is saved, each contribution keeping its author; a call refused before its process starts saves nothing. A draft that cannot be saved never stops the launch: the process reads that file's earlier bytes and the result names it in `unsaved_documents` (below) |
+| Git forms that read only history, refs, configuration or a remote; `terminal_read`, `terminal_snapshot` | Save nothing |
+
+`unsaved_documents` lists up to 16 drafts as `path` and `cause`, and `omitted_unsaved_documents` counts the rest. It is absent when every draft was saved. A `command` or `verify` result states the drafts any of its launches left unsaved, Git's among them; `terminal_open` and `terminal_send` state their own.
+
+| `cause` | The draft |
+|---------|-----------|
+| `changed_outside` | Sits over a file that changed outside its document; saving would overwrite that change |
+| `not_written` | Could not be written: its publication failed |
+| `agent_edit_held` | Holds an agent edit whose publication failed. Only the reviewed publication door publishes agent text, so a launch leaves it |
 
 A worker on its private branch never sees documents: its tree is a copy. The design and the Den side are in [files-live.md § The open document is the file](files-live.md#the-open-document-is-the-file).
 

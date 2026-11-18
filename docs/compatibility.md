@@ -87,6 +87,12 @@ operation, repair source, or establish replay eligibility. Execution and effect
 claims remain projections of the invocation recorder. This work changes no
 persisted schema or command language version.
 
+The `unsaved_documents` and `omitted_unsaved_documents` result fields of
+`command`, `verify`, `terminal_open` and `terminal_send`, and their `cause`
+values (`changed_outside`, `not_written`, `agent_edit_held`), are additive
+`agent-public` vocabulary defined in `internal/toolcontract`. A cause keeps its
+meaning; a new reason takes a new value.
+
 Recovery availability and diagnostic-knowledge facts are additive host facts in
 the `paintedwolf` namespace. They distinguish missing observations from the
 standard typed zero values without changing OAR defaults. Structural argument
