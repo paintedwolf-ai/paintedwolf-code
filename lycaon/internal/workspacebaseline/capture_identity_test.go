@@ -110,7 +110,7 @@ func TestOverlayIdentitySurvivesLabelChangesAndRootOrder(t *testing.T) {
 	roots := []projectroot.RootRef{{ID: "a", Label: "shared", Path: t.TempDir()}, {ID: "z", Label: "app", Path: t.TempDir(), IsPrimary: true}}
 	store := workspacebaseline.New(nil, sourceblob.New(filepath.Join(data, "source-content")), filepath.Join(data, "manifests"))
 	for _, root := range roots {
-		for _, rel := range []string{"same.txt", "@shared/literal:part"} {
+		for _, rel := range []string{"same.txt", "@shared/same.txt", "@shared/literal:part"} {
 			writeFile(t, filepath.Join(branchDir(t, branch, root.ID), rel), []byte(root.ID+" base"), 0o600)
 		}
 	}
@@ -121,6 +121,20 @@ func TestOverlayIdentitySurvivesLabelChangesAndRootOrder(t *testing.T) {
 	}
 	overlay, err := store.CaptureOverlay(t.Context(), "job", baseline, roots, branch)
 	testutil.FailErr(t, "capture overlay", err)
+
+	captured, err := workspacebaseline.Open(t.Context(), baseline, workspacebaseline.ContentStore(baseline))
+	testutil.FailErr(t, "open captured display", err)
+	primary, exists, err := captured.Content(t.Context(), "./@shared/same.txt")
+	testutil.FailErr(t, "read primary literal display", err)
+	if !exists || primary != "z base" {
+		t.Fatalf("primary display = %q, %v", primary, exists)
+	}
+	secondary, exists, err := captured.Content(t.Context(), "@shared/same.txt")
+	testutil.FailErr(t, "read secondary display", err)
+	if !exists || secondary != "a base" {
+		t.Fatalf("secondary display = %q, %v", secondary, exists)
+	}
+	testutil.FailErr(t, "close captured display", captured.Close())
 	roots[0].Label = "renamed"
 	reader, err := workspacebaseline.Open(t.Context(), baseline, workspacebaseline.ContentStore(baseline))
 	testutil.FailErr(t, "reopen baseline", err)

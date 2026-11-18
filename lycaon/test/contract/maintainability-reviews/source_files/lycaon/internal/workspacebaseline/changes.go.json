@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/workspacebaseline/changes.go",
+  "kind": "algorithm",
+  "workstream": "baseline-capture-identity",
+  "disposition": "retain",
+  "reason": "Retain manifest comparison and root-relative branch addressing together. Point comparison, change enumeration, sealed overlay iteration, and move checks must resolve the same identities; focused fixtures cover root labels, exact misses, and ambiguous display names.",
+  "reviewed_commit": "a501fd13148126bf153a78e52d18ec520422d0df",
+  "ceiling": 390,
+  "boundaries": {
+    "lycaon/internal/workspacebaseline/capture_identity_test.go": "c3e74c2b567de9bbe3fd01098e32acc5abf41f23645be221f41978590a013200",
+    "lycaon/internal/workspacebaseline/changes_test.go": "c11e161ffb5beb37f377d020334520c7844b9f5bef7b16e7c3d6c9c11f21369c"
+  }
+}

@@ -44,6 +44,9 @@ func Materialize(ctx context.Context, baselinePath, overlayPath string, blobs *s
 		}
 		defer func() { _ = reader.Close() }()
 		err = reader.EachIdentity(ctx, roots, func(entry Entry) error {
+			if _, err := rootForIdentity(roots, entry.RootID); err != nil {
+				return err
+			}
 			overlay[identityKey(entry.RootID, entry.ScopeRel)] = overlayEntry{entry: entry}
 			return nil
 		})
@@ -53,6 +56,9 @@ func Materialize(ctx context.Context, baselinePath, overlayPath string, blobs *s
 	}
 	m := materializer{ctx: ctx, roots: roots, branch: branch, blobs: baseline.blobs}
 	err = baseline.EachIdentity(ctx, roots, func(entry Entry) error {
+		if _, err := rootForIdentity(roots, entry.RootID); err != nil {
+			return err
+		}
 		if _, changed := overlay[identityKey(entry.RootID, entry.ScopeRel)]; changed {
 			return nil
 		}
@@ -61,7 +67,7 @@ func Materialize(ctx context.Context, baselinePath, overlayPath string, blobs *s
 		}
 		src := ""
 		if current != nil {
-			src = current(entry.Path)
+			src = current(projectroot.BaselineDisplayPath(roots, entry.RootID, entry.ScopeRel))
 		}
 		if src == "" {
 			m.report.Unavailable = append(m.report.Unavailable, entry.Path)

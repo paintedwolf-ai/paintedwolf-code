@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/session/overlay_promote.go",
+  "kind": "module",
+  "workstream": "baseline-capture-identity",
+  "disposition": "retain",
+  "reason": "Retain session overlay inspection and promotion eligibility with checkpoint selection. Nil-root callers reload the recorded branch topology before baseline comparison; the same inspection result controls whether pending edits remain recoverable.",
+  "reviewed_commit": "a501fd13148126bf153a78e52d18ec520422d0df",
+  "ceiling": 315,
+  "boundaries": {
+    "lycaon/internal/session/merge_reconcile_paths_test.go": "4f83c00f75d0e3f554e6debe286ffc0b3bb3af1eb069dbc17270efdcb09bdc36",
+    "lycaon/internal/session/workspace_baseline_roots_test.go": "33f1e1201184d692d89edc51a0fe546e0816bcf05465c56d4eab3399d1adbf22"
+  }
+}
