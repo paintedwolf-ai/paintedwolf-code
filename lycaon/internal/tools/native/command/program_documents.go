@@ -128,59 +128,64 @@ func commandDocumentBudgetError(err error) error {
 	return err
 }
 
-func (d *programDocuments) appendNotes(stderr string) string {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	keys := make([]string, 0, len(d.notes))
-	length := len(stderr)
-	for key, note := range d.notes {
-		if !note.delivered {
-			keys = append(keys, key)
-			length += len(note.text) + 1
-		}
-	}
-	if len(keys) == 0 {
+type documentNotices struct {
+	notes   []*documentNotice
+	release func()
+}
+
+func (n documentNotices) appendTo(stderr string) string {
+	if len(n.notes) == 0 {
 		return stderr
 	}
-	sort.Strings(keys)
-	// The initial window and each notice's projection envelope remain held.
+	length := len(stderr)
+	for _, note := range n.notes {
+		length += len(note.text) + 1
+	}
 	var out strings.Builder
 	out.Grow(length + 1)
 	out.WriteString(stderr)
 	if stderr != "" && stderr[len(stderr)-1] != '\n' {
 		out.WriteByte('\n')
 	}
-	for _, key := range keys {
-		note := d.notes[key]
-		note.delivered = true
+	for _, note := range n.notes {
 		out.WriteString(note.text)
 		out.WriteByte('\n')
 	}
 	return out.String()
 }
 
-// takePaths retains the existing notice admission through completion consumption,
-// even after the background job releases its last program hold.
-func (d *programDocuments) takePaths() ([]string, func()) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	count := 0
-	for _, note := range d.notes {
-		if !note.delivered {
-			count++
-		}
+func (n documentNotices) paths() []string {
+	if len(n.notes) == 0 {
+		return nil
 	}
-	if count == 0 {
-		return nil, nil
-	}
-	paths := make([]string, 0, count)
-	for _, note := range d.notes {
-		if !note.delivered {
-			paths = append(paths, note.path)
-			note.delivered = true
-		}
+	paths := make([]string, 0, len(n.notes))
+	for _, note := range n.notes {
+		paths = append(paths, note.path)
 	}
 	sort.Strings(paths)
+	return paths
+}
+
+// takeNotices keeps the admission until the chosen delivery consumes the notices.
+func (d *programDocuments) takeNotices() documentNotices {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	keys := make([]string, 0, len(d.notes))
+	for key, note := range d.notes {
+		if !note.delivered {
+			keys = append(keys, key)
+		}
+	}
+	if len(keys) == 0 {
+		return documentNotices{}
+	}
+	sort.Strings(keys)
+	notes := make([]*documentNotice, 0, len(keys))
+	for _, key := range keys {
+		note := d.notes[key]
+		note.delivered = true
+		notes = append(notes, note)
+	}
 	d.transfers++
-	return paths, sync.OnceFunc(d.releaseTransfer)
+	return documentNotices{notes: notes, release: sync.OnceFunc(d.releaseTransfer)}
 }

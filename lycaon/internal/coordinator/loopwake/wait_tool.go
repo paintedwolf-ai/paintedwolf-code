@@ -80,6 +80,9 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 			})
 			if ready {
 				out, err := surveyjson.Marshal(WaitToolResult{Status: "process_done", Conditions: []awaitstore.Condition{winner}})
+				if err == nil {
+					ObserveProcessWait(tctx.Identity.SessionID, winner, loop.loopDeps().ObserveProcess)
+				}
 				return string(out), err
 			}
 		}

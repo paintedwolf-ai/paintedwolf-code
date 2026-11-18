@@ -8,6 +8,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// DeliveryObservation is shared by guidance and other deliveries of the same fact.
+type DeliveryObservation interface {
+	Observe()
+	Observed() bool
+}
+
 type KickOption func(*kickMeta)
 
 type kickMeta struct {
@@ -17,6 +23,7 @@ type kickMeta struct {
 	evidenceDigest        string
 	commandCompletion     string
 	commandRefusal        string
+	observation           DeliveryObservation
 	topologyOutput        string
 	promotedPaths         []string
 	scanID                string
@@ -46,6 +53,11 @@ func WithCommandCompletion(completion string) KickOption {
 	return func(m *kickMeta) {
 		m.commandCompletion = strings.TrimSpace(completion)
 	}
+}
+
+// WithDeliveryObservation suppresses guidance after its fact has been delivered.
+func WithDeliveryObservation(observation DeliveryObservation) KickOption {
+	return func(m *kickMeta) { m.observation = observation }
 }
 
 // WithCommandRefusal passes a running job's refusal report into process-refused guidance.
@@ -342,6 +354,7 @@ func cloneKickMeta(m kickMeta) kickMeta {
 		evidenceDigest:    m.evidenceDigest,
 		commandCompletion: m.commandCompletion,
 		commandRefusal:    m.commandRefusal,
+		observation:       m.observation,
 		topologyOutput:    m.topologyOutput,
 		scanID:            m.scanID,
 		scanStatus:        m.scanStatus,

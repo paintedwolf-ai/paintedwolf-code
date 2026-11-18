@@ -348,8 +348,9 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 	endEv, emitEnd := r.jobs.finishProjectProcessLocked(proc)
 	publishProject := r.publishProject
 	completion := Completion{
-		IsCheck:        proc.isCheck,
-		SourceRevision: proc.sourceRevision, SourceRootDigest: proc.sourceRootDigest, Cwd: proc.cwd,
+		ExitObservation: proc.exitObservationLocked(),
+		IsCheck:         proc.isCheck,
+		SourceRevision:  proc.sourceRevision, SourceRootDigest: proc.sourceRootDigest, Cwd: proc.cwd,
 		Handle: proc.Handle, SessionID: proc.SessionID, ProjectID: proc.ProjectID,
 		OriginTool: proc.originTool, ToolCallID: proc.toolCallID, RunID: proc.runID,
 		Mode: proc.mode, StartedAt: proc.startedAt, FinishedAt: proc.finishedAt, PersonWait: proc.personWaitedLocked(proc.finishedAt),
@@ -357,6 +358,7 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		Stages: append([]hostcmd.StageResult(nil), proc.Stages...),
 	}
 	owned := proc.resources.take()
+	completion.ProgramStop = owned.programStop
 	completion.UnsavedDocumentPaths, completion.ReleaseNotices = owned.unsavedDocumentPaths, owned.releaseNotices
 	completion.IndexWatch = owned.indexWatch
 	exitCode := proc.exitCode

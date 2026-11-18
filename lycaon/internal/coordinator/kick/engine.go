@@ -199,6 +199,10 @@ func (k *KickEngine) RenderPendingNudge(ctx context.Context, sessionID string, l
 	if item == nil {
 		return "", 0, false, nil
 	}
+	if item.observed() {
+		queue.dropStaged(item)
+		return "", 0, false, nil
+	}
 	if item.deferred {
 		if item.hasSeq && live.BatchSeq > 0 && item.batchSeq > 0 && item.batchSeq < live.BatchSeq {
 			queue.dropStaged(item)

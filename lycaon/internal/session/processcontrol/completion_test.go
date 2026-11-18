@@ -55,10 +55,12 @@ func TestCommandSettlementRetainsReportAndWakesOnlySubscribedWait(t *testing.T) 
 	service := New(f, f, f, f)
 	service.SetLoop(f, f)
 	now := time.Now()
-	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: "session", Handle: "handle", OriginTool: "verify", RunID: "run", ToolCallID: "call", ExitCode: 1, FinishedAt: now, Tail: "failed check", UnsavedDocumentPaths: []string{"source.txt"}})
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: "session", Handle: "handle", OriginTool: "verify", RunID: "run", ToolCallID: "call", ExitCode: 1, FinishedAt: now, Tail: "failed check", UnsavedDocumentPaths: []string{"source.txt"},
+		ProgramStop: bgprocess.ProgramStop{Code: "COMMAND_OPTION_UNSUPPORTED", Feedback: "refusal details"}})
 	report, ok := service.Report("session", "handle")
 	t.Logf("completion report for manual render inspection:\n%s", report)
-	if !ok || !strings.Contains(report, "failed check") || !strings.Contains(report, "policy guidance") {
+	if !ok || !strings.Contains(report, "failed check") || !strings.Contains(report, "policy guidance") ||
+		!strings.Contains(report, "program_stop_code=COMMAND_OPTION_UNSUPPORTED") || !strings.Contains(report, "source.txt") {
 		t.Fatalf("retained report=%q found=%v", report, ok)
 	}
 	if len(f.wakes) != 1 || len(f.emitted) != 0 {
@@ -77,6 +79,24 @@ func TestCommandSettlementRetainsReportAndWakesOnlySubscribedWait(t *testing.T) 
 	service.HandleCommandRefusal(t.Context(), bgprocess.RefusalNotice{SessionID: "session", Handle: "handle", OriginTool: "command", StartedAt: now})
 	if len(f.wakes) != 2 || f.wakes[1] != anchor.ProcessRefused {
 		t.Fatalf("refusal wake=%v", f.wakes)
+	}
+	seen := &bgprocess.ExitObservation{}
+	seen.Observe()
+	seenCompletion := bgprocess.Completion{SessionID: "session", Handle: "seen", ExitObservation: seen, FinishedAt: now}
+	service.HandleCommandCompletion(t.Context(), seenCompletion)
+	if len(f.emitted) != 2 {
+		t.Fatalf("observed exit emitted guidance: %v", f.emitted)
+	}
+	if _, found := service.Report("session", "seen"); !found {
+		t.Fatal("observed exit lost the report for an explicit wait")
+	}
+
+	newExit := &bgprocess.ExitObservation{}
+	seenCompletion.Handle, seenCompletion.ExitObservation = "fresh", newExit
+	service.HandleCommandCompletion(t.Context(), seenCompletion)
+	service.Observe("session", "fresh")
+	if !newExit.Observed() || len(f.emitted) != 3 {
+		t.Fatalf("retained report was not observed: delivered=%t signals=%v", newExit.Observed(), f.emitted)
 	}
 	if _, found := service.Report("foreign", "handle"); found {
 		t.Fatal("foreign session read completion report")

@@ -2,9 +2,7 @@ package command
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"time"
 
@@ -23,13 +21,13 @@ type RunningProgramResult struct {
 	Handle    string `json:"handle"`
 }
 
-func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluation, ending *programEnding) (string, error) {
+func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluation, ending *programEnding, startedAt time.Time) (string, error) {
 	run := e.run
 	attached := make(chan error, 1)
 	handle, err := r.Supervisor.Background.StartProgram(ctx, bgprocess.ProgramJobSpec{
 		SessionID: run.tc.Identity.SessionID, RootSessionID: run.tc.ChatSessionID(),
 		ProjectID: run.tc.Identity.ProjectID, Cwd: e.paths.Cwd().DisplayPath,
-		CommandLine: run.source, OriginTool: run.tool, ToolCallID: run.tc.Identity.ToolCallID,
+		CommandLine: run.source, OriginTool: run.tool, ToolCallID: run.tc.Identity.ToolCallID, StartedAt: startedAt,
 		Run: func(jobCtx context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
 			stop := context.AfterFunc(jobCtx, func() { r.Supervisor.Interrupt(run.root.Identity.ProgramID) })
 			defer stop()
@@ -41,29 +39,22 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 			<-ending.done
 			r.recordParkedRun(context.WithoutCancel(ctx), run)
 			r.recordDetachedEffects(context.WithoutCancel(ctx), run)
-			var outcome ProgramOutcome
-			decodeErr := json.Unmarshal([]byte(ending.result), &outcome)
-			status := outcome.Status
-			if decodeErr != nil || (ending.err != nil && status == 0) {
-				status = 1
-			}
-			if ending.result != "" {
-				_, _ = fmt.Fprintln(stderr, ending.result)
-			}
-			return bgprocess.ProgramJobResult{ExitCode: status}, errors.Join(ending.err, decodeErr, attachErr)
+			return ending.jobResult(), errors.Join(ending.err, attachErr)
 		},
 	})
 	if err != nil {
 		r.interruptProgram(ctx, run, ending)
+		go func() {
+			<-ending.done
+			ending.releaseNotices()
+		}()
 		return "", err
 	}
 	if err := <-attached; err != nil {
 		return "", err
 	}
-	if e.waits != nil {
-		session := run.tc.Identity.SessionID
-		e.waits.promoted(func() func() { return r.Supervisor.Background.BeginPersonWait(session, handle) })
-	}
+	session := run.tc.Identity.SessionID
+	e.waits.promoted(func() func() { return r.Supervisor.Background.BeginPersonWait(session, handle) })
 	e.call.detach()
 	if out := e.callTC.Effects.Out; out != nil {
 		out.MergeChild(run.tc.Effects.Out.TakeCommitted(), tools.MergeProgram)
@@ -73,6 +64,26 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 	}
 	result, err := surveyjson.Marshal(RunningProgramResult{ProgramID: run.root.Identity.ProgramID, State: "running", Handle: handle})
 	return string(result), err
+}
+
+func (e *programEnding) jobResult() bgprocess.ProgramJobResult {
+	outcome := e.settlement.outcome
+	status := outcome.Status
+	if e.err != nil && status == 0 {
+		status = 1
+	}
+	settled := bgprocess.ProgramJobResult{
+		ExitCode: status, FinishedAt: e.finishedAt, PersonWait: &e.personWait,
+		UnsavedDocumentPaths: e.settlement.drafts.paths(),
+	}
+	if e.settlement.drafts.release != nil || e.settlement.releaseFeedback != nil {
+		settled.ReleaseNotices = e.releaseNotices
+	}
+	settled.ProgramStop.Code = outcome.StopCode
+	if refusal := outcome.Refusal; refusal != nil {
+		settled.ProgramStop.Code, settled.ProgramStop.Feedback = refusal.Code, refusal.Feedback
+	}
+	return settled
 }
 
 // follow replays retained bytes and subscribes under the write lock, so output

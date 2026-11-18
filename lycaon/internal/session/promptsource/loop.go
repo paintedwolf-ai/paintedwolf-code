@@ -143,6 +143,7 @@ func (m *Loop) Build() loopwake.LoopDeps {
 			ProcessState:   m.Processes.HandleState,
 			ProcessSubject: m.Processes.HandleSubject,
 			ProcessReport:  m.Processes.Report,
+			ObserveProcess: m.Processes.Observe,
 			DropPendingKicksForBatchSeq: func(sessionID string, batchSeq int) {
 				m.Runtime.Kicks().DropPendingKicksForBatchSeq(sessionID, batchSeq)
 			},

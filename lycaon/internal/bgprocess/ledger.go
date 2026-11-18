@@ -3,6 +3,7 @@ package bgprocess
 import (
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/hostcmd"
 )
@@ -21,7 +22,7 @@ func (r *Registry) LedgerJobs(sessionID string) []JobSnapshot {
 		if (proc.kind != processKindPipeline && proc.kind != processKindProgram) || proc.silent {
 			continue
 		}
-		exited := proc.hasExit && proc.reason == TerminationExited && !proc.observed
+		exited := proc.hasExit && proc.reason == TerminationExited && !proc.exitObservation.Observed()
 		if !proc.running && !exited {
 			continue
 		}
@@ -40,17 +41,33 @@ func (r *Registry) LedgerJobs(sessionID string) []JobSnapshot {
 	return out
 }
 
-// Observe records that the agent saw the job's state: it read the job's
-// output, waited on it, or a result reported its exit.
+// ExitObservation tracks delivery even after the registry evicts the job's output.
+type ExitObservation struct{ delivered atomic.Bool }
+
+func (o *ExitObservation) Observe() {
+	if o != nil {
+		o.delivered.Store(true)
+	}
+}
+
+func (o *ExitObservation) Observed() bool { return o != nil && o.delivered.Load() }
+
+func (p *Process) exitObservationLocked() *ExitObservation {
+	if p.hasExit && p.exitObservation == nil {
+		p.exitObservation = &ExitObservation{}
+	}
+	return p.exitObservation
+}
+
+// Observe records delivery of a job's terminal state.
 func (r *Registry) Observe(sessionID, handle string) {
 	if r == nil {
 		return
 	}
-	proc, err := r.jobs.lookup(sessionID, handle)
-	if err != nil {
-		return
-	}
 	r.jobs.mu.Lock()
-	proc.observed = true
-	r.jobs.mu.Unlock()
+	defer r.jobs.mu.Unlock()
+	proc := r.jobs.sessions[strings.TrimSpace(sessionID)][strings.TrimSpace(handle)]
+	if proc != nil {
+		proc.exitObservationLocked().Observe()
+	}
 }

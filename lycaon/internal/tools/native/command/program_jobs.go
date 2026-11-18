@@ -216,7 +216,8 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 			j.record(handle, result, err)
 			settled := bgprocess.ProgramJobResult{ExitCode: result.Status}
 			if documents, ok := ctx.Value(programDocumentsKey{}).(*programDocuments); ok {
-				settled.UnsavedDocumentPaths, settled.ReleaseNotices = documents.takePaths()
+				notices := documents.takeNotices()
+				settled.UnsavedDocumentPaths, settled.ReleaseNotices = notices.paths(), notices.release
 			}
 			return settled, err
 		},

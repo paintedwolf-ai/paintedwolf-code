@@ -164,6 +164,8 @@ func (e *StartConflict) Unwrap() error { return e.Kind }
 
 // Completion is the terminal, host-authoritative result for one command job.
 type Completion struct {
+	ExitObservation *ExitObservation
+	ProgramStop     ProgramStop
 	// UnsavedDocumentPaths records held drafts encountered by a program job.
 	UnsavedDocumentPaths []string
 	// ReleaseNotices returns admission after the completion consumer finishes.

@@ -203,6 +203,10 @@ func (k *KickEngine) sessionKickQueue(sessionID string) *sessionKickQueue {
 	return actual.(*sessionKickQueue)
 }
 
+func (item kickQueueItem) observed() bool {
+	return item.meta.observation != nil && item.meta.observation.Observed()
+}
+
 // KickSkip reports queued guidance whose live obligation has cleared.
 type KickSkip func(kickID, subject string) bool
 
@@ -210,7 +214,7 @@ func (q *sessionKickQueue) stage(skip KickSkip, leases *atomic.Uint64) string {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.staged != nil {
-		if skip == nil || !skip(q.staged.kickID, q.staged.subject) {
+		if !q.staged.observed() && (skip == nil || !skip(q.staged.kickID, q.staged.subject)) {
 			return q.staged.kickID
 		}
 		q.staged = nil
@@ -218,7 +222,7 @@ func (q *sessionKickQueue) stage(skip KickSkip, leases *atomic.Uint64) string {
 	for len(q.items) > 0 {
 		item := q.items[0]
 		q.items = q.items[1:]
-		if skip != nil && skip(item.kickID, item.subject) {
+		if item.observed() || (skip != nil && skip(item.kickID, item.subject)) {
 			continue
 		}
 		item.lease = leases.Add(1)
@@ -234,7 +238,7 @@ func (q *sessionKickQueue) prune(skip KickSkip) []string {
 	defer q.mu.Unlock()
 	var ids []string
 	if q.staged != nil {
-		if skip != nil && skip(q.staged.kickID, q.staged.subject) {
+		if q.staged.observed() || (skip != nil && skip(q.staged.kickID, q.staged.subject)) {
 			q.staged = nil
 		} else {
 			ids = append(ids, q.staged.kickID)
@@ -242,7 +246,7 @@ func (q *sessionKickQueue) prune(skip KickSkip) []string {
 	}
 	kept := q.items[:0]
 	for _, item := range q.items {
-		if skip != nil && skip(item.kickID, item.subject) {
+		if item.observed() || (skip != nil && skip(item.kickID, item.subject)) {
 			continue
 		}
 		kept = append(kept, item)
@@ -281,6 +285,9 @@ func (q *sessionKickQueue) ack(lease uint64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.staged != nil && q.staged.lease == lease {
+		if observation := q.staged.meta.observation; observation != nil {
+			observation.Observe()
+		}
 		q.staged = nil
 	}
 }

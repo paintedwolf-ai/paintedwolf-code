@@ -51,11 +51,14 @@ type Service struct {
 	continueUser    ContinueUser
 	roundComplete   RoundComplete
 	hostBlocked     HostBlocked
+	observeProcess  func(sessionID, handle string)
 }
 
 func New(st Store, q *queue.Store, gate *lifecycle.State, recovery *recovery.Service, spend *spendguard.Service, drafts *draftqueue.Service, state *submissionstate.Service, locks *promptstate.MutexRegistry, execute Execute, continuation ContinueUser, round RoundComplete, blocked HostBlocked) *Service {
 	return &Service{store: st, queue: q, Gate: gate, Recovery: recovery, Spend: spend, Drafts: drafts, SubmissionState: state, promptLocks: locks, execute: execute, continueUser: continuation, roundComplete: round, hostBlocked: blocked}
 }
+
+func (m *Service) SetProcessObserver(observe func(string, string)) { m.observeProcess = observe }
 
 func (m *Service) lockAdmission(sessionID string) func() {
 	lock := m.admission.Acquire(sessionID)

@@ -67,15 +67,19 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 			Confine: completion.Observation, IndexWatch: completion.IndexWatch,
 		})
 	}
-	m.processReports.publish(completion.SessionID, completion.Handle, digest)
+	m.processReports.publish(completion.SessionID, completion.Handle, processReport{digest: digest, exit: completion.ExitObservation})
 	env := anchor.Envelope{
 		Subject:                 strings.TrimSpace(completion.Handle),
 		CommandCompletionDigest: digest,
 	}
+	if completion.ExitObservation != nil {
+		env.CommandExitObservation = completion.ExitObservation
+	}
 	if m.nudgeProcessWait(ctx, completion.SessionID, completion.Handle, anchor.ProcessFinished, env) {
 		return
 	}
-	if completion.TerminationReason == bgprocess.TerminationStoppedByAgent {
+	if completion.TerminationReason == bgprocess.TerminationStoppedByAgent ||
+		completion.ExitObservation.Observed() {
 		return
 	}
 	if sess == nil || !sess.IsWorkerChild() {
@@ -131,6 +135,12 @@ func CommandCompletionDigest(completion bgprocess.Completion) string {
 	}
 	if len(completion.Stages) > 0 {
 		digest += "\ncommand=" + truncateUTF8Head(hostcmd.CommandLine(completion.Stages), maxCommandBytes)
+	}
+	if stop := completion.ProgramStop; stop.Code != "" {
+		digest += "\nprogram_stop_code=" + stop.Code
+		if stop.Feedback != "" {
+			digest += "\n" + truncateUTF8Head(stop.Feedback, maxTailBytes)
+		}
 	}
 	if completion.Failure != nil {
 		digest += "\nexec_failure=" + string(completion.Failure.Kind) + ": " + truncateUTF8Head(completion.Failure.Detail, maxCommandBytes)
