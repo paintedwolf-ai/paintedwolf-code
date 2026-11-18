@@ -52,13 +52,73 @@ function progressChangeDisplayState(
   return change.state;
 }
 
-export function progressChangesToSteps(
+function progressChangesToSteps(
   changes: readonly ProgressChange[],
 ): ProgressStep[] {
   return changes.map((change) => ({
     label: progressChangeLabel(change),
     state: progressChangeDisplayState(change),
   }));
+}
+
+/** A progress row in the transcript: the plan as authored, a later change, or the finished plan. */
+export type ProgressSnapshotKind = "created" | "updated" | "completed";
+
+type ProgressSnapshotSource = {
+  kind: ProgressSnapshotKind;
+  steps?: readonly ProgressStep[];
+  changes?: readonly ProgressChange[];
+  summary?: ProgressUpdateSummary;
+};
+
+export const PROGRESS_SNAPSHOT_TITLES: Record<ProgressSnapshotKind, string> = {
+  created: "Progress",
+  updated: "Updated",
+  completed: "Done",
+};
+
+/** The counts of an update too large to list: its summary arrives with no rows. */
+export function progressAggregateSummary(update: {
+  steps?: readonly ProgressStep[];
+  changes?: readonly ProgressChange[];
+  summary?: ProgressUpdateSummary;
+}): ProgressUpdateSummary | undefined {
+  const listed = (update.steps?.length ?? 0) + (update.changes?.length ?? 0);
+  return listed === 0 ? update.summary : undefined;
+}
+
+/** The rows a snapshot lists; an aggregate update is one row. */
+export function progressSnapshotSteps(source: ProgressSnapshotSource): ProgressStep[] {
+  const aggregate = progressAggregateSummary(source);
+  if (aggregate) {
+    return [{
+      label: progressUpdateSummaryLabel(aggregate, source.kind === "created"),
+      state: aggregate.pending > 0 ? "pending" : "done",
+    }];
+  }
+  if (source.kind === "updated") return progressChangesToSteps(source.changes ?? []);
+  return [...(source.steps ?? [])];
+}
+
+/** The steps a snapshot covers, which an aggregate update states without listing them. */
+export function progressSnapshotCount(source: ProgressSnapshotSource, listed: number): number {
+  const aggregate = progressAggregateSummary(source);
+  if (!aggregate) return listed;
+  return source.kind === "created" ? aggregate.total_steps : aggregate.change_count;
+}
+
+/** How far the plan stands after a listed update, when the host stated it. */
+export function progressUpdateStanding(source: ProgressSnapshotSource): string | undefined {
+  if (source.kind !== "updated" || !source.summary || progressAggregateSummary(source)) return undefined;
+  return `${source.summary.done} of ${source.summary.total_steps}`;
+}
+
+/** The one line a finished plan rests as. */
+export function progressCompletedLabel(steps: readonly ProgressStep[]): string {
+  const done = steps.filter((step) => step.state === "done").length;
+  const noun = steps.length === 1 ? "step" : "steps";
+  if (done !== steps.length) return `${done} of ${steps.length} ${noun} done`;
+  return steps.length === 1 ? "1 step done" : `All ${steps.length} steps done`;
 }
 
 function progressChangeEntries(
@@ -113,11 +173,12 @@ export function progressHistoryFromMessages(
     const meta = msg.progress_update;
     if (!meta) continue;
     const ts = msg.created_at;
-    if (meta.summary) {
+    const aggregate = progressAggregateSummary(meta);
+    if (aggregate) {
       entries.push({
         key: `${msg.id}:summary`,
         kind: "summary",
-        label: progressUpdateSummaryLabel(meta.summary, meta.initial === true),
+        label: progressUpdateSummaryLabel(aggregate, meta.initial === true),
         state: "summary",
         ts,
       });

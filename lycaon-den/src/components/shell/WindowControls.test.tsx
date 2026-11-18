@@ -38,7 +38,7 @@ afterEach(() => {
 
 describe("WindowControls", () => {
   it("draws the default cluster on the right with accessible names", () => {
-    render(() => <WindowControls side="right" owner narrow />);
+    render(() => <WindowControls side="right" chrome="drawn" owner narrow />);
     const cluster = screen.getByTestId("window-controls-right");
     expect(cluster.getAttribute("data-side")).toBe("right");
     expect(
@@ -53,8 +53,8 @@ describe("WindowControls", () => {
     setWindowChromeLayoutForTests({ left: ["appmenu"], right: ["close"], source: "portal" });
     render(() => (
       <>
-        <WindowControls side="left" owner narrow />
-        <WindowControls side="right" owner narrow />
+        <WindowControls side="left" chrome="drawn" owner narrow />
+        <WindowControls side="right" chrome="drawn" owner narrow />
       </>
     ));
     expect(screen.getByTestId("window-controls-left").querySelector("[data-testid='window-app-menu']")).not.toBeNull();
@@ -63,7 +63,7 @@ describe("WindowControls", () => {
   });
 
   it("drives the window through its native operations", () => {
-    render(() => <WindowControls side="right" owner narrow />);
+    render(() => <WindowControls side="right" chrome="drawn" owner narrow />);
     fireEvent.click(screen.getByTestId("window-minimize"));
     fireEvent.click(screen.getByTestId("window-maximize"));
     fireEvent.click(screen.getByTestId("window-close"));
@@ -75,7 +75,7 @@ describe("WindowControls", () => {
   });
 
   it("labels the maximize control Restore while the window is maximized", () => {
-    render(() => <WindowControls side="right" owner narrow />);
+    render(() => <WindowControls side="right" chrome="drawn" owner narrow />);
     const control = screen.getByTestId("window-maximize");
     expect(control.getAttribute("aria-label")).toBe("Maximize window");
     setWindowMaximizedForTests(true);
@@ -85,8 +85,8 @@ describe("WindowControls", () => {
   it("marks the cluster the narrow band swaps in or out", () => {
     render(() => (
       <>
-        <WindowControls side="right" owner narrow={false} />
-        <WindowControls side="left" owner={false} narrow />
+        <WindowControls side="right" chrome="drawn" owner narrow={false} />
+        <WindowControls side="left" chrome="drawn" owner={false} narrow />
       </>
     ));
     setWindowChromeLayoutForTests({ left: ["close"], right: ["minimize"], source: "portal" });
@@ -95,15 +95,15 @@ describe("WindowControls", () => {
   });
 
   it("renders nothing for a column that never owns the edge", () => {
-    render(() => <WindowControls side="right" owner={false} narrow={false} />);
+    render(() => <WindowControls side="right" chrome="drawn" owner={false} narrow={false} />);
     expect(screen.queryByTestId("window-controls-right")).toBeNull();
   });
 
-  it("renders nothing where the window has native buttons", () => {
+  it("renders nothing where the OS overlays its own buttons", () => {
     platform = "macos";
     const { container } = render(() => (
       <>
-        <WindowControls side="right" owner narrow />
+        <WindowControls side="left" chrome="native" owner narrow />
         {soleWindowControls()}
       </>
     ));

@@ -142,3 +142,22 @@ func TestParseSource(t *testing.T) {
 		}
 	}
 }
+
+func TestCargoRowsInventoryOnlyRegistryCrates(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	files := map[string]string{
+		"Cargo.toml": "[dependencies]\nserde = \"1\"\nlocal-crate = { path = \"crates/local-crate\" }\n\n" +
+			"[target.'cfg(target_os = \"macos\")'.dependencies]\nlocal-mac = { path = \"crates/local-mac\", version = \"0.1\" }\n",
+		"Cargo.lock": "[[package]]\nname = \"serde\"\nversion = \"1.0.2\"\n\n[[package]]\nname = \"local-crate\"\nversion = \"0.1.0\"\n\n" +
+			"[[package]]\nname = \"local-mac\"\nversion = \"0.1.0\"\n",
+	}
+	for name, body := range files {
+		testutil.FailErr(t, "write fixture", os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600))
+	}
+	rows, err := cargoRows(newPinReader(dir), &manifestConfig{Kind: "cargo", Path: "Cargo.toml", Lock: "Cargo.lock"})
+	testutil.FailErr(t, "collect cargo rows", err)
+	if len(rows) != 1 || rows[0].dependency != "serde" || rows[0].pins[0].text != "1.0.2" {
+		t.Fatalf("rows = %+v, want only the registry crate serde 1.0.2", rows)
+	}
+}

@@ -130,6 +130,10 @@ wheel-glide = { path = "crates/wheel-glide" }
 
 # Clipboard, desktop portals, the file manager bus interface and window identity
 # use the GTK display connection the shell already runs on.
+# Tests that wait on tokio timers run on a paused clock.
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 desktop-settings-observer = { path = "crates/desktop-settings-observer" }
 gtk = "0.18"

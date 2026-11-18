@@ -3,7 +3,6 @@ package llm
 import (
 	"context"
 	"errors"
-	"runtime"
 	"testing"
 	"time"
 
@@ -126,17 +125,12 @@ func TestUtilityCallOnADeadContextOpensNoReceipt(t *testing.T) {
 
 func awaitForegroundWaiter(t *testing.T, lanes *utilityLanes, id string) {
 	t.Helper()
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the foreground request enters admission", func() bool {
 		lanes.mu.Lock()
+		defer lanes.mu.Unlock()
 		lane := lanes.lanes[id]
-		waiting := lane != nil && lane.foregroundWaiting > 0
-		lanes.mu.Unlock()
-		if waiting {
-			return
-		}
-		runtime.Gosched()
-	}
-	t.Fatal("foreground did not enter admission")
+		return lane != nil && lane.foregroundWaiting > 0
+	})
 }
 
 func TestAdmissionPrioritizesWaitingForeground(t *testing.T) {

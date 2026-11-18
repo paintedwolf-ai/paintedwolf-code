@@ -45,7 +45,7 @@ func TestAppendWorkerSummaryAndTags(t *testing.T) {
 		ChildSessionID: child.ID,
 		AgentType:      "implementer",
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "mgr.Workers.Summaries.Append failed", err)
 	}
 	tags, err := mgr.Workers.Summaries.Tags(ctx, parent.ID)
 	testutil.FailErr(t, "mgr.WorkerSummaryTags failed", err)

@@ -49,7 +49,7 @@ describe("NotificationStack", () => {
     mount(store, { activeProjectId: "proj-a" });
 
     const stack = screen.getByTestId("notification-stack");
-    expect(stack.children[0]?.classList.contains("den-notice-rail")).toBe(true);
+    expect(stack.children[0]?.getAttribute("data-testid")).toBe("notice-rail");
     expect(
       [...stack.querySelectorAll<HTMLElement>("[data-project-id]")].map(
         (group) => group.dataset.projectId,

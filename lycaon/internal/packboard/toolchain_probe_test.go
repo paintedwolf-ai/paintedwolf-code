@@ -71,9 +71,11 @@ func (f *fakeToolchainHost) host() toolchainHost {
 					break
 				}
 			}
+			// A slow binary answers after delay unless the probe gives up first.
 			if f.delay > 0 {
-				time.Sleep(f.delay)
-				if ctx.Err() != nil {
+				select {
+				case <-time.After(f.delay):
+				case <-ctx.Done():
 					return ""
 				}
 			}
@@ -145,15 +147,17 @@ func TestInterruptedToolchainProbeIsNotCached(t *testing.T) {
 }
 
 func TestCanceledCallerDoesNotCancelTheRefresh(t *testing.T) {
-	fake := newFakeToolchainHost(10 * time.Millisecond)
-	probes := newToolchainProbes(fake.host())
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	probes.toolchains(ctx, []string{"Go"})
-	probes.wg.Wait()
-	if got := probes.toolchains(t.Context(), []string{"Go"}); !slices.Equal(got, []string{"go 1.26.6"}) {
-		t.Fatalf("a finished prompt's context cut the refresh short: %v", got)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		fake := newFakeToolchainHost(10 * time.Millisecond)
+		probes := newToolchainProbes(fake.host())
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		probes.toolchains(ctx, []string{"Go"})
+		probes.wg.Wait()
+		if got := probes.toolchains(t.Context(), []string{"Go"}); !slices.Equal(got, []string{"go 1.26.6"}) {
+			t.Fatalf("a finished prompt's context cut the refresh short: %v", got)
+		}
+	})
 }
 
 func TestToolchainResultsAreKeyedByResolvedPath(t *testing.T) {

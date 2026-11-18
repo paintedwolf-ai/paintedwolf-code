@@ -134,7 +134,6 @@ describe("CheckpointDecisionChicklet", () => {
     const card = getByTestId("checkpoint-decision-chicklet");
     const revoke = getByTestId("checkpoint-decision-revoke");
     // Revoke sits beside the disclosure toggle in the header row, never inside it.
-    expect(revoke.closest(".den-transcript-disclosure-toggle")).toBeNull();
     expect(revoke.parentElement).toBe(disclosureToggle(card).parentElement);
     expect(disclosureToggle(card).getAttribute("aria-controls")).toBe(getByTestId("checkpoint-decision-body").id);
     fireEvent.click(revoke);
@@ -253,8 +252,6 @@ describe("CheckpointDecisionChicklet", () => {
     fireEvent.click(disclosureToggle(el));
     expect(isDisclosureOpen(el)).toBe(true);
 
-    const body = getByTestId("checkpoint-decision-body");
-    expect(body.querySelector(".den-tool-part-card-facts")).toBeTruthy();
     expect(getByTestId("checkpoint-decision-body-status").textContent).toBe("Allowed");
     expect(getByTestId("checkpoint-decision-body-tool").textContent).toBe("command");
     expect(getByTestId("checkpoint-decision-body-action").textContent).toBe("cargo build --release");

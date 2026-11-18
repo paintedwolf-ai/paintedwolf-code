@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -80,23 +81,25 @@ func TestCallResultReportsRunningThenTheSettledResult(t *testing.T) {
 }
 
 func TestCallResultCarriesTextResultsAndFailureCodes(t *testing.T) {
-	registry := heldcall.New(nil, nil)
-	handle := holdCall(t, registry, func(context.Context) heldcall.Settled {
-		time.Sleep(20 * time.Millisecond)
-		facts := guidance.ToolResultFacts{Outcome: api.ToolResultOutcomeRejected}.WithCode("SURVEY_GLOB_INVALID")
-		return heldcall.Settled{Content: "Rejected: SURVEY_GLOB_INVALID", Outcome: api.ToolResultOutcomeRejected, Facts: facts}
+	synctest.Test(t, func(t *testing.T) {
+		registry := heldcall.New(nil, nil)
+		handle := holdCall(t, registry, func(context.Context) heldcall.Settled {
+			time.Sleep(20 * time.Millisecond)
+			facts := guidance.ToolResultFacts{Outcome: api.ToolResultOutcomeRejected}.WithCode("SURVEY_GLOB_INVALID")
+			return heldcall.Settled{Content: "Rejected: SURVEY_GLOB_INVALID", Outcome: api.ToolResultOutcomeRejected, Facts: facts}
+		})
+		payload, err := run(t, &ResultTool{Registry: registry}, map[string]any{"handle": handle, "wait_ms": 2000})
+		if err != nil {
+			testutil.FailErr(t, "read", err)
+		}
+		if payload["outcome"] != "rejected" || payload["result"] != "Rejected: SURVEY_GLOB_INVALID" {
+			t.Fatalf("payload = %v", payload)
+		}
+		codes, _ := payload["codes"].([]any)
+		if len(codes) != 1 || codes[0] != "SURVEY_GLOB_INVALID" {
+			t.Fatalf("codes = %v", payload["codes"])
+		}
 	})
-	payload, err := run(t, &ResultTool{Registry: registry}, map[string]any{"handle": handle, "wait_ms": 2000})
-	if err != nil {
-		testutil.FailErr(t, "read", err)
-	}
-	if payload["outcome"] != "rejected" || payload["result"] != "Rejected: SURVEY_GLOB_INVALID" {
-		t.Fatalf("payload = %v", payload)
-	}
-	codes, _ := payload["codes"].([]any)
-	if len(codes) != 1 || codes[0] != "SURVEY_GLOB_INVALID" {
-		t.Fatalf("codes = %v", payload["codes"])
-	}
 }
 
 func TestUnknownHandleRejectsWithAStructuredCode(t *testing.T) {

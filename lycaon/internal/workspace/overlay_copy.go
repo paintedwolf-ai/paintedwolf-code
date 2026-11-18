@@ -19,8 +19,8 @@ func (m *Manager) CreateWorkerWorkspace(ctx context.Context, primaryDir, jobID s
 	if err != nil {
 		return nil, err
 	}
-	roots := []projectroot.RootRef{{ID: "primary", Label: filepath.Base(primary), Path: primary, IsPrimary: true}}
-	binding, _, err := m.CreateWorkerBranch(ctx, roots, "primary", jobID)
+	roots := []projectroot.RootRef{{ID: projectroot.SingleRootID, Label: filepath.Base(primary), Path: primary, IsPrimary: true}}
+	binding, _, err := m.CreateWorkerBranch(ctx, roots, projectroot.SingleRootID, jobID)
 	return binding, err
 }
 
@@ -91,7 +91,7 @@ func (m *Manager) releaseBranchRetention(jobID string) error {
 // keep the branch and its metadata: the view is still in custody, and the directory may still be a mount.
 func (m *Manager) settleMountedBranch(branchRoot, jobID string) (bool, error) {
 	branchClaimsMu.RLock()
-	rec, ok := lookupBranchClaimRecord(branchRoot)
+	rec, ok := branchClaimStates[filepath.Clean(branchRoot)]
 	branchClaimsMu.RUnlock()
 	if ok && rec.layered != nil {
 		return true, settleBranchLayeredView(context.Background(), branchRoot, rec.layered)

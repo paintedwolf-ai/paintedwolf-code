@@ -54,6 +54,24 @@ class RehearsalCredentialsTests(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 rehearsal.validate({**self.config, **change})
 
+    def test_absent_environment_settings_are_reported_by_field_and_variable(self):
+        inherited = {"RELEASE_TEST_R2_BUCKET": "test-bucket", "RELEASE_TEST_DOWNLOAD_BASE_URL": "https://test.example.com",
+                     "RELEASE_TEST_R2_ENDPOINT_URL": "", "RELEASE_TEST_CONFIG": ""}
+        with patch.object(rehearsal, "DEFAULT_CONFIG", Path(os.devnull) / "absent"):
+            with self.assertRaises(rehearsal.MissingFields) as refusal:
+                rehearsal.environment(rehearsal.configuration(inherited), inherited)
+        self.assertEqual(refusal.exception.fields, ("access_key_id", "endpoint_url", "secret_access_key"))
+        root = Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory() as home:
+            result = subprocess.run([sys.executable, str(root / "scripts/release_storage/rehearsal.py"), os.devnull],
+                                    env={**inherited, "HOME": home, "PATH": os.environ["PATH"]},
+                                    capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        for variable in ("RELEASE_TEST_R2_ACCESS_KEY_ID", "RELEASE_TEST_R2_ENDPOINT_URL", "RELEASE_TEST_R2_SECRET_ACCESS_KEY"):
+            self.assertIn(variable, result.stderr)
+        for variable in ("RELEASE_TEST_R2_BUCKET", "RELEASE_TEST_DOWNLOAD_BASE_URL"):
+            self.assertNotIn(variable, result.stderr)
+
     def test_failed_harness_preserves_private_config_and_cleans_empty_keys(self):
         root = Path(__file__).resolve().parents[3]
         with tempfile.TemporaryDirectory() as directory:

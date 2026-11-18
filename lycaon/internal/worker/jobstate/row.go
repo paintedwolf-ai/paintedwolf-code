@@ -10,7 +10,7 @@ import (
 )
 
 // FromRow maps a generated worker_jobs row onto the wire type.
-func FromRow(ctx context.Context, database db.DBTX, r db.WorkerJobs) (*api.WorkerTask, error) {
+func (reader Reader) FromRow(ctx context.Context, database db.DBTX, r db.WorkerJobs) (*api.WorkerTask, error) {
 	task := api.WorkerTask{
 		ID:               r.ID,
 		ProjectID:        r.ProjectID,
@@ -51,7 +51,7 @@ func FromRow(ctx context.Context, database db.DBTX, r db.WorkerJobs) (*api.Worke
 	if err := db.UnmarshalJSON(r.FailureJson, &failure); err == nil && r.FailureJson.Valid && r.FailureJson.String != "" && r.FailureJson.String != "null" {
 		task.Failure = &failure
 	}
-	if err := resolveWorkerWorkspace(ctx, database, r, &task); err != nil {
+	if err := reader.resolveWorkerWorkspace(r, &task); err != nil {
 		return nil, err
 	}
 	if ms := db.StringFromNull(r.MergeStatus); ms != "" {

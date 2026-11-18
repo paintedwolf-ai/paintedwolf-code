@@ -31,14 +31,19 @@ func CanonicalPath(path string) string {
 			}
 			return compareForm(out)
 		}
-		// Resolve dangling links before appending the missing tail.
+		// Resolve dangling links before appending the missing tail. A relative
+		// target is read from the directory the link is in, not its spelling.
 		if target, err := os.Readlink(cur); err == nil {
 			links++
 			if links > 40 {
 				return ""
 			}
 			if !filepath.IsAbs(target) {
-				target = filepath.Join(filepath.Dir(cur), target)
+				parent, ok := canonicalizeExisting(filepath.Dir(cur))
+				if !ok {
+					return ""
+				}
+				target = filepath.Join(parent, target)
 			}
 			cur = filepath.Clean(target)
 			continue

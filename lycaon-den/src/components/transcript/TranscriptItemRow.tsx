@@ -14,7 +14,7 @@ import { AssistantChatTurn } from "./AssistantChatTurn.tsx";
 import { BlueprintCard } from "../blueprint/BlueprintCard.tsx";
 import type { ChatBlueprintState } from "../blueprint/chat-blueprint-state.ts";
 import type { CitationExploreContext } from "../citation/CitationGroundingPanel.tsx";
-import { ProgressStrip } from "../ProgressStrip.tsx";
+import { ProgressSnapshot } from "./ProgressSnapshot.tsx";
 import { TranscriptTimeMarker, TranscriptUnreadMarker, TurnTail } from "./TranscriptTimeRows.tsx";
 import { TurnWalkCard } from "./TurnWalkCard.tsx";
 import { type MessageRecoveryHandlers, UserBubble } from "./UserBubble.tsx";
@@ -397,9 +397,9 @@ export function TranscriptItemRow(props: {
       </Match>
       <Match when={progressCompleteItem(item())}>
         {(progress) => (
-          <ProgressStrip
+          <ProgressSnapshot
+            kind="completed"
             steps={progress().steps}
-            completed
             sessionId={props.sessionId ?? undefined}
             entryKey={progress().key}
           />
@@ -409,17 +409,18 @@ export function TranscriptItemRow(props: {
         {(update) => (
           <Switch>
             <Match when={update().initial}>
-              <ProgressStrip
+              <ProgressSnapshot
+                kind="created"
                 steps={update().steps}
                 summary={update().summary}
-                created
                 sessionId={props.sessionId ?? undefined}
                 entryKey={update().key}
               />
             </Match>
             <Match when={update().summary != null || update().changes.length > 0}>
-              <ProgressStrip
-                deltaChanges={update().changes}
+              <ProgressSnapshot
+                kind="updated"
+                changes={update().changes}
                 summary={update().summary}
                 sessionId={props.sessionId ?? undefined}
                 entryKey={update().key}

@@ -17,6 +17,11 @@ webE2e.describe("presentation stability", () => {
     expect(original).not.toBeNull();
     await nav.getByRole("button", { name: "Search", exact: true }).click();
     await expect(surface).toHaveAttribute("data-resident", "idle");
+    // An idle surface stays laid out and only stops painting, so its scroll offsets survive.
+    expect(await surface.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { laidOut: style.display !== "none" && element.getBoundingClientRect().width > 0, visibility: style.visibility };
+    })).toEqual({ laidOut: true, visibility: "hidden" });
 
     const refreshed = page.waitForResponse((response) =>
       new URL(response.url()).pathname.endsWith("/source/workspace") && response.ok(),
@@ -46,6 +51,13 @@ webE2e.describe("presentation stability", () => {
 
   webE2e("keeps Chat painted while inline Files opens cold", async ({ page }) => {
     await bootstrapChatSession(page);
+    // The chat header paints the stage background, opaque, under the window chrome.
+    const [headerFill, stageFill] = await page.evaluate(() => [
+      getComputedStyle(document.querySelector(".den-shell-stage--chat .den-shell-header")!, "::before").backgroundColor,
+      getComputedStyle(document.body).backgroundColor,
+    ]);
+    expect(headerFill).toBe(stageFill);
+    expect(headerFill).toMatch(/^rgb\(/);
     const chat = page.getByTestId("chat-view");
     const chatSurface = chat.locator(
       "xpath=ancestor::*[@data-resident-key][1]",

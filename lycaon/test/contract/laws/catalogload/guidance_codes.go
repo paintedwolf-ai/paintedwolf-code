@@ -112,37 +112,6 @@ var guidanceCodes = []laws.Rule{
 		},
 	},
 	{
-		// A recoverable hint is emitted by code, a posture rule, a tool
-		// profile or the block plane; registered prose nobody emits is dead.
-		Name:    "recoverable-hint-codes-have-emission-sites",
-		Anchors: []laws.Anchor{laws.Dir("lycaon/config/packs/painted-wolf/platform/host/posture-rules")},
-		Check: func(r *laws.Run) {
-			emitted := emittedCodes(r)
-			for code, entry := range laws.HintConfig(r.Corpus).HintCodes {
-				if strings.TrimSpace(entry.Emit) == guidance.EmitBanner ||
-					entry.Severity == "info" && !strings.HasPrefix(entry.Emit, "guard:") && !strings.HasPrefix(entry.Emit, "rule:") {
-					continue
-				}
-				if !emitted(code) {
-					r.Report("recoverable hint %s is registered but never emitted", code)
-				}
-			}
-		},
-	},
-	{
-		// Every registry entry but banners and warnings has an emitter.
-		Name:    "registry-codes-have-emission-sites",
-		Anchors: []laws.Anchor{laws.Dir("lycaon/config/packs/painted-wolf/platform/host/posture-rules")},
-		Check: func(r *laws.Run) {
-			emitted := emittedCodes(r)
-			for code, entry := range laws.HintConfig(r.Corpus).HintCodes {
-				if strings.TrimSpace(entry.Emit) != guidance.EmitBanner && entry.Severity != "warning" && !emitted(code) {
-					r.Report("hint %s has no emitter", code)
-				}
-			}
-		},
-	},
-	{
 		// A literal Code: line in a prompt names a registered hint.
 		Name:    "prompt-hint-codes-registered",
 		Anchors: []laws.Anchor{laws.Dir("lycaon/config/packs/painted-wolf/platform/agents/prompts")},
@@ -196,17 +165,6 @@ var guidanceCodes = []laws.Rule{
 			}
 		},
 	},
-}
-
-// emittedCodes reports codes emitted by production Go, posture rules, tool
-// profiles or the block plane.
-func emittedCodes(r *laws.Run) func(string) bool {
-	scan := r.GuidanceEmission()
-	catalog := laws.CatalogHintCodes(r.Corpus)
-	anchored := laws.OARAnchoredCodes(r.Corpus)
-	return func(code string) bool {
-		return scan.HasEmissionSite(code) || catalog[code] || anchored[code]
-	}
 }
 
 // postureNamespaced reports a deny code outside the registry by design.

@@ -359,6 +359,10 @@ const (
 	// ApiErrorCodeOverlayFormatInvalid workspace .paintedwolf/overlay.yaml has a
 	// missing or invalid overlay_format
 	ApiErrorCodeOverlayFormatInvalid ApiErrorCode = "overlay_format_invalid"
+	// ApiErrorCodeProjectSettingsNeedRepair the project's
+	// .paintedwolf/limits.yaml, verify.yaml, or review.yaml could not be read;
+	// saving would replace it, so the file must be fixed first
+	ApiErrorCodeProjectSettingsNeedRepair ApiErrorCode = "project_settings_need_repair"
 	// ApiErrorCodeProjectApprovalsNeedRepair the project's
 	// .paintedwolf/approvals.yaml has parts the host did not apply; saving would
 	// replace them, so the file must be fixed first
@@ -1073,6 +1077,7 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeExtensionSuggestionInvalid,
 	ApiErrorCodeOverlayFormatUnsupported,
 	ApiErrorCodeOverlayFormatInvalid,
+	ApiErrorCodeProjectSettingsNeedRepair,
 	ApiErrorCodeProjectApprovalsNeedRepair,
 	ApiErrorCodeRootNotFound,
 	ApiErrorCodeRootBusy,
@@ -1494,6 +1499,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeExtensionSuggestionInvalid,
 		ApiErrorCodeOverlayFormatUnsupported,
 		ApiErrorCodeOverlayFormatInvalid,
+		ApiErrorCodeProjectSettingsNeedRepair,
 		ApiErrorCodeProjectApprovalsNeedRepair,
 		ApiErrorCodeRootBusy,
 		ApiErrorCodeDuplicateRoot,

@@ -26,7 +26,7 @@ func TestAPIScanFeedbackAsyncEvidenceAndSummary(t *testing.T) {
 	created := enqueueSingleScanner(t, srv, project.ID, []wire.ScanCategory{wire.ScanCategorySCA})
 
 	var got wire.CodeScan
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the scan summary is complete", func() bool {
 		getReq := authedRequest(t, http.MethodGet, scanURL(project.ID, created.ID)+"?view=summary", nil)
 		getW := httptest.NewRecorder()
 		srv.ServeHTTP(getW, getReq)

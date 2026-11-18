@@ -39,7 +39,7 @@ func TestStopAdmissionIsLinearizedPerSessionTree(t *testing.T) {
 		firstResult <- flight
 	}()
 	<-firstStarted
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the second stop holds the session gate", func() bool {
 		mgr.mu.Lock()
 		defer mgr.mu.Unlock()
 		gate := mgr.gates[first]

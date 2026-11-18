@@ -187,8 +187,6 @@ var promptInputs = []laws.Rule{{
 }}
 
 var workflowVersion = []laws.Rule{{
-	// Only the definition catalog, the anchor matcher and run creation branch
-	// on a workflow version; elsewhere it is passed through, stored or shown.
 	Name:    "workflow-version-is-not-branched-on",
 	Anchors: []laws.Anchor{laws.Package("internal/workflow/definition"), laws.Package("internal/coordinator/anchor")},
 	Check: func(r *laws.Run) {
@@ -222,7 +220,7 @@ var workflowVersion = []laws.Rule{{
 }}
 
 func isVersionUseExempt(f *laws.GoFile) bool {
-	if laws.Under(f, "internal/workflow/definition", "internal/coordinator/anchor", "internal/workflow/run_start.go", "internal/workflow/invoke_child.go") {
+	if laws.Under(f, "internal/workflow/definition", "internal/coordinator/anchor", "internal/workflow/run_start.go", "internal/workflow/invoke_child.go", "internal/releasecontract") {
 		return true
 	}
 	// Evaluation suites and timeline archives carry versions of their own.

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/workspace"
 )
 
@@ -22,7 +23,7 @@ type WorkerRuntimeSettler interface {
 
 // CanceledWorkRetainer keeps a canceled worker's unpromoted bytes before its tree is deleted.
 type CanceledWorkRetainer interface {
-	RetainCanceledWork(ctx context.Context, jobID, root, baselinePath string) error
+	RetainCanceledWork(ctx context.Context, jobID, root, baselinePath string, primary projectroot.RootRef) error
 }
 
 var _ CanceledWorkRetainer = (*workspace.Manager)(nil)
@@ -62,7 +63,8 @@ func (q *sqlQueueCore) settleCanceledRuntime(ctx context.Context, jobID string) 
 		return err
 	}
 	if retainer, ok := ws.(CanceledWorkRetainer); ok {
-		return retainer.RetainCanceledWork(ctx, jobID, task.WorkspaceRoot, task.WorkspaceBaselinePath)
+		primary := projectroot.RootRef{ID: task.WorkspaceRootID, Path: task.WorkspacePath, IsPrimary: true}
+		return retainer.RetainCanceledWork(ctx, jobID, task.WorkspaceRoot, task.WorkspaceBaselinePath, primary)
 	}
 	return nil
 }

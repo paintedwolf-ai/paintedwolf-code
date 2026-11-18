@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -32,8 +31,7 @@ func TestPriorityBelowNormalSetsNice(t *testing.T) {
 	if err := guard.onStarted(cmd); err != nil {
 		t.Fatalf("onStarted: %v", err)
 	}
-	// Give the kernel a beat to apply priority.
-	time.Sleep(20 * time.Millisecond)
+	// onStarted sets the priority with one system call; it holds when that call returns.
 	inherited, err := processNice(os.Getpid())
 	testutil.FailErr(t, "read the test's nice value", err)
 	nice, err := processNice(cmd.Process.Pid)
