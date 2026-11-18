@@ -8,8 +8,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestMemoryRegistrySetCover_latestWins(t *testing.T) {
-	reg := NewMemoryRegistry()
+func TestProjectRegistrySetCover_latestWins(t *testing.T) {
+	reg := newProjectRegistry(t)
 	p, err := reg.Create(context.Background(), CreateParams{Name: "cover-test"})
 	testutil.FailErr(t, "reg.Create failed", err)
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)

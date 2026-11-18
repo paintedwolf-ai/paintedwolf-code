@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -19,7 +20,7 @@ func TestDirectoryFilterSearchReplacementParity(t *testing.T) {
 		testutil.FailErr(t, "create fixture directory", os.MkdirAll(filepath.Dir(abs), 0o755))
 		testutil.FailErr(t, "write fixture", os.WriteFile(abs, []byte("old\n"), 0o644))
 	}
-	p, err := project.CreateWithRoot(context.Background(), project.NewMemoryRegistry(), dir)
+	p, err := project.CreateWithRoot(context.Background(), projecttest.NewRegistry(t), dir)
 	testutil.FailErr(t, "create project", err)
 	root := CodeRoot{ProjectID: p.ID, RootID: p.Roots[0].ID, Path: dir}
 	store := testReplaceStore{project: p}

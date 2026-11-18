@@ -9,12 +9,13 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestReplacementRejectsFileOnlyQueries(t *testing.T) {
-	registry := project.NewMemoryRegistry()
+	registry := projecttest.NewRegistry(t)
 	p, err := project.CreateWithRoot(t.Context(), registry, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	server := &Handler{projectRegistry: registry, responses: &httpio.Responder{}}
@@ -43,7 +44,7 @@ func TestReplacementRejectsFileOnlyQueries(t *testing.T) {
 }
 
 func TestReplaceRootsIntersectsQueryAndOrigin(t *testing.T) {
-	registry := project.NewMemoryRegistry()
+	registry := projecttest.NewRegistry(t)
 	a, err := project.CreateWithRoot(t.Context(), registry, t.TempDir())
 	testutil.FailErr(t, "create origin project", err)
 	b, err := project.CreateWithRoot(t.Context(), registry, t.TempDir())

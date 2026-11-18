@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -83,7 +84,7 @@ func TestActivityProgressIsThrottledAndCannotReopenFinishedLease(t *testing.T) {
 
 func eventFixtureProject(t *testing.T) string {
 	t.Helper()
-	registry := project.NewMemoryRegistry()
+	registry := projecttest.NewRegistry(t)
 	p, err := registry.Create(t.Context(), project.CreateParams{Draft: true, Name: "Prompt event fixture"})
 	testutil.FailErr(t, "register prompt event project", err)
 	return p.ID
