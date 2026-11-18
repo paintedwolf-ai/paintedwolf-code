@@ -358,9 +358,6 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 				names = append(names, meta.Name)
 			}
 			out.violations = append(out.violations, fmt.Sprintf("request %d on %s offers %v", i, where, names))
-			if req.Debug.CommandGuidance != nil {
-				out.violations = append(out.violations, fmt.Sprintf("request %d guidance facts %v", i, req.Debug.CommandGuidance.Facts))
-			}
 		}
 	}
 	return out
