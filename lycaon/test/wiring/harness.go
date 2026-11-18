@@ -129,6 +129,7 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 		cfg.TestOrchestrator = autoCompleteOrchestrator
 	}
 	var recording *llm.RecordingClient
+	var sa *app.ServeApp
 	switch {
 	case o.llmClient != nil:
 		cfg.TestLLMClient = o.llmClient
@@ -147,8 +148,8 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 		cfg.TestLLMClient = llm.NewMockProvider(loadMockConfig(t))
 	}
 
-	var sa *app.ServeApp
-	sa, err := app.Build(t.Context(), cfg)
+	var err error
+	sa, err = app.Build(t.Context(), cfg)
 	testutil.FailErr(t, "build app", err)
 	t.Cleanup(func() { testutil.FailErr(t, "close test app", sa.Close()) })
 

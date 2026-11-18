@@ -132,7 +132,9 @@ func spellings(value string) []string {
 }
 
 func TestPlantedSecretsReachNoSink(t *testing.T) {
+	// Debug logging and the model-request capture are sinks too.
 	t.Setenv("LYCAON_LOG_LEVEL", "debug")
+	t.Setenv("LYCAON_LLM_DEBUG", "1")
 	plants := catalogPlants(t)
 	managed := "pw-canary-managed-7f3c19e2b84d5a60"
 	plants = append(plants, plant{rule: "managed secret", value: managed})
