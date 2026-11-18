@@ -2,14 +2,14 @@ package execution_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/scan"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -28,7 +28,7 @@ func TestRunnerConcurrencyCap(t *testing.T) {
 
 	cfg := scancfg.DefaultRunnerConfig()
 	cfg.Runner.MaxConcurrency = 2
-	runner := scanexecution.NewRunner(store, reg, scan.NoopIngester{}, cfg, nil)
+	runner := scanexecution.NewRunner(store, reg, scantest.DiscardIngester{}, cfg, nil)
 	runner.Snapshots = coord.SnapshotStore()
 
 	dir := testProjectDir(t)

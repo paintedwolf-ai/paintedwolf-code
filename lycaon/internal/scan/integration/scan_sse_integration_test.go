@@ -5,16 +5,15 @@ package integration
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/scan"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/events"
-
+	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -42,7 +41,7 @@ func TestScanSSEIntegrationPublishesTransitions(t *testing.T) {
 	mock := &scantest.MockScanner{Result: &scanoutput.Result{FindingsCount: 1}}
 	reg := &scantest.MockRegistry{Scanner: mock}
 	cfg := scancfg.DefaultRunnerConfig()
-	runner := scanexecution.NewRunner(store, reg, scan.NoopIngester{}, cfg, pub)
+	runner := scanexecution.NewRunner(store, reg, scantest.DiscardIngester{}, cfg, pub)
 	runner.Snapshots = coord.SnapshotStore()
 
 	created, err := coord.Enqueue(context.Background(), scan.EnqueueRequest{

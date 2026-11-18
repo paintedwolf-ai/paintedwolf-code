@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	lyexec "github.com/lycaon/lycaon/internal/exec"
-	"github.com/lycaon/lycaon/internal/scan/rules"
+	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -24,8 +24,8 @@ var (
 // branch tip, which is whatever upstream pushed last.
 func TestVendorRuleCatalogsArePinned(t *testing.T) {
 	t.Parallel()
-	prov, err := rules.LoadRulesProvenance()
-	contractcheck.FailErr(t, "rules.LoadRulesProvenance failed", err)
+	prov, err := scantest.LoadRulesProvenance()
+	contractcheck.FailErr(t, "scantest.LoadRulesProvenance failed", err)
 
 	for _, vendor := range prov.Vendors {
 		if !vendorCommitSHA.MatchString(vendor.Commit) {
@@ -52,8 +52,8 @@ func TestVendorRuleCatalogsArePinned(t *testing.T) {
 func TestVendorRulePatchesArePinned(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	prov, err := rules.LoadRulesProvenance()
-	contractcheck.FailErr(t, "rules.LoadRulesProvenance failed", err)
+	prov, err := scantest.LoadRulesProvenance()
+	contractcheck.FailErr(t, "scantest.LoadRulesProvenance failed", err)
 
 	for _, vendor := range prov.Vendors {
 		dir := filepath.Join(
@@ -102,8 +102,8 @@ func TestVendorRulePatchesArePinned(t *testing.T) {
 func TestVendorRuleCatalogsCarryRuleFiles(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	prov, err := rules.LoadRulesProvenance()
-	contractcheck.FailErr(t, "rules.LoadRulesProvenance failed", err)
+	prov, err := scantest.LoadRulesProvenance()
+	contractcheck.FailErr(t, "scantest.LoadRulesProvenance failed", err)
 
 	for _, vendor := range prov.Vendors {
 		dir := filepath.Join(root, "lycaon", "config", "runtime", "scanners", "rules", vendor.ID)
