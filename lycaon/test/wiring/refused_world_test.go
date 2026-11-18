@@ -286,10 +286,12 @@ func refusalProjectAt(base string) refusalProject {
 	return refusalProject{project: filepath.Join(base, "proj"), outside: filepath.Join(base, "outsid\u00e9")}
 }
 
-// copyRefusalProject gives one cell its own copy of the template.
+// copyRefusalProject gives one cell its own copy of the template. Fixtures
+// live under the home directory: the system temp directory is a default write
+// root, so a sibling there is not outside the roots.
 func copyRefusalProject(t *testing.T, template refusalProject) refusalProject {
 	t.Helper()
-	base := filepath.Join(t.TempDir(), "w")
+	base := filepath.Join(outsideCommandFolder(t), "w")
 	testutil.FailErr(t, "copy fixture", os.CopyFS(base, os.DirFS(filepath.Dir(template.project))))
 	return refusalProjectAt(base)
 }
@@ -297,7 +299,7 @@ func copyRefusalProject(t *testing.T, template refusalProject) refusalProject {
 // newRefusalTemplate builds the project and the outside repository once per test.
 func newRefusalTemplate(t *testing.T) refusalProject {
 	t.Helper()
-	p := refusalProjectAt(t.TempDir())
+	p := refusalProjectAt(outsideCommandFolder(t))
 	files := map[string]string{
 		"notes.txt":              "first note\nsecond note\n",
 		"tracked.txt":            "committed\n",
