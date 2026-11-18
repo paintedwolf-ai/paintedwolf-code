@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect } from "@playwright/test";
@@ -23,7 +24,13 @@ function programResult(content: string): { status: number; stdout: string; stder
 webE2e("a process the agent launches reads the person's unsaved text", async ({ page, request }) => {
   const { project, root } = await openProjectFilesFixture(page, request, {
     prefix: "editor-launch", name: "Editor agent launch",
-    seed: (root) => writeFileSync(path.join(root, "shared.txt"), "First line\nLast line\n"),
+    seed: (root) => {
+      writeFileSync(path.join(root, "shared.txt"), "First line\nLast line\n");
+      const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", ...args], { cwd: root });
+      git("init", "--quiet");
+      git("add", "shared.txt");
+      git("commit", "--quiet", "--message", "Seed");
+    },
   });
   const onDisk = () => readFileSync(path.join(root, "shared.txt"), "utf8");
   const sessionRow = page.locator('[data-testid="focused-session-list"] [data-session-id]');
@@ -38,12 +45,12 @@ webE2e("a process the agent launches reads the person's unsaved text", async ({ 
     { path: "shared.txt", root_id: project.roots[0]!.id, client_id: "fixture-observer" });
   await apiJson(request, "POST", "/harness/llm/auto", { enabled: false });
   try {
-    const prompt = await apiPostPrompt(request, sessionId, { text: "Track shared.txt in Git and report what changed." });
+    const prompt = await apiPostPrompt(request, sessionId, { text: "Report what changed in shared.txt." });
     expect(prompt.ok(), await prompt.text()).toBe(true);
     const driver = manualHarnessTools(request, sessionId);
     await driver.loadTools("update_progress");
     await driver.completed(await driver.invoke("update_progress", {
-      content: "## Progress\n- [ ] Track shared.txt in Git\n- [ ] Report what changed\n",
+      content: "## Progress\n- [ ] Report what changed in shared.txt\n",
     }));
     const run = async (command: string) => {
       const content = await driver.completed(await driver.invoke("command", { command }));
@@ -51,7 +58,6 @@ webE2e("a process the agent launches reads the person's unsaved text", async ({ 
       expect(result.status, content).toBe(0);
       return { content, ...result };
     };
-    await run("git init && git add shared.txt");
     expect((await run("git ls-files")).stdout).toContain("shared.txt");
 
     await editor.click();
