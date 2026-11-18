@@ -19,7 +19,7 @@ function activeFileRevealKey(file: ActiveFile): string | null {
 }
 
 
-type SourceProps = Pick<FilesTreeProps, "projectId" | "workspaceId" | "client" | "sessionId" | "chatId" | "approvalsRevision" |
+type SourceProps = Pick<FilesTreeProps, "projectId" | "workspaceId" | "roots" | "client" | "sessionId" | "chatId" | "approvalsRevision" |
   "filterQuery" | "reviewScope" | "activeFile" | "navigationRevision" | "autoReveal" |
   "onWorkspaceMismatch" | "onInitialLoadSettled" | "onSelectEntry">;
 
@@ -108,9 +108,13 @@ export function createFilesTreeSource(props: SourceProps, deps: {
       const client = props.client;
       const session = props.sessionId;
       if (!project || !workspace || !client) { setSourceView(undefined); return; }
-      const held = untrack(() => retainFilesTreeSession(client, project, workspace, session, {
-        chat_id: props.chatId, disclosures: restoredFilesTreeDisclosures(workspace), filter: props.filterQuery, review: props.reviewScope,
-      }));
+      const held = untrack(() => {
+        const roots = new Set(props.roots.map(root => root.id));
+        const disclosures = restoredFilesTreeDisclosures(workspace)?.filter(rule => roots.has(rule.address.root_id));
+        return retainFilesTreeSession(client, project, workspace, session, {
+          chat_id: props.chatId, disclosures, filter: props.filterQuery, review: props.reviewScope,
+        });
+      });
       if (seededWorkspaceKey !== workspace) {
         seededWorkspaceKey = workspace; deps.setDirStates({});
         deps.restoration.pendingScroll = getFilesTreeScrollTop(workspace);

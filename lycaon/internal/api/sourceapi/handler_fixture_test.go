@@ -24,6 +24,11 @@ import (
 
 func callSourceViewHandler(t *testing.T, handler http.HandlerFunc, projectID, viewID string, body any) *httptest.ResponseRecorder {
 	t.Helper()
+	return callSourceViewHandlerAs(t, people.WithCaller(t.Context(), testutil.HostOwner()), handler, projectID, viewID, body)
+}
+
+func callSourceViewHandlerAs(t *testing.T, ctx context.Context, handler http.HandlerFunc, projectID, viewID string, body any) *httptest.ResponseRecorder {
+	t.Helper()
 	encoded, err := json.Marshal(body)
 	testutil.FailErr(t, "encode source view request", err)
 	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(encoded))
@@ -31,8 +36,7 @@ func callSourceViewHandler(t *testing.T, handler http.HandlerFunc, projectID, vi
 	route := chi.NewRouteContext()
 	route.URLParams.Add("id", projectID)
 	route.URLParams.Add("view_id", viewID)
-	ctx := context.WithValue(request.Context(), chi.RouteCtxKey, route)
-	ctx = people.WithCaller(ctx, testutil.HostOwner())
+	ctx = context.WithValue(ctx, chi.RouteCtxKey, route)
 	response := httptest.NewRecorder()
 	handler(response, request.WithContext(ctx))
 	return response

@@ -63,6 +63,9 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 	var locations chatLocationProjection
 	if request.Tree != nil {
 		locations, err = s.Trees.chatLocations(r.Context(), scope, p, request.Tree.Intent.ChatID)
+		if err == nil {
+			err = validateDisclosureRoots(p, locations.roots, request.Tree.Intent.Disclosures)
+		}
 		if err != nil {
 			s.writeSourceViewError(w, r, err)
 			return true
@@ -181,6 +184,22 @@ func validateSourceViewCreate(p *project.Project, request wire.SourceViewCreate)
 		}
 	}
 	return validateSourceComparisonIntent(request.Comparison.Intent)
+}
+
+func validateDisclosureRoots(p *project.Project, outside []sourcetree.Root, disclosures []wire.SourceTreeDisclosure) error {
+	roots := make(map[string]bool, len(p.Roots)+len(outside))
+	for _, root := range p.Roots {
+		roots[root.ID] = true
+	}
+	for _, root := range outside {
+		roots[root.ID] = true
+	}
+	for _, disclosure := range disclosures {
+		if !roots[disclosure.Address.RootID] {
+			return sourcetree.ErrUnknownRoot
+		}
+	}
+	return nil
 }
 
 func validateSourceTreeAddress(p *project.Project, address wire.SourceTreeAddress) error {
