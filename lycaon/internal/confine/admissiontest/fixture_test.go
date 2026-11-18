@@ -1,11 +1,11 @@
-package admissionfixture_test
+package admissiontest_test
 
 import (
 	"errors"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 )
 
 func TestEnableRestoresProcessAdmission(t *testing.T) {
@@ -15,9 +15,9 @@ func TestEnableRestoresProcessAdmission(t *testing.T) {
 		t.Fatalf("fresh process requires confinement: %v", err)
 	}
 	t.Run("enabled", func(t *testing.T) {
-		admissionfixture.Enable(t)
+		admissiontest.Enable(t)
 		t.Run("nested", func(t *testing.T) {
-			admissionfixture.Enable(t)
+			admissiontest.Enable(t)
 			if err := confine.RequireApplied(false); !errors.Is(err, confine.ErrNotConfined) {
 				t.Fatalf("nested scope did not require confinement: %v", err)
 			}

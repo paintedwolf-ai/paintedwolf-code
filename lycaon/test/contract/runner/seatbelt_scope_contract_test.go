@@ -23,7 +23,7 @@ var confineEngagementAPIs = []struct {
 	names           []string
 }{
 	{"confine", "confine", []string{"Available", "EnableAutoConfine"}},
-	{"confine/admissionfixture", "admissionfixture", []string{"Enable"}},
+	{"confine/admissiontest", "admissiontest", []string{"Enable"}},
 }
 
 const seatbeltWholePackageScope = "./internal/confine"

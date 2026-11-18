@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -20,7 +20,7 @@ func TestInstalledScannerProductCases(t *testing.T) {
 	if _, err := bundled.VerifyStagedArtifact(manifest, root, "linux", runtime.GOARCH); err != nil {
 		testutil.MissingScannerResource(t, "packaged OpenGrep", err)
 	}
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Run("disabled boundary cannot qualify", func(t *testing.T) {

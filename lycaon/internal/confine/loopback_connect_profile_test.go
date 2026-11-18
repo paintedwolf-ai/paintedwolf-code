@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -68,7 +68,7 @@ func TestBrowserProfileFollowsTheRequestedLoopbackPorts(t *testing.T) {
 }
 
 func TestBrowserConfinementKeepsANarrowedRequest(t *testing.T) {
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	c, ok := confine.BrowserConfinement(confine.Request{
 		Roots:                []string{t.TempDir()},
 		LoopbackConnect:      true,

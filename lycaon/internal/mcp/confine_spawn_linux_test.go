@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -22,7 +22,7 @@ func TestLinuxStdioMCPAppliedBoundary(t *testing.T) {
 		caps, _ := confine.LinuxCapabilities()
 		t.Fatalf("required Linux MCP boundary is unavailable: %+v", caps)
 	}
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	_, err := confine.StartEgressBroker(t.TempDir(), net.Listen)

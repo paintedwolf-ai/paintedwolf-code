@@ -21,7 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 )
 
 func fixtureDir(t *testing.T, name string) string {
@@ -546,7 +546,7 @@ func TestCaptureURLReachesHostLoopback(t *testing.T) {
 		t.Skip("browser capture")
 	}
 	browsertest.SkipIfNoBrowser(t)
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

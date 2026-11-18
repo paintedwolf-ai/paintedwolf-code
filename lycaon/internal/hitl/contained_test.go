@@ -6,14 +6,14 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/hitl"
 )
 
 // TestContainedProvenanceMatchesDefaultConfinement asserts the Contained value the
 // gate stamps equals the confinement exec.Run would apply for the same roots.
 func TestContainedProvenanceMatchesDefaultConfinement(t *testing.T) {
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	roots := []string{t.TempDir()}
 
 	c, ok := confine.DefaultConfinement(confine.Request{Roots: roots})
@@ -47,7 +47,7 @@ func TestContainedProvenanceMatchesDefaultConfinement(t *testing.T) {
 // same authority. The gate stamps Contained from its own DefaultConfinement call, so
 // narrowing must reach this projection as well as the profile.
 func TestContainedCarriesDirectIPNarrowing(t *testing.T) {
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
@@ -97,7 +97,7 @@ func TestContainedCarriesDirectIPNarrowing(t *testing.T) {
 }
 
 func TestContainedWriteRootsCarryDurableGrants(t *testing.T) {
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	project := t.TempDir()
 	granted := t.TempDir()
 	confine.SetGrantedWriteRootsSource(func(string) []string { return []string{granted} })
@@ -121,7 +121,7 @@ func TestContainedWriteRootsCarryDurableGrants(t *testing.T) {
 }
 
 func TestContainedTaskOverlayStaysOutOfRoots(t *testing.T) {
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	project := t.TempDir()
 	overlay := filepath.Join(t.TempDir(), "not-yet-created")
 	got := hitl.ContainedForAction(hitl.ActionConfineInputs{
@@ -173,7 +173,7 @@ func TestContainedProjectionRefusesInvalidStateAncestor(t *testing.T) {
 }
 
 func TestContainedPreservesReadOnlyRootAuthority(t *testing.T) {
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	state, project := t.TempDir(), t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", state)
 	output := filepath.Join(state, "session-output", "chat")

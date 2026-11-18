@@ -4,12 +4,12 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 )
 
 func assertBrowserLoopbackConfinement(t *testing.T) {
 	t.Helper()
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_PERMISSIONS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")

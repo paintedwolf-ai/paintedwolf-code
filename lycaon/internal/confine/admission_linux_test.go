@@ -6,13 +6,13 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestRequireAppliedRejectsUnavailableLinuxBoundary(t *testing.T) {
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	restoreLinuxCapabilities(t)
