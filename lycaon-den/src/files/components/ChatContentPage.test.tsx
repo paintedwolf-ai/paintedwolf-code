@@ -4,6 +4,7 @@ import { createSignal } from "solid-js";
 import type { ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatContentPage } from "./ChatContentPage.tsx";
+import type { SourceFormatSettings } from "../../api/types.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { assertNamedControl } from "../../test/controls.ts";
 import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
@@ -386,12 +387,14 @@ describe("chat content Files pane", () => {
   it("mounts language grammars, renders language labels, and applies project lineWidth in ChatContentPage", async () => {
     void saveEditorLineLayout("pretty");
     const py = `def f(a, b): return {${Array.from({ length: 16 }, (_, i) => `"key_${i}": ${i}`).join(", ")}}\n`;
-    const client = {
-      getProjectSourceFormatSettings: async () => ({
+    const client = stubClient({
+      getProjectSourceFormatSettings: async (_project: string, path: string): Promise<SourceFormatSettings> => ({
+        path,
+        root_id: "00000000-0000-4000-8000-000000000001",
         config_names: ["pyproject.toml"],
         sources: [{ tool: "ruff", configs: ["pyproject.toml"], settings: { line_width: 80 } }],
       }),
-    } as never;
+    });
     const view = render(() => (
       <ChatContentPage
         projectId="proj"
