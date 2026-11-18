@@ -47,7 +47,7 @@ func TestDCOCertificationUsesTrustedBoundedSerializedCaller(t *testing.T) {
 	if !maps.Equal(workflow.Permissions, want) {
 		t.Errorf("certification needs exactly %v, got %v", want, workflow.Permissions)
 	}
-	wantGroup := "dco-${{ github.event.pull_request.head.ref || github.event.workflow_run.head_branch || github.event.merge_group.head_ref || inputs.queue_ref || inputs.pull_request || github.run_id }}"
+	wantGroup := "dco-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.merge_group.head_ref || inputs.queue_ref || inputs.pull_request || github.event.workflow_run.head_branch || github.run_id }}"
 	if workflow.Concurrency.Group != wantGroup || workflow.Concurrency.Queue != "max" || workflow.Concurrency.Cancel {
 		t.Errorf("DCO writers for one pull request or merge group must serialize without cancelling or replacing pending events: %+v", workflow.Concurrency)
 	}
