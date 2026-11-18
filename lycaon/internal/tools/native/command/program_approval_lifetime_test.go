@@ -56,7 +56,7 @@ func TestProgramApprovalSurvivesTurnAndHonorsStop(t *testing.T) {
 					done <- callResult{content, err}
 				}()
 				<-invoked
-				clock.Advance(command.ProgramInlineWait)
+				clock.Advance(toolcontract.ProgramInlineWait)
 				got := <-done
 				testutil.FailErr(t, "promote running program", got.err)
 				close(ask)
@@ -149,11 +149,11 @@ func TestProgramForegroundBudgetExcludesApprovalWaits(t *testing.T) {
 	}()
 	<-approval.entered
 	for _, due := range clock.TimersDue() {
-		if due <= command.ProgramInlineWait {
+		if due <= toolcontract.ProgramInlineWait {
 			t.Fatalf("foreground budget still running during the approval wait: %v", clock.TimersDue())
 		}
 	}
-	clock.Advance(10 * command.ProgramInlineWait)
+	clock.Advance(10 * toolcontract.ProgramInlineWait)
 	close(approval.answer)
 	got := <-done
 	testutil.FailErr(t, "complete after approval", got.err)

@@ -114,24 +114,6 @@ func WaitBudget(args map[string]any) time.Duration {
 	return budget
 }
 
-func commandTimeout(args map[string]any, toolName string) time.Duration {
-	if v, ok := args["timeout_ms"].(float64); ok && v > 0 {
-		d := time.Duration(v) * time.Millisecond
-		// Mirror the schema bounds for callers that bypass schema validation.
-		if d < time.Second {
-			d = time.Second
-		}
-		if d > exec.MaxCommandTimeout {
-			return exec.MaxCommandTimeout
-		}
-		return d
-	}
-	if toolName == VerifyToolName {
-		return exec.DefaultVerifyTimeout
-	}
-	return 0
-}
-
 func commandRunID(tctx tools.ToolContext) string {
 	if tctx.Identity.ParentSessionID != "" {
 		return tctx.Identity.ParentSessionID
@@ -237,8 +219,8 @@ func runCommandForeground(
 		Runner: runner,
 		Mode:   bgprocess.JobModeAwaited, OriginTool: toolName,
 		ToolCallID: tctx.Identity.ToolCallID, RunID: commandRunID(tctx),
-		Timeout: commandTimeout(args, toolName), AllowConcurrent: allowConcurrent(args),
-		Facts: spawnFacts,
+		AllowConcurrent: allowConcurrent(args),
+		Facts:           spawnFacts,
 	})
 	if err != nil {
 		index.Release()

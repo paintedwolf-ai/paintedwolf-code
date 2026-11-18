@@ -50,7 +50,7 @@ func TestArgvShapeObservationIgnoresOtherErrors(t *testing.T) {
 }
 
 func TestArgvShapeRejectCommandMissing(t *testing.T) {
-	tr := ArgvShapeReject("command", map[string]any{"cwd": ".", "timeout_ms": 120000})
+	tr := ArgvShapeReject("command", map[string]any{"cwd": "."})
 	if tr == nil || tr.Code != "COMMAND_ARGV_REQUIRED" {
 		t.Fatalf("got %#v", tr)
 	}

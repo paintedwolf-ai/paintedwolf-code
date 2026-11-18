@@ -296,10 +296,7 @@ resource_implied:
 # Codegen: ./task codegen:native-tool-contracts
 grant_identity_neutral_args:
   command:
-    - timeout_ms
     - terminal_capture
-  verify:
-    - timeout_ms
   source_history:
     - limit
     - before_ordinal
