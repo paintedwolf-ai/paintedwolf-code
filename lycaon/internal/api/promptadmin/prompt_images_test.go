@@ -64,7 +64,7 @@ func TestPromptAdmissionProjectsEachImageBlobOnce(t *testing.T) {
 	response := httptest.NewRecorder()
 	prepared, ok := handler.Submission.preparePromptAdmission(
 		response, httptest.NewRequest("POST", "/", nil),
-		sess.ID, sess, input, input.Text, input.Text, false,
+		sess.ID, sess, input, attachments, input.Text, input.Text, false,
 	)
 	if !ok {
 		t.Fatalf("prepare admission: %d %s", response.Code, response.Body.String())
