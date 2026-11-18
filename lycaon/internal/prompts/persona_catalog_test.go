@@ -9,8 +9,6 @@ import (
 )
 
 func TestHintCodeCacheIsBoundToRevisionAndContent(t *testing.T) {
-	ResetPersonaContractCache()
-	t.Cleanup(ResetPersonaContractCache)
 	entry := func(instead string) []hintregistry.Entry {
 		return []hintregistry.Entry{{
 			Code: "SAME_CODE",

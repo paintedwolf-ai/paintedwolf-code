@@ -201,8 +201,6 @@ func TestW12PersonaTemplateIsolation(t *testing.T) {
 	if a.Layers().Catalog.Revision == b.Layers().Catalog.Revision {
 		t.Fatal("derived engines must keep distinct catalogs")
 	}
-	// Persona cache keys by catalog fingerprint.
-	prompts.ResetPersonaContractCache()
 	rA, err := prompts.NewReader(prompts.ReaderInput{
 		ProfileID: "implement",
 		Profiles:  v1.ToolProfiles,
