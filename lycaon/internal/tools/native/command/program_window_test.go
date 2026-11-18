@@ -29,8 +29,9 @@ const writeGen = `external -- /bin/sh -c 'echo generated > gen.txt'`
 // every window open counted.
 type windowFixture struct {
 	*programtest.Fixture
-	ledger *sourceledger.Store
-	opener *countingOpener
+	ledger             *sourceledger.Store
+	opener             *countingOpener
+	continuousCoverage atomic.Bool
 }
 
 // countingOpener counts opens around the real ledger. before, when set, runs
@@ -53,8 +54,6 @@ func (o *countingOpener) OpenCommandWindow(ctx context.Context, in sourceledger.
 
 func newWindowFixture(t *testing.T, timing sourceledger.Timing) *windowFixture {
 	t.Helper()
-	// Without watcher coverage a close settles before the program's result.
-
 	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
 	ledger := f.AttachLedger(t, timing)
@@ -64,7 +63,14 @@ func newWindowFixture(t *testing.T, timing sourceledger.Timing) *windowFixture {
 		configure(tc)
 		tc.Source.Commands = opener
 	}
-	return &windowFixture{Fixture: f, ledger: ledger, opener: opener}
+	fixture := &windowFixture{Fixture: f, ledger: ledger, opener: opener}
+	// Retire each observed stream to exercise settlement without coverage.
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, event repochange.Event) {
+		if event.ProjectDir == f.Dir && event.Source == repochange.SourceWatcher && !fixture.continuousCoverage.Load() {
+			repochange.CloseRoot(f.Dir)
+		}
+	}))
+	return fixture
 }
 
 func (f *windowFixture) run(t *testing.T, source string) command.ProgramOutcome {
@@ -121,6 +127,7 @@ func TestProgramWindowACCW01UntrustedTokenSettlesBeforeTheResult(t *testing.T) {
 func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
 	gate := make(chan time.Time)
 	f := newWindowFixture(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time { return gate }})
+	f.continuousCoverage.Store(true)
 	repochangetest.Watch(t, f.Dir)
 	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
 	outcome := f.run(t, writeGen)
