@@ -70,11 +70,8 @@ func TestTopologyLookupEmpty(t *testing.T) {
 
 func TestValidateAgentToolProfiles(t *testing.T) {
 	reg := agentRegistryFixture(t)
-	profiles := []sandbox.ToolProfile{
-		{ID: "coordinator"},
-		{ID: "implement"},
-		{ID: "explore_readonly"},
-	}
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load shipped tool profiles", err)
 	if err := ValidateAgentToolProfiles(reg, profiles); err != nil {
 		testutil.FailErr(t, "ValidateAgentToolProfiles failed", err)
 	}
