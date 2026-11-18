@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -21,7 +22,7 @@ import (
 )
 
 func TestMessageCarriesVersionCount(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
@@ -50,7 +51,7 @@ func TestMessageCarriesVersionCount(t *testing.T) {
 }
 
 func TestDraftVersionsEndpointOrder(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
@@ -71,12 +72,12 @@ func TestDraftVersionsEndpointOrder(t *testing.T) {
 }
 
 func TestDraftNeverEmitsDeleteOpForCoordinatorDraftSlot(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetEventPublisher(pub)
-	projectID := attachTestProject(t, mgr)
+	projectID := attachTestProject(t, mgr, store)
 
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: projectID}, projectID)

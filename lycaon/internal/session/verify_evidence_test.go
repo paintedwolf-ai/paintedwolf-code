@@ -11,9 +11,10 @@ import (
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/repochange"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -29,7 +30,8 @@ func (s stubVerifyConfig) VerifyTestCommand(string) string { return s.cmd }
 func verifyGateHarness(t *testing.T, declared string) (*Host, *api.Session, []api.Message) {
 	t.Helper()
 	ctx := context.Background()
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessions := storetest.New(t, "verify-proj")
+	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
 	mgr.Verification.SetRevisionSource(func(_ context.Context, root string) (string, string) {
@@ -38,17 +40,16 @@ func verifyGateHarness(t *testing.T, declared string) (*Host, *api.Session, []ap
 	if declared != "" {
 		mgr.Verification.SetVerifyConfig(stubVerifyConfig{cmd: declared})
 	}
-	sess, err := mgr.Coordinator.Context.Sessions.(Store).Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
+	sess, err := mgr.Coordinator.Context.Sessions.(Store).Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "verify-proj")
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	sess.ProjectID = "verify-proj"
-	sess.WorkspacePath = t.TempDir()
+
 	history := []api.Message{{Role: api.MessageRoleUser, Content: "do the work", CreatedAt: time.Now().Add(-time.Minute)}}
 	return mgr, sess, history
 }
 
-// statedRun is the subsystem owner's invocation result.
+// statedRun supplies a terminal invocation result.
 func statedRun(command string, exitCode int) tools.SourceRunCapture {
 	verdict := api.SourceVerdictPassed
 	if exitCode != 0 {
@@ -232,17 +233,19 @@ func TestVerifyGateState_commandUnverifiableCountsAsAttempt(t *testing.T) {
 
 func TestWorkflowSourceVerifyPassedReadsCurrentSessionEvidence(t *testing.T) {
 	ctx := t.Context()
-	memory := store.NewMemory()
-	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessionStore := storetest.New(t, "verify-proj")
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
 	mgr.Verification.SetRevisionSource(func(_ context.Context, root string) (string, string) {
 		return invocation.SourceRevisionForRoot(root)
 	})
-	sess, err := memory.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
 	testutil.FailErr(t, "create verify session", err)
-	sess.WorkspacePath = t.TempDir()
-	testutil.FailErr(t, "append user boundary", memory.AppendMessages(ctx, sess.ID, api.Message{
+	testdbseed.BindSessionWorkspace(t, sessionStore.DB(), sess.ID, t.TempDir())
+	sess, err = sessionStore.Get(ctx, sess.ID)
+	testutil.FailErr(t, "reload session workspace", err)
+	testutil.FailErr(t, "append user boundary", sessionStore.AppendMessages(ctx, sess.ID, api.Message{
 		ID: "user-1", Role: api.MessageRoleUser, Content: "fix it", CreatedAt: time.Now().Add(-time.Minute),
 	}))
 	recordVerify(t, mgr, sess, "go test ./...", 0)
@@ -276,12 +279,12 @@ func TestSourceRunEvidenceRequiresTerminalVerdict(t *testing.T) {
 
 func TestCommandCompletionRecordsPromotedCommandEvidence(t *testing.T) {
 	ctx := context.Background()
-	memory := store.NewMemory()
-	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessionStore := storetest.New(t, "verify-proj")
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	evidenceStore := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 	mgr.Verification.SetEvidenceStore(evidenceStore)
-	sess, err := memory.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
 	testutil.FailErr(t, "create completion session", err)
 
 	finishedAt := time.Now().UTC()
@@ -310,12 +313,12 @@ func TestCommandCompletionRecordsPromotedCommandEvidence(t *testing.T) {
 
 func TestCommandCompletionRecordsPromotedVerifyEvidence(t *testing.T) {
 	ctx := context.Background()
-	memory := store.NewMemory()
-	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessionStore := storetest.New(t, "verify-proj")
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	evidenceStore := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 	mgr.Verification.SetEvidenceStore(evidenceStore)
-	sess, err := memory.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
 	testutil.FailErr(t, "create completion session", err)
 
 	finishedAt := time.Now().UTC()

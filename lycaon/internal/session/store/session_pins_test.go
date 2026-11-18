@@ -30,7 +30,7 @@ func pinTestStores(t *testing.T) map[string]pinTestStore {
 	dir := t.TempDir()
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	return map[string]pinTestStore{"sql": NewSQL(sqlDB), "memory": NewMemory()}
+	return map[string]pinTestStore{"sql": NewSQL(sqlDB)}
 }
 
 func createPinTestChats(t *testing.T, st pinTestStore, n int) []string {

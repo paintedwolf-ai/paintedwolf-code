@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"sort"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -39,36 +38,5 @@ func (s *sqlSessionViews) ReadExecutionState(ctx context.Context, root string) (
 			state.Submissions = append(state.Submissions, ExecutionSubmission{ID: row.ID, SessionID: row.SessionID, Status: PromptSubmissionStatus(row.Status), ErrorCode: row.ErrorCode})
 		}
 	}
-	return state, nil
-}
-
-func (s *memorySessionViews) ReadExecutionState(ctx context.Context, root string) (ExecutionState, error) {
-	var state ExecutionState
-	if err := ctx.Err(); err != nil {
-		return state, err
-	}
-	core := s.core
-	core.mu.RLock()
-	defer core.mu.RUnlock()
-	scope := map[string]bool{}
-	for _, id := range memorySessionTreeIDs(core.sessions, root) {
-		if row := core.sessions[id]; row != nil {
-			scope[id] = true
-			state.Sessions = append(state.Sessions, ExecutionSession{ID: id, ProjectID: row.ProjectID, Status: row.Status})
-		}
-	}
-	latest := map[string]int64{}
-	for _, p := range core.promptSubmissions {
-		if scope[p.SessionID] && p.AdmissionSeq > latest[p.SessionID] {
-			latest[p.SessionID] = p.AdmissionSeq
-		}
-	}
-	for _, p := range core.promptSubmissions {
-		if scope[p.SessionID] && p.Status != PromptSubmissionComplete && (!p.Status.Terminal() || p.AdmissionSeq == latest[p.SessionID]) {
-			state.Submissions = append(state.Submissions, ExecutionSubmission{ID: p.ID, SessionID: p.SessionID, Status: p.Status, ErrorCode: p.ErrorCode})
-		}
-	}
-	sort.Slice(state.Sessions, func(i, j int) bool { return state.Sessions[i].ID < state.Sessions[j].ID })
-	sort.Slice(state.Submissions, func(i, j int) bool { return state.Submissions[i].ID < state.Submissions[j].ID })
 	return state, nil
 }

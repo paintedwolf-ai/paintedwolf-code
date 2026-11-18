@@ -20,6 +20,7 @@ import (
 	sessionexecution "github.com/lycaon/lycaon/internal/session/execution"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -452,7 +453,7 @@ func TestLocalCapabilityCardsComposeSecretPermission(t *testing.T) {
 }
 
 func TestNudgeCoordinatorScanDoneWakesOnlyTheSessionThatRequestedTheScan(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, "p1")
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 
 	requester, err := store.Create(context.Background(), api.CreateSessionRequest{ProjectID: "p1"}, "p1")

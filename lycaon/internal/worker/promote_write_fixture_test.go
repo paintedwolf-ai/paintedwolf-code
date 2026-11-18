@@ -1,11 +1,12 @@
 package worker
 
 import (
+	"path/filepath"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"strings"
 )
 
 func (p PromoteRoots) WritePrimaryBytes(task *api.WorkerTask, qualifiedPath string, content []byte) error {

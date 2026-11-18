@@ -10,8 +10,3 @@ import (
 func (s *sqlCore) HostOwner(ctx context.Context) (people.Person, error) {
 	return s.peopleStore.HostOwner(ctx)
 }
-
-// HostOwner returns the store's fixed owner.
-func (s *memoryCore) HostOwner(context.Context) (people.Person, error) {
-	return s.owner, nil
-}

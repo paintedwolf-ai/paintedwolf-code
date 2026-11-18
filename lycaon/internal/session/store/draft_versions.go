@@ -3,12 +3,12 @@ package store
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/search"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -117,66 +117,4 @@ func (s *sqlCompaction) CountDraftVersions(ctx context.Context, sessionID, slotI
 		SlotID:    slotID,
 	})
 	return int(count), err
-}
-
-func draftVersionsKey(sessionID, slotID string) string {
-	return sessionID + "\x00" + slotID
-}
-
-func (s *memoryCompaction) AppendDraftVersion(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error) {
-	if err := ctx.Err(); err != nil {
-		return 0, err
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	slotID = strings.TrimSpace(slotID)
-	if sessionID == "" || slotID == "" {
-		return 0, fmt.Errorf("session_id and slot_id required")
-	}
-	core := s.core
-	core.mu.Lock()
-	defer core.mu.Unlock()
-	if _, ok := core.sessions[sessionID]; !ok {
-		return 0, ErrSessionNotFound
-	}
-	key := draftVersionsKey(sessionID, slotID)
-	versions := core.draftVersions[key]
-	nextIndex := len(versions)
-	versions = append(versions, api.DraftVersion{
-		VersionIndex: nextIndex,
-		Body:         body,
-		OutcomeCode:  strings.TrimSpace(outcomeCode),
-		CreatedAt:    time.Now().UTC(),
-	})
-	core.draftVersions[key] = versions
-	return len(versions), nil
-}
-
-func (s *memoryCompaction) ListDraftVersions(ctx context.Context, sessionID, slotID string) ([]api.DraftVersion, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	slotID = strings.TrimSpace(slotID)
-	if sessionID == "" || slotID == "" {
-		return nil, fmt.Errorf("session_id and slot_id required")
-	}
-	core := s.core
-	core.mu.RLock()
-	defer core.mu.RUnlock()
-	if _, ok := core.sessions[sessionID]; !ok {
-		return nil, ErrSessionNotFound
-	}
-	key := draftVersionsKey(sessionID, slotID)
-	versions := core.draftVersions[key]
-	out := make([]api.DraftVersion, len(versions))
-	copy(out, versions)
-	return out, nil
-}
-
-func (s *memoryCompaction) CountDraftVersions(ctx context.Context, sessionID, slotID string) (int, error) {
-	versions, err := s.ListDraftVersions(ctx, sessionID, slotID)
-	if err != nil {
-		return 0, err
-	}
-	return len(versions), nil
 }

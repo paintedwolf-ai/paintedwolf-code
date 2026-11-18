@@ -2,17 +2,17 @@ package orchestration_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,7 +26,7 @@ func TestMultiLegDelegationDependencyOrder(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 
 	if _, err := orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -75,7 +75,7 @@ func TestParallelLegsStartConcurrently(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 
 	if _, err := orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -93,7 +93,7 @@ func TestDependencyFailureBlocksDownstream(t *testing.T) {
 	mockCfg, err := llm.LoadMockConfig()
 	testutil.FailErr(t, "llm.LoadMockConfig failed", err)
 
-	sessStore := store.NewMemory()
+	sessStore := storetest.New(t, testdbseed.DefaultProjectID)
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	failRec := &recordingWorkers{
 		TopologyWorkers: orchestration.NewMemoryTopologyWorkers(),
@@ -113,7 +113,7 @@ func TestDependencyFailureBlocksDownstream(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 
 	_, err = orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,

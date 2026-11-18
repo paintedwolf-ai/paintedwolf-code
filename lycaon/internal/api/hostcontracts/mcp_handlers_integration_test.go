@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -19,9 +18,10 @@ import (
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -70,6 +70,8 @@ func TestHandleMCPCheck(t *testing.T) {
 // stageFakeMCPDistro replaces the shipped MCP catalog for one test.
 
 func TestMCPSettingsSSEOnToggle(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	hub := events.NewMemoryHub()
 	ch, cancel, err := hub.Subscribe(context.Background(), events.Subscription{Project: "", Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "hub.Subscribe failed", err)
@@ -94,9 +96,9 @@ func TestMCPSettingsSSEOnToggle(t *testing.T) {
 		testutil.FailErr(t, "reg.Catalog.Load failed", err)
 	}
 
-	store := store.NewMemory()
+	store := sessionFixture
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: store, Projects: project.NewMemoryRegistry(),
+		Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()),
 		Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)}, Host: hostapi.HostDependencies{Events: hub}, External: hostapi.ExternalDependencies{MCP: reg}}), nil, hostapi.TestAPIToken)
 
 	enabled := true

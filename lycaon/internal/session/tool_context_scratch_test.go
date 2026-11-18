@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -28,7 +29,7 @@ import (
 
 type scratchFixture struct {
 	mgr    *Host
-	store  *store.Memory
+	store  *store.SQL
 	root   *api.Session
 	worker *api.Session
 	dir    func(sessionID string) string
@@ -38,7 +39,7 @@ func newScratchFixture(t *testing.T) scratchFixture {
 	t.Helper()
 	ctx := t.Context()
 	stateRoot := t.TempDir()
-	sessions := store.NewMemory()
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetScratchFolders(scratch.New(stateRoot))
 	root, err := sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -150,7 +151,7 @@ func userTurnMessage(role api.MessageRole, visibility api.MessageVisibility) api
 // Writes and client turn lenses share the permanent opener ordinal across host continuations.
 func TestToolContextUserTurnTracksSessionCurrentTurn(t *testing.T) {
 	ctx := t.Context()
-	sessions := store.NewMemory()
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 
 	sess, err := sessions.Create(ctx, api.CreateSessionRequest{
@@ -324,13 +325,17 @@ func TestTurnClockRestoresFromTheStoreAfterRestart(t *testing.T) {
 
 func TestEvaluateVerdictGroundingHostAssemblesMissingCitations(t *testing.T) {
 	ctx := t.Context()
-	st := store.NewMemory()
+	st := storetest.New(t, "project-1")
 	parent, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create parent", err)
+	_, err = st.DB().ExecContext(ctx, `INSERT INTO worker_jobs (id, project_id, parent_session_id, agent_type, prompt, brief, created_at) VALUES ('job-1', ?, ?, 'skeptic', 'challenge the claims', '', ?)`, parent.ProjectID, parent.ID, time.Now().UTC().Format(time.RFC3339Nano))
+	testutil.FailErr(t, "record worker dispatch", err)
 	child, err := st.CreateChild(ctx, parent, api.SpawnChildRequest{
 		AgentType: "skeptic", Prompt: "challenge the claims", WorkerJobID: "job-1",
 	})
 	testutil.FailErr(t, "create child", err)
+	_, err = st.DB().ExecContext(ctx, `UPDATE worker_jobs SET child_session_id = ? WHERE id = 'job-1'`, child.ID)
+	testutil.FailErr(t, "bind worker session", err)
 	testutil.FailErr(t, "record reviewer evidence", st.UpsertEvidenceRecord(ctx, child.ID, evidence.Record{
 		Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "auth/session.go",
 	}))
@@ -369,7 +374,7 @@ func TestEvaluateVerdictGroundingHostAssemblesMissingCitations(t *testing.T) {
 
 func TestEvaluateVerdictGroundingRejectsInventedCitation(t *testing.T) {
 	ctx := t.Context()
-	st := store.NewMemory()
+	st := storetest.New(t, "project-1")
 	parent, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create parent", err)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())

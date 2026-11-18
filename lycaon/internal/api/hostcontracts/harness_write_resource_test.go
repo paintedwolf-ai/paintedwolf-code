@@ -12,14 +12,15 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestHarnessWriteResourceAuthenticatesBoundaryRefusal(t *testing.T) {
 	t.Setenv(configdir.EnvDev, "1")
 	t.Setenv(configdir.EnvHarness, "1")
-	server := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}}), nil, hostapi.TestAPIToken)
+	server := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}}), nil, hostapi.TestAPIToken)
 	unauthorized := httptest.NewRecorder()
 	server.ServeHTTP(unauthorized, httptest.NewRequest(http.MethodPost, "/harness/write-resource", nil))
 	if unauthorized.Code != http.StatusUnauthorized {

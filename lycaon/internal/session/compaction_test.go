@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"strings"
 	"testing"
@@ -14,20 +13,22 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/history"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/zstdcodec"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Host, *store.Memory) {
+func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Host, *store.SQL) {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetDataDir(t.TempDir())
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -215,19 +216,19 @@ func TestCompactionViewSplicesNewMessages(t *testing.T) {
 
 func TestPromptHistorySeeksAfterCompactionWatermark(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	oartest.InstallCloseoutPolicy(t, mgr)
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append covered messages", mem.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "append covered messages", sessionStore.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "covered-user", Role: api.MessageRoleUser, Content: "old request"},
 		api.Message{ID: "covered-answer", Role: api.MessageRoleAssistant, Content: "old answer"},
 	))
-	covered, err := mem.GetMessages(ctx, sess.ID)
+	covered, err := sessionStore.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "load covered messages", err)
 	watermark := covered[len(covered)-1].Ord
-	testutil.FailErr(t, "put compaction view", mem.PutCompactionView(ctx, sess.ID, store.CompactionView{
+	testutil.FailErr(t, "put compaction view", sessionStore.PutCompactionView(ctx, sess.ID, store.CompactionView{
 		Generation:        1,
 		CoveredThroughOrd: watermark,
 		CoveredThroughID:  covered[len(covered)-1].ID,
@@ -236,13 +237,13 @@ func TestPromptHistorySeeksAfterCompactionWatermark(t *testing.T) {
 			ID: "summary", Role: api.MessageRoleAssistant, Content: "old request summarized",
 		}},
 	}))
-	testutil.FailErr(t, "advance compaction generation", mem.UpdateSession(ctx, sess.ID, func(current *api.Session) {
+	testutil.FailErr(t, "advance compaction generation", sessionStore.UpdateSession(ctx, sess.ID, func(current *api.Session) {
 		current.CompactionGeneration = 1
 	}))
-	testutil.FailErr(t, "append uncovered message", mem.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "append uncovered message", sessionStore.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "new-user", Role: api.MessageRoleUser, Content: "new request"},
 	))
-	sess, err = mem.Get(ctx, sess.ID)
+	sess, err = sessionStore.Get(ctx, sess.ID)
 	testutil.FailErr(t, "reload session", err)
 
 	suffix, err := mgr.Runner.History.Load(ctx, sess)
@@ -255,7 +256,7 @@ func TestPromptHistorySeeksAfterCompactionWatermark(t *testing.T) {
 		t.Fatalf("assembled history = %+v, want summary plus new-user", assembled)
 	}
 	covered[0].Content = "edited old request"
-	_, err = mem.UpdateMessage(ctx, sess.ID, covered[0].ID, covered[0])
+	_, err = sessionStore.UpdateMessage(ctx, sess.ID, covered[0].ID, covered[0])
 	testutil.FailErr(t, "edit covered message", err)
 	canonical, err := mgr.Runner.History.Load(ctx, sess)
 	testutil.FailErr(t, "load after covered edit", err)
@@ -276,18 +277,18 @@ func (p *promptHistoryReadProbe) GetMessages(context.Context, string) ([]api.Mes
 
 func TestPromptHistoryOverflowNeverLoadsFullTranscript(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	mem := store.NewMemory()
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create long session", err)
 	rows := make([]api.Message, 1200)
 	for i := range rows {
 		rows[i] = api.Message{ID: fmt.Sprintf("row-%d", i), Role: api.MessageRoleAssistant, Content: "recorded observation"}
 	}
 	rows[17] = api.Message{ID: "active-request", Role: api.MessageRoleUser, Content: "Keep the active human instruction verbatim"}
-	testutil.FailErr(t, "append long history", mem.AppendMessages(t.Context(), sess.ID, rows...))
-	sess, err = mem.Get(t.Context(), sess.ID)
+	testutil.FailErr(t, "append long history", sessionStore.AppendMessages(t.Context(), sess.ID, rows...))
+	sess, err = sessionStore.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read active turn identity", err)
-	probe := &promptHistoryReadProbe{Store: mem}
+	probe := &promptHistoryReadProbe{Store: sessionStore}
 	mgr := NewHost(probe, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	loaded, err := mgr.Runner.History.Load(t.Context(), sess)
@@ -381,9 +382,9 @@ func TestWorkerSpawnDoesNotGrowParentMessages(t *testing.T) {
 			t.Fatalf("child parent = %q, want %q", child.ParentSessionID, parent.ID)
 		}
 		if err := store.AppendMessages(ctx, child.ID,
-			api.Message{ID: "tool1", Role: api.MessageRoleTool, Content: transcript},
-			api.Message{ID: "tool2", Role: api.MessageRoleTool, Content: transcript},
-			api.Message{ID: "a1", Role: api.MessageRoleAssistant, Content: "done details " + transcript},
+			api.Message{ID: fmt.Sprintf("tool1-%d", i), Role: api.MessageRoleTool, Content: transcript},
+			api.Message{ID: fmt.Sprintf("tool2-%d", i), Role: api.MessageRoleTool, Content: transcript},
+			api.Message{ID: fmt.Sprintf("a1-%d", i), Role: api.MessageRoleAssistant, Content: "done details " + transcript},
 		); err != nil {
 			testutil.FailErr(t, "store.AppendMessages failed", err)
 		}

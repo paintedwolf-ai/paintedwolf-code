@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 	"time"
@@ -15,26 +14,30 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/tsparse"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestSetTitleOverwritesAndPublishes(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sessionStore := sessionFixture
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, Lookup: project.ScopeLookup{Registry: reg}})
@@ -52,7 +55,7 @@ func TestSetTitleOverwritesAndPublishes(t *testing.T) {
 		t.Fatalf("title = %q", updated.Title)
 	}
 
-	got, err := mem.Get(ctx, sess.ID)
+	got, err := sessionStore.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get", err)
 	if got.Title != "Ship readiness checklist" {
 		t.Fatalf("stored title = %q", got.Title)
@@ -78,18 +81,20 @@ func TestSetTitleOverwritesAndPublishes(t *testing.T) {
 }
 
 func TestUpdateTitleIfUnsetNoOpsAfterManualSet(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	mem := store.NewMemory()
+	sessionStore := sessionFixture
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".*", Text: "ok"},
 	}})
-	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	mgr := NewHost(sessionStore, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 
 	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
@@ -100,13 +105,13 @@ func TestUpdateTitleIfUnsetNoOpsAfterManualSet(t *testing.T) {
 
 	// The auto-title path does not overwrite a manual title.
 	mgr.Chats.Naming.SessionFromPrompt(ctx, sess, "Build a completely different thing")
-	got, err := mem.Get(ctx, sess.ID)
+	got, err := sessionStore.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get", err)
 	if got.Title != "Manual name" {
 		t.Fatalf("title overwritten to %q", got.Title)
 	}
 
-	updated, err := mem.UpdateTitleIfUnset(ctx, sess.ID, "Race loser")
+	updated, err := sessionStore.UpdateTitleIfUnset(ctx, sess.ID, "Race loser")
 	testutil.FailErr(t, "ifunset", err)
 	if updated {
 		t.Fatal("UpdateTitleIfUnset reported update after manual set")
@@ -114,14 +119,16 @@ func TestUpdateTitleIfUnsetNoOpsAfterManualSet(t *testing.T) {
 }
 
 func TestSetTitleWinsRaceVsIfUnset(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sessionStore := sessionFixture
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 
 	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
@@ -130,12 +137,12 @@ func TestSetTitleWinsRaceVsIfUnset(t *testing.T) {
 	// Concurrent-style: Set always writes; subsequent IfUnset no-ops.
 	_, err = mgr.Chats.Naming.SetTitle(ctx, sess.ID, "User wins")
 	testutil.FailErr(t, "set", err)
-	ok, err := mem.UpdateTitleIfUnset(ctx, sess.ID, "Auto late")
+	ok, err := sessionStore.UpdateTitleIfUnset(ctx, sess.ID, "Auto late")
 	testutil.FailErr(t, "ifunset", err)
 	if ok {
 		t.Fatal("IfUnset should no-op when title already set")
 	}
-	got, err := mem.Get(ctx, sess.ID)
+	got, err := sessionStore.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get", err)
 	if got.Title != "User wins" {
 		t.Fatalf("title = %q", got.Title)
@@ -186,8 +193,7 @@ func TestSyntaxOverrideFeedbackRecordsExplicitChoice(t *testing.T) {
 	}
 }
 
-// ordStoreFixture is one Store backend wired up with a fresh session, ready for
-// the ord contract checks. The SQL and memory stores behave identically.
+// ordStoreFixture binds the repository to one fresh session.
 type ordStoreFixture struct {
 	store     Store
 	sessionID string
@@ -204,23 +210,13 @@ func newSQLOrdFixture(t *testing.T) ordStoreFixture {
 	return ordStoreFixture{store: store, sessionID: sess.ID}
 }
 
-func newMemoryOrdFixture(t *testing.T) ordStoreFixture {
-	t.Helper()
-	store := store.NewMemory()
-	sess, err := store.Create(context.Background(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create session", err)
-	return ordStoreFixture{store: store, sessionID: sess.ID}
-}
-
-// AppendMessages mints a strictly increasing per-session creation ordinal in both
-// stores; ord is the integer Den sorts by.
+// AppendMessages assigns the creation ordinal used for transcript ordering.
 func TestStoreOrdMonotonicAppend(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		fixture func(t *testing.T) ordStoreFixture
 	}{
 		{"sql", newSQLOrdFixture},
-		{"memory", newMemoryOrdFixture},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := tc.fixture(t)
@@ -262,7 +258,6 @@ func TestStoreOrdAndTSSurvivePatch(t *testing.T) {
 		fixture func(t *testing.T) ordStoreFixture
 	}{
 		{"sql", newSQLOrdFixture},
-		{"memory", newMemoryOrdFixture},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := tc.fixture(t)

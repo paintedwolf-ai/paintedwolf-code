@@ -3,8 +3,6 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 	"time"
@@ -23,12 +21,15 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -63,10 +64,10 @@ func TestHandleCommandRefusalWakesWithDigest(t *testing.T) {
 }
 
 func testHandleCommandRefusalWakesWithDigest(t *testing.T, offered []string) {
-	memory := store.NewMemory()
-	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Processes.ToolPolicy = newPostToolGuidanceManager(t).ToolPolicy
-	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "")
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create waiting session", err)
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	reports := make(chan anchor.Envelope, 1)
@@ -202,11 +203,11 @@ func TestMixedPathRecoveryKeepsTerminalPathsOutsideRequestedGrants(t *testing.T)
 }
 
 func TestCommandCompletionWakesWorkerProcessWait(t *testing.T) {
-	memory := store.NewMemory()
-	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "")
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create waiting worker session", err)
-	testutil.FailErr(t, "mark worker session", memory.UpdateSession(t.Context(), sess.ID, func(s *api.Session) {
+	testutil.FailErr(t, "mark worker session", sessionStore.UpdateSession(t.Context(), sess.ID, func(s *api.Session) {
 		s.ParentSessionID = "parent"
 	}))
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
@@ -223,14 +224,16 @@ func TestCommandCompletionWakesWorkerProcessWait(t *testing.T) {
 }
 
 func TestAutoNameProjectIdempotentOnReplay(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	store := store.NewMemory()
+	store := sessionFixture
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".*", Text: "ok"},
 	}})

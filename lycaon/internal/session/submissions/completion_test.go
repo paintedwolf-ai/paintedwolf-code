@@ -27,7 +27,6 @@ func TestStoppedReceiptWinsLateCompletion(t *testing.T) {
 		name string
 		open func(*testing.T) completionStore
 	}{
-		{"memory", func(*testing.T) completionStore { return store.NewMemory() }},
 		{"sql", func(t *testing.T) completionStore {
 			db := testdbfixture.Open(t, "completion.db")
 			testdbseed.InsertProjectRoot(t, db, testdbseed.DefaultProjectID, t.TempDir())

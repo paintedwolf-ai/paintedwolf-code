@@ -2,13 +2,13 @@ package worker
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"

@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -169,57 +169,6 @@ func sealTurnCloseoutSQL(ctx context.Context, s *sqlCore, commit TurnCloseoutCom
 		return err
 	}
 	return tx.Commit()
-}
-
-func (t *memoryTurns) SealTurnCloseout(ctx context.Context, commit TurnCloseoutCommit) error {
-	return sealTurnCloseoutMemory(ctx, t.core, commit)
-}
-
-func sealTurnCloseoutMemory(ctx context.Context, s *memoryCore, commit TurnCloseoutCommit) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	turnID, attemptID, outputID := commit.TurnID, commit.AttemptID, commit.OutputID
-	message := api.Message{}
-	if commit.Message != nil {
-		message = *commit.Message
-	}
-	if !json.Valid([]byte(commit.CheckpointJSON)) {
-		return fmt.Errorf("invalid closeout checkpoint")
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	turn, ok := s.turns[turnID]
-	if !ok || turn.ActiveAttemptID != attemptID || turn.Status != TurnStatusRunning {
-		return fmt.Errorf("closeout attempt claim lost")
-	}
-	outputMessageID := ""
-	scripted := false
-	if outputID != "" {
-		output, ok := s.modelOutputs[outputID]
-		if !ok || output.TurnAttemptID != attemptID {
-			return fmt.Errorf("closeout output belongs to another attempt")
-		}
-		outputMessageID = output.MessageID
-		scripted = output.Scripted
-	}
-	record := closeoutRecord(message, outputID, outputMessageID, scripted)
-	body, err := json.Marshal(record)
-	if err != nil {
-		return err
-	}
-	if old, ok := s.turnCloseouts[attemptID]; ok && old != string(body) {
-		return fmt.Errorf("turn closeout identity changed")
-	}
-	if err := checkpointTurnLocked(s, turnID, attemptID, TurnPhaseFinalizing, commit.CheckpointJSON); err != nil {
-		return err
-	}
-	if s.turnCloseouts == nil {
-		s.turnCloseouts = map[string]string{}
-	}
-	s.turnCloseouts[attemptID] = string(body)
-	return nil
 }
 
 func boolInt(value bool) int64 {

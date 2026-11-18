@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,18 +13,20 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func newSkillsTestManager(t *testing.T) *Host {
 	t.Helper()
-	return NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	return NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 }
 
 func writeSkill(t *testing.T, root, rel, name, desc string) {
@@ -203,15 +204,17 @@ func TestEffectiveSkillsShadowsStock(t *testing.T) {
 }
 
 func TestEffectiveSkillsNoTaint(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	ctx := context.Background()
 	root := t.TempDir()
 	writeSkill(t, root, ".agents/skills", "release-check", "Release checklist.")
 
-	mem := store.NewMemory()
-	m := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sessionStore := sessionFixture
+	m := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "cs.yaml"))
 	testutil.FailErr(t, "surfaces", err)
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(ctx, reg, root)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	m.SetProjectRegistry(reg)
@@ -222,7 +225,7 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 		Projects: reg,
 	})
 
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)
 
 	loaded, _ := m.Profiles.EffectiveSkills(ctx, p.ID, []string{root})
@@ -235,7 +238,7 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 	if !found {
 		t.Fatal("expected project skill")
 	}
-	if mem.SessionUntrustedContent(sess.ID) {
+	if sessionStore.SessionUntrustedContent(sess.ID) {
 		t.Fatal("loading a project skill must not taint the session")
 	}
 }

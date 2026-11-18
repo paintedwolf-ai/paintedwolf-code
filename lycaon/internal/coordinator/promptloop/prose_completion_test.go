@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -35,8 +35,8 @@ func TestPromptLoopSpendCeilingMapsToCloseout(t *testing.T) {
 func TestWorkerTerminalTurnRecordsOnlyAcceptedStructuredCompletion(t *testing.T) {
 	for _, status := range []string{"complete", "partial", "blocked", "prose"} {
 		t.Run(status, func(t *testing.T) {
-			memory := store.NewMemory()
-			sess, err := memory.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+			sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create worker session", err)
 			sess.ParentSessionID, sess.AgentType = "parent", "implementer"
 			args := map[string]any{"leg_status": status, "brief": "bounded work"}
@@ -63,7 +63,7 @@ func TestWorkerTerminalTurnRecordsOnlyAcceptedStructuredCompletion(t *testing.T)
 				t.Error("terminal turn executed a source mutation")
 				return "", nil
 			}))
-			deps := promptloop.StoreDeps(memory)
+			deps := promptloop.StoreDeps(sessionStore)
 			deps.Model.LLM, deps.Context.Tools = client, registry
 			deps.Context.Policy = &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "write"}, {Name: workertools.CompleteLegTool}}}
 			_, err = promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{
@@ -79,7 +79,7 @@ func TestWorkerTerminalTurnRecordsOnlyAcceptedStructuredCompletion(t *testing.T)
 			if len(client.requests) != 1 || len(client.requests[0].Tools) != 1 || client.requests[0].Tools[0].Name != workertools.CompleteLegTool {
 				t.Fatal("terminal tool surface is not complete_leg only")
 			}
-			messages, err := memory.GetMessages(t.Context(), sess.ID)
+			messages, err := sessionStore.GetMessages(t.Context(), sess.ID)
 			testutil.FailErr(t, "read terminal transcript", err)
 			report, _, recorded := workercompletion.LastCompleteLegReport(messages)
 			if recorded != (status != "prose") || (recorded && report.LegStatus != status) {
@@ -93,7 +93,7 @@ func TestProseCompletionRequiresUsablePayload(t *testing.T) {
 	for _, forced := range []bool{false, true} {
 		for _, content := range []string{"", " \n", "The turn limit prevented reading the file."} {
 			t.Run(proseCompletionCaseName(forced, content), func(t *testing.T) {
-				messages := store.NewMemory()
+				messages := storetest.New(t, "project")
 				sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 				testutil.FailErr(t, "create session", err)
 				calls := 0
@@ -154,7 +154,7 @@ func proseCompletionCaseName(forced bool, content string) string {
 }
 
 func TestProseCompletionRecoversFromBookkeepingToolCallAttempt(t *testing.T) {
-	messages := store.NewMemory()
+	messages := storetest.New(t, "project")
 	sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	client := &sequentialLLMClient{completions: []*modelcall.Completion{

@@ -24,7 +24,7 @@ import (
 
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -34,6 +34,8 @@ import (
 )
 
 func TestOpenAPIScansRealServer(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	root := t.TempDir()
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(root, "store.db"))
 
@@ -82,13 +84,13 @@ func TestOpenAPIScansRealServer(t *testing.T) {
 	}
 	testutil.FailErr(t, "seed scan source", os.WriteFile(filepath.Join(projectDir, "main.go"), []byte("package main\n"), 0o600))
 
-	projReg := project.NewMemoryRegistry()
+	projReg := project.NewSQLRegistry(sessionFixture.DB())
 	proj, err := projReg.Create(t.Context(), project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: projectDir}},
 	})
 	testutil.FailErr(t, "create project", err)
 
-	sessStore := store.NewMemory()
+	sessStore := sessionFixture
 	mockLLM := llm.NewMockProvider(nil)
 	mgr := session.NewHost(sessStore, session.Models{Client: mockLLM, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{

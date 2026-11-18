@@ -56,29 +56,3 @@ func truncateMessagesTx(ctx context.Context, s *sqlCore, tx *sql.Tx, sessionID, 
 	sess, err := sessionFromRow(row)
 	return removed, sess, spillRefs, err
 }
-
-func deleteTurnLocked(s *memoryCore, turnID string) {
-	for _, attempt := range s.turnAttempts[turnID] {
-		delete(s.turnCloseouts, attempt.ID)
-	}
-	delete(s.turns, turnID)
-	delete(s.turnAttempts, turnID)
-	for submissionID, boundTurnID := range s.turnSubmissions {
-		if boundTurnID == turnID {
-			delete(s.turnSubmissions, submissionID)
-		}
-	}
-	for workerJobID, turnIDs := range s.workerTurns {
-		kept := turnIDs[:0]
-		for _, boundTurnID := range turnIDs {
-			if boundTurnID != turnID {
-				kept = append(kept, boundTurnID)
-			}
-		}
-		if len(kept) == 0 {
-			delete(s.workerTurns, workerJobID)
-		} else {
-			s.workerTurns[workerJobID] = kept
-		}
-	}
-}

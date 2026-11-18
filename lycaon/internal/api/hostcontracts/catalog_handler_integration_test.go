@@ -14,7 +14,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
@@ -22,11 +22,13 @@ import (
 )
 
 func TestListWorkflowsFromCatalogOnly(t *testing.T) {
-	reg := project.NewMemoryRegistry()
+	sessionFixture := storetest.New(t)
+
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	opened, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 
-	store := store.NewMemory()
+	store := sessionFixture
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
 		WorkflowCatalog: workflowcatalog.Resolver{
@@ -52,7 +54,9 @@ func TestListWorkflowsFromCatalogOnly(t *testing.T) {
 }
 
 func TestListWorkflowsCatalogAndOverlay(t *testing.T) {
-	reg := project.NewMemoryRegistry()
+	sessionFixture := storetest.New(t)
+
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	opened, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 	overlayDir := filepath.Join(project.PrimaryRootPath(opened), settingsoverlay.DirName(), "workflows", "plan")
@@ -64,7 +68,7 @@ func TestListWorkflowsCatalogAndOverlay(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 
-	store := store.NewMemory()
+	store := sessionFixture
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
 		WorkflowCatalog: workflowcatalog.Resolver{ProjectTierApplies: func(context.Context, string) bool { return true }}}}), nil, hostapi.TestAPIToken)
@@ -102,7 +106,9 @@ func TestListWorkflowsCatalogAndOverlay(t *testing.T) {
 }
 
 func TestListWorkflowsExcludesInvalidOverlayAndReportsDiagnostics(t *testing.T) {
-	reg := project.NewMemoryRegistry()
+	sessionFixture := storetest.New(t)
+
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	opened, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 
@@ -151,7 +157,7 @@ phases:
 `
 	testutil.FailErr(t, "write valid", os.WriteFile(filepath.Join(validDir, "workflow.yaml"), []byte(validYAML), 0o644))
 
-	store := store.NewMemory()
+	store := sessionFixture
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
 		WorkflowCatalog: workflowcatalog.Resolver{ProjectTierApplies: func(context.Context, string) bool { return true }}}}), nil, hostapi.TestAPIToken)

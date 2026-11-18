@@ -3,7 +3,6 @@ package hostcontracts
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net"
 	"net/http"
 	"strings"
@@ -14,17 +13,20 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestServerEndToEnd(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	dir := t.TempDir()
-	store := store.NewMemory()
+	store := sessionFixture
 	mock := llm.NewMockProvider(contractfixture.TestMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
 	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {

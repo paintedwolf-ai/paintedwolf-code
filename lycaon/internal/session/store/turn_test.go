@@ -2,11 +2,11 @@ package store
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -33,9 +33,8 @@ type turnTestStore interface {
 func TestTurnAttemptRecoveryParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(*testing.T) turnTestStore
+		open func(t *testing.T) turnTestStore
 	}{
-		{name: "memory", open: func(*testing.T) turnTestStore { return NewMemory() }},
 		{name: "sql", open: openTurnSQLStore},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
@@ -80,9 +79,8 @@ func TestTurnAttemptRecoveryParity(t *testing.T) {
 func TestRecoverTurnsForSessionLeavesOtherSessionsAloneParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(*testing.T) turnTestStore
+		open func(t *testing.T) turnTestStore
 	}{
-		{name: "memory", open: func(*testing.T) turnTestStore { return NewMemory() }},
 		{name: "sql", open: openTurnSQLStore},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
@@ -137,9 +135,8 @@ func TestRecoverTurnsForSessionLeavesOtherSessionsAloneParity(t *testing.T) {
 func TestSettledModelOutputRepairsProjectionParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(*testing.T) turnTestStore
+		open func(t *testing.T) turnTestStore
 	}{
-		{name: "memory", open: func(*testing.T) turnTestStore { return NewMemory() }},
 		{name: "sql", open: openTurnSQLStore},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
@@ -188,9 +185,8 @@ func TestSettledModelOutputRepairsProjectionParity(t *testing.T) {
 func TestFinalizingTurnCompletesDuringRecoveryParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(*testing.T) turnTestStore
+		open func(t *testing.T) turnTestStore
 	}{
-		{name: "memory", open: func(*testing.T) turnTestStore { return NewMemory() }},
 		{name: "sql", open: openTurnSQLStore},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
@@ -239,9 +235,10 @@ func TestFinalizingTurnCompletesDuringRecoveryParity(t *testing.T) {
 
 func TestWorkerRetryStartsNewAttemptOnSameTurn(t *testing.T) {
 	ctx := t.Context()
-	st := NewMemory()
+	st := newSQLTestStore(t)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
+	testdbseed.InsertWorkerJob(t, st.DB(), "worker-job-1", sess.ID)
 	first, err := st.BeginTurn(ctx, TurnStart{
 		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginWorker,
 		WorkerJobID: "worker-job-1", InputJSON: `{}`,
@@ -259,29 +256,7 @@ func TestWorkerRetryStartsNewAttemptOnSameTurn(t *testing.T) {
 	}
 }
 
-func TestWorkerTurnRecoveryIsScopedByOriginMemory(t *testing.T) {
-	ctx := t.Context()
-	st := NewMemory()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create session", err)
-	first, err := st.BeginTurn(ctx, TurnStart{
-		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginWorker,
-		WorkerJobID: "worker-job-1", InputJSON: `{}`,
-	})
-	testutil.FailErr(t, "begin worker turn", err)
-	_, err = st.FinishTurn(ctx, first.Turn.ID, first.Attempt.ID, TurnStatusFailed, "", "", "transient provider failure")
-	testutil.FailErr(t, "fail worker turn", err)
-	closeout, err := st.BeginTurn(ctx, TurnStart{
-		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginWorkerCloseout,
-		WorkerJobID: "worker-job-1", InputJSON: `{}`,
-	})
-	testutil.FailErr(t, "begin worker closeout", err)
-	if closeout.Turn.ID == first.Turn.ID || closeout.Attempt.Attempt != 1 {
-		t.Fatalf("closeout = %+v, worker turn = %+v", closeout, first)
-	}
-}
-
-func TestWorkerTurnRecoveryIsScopedByOriginSQL(t *testing.T) {
+func TestWorkerTurnRecoveryIsScopedByOrigin(t *testing.T) {
 	ctx := t.Context()
 	st := openTurnSQLStore(t).(*SQL)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)

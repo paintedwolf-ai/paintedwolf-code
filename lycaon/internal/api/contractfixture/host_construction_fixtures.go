@@ -2,8 +2,6 @@ package contractfixture
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
-	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -17,15 +15,18 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -42,18 +43,18 @@ func NewServerForTest(t *testing.T, deps hostapi.Dependencies, opts ...TestDeps)
 	return srv
 }
 
-// withSQLProjects keeps projects in the database the filled source ledger
-// writes to, so the files a read tracks can reference their project.
-
 func NewTestServer(t *testing.T, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
 	return NewTestServerWithRegistry(t, toolstest.NewRegistry(), opts...)
 }
 
 func NewTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...TestDeps) *hostapi.Server {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	WireTestBindingRegistry(t)
-	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store.NewMemory(), Projects: project.NewMemoryRegistry()}}
+	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{
+		Store: sessionFixture, Projects: project.NewSQLRegistry(sessionFixture.DB())}}
 	for _, opt := range opts {
 		opt(&deps)
 	}

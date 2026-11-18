@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -81,7 +82,7 @@ func (c *scriptedTurnClient) Requests() []modelcall.CompletionRequest {
 
 type reproducedSourceFixture struct {
 	mgr     *session.Host
-	store   *store.Memory
+	store   *store.SQL
 	client  *scriptedTurnClient
 	rootDir string
 	projID  string
@@ -109,11 +110,13 @@ func loadStockGuardPipeline(t *testing.T) *oar.GuardPipeline {
 }
 
 func newReproducedSourceFixture(t *testing.T, completions []*modelcall.Completion) *reproducedSourceFixture {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 
 	rootDir := t.TempDir()
-	mem := store.NewMemory()
+	sessionStore := sessionFixture
 	client := &scriptedTurnClient{completions: completions}
 
 	registry := toolstest.NewRegistry()
@@ -128,10 +131,10 @@ func newReproducedSourceFixture(t *testing.T, completions []*modelcall.Completio
 		return string(payload), err
 	}))
 
-	mgr := session.NewHost(mem, session.Models{Client: client, Limits: settings.DefaultSessionLimits()}, registry)
+	mgr := session.NewHost(sessionStore, session.Models{Client: client, Limits: settings.DefaultSessionLimits()}, registry)
 	mgr.SetDataDir(t.TempDir())
 
-	projects := project.NewMemoryRegistry()
+	projects := project.NewSQLRegistry(sessionFixture.DB())
 	proj, err := project.CreateWithRoot(t.Context(), projects, rootDir)
 	testutil.FailErr(t, "create rooted project", err)
 	mgr.SetProjectRegistry(projects)
@@ -153,7 +156,7 @@ func newReproducedSourceFixture(t *testing.T, completions []*modelcall.Completio
 	mgr.SetRejectFormatter(rejectFmt)
 	mgr.SetOARPipeline(loadStockGuardPipeline(t), oar.NewRenderer(rejectFmt, nil))
 
-	return &reproducedSourceFixture{mgr: mgr, store: mem, client: client, rootDir: rootDir, projID: proj.ID}
+	return &reproducedSourceFixture{mgr: mgr, store: sessionStore, client: client, rootDir: rootDir, projID: proj.ID}
 }
 
 func buildSourceFileLines(prefix string, n int) string {

@@ -4,7 +4,6 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 
@@ -15,11 +14,12 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -34,6 +34,8 @@ func countRunContextBlocks(msgs []api.Message) int {
 }
 
 func TestRunContextInjectsEveryIteration(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
@@ -44,7 +46,7 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 		}},
 		FollowUpText: "done",
 	}}}))
-	store := store.NewMemory()
+	store := sessionFixture
 	reg := toolstest.NewRegistry()
 	if err := reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "[]", nil
@@ -52,7 +54,7 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 		testutil.FailErr(t, "register command", err)
 	}
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
-	projects := project.NewMemoryRegistry()
+	projects := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(ctx, projects, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	mgr.SetProjectRegistry(projects)
@@ -96,7 +98,7 @@ func TestSecondPromptStillGetsRunContextAfterAdvance(t *testing.T) {
 		{Pattern: ".", Text: "ok"},
 		{Pattern: ".", Text: "ok"},
 	}}))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
@@ -139,7 +141,7 @@ func TestWorkerLegInjectsEveryIteration(t *testing.T) {
 		}},
 		FollowUpText: "done",
 	}}}))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register worker command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "module fixture", nil
@@ -188,7 +190,7 @@ func TestGateBlockedSingleImperativeChannel(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))

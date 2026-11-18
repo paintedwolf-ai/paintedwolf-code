@@ -2,8 +2,6 @@ package workflow
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/worker/workertest"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"path/filepath"
 	"testing"
 
@@ -14,8 +12,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

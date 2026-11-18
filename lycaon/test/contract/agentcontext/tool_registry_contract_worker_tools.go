@@ -1,13 +1,13 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session/decisions/decisionstest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/internal/workerops"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )

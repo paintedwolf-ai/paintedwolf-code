@@ -2,10 +2,6 @@ package sourcecontracts
 
 import (
 	"encoding/json"
-	hostapi "github.com/lycaon/lycaon/internal/api"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,13 +9,17 @@ import (
 	"path/filepath"
 	"testing"
 
+	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )

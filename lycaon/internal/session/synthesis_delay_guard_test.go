@@ -17,7 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -35,7 +35,7 @@ func newSynthesisDelayManager(t *testing.T) (*Host, *api.Session) {
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load hint registry", err)
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 
 	sess, err := store.Create(context.Background(), api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
@@ -196,7 +196,7 @@ func loadAgentsForTest(t *testing.T) profiles.AgentProfileResolver {
 
 func TestBuildSessionCreateDefaultsCoordinatorProfile(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if sess.AgentType != orchestration.ProfileCoordinator {
@@ -217,7 +217,7 @@ func TestBuildSessionCreateDefaultsCoordinatorProfile(t *testing.T) {
 func TestManagerPromptToolProfileUsesWorkflowManifest(t *testing.T) {
 	reg, err := profiles.LoadPostureRegistry()
 	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Profiles.SetPostureRegistry(reg)
 	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
 	mgr.SetWorkflowDomains(workflowDomainFixture(stubWorkflowManifest{
@@ -248,10 +248,11 @@ postures:
 	if err := os.WriteFile(filepath.Join(overlayDir, "postures.yaml"), overlay, 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	persistence := storetest.New(t)
+	mgr := NewHost(persistence, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Profiles.SetPostureRegistry(reg)
 	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
-	projectID := RegisterProjectContextForTest(t, mgr, dir)
+	projectID := RegisterProjectContextForTest(t, mgr, persistence.DB(), dir)
 	sess := &api.Session{ID: "s1", ProjectID: projectID, Posture: api.SessionPostureSpec, AgentType: orchestration.ProfileCoordinator, WorkspacePath: dir}
 	got, err := mgr.Profiles.PromptToolProfile(context.Background(), sess)
 	testutil.FailErr(t, "mgr.Profiles.PromptToolProfile failed", err)

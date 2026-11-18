@@ -4,7 +4,6 @@ package coordinator_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -21,7 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/session/profiles"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -29,6 +28,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/testutil/prompttest"
 	"github.com/lycaon/lycaon/internal/toolhost"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -70,7 +70,7 @@ func TestManagerPromptUsesCoordinatorAssembly(t *testing.T) {
 	root := sessionIntegrationRoot(t)
 	ctx := context.Background()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	wireManagerPromptPolicy(t, mgr, root)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root}))
@@ -94,7 +94,7 @@ func TestManagerKickNudgeViaRuntime(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	root := sessionIntegrationRoot(t)
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	wireManagerPromptPolicy(t, mgr, root)

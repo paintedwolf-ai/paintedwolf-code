@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -57,7 +57,7 @@ func TestWorkerBridgeReleasesParentAfterQueueAcknowledgement(t *testing.T) {
 
 func TestExecuteRetainsChildSessionForDenTranscript(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 
 	var childID string
 	runner := &fakePromptRunner{
@@ -81,18 +81,24 @@ func TestExecuteRetainsChildSessionForDenTranscript(t *testing.T) {
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	_, err = exec.Execute(ctx, api.WorkerTask{
-		ID:              "job-1",
+	queue := NewSQLQueue(store.DB(), 1)
+	jobID, err := queue.EnqueueWithProjectID(ctx, parent.ProjectID, api.WorkerTask{
 		ParentSessionID: parent.ID,
 		Prompt:          "do work",
 		Brief:           "fixture",
 		AgentType:       "implementer",
-	}, WorkerRunContext{ProjectDir: "/p"})
+	})
+	testutil.FailErr(t, "enqueue worker", err)
+	task, ok := queue.Get(jobID)
+	if !ok {
+		t.Fatal("enqueued worker missing")
+	}
+	_, err = exec.Execute(ctx, *task, WorkerRunContext{ProjectDir: parent.WorkspacePath})
 	testutil.FailErr(t, "exec.Execute failed", err)
 	if childID == "" {
 		t.Fatal("child session id not captured")
 	}
-	if binder.jobID != "job-1" || binder.childID != childID {
+	if binder.jobID != jobID || binder.childID != childID {
 		t.Fatalf("child binding = %q/%q", binder.jobID, binder.childID)
 	}
 	if _, err := store.Get(ctx, childID); err != nil {

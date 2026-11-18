@@ -2,14 +2,15 @@ package store
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 func TestSQLPatchLiveProjectionPersistsContentAndToolCalls(t *testing.T) {
@@ -101,8 +102,8 @@ func TestSQLPatchLiveProjectionPersistsContentAndToolCalls(t *testing.T) {
 	}
 }
 
-func TestMemoryPatchLiveProjectionDoesNotAdvanceSeq(t *testing.T) {
-	st := NewMemory()
+func TestPatchLiveProjectionDoesNotAdvanceSeq(t *testing.T) {
+	st := newSQLTestStore(t)
 	ctx := context.Background()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)

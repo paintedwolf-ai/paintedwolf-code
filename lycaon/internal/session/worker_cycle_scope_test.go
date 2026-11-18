@@ -2,7 +2,6 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"strings"
 	"testing"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

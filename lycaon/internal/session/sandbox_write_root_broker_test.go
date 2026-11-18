@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -149,7 +149,7 @@ func TestWriteRootAuthorizeSkipsCardWhenOverlayCovers(t *testing.T) {
 // A worker uses the write roots its chat approved without asking again.
 func TestWorkerUsesItsChatsApprovedWriteRoot(t *testing.T) {
 	t.Parallel()
-	store := sessionstore.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create chat", err)
 	child, err := store.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})

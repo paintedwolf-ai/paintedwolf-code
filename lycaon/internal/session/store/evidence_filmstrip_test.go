@@ -11,7 +11,7 @@ import (
 )
 
 func TestCommitEvidenceToolResult_filmstripMintsFrameHandles(t *testing.T) {
-	store := NewMemory()
+	store := newSQLTestStore(t, "proj")
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, "proj")
 	testutil.FailErr(t, "create session in store", err)

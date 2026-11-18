@@ -3,6 +3,7 @@ package testdbseed
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -86,24 +87,28 @@ func draftScratchPath(projectID string) (string, error) {
 	return enginepaths.DraftWorkspaceUnder(dir, projectID), nil
 }
 
-// BindSessionWorkspace sets computed workspace_path on memory-backed sessions in tests.
-func BindSessionWorkspace(t *testing.T, store interface {
-	UpdateSession(ctx context.Context, id string, fn func(*api.Session)) error
-}, sessionID, path string) {
+// BindSessionWorkspace attaches a root and binds the session to it.
+func BindSessionWorkspace(t *testing.T, database store, sessionID, path string) {
 	t.Helper()
-	err := store.UpdateSession(t.Context(), sessionID, func(s *api.Session) {
-		s.WorkspacePath = path
-	})
+	var projectID string
+	err := database.QueryRowContext(t.Context(), `SELECT project_id FROM sessions WHERE id = ?`, sessionID).Scan(&projectID)
+	testutil.FailErr(t, "read session project", err)
+	var rootID string
+	err = database.QueryRowContext(t.Context(), `SELECT id FROM project_roots WHERE project_id = ? AND path = ?`, projectID, path).Scan(&rootID)
+	if errors.Is(err, sql.ErrNoRows) {
+		rootID = InsertProjectRoot(t, database, projectID, path)
+	} else {
+		testutil.FailErr(t, "find workspace root", err)
+	}
+	_, err = database.ExecContext(t.Context(), `UPDATE sessions SET workspace_root_id = ? WHERE id = ?`, rootID, sessionID)
 	testutil.FailErr(t, "bind session workspace", err)
 }
 
 // OrchestrationWorkspace binds a temporary session root.
-func OrchestrationWorkspace(t *testing.T, store interface {
-	UpdateSession(ctx context.Context, id string, fn func(*api.Session)) error
-}, sess *api.Session) string {
+func OrchestrationWorkspace(t *testing.T, database store, sessionID string) string {
 	t.Helper()
 	dir := t.TempDir()
-	BindSessionWorkspace(t, store, sess.ID, dir)
+	BindSessionWorkspace(t, database, sessionID, dir)
 	return dir
 }
 

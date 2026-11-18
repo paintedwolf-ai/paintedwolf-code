@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -63,17 +64,17 @@ func TestUserTurnOrdinalSQLMatchesGoPredicate(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "user-turn-contract.db")
 
 	sqlStore := store.NewSQL(sqlDB)
-	memStore := store.NewMemory()
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 
 	sqlSess, err := sqlStore.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create sql session", err)
-	memSess, err := memStore.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	memSess, err := sessionStore.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create memory session", err)
 
 	transcript := turnOrdinalTranscript()
 	contractcheck.FailErr(t, "append sql messages", sqlStore.AppendMessages(ctx, sqlSess.ID, transcript...))
-	contractcheck.FailErr(t, "append memory messages", memStore.AppendMessages(ctx, memSess.ID, transcript...))
+	contractcheck.FailErr(t, "append memory messages", sessionStore.AppendMessages(ctx, memSess.ID, transcript...))
 
 	want := 0
 	for _, msg := range transcript {
@@ -92,7 +93,7 @@ func TestUserTurnOrdinalSQLMatchesGoPredicate(t *testing.T) {
 		t.Fatalf("SQL CountSessionUserTurns = %d, user intents = %d", gotSQL, want)
 	}
 
-	gotMemSource, err := memStore.ReadSourceTurn(ctx, memSess.ID, 0)
+	gotMemSource, err := sessionStore.ReadSourceTurn(ctx, memSess.ID, 0)
 	gotMem := gotMemSource.Number
 	contractcheck.FailErr(t, "memory user turn ordinal", err)
 	if gotMem != want {

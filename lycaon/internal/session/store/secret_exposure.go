@@ -11,20 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/protectedpath"
 )
 
-func (ev *memoryEvidence) SessionSecretExposure(ctx context.Context, sessionID string) (bool, error) {
-	s := ev.core
-	if err := ctx.Err(); err != nil {
-		return false, err
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return false, nil
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.secretExposureRecords[sessionID] > 0, nil
-}
-
 type secretExposureCount struct {
 	n    int
 	warm bool
@@ -63,16 +49,6 @@ func countSecretExposureRecords(ctx context.Context, s *sqlCore, sessionID strin
 	return n, nil
 }
 
-func bumpSecretExposureLocked(s *memoryCore, sessionID string, rec evidence.Record) {
-	if !evidence.RecordMarksSecretExposure(rec) {
-		return
-	}
-	if s.secretExposureRecords == nil {
-		s.secretExposureRecords = make(map[string]int)
-	}
-	s.secretExposureRecords[sessionID]++
-}
-
 func bumpSecretExposure(s *sqlCore, sessionID string, rec evidence.Record) {
 	if !evidence.RecordMarksSecretExposure(rec) {
 		return
@@ -91,11 +67,6 @@ func invalidateSecretExposure(s *sqlCore, sessionID string) {
 	s.secretExposureMu.Lock()
 	defer s.secretExposureMu.Unlock()
 	s.secretExposureRecords.Delete(sessionID)
-}
-
-// SeedSecretExposure records inherited secret exposure.
-func (ev *memoryEvidence) SeedSecretExposure(ctx context.Context, sessionID string) error {
-	return upsertEvidenceRecordMemory(ctx, ev.core, sessionID, inheritSecretExposureRecord())
 }
 
 func (ev *sqlEvidence) SeedSecretExposure(ctx context.Context, sessionID string) error {

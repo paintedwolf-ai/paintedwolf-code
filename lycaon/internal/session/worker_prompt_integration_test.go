@@ -4,8 +4,6 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,10 +20,13 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -37,14 +38,14 @@ func (s *stubWorkerContext) BuildWorkerPromptContext(_ context.Context, _ string
 	return s.ctx, nil
 }
 
-func setupWorkerPromptFixture(t *testing.T) (*session.Host, *store.Memory, *llm.RecordingClient) {
+func setupWorkerPromptFixture(t *testing.T) (*session.Host, *store.SQL, *llm.RecordingClient) {
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: ".",
 		Text:    "ok",
 	}}}))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	if err := orchestration.LoadRequiredAgentRegistry(context.Background(), agents); err != nil {
@@ -86,7 +87,7 @@ func TestChildPromptIncludesWorkerContextBlock(t *testing.T) {
 	}
 	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create failed", err)
-	testdbseed.BindSessionWorkspace(t, store, parent.ID, dir)
+	testdbseed.BindSessionWorkspace(t, store.DB(), parent.ID, dir)
 	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer,
 		Prompt:    "implement feature",

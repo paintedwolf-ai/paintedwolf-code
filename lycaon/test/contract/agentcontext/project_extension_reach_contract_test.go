@@ -3,7 +3,6 @@ package contract
 import (
 	"bytes"
 	"context"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -19,9 +18,10 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
@@ -260,6 +260,7 @@ func TestCatalogViewCacheBoundAndFingerprintKey(t *testing.T) {
 }
 
 func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
+
 	ctx := context.Background()
 	root := configlayout.FindModuleRoot()
 
@@ -273,6 +274,8 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			sessionFixture := storetest.New(t)
+
 			surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "cs.yaml"))
 			contractcheck.FailErr(t, "surfaces", err)
 			if err := surfaces.PutEnabled(map[string]bool{projectcontrib.SurfaceExtensionConfig: tc.deviceOn}); err != nil {
@@ -286,11 +289,11 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 				}(),
 				Desired: extpacks.EmptyDesired(),
 			})
-			m := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+			m := session.NewHost(sessionFixture, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 			m.SetEffectiveCatalogDeps(root, boot, surfaces)
 			m.Catalog.SetCatalogViewCache(catalogview.NewCache(root, nil))
 
-			reg := project.NewMemoryRegistry()
+			reg := project.NewSQLRegistry(sessionFixture.DB())
 			m.SetProjectRegistry(reg)
 			projDir := t.TempDir()
 			lycaonDir := filepath.Join(projDir, settingsoverlay.DirName())

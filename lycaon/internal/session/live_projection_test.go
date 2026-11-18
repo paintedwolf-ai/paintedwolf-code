@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,12 +19,14 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/toolcontext"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -289,10 +290,10 @@ const messageStorageSecret = "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
 
 func TestUpdateMessageReappliesStorageRedaction(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.Runner.Transcript.SetRedactor(redactMessageStorageFixture)
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	placeholder := api.Message{ID: "assistant-1", Role: api.MessageRoleAssistant}
@@ -304,7 +305,7 @@ func TestUpdateMessageReappliesStorageRedaction(t *testing.T) {
 	}}
 	testutil.FailErr(t, "update assistant tool call", mgr.Runner.Transcript.Update(ctx, sess.ID, raw.ID, raw))
 
-	messages, err := mem.GetMessages(ctx, sess.ID)
+	messages, err := sessionStore.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read messages", err)
 	if len(messages) != 1 || len(messages[0].ToolCalls) != 1 {
 		t.Fatalf("stored messages = %+v", messages)
@@ -344,7 +345,7 @@ func redactMessageStorageFixture(_ context.Context, msg api.Message) (api.Messag
 // A phase the coordinator enters with its own tool call is taught on its next
 // model call, even while another kick waits for the next turn start.
 func TestPhaseGuidanceIsDeliveredOnTheNextModelCall(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	const phaseGuidance = "claims phase fixture"

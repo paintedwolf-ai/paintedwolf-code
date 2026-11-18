@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -20,7 +20,7 @@ func TestStateToolsRespectProjectDir(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "wf.db")
 
 	wfStore := workflowpersistence.New(sqlDB)
-	sessStore := store.NewMemory()
+	sessStore := storetest.New(t, testdbseed.DefaultProjectID)
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
 	mgr := workflow.NewManager(wfStore, sessStore, reg, nil)
@@ -33,7 +33,7 @@ func TestStateToolsRespectProjectDir(t *testing.T) {
 	dirB := t.TempDir()
 	sess, err := sessStore.Create(context.Background(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "sessStore.Create failed", err)
-	testdbseed.BindSessionWorkspace(t, sessStore, sess.ID, dirA)
+	testdbseed.BindSessionWorkspace(t, sessStore.DB(), sess.ID, dirA)
 
 	_, err = toolReg.Run(context.Background(), "state_query", nil, securityToolContext(sess.ID, dirB, ""))
 	if err == nil {

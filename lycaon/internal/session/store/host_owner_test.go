@@ -25,13 +25,12 @@ type authorshipTestStore interface {
 
 func authorshipStores() []struct {
 	name string
-	open func(*testing.T) authorshipTestStore
+	open func(t *testing.T) authorshipTestStore
 } {
 	return []struct {
 		name string
-		open func(*testing.T) authorshipTestStore
+		open func(t *testing.T) authorshipTestStore
 	}{
-		{name: "memory", open: func(*testing.T) authorshipTestStore { return NewMemory() }},
 		{name: "sql", open: func(t *testing.T) authorshipTestStore {
 			handle := testdbfixture.Open(t, "authorship.db")
 			testdbseed.InsertProjectRoot(t, handle, testdbseed.DefaultProjectID, t.TempDir())

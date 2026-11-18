@@ -3,11 +3,11 @@ package worker
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )

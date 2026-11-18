@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// contactStore is the surface the contact tests exercise on both stores.
 type contactStore interface {
 	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
 	RecordContact(ctx context.Context, sessionID, host string, contact evidence.Contact) error
@@ -21,9 +20,7 @@ type contactStore interface {
 }
 
 func TestRecordContactBuildsSessionContacts(t *testing.T) {
-	t.Run("memory", func(t *testing.T) {
-		testRecordContactBuildsSessionContacts(t, NewMemory(), "proj-contacts-memory")
-	})
+
 	t.Run("sql", func(t *testing.T) {
 		sqlDB := testdbfixture.Open(t, "contacts.db")
 		testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
@@ -96,7 +93,6 @@ func TestContactRecordShape(t *testing.T) {
 	}
 }
 
-// urlStandingStore is the surface the address-standing test exercises on both stores.
 type urlStandingStore interface {
 	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
 	UpsertEvidenceRecord(ctx context.Context, sessionID string, rec evidence.Record) error
@@ -105,9 +101,7 @@ type urlStandingStore interface {
 }
 
 func TestSessionURLStandingMatchesRecordedAddressesExactly(t *testing.T) {
-	t.Run("memory", func(t *testing.T) {
-		testSessionURLStanding(t, NewMemory(), "proj-observed-memory")
-	})
+
 	t.Run("sql", func(t *testing.T) {
 		sqlDB := testdbfixture.Open(t, "observed.db")
 		testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())

@@ -23,7 +23,7 @@ func TestGroundingFrictionPromptAndCycleCeilings(t *testing.T) {
 
 func TestGroundingFrictionWorkersShareOnlyCycleBudget(t *testing.T) {
 	mgr, root := newSynthesisDelayManager(t)
-	child, err := mgr.store.(*store.Memory).CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := mgr.store.(*store.SQL).CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create worker", err)
 	mgr.RecordGroundingFriction(t.Context(), root.ID)
 	for i := 1; i < limits.DefaultGroundingRejectsPerCycle; i++ {
@@ -42,7 +42,7 @@ func TestGroundingFrictionWorkersShareOnlyCycleBudget(t *testing.T) {
 
 func TestGroundingFrictionRestartsForEachWorkflowPhase(t *testing.T) {
 	mgr, root := newSynthesisDelayManager(t)
-	child, err := mgr.store.(*store.Memory).CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "skeptic"})
+	child, err := mgr.store.(*store.SQL).CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "skeptic"})
 	testutil.FailErr(t, "create worker", err)
 	for i := 0; i < limits.DefaultGroundingRejectsPerCycle; i++ {
 		mgr.BeginPrompt(t.Context(), child, promptinput.Input{HostSignal: &promptinput.HostSignal{}})

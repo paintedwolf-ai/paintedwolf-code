@@ -19,11 +19,12 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -38,7 +39,7 @@ func (markdownRunLedger) WorkerLegs(context.Context, string, time.Time) ([]guida
 }
 
 type markdownRun struct {
-	store    *store.Memory
+	store    *store.SQL
 	session  *api.Session
 	deps     promptloop.PromptLoopDeps
 	outputs  []string
@@ -50,11 +51,18 @@ type markdownRun struct {
 // first model response follows whatever history the caller gives Run.
 func newMarkdownRun(t *testing.T, completions ...*modelcall.Completion) *markdownRun {
 	t.Helper()
-	r := &markdownRun{store: store.NewMemory()}
+	r := &markdownRun{store: storetest.New(t, "project")}
 	session, err := r.store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	r.session = session
+	testdbseed.InsertSessionWorkflowRun(t, r.store.DB(), "run-1", session.ID, "running")
 	deps := promptloop.StoreDeps(r.store)
+	deps.Projection.AppendMessages = func(ctx context.Context, sessionID string, messages ...api.Message) error {
+		for i := range messages {
+			messages[i].WorkflowRunID = "run-1"
+		}
+		return r.store.AppendMessages(ctx, sessionID, messages...)
+	}
 	deps.Model.LLM = &sequentialLLMClient{completions: completions}
 	deps.Context.Tools = toolstest.NewRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
