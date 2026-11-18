@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -48,7 +48,7 @@ func TestBundledProvidersIncludeDeepInfra(t *testing.T) {
 func TestDeepInfraRegistryUnconfiguredWithoutKey(t *testing.T) {
 	t.Setenv("DEEPINFRA_API_KEY", "di-env-ignored")
 	catalog := liveCatalogForShipIDs(t, "deepinfra")
-	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
+	registry, err := llm.NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}

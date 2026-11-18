@@ -18,7 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/cost/costtest"
 	"github.com/lycaon/lycaon/internal/llm"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -58,7 +58,7 @@ func TestProviderPromptAgainstStubBackend(t *testing.T) {
 
 	catalog, err := llm.NewProviderCatalogAt(localProviders)
 	testutil.FailErr(t, "llm.NewProviderCatalogAt failed", err)
-	creds := providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age"))
+	creds := credentialstest.Open(t, filepath.Join(tmp, "credential-vault.age"))
 	if err := creds.Set("test-openai", "test-key"); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
@@ -145,7 +145,7 @@ agent_pool:
 
 	catalog, err := llm.NewProviderCatalogAt(filepath.Join(tmp, "providers.local.yaml"))
 	testutil.FailErr(t, "llm.NewProviderCatalogAt failed", err)
-	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")), nil)
+	registry, err := llm.NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(tmp, "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}
@@ -155,7 +155,7 @@ agent_pool:
 
 	svc := &llm.Service{
 		Catalog:     catalog,
-		Credentials: providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")),
+		Credentials: credentialstest.Open(t, filepath.Join(tmp, "credential-vault.age")),
 		Registry:    registry,
 		Policy:      policy,
 		Router:      llm.NewStaticModelRouter(policy),

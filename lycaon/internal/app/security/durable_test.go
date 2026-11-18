@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -29,7 +30,7 @@ func managedScreeningFixture(t *testing.T) (*Runtime, *secretmatch.Matcher, *ses
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, database, "root-1", testdbseed.DefaultProjectID)
-	values := credentialstore.NewEmpty(credentialstore.Slot{
+	values := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets, Context: "durable screening test",
 	}, func(string) bool { return true })

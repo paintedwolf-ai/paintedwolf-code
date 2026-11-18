@@ -29,24 +29,13 @@ func DefaultSlot() (credentialstore.Slot, error) {
 	}, nil
 }
 
-// New loads credentials from the platform's store.
-func New() (*Store, error) {
-	slot, err := DefaultSlot()
-	if err != nil {
-		return nil, err
-	}
+// Open loads the encrypted provider namespace from its configured slot.
+func Open(slot credentialstore.Slot) (*Store, error) {
 	store, err := credentialstore.Open(slot, nil)
 	if err != nil {
 		return nil, err
 	}
 	return &Store{store: store}, nil
-}
-
-// NewAt opens an empty store at path with a development identity file.
-func NewAt(path string) *Store {
-	return &Store{store: credentialstore.NewEmpty(credentialstore.Slot{
-		Path: path, Namespace: credentialstore.NamespaceProviders, Context: credentialContext,
-	}, nil)}
 }
 
 // Get returns the stored API key for providerID.

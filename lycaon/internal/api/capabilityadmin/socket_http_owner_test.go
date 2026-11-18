@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
@@ -293,7 +294,7 @@ func assertNoUnixAccept(t *testing.T, listener *net.UnixListener) {
 
 func newSocketRecipientSecret(t *testing.T, ctx context.Context, database db.Handle, root, secret string) (*secretcap.Service, *secretmatch.Matcher, string) {
 	t.Helper()
-	values := credentialstore.NewEmpty(credentialstore.Slot{Path: filepath.Join(root, credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "socket owner fixture"}, func(string) bool { return true })
+	values := credentialstoretest.Open(t, credentialstore.Slot{Path: filepath.Join(root, credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "socket owner fixture"}, func(string) bool { return true })
 	service := secretcap.NewWithStore(database, values, nil)
 	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 	testutil.FailErr(t, "socket matcher", err)

@@ -4,18 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
@@ -23,7 +24,7 @@ import (
 func TestSecretCapabilityToolsExposeReferencesAndLifecycleOnly(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "root-chat", testdbseed.DefaultProjectID)
-	values := credentialstore.NewEmpty(credentialstore.Slot{
+	values := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets,
 		Context:   "test managed secret",
@@ -85,7 +86,7 @@ func TestSecretCapabilityToolsExposeReferencesAndLifecycleOnly(t *testing.T) {
 func TestSecretGenerateProjectScopeRequiresPurpose(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "root-chat", testdbseed.DefaultProjectID)
-	values := credentialstore.NewEmpty(credentialstore.Slot{
+	values := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets,
 		Context:   "test managed secret",

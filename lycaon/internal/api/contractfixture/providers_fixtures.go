@@ -14,7 +14,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -145,7 +145,7 @@ func NewProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string,
 
 	catalog, err := llm.NewProviderCatalogAt(userProviders)
 	testutil.FailErr(t, "load provider catalog", err)
-	creds := providercredentials.NewAt(credPath)
+	creds := credentialstest.Open(t, credPath)
 	policy, err := llm.NewPolicyStoreAt(globalPolicy)
 	testutil.FailErr(t, "load model policy", err)
 	registry, err := llm.NewRegistry(t.Context(), catalog, creds, nil)

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -23,7 +24,8 @@ func cancellationFixture(t *testing.T) (*OAuthClient, *OAuthTokenStore, <-chan s
 	}))
 	t.Cleanup(srv.Close)
 	t.Cleanup(unblock)
-	store := NewOAuthTokenStoreAt(t.TempDir() + "/oauth.yaml")
+	store, err := OpenOAuthTokenStore(credentialstore.Slot{Path: t.TempDir() + "/oauth.yaml", Namespace: credentialstore.NamespaceMCPOAuth, Context: oauthRecordContext})
+	testutil.FailErr(t, "open OAuth credentials", err)
 	client := NewOAuthClient(store, "", srv.Client())
 	t.Cleanup(func() { client.Close(t.Context()) })
 	client.pending["remote"] = pendingOAuth{

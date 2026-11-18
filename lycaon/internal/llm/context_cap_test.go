@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/modelfeed"
@@ -29,7 +29,7 @@ func feedOnlyRegistry(t *testing.T, feedWindow int, localModels string) (*Regist
 	}))
 	t.Cleanup(server.Close)
 	catalog := mustCatalogCloneShipToLocal(t, "providers:\n  - id: hosted\n    kind: openai\n    base_url: "+server.URL+"/v1\n    api_key_env: \"\"\n    models: "+localModels+"\n"+MinimalShipHTTPRetryYAML)
-	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
+	creds := credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age"))
 	testutil.FailErr(t, "set key", creds.Set("hosted", "test-key"))
 	reg, err := NewRegistry(t.Context(), catalog, creds, nil)
 	testutil.FailErr(t, "build registry", err)

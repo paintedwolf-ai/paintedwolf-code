@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -77,7 +77,7 @@ func TestBundledProvidersShipKindTemplates(t *testing.T) {
 func TestAnthropicRegistryConfiguredWithKey(t *testing.T) {
 	t.Parallel()
 	catalog := liveCatalogForShipIDs(t, "anthropic")
-	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
+	creds := credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age"))
 	if err := creds.Set("anthropic", "sk-ant-test"); err != nil {
 		contractcheck.FailErr(t, "creds.Set failed", err)
 	}
@@ -104,7 +104,7 @@ func TestAnthropicRegistryUnconfiguredWithoutKey(t *testing.T) {
 	// Bundled providers come from the binary; the local overlay stays a real path.
 	catalog, err := llm.NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
 	contractcheck.FailErr(t, "llm.NewProviderCatalogAt failed", err)
-	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
+	registry, err := llm.NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}

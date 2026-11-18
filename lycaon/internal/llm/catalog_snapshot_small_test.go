@@ -3,19 +3,21 @@ package llm
 import (
 	"context"
 	"errors"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
-	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/llm/modelinfo"
-	"github.com/lycaon/lycaon/internal/llm/providerprofile"
-	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
-	"github.com/lycaon/lycaon/internal/modelfeed"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/llm/providerprofile"
+	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
+	"github.com/lycaon/lycaon/internal/modelfeed"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestMergeBedrockInferenceProfilesExposesOnlyCallableProfileIDs(t *testing.T) {
@@ -127,7 +129,7 @@ func TestModelAssignmentDiscoveryFailure(t *testing.T) {
     api_key_env: ""
     models: []
 `+MinimalShipHTTPRetryYAML)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credentials.age")), nil)
+	registry, err := NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(t.TempDir(), "credentials.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
@@ -206,7 +208,9 @@ providers:
 	writeProvidersLocal(t, localPath, shipYAML)
 	cat, err := NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "catalog", err)
-	creds, err := providercredentials.New()
+	slot, err := providercredentials.DefaultSlot()
+	testutil.FailErr(t, "resolve credential slot", err)
+	creds, err := providercredentials.Open(slot)
 	testutil.FailErr(t, "creds", err)
 	testutil.FailErr(t, "set key", creds.Set("openai", "sk-test"))
 

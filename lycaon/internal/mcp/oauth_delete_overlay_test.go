@@ -6,12 +6,13 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func newOAuthDeleteHarness(t *testing.T) (*mcp.Runtime, *mcp.OAuthTokenStore) {
 	t.Helper()
-	store := mcp.NewOAuthTokenStoreAt(filepath.Join(t.TempDir(), "credential-vault.age"))
+	store := mcptest.OpenOAuthStore(t, filepath.Join(t.TempDir(), "credential-vault.age"))
 	testutil.FailErr(t, "seed oauth token", store.Put("svca", mcp.OAuthTokenRecord{
 		AccessToken: "secret-token",
 	}))

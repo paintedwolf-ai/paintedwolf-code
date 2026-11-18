@@ -11,7 +11,8 @@ import (
 
 func TestCredentialStoreRoundTrip(t *testing.T) {
 	path := t.TempDir() + "/credential-vault.age"
-	store := NewAt(path)
+	store, err := Open(credentialstore.Slot{Path: path, Namespace: credentialstore.NamespaceProviders, Context: credentialContext})
+	testutil.FailErr(t, "open provider credentials", err)
 
 	if err := store.Set("openai", "sk-test-secret"); err != nil {
 		testutil.FailErr(t, "store.Set failed", err)
@@ -27,11 +28,10 @@ func TestCredentialStoreRoundTrip(t *testing.T) {
 		t.Fatal("credential vault exposed plaintext")
 	}
 
-	vault, err := credentialstore.OpenFile(credentialstore.Slot{
+	reloaded, err := Open(credentialstore.Slot{
 		Path: path, Namespace: credentialstore.NamespaceProviders, Context: credentialContext,
-	}, nil)
+	})
 	testutil.FailErr(t, "reopen credential vault", err)
-	reloaded := &Store{store: vault}
 	key, ok := reloaded.Get("openai")
 	if !ok || key.Value() != "sk-test-secret" {
 		t.Fatalf("get = %q ok = %v", key, ok)
@@ -52,11 +52,26 @@ func TestCredentialStoreRoundTrip(t *testing.T) {
 }
 
 func TestCredentialStoreRejectsEmptyKey(t *testing.T) {
-	store := NewAt(t.TempDir() + "/credential-vault.age")
+	store, err := Open(credentialstore.Slot{Path: t.TempDir() + "/credential-vault.age", Namespace: credentialstore.NamespaceProviders, Context: credentialContext})
+	testutil.FailErr(t, "open provider credentials", err)
 	if err := store.Set("openai", "   "); err == nil {
 		t.Fatal("empty API key was accepted")
 	}
 	if _, ok := store.Get("openai"); ok {
 		t.Fatal("empty API key was stored")
+	}
+}
+
+func TestCredentialStoreRefusesInvalidVaultWithoutMutation(t *testing.T) {
+	slot := credentialstore.Slot{Path: t.TempDir() + "/credential-vault.age", Namespace: credentialstore.NamespaceProviders, Context: credentialContext}
+	before := []byte("invalid encrypted vault")
+	testutil.FailErr(t, "write invalid vault", os.WriteFile(slot.Path, before, 0o600))
+	if store, err := Open(slot); err == nil || store != nil {
+		t.Fatal("invalid vault was accepted")
+	}
+	after, err := os.ReadFile(slot.Path)
+	testutil.FailErr(t, "read refused vault", err)
+	if string(after) != string(before) {
+		t.Fatal("refused vault was mutated")
 	}
 }

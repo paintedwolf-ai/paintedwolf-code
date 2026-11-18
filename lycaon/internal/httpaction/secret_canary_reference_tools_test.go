@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/nativemanifest"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
+	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -109,7 +109,7 @@ func registerCanaryMCP(t *testing.T, registry *tools.DefaultRegistry, matcher *s
 		StatePath:          filepath.Join(tempDir, "state"),
 		GlobalOverridePath: filepath.Join(tempDir, "mcp.yaml"),
 		Connector:          canaryEchoConnector{received: &received},
-		OAuthStore:         mcp.NewOAuthTokenStoreAt(filepath.Join(tempDir, "oauth.json")),
+		OAuthStore:         mcptest.OpenOAuthStore(t, filepath.Join(tempDir, "oauth.json")),
 	})
 	testutil.FailErr(t, "create canary MCP runtime", err)
 	runtime.Tools.SetToolRegistry(registry)

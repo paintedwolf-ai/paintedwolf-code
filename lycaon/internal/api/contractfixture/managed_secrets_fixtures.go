@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
@@ -65,7 +66,7 @@ func NewManagedSecretServer(t *testing.T) (*hostapi.Server, *secretcap.Service, 
 	t.Helper()
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "root-chat", testdbseed.DefaultProjectID)
-	values := credentialstore.NewEmpty(credentialstore.Slot{
+	values := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets,
 		Context:   "test managed secret",

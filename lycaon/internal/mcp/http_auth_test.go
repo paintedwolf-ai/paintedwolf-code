@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -125,7 +126,7 @@ func TestWireRedactsStaticSecrets(t *testing.T) {
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		GlobalOverridePath: storePath,
 		Connector:          &mcp.MockConnector{},
-		OAuthStore:         mcp.NewOAuthTokenStoreAt(oauthPath),
+		OAuthStore:         mcptest.OpenOAuthStore(t, oauthPath),
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	testutil.FailErr(t, "load", reg.Catalog.Load(t.Context()))

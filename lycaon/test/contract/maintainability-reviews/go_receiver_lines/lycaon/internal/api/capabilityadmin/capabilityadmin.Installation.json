@@ -4,12 +4,12 @@
   "kind": "runtime_service",
   "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "Retain installation at 373 receiver lines. Applying, rolling back, and replaying one reviewed choice remain serialized together; socket references and unavailable-intent restoration retain the same lifetime. Session lookup resources are narrowed in adjacent route components. Restart, recipient-substitution, and revocation tests preserve their original assertions after fixture setup extraction.",
+  "reason": "Retain the serialized application, rollback and replay of a reviewed choice at 373 receiver lines. The same transaction binds socket references and restores unavailable intent. Restart, recipient substitution and revocation contracts exercise the production routes and encrypted credential store.",
   "reviewed_commit": "14725b25ec62673da30a613e4982cd7f57f55aa7",
   "ceiling": 373,
   "boundaries": {
     "lycaon/internal/api/capabilityadmin/socket_pending_restart_test.go": "8fb3f2cbf56291f2263ab73eaf4f1a01771ab4e2a75f624fe6a4c81f78297786",
-    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "0e5aa8876a9b7da0308114ea6381adb2f4cdb02ab6f127530520b0cf5e17d9af",
+    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "0b40184c72e3cd1d04111955280fe65abe0230957421238f6bbbe264e8bc30b1",
     "lycaon/internal/api/capabilityadmin/approval_revocation_test.go": "d39295d8e562e2b626d07828b1a03d90252a73c1943436212508ae3b722b059b"
   },
   "reviewed_shape": "f4a003fd024eecc412afdbeda3292fe3af1f2682c0c6f6baf6b5411d75fc6a96"

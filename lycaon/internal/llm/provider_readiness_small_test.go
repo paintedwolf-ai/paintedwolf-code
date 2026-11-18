@@ -3,7 +3,14 @@ package llm
 import (
 	"context"
 	"encoding/json"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
@@ -13,12 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"net/http"
-	"net/http/httptest"
-	"path/filepath"
-	"strings"
-	"sync/atomic"
-	"testing"
 )
 
 // MinimalShipHTTPRetryYAML is an indented http_retry block for synthetic ship
@@ -192,7 +193,7 @@ func TestRegistryTestConnectivityAzureProbesDataPlaneKey(t *testing.T) {
 			Models:         []modelinfo.Entry{{ID: "customer-deployment", PricedAs: "gpt-4o"}},
 		}
 		catalog := mustTestProviderCatalog(t, entry)
-		credentials := providercredentials.NewAt(t.TempDir() + "/credential-vault.age")
+		credentials := credentialstest.Open(t, t.TempDir()+"/credential-vault.age")
 		testutil.FailErr(t, "store Azure key", credentials.Set("azure", key))
 		registry, err := NewRegistry(t.Context(), catalog, credentials, nil)
 		if err == nil {
@@ -293,7 +294,7 @@ func TestNewProviderForEntryAttachesHTTPRetry(t *testing.T) {
 			}))
 			defer server.Close()
 			entry := CatalogEntry{ID: "p", Kind: kind, BaseURL: server.URL + "/v1", HTTPRetry: policy, Models: []modelinfo.Entry{{ID: "model", ContextLength: 32768, ThinkStyle: "none"}}}
-			reg, err := NewRegistry(t.Context(), mustTestProviderCatalog(t, entry), providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
+			reg, err := NewRegistry(t.Context(), mustTestProviderCatalog(t, entry), credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 			if err == nil {
 				reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 			}

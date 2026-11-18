@@ -12,7 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/evidence"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	anthropicprovider "github.com/lycaon/lycaon/internal/llm/providers/anthropic"
@@ -189,7 +189,7 @@ func TestRegistryModelHasVision(t *testing.T) {
 	writeProvidersLocal(t, localPath, []byte(yaml))
 	catalog, err := NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "catalog", err)
-	reg, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")), nil)
+	reg, err := NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(tmp, "credential-vault.age")), nil)
 	if err == nil {
 		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}

@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -418,7 +419,7 @@ func testService(t *testing.T) (*Service, *credentialstore.Store, *[]secretmatch
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, database, "root-1", testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, database, "root-2", testdbseed.DefaultProjectID)
-	values := credentialstore.NewEmpty(credentialstore.Slot{
+	values := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets,
 		Context:   "test managed secret",

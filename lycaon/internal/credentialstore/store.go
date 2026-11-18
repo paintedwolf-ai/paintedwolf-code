@@ -74,11 +74,6 @@ func Open(slot Slot, validate Validator) (*Store, error) {
 	return openWith(backend, slot.Context, validate)
 }
 
-// OpenFile loads a slot with a development identity file.
-func OpenFile(slot Slot, validate Validator) (*Store, error) {
-	return openWith(newDevelopmentBackend(slot.Path, slot.Namespace), slot.Context, validate)
-}
-
 func openWith(backend Backend, context string, validate Validator) (*Store, error) {
 	s := &Store{
 		backend: backend, keys: make(map[string]string),
@@ -98,14 +93,6 @@ func openWith(backend Backend, context string, validate Validator) (*Store, erro
 		}
 	}
 	return s, nil
-}
-
-// NewEmpty constructs an unloaded slot with a development identity file.
-func NewEmpty(slot Slot, validate Validator) *Store {
-	return &Store{
-		backend: newDevelopmentBackend(slot.Path, slot.Namespace), keys: make(map[string]string),
-		validate: validate, context: strings.TrimSpace(slot.Context),
-	}
 }
 
 // Get returns a stored key wrapped in SecretValue.
@@ -183,9 +170,7 @@ func DescribeSlot(slot Slot) (string, error) {
 	return backend.Describe(), nil
 }
 
-// VerifyDurable re-reads the encrypted vault from disk and reloads its identity
-// from the platform identity provider (bypassing in-memory sharedVault identity
-// and provider caches) to confirm that id == want is durably persisted.
+// VerifyDurable bypasses vault and identity caches to confirm durable storage.
 func VerifyDurable(slot Slot, id, want string) error {
 	path := strings.TrimSpace(slot.Path)
 	namespace := strings.TrimSpace(slot.Namespace)

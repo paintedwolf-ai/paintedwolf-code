@@ -17,6 +17,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/secretview"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
@@ -73,7 +74,7 @@ func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x5a}, 32))
 	testutil.FailErr(t, "fingerprinter", err)
 	matcher.SetFingerprinter(fp)
-	values := credentialstore.NewEmpty(credentialstore.Slot{
+	values := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets,
 		Context:   "test managed secret",
