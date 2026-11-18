@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -114,9 +115,16 @@ func TestPreflightProbeIDsAreStableAndOrdered(t *testing.T) {
 		"scanner_engine", "browser_engine", "decision_engine", "ocr_engine", "provider_configured", "lite_slot",
 	}
 
-	got := preflight.Default().IDs()
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("preflight probe ids = %v, want %v — ids are wire-visible and their order is the display order", got, want)
+	results, _ := preflight.Default().Run(t.Context(), preflight.Env{
+		ConfigDir:        t.TempDir(),
+		ResolveGitEngine: func() error { return nil },
+	})
+	got := make([]string, 0, len(results))
+	for _, result := range results {
+		got = append(got, result.ID)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("preflight probe IDs in display order = %v, want %v", got, want)
 	}
 }
 
