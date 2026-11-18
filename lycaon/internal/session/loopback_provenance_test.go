@@ -508,9 +508,7 @@ func TestLoopbackListenerHelper(t *testing.T) {
 // A server a session's action launched is that session's, through the same
 // lineage the egress broker attributes by, and nobody else's.
 func TestLoopbackOwnershipFollowsARealLaunch(t *testing.T) {
-	if !lineage.Supported() {
-		t.Skip("launch lineage requires a supported platform")
-	}
+	testutil.RequireLineage(t, lineage.Supported())
 	line, err := lineage.Open("command running dev server", "chat-live")
 	testutil.FailErr(t, "open lineage", err)
 	t.Cleanup(func() { _ = line.Close() })

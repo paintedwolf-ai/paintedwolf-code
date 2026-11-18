@@ -4,6 +4,6 @@ package sourceledger
 
 import "testing"
 
-func TestLargeDirectoryTransitionsDoNotWriteDescendants(t *testing.T) {
+func TestStressLargeDirectoryTransitionsDoNotWriteDescendants(t *testing.T) {
 	testDirectoryTransitionWork(t, []int{1, 4096})
 }

@@ -89,7 +89,7 @@ def backstop_seconds(name):
 def catalog():
     value = json.loads(CATALOG.read_text())
     if set(value) != {"groups", "go", "tasks", "private", "selection", "resources", "environment", "ci",
-                      "capacity", "fuzz", "provisions"}:
+                      "capacity", "fuzz", "provisions", "not_run"}:
         raise ValueError("invalid verification catalog")
     for name, provision in value["provisions"].items():
         targets, packages = provision.get("targets"), provision.get("packages", [])
@@ -139,6 +139,13 @@ def catalog():
         raise ValueError("the verification environment declares names and prefixes")
     if not valid_fuzz(value["fuzz"]):
         raise ValueError("the fuzz section declares tags, smoke_seconds and seconds per ./package target")
+    not_run = value["not_run"]
+    if (not isinstance(not_run, dict) or set(not_run) != {"tags", "tests"}
+            or not all(isinstance(reason, str) and reason for reason in not_run["tags"].values())
+            or not all(isinstance(group, dict) and set(group) - {"go", "rust"} == {"reason"} and group["reason"]
+                       and all(isinstance(group.get(kind, []), list) for kind in ("go", "rust"))
+                       for group in not_run["tests"])):
+        raise ValueError("the not-run set declares build tags and test groups, each with its reason")
     for name, spec in value["resources"].items():
         # Catalog stages and invocations outside the catalog declare resources by Task name.
         if name in value["groups"] or name in value["go"]:

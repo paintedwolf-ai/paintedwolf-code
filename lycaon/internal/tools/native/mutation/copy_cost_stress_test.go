@@ -14,7 +14,7 @@ import (
 
 // Keep this diagnostic small enough to identify a per-entry cost before the
 // required full-size entry test exercises the final implementation.
-func TestRecursiveCopyEntryCost(t *testing.T) {
+func TestStressRecursiveCopyEntryCost(t *testing.T) {
 	h := newHarness(t, nil)
 	testutil.FailErr(t, "create source", os.Mkdir(h.path("source"), 0o755))
 	for i := range 1000 {
@@ -38,7 +38,7 @@ func TestRecursiveCopyEntryCost(t *testing.T) {
 	}
 }
 
-func TestRecursiveRemovalEntryCost(t *testing.T) {
+func TestStressRecursiveRemovalEntryCost(t *testing.T) {
 	h := newHarness(t, nil)
 	const count = 1000
 	for i := range count {

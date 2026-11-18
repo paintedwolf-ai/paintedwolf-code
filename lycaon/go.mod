@@ -35,6 +35,7 @@ require (
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-chi/cors v1.2.2
 	github.com/go-enry/go-enry/v2 v2.9.6
+	github.com/go-git/go-billy/v5 v5.9.2
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/go-rod/rod v0.116.2
 	github.com/godbus/dbus/v5 v5.2.4
@@ -173,7 +174,6 @@ require (
 	github.com/go-enry/go-oniguruma v1.2.1 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
-	github.com/go-git/go-billy/v5 v5.9.2 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect

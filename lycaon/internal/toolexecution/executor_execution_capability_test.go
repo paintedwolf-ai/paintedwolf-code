@@ -24,8 +24,8 @@ import (
 func TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce(t *testing.T) {
 	for _, capability := range []string{"process_control", "credential_store", "host_execution"} {
 		t.Run(capability, func(t *testing.T) {
-			if (capability == "process_control" || capability == "credential_store") && !confine.Available() {
-				t.Skip("confined execution capabilities require an available sandbox")
+			if capability == "process_control" || capability == "credential_store" {
+				testutil.RequireConfinement(t, confine.Available())
 			}
 			confine.TestingSetAutoConfine(t)
 			stageApprovals(t, settings.ApprovalEffectAsk)

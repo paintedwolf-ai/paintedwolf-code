@@ -206,6 +206,7 @@ class ProvisionTests(unittest.TestCase):
         self.assertEqual(installed, [coverage_changes.python_coverage.REQUIREMENTS,
                                      coverage_changes.ROOT / "scripts/workflow_lint/requirements.txt",
                                      ROOT / "scripts/generation/requirements-test.txt",
+                                     ROOT / "scripts/generation/requirements-conversion-test.txt",
                                      ROOT / "scripts/coordinator-benchmark/requirements.txt",
                                      ROOT / "scripts/bialy/custom_model/requirements-test.txt"])
         with patch("sys.stderr"), self.assertRaises(SystemExit):

@@ -26,7 +26,8 @@
     ],
     "oar:verify": [
       "test:oar",
-      "oar:conformance"
+      "oar:conformance",
+      "oar:rejection-walk"
     ],
     "check": [
       "build",
@@ -157,7 +158,8 @@
         "./internal/tools/native/command",
         "./internal/toolhost",
         "./internal/tools/native/jq",
-        "./internal/worker"
+        "./internal/worker",
+        "./internal/tools/native/mutation"
       ],
       "flags": [
         "-p=1",
@@ -245,7 +247,7 @@
         "./test/wiring/commands"
       ],
       "flags": [
-        "-run=^(TestArtifactCLIRequiresConfinement|TestWithheldListenerRoutesToLocalListen|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestContainedPreservesReadOnlyRootAuthority|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestCommandInstructionGrantUsesOneOrdinaryApproval|TestCurrentReviewCannotReplaceExecutionPermit|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestExecutionReviewHonorsReviewedReasonAndLaterDeny|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport|TestSessionOutputReadUsesAppliedReadOnlyAuthority|TestPreparedGroupRefusesRemovedCaptureAfterOwnerRegistration|TestPreparedLaunchFreezesFinalPathEnvironmentAndLiteralArguments|TestPreparedLaunchPreservesRelativeScriptKernelFilename|TestPreparedLaunchRegistersBeforePayloadAndRechecksCurrentAuthority|TestPreparedLaunchRejectsChangedCapturedVectorsBeforeNativeStart|TestPreparedLaunchResolvesRelativeAndEmptyPathAtCapturedCwd|TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode|TestPreparedLinuxScriptPreservesOrdinaryPathAndNativeArgv|TestPreparedNativeCallbackFailureAndCancellationNeverReleasePayload|TestPreparedStrictBoundaryNeverFallsBackToHostExecution|TestOwnedProcessGroupCancellationRetainsNativeSettlement|TestOwnedProcessGroupRefusesConsumedPreparedCommand|TestOwnedProcessGroupWaitsOnceStopsTreeAndPreservesUnrelatedProcess|TestPinnedLaunchDoesNotGrantAnUnadmittedHardlinkOperand|TestPinnedLaunchPreservesOrdinaryScriptArgumentsAndDirectory|TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload|TestPinnedHostExecutionPreservesSetuidProcessInspection|TestRunInOwnGroupCancellationKillsAShellIgnoringTerm|TestRunInOwnGroupDetachesFromTheEnginesTerminal|TestRunInOwnGroupEndsWhatTheCommandLeftBehind|TestRunInOwnGroupReportsACommandRemovedAfterPreparation|TestRunInOwnGroupTerminalHelperProcess|TestNonHTTPContractStaleSymlinkGrantRevalidateDenies|TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata|TestExternalCommandSaveMergesWithHumanTyping|TestProgramAppendStopsOnUnsavedAcceptanceWithoutReplaying|TestProgramPublicationRedirectEffectsAdmitBeforeOpening|TestProgramPublicationRedirectRequiresCurrentWriteProgress|TestProgramPublicationRespectsCurrentEffectAuthority|TestProgramPublicationReviewRaceStopsBeforeRead|TestProgramPublicationSettlesBeforeRedirectCapture|TestProgramPublishesOwnAgentDraftBeforeNativeAndExternalReads|TestRetainedCommandOutputCreditsOnlyDeliveredHeadAndTail|TestEveryTerminalResultStatesTheBox|TestTerminalAndCommandShareLaunchEnvironmentAndScratch|TestProgramExternalSystemToolsRunWithoutStderr|TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed|TestExternalSpawnUsesOnlyAdmittedWriteRoots|TestAgentGitAuthenticatesFromInsideItsConfinement|TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement|TestRealEnforcerSelectsAndVerifiesAMountedView|TestAvailabilityIsProvenByARealDenialAndLeavesNothing|TestDeniedPathNamedThroughAnAliasIsRefusedAtItsCanonicalPath|TestLaunchRefusesAProcessThatAnswersTooFewSteps|TestPlacedBranchIsUsableAndItsFolderIsClosed|TestMaterializedWorkerReachesOnlyItsOwnBranch|TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion|TestBranchTreeAnswersFromTheViewOnEveryProvider|TestMaterializedWorkerRetriesPromotionAfterSourceOutage|TestMountedWorkerRetriesPromotionAfterSourceOutage|TestNonPrimaryRootRefsReachPromotionAndRollBack|TestSmallMaterializedLifecycleAcrossProcessRestart|TestSmallMaterializedLifecyclePreservesSourceConflict|TestSmallMountedLifecycleAcrossProcessRestart|TestSmallMountedLifecyclePreservesSourceConflict|TestStackedWorkerClaimsAndPromotesThroughTheOneTransaction|TestStressFirefoxMountedSparseWorkerLifecycle|TestRefusedOperationsLeaveTheWorldUnchanged|TestRefusedPathsStayInsideTheRoots|TestGateContainedIsTheAppliedSpawnBoundary|TestSpawnRefusesASocketTheBoundaryLacks|TestContractNoAmbientNetworkAllowAlias|TestInvariantWriteRootSSOTSharedByGateAndConfine|TestProgramBackgroundReadServesThePersonsDraft|TestProgramReadsThePersonsUnsavedText|TestProgramWriteSavesThePersonsDraftWithIt|TestProgramRepoMapReadsThePersonsDraft)$"
+        "-run=^(TestArtifactCLIRequiresConfinement|TestWithheldListenerRoutesToLocalListen|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestContainedPreservesReadOnlyRootAuthority|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestCommandInstructionGrantUsesOneOrdinaryApproval|TestCurrentReviewCannotReplaceExecutionPermit|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestExecutionReviewHonorsReviewedReasonAndLaterDeny|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport|TestSessionOutputReadUsesAppliedReadOnlyAuthority|TestPreparedGroupRefusesRemovedCaptureAfterOwnerRegistration|TestPreparedLaunchFreezesFinalPathEnvironmentAndLiteralArguments|TestPreparedLaunchPreservesRelativeScriptKernelFilename|TestPreparedLaunchRegistersBeforePayloadAndRechecksCurrentAuthority|TestPreparedLaunchRejectsChangedCapturedVectorsBeforeNativeStart|TestPreparedLaunchResolvesRelativeAndEmptyPathAtCapturedCwd|TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode|TestPreparedLinuxScriptPreservesOrdinaryPathAndNativeArgv|TestPreparedNativeCallbackFailureAndCancellationNeverReleasePayload|TestPreparedStrictBoundaryNeverFallsBackToHostExecution|TestOwnedProcessGroupCancellationRetainsNativeSettlement|TestOwnedProcessGroupRefusesConsumedPreparedCommand|TestOwnedProcessGroupWaitsOnceStopsTreeAndPreservesUnrelatedProcess|TestPinnedLaunchDoesNotGrantAnUnadmittedHardlinkOperand|TestPinnedLaunchPreservesOrdinaryScriptArgumentsAndDirectory|TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload|TestPinnedHostExecutionPreservesSetuidProcessInspection|TestRunInOwnGroupCancellationKillsAShellIgnoringTerm|TestRunInOwnGroupDetachesFromTheEnginesTerminal|TestRunInOwnGroupEndsWhatTheCommandLeftBehind|TestRunInOwnGroupReportsACommandRemovedAfterPreparation|TestRunInOwnGroupTerminalHelperProcess|TestNonHTTPContractStaleSymlinkGrantRevalidateDenies|TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata|TestExternalCommandSaveMergesWithHumanTyping|TestProgramAppendStopsOnUnsavedAcceptanceWithoutReplaying|TestProgramPublicationRedirectEffectsAdmitBeforeOpening|TestProgramPublicationRedirectRequiresCurrentWriteProgress|TestProgramPublicationRespectsCurrentEffectAuthority|TestProgramPublicationReviewRaceStopsBeforeRead|TestProgramPublicationSettlesBeforeRedirectCapture|TestProgramPublishesOwnAgentDraftBeforeNativeAndExternalReads|TestRetainedCommandOutputCreditsOnlyDeliveredHeadAndTail|TestEveryTerminalResultStatesTheBox|TestTerminalAndCommandShareLaunchEnvironmentAndScratch|TestProgramExternalSystemToolsRunWithoutStderr|TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed|TestExternalSpawnUsesOnlyAdmittedWriteRoots|TestAgentGitAuthenticatesFromInsideItsConfinement|TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement|TestRealEnforcerSelectsAndVerifiesAMountedView|TestAvailabilityIsProvenByARealDenialAndLeavesNothing|TestDeniedPathNamedThroughAnAliasIsRefusedAtItsCanonicalPath|TestLaunchRefusesAProcessThatAnswersTooFewSteps|TestPlacedBranchIsUsableAndItsFolderIsClosed|TestMaterializedWorkerReachesOnlyItsOwnBranch|TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion|TestBranchTreeAnswersFromTheViewOnEveryProvider|TestNonPrimaryRootRefsReachPromotionAndRollBack|TestSmallMaterializedLifecycleAcrossProcessRestart|TestSmallMaterializedLifecyclePreservesSourceConflict|TestSmallMountedLifecycleAcrossProcessRestart|TestSmallMountedLifecyclePreservesSourceConflict|TestStackedWorkerClaimsAndPromotesThroughTheOneTransaction|TestRefusedOperationsLeaveTheWorldUnchanged|TestRefusedPathsStayInsideTheRoots|TestGateContainedIsTheAppliedSpawnBoundary|TestSpawnRefusesASocketTheBoundaryLacks|TestContractNoAmbientNetworkAllowAlias|TestInvariantWriteRootSSOTSharedByGateAndConfine|TestProgramBackgroundReadServesThePersonsDraft|TestProgramReadsThePersonsUnsavedText|TestProgramWriteSavesThePersonsDraftWithIt|TestProgramRepoMapReadsThePersonsDraft)$"
       ],
       "bundled": true
     },
@@ -259,6 +261,17 @@
         "./test/scanstress/..."
       ],
       "bundled": true
+    },
+    "oar:rejection-walk": {
+      "options": [
+        "--full"
+      ],
+      "packages": [
+        "./internal/toolexecution"
+      ],
+      "flags": [
+        "-run=^TestCatalogEveryIntrinsicRejectionResolvesBeforeFallback$"
+      ]
     }
   },
   "tasks": {
@@ -1134,7 +1147,13 @@
       "DOCKER_CONTEXT",
       "DOCKER_CONFIG",
       "BIALY_GENERATION_BUNDLE",
-      "BIALY_GENERATION_AUTHORITY"
+      "BIALY_GENERATION_AUTHORITY",
+      "LYCAON_GIT_REFERENCE",
+      "LYCAON_GIT_PARITY_REQUIRED",
+      "LYCAON_BROWSER_BIN",
+      "LYCAON_BROWSER_REQUIRED",
+      "LYCAON_OCR_REQUIRED",
+      "LYCAON_SCANNER_SUITE_REQUIRED"
     ],
     "prefixes": [
       "LC_",
@@ -1331,6 +1350,7 @@
         "den",
         "den-tests",
         "shell-native",
+        "updater-native",
         "documentcore-native"
       ]
     },
@@ -1350,6 +1370,7 @@
       "setup": "shell",
       "changes": [
         "shell-native",
+        "updater-native",
         "decide-native"
       ]
     },
@@ -1380,7 +1401,8 @@
       "platform": "linux",
       "changes": [
         "den",
-        "shell-native"
+        "shell-native",
+        "updater-native"
       ]
     },
     "confinement-arm64": {
@@ -1517,7 +1539,8 @@
       "arguments": [
         "./internal/tools/native/command",
         "./internal/toolhost",
-        "./internal/tools/native/jq"
+        "./internal/tools/native/jq",
+        "./internal/tools/native/mutation"
       ],
       "minutes": 90,
       "profiles": [
@@ -1580,6 +1603,7 @@
         "den",
         "den-tests",
         "shell-native",
+        "updater-native",
         "decide-native",
         "documentcore-native"
       ]
@@ -1600,6 +1624,24 @@
       "platform": "macos",
       "changes": [
         "confinement"
+      ]
+    },
+    "native-macos": {
+      "targets": [
+        "den:test:rust",
+        "decide:test"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "integration",
+        "nightly"
+      ],
+      "suite": "behavior",
+      "setup": "shell",
+      "platform": "macos",
+      "runner": "macos-15",
+      "changes": [
+        "updater-native"
       ]
     }
   },
@@ -1752,5 +1794,36 @@
         "den:harness:test": []
       }
     }
+  },
+  "not_run": {
+    "tags": {
+      "live_llm": "calls paid model providers; a person runs it with authorization",
+      "live_web": "fetches from public web sites; a person runs it",
+      "live_scanners": "installs and runs every catalog scanner from the network; a person runs it (test:live-scanners)"
+    },
+    "tests": [
+      {
+        "reason": "Windows: no tier has a Windows test runner",
+        "go": [
+          "internal/exec/priority_windows_test.go:TestPriorityBelowNormalCreationFlags",
+          "internal/exec/priority_windows_test.go:TestPriorityNormalOmitsBelowNormal",
+          "internal/exec/pty_test.go:TestStartPTYUnsupportedOnWindows",
+          "internal/fseffect/ownership_windows_test.go:TestWindowsOwnershipIsAnExplicitUnavailableCapability",
+          "internal/pagedview/storage_windows_test.go:TestStorageFullWindowsErrors",
+          "internal/confine/package_cache_roots_windows_test.go:TestStandardCacheDataRootsWindows",
+          "test/contract/tools/terminal_bounds_security_contract_test.go:TestTerminalUnsupportedMapsOnWindowsCI"
+        ],
+        "rust": [
+          "lycaon-den/src-tauri/src/protected_launch/none.rs:non_unix_targets_are_never_protected",
+          "lycaon-den/src-tauri/src/update_service/installer/unsupported.rs:absence_of_an_adapter_is_explicit"
+        ]
+      },
+      {
+        "reason": "builds only for operating systems the product does not ship on",
+        "go": [
+          "internal/confine/package_cache_roots_other_test.go:TestStandardCacheDataRootsOther"
+        ]
+      }
+    ]
   }
 }

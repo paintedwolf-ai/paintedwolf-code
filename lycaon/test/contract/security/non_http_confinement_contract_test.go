@@ -21,8 +21,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// Confinement integrity for fail-closed mediation, emitters, Contained, and grants.
-
 // A front door that cannot bind leaves no half-started broker: the HTTP
 // listener is released, and an action needing mediation refuses before launch.
 func TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack(t *testing.T) {

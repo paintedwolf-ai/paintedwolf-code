@@ -5,6 +5,7 @@ package worker
 import (
 	"bytes"
 	"crypto/rand"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -24,39 +26,23 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// largeSourceFiles is a working tree of the size a large real repository
+// has; a mounted worker over it must copy and read nothing it is not asked for.
+const largeSourceFiles = 100_000
+
 // This explicitly exercises the mounted lane, not production budget selection.
 // Restart, broad traversal and concurrent-worker scale are separate scenarios.
-func TestStressFirefoxMountedSparseWorkerLifecycle(t *testing.T) {
-	source := os.Getenv("PW_M14_FIREFOX_SOURCE")
-	if source == "" {
-		t.Skip("requires explicitly transferred pinned Firefox fixture")
-	}
-	const pin = "4a9cf9ae9564d9f3209a04b461670baa0b0c5f0e"
-	if got := gittest.Run(t, source, "rev-parse", "HEAD"); strings.TrimSpace(got) != pin {
-		t.Fatalf("unexpected Firefox fixture head: %q", got)
-	}
+func TestStressMountedSparseWorkerLifecycleOverALargeSource(t *testing.T) {
+	source := largeSource(t, largeSourceFiles)
+	head := strings.TrimSpace(gittest.Run(t, source, "rev-parse", "HEAD"))
 	original, err := os.ReadFile(filepath.Join(source, "README.md"))
 	testutil.FailErr(t, "source read oracle", err)
-	name := "m14-test-" + rand.Text() + ".txt"
+	name := "scale-test-" + rand.Text() + ".txt"
 	content := []byte("isolated worker change: " + name + "\n")
 	sourceFile := filepath.Join(source, name)
-	if _, err := os.Lstat(sourceFile); !os.IsNotExist(err) {
-		t.Fatalf("fixture path is not unused: %v", err)
-	}
-	t.Cleanup(func() {
-		data, err := os.ReadFile(sourceFile)
-		if os.IsNotExist(err) {
-			return
-		}
-		testutil.FailErr(t, "inspect authored fixture path", err)
-		if !bytes.Equal(data, content) {
-			t.Fatal("preserving unexpected source content at authored path")
-		}
-		testutil.FailErr(t, "remove only authored source file", os.Remove(sourceFile))
-	})
-	fixture := newFirefoxWorkerFixture(t, source)
+	fixture := newLargeSourceWorkerFixture(t, source)
 	started := time.Now()
-	task := claimFirefoxWorker(t, fixture, name)
+	task := claimLargeSourceWorker(t, fixture, name)
 	t.Logf("prepare elapsed=%s", time.Since(started))
 	t.Cleanup(func() {
 		testutil.FailErr(t, "destroy scale worker", fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
@@ -103,12 +89,12 @@ func TestStressFirefoxMountedSparseWorkerLifecycle(t *testing.T) {
 	}
 	assertFileHolds(t, sourceFile, string(content))
 	assertFileHolds(t, filepath.Join(source, "README.md"), string(original))
-	if got := gittest.Run(t, source, "rev-parse", "HEAD"); strings.TrimSpace(got) != pin {
+	if got := gittest.Run(t, source, "rev-parse", "HEAD"); strings.TrimSpace(got) != head {
 		t.Fatal("promotion changed source HEAD")
 	}
 }
 
-func newFirefoxWorkerFixture(t *testing.T, source string) *layeredWorkerFixture {
+func newLargeSourceWorkerFixture(t *testing.T, source string) *layeredWorkerFixture {
 	t.Helper()
 	confine.TestingSetAutoConfine(t)
 	database := testdbfixture.Open(t, "store.db")
@@ -126,7 +112,7 @@ func newFirefoxWorkerFixture(t *testing.T, source string) *layeredWorkerFixture 
 	return &layeredWorkerFixture{db: database, queue: queue, manager: manager, source: source, branches: branches}
 }
 
-func claimFirefoxWorker(t *testing.T, f *layeredWorkerFixture, name string) *api.WorkerTask {
+func claimLargeSourceWorker(t *testing.T, f *layeredWorkerFixture, name string) *api.WorkerTask {
 	t.Helper()
 	id, err := f.queue.Enqueue(t.Context(), api.WorkerTask{
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: f.source, WorkspaceRootID: "root-id",
@@ -143,4 +129,26 @@ func claimFirefoxWorker(t *testing.T, f *layeredWorkerFixture, name string) *api
 	testutil.FailErr(t, "prepare scale worker", err)
 	task.ClaimToken = next.ClaimToken
 	return task
+}
+
+// largeSource commits a generated tree of files in nested directories, as
+// one fast-import stream so building it costs no per-file Git process.
+func largeSource(t *testing.T, files int) string {
+	t.Helper()
+	source := t.TempDir()
+	gittest.Init(t, source)
+	var stream bytes.Buffer
+	stream.WriteString("blob\nmark :1\ndata 7\nsource\n")
+	stream.WriteString("commit refs/heads/main\ncommitter Painted Wolf test <test@paintedwolf.dev> 0 +0000\ndata 6\nlarge\n")
+	stream.WriteString("M 100644 :1 README.md\n")
+	for i := range files {
+		fmt.Fprintf(&stream, "M 100644 :1 d%03d/e%03d/f%06d.txt\n", i%1000, (i/1000)%100, i)
+	}
+	out, code, err := gitexec.Run(t.Context(), source, []string{"fast-import", "--quiet"},
+		gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: stream.Bytes()})
+	if err != nil || code != 0 {
+		t.Fatalf("fast-import: exit %d: %v: %s", code, err, out)
+	}
+	gittest.Run(t, source, "checkout", "-f", "main")
+	return source
 }

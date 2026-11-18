@@ -147,17 +147,23 @@ func TestEditorActionPathDisplayMatchesAttachmentFence(t *testing.T) {
 				t.Fatal("invoke accepted without a message id")
 			}
 
-			contractfixture.WaitForSessionIdle(t, baseURL, sess.ID)
-			msgs := contractfixture.ListMessagesAtURL(t, baseURL, sess.ID)
+			// An accepted invoke admits its prompt asynchronously, so the session can
+			// still read idle from the previous turn: wait for this prompt's answer.
+			var msgs []wire.Message
 			var prompt *wire.Message
-			for i := range msgs {
-				if msgs[i].ID == accepted.MessageID {
-					prompt = &msgs[i]
+			testutil.WaitFor(t, "the admitted prompt is answered", func() bool {
+				contractfixture.WaitForSessionIdle(t, baseURL, sess.ID)
+				msgs = contractfixture.ListMessagesAtURL(t, baseURL, sess.ID)
+				prompt = nil
+				for i := range msgs {
+					if msgs[i].ID == accepted.MessageID {
+						prompt = &msgs[i]
+					} else if prompt != nil && msgs[i].Role == wire.MessageRoleAssistant {
+						return true
+					}
 				}
-			}
-			if prompt == nil {
-				t.Fatalf("admitted prompt %s missing from transcript", accepted.MessageID)
-			}
+				return false
+			})
 			// The fence is the host marker; the request text outside it names the
 			// same selection with the same display spelling.
 			if !strings.Contains(prompt.Content, tc.wantFence) {

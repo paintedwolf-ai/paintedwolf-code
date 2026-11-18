@@ -241,9 +241,7 @@ func TestUnderBudgetMaterializedWorkerRetainsGitAndCheckpointBases(t *testing.T)
 // it, its own tree stays writable, and the branches and object store beside it stay out of reach.
 func TestMaterializedWorkerReachesOnlyItsOwnBranch(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
-	if !confine.Available() {
-		t.Skip("this host applies no confinement")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	fixture := newLayeredWorkerFixture(t, nil)
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(fixture.branches))
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
@@ -299,9 +297,7 @@ func TestMaterializedWorkerReachesOnlyItsOwnBranch(t *testing.T) {
 // Only a host with no way to mount skips; a host that mounts but does not enforce fails here.
 func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
-	if !confine.Available() {
-		t.Skip("this host applies no confinement")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	selector := workspace.HostSelector()
 	selector.BudgetFor = adapter.ZeroBudget
 	skipWithoutMount(t, selector)

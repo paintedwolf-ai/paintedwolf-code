@@ -28,12 +28,15 @@ QUEUE_LEAVES = {"lint:full", "arch-lint:changes", "comments:check", "test:fail-m
 # targets that run without the runtime engines every other target needs.
 # Change areas a lane declares in `changes`; the change planner selects the lanes of each area it finds.
 AREAS = {"always", "go", "go-code", "den", "den-tests", "scripts", "dependencies", "confinement", "command-language",
-         "command-scale", "shell-native", "decide-native", "documentcore-native"}
+         "command-scale", "shell-native", "updater-native", "decide-native",
+         "documentcore-native"}
 # Execution a lane declares in `phases`: admission's check phases, admission's test phases, the Go packages
 # a change affects, or the Go packages whose source it edits. Each belongs to one lane.
 PHASES = {"admission", "admission-tests", "affected-packages", "changed-packages"}
 INPUTS = ("containers", "browser", "playwright", "userlands", "repository_tools", "nix", "linux_launch", "notices",
           "analysis_lint", "analysis_vulnerabilities")
+# The check gate's own platform: a lane there repeating a gate stage would run it twice.
+GATE_PLATFORM = "linux"
 
 
 def supplemental(lane):
@@ -124,7 +127,8 @@ def lanes():
     unjudged = QUEUE_LEAVES & set(expected_check) - set(fast) - STATIC_STAGES
     if unjudged:
         raise ValueError(f"the merge queue leaves stages no pull request runs: {sorted(unjudged)}")
-    platform = {stage["name"] for lane in values.values() if "platform" in lane for stage in expand(lane["targets"])}
+    platform = {stage["name"] for lane in values.values() if lane.get("platform") == GATE_PLATFORM
+                for stage in expand(lane["targets"])}
     repeated = platform & {stage["name"] for stage in expand([GATE])}
     if repeated:
         raise ValueError(f"platform lanes repeat {GATE} stages: {sorted(repeated)}")

@@ -15,6 +15,7 @@ class NativeImpactTests(unittest.TestCase):
     def test_native_source_selects_its_dependencies_and_the_repository_baseline(self):
         cases = {
             "lycaon-den/src-tauri/src/lib.rs": "shell-native",
+            "lycaon-den/src-tauri/src/update_service/installer/macos.rs": "updater-native",
             "lycaon/internal/decide/native/src/main.rs": "decide-native",
             "lycaon/internal/documentcore/native/src/main.rs": "documentcore-native",
         }

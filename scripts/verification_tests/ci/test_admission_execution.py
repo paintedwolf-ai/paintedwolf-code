@@ -194,12 +194,20 @@ class AdmissionTests(unittest.TestCase):
 
     def test_offline_namespace_drops_root_and_preserves_argument_boundaries(self):
         from ci_policy.offline import command
-        argv = command(['python3', 'runner.py', 'lane;false'], 1001, 1001)
+        argv = command(['python3', 'runner.py', 'lane;false'], 1001, 1001, 'linux')
         self.assertEqual(argv[-3:], ['python3', 'runner.py', 'lane;false'])
         shell = argv[argv.index('-c') + 1]
         self.assertIn('set -e; ip link set lo up', shell)
         self.assertIn('setpriv --reuid="$uid" --regid="$gid"', shell)
         self.assertNotIn('lane;false', shell)
+
+    def test_offline_macos_lane_denies_only_network_beyond_the_machine(self):
+        from ci_policy.offline import command
+        argv = command(['python3', 'runner.py', 'lane;false'], 501, 20, 'darwin')
+        self.assertEqual(argv[:2], ['sandbox-exec', '-p'])
+        self.assertEqual(argv[3:], ['python3', 'runner.py', 'lane;false'])
+        self.assertIn('(deny network-outbound)', argv[2])
+        self.assertIn('(allow network-outbound (remote ip "localhost:*"))', argv[2])
 
     def test_health_counts_distinct_runs_not_repeated_artifacts(self):
         from ci_policy.health import summarize, queue_times

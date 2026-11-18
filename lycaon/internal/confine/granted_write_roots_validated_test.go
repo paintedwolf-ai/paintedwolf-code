@@ -15,9 +15,7 @@ func TestDefaultConfinementValidatesGrantedWriteRoots(t *testing.T) {
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
-	if !confine.Available() {
-		t.Skip("this host has no confinement adapter")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 
 	// A sane request with only an attached root confines normally.
 	if _, on := confine.DefaultConfinement(confine.Request{Roots: []string{"/proj"}}); !on {
