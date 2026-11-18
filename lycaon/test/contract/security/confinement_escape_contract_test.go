@@ -195,11 +195,11 @@ func TestConfinementIntegrityUnattributedProxy(t *testing.T) {
 		}
 		return egressproxy.Peer{Lineage: "live-command", Leased: true}, true
 	})
-	p.SetDialEndpointForTest(func(ctx context.Context, _ egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(ctx context.Context, _ egressproxy.Endpoint) (net.Conn, error) {
 		var dialer net.Dialer
 		return dialer.DialContext(ctx, "tcp", upstream.Listener.Addr().String())
-	})
-	_, err := p.Start()
+	}
+	_, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
 	testutil.FailErr(t, "proxy Start", err)
 	t.Cleanup(func() { _ = p.Close() })
 

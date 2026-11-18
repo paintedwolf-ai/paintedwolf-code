@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/confinetest"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -219,8 +220,7 @@ func TestDefaultConfinementPolicy(t *testing.T) {
 		if !on || c == nil || c.Network != confine.NetworkProxyOnly {
 			t.Fatalf("default confinement should be proxy-only: on=%v c=%+v", on, c)
 		}
-		restore := confine.SetBrokerForTest(nil, egressproxy.Addrs{HTTP: "127.0.0.1:8080", SOCKS: "127.0.0.1:1080"})
-		defer restore()
+		confinetest.StartBroker(t)
 		lease, err := confine.BindAction(c, confine.EgressCommand{ToolCallID: "default-test"})
 		testutil.FailErr(t, "bind default egress", err)
 		defer lease.Close(t.Context())
@@ -869,7 +869,7 @@ func TestBoundaryEgress(t *testing.T) {
 	if !on || c == nil || c.Network != confine.NetworkProxyOnly {
 		t.Fatalf("DefaultConfinement must be proxy-only: on=%v c=%+v", on, c)
 	}
-	defer confine.SetBrokerForTest(nil, egressproxy.Addrs{HTTP: "127.0.0.1:8080", SOCKS: "127.0.0.1:1080"})()
+	confinetest.StartBroker(t)
 	lease, err := confine.BindAction(c, confine.EgressCommand{ToolCallID: "egress-boundary"})
 	testutil.FailErr(t, "bind egress", err)
 	defer lease.Close(t.Context())
@@ -947,11 +947,11 @@ func TestProxyOnlyRoutesThroughInAppProxy(t *testing.T) {
 			leasedPeer("cmd"), // attribution is covered in egressproxy's own tests
 		)
 		// Inject loopback dialing to isolate proxy policy.
-		p.SetDialEndpointForTest(func(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, error) {
+		dialEndpoint := func(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, error) {
 			var d net.Dialer
 			return d.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", ep.Host, ep.Port))
-		})
-		if _, err := p.Start(); err != nil {
+		}
+		if _, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint}); err != nil {
 			testutil.FailErr(t, "p.Start failed", err)
 		}
 		defer func() { _ = p.Close() }()
@@ -1070,7 +1070,7 @@ func TestDefaultConfinementEnabledForDraftScratchRoot(t *testing.T) {
 	if !on || c == nil {
 		t.Fatalf("draft scratch root should confine when available: on=%v c=%v", on, c)
 	}
-	defer confine.SetBrokerForTest(nil, egressproxy.Addrs{HTTP: "127.0.0.1:8080", SOCKS: "127.0.0.1:1080"})()
+	confinetest.StartBroker(t)
 	lease, err := confine.BindAction(c, confine.EgressCommand{ToolCallID: "draft-scratch-test"})
 	testutil.FailErr(t, "bind draft scratch egress", err)
 	defer lease.Close(t.Context())
