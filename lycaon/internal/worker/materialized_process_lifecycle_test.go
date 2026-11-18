@@ -188,7 +188,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	if string(base) != "package main\n" {
 		t.Fatalf("retained base = %q", base)
 	}
-	service := &MergeService{Queue: queue, Store: queue, DataDir: testbaseline.DataDir(t, database), Workspace: manager}
+	service := &MergeService{Queue: queue, Store: queue.Promotions, DataDir: testbaseline.DataDir(t, database), Workspace: manager}
 	testutil.FailErr(t, "recover merge transactions", service.RecoverOrphanedMergeApplies(t.Context()))
 	if sourceConflict {
 		assertRecoveredSourceConflict(t, service, task, source, manifest.CheckpointID, fields[1])

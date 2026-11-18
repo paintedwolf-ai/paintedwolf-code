@@ -62,7 +62,7 @@ func TestMaterializedWorkerPromotesThreeWayFromItsPristineBase(t *testing.T) {
 	moved[8] = "NINE"
 	testutil.FailErr(t, "source moves", os.WriteFile(filepath.Join(source, "notes.txt"), []byte(strings.Join(moved, "\n")+"\n"), 0o644))
 
-	service := &MergeService{Queue: queue, Store: queue, DataDir: dataDir}
+	service := &MergeService{Queue: queue, Store: queue.Promotions, DataDir: dataDir}
 	result, err := service.PromoteOverlay(ctx, "parent", id, api.PromoteOverlayInput{})
 	testutil.FailErr(t, "promote", err)
 	if result.Status != api.WorkerMergeStatusMerged {

@@ -180,7 +180,7 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 
 	merge := &MergeService{
 		Queue:        queue,
-		Store:        queue,
+		Store:        queue.Promotions,
 		Projects:     projects,
 		Workspace:    mgr,
 		Reject:       rejectFmt,

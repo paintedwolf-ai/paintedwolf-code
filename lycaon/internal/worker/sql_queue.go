@@ -67,6 +67,7 @@ type sqlQueuePromotion struct {
 
 // SQLQueue persists worker tasks.
 type SQLQueue struct {
+	Promotions *PromotionStore
 	*sqlQueueCore
 	sqlQueueClaims
 	sqlQueuePromotion
@@ -136,6 +137,7 @@ func NewSQLQueue(database db.Handle, maxRunning int) *SQLQueue {
 	}
 	core.changes = &jobChanges{store: core.store}
 	q := &SQLQueue{
+		Promotions:        &PromotionStore{store: core.store, changes: core.changes, runnable: core.runnable},
 		sqlQueueCore:      core,
 		sqlQueueClaims:    sqlQueueClaims{sqlQueueCore: core},
 		sqlQueuePromotion: sqlQueuePromotion{sqlQueueCore: core},

@@ -26,8 +26,8 @@ func testPromoteCrashAfterCommit(t *testing.T) {
 		testdbseed.InsertSessionWithRoot(t, sqlDB, "parent", testdbseed.DefaultProjectID, root)
 		_, err := queue.Enqueue(ctx, api.WorkerTask{ID: id, ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: root, AgentType: "implementer", Prompt: "p", Brief: "b", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}})
 		testutil.FailErr(t, "enqueue", err)
-		testutil.FailErr(t, "set merge status", queue.SetMergeStatus(ctx, id, status))
-		svc := &MergeService{Queue: queue, Store: queue, DataDir: t.TempDir()}
+		testutil.FailErr(t, "set merge status", queue.Promotions.SetMergeStatus(ctx, id, status))
+		svc := &MergeService{Queue: queue, Store: queue.Promotions, DataDir: t.TempDir()}
 		task, ok := queue.Get(id)
 		if !ok {
 			t.Fatal("job not found")
@@ -200,7 +200,7 @@ func TestRecoverOrphanedMergeAppliesEndsWithoutWaitingAfterRepair(t *testing.T) 
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	svc := &MergeService{Queue: queue, Store: cancelAfterRepair{MergeStore: queue, cancel: cancel}, DataDir: t.TempDir()}
+	svc := &MergeService{Queue: queue, Store: cancelAfterRepair{MergeStore: queue.Promotions, cancel: cancel}, DataDir: t.TempDir()}
 	testutil.FailErr(t, "recover", svc.RecoverOrphanedMergeApplies(ctx))
 	if task, ok := queue.Get(id); !ok || task.MergeStatus == api.WorkerMergeStatusApplying {
 		t.Fatalf("crashed promotion left applying: %+v", task)

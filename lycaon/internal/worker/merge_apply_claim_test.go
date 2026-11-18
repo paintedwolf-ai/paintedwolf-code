@@ -42,14 +42,14 @@ func TestBeginMergeApplyClaimsPendingOnce(t *testing.T) {
 	if !bound {
 		t.Fatal("expected workspace root CAS to win on an unbound job")
 	}
-	testutil.FailErr(t, "SetMergeStatus", q.SetMergeStatus(ctx, id, api.WorkerMergeStatusPending))
+	testutil.FailErr(t, "SetMergeStatus", q.Promotions.SetMergeStatus(ctx, id, api.WorkerMergeStatusPending))
 
-	token, ok, err := q.BeginMergeApply(ctx, id)
+	token, ok, err := q.Promotions.BeginMergeApply(ctx, id)
 	testutil.FailErr(t, "BeginMergeApply first", err)
 	if !ok || token == "" {
 		t.Fatalf("expected first claim with token, got ok=%v token=%q", ok, token)
 	}
-	_, ok, err = q.BeginMergeApply(ctx, id)
+	_, ok, err = q.Promotions.BeginMergeApply(ctx, id)
 	testutil.FailErr(t, "BeginMergeApply second", err)
 	if ok {
 		t.Fatal("expected second claim to fail while applying")
@@ -134,7 +134,7 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 			trunkUpdated := "package app\n\nfunc A() int { return 10 }\n\nfunc B() int { return 2 }\n"
 			testutil.FailErr(t, "write trunk update", os.WriteFile(filepath.Join(primary, "app.go"), []byte(trunkUpdated), 0o644))
 
-			svc := &MergeService{Queue: q, Store: q, DataDir: t.TempDir()}
+			svc := &MergeService{Queue: q, Store: q.Promotions, DataDir: t.TempDir()}
 			previewOut, err := svc.PreviewForSession(ctx, "parent-cp", jobID, "summary", nil)
 			testutil.FailErr(t, "PreviewForSession", err)
 			if len(previewOut.CleanPaths) != 3 {
@@ -388,7 +388,7 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 
 	_, err = sqlStore.SetWorkerWorkspace(ctx, jobID, overlay, baselinePath)
 	testutil.FailErr(t, "SetWorkerWorkspace", err)
-	testutil.FailErr(t, "SetMergeStatus", q.SetMergeStatus(ctx, jobID, api.WorkerMergeStatusPending))
+	testutil.FailErr(t, "SetMergeStatus", q.Promotions.SetMergeStatus(ctx, jobID, api.WorkerMergeStatusPending))
 
 	// Tear down the active worker view directory completely after checkpoint publication.
 	testutil.FailErr(t, "RemoveAll overlay view", os.RemoveAll(overlay))

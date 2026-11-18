@@ -7,7 +7,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/workerprogress"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // SetProgress checkpoints a worker's lifetime progress counters on its job row.

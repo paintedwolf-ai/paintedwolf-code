@@ -230,7 +230,7 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 
 	hook := &stackedPromotionHook{}
 	dataDir := t.TempDir()
-	svc := &MergeService{Queue: fixture.queue, Store: fixture.queue, DataDir: dataDir, Workspace: fixture.manager, Scans: hook}
+	svc := &MergeService{Queue: fixture.queue, Store: fixture.queue.Promotions, DataDir: dataDir, Workspace: fixture.manager, Scans: hook}
 	coordinator, err := fixture.manager.CheckpointCoordinator()
 	testutil.FailErr(t, "coordinator", err)
 	assertOriginalTarget := func(t *testing.T) {
@@ -266,7 +266,7 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 	hook.crash = false
 	_, err = fixture.db.ExecContext(t.Context(), `UPDATE worker_jobs SET merge_lease_expires_at = '2000-01-01T00:00:00Z' WHERE id = ?`, child.ID)
 	testutil.FailErr(t, "expire crashed lease", err)
-	restarted := &MergeService{Queue: fixture.queue, Store: fixture.queue, DataDir: dataDir, Workspace: fixture.manager, Scans: hook}
+	restarted := &MergeService{Queue: fixture.queue, Store: fixture.queue.Promotions, DataDir: dataDir, Workspace: fixture.manager, Scans: hook}
 	testutil.FailErr(t, "startup recovery", restarted.RecoverOrphanedMergeApplies(t.Context()))
 	assertOriginalTarget(t)
 

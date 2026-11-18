@@ -143,7 +143,7 @@ func testCompletedOverlaySurvivesTreeEviction(t *testing.T, relocate bool) {
 	lease.Release()
 	testutil.FailErr(t, "evict again", workspace.EvictJobTree(ctx, root))
 
-	svc := &MergeService{Queue: q, Store: q, Workspace: mgr, DataDir: t.TempDir()}
+	svc := &MergeService{Queue: q, Store: q.Promotions, Workspace: mgr, DataDir: t.TempDir()}
 	out, err := svc.PromoteOverlay(ctx, "", id, api.PromoteOverlayInput{})
 	testutil.FailErr(t, "promote after eviction", err)
 	if out.Status != api.WorkerMergeStatusMerged {

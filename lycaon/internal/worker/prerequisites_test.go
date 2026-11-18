@@ -161,7 +161,7 @@ func TestProducerPromotionPublishesConsumerReadiness(t *testing.T) {
 	testutil.FailErr(t, "enqueue consumer", err)
 	_, err = database.ExecContext(t.Context(), `UPDATE worker_jobs SET status='complete', result_json='{"status":"complete"}' WHERE id=?`, id)
 	testutil.FailErr(t, "complete producer", err)
-	testutil.FailErr(t, "promote producer", queue.SetMergeStatus(t.Context(), id, api.WorkerMergeStatusMerged))
+	testutil.FailErr(t, "promote producer", queue.Promotions.SetMergeStatus(t.Context(), id, api.WorkerMergeStatusMerged))
 	var state string
 	err = database.QueryRowContext(t.Context(), `SELECT json_extract(data_json,'$.dependencies[0].state') FROM event_outbox WHERE topic='worker' AND facet=? ORDER BY id DESC LIMIT 1`, cid).Scan(&state)
 	testutil.FailErr(t, "read consumer event", err)

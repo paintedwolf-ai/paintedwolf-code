@@ -71,7 +71,7 @@ func TestEntryLeftOutOfTheBranchIsNotAWorkerDeletion(t *testing.T) {
 	if len(changed) != 1 || changed[0] != "main.go" {
 		t.Fatalf("changes = %v", changed)
 	}
-	svc := &MergeService{Queue: q, Store: q, Workspace: mgr, DataDir: t.TempDir()}
+	svc := &MergeService{Queue: q, Store: q.Promotions, Workspace: mgr, DataDir: t.TempDir()}
 	out, err := svc.PromoteOverlay(ctx, "", id, api.PromoteOverlayInput{})
 	testutil.FailErr(t, "promote", err)
 	if out.Status != api.WorkerMergeStatusMerged {

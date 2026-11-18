@@ -93,7 +93,7 @@ func TestStressFirefoxMountedSparseWorkerLifecycle(t *testing.T) {
 	if !published || len(manifest.Entries) != 1 || manifest.Entries[0].Path.Rel != name {
 		t.Fatal("checkpoint scope differs from the single authored file")
 	}
-	service := &MergeService{Queue: fixture.queue, Store: fixture.queue, DataDir: testbaseline.DataDir(t, fixture.db), Workspace: fixture.manager}
+	service := &MergeService{Queue: fixture.queue, Store: fixture.queue.Promotions, DataDir: testbaseline.DataDir(t, fixture.db), Workspace: fixture.manager}
 	started = time.Now()
 	result, err := service.PromoteOverlay(t.Context(), "", task.ID, api.PromoteOverlayInput{})
 	t.Logf("promotion elapsed=%s", time.Since(started))
