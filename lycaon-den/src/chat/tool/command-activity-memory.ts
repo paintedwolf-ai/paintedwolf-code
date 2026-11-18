@@ -127,7 +127,7 @@ function orderPinnedRows(projected: readonly ProjectedRow[], placements: Readonl
 
   for (const row of projected) {
     const placement = placements.get(row.key);
-    const anchor = visibleAnchor(row.key, placement?.after, visible, placements);
+    const anchor = placement && visibleAnchor(placement, visible, placements);
     if (placement && anchor !== undefined) {
       let siblings = children.get(anchor);
       if (!siblings) children.set(anchor, siblings = []);
@@ -152,18 +152,18 @@ function orderPinnedRows(projected: readonly ProjectedRow[], placements: Readonl
 }
 
 function visibleAnchor(
-  key: string,
-  pin: RowAnchor | undefined,
+  pinned: RowPlacement,
   visible: ReadonlySet<string>,
   placements: ReadonlyMap<string, RowPlacement>,
 ): string | undefined {
   // A split can move the anchor away while keeping its predecessor visible.
-  const visited = new Set([key]);
-  let anchor = pin;
+  if (!pinned.after) return undefined;
+  const visited = new Set<string>();
+  let anchor: RowAnchor | undefined = pinned.after;
   while (anchor && !visited.has(anchor.key)) {
     const placement = placements.get(anchor.key);
     if (placement?.order !== anchor.order) return undefined;
-    if (visible.has(anchor.key)) return anchor.key;
+    if (anchor.order < pinned.order && visible.has(anchor.key)) return anchor.key;
     visited.add(anchor.key);
     anchor = placement.predecessor;
   }
