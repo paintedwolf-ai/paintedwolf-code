@@ -59,11 +59,11 @@ func discoverFeedURLs(body, siteBase string) []string {
 	return out
 }
 
-func fetchFeedLinks(ctx context.Context, feedURL string, maxItems int) []siteIndexLink {
+func (crawler *Crawler) fetchFeedLinks(ctx context.Context, feedURL string, maxItems int) []siteIndexLink {
 	if maxItems <= 0 {
 		maxItems = maxRSSItems
 	}
-	body, err := fetchTextURL(ctx, feedURL)
+	body, err := crawler.fetchTextURL(ctx, feedURL)
 	if err != nil {
 		return nil
 	}

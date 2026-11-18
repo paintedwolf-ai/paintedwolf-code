@@ -41,6 +41,7 @@ import (
 
 // Dependencies holds the domain runtimes and services needed by boards.
 type Dependencies struct {
+	WebResearchExchange      webresearch.Exchange
 	Storage                  persistence.Runtime
 	Sessions                 *sessions.Runtime
 	Workers                  *workerruntime.Runtime
@@ -132,19 +133,19 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	r.deps.Sessions.Manager.Coordinator.Loading.SetDecider(r.deps.Decisions.Decider)
 	r.deps.Sessions.Manager.Coordinator.Loading.SetSkillBodyRenderer(r.deps.Execution.Host.Skills.RenderSkillBody)
 
-	r.WebRuntime, err = webresearch.WireRuntime(ctx)
+	r.WebRuntime, err = webresearch.WireRuntime(ctx, r.deps.WebResearchExchange)
 	if err != nil {
 		return fmt.Errorf("web research runtime: %w", err)
 	}
 	r.WebCreds = r.WebRuntime.Creds
 	webCat, webCfg, webReg := r.WebRuntime.Catalog, r.WebRuntime.Config, r.WebRuntime.Registry
 	llmReg, llmPol := r.deps.Providers.RegistryPolicy()
-	r.WebDiscoverer = webresearch.NewDirectDiscovererFactory(r.deps.Storage.WebIndex, webReg, r.WebCreds, webCfg, webCat, r.deps.Decisions.Rerank)
+	r.WebDiscoverer = webresearch.NewDirectDiscovererFactory(r.WebRuntime.Discovery, r.deps.Storage.WebIndex, webReg, r.WebCreds, webCfg, webCat, r.deps.Decisions.Rerank)
 	r.deps.Execution.Host.Web.SetDirectDiscovererFactory(r.WebDiscoverer)
 
 	if r.deps.Storage.WebIndex != nil {
 		webReg.AttachQuotaStore(r.deps.Storage.WebIndex)
-		r.WebWarmer = webresearch.NewWarmer(r.deps.Storage.WebIndex, llmReg, llmPol, webCfg)
+		r.WebWarmer = webresearch.NewWarmer(r.WebRuntime.Discovery, r.deps.Storage.WebIndex, llmReg, llmPol, webCfg)
 		warmer := r.WebWarmer
 		r.deps.Resources.Track("web-warmer", 90, func(context.Context) error { warmer.Close(); return nil })
 		r.WebWarmer.Cost = r.deps.Providers.Costs
@@ -159,12 +160,15 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	}
 
 	deps := webresearch.ToolDeps{
-		Creds:    r.WebCreds,
-		Config:   webCfg,
-		Catalog:  webCat,
-		Registry: webReg,
-		Index:    r.deps.Storage.WebIndex,
-		Rerank:   r.deps.Decisions.Rerank,
+		Crawler:     r.WebRuntime.Crawler,
+		Discovery:   r.WebRuntime.Discovery,
+		FetchBudget: r.WebRuntime.FetchBudget,
+		Creds:       r.WebCreds,
+		Config:      webCfg,
+		Catalog:     webCat,
+		Registry:    webReg,
+		Index:       r.deps.Storage.WebIndex,
+		Rerank:      r.deps.Decisions.Rerank,
 		SearchWarmHook: func(ctx context.Context, sessionID, toolCallID, query, projectDir string, hitURLs, residualURLs []string, strongHits, maxResults int, directParticipated bool) {
 			r.deps.Sessions.Manager.Chats.Research.Search(ctx, sessionID, toolCallID, query, projectDir, hitURLs, residualURLs, strongHits, maxResults, directParticipated)
 		},

@@ -26,7 +26,6 @@ import (
 
 func TestFetchURLImageWithoutDest(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	allowLoopbackFetch(t)
 
 	svg := `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text>Architecture Map</text></svg>`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -37,7 +36,7 @@ func TestFetchURLImageWithoutDest(t *testing.T) {
 
 	tempDir := t.TempDir()
 	reg := tools.NewDefaultRegistry()
-	deps := ToolDeps{
+	deps := ToolDeps{Crawler: newTestCrawler(), Discovery: NewDiscovery(newTestCrawler()), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
 		AddressOrigin: sourceAlways,
 		VisualScreen:  visualscreen.NewGate(visualscreen.NewScanner(nil), nil, nil),
 	}
@@ -94,7 +93,6 @@ func TestFetchURLImageWithoutDest(t *testing.T) {
 // text normalization would strip format runes and corrupt the raster.
 func TestFetchURLTextModeImageKeepsRawBytes(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	allowLoopbackFetch(t)
 
 	img := image.NewRGBA(image.Rect(0, 0, 3, 2))
 	var buf bytes.Buffer
@@ -108,7 +106,7 @@ func TestFetchURLTextModeImageKeepsRawBytes(t *testing.T) {
 	defer srv.Close()
 
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, ToolDeps{AddressOrigin: sourceAlways}, nil))
+	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, ToolDeps{Crawler: newTestCrawler(), Discovery: NewDiscovery(newTestCrawler()), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()), AddressOrigin: sourceAlways}, nil))
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "s1",
 			ToolCallID: "call1"},
@@ -143,7 +141,6 @@ func insertPNGText(t *testing.T, raw []byte, text string) []byte {
 
 func TestFetchURLNonImageBinaryUnsupported(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	allowLoopbackFetch(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/font-woff2")
@@ -153,7 +150,7 @@ func TestFetchURLNonImageBinaryUnsupported(t *testing.T) {
 
 	tempDir := t.TempDir()
 	reg := tools.NewDefaultRegistry()
-	deps := ToolDeps{AddressOrigin: sourceAlways}
+	deps := ToolDeps{Crawler: newTestCrawler(), Discovery: NewDiscovery(newTestCrawler()), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()), AddressOrigin: sourceAlways}
 	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, deps, nil))
 
 	tctx := tools.ToolContext{
@@ -180,7 +177,6 @@ func TestFetchURLNonImageBinaryUnsupported(t *testing.T) {
 
 func TestFetchURLImageSecretScreeningWithheld(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	allowLoopbackFetch(t)
 
 	secretSVG := `<svg><text>AKIAQYJK5TXV4NZR7SGB</text></svg>`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -198,7 +194,7 @@ func TestFetchURLImageSecretScreeningWithheld(t *testing.T) {
 		return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
 	})
 
-	deps := ToolDeps{
+	deps := ToolDeps{Crawler: newTestCrawler(), Discovery: NewDiscovery(newTestCrawler()), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
 		AddressOrigin: sourceAlways,
 		VisualScreen:  gate,
 	}

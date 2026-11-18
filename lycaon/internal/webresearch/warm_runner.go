@@ -67,12 +67,13 @@ func (r *WarmRunner) cycle(ctx context.Context) {
 		wrlog.Debug("scheduled warm cycle skipped", "reason", warmSkipNotLive)
 		return
 	}
-	if !tryAcquireDirectSlot() {
+	release, acquired := w.discovery.tryAcquire()
+	if !acquired {
 		// Interactive discovery holds the slot.
 		wrlog.Debug("scheduled warm cycle skipped", "reason", warmSkipBusy)
 		return
 	}
-	defer releaseDirectSlot()
+	defer release()
 
 	caps := w.caps()
 	budget := caps.ScheduledProbes
@@ -117,7 +118,7 @@ func (r *WarmRunner) stackWarm(ctx context.Context, budget int, mode WarmingMode
 		docURLs = append(docURLs, projectstack.RegistryDocURLs(templates, signals.Deps)...)
 		if len(docURLs) > 0 && spent < budget {
 			crawlStart := time.Now()
-			d := &directDiscoverer{index: w.index, origin: webindex.OriginWarmed, seedOrigin: searchOriginWarm}
+			d := &directDiscoverer{discovery: w.discovery, index: w.index, origin: webindex.OriginWarmed, seedOrigin: searchOriginWarm}
 			hosts, result := w.warmDocHosts(ctx, d, docURLs, query, budget-spent)
 			w.index.QueueActivity(ctx, webindex.WarmActivity{
 				Trigger: warmTriggerStack, Tier: warmTierCrawl, Topic: clipTopic(filepath.Base(root)),
@@ -136,7 +137,7 @@ func (r *WarmRunner) stackWarm(ctx context.Context, budget int, mode WarmingMode
 				projectID, _ = r.ProjectIDForRoot(ctx, root)
 			}
 			seedStart := time.Now()
-			d := &directDiscoverer{index: w.index, origin: webindex.OriginWarmed, taskHint: query, seedOrigin: searchOriginWarm}
+			d := &directDiscoverer{discovery: w.discovery, index: w.index, origin: webindex.OriginWarmed, taskHint: query, seedOrigin: searchOriginWarm}
 			caps := w.caps()
 			hosts, result, skip := w.warmSeed(ctx, d, capTokens(query, warmTopicTokens), projectID, root, caps, min(caps.SeedProbes, budget-spent))
 			w.index.QueueActivity(ctx, webindex.WarmActivity{
@@ -167,7 +168,7 @@ func (r *WarmRunner) starvedRewarm(ctx context.Context, budget int) (spent int) 
 			return spent
 		}
 		start := time.Now()
-		d := &directDiscoverer{index: w.index, origin: webindex.OriginWarmed, taskHint: query.Query, seedOrigin: searchOriginWarm}
+		d := &directDiscoverer{discovery: w.discovery, index: w.index, origin: webindex.OriginWarmed, taskHint: query.Query, seedOrigin: searchOriginWarm}
 		caps := w.caps()
 		hosts, result, skip := w.warmSeed(ctx, d, capTokens(query.Query, warmTopicTokens), query.ProjectID, query.ProjectDir, caps, min(caps.SeedProbes, budget-spent))
 		w.index.QueueActivity(ctx, webindex.WarmActivity{
@@ -197,7 +198,7 @@ func (r *WarmRunner) historyRewarm(ctx context.Context, budget int) (spent int) 
 		return 0
 	}
 	caps := w.caps()
-	d := &directDiscoverer{index: w.index, origin: webindex.OriginWarmed, seedOrigin: searchOriginWarm}
+	d := &directDiscoverer{discovery: w.discovery, index: w.index, origin: webindex.OriginWarmed, seedOrigin: searchOriginWarm}
 	warmed := 0
 	for _, host := range hosts {
 		if ctx.Err() != nil || spent >= budget || warmed >= warmRewarmHostsPerCycle {
@@ -210,7 +211,7 @@ func (r *WarmRunner) historyRewarm(ctx context.Context, budget int) (spent int) 
 			}
 		}
 		start := time.Now()
-		crawler := newHostCrawlerPreSlotted(ctx)
+		crawler := newHostCrawlerPreSlotted(ctx, w.discovery)
 		crawler.launch("https://"+host, nil)
 		scorer := newQueryScorer(host, nil, false, CurrentPeriod())
 		fr := newFrontier(caps.TurnProbes, maxHitsPerHost)
@@ -241,7 +242,7 @@ func (r *WarmRunner) bootstrap(ctx context.Context, budget int) int {
 	}
 	query := "official documentation and reference sites for widely used programming languages and developer tools"
 	start := time.Now()
-	d := &directDiscoverer{index: w.index, origin: webindex.OriginWarmed, taskHint: query, seedOrigin: searchOriginWarm}
+	d := &directDiscoverer{discovery: w.discovery, index: w.index, origin: webindex.OriginWarmed, taskHint: query, seedOrigin: searchOriginWarm}
 	caps := w.caps()
 	hosts, result, skip := w.warmSeed(ctx, d, capTokens(query, warmTopicTokens), "", "", caps, min(caps.SeedProbes, budget))
 	w.index.QueueActivity(ctx, webindex.WarmActivity{

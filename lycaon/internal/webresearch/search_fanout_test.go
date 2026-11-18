@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"sort"
@@ -20,9 +19,9 @@ func testCatalog(t *testing.T) *Catalog {
 	return cat
 }
 
-func testRegistry(t *testing.T) *Registry {
+func testRegistry(t *testing.T, exchange Exchange) *Registry {
 	t.Helper()
-	reg := NewRegistry(testCatalog(t))
+	reg := NewRegistry(testCatalog(t), exchange)
 	testutil.FailErr(t, "RegisterCatalogProviders", RegisterCatalogProviders(t.Context(), reg))
 	return reg
 }
@@ -45,7 +44,7 @@ func assertStringSetEqual(t *testing.T, label string, want, got []string) {
 
 func braveStubRegistry(t *testing.T, hitURL string) *Registry {
 	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"web": map[string]any{
 				"results": []map[string]string{{
@@ -53,20 +52,20 @@ func braveStubRegistry(t *testing.T, hitURL string) *Registry {
 				}},
 			},
 		})
-	}))
+	})
 	t.Cleanup(srv.Close)
 	spec := braveRESTSpec()
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?q=" + url.QueryEscape(query), nil
 	}
-	reg := NewRegistry(testCatalog(t))
-	reg.Register(NewRESTSearchProvider(spec, KindKeyed))
-	injectProviderHTTPClient(t, srv.Client())
+	reg := NewRegistry(testCatalog(t), srv.exchange)
+	reg.Register(NewRESTSearchProvider(spec, KindKeyed, srv.exchange))
+
 	return reg
 }
 
 func TestSearchDirectRouterUnavailable(t *testing.T) {
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query:    "router unavailable probe",
 		Settings: Settings{MaxResultsDefault: 10, EnabledProviders: []string{"direct"}},
 	})
@@ -83,12 +82,12 @@ func TestSearchDirectRouterUnavailable(t *testing.T) {
 
 func TestSearchExplicitProviderBypassesEnabledSet(t *testing.T) {
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{URL: "https://example.com/direct", Provider: "direct"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query:      "explicit direct probe",
 		Provider:   "direct",
 		Settings:   Settings{EnabledProviders: []string{}},
 		Discoverer: d,
-		Registry:   testRegistry(t),
+		Registry:   testRegistry(t, nil),
 	})
 	if d.Calls != 1 {
 		t.Fatalf("direct discoverer calls = %d want 1 for explicit direct", d.Calls)
@@ -99,11 +98,11 @@ func TestSearchExplicitProviderBypassesEnabledSet(t *testing.T) {
 }
 
 func TestSearchExplicitUnconfiguredProviderSkips(t *testing.T) {
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query:    "explicit brave probe",
 		Provider: "brave",
 		Settings: Settings{EnabledProviders: []string{"direct"}},
-		Registry: testRegistry(t),
+		Registry: testRegistry(t, nil),
 	})
 	if !result.OK || len(result.Results) != 0 {
 		t.Fatalf("result = %+v", result)
@@ -115,14 +114,14 @@ func TestSearchExplicitUnconfiguredProviderSkips(t *testing.T) {
 
 func TestSearchFanOutDirectOnlyIgnoresDisabledProviders(t *testing.T) {
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{URL: "https://example.com/direct", Provider: "direct"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query: "direct only probe",
 		Settings: Settings{
 			EnabledProviders: []string{"direct"},
 			Keys:             map[string]string{"brave": "key"},
 		},
 		Discoverer: d,
-		Registry:   testRegistry(t),
+		Registry:   testRegistry(t, nil),
 	})
 	if d.Calls != 1 {
 		t.Fatalf("direct discoverer calls = %d want 1", d.Calls)
@@ -134,11 +133,11 @@ func TestSearchFanOutDirectOnlyIgnoresDisabledProviders(t *testing.T) {
 
 func TestSearchNoProvidersEnabledSoftSkip(t *testing.T) {
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{URL: "https://example.com"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query:      "no providers probe",
 		Settings:   Settings{EnabledProviders: []string{}},
 		Discoverer: d,
-		Registry:   testRegistry(t),
+		Registry:   testRegistry(t, nil),
 	})
 	if d.Calls != 0 {
 		t.Fatalf("direct discoverer calls = %d want 0", d.Calls)
@@ -154,7 +153,7 @@ func TestSearchNoProvidersEnabledSoftSkip(t *testing.T) {
 func TestSearchFanOutProviderOnlyWithoutDirect(t *testing.T) {
 	reg := braveStubRegistry(t, "https://example.com/brave")
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{URL: "https://example.com/direct", Provider: "direct"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query: "brave only probe",
 		Settings: Settings{
 			Keys:             map[string]string{"brave": "brave-key"},
@@ -174,7 +173,7 @@ func TestSearchFanOutProviderOnlyWithoutDirect(t *testing.T) {
 func TestSearchFanOutDirectBesideProvider(t *testing.T) {
 	reg := braveStubRegistry(t, "https://example.com/brave")
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{URL: "https://example.com/direct", Title: "Direct hit", Provider: "direct"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query: "mixed fanout probe",
 		Settings: Settings{
 			Keys:             map[string]string{"brave": "brave-key"},
@@ -195,13 +194,13 @@ func TestSearchFanOutDirectBesideProvider(t *testing.T) {
 
 func TestSearchFanOutSkipsUnconfiguredEnabledProvider(t *testing.T) {
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{URL: "https://example.com/direct", Provider: "direct"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query: "skip unconfigured probe",
 		Settings: Settings{
 			EnabledProviders: []string{"direct", "brave"},
 		},
 		Discoverer: d,
-		Registry:   testRegistry(t),
+		Registry:   testRegistry(t, nil),
 	})
 	if !result.OK || len(result.Results) != 1 || result.Results[0].Provider != "direct" {
 		t.Fatalf("result = %+v", result)

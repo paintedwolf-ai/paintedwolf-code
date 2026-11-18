@@ -19,7 +19,7 @@ import (
 )
 
 func TestGetWebResearchProvidersStatus(t *testing.T) {
-	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t))
+	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t), nil)
 	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
 	cfg, openErr := webresearch.OpenConfigStore(filepath.Join(t.TempDir(), "web-research-config.yaml"))
 	testutil.FailErr(t, "open web research store", openErr)
@@ -96,7 +96,7 @@ func TestGetWebResearchProvidersStatus(t *testing.T) {
 }
 
 func TestTestWebResearchProviderUnknown(t *testing.T) {
-	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t))
+	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t), nil)
 	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
 	s := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: storetest.New(t, testdbseed.DefaultProjectID)}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{Catalog: reg.Catalog(), Registry: reg}}}), nil, "test-token")
@@ -112,7 +112,7 @@ func TestTestWebResearchProviderUnknown(t *testing.T) {
 }
 
 func TestTestWebResearchProviderNotConfigured(t *testing.T) {
-	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t))
+	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t), nil)
 	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
 	s := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: storetest.New(t, testdbseed.DefaultProjectID)}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{Catalog: reg.Catalog(), Registry: reg}}}), nil, "test-token")
@@ -136,7 +136,7 @@ func TestTestWebResearchProviderNotConfigured(t *testing.T) {
 }
 
 func TestUpdateWebResearchProviderConfigRejectsMetadataEndpoint(t *testing.T) {
-	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t))
+	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t), nil)
 	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
 	cfg, openErr := webresearch.OpenConfigStore(filepath.Join(t.TempDir(), "web-research-config.yaml"))
 	testutil.FailErr(t, "open web research store", openErr)

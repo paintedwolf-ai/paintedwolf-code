@@ -9,7 +9,7 @@ import (
 // which are catalog policy rather than a user preference.
 func TestDeclaredEndpointHostsCoversSeedAndResultsProviders(t *testing.T) {
 	t.Parallel()
-	reg := testRegistry(t)
+	reg := testRegistry(t, nil)
 	settings := Settings{
 		SearchEnabled:    true,
 		Config:           map[string]map[string]string{},
@@ -52,7 +52,7 @@ func TestDeclaredEndpointHostsCoversSeedAndResultsProviders(t *testing.T) {
 // claim a destination this call cannot reach.
 func TestDeclaredEndpointHostsSkipsUnconfiguredProviders(t *testing.T) {
 	t.Parallel()
-	reg := testRegistry(t)
+	reg := testRegistry(t, nil)
 	empty := Settings{SearchEnabled: true, Config: map[string]map[string]string{}}
 	if hosts := DeclaredEndpointHosts(empty, reg); len(hosts) != 0 {
 		t.Fatalf("no configured provider must declare no destinations, got %v", hosts)

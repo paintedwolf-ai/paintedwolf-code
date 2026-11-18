@@ -6,10 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,9 +15,8 @@ import (
 	"testing"
 
 	internalapi "github.com/lycaon/lycaon/internal/api"
-	"github.com/lycaon/lycaon/internal/egress"
+	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/webresearch"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -36,53 +33,22 @@ type recordedHTTPRequest struct {
 	Body   string
 }
 
-type recordingRoundTripper struct {
+type recordingProviderExchange struct {
 	mu   sync.Mutex
 	reqs []recordedHTTPRequest
 }
 
-func (r *recordingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	body := ""
-	if req.Body != nil {
-		raw, err := io.ReadAll(req.Body)
-		if err != nil {
-			return nil, err
-		}
-		_ = req.Body.Close()
-		body = string(raw)
-		req.Body = io.NopCloser(bytes.NewReader(raw))
-	}
+func (r *recordingProviderExchange) Exchange(_ context.Context, request outboundhttp.Request) (outboundhttp.Response, error) {
 	r.mu.Lock()
-	r.reqs = append(r.reqs, recordedHTTPRequest{
-		Method: req.Method,
-		URL:    req.URL.String(),
-		Body:   body,
-	})
+	r.reqs = append(r.reqs, recordedHTTPRequest{Method: request.Method, URL: request.URL, Body: string(request.Body)})
 	r.mu.Unlock()
-	return &http.Response{
-		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(strings.NewReader(`{"web":{"results":[]}}`)),
-		Header:     make(http.Header),
-		Request:    req,
-	}, nil
+	return outboundhttp.Response{Status: http.StatusOK, Body: []byte(`{"web":{"results":[]}}`)}, nil
 }
 
-func (r *recordingRoundTripper) snapshot() []recordedHTTPRequest {
+func (r *recordingProviderExchange) snapshot() []recordedHTTPRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]recordedHTTPRequest, len(r.reqs))
-	copy(out, r.reqs)
-	return out
-}
-
-func installRecordingProviderHTTP(t *testing.T) *recordingRoundTripper {
-	t.Helper()
-	// Endpoint validation still runs before the recording transport.
-	egress.TestingResolve(t, egress.StaticLookup(netip.MustParseAddr("1.1.1.1")))
-	rec := &recordingRoundTripper{}
-	webresearch.SetProviderHTTPClientForTest(&http.Client{Transport: rec})
-	t.Cleanup(func() { webresearch.SetProviderHTTPClientForTest(nil) })
-	return rec
+	return append([]recordedHTTPRequest(nil), r.reqs...)
 }
 
 func plantCanaryWorkspace(t *testing.T, dir string) {

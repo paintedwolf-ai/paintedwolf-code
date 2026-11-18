@@ -86,7 +86,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 		testutil.FailErr(t, "write global approvals", os.WriteFile(filepath.Join(os.Getenv("LYCAON_CONFIG_DIR"), "approvals.yaml"), []byte("approval_posture: "+string(o.globalApprovalPosture)+"\n"), 0o600))
 	}
 
-	cfg := configuration.Config{}
+	cfg := configuration.Config{WebResearchExchange: o.webResearchExchange}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
 	// Install packs before the builder resolves the catalog.
 	installHarnessPacks(t, o.installedPackDirs)

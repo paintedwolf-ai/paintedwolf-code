@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/webresearch/warm_test.go",
+  "kind": "test_suite",
+  "workstream": "web-research-runtime",
+  "disposition": "retain",
+  "reason": "Retain the 401-line warming lifecycle suite. Shared Discovery and Crawler fixtures cover admission, foreground priority, disable/cancel, pre-acquired slot release and activity recording as one resource-lifetime contract.",
+  "reviewed_commit": "07ad83d4a386172877e6221d2ed1feffb7f6900f",
+  "ceiling": 401,
+  "boundaries": {
+    "lycaon/internal/webresearch/warm_test.go": "f6f92d847a4573178ee891bb9b36398dedd88b221f6b75ec036322f27e8a278a"
+  }
+}

@@ -11,9 +11,9 @@ import (
 	"github.com/lycaon/lycaon/internal/curationctx"
 )
 
-func finalizeDirectSearchHits(scope string, origin searchOrigin, fr *frontier, stats *searchStats, scorer *queryScorer, memoryKeys map[string]struct{}) []WebHit {
+func (d *Discovery) finalizeDirectSearchHits(scope string, origin searchOrigin, fr *frontier, stats *searchStats, scorer *queryScorer, memoryKeys map[string]struct{}) []WebHit {
 	hits := fr.finalHits()
-	recordSeen(scope, hits)
+	d.recordSeen(scope, hits)
 	stats.noteMemoryPhase(len(memoryKeys), fr.spent, len(fr.hits))
 	if origin == searchOriginUser {
 		stats.setResiduals(fr.residualURLs(scorer, residualHandoffCap))
@@ -21,12 +21,12 @@ func finalizeDirectSearchHits(scope string, origin searchOrigin, fr *frontier, s
 	return hits
 }
 
-func finalizeDirectSearchHitsOrErr(scope string, origin searchOrigin, fr *frontier, stats *searchStats, scorer *queryScorer) ([]WebHit, error) {
+func (d *Discovery) finalizeDirectSearchHitsOrErr(scope string, origin searchOrigin, fr *frontier, stats *searchStats, scorer *queryScorer) ([]WebHit, error) {
 	hits := fr.finalHits()
 	if len(hits) == 0 {
 		return nil, fmt.Errorf("no live hits after verification")
 	}
-	recordSeen(scope, hits)
+	d.recordSeen(scope, hits)
 	if origin == searchOriginUser {
 		stats.setResiduals(fr.residualURLs(scorer, residualHandoffCap))
 	}
@@ -58,7 +58,7 @@ func (d *directDiscoverer) beginDirectSearch(ctx context.Context, dreq DirectReq
 	query, maxResults := dreq.Query, dreq.MaxResults
 	ops := parseQueryOperators(query)
 	sctx, cancel := context.WithCancel(ctx)
-	seen := seenURLs(d.memoryScope)
+	seen := d.discovery.seenURLs(d.memoryScope)
 	scorer := newQueryScorer(ops.cleaned, nil, false, dreq.Period)
 	scorer.rerank = d.rerank
 	scorer.markSeen(seen)
@@ -69,7 +69,7 @@ func (d *directDiscoverer) beginDirectSearch(ctx context.Context, dreq DirectReq
 		pinned = seedHostsSet(ops.siteBases)
 	}
 	fr := newFrontier(maxResults, perHostCap)
-	crawler := newHostCrawler(sctx)
+	crawler := newHostCrawler(sctx, d.discovery)
 	origin := d.seedOrigin
 	if origin == "" {
 		origin = searchOriginUser
@@ -119,8 +119,8 @@ func (d *directDiscoverer) search(ctx context.Context, dreq DirectRequest, stats
 	defer s.providerSeedCancel()
 
 	if s.origin == searchOriginUser {
-		activeUserSearches.Add(1)
-		defer activeUserSearches.Add(-1)
+		d.discovery.active.Add(1)
+		defer d.discovery.active.Add(-1)
 		defer func() {
 			stats.setDirectOutcome(s.fr.strongHits(), maxResults)
 			if d.index == nil {
@@ -180,7 +180,7 @@ func (d *directDiscoverer) search(ctx context.Context, dreq DirectRequest, stats
 					wait.cutProviderSeeds("budget_met")
 					cancel()
 					wg.Wait()
-					hits := finalizeDirectSearchHits(d.memoryScope, origin, fr, stats, scorer, memoryKeys)
+					hits := d.discovery.finalizeDirectSearchHits(d.memoryScope, origin, fr, stats, scorer, memoryKeys)
 					return hits, true, nil
 				}
 				if fr.plateauReached() {
@@ -188,7 +188,7 @@ func (d *directDiscoverer) search(ctx context.Context, dreq DirectRequest, stats
 					wait.cutProviderSeeds("search_done")
 					cancel()
 					wg.Wait()
-					hits, err := finalizeDirectSearchHitsOrErr(d.memoryScope, origin, fr, stats, scorer)
+					hits, err := d.discovery.finalizeDirectSearchHitsOrErr(d.memoryScope, origin, fr, stats, scorer)
 					if err != nil {
 						return nil, false, err
 					}
@@ -233,7 +233,7 @@ func finalizeSearchAfterWait(d *directDiscoverer, origin searchOrigin, merge *ch
 	memoryKeys := merge.memoryKeySnapshot()
 	stats.noteMemoryPhase(len(memoryKeys), fr.spent, len(fr.hits))
 
-	hits, err := finalizeDirectSearchHitsOrErr(d.memoryScope, origin, fr, stats, scorer)
+	hits, err := d.discovery.finalizeDirectSearchHitsOrErr(d.memoryScope, origin, fr, stats, scorer)
 	if err != nil {
 		if len(plan.seeds) == 0 && len(plan.leads) == 0 && len(fr.candidates) == 0 {
 			return nil, false, fmt.Errorf("no seeds")

@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/app/boards/boards.Runtime",
+  "kind": "construction",
+  "workstream": "web-research-runtime",
+  "disposition": "retain",
+  "reason": "Retain the 472-line board and research composition component. It builds explicit research stores, Registry, Discovery, Crawler and FetchBudget resources, shares them with tools and warming, and registers warmer shutdown with application resources. Per-operation security and session research remain separate collaborators; app-wired secret-floor tests verify the integration.",
+  "reviewed_commit": "07ad83d4a386172877e6221d2ed1feffb7f6900f",
+  "ceiling": 472,
+  "boundaries": {
+    "lycaon/test/security/api_outbound_secret_floor_e2e_test.go": "bba80e68228943c61ed01bca76737d98e77309f4811f932389d99ab7814af535",
+    "lycaon/test/security/outbound_secret_testutil_test.go": "6f0f0e240a25e59affdcabe6f0a9cdf47345b7040c2f699bbc162f3161d0b726",
+    "lycaon/internal/webresearch/runtime_resources_test.go": "96e4a128bff2d6172940f6175fd0219f6ceaa62865254eefb6db430752e52e1e"
+  },
+  "reviewed_shape": "8a9edd5bceab913538b76acd47376b1c43f9e060df06fe062631d467c8080902"
+}

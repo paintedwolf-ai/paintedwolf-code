@@ -13,16 +13,19 @@ import (
 )
 
 func TestFetchURLRejectsNonHTTP(t *testing.T) {
-	_, err := fetchURL(context.Background(), FetchOptions{URL: "file:///etc/passwd"})
+	crawler := newTestCrawler()
+
+	_, err := crawler.fetchURL(context.Background(), FetchOptions{URL: "file:///etc/passwd"})
 	if err == nil {
 		t.Fatal("expected error for file URL")
 	}
 }
 
 func TestFetchURLHTML(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	srv := testHTTPServer(t, "text/html", `<html><head><title>Doc</title></head><body><p>Hello</p></body></html>`)
-	res, err := fetchURL(context.Background(), FetchOptions{URL: srv})
+	res, err := crawler.fetchURL(context.Background(), FetchOptions{URL: srv})
 	testutil.FailErr(t, "FetchURL", err)
 	if res.Title != "Doc" {
 		t.Fatalf("title = %q", res.Title)

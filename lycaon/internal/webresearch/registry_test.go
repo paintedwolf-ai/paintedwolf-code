@@ -5,14 +5,13 @@ import (
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestRegistryBraveSearch(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("X-Subscription-Token"); got != "secret" {
 			t.Fatalf("token = %q", got)
 		}
@@ -25,21 +24,16 @@ func TestRegistryBraveSearch(t *testing.T) {
 				}},
 			},
 		})
-	}))
+	})
 	t.Cleanup(srv.Close)
 
-	orig := braveSearchURL
 	override := srv.URL
-	// braveRESTSpec uses const URL — test via custom spec pointed at srv
 	spec := braveRESTSpec()
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return override + "?q=" + query, nil
 	}
-	reg := NewRegistry(testCatalog(t))
-	reg.Register(NewRESTSearchProvider(spec, KindKeyed))
-
-	injectProviderHTTPClient(t, srv.Client())
-	_ = orig
+	reg := NewRegistry(testCatalog(t), srv.exchange)
+	reg.Register(NewRESTSearchProvider(spec, KindKeyed, srv.exchange))
 
 	out := reg.Get("brave").Search(context.Background(), Settings{
 		Keys:                  map[string]string{"brave": "secret"},
@@ -63,7 +57,7 @@ func TestDefaultSettingsResolvesCatalogKeys(t *testing.T) {
 }
 
 func TestRegistryListsProviders(t *testing.T) {
-	reg := testRegistry(t)
+	reg := testRegistry(t, nil)
 	if len(reg.IDs()) != len(testCatalog(t).Entries()) {
 		t.Fatalf("ids = %v want %d", reg.IDs(), len(testCatalog(t).Entries()))
 	}

@@ -12,9 +12,11 @@ import (
 // ./task test:digest -- ./internal/webresearch -run LivePublic -count=1 -timeout=3m
 // Skipped under -short (CI / check-fast).
 func TestDirectLivePublicIndexFetch(t *testing.T) {
+	discovery := NewDiscovery(newTestCrawler())
+
 	skipUnlessLiveDirectFetch(t)
 
-	resetDirectState(2)
+	discovery.slots = make(chan struct{}, 2)
 
 	type siteExpect struct {
 		base       string
@@ -27,7 +29,7 @@ func TestDirectLivePublicIndexFetch(t *testing.T) {
 		{base: "https://www.flatcar.org/docs", wantSubstr: "flatcar"},
 	}
 
-	d := discovererSeedingURLs(t,
+	d := discovererSeedingURLs(t, discovery,
 		"https://docs.alpinelinux.org",
 		"https://www.talos.dev",
 		"https://www.flatcar.org/docs",
@@ -65,16 +67,18 @@ func TestDirectLivePublicIndexFetch(t *testing.T) {
 }
 
 func TestDirectLiveSparseWithSynthesis(t *testing.T) {
+	discovery := NewDiscovery(newTestCrawler())
+
 	skipUnlessLiveDirectFetch(t)
 
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
 
 	// sqlite.org publishes no sitemap or llms.txt — seed the known WAL page
 	// directly via the provider channel.
 	base := "https://www.sqlite.org"
 	synthURL := base + "/wal.html"
 
-	d := providerBackedDiscoverer(t, "hn", "SQLite WAL write-ahead logging", synthURL)
+	d := providerBackedDiscoverer(t, discovery, "hn", "SQLite WAL write-ahead logging", synthURL)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -91,9 +95,11 @@ func TestDirectLiveSparseWithSynthesis(t *testing.T) {
 }
 
 func TestDirectLiveParallelQueries(t *testing.T) {
+	discovery := NewDiscovery(newTestCrawler())
+
 	skipUnlessLiveDirectFetch(t)
 
-	resetDirectState(2)
+	discovery.slots = make(chan struct{}, 2)
 
 	queries := []string{
 		"Alpine Linux apk package manager",
@@ -117,7 +123,7 @@ func TestDirectLiveParallelQueries(t *testing.T) {
 	ch := make(chan result, len(queries))
 	for i, q := range queries {
 		go func() {
-			d := discovererSeedingURLs(t, seeds...)
+			d := discovererSeedingURLs(t, discovery, seeds...)
 			out := searchDirect(ctx, d, q, CurrentPeriod(), 3)
 			ch <- result{idx: i, out: out}
 		}()
@@ -142,11 +148,13 @@ func TestDirectLiveParallelQueries(t *testing.T) {
 }
 
 func TestDirectLiveTalosQueryIsolated(t *testing.T) {
+	discovery := NewDiscovery(newTestCrawler())
+
 	skipUnlessLiveDirectFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	d := discovererSeedingURLs(t,
+	d := discovererSeedingURLs(t, discovery,
 		"https://docs.alpinelinux.org",
 		"https://www.talos.dev",
 		"https://www.flatcar.org/docs",

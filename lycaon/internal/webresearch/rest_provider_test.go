@@ -8,7 +8,7 @@ import (
 )
 
 func TestRESTProviderClassifiesItsOwnIODeadlineAsTimeout(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(_ http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(_ http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
 	})
 	spec := RESTSpec{
@@ -19,7 +19,7 @@ func TestRESTProviderClassifiesItsOwnIODeadlineAsTimeout(t *testing.T) {
 		},
 		ParseHits: func([]byte) ([]WebHit, error) { return nil, nil },
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		PerProviderTimeoutSec: 1,
 	}, "query", 1)
 	if out.reason != "timeout" {
@@ -28,7 +28,7 @@ func TestRESTProviderClassifiesItsOwnIODeadlineAsTimeout(t *testing.T) {
 }
 
 func TestRESTProviderDropsInvalidResultURLs(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode([]WebHit{
 			{Title: "Missing"},
 			{Title: "Script", URL: "javascript:alert(1)"},
@@ -48,14 +48,14 @@ func TestRESTProviderDropsInvalidResultURLs(t *testing.T) {
 			return hits, err
 		},
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{}, "query", 10)
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{}, "query", 10)
 	if !out.ok || len(out.hits) != 1 || out.hits[0].URL != "https://example.com/docs" {
 		t.Fatalf("out = %+v", out)
 	}
 }
 
 func TestRESTProviderRejectsResponseWithOnlyInvalidResultURLs(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode([]WebHit{{Title: "Missing"}})
 	})
 	spec := RESTSpec{
@@ -70,7 +70,7 @@ func TestRESTProviderRejectsResponseWithOnlyInvalidResultURLs(t *testing.T) {
 			return hits, err
 		},
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{}, "query", 10)
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{}, "query", 10)
 	if out.ok || out.reason != "parse_error" {
 		t.Fatalf("out = %+v", out)
 	}

@@ -158,7 +158,7 @@ func TestProviderGateAuthenticatedBypass(t *testing.T) {
 }
 
 func TestMwmblConfiguredWithoutSettings(t *testing.T) {
-	reg := testRegistry(t)
+	reg := testRegistry(t, nil)
 	p := reg.Get("mwmbl")
 	if p == nil {
 		t.Fatal("missing mwmbl provider")

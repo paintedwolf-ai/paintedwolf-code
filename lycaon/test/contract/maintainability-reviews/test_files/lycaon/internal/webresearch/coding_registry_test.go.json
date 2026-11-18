@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/webresearch/coding_registry_test.go",
+  "kind": "test_suite",
+  "workstream": "web-research-runtime",
+  "disposition": "retain",
+  "reason": "Retain the 381-line coding-provider contract matrix. Each case uses an isolated bounded HTTP fixture to verify the catalog adapter request and decoded results; shared fixture construction avoids process transport replacement.",
+  "reviewed_commit": "07ad83d4a386172877e6221d2ed1feffb7f6900f",
+  "ceiling": 381,
+  "boundaries": {
+    "lycaon/internal/webresearch/coding_registry_test.go": "e26db3275ca79165a087a8acad0b89333e6681c3427ee464825a52edb2a0ec4d"
+  }
+}

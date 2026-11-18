@@ -18,20 +18,26 @@ type SearchProvider interface {
 
 // Registry holds catalog-backed custom providers.
 type Registry struct {
-	catalog   *Catalog
-	providers *catalogruntime.Registry[SearchProvider]
-	gates     map[string]*providerGate
-	health    map[string]*providerHealth
-	quota     ProviderQuotaStore
+	catalog     *Catalog
+	exchange    Exchange
+	providers   *catalogruntime.Registry[SearchProvider]
+	gates       map[string]*providerGate
+	health      map[string]*providerHealth
+	quota       ProviderQuotaStore
+	seedCache   *ttlCache[providerOutcome]
+	resultCache *ttlCache[cachedSearchResult]
 }
 
 // NewRegistry builds an empty registry for a catalog.
-func NewRegistry(catalog *Catalog) *Registry {
+func NewRegistry(catalog *Catalog, exchange Exchange) *Registry {
 	return &Registry{
-		catalog:   catalog,
-		providers: catalogruntime.NewRegistry[SearchProvider](),
-		gates:     make(map[string]*providerGate),
-		health:    make(map[string]*providerHealth),
+		catalog:     catalog,
+		exchange:    exchange,
+		seedCache:   newTTLCache[providerOutcome](providerSeedCacheTTL, providerSeedCacheMax),
+		resultCache: newTTLCache[cachedSearchResult](searchResultCacheTTL, searchResultCacheMax),
+		providers:   catalogruntime.NewRegistry[SearchProvider](),
+		gates:       make(map[string]*providerGate),
+		health:      make(map[string]*providerHealth),
 	}
 }
 
@@ -119,7 +125,7 @@ var customBuilders = map[string]func(*Registry){
 	"mwmbl":           func(r *Registry) { r.registerREST(mwmblRESTSpec(), KindKeyless) },
 	"hn":              func(r *Registry) { r.registerREST(hnRESTSpec(), KindKeyless) },
 	"mankier":         func(r *Registry) { r.registerREST(mankierRESTSpec(), KindKeyless) },
-	"ietf_rfc":        func(r *Registry) { r.registerProvider(newIETFRFCProvider()) },
+	"ietf_rfc":        func(r *Registry) { r.registerProvider(newIETFRFCProvider(r.exchange)) },
 	"microsoft_learn": func(r *Registry) { r.registerREST(microsoftLearnRESTSpec(), KindKeyless) },
 	"arxiv":           func(r *Registry) { r.registerREST(arxivRESTSpec(), KindKeyless) },
 	"mdn":             func(r *Registry) { r.registerREST(mdnRESTSpec(), KindKeyless) },
@@ -221,7 +227,7 @@ func (r *Registry) ensureHealthGate(providerID string) *providerHealth {
 }
 
 func (r *Registry) registerREST(spec RESTSpec, kind ProviderKind) {
-	r.registerProvider(NewRESTSearchProvider(spec, kind))
+	r.registerProvider(NewRESTSearchProvider(spec, kind, r.exchange))
 }
 
 func (r *Registry) registerProvider(p SearchProvider) {

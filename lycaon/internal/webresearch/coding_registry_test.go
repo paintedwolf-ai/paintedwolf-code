@@ -8,7 +8,7 @@ import (
 )
 
 func TestProviderCratesIO(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("User-Agent"); got != cratesIOUserAgent {
 			t.Fatalf("user-agent = %q", got)
 		}
@@ -23,7 +23,7 @@ func TestProviderCratesIO(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		PerProviderTimeoutSec: 5,
 	}, "serde", 5)
 	if !out.ok || out.hits[0].URL != "https://crates.io/crates/serde" {
@@ -35,7 +35,7 @@ func TestProviderCratesIO(t *testing.T) {
 }
 
 func TestProviderPkgGoDev(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("q"); got != "encoding/json" {
 			t.Fatalf("q = %q", got)
 		}
@@ -50,7 +50,7 @@ func TestProviderPkgGoDev(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"pkg_go_dev": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "encoding/json", 5)
@@ -60,7 +60,7 @@ func TestProviderPkgGoDev(t *testing.T) {
 }
 
 func TestProviderNpm(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("text"); got != "express" {
 			t.Fatalf("text = %q", got)
 		}
@@ -77,7 +77,7 @@ func TestProviderNpm(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?text=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		PerProviderTimeoutSec: 5,
 	}, "express", 5)
 	if !out.ok || out.hits[0].URL != "https://www.npmjs.com/package/express" {
@@ -86,7 +86,7 @@ func TestProviderNpm(t *testing.T) {
 }
 
 func TestProviderJsr(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"items": []map[string]any{{
 				"scope": "deno", "name": "hono", "description": "web framework", "latestVersion": "1.0.0",
@@ -97,7 +97,7 @@ func TestProviderJsr(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?query=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"jsr": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "hono", 5)
@@ -107,7 +107,7 @@ func TestProviderJsr(t *testing.T) {
 }
 
 func TestProviderNuget(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data": []map[string]any{{
 				"id": "Newtonsoft.Json", "version": "13.0.4", "description": "JSON framework",
@@ -119,7 +119,7 @@ func TestProviderNuget(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		PerProviderTimeoutSec: 5,
 	}, "Newtonsoft.Json", 5)
 	if !out.ok || out.hits[0].URL != "https://www.newtonsoft.com/json" {
@@ -128,7 +128,7 @@ func TestProviderNuget(t *testing.T) {
 }
 
 func TestProviderRubygems(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode([]map[string]any{{
 			"name": "rails", "version": "8.1.0", "info": "web framework", "project_uri": "https://rubygems.org/gems/rails",
 			"downloads": 100,
@@ -138,7 +138,7 @@ func TestProviderRubygems(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?query=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		PerProviderTimeoutSec: 5,
 	}, "rails", 5)
 	if !out.ok || out.hits[0].URL != "https://rubygems.org/gems/rails" {
@@ -156,7 +156,7 @@ func TestDocsRsCrateURLFallback(t *testing.T) {
 }
 
 func TestProviderMavenCentral(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("wt"); got != "json" {
 			t.Fatalf("wt = %q", got)
 		}
@@ -173,7 +173,7 @@ func TestProviderMavenCentral(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?q=" + query + "&wt=json", nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		PerProviderTimeoutSec: 5,
 	}, "jackson", 5)
 	if !out.ok || out.hits[0].Title != "com.fasterxml.jackson.core:jackson-databind" {
@@ -182,7 +182,7 @@ func TestProviderMavenCentral(t *testing.T) {
 }
 
 func TestProviderPackagist(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"results": []map[string]any{{
 				"name": "symfony/yaml", "description": "YAML component",
@@ -194,7 +194,7 @@ func TestProviderPackagist(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		PerProviderTimeoutSec: 5,
 	}, "symfony", 5)
 	if !out.ok || out.hits[0].URL != "https://packagist.org/packages/symfony/yaml" {
@@ -203,7 +203,7 @@ func TestProviderPackagist(t *testing.T) {
 }
 
 func TestProviderPubDev(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("q"); got != "http" {
 			t.Fatalf("q = %q", got)
 		}
@@ -215,7 +215,7 @@ func TestProviderPubDev(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"pub_dev": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "http", 5)
@@ -225,7 +225,7 @@ func TestProviderPubDev(t *testing.T) {
 }
 
 func TestProviderHex(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("search"); got != "phoenix" {
 			t.Fatalf("search = %q", got)
 		}
@@ -238,7 +238,7 @@ func TestProviderHex(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?search=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"hex": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "phoenix", 5)
@@ -248,7 +248,7 @@ func TestProviderHex(t *testing.T) {
 }
 
 func TestProviderCran(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("q"); got != "ggplot2" {
 			t.Fatalf("q = %q", got)
 		}
@@ -267,7 +267,7 @@ func TestProviderCran(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"cran": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "ggplot2", 5)
@@ -280,7 +280,7 @@ func TestProviderCran(t *testing.T) {
 }
 
 func TestProviderHackage(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Accept"); got != "application/json" {
 			t.Fatalf("accept = %q", got)
 		}
@@ -293,7 +293,7 @@ func TestProviderHackage(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?terms=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"hackage": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "lens", 5)
@@ -303,7 +303,7 @@ func TestProviderHackage(t *testing.T) {
 }
 
 func TestProviderMetacpan(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("q"); got != "Moose" {
 			t.Fatalf("q = %q", got)
 		}
@@ -325,7 +325,7 @@ func TestProviderMetacpan(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"metacpan": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "Moose", 5)
@@ -341,7 +341,7 @@ func TestProviderMetacpan(t *testing.T) {
 }
 
 func TestProviderNVD(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"vulnerabilities": []map[string]any{{
 				"cve": map[string]any{
@@ -356,7 +356,7 @@ func TestProviderNVD(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?keywordSearch=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		PerProviderTimeoutSec: 5,
 	}, "log4j", 5)
 	if !out.ok || out.hits[0].URL != "https://nvd.nist.gov/vuln/detail/CVE-2021-44228" {
@@ -365,7 +365,7 @@ func TestProviderNVD(t *testing.T) {
 }
 
 func TestProviderCSSTricks(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode([]map[string]any{{
 			"title": "CSS Grid", "url": "https://css-tricks.com/css-grid/", "subtype": "post",
 		}})
@@ -374,7 +374,7 @@ func TestProviderCSSTricks(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?search=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		PerProviderTimeoutSec: 5,
 	}, "grid", 5)
 	if !out.ok || out.hits[0].URL != "https://css-tricks.com/css-grid/" {
@@ -383,14 +383,14 @@ func TestProviderCSSTricks(t *testing.T) {
 }
 
 func TestProviderCanIUse(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"featureIds": []string{"css-grid", "css-subgrid"}})
 	})
 	spec := caniuseRESTSpec()
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?search=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		PerProviderTimeoutSec: 5,
 	}, "grid", 5)
 	if !out.ok || out.hits[0].URL != "https://caniuse.com/css-grid" {
