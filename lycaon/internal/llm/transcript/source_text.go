@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -75,7 +76,7 @@ func projectSourceHistoryVersion(message api.Message, part api.MessageContentPar
 	if !ok {
 		return parts
 	}
-	encoded, err := json.Marshal(metadata)
+	encoded, err := surveyjson.Marshal(metadata)
 	if err != nil {
 		return parts
 	}

@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -29,21 +32,7 @@ func projectCommandResult(message api.Message, parts []api.MessageContentPart) [
 	if !ok || prefix != "" {
 		return parts
 	}
-	var metadata map[string]json.RawMessage
-	if json.Unmarshal([]byte(body), &metadata) != nil {
-		return parts
-	}
-	var state struct {
-		ProgramID string `json:"program_id"`
-		State     string `json:"state"`
-		Status    *int   `json:"status"`
-		Stdout    string `json:"stdout"`
-		Stderr    string `json:"stderr"`
-		Refusal   *struct {
-			Code     string `json:"code"`
-			Feedback string `json:"feedback"`
-		} `json:"refusal"`
-	}
+	var state commandResultPayload
 	if json.Unmarshal([]byte(body), &state) != nil || state.ProgramID != receipt.ID || state.State != receipt.State || state.Status == nil {
 		return parts
 	}
@@ -55,33 +44,11 @@ func projectCommandResult(message api.Message, parts []api.MessageContentPart) [
 	default:
 		return parts
 	}
-	feedback := ""
-	if state.Refusal != nil {
-		if state.Refusal.Code == "" || (receipt.StopCode != "" && state.Refusal.Code != receipt.StopCode) {
-			return parts
-		}
-		if receipt.StopCode == "" && receipt.State != "running" {
-			return parts
-		}
-		feedback = state.Refusal.Feedback
-		var refusal map[string]json.RawMessage
-		if json.Unmarshal(metadata["refusal"], &refusal) != nil {
-			return parts
-		}
-		delete(refusal, "feedback")
-		if details, present := refusal["details"]; present && string(details) != "null" {
-			if message.ID == "" {
-				return parts
-			}
-			delete(refusal, "details")
-			refusal["details_retained"] = json.RawMessage("true")
-			refusal["result_message_id"], _ = json.Marshal(message.ID) //nolint:errchkjson // Strings always encode.
-		}
-		metadata["refusal"], _ = json.Marshal(refusal) //nolint:errchkjson // Members were decoded from JSON or are literal JSON.
+	feedback, valid := state.projectRefusal(message.ID, receipt)
+	if !valid {
+		return parts
 	}
-	delete(metadata, "stdout")
-	delete(metadata, "stderr")
-	encoded, err := json.Marshal(metadata)
+	encoded, err := surveyjson.Marshal(state.commandResultMetadata)
 	if err != nil {
 		return parts
 	}
@@ -104,8 +71,77 @@ func projectCommandResult(message api.Message, parts []api.MessageContentPart) [
 		fence := sourceFence(text)
 		appendText(source, label+"\n"+fence+"\n", text+"\n"+fence)
 	}
-	appendStream("command_stderr", "Command stderr:", state.Stderr)
-	appendStream("command_stdout", "Command stdout:", state.Stdout)
+	appendStream("command_stderr", "Command stderr:", ansi.Strip(state.Stderr))
+	appendStream("command_stdout", "Command stdout:", ansi.Strip(state.Stdout))
 	appendText("result_suffix", "", suffix)
 	return out
+}
+
+type commandResultPayload struct {
+	commandResultMetadata
+	ProgramID string `json:"program_id"`
+	Stdout    string `json:"stdout"`
+	Stderr    string `json:"stderr"`
+	Refusal   *struct {
+		Code     string          `json:"code"`
+		Feedback string          `json:"feedback"`
+		Details  json.RawMessage `json:"details"`
+	} `json:"refusal"`
+}
+
+type commandResultMetadata struct {
+	State                    string                  `json:"state"`
+	Status                   *int                    `json:"status"`
+	Outputs                  []commandStreamMetadata `json:"outputs,omitempty"`
+	NonzeroExecutions        []commandExitMetadata   `json:"nonzero_executions,omitempty"`
+	OmittedNonzeroExecutions int                     `json:"omitted_nonzero_executions,omitempty"`
+	CompletedEffects         int                     `json:"completed_effects,omitempty"`
+	UncertainEffects         int                     `json:"uncertain_effects,omitempty"`
+	CPUTimeUnmeasured        bool                    `json:"cpu_time_unmeasured,omitempty"`
+	Refusal                  *commandRefusalMetadata `json:"refusal,omitempty"`
+}
+
+type commandStreamMetadata struct {
+	Stream       string                         `json:"stream"`
+	TotalBytes   int64                          `json:"total_bytes"`
+	TotalLines   int64                          `json:"total_lines"`
+	Complete     bool                           `json:"complete"`
+	Truncated    bool                           `json:"truncated"`
+	OmittedLines int64                          `json:"omitted_lines,omitempty"`
+	OutputPath   string                         `json:"output_path"`
+	Limit        *api.CommandProgramOutputLimit `json:"limit,omitempty"`
+}
+
+type commandExitMetadata struct {
+	StatusCode *int `json:"status_code"`
+	Span       struct {
+		Line int `json:"line"`
+	} `json:"span"`
+}
+
+type commandRefusalMetadata struct {
+	Code            string `json:"code"`
+	DetailsRetained bool   `json:"details_retained,omitempty"`
+	ResultMessageID string `json:"result_message_id,omitempty"`
+}
+
+func (p *commandResultPayload) projectRefusal(messageID string, receipt *api.CommandProgramReceipt) (string, bool) {
+	refusal := p.Refusal
+	if refusal == nil {
+		return "", true
+	}
+	if refusal.Code == "" || (receipt.StopCode != "" && refusal.Code != receipt.StopCode) ||
+		(receipt.StopCode == "" && receipt.State != "running") {
+		return "", false
+	}
+	metadata := &commandRefusalMetadata{Code: refusal.Code}
+	if len(refusal.Details) > 0 && string(refusal.Details) != "null" {
+		if messageID == "" {
+			return "", false
+		}
+		metadata.DetailsRetained = true
+		metadata.ResultMessageID = messageID
+	}
+	p.commandResultMetadata.Refusal = metadata
+	return refusal.Feedback, true
 }

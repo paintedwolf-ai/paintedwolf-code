@@ -2,13 +2,13 @@
 package transcript
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -271,7 +271,7 @@ func checkpointDecisionParts(msg api.Message) []api.MessageContentPart {
 
 func checkpointReceiptParts(decision api.CheckpointDecisionMeta) []api.MessageContentPart {
 	decision.Guidance = ""
-	body, err := json.Marshal(struct {
+	body, err := surveyjson.Marshal(struct {
 		Decision api.CheckpointDecisionMeta `json:"human_checkpoint"`
 	}{Decision: decision})
 	if err != nil {
