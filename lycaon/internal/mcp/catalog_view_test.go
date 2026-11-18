@@ -4,9 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/mcp"
-	"github.com/lycaon/lycaon/internal/testutil"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestRegistryCatalogViewConfiguredEnabled(t *testing.T) {
@@ -33,7 +35,7 @@ func TestRegistryCatalogViewConfiguredEnabled(t *testing.T) {
 }
 
 func TestRegistryResolveQualifiedTool(t *testing.T) {
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{"fixture": {{Name: "echo", Description: "echo"}}},
 	}
 	reg := newTestRegistry(t, conn, "fixture")

@@ -2,8 +2,6 @@ package wiring
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -12,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/api"
@@ -22,8 +22,9 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/scan"
@@ -35,10 +36,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Each test supplies its own server catalog.
@@ -99,7 +100,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	if o.mcpConnector != nil {
 		cfg.TestMCPConnector = o.mcpConnector
 	} else {
-		cfg.TestMCPConnector = &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{
+		cfg.TestMCPConnector = &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{
 			"svca": {{Name: "do", Description: "do"}},
 		}}
 	}

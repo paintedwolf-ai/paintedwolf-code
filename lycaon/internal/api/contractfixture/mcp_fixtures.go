@@ -9,10 +9,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -20,7 +23,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func AddMcpRecipe(t *testing.T, srv *hostapi.Server, recipeID, projectID string) *httptest.ResponseRecorder {
@@ -62,7 +64,7 @@ func NewMCPProviderWithDistro(t *testing.T, distroBody string, projectMCP bool, 
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath:          t.TempDir(),
 		GlobalOverridePath: globalPath,
-		Connector: &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{
+		Connector: &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{
 			"svca": {
 				{Name: "do", Description: "do"},
 				{Name: "query", Description: "query"},

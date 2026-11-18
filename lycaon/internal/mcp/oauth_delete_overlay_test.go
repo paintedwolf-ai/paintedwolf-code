@@ -23,7 +23,7 @@ func newOAuthDeleteHarness(t *testing.T) (*mcp.Runtime, *mcp.OAuthTokenStore) {
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath:          t.TempDir(),
 		GlobalOverridePath: filepath.Join(t.TempDir(), "mcp.yaml"),
-		Connector:          &mcp.MockConnector{},
+		Connector:          &mcptest.Connector{},
 		OAuthStore:         store,
 	})
 	testutil.FailErr(t, "NewRuntime", err)

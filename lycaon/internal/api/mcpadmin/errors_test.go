@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/mcp"
@@ -136,7 +137,7 @@ func TestHandlerPostCommitFinalizationDeferredReportsSuccessAtAPIBoundary(t *tes
 		StatePath:          stateDir,
 		GlobalOverridePath: filepath.Join(stateDir, "mcp.yaml"),
 		OAuthStore:         mcptest.OpenOAuthStore(t, filepath.Join(stateDir, "mcp-oauth.vault")),
-		Connector:          &mcp.MockConnector{},
+		Connector:          &mcptest.Connector{},
 		VerifyStaticCredentialWrite: func(slot credentialstore.Slot, key, want string) error {
 			if !failedFinalizationOnce && strings.Contains(want, `"tok-v2"`) && !strings.Contains(want, `"pending_commit"`) {
 				failedFinalizationOnce = true

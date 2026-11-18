@@ -52,7 +52,7 @@ func TestPreflightValidationRejectsCorruptRecordBeforeMutatingValidPendingRecord
 	reg, err := NewRuntime(RuntimeOptions{
 		StatePath:          stateDir,
 		GlobalOverridePath: globalPath,
-		Connector:          &MockConnector{},
+		Connector:          catalogConnector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	loadErr := reg.Catalog.Load(ctx)
@@ -85,7 +85,7 @@ func TestAdminRollbackIsSerializedInsideCatalogTransactionAndSurfacesErrors(t *t
 	reg, err := NewRuntime(RuntimeOptions{
 		StatePath:          stateDir,
 		GlobalOverridePath: globalPath,
-		Connector:          &MockConnector{},
+		Connector:          catalogConnector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	testutil.FailErr(t, "Load", reg.Catalog.Load(ctx))
@@ -162,7 +162,7 @@ func TestCommittedButVerificationFailedBoundaryForCreateUpdateDelete(t *testing.
 	reg, err := NewRuntime(RuntimeOptions{
 		StatePath:          stateDir,
 		GlobalOverridePath: globalPath,
-		Connector:          &MockConnector{},
+		Connector:          catalogConnector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	testutil.FailErr(t, "Load", reg.Catalog.Load(ctx))
@@ -272,7 +272,7 @@ func (f *pendingCommitRecoveryFixture) newReg() *Runtime {
 	r, err := NewRuntime(RuntimeOptions{
 		StatePath:          f.stateDir,
 		GlobalOverridePath: f.globalPath,
-		Connector:          &MockConnector{},
+		Connector:          catalogConnector{},
 	})
 	testutil.FailErr(f.t, "NewRuntime", err)
 	testutil.FailErr(f.t, "Load", r.Catalog.Load(f.ctx))
@@ -417,7 +417,7 @@ func (f *pendingCommitRecoveryFixture) crashAfterConfigWriteLeavesUncommittedOve
 
 // 2a. Recovery fails at "before_recovery_config_write": PendingCommit stays intact.
 func (f *pendingCommitRecoveryFixture) recoveryFaultBeforeConfigWriteKeepsPendingCommit() {
-	rFail1, err := NewRuntime(RuntimeOptions{StatePath: f.stateDir, GlobalOverridePath: f.globalPath, Connector: &MockConnector{}})
+	rFail1, err := NewRuntime(RuntimeOptions{StatePath: f.stateDir, GlobalOverridePath: f.globalPath, Connector: catalogConnector{}})
 	testutil.FailErr(f.t, "NewRuntime rFail1", err)
 	rFail1.Catalog.recoveryHook = func(stage, _ string) error {
 		if stage == "before_recovery_config_write" {
@@ -432,7 +432,7 @@ func (f *pendingCommitRecoveryFixture) recoveryFaultBeforeConfigWriteKeepsPendin
 
 // 2b. Recovery writes restored mcp.yaml then crashes before RestoreSnapshot.
 func (f *pendingCommitRecoveryFixture) recoveryFaultBeforeVaultRestoreKeepsPendingCommit() {
-	rFail2, err := NewRuntime(RuntimeOptions{StatePath: f.stateDir, GlobalOverridePath: f.globalPath, Connector: &MockConnector{}})
+	rFail2, err := NewRuntime(RuntimeOptions{StatePath: f.stateDir, GlobalOverridePath: f.globalPath, Connector: catalogConnector{}})
 	testutil.FailErr(f.t, "NewRuntime rFail2", err)
 	rFail2.Catalog.recoveryHook = func(stage, _ string) error {
 		if stage == "after_recovery_config_write_before_vault_restore" {
@@ -632,7 +632,7 @@ func TestSubprocessCrashAtPersistentPrefixBoundaries(t *testing.T) {
 		r, err := NewRuntime(RuntimeOptions{
 			StatePath:          stateDir,
 			GlobalOverridePath: globalPath,
-			Connector:          &MockConnector{},
+			Connector:          catalogConnector{},
 		})
 		testutil.FailErr(t, "subprocess NewRuntime", err)
 		if stage == "after_recovery_config_write_before_vault_restore" {
@@ -743,7 +743,7 @@ func TestSubprocessCrashAtPersistentPrefixBoundaries(t *testing.T) {
 	} {
 		stateDir := t.TempDir()
 		globalPath := filepath.Join(stateDir, "mcp.yaml")
-		reg, err := NewRuntime(RuntimeOptions{StatePath: stateDir, GlobalOverridePath: globalPath, Connector: &MockConnector{}})
+		reg, err := NewRuntime(RuntimeOptions{StatePath: stateDir, GlobalOverridePath: globalPath, Connector: catalogConnector{}})
 		testutil.FailErr(t, "NewRuntime", err)
 		testutil.FailErr(t, "Load", reg.Catalog.Load(ctx))
 		enabled := false
@@ -762,7 +762,7 @@ func TestSubprocessCrashAtPersistentPrefixBoundaries(t *testing.T) {
 			runChildExit42(stateDir, "after_recovery_config_write_before_vault_restore")
 		}
 
-		recovered, err := NewRuntime(RuntimeOptions{StatePath: stateDir, GlobalOverridePath: globalPath, Connector: &MockConnector{}})
+		recovered, err := NewRuntime(RuntimeOptions{StatePath: stateDir, GlobalOverridePath: globalPath, Connector: catalogConnector{}})
 		testutil.FailErr(t, "NewRuntime recovered", err)
 		testutil.FailErr(t, "Load recovered", recovered.Catalog.Load(ctx))
 

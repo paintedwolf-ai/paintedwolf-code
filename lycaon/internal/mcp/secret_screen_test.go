@@ -2,18 +2,20 @@ package mcp_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const plantedAWS = "AKIAQYJK5TXV4NZR7SGB"
@@ -34,7 +36,7 @@ func TestMCPCallToolScreenStdio(t *testing.T) {
 `), 0o600))
 
 	calls := map[string]map[string]int{}
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{
 			"fixture": {{Name: "query", Description: "query"}},
 		},
