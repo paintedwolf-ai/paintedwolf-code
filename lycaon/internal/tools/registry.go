@@ -510,18 +510,16 @@ type Invocation struct {
 	NativeInputs    *hitl.NativeActionInputs
 	NativeOperation *toolcontract.BoundOperation
 	NativeStages    []toolcontract.ExecutionStage
-	// EntryTool is the model-called program entry, such as command or verify,
-	// whose program reached this native child.
-	EntryTool      string
-	ID             string
-	ProjectID      string
-	SessionID      string
-	MessageID      string
-	ToolCallID     string
-	ToolName       string
-	ArgsDigest     string
-	ContractDigest string
-	Contract       toolcontract.Contract
+	EntryTool       string // the program entry, such as verify, that reached this child
+	ID              string
+	ProjectID       string
+	SessionID       string
+	MessageID       string
+	ToolCallID      string
+	ToolName        string
+	ArgsDigest      string
+	ContractDigest  string
+	Contract        toolcontract.Contract
 }
 
 // Definition is one atomically published registry entry.

@@ -49,11 +49,10 @@ type ProposedAction struct {
 
 // ActionInvocation captures tool invocation facts.
 type ActionInvocation struct {
-	NativeInputs *NativeActionInputs `json:"-"`
-	BoundStages  []toolcontract.ExecutionStage
-	Tool         string
-	// EntryTool is the program entry that reached Tool; tool rules match either.
-	EntryTool     string
+	NativeInputs  *NativeActionInputs `json:"-"`
+	BoundStages   []toolcontract.ExecutionStage
+	Tool          string
+	EntryTool     string // the program entry that reached Tool; tool rules match either
 	Args          map[string]any
 	Files         []string
 	ResolvedFiles []string
