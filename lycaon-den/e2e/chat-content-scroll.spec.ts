@@ -164,7 +164,7 @@ declare global {
     prettyReader: {
       positionAtTop(): ReaderPosition;
       distance(target: ReaderPosition): number | null;
-      putCaretAtStart(): void;
+      readAwayFromCaret(target: ReaderPosition): boolean;
       caretVisible(): boolean;
     };
   }
@@ -179,7 +179,13 @@ for (const source of ["retained", "receipts"]) {
     await page.getByTestId("goto-line-input").fill("173:330");
     await page.getByTestId("goto-line-input").press("Enter");
     await expect(reader.locator(".cm-content")).toContainText('"row":172');
-    await page.evaluate(() => window.prettyReader.putCaretAtStart());
+    await expect.poll(async () => {
+      return page.evaluate(async () => {
+        if (!window.prettyReader.readAwayFromCaret({ row: 172, column: 330 })) return false;
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        return !window.prettyReader.caretVisible() && window.prettyReader.positionAtTop().row === 172;
+      });
+    }).toBe(true);
     for (const layout of ["pretty", "wrap"]) {
       await expect.poll(() => page.evaluate(() => window.prettyReader.caretVisible())).toBe(false);
       await expect.poll(() => page.evaluate(() => window.prettyReader.positionAtTop().row)).toBeGreaterThan(95);

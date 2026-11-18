@@ -146,7 +146,13 @@ function PrettyReaderFixture(props: { receipts: boolean }) {
       const rect = pos === undefined ? null : view.coordsAtPos(pos);
       return rect ? (rect.top - view.scrollDOM.getBoundingClientRect().top) / view.defaultLineHeight : null;
     },
-    putCaretAtStart() { editor().dispatch({ selection: { anchor: 0 } }); },
+    readAwayFromCaret(target: ReaderPosition) {
+      const view = editor(), pos = position(target);
+      if (pos === undefined) return false;
+      view.contentDOM.blur();
+      view.dispatch({ selection: { anchor: 0 }, effects: EditorView.scrollIntoView(pos, { y: "start", yMargin: 0 }) });
+      return true;
+    },
     caretVisible() {
       const view = editor(), rect = view.coordsAtPos(view.state.selection.main.head), port = view.scrollDOM.getBoundingClientRect();
       return !!rect && rect.bottom > port.top && rect.top < port.bottom;
