@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -28,11 +29,14 @@ func TestBootToolClaimsHonestOnTheServedRegistry(t *testing.T) {
 	testutil.FailErr(t, "validate boot tool claims", tools.ValidateBootToolClaimsHonest(h.ToolRegistry))
 }
 
-// A release has no configuration tree on disk, so boot installs the anchor
-// catalog from the embedded configuration.
+// A release has no configuration tree on disk: it stages schemas in the engine
+// root and boot installs the anchor catalog from the embedded configuration.
 func TestBootInstallsBundledAnchorCatalogWithoutAConfigRoot(t *testing.T) {
+	engineRoot := t.TempDir()
+	schemas := filepath.Join(configlayout.FindModuleRoot(), "..", configlayout.SchemasDirName)
+	testutil.FailErr(t, "stage schemas", os.CopyFS(filepath.Join(engineRoot, configlayout.SchemasDirName), os.DirFS(schemas)))
+	t.Setenv(configlayout.EnvEngineRoot, engineRoot)
 	anchorcatalog.Clear()
-	t.Chdir(t.TempDir())
 	BuildForTest(t, withConfigRoot(t.TempDir()))
 	if !anchorcatalog.Loaded() {
 		t.Fatal("boot without a configuration tree installed no anchor catalog")
@@ -73,7 +77,7 @@ func TestRunStopSettlesWorkersThroughTheSessionTranscript(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureOrchestrate}, dir)
 	testutil.FailErr(t, "create session", err)
 	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
-		WorkflowID: "plan", WorkflowVersion: activeWorkflowVersion("plan"),
+		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "start workflow", err)
 
