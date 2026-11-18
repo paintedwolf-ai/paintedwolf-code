@@ -35,16 +35,12 @@ func resolvePickerTurnProfile(
 	default:
 		history = append(history, visibleTurnMessage(userPrompt))
 	}
-	return ResolveTurnProfile(enrichPickerRunContext(runCtx), sess, history, state...)
-}
-
-func enrichPickerRunContext(runCtx api.CoordinatorRunContext) api.CoordinatorRunContext {
-	return EnrichRunContextForWorkflow(runCtx, "")
+	return ResolveTurnProfile(runCtx, sess, history, state...)
 }
 
 func TestSelectSurfaceInvestigateDefaultAmbient(t *testing.T) {
 	profile := resolvePickerTurnProfile(
-		api.CoordinatorRunContext{WorkflowID: "implement", CurrentPhase: "work"},
+		api.CoordinatorRunContext{WorkflowID: "implement", WorkflowInvestigateEligible: new(true), CurrentPhase: "work"},
 		&api.Session{Posture: api.SessionPostureBuild},
 		nil,
 		"fix the auth bug in src/auth.go",
@@ -87,7 +83,13 @@ func TestSelectSurfaceInvestigateHardBlockWorkersInFlight(t *testing.T) {
 
 func TestSelectSurfaceInvestigateHardBlockPlanCatalog(t *testing.T) {
 	profile := resolvePickerTurnProfile(
-		api.CoordinatorRunContext{WorkflowID: "plan", CurrentPhase: "research", SurfaceProfile: "plan"},
+		api.CoordinatorRunContext{
+			WorkflowID: "plan", CurrentPhase: "research", SurfaceProfile: "plan",
+			WorkflowInvestigateEligible: new(false),
+			PhaseCoordinatorSurface:     "plan_research",
+			PhaseSurfaceTemplate:        "agents/coordinator-surface-plan.md",
+			PhaseModeRefs:               []string{"plan-research"},
+		},
 		&api.Session{Posture: api.SessionPostureSpec},
 		nil,
 		"research the repo",
@@ -152,7 +154,7 @@ func TestSelectSurfaceHostCycleOpenPlanAfterReadScoutUsesInvestigate(t *testing.
 		},
 	}}
 	profile := resolvePickerTurnProfile(
-		api.CoordinatorRunContext{WorkflowID: "implement", CurrentPhase: "work"},
+		api.CoordinatorRunContext{WorkflowID: "implement", WorkflowInvestigateEligible: new(true), CurrentPhase: "work"},
 		&api.Session{Posture: api.SessionPostureBuild},
 		history,
 		"Worker task finished — synthesize",
@@ -169,7 +171,7 @@ func TestSelectSurfaceIdleLoopWakeContinuesInvestigateAfterVisibleUser(t *testin
 		{Role: api.MessageRoleAssistant, Content: "Reading pacifism.py now."},
 	}
 	profile := resolvePickerTurnProfile(
-		api.CoordinatorRunContext{WorkflowID: "implement", CurrentPhase: "work"},
+		api.CoordinatorRunContext{WorkflowID: "implement", WorkflowInvestigateEligible: new(true), CurrentPhase: "work"},
 		&api.Session{Posture: api.SessionPostureBuild},
 		history,
 		HostLoopWakeSentinel,
@@ -187,7 +189,7 @@ func TestSelectSurfaceIdleLoopWakeStaysOrchestrateAfterWorkerSinceVisibleUser(t 
 		},
 	}
 	profile := resolvePickerTurnProfile(
-		api.CoordinatorRunContext{WorkflowID: "implement", CurrentPhase: "work"},
+		api.CoordinatorRunContext{WorkflowID: "implement", WorkflowInvestigateEligible: new(true), CurrentPhase: "work"},
 		&api.Session{Posture: api.SessionPostureBuild},
 		history,
 		HostLoopWakeSentinel,
@@ -213,8 +215,8 @@ func TestSelectSurfaceInvestigateHardBlockPendingOverlay(t *testing.T) {
 func TestSelectSurfaceInvestigateHardBlockChildSubroutine(t *testing.T) {
 	profile := resolvePickerTurnProfile(
 		api.CoordinatorRunContext{
-			WorkflowID: "implement",
-			RunStatus:  string(api.WorkflowRunStatusPausedOnChild),
+			WorkflowID: "implement", WorkflowInvestigateEligible: new(true),
+			RunStatus: string(api.WorkflowRunStatusPausedOnChild),
 		},
 		&api.Session{Posture: api.SessionPostureBuild},
 		nil,
@@ -280,7 +282,7 @@ func TestSelectSurfaceWorkerFinishedWithSiblingsUsesDispatch(t *testing.T) {
 
 func TestSelectSurfaceTransitionBackToInvestigateAfterWorkersIdle(t *testing.T) {
 	profile := resolvePickerTurnProfile(
-		api.CoordinatorRunContext{WorkflowID: "implement", CurrentPhase: "work"},
+		api.CoordinatorRunContext{WorkflowID: "implement", WorkflowInvestigateEligible: new(true), CurrentPhase: "work"},
 		&api.Session{Posture: api.SessionPostureBuild},
 		completeImplementerHistoryForPicker(),
 		"summarize what changed",

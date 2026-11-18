@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/decisions/decisionstest"
@@ -367,16 +368,26 @@ func TestAppendWorkerSummaryCarriesStructuredDecisionRequest(t *testing.T) {
 	}
 
 	anchorEnv := mgr.Workers.Results.EnvelopeForTerminal(ctx, parent.ID, "job-dec")
-	req, ok := kick.WorkerDecisionRequestFromOptions(anchorEnv.KickOptions())
+	if got := anchorEnv.WorkerDecisionRequest["child_session_id"]; got != child.ID {
+		t.Fatalf("decision child = %v, want %q", got, child.ID)
+	}
+	kicks := &kick.KickEngine{}
+	kicks.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
+	kicks.QueueDeferred(parent.ID, "coordinator-worker-task-finished", anchorEnv.KickOptions()...)
+	if id := kicks.TakePendingKickIDUnless(parent.ID, nil); id != "coordinator-worker-task-finished" {
+		t.Fatalf("staged worker decision guidance = %q", id)
+	}
+	nudge, _, ok, err := kicks.RenderPendingNudge(ctx, parent.ID, kick.CoordinatorKickRenderContext{})
+	testutil.FailErr(t, "render worker decision", err)
 	if !ok {
-		t.Fatal("envelope missing last_worker_decision_request")
+		t.Fatal("worker decision did not produce guidance")
 	}
-	if req.Question != "Fix host cache lifecycle or use project scratch?" {
-		t.Fatalf("kick question = %q", req.Question)
+	for _, fact := range append([]string{env.DecisionRequest.Question, string(api.WorkerBlockerSandbox)}, env.DecisionRequest.Options...) {
+		if !strings.Contains(nudge, fact) {
+			t.Fatalf("worker decision guidance omitted %q: %s", fact, nudge)
+		}
 	}
-	if req.BlockerClass != api.WorkerBlockerSandbox || req.ChildSessionID != child.ID {
-		t.Fatalf("kick decision = %+v", req)
-	}
+
 }
 
 func TestWorkerProjectionWaitsForOriginalDispatchResponse(t *testing.T) {

@@ -159,27 +159,3 @@ func PartialWorkerSummaryJobIDs(history []api.Message) []string {
 	}
 	return ids
 }
-
-// PendingOverlaySummaryIDs returns job ids whose latest WorkerSummary is still open.
-func PendingOverlaySummaryIDs(history []api.Message) []string {
-	var ids []string
-	seen := map[string]struct{}{}
-	for i := len(history) - 1; i >= 0; i-- {
-		meta := history[i].WorkerSummary
-		if meta == nil {
-			continue
-		}
-		id := strings.TrimSpace(meta.WorkerID)
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		if meta.Status == api.WorkerSummaryStatusOpen {
-			ids = append(ids, id)
-		}
-	}
-	return ids
-}

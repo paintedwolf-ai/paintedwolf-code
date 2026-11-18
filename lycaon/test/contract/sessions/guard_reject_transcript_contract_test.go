@@ -69,8 +69,7 @@ func TestGuardRejectUsesBlockedAssistantTurnSSOT(t *testing.T) {
 		t.Fatalf("rejectBlockedAssistantTurn SSOT not wired from guard paths: missing %q", requiredRef)
 	}
 
-	// Guard nudges are model steering, never chat rows: appendUserNudge hardcodes
-	// internal visibility, so no guard path may opt a nudge into the transcript.
+	// Host nudges keep internal visibility on every guard path.
 	for _, name := range []string{"closeout_commit.go", "reject.go", "batch.go", "tools.go"} {
 		part, err := os.ReadFile(filepath.Join(pkgDir, name))
 		testutil.FailErr(t, "read promptloop/"+name, err)

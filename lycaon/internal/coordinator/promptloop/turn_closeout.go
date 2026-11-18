@@ -449,19 +449,6 @@ func (l *turnCloseout) returnAssembledEarlyCloseout(
 	return st.history, st.lastAssistantID, st.lastAssistantContent, nil
 }
 
-// turnNudges keeps the host's in-turn guidance: nudges, spend and budget runways, and repeat-call fuses.
-
-// appendUserNudge defers persistence during an open draft slot.
-func (l *turnNudges) appendUserNudge(
-	ctx context.Context,
-	sessionID string,
-	history []api.Message,
-	content string,
-	st *promptLoopTurnState,
-) ([]api.Message, error) {
-	return l.appendHostNudge(ctx, sessionID, history, HostNudge{Content: content}, "", st)
-}
-
 func hostNudgeSignalID(nudge HostNudge) string {
 	signalID := strings.TrimSpace(nudge.SignalID)
 	if nudge.Feedback != nil {

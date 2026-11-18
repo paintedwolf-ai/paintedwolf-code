@@ -76,7 +76,7 @@ func TestComputeSurfaceFacts_reflectsSources(t *testing.T) {
 }
 
 func TestComputeSurfaceFacts_visibleUserClearsHardBlockWhenStructuralGuardsClear(t *testing.T) {
-	runCtx := enrichPickerRunContext(api.CoordinatorRunContext{WorkflowID: "implement", CurrentPhase: "work"})
+	runCtx := api.CoordinatorRunContext{WorkflowID: "implement", WorkflowInvestigateEligible: new(true), CurrentPhase: "work"}
 	sess := &api.Session{Posture: api.SessionPostureBuild}
 	facts := ComputeSurfaceFacts(runCtx, sess, []api.Message{visibleTurnMessage("fix the auth bug")}, ImplementSessionState{})
 	if facts.InvestigateHardBlock {
@@ -91,7 +91,7 @@ func TestComputeSurfaceFacts_visibleUserClearsHardBlockWhenStructuralGuardsClear
 }
 
 func TestComputeSurfaceFacts_investigateDefaultEligibleAmbient(t *testing.T) {
-	runCtx := enrichPickerRunContext(api.CoordinatorRunContext{WorkflowID: "implement", CurrentPhase: "work"})
+	runCtx := api.CoordinatorRunContext{WorkflowID: "implement", WorkflowInvestigateEligible: new(true), CurrentPhase: "work"}
 	facts := ComputeSurfaceFacts(runCtx, &api.Session{}, []api.Message{visibleTurnMessage("hello")}, ImplementSessionState{})
 	if !facts.InvestigateDefaultEligible {
 		t.Fatal("enriched ambient implement run should be investigate-default eligible")
