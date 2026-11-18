@@ -53,6 +53,6 @@
 
 ## Remaining work
 
-Finish final-head CI and repair any remaining relevant failures. Preserve transactional mutation locking and ordinals when composing with #2538, and keep the atomic SQL implementation when #2567 removes memory fixtures. No unlanded PR is needed to land this implementation on current main.
+At the final check on 2026-11-18 18:48 UTC, final-head CI `44367934936` had no assigned runner for its static or plan jobs after approximately 30 minutes. The repository had over 140 queued workflow runs. Remote `coverage:changes` passed on the final source tree, but hosted CI and certification remain unverified. The PR remains ready with its run intact. Inspect that result and repair any relevant failures when runners become available. Preserve transactional mutation locking and ordinals when composing with #2538, and keep the atomic SQL implementation when #2567 removes memory fixtures. No unlanded PR is needed to land this implementation on current main.
 
 The acceptance replay in `milestone-plan.md` remains separate dev-build qualification. No live-model or installed-app qualification has been performed.
