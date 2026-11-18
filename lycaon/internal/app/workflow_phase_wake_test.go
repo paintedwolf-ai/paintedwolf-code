@@ -53,7 +53,7 @@ func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load manifests", err)
 	wfStore := workflowpersistence.New(sqlDB)
-	wfMgr := workflow.NewManager(wfStore, sessionStore, manifests, nil)
+	wfMgr := workflow.NewManager(wfStore, sessionStore, manifests, Filesystem{})
 	now := time.Now().UTC()
 	run := &api.WorkflowRun{
 		ID: "bugbash-run", SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
@@ -115,7 +115,7 @@ func TestTerminalCompletionSettlesWithoutAmbientWake(t *testing.T) {
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load manifests", err)
 	wfStore := workflowpersistence.New(sqlDB)
-	wfMgr := workflow.NewManager(wfStore, sessionStore, manifests, nil)
+	wfMgr := workflow.NewManager(wfStore, sessionStore, manifests, Filesystem{})
 	now := time.Now().UTC()
 	run := &api.WorkflowRun{
 		ID: "options-run", SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
@@ -155,7 +155,7 @@ func TestHumanApprovalAdvanceQueuesWakeForRunningChild(t *testing.T) {
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load manifests", err)
 	wfStore := workflowpersistence.New(sqlDB)
-	wfMgr := workflow.NewManager(wfStore, sessionStore, manifests, nil)
+	wfMgr := workflow.NewManager(wfStore, sessionStore, manifests, Filesystem{})
 	now := time.Now().UTC()
 	parent := &api.WorkflowRun{
 		ID: "bugbash-parent", SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
@@ -195,7 +195,7 @@ func TestPhaseEntryGuidanceUsesTheRunWorkflowVersion(t *testing.T) {
 	testutil.FailErr(t, "create phase guidance session", err)
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load phase guidance workflows", err)
-	manager := workflow.NewManager(workflowpersistence.New(sqlDB), sessionsStore, manifests, nil)
+	manager := workflow.NewManager(workflowpersistence.New(sqlDB), sessionsStore, manifests, Filesystem{})
 	host := session.NewHost(sessionsStore, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
 	registry, err := anchor.LoadRegistryFromConfigRoot()
 	testutil.FailErr(t, "load versioned phase guidance bindings", err)
@@ -232,7 +232,7 @@ func TestPhaseHandoffCarriesDurableEvidenceAndResetsPreviousRunProgress(t *testi
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load handoff manifests", err)
 	wfStore := workflowpersistence.New(database)
-	manager := workflow.NewManager(wfStore, sessionsStore, manifests, nil)
+	manager := workflow.NewManager(wfStore, sessionsStore, manifests, Filesystem{})
 	now := time.Now().UTC()
 	run := &api.WorkflowRun{ID: "handoff", SessionID: "chat", ProjectID: testdbseed.DefaultProjectID, WorkflowID: "security-survey", WorkflowVersion: "1.0.0", Status: api.WorkflowRunStatusRunning, CurrentPhase: "claims", CreatedAt: now, UpdatedAt: now}
 	vars := map[string]any{"evidence_digest": "retained-evidence-identity", "topology_outputs": map[string]any{"fan_out": "retained-topology-output"}, "options": map[string]any{"criterion": "explicit-selection-criterion"}, "review_verdict": map[string]any{"claim": "approved"}}
@@ -283,7 +283,7 @@ func TestFeedbackAndReviewCallbacksRetainGuidanceUntilCoordinatorWake(t *testing
 	host := session.NewHost(sessionStore, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load feedback workflow catalog", err)
-	manager := workflow.NewManager(workflowpersistence.New(database), sessionStore, manifests, nil)
+	manager := workflow.NewManager(workflowpersistence.New(database), sessionStore, manifests, Filesystem{})
 	host.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: manager.Store.Runs, Approvals: manager.Policy, Obligations: manager.Obligations})
 	kicks := &kick.KickEngine{}
 	bus := anchor.NewBus(kicks)
@@ -343,7 +343,7 @@ func TestComposeWorkerAssignmentRendersNamedFollowUpAndWorkflowContext(t *testin
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load workflow manifests", err)
 	wfStore := workflowpersistence.New(database)
-	wfMgr := workflow.NewManager(wfStore, sessionStore, manifests, nil)
+	wfMgr := workflow.NewManager(wfStore, sessionStore, manifests, Filesystem{})
 	now := time.Now().UTC()
 	run := &api.WorkflowRun{
 		ID: "survey-run", SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
@@ -368,7 +368,7 @@ func TestComposeWorkerAssignmentRendersNamedFollowUpAndWorkflowContext(t *testin
 		scanning: &scanning.Runtime{Store: scan.NewSQLStore(database)},
 		boards:   &boards.Runtime{WorkerRecords: records},
 		workerRuntime: &workerruntime.Runtime{
-			Workspace:      workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), nil),
+			Workspace:      workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), workspace.Filesystem{}),
 			InjectRenderer: prompts.NewInjectRenderer(engine),
 		},
 	}

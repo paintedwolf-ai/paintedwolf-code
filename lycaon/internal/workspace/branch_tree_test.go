@@ -26,7 +26,7 @@ func TestBranchTreeAnswersFromTheViewOnEveryProvider(t *testing.T) {
 		kind    adapter.PreparationKind
 	}{
 		{"materialized", func(t *testing.T, state string) *workspace.Manager {
-			return workspace.NewManager(enginepaths.WorkerBranchesRootUnder(state), platform.NewSelector(platform.Config{}), nil)
+			return workspace.NewManager(enginepaths.WorkerBranchesRootUnder(state), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 		}, adapter.PreparationMaterialized},
 		{"mounted", func(t *testing.T, state string) *workspace.Manager {
 			confine.TestingSetAutoConfine(t)
@@ -38,7 +38,7 @@ func TestBranchTreeAnswersFromTheViewOnEveryProvider(t *testing.T) {
 			branches := enginepaths.WorkerBranchesRootUnder(state)
 			privateGit, err := workspace.OpenPrivateGit(branches)
 			testutil.FailErr(t, "open private Git", err)
-			return workspace.NewManager(branches, selector, nil).WithPrivateGit(privateGit)
+			return workspace.NewManager(branches, selector, workspace.Filesystem{}).WithPrivateGit(privateGit)
 		}, adapter.PreparationMounted},
 	}
 	for _, tc := range cases {

@@ -31,7 +31,7 @@ func TestWorkerFixtureReconstructsAfterOriginalWorkspaceRemoval(t *testing.T) {
 	queue := worker.NewSQLServices(database, 2).Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
 	queue.Branches.SetProjectStore(projects)
-	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}), nil))
+	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{}))
 	prepared, err := harnessfixture.Prepare(t.Context(), queue, queue.Branches, sessions, parent, attached.Roots[0], harnessfixture.Setup{
 		Overlays: []harnessfixture.Overlay{{Label: "Retained history", Files: map[string]string{"README.md": "changed\n", "new.txt": "new\n"}}},
 	}, nil)

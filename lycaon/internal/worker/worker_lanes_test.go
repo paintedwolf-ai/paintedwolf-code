@@ -35,7 +35,7 @@ func TestWorkerRoundsShareTheirLaneThroughTheClaimPath(t *testing.T) {
 
 	q := NewSQLServices(sqlDB, 4).Queue
 	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
-	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), platform.NewSelector(platform.Config{}), nil)
+	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	q.Branches.SetWorkerWorkspaceManager(manager)
 	records := workerrecords.New(sqlDB)
 	q.Branches.SetWorkerLanes(&WorkerLanes{Lanes: workerlane.New(manager, records), Records: records, State: workerlane.NewM14State(q)})

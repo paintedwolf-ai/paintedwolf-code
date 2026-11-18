@@ -62,7 +62,7 @@ func newMaterializedManager(t *testing.T, branches string, selector *adapter.Sel
 	coordinator := openMaterializedRecovery(t, branches)
 	gitManager, err := OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	return NewManager(branches, selector, clone).WithRecovery(coordinator).WithPrivateGit(gitManager)
+	return NewManager(branches, selector, Filesystem{CloneFile: clone}).WithRecovery(coordinator).WithPrivateGit(gitManager)
 }
 
 func manifestByPath(t *testing.T, store *checkpoint.Store, checkpointID string) map[string]checkpoint.ManifestEntry {
@@ -221,11 +221,12 @@ func TestTheCostIsDeclaredBeforeTheFirstCopy(t *testing.T) {
 	}
 }
 
+func smallDisk(string) (uint64, bool, error) {
+	return 16, true, nil
+}
+
 func TestAWorkspaceTheDiskCannotHoldIsRefused(t *testing.T) {
-	saved := queryAvailableStorageBytes
-	t.Cleanup(func() { queryAvailableStorageBytes = saved })
-	queryAvailableStorageBytes = func(string) (uint64, bool, error) { return 16, true, nil }
-	mgr := NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), nil)
+	mgr := NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), Filesystem{AvailableStorage: smallDisk})
 	_, err := mgr.CreateWorkerWorkspace(t.Context(), materializedSource(t), "job-full")
 	var capacity *adapter.WorkspaceCapacityError
 	if !errors.As(err, &capacity) || capacity.Available != 16 || !errors.Is(err, ErrWorkspaceStorageExhausted) {

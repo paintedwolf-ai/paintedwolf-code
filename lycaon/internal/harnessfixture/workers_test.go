@@ -92,7 +92,7 @@ func newScriptedHarness(t *testing.T, files map[string]string) *scriptedHarness 
 	h.ledger = sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
 	h.queue.Branches.SetBaselineStore(h.ledger.Baselines)
 	h.queue.Branches.SetProjectStore(h.projects)
-	h.manager = workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}), nil)
+	h.manager = workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	h.queue.Branches.SetWorkerWorkspaceManager(h.manager)
 	h.decisions = sessiondecisions.NewSQL(database)
 	return h
