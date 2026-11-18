@@ -27,6 +27,10 @@ UNDRAFTED = event("pull_request", **{"github.event.action": "ready_for_review",
 READY = event("pull_request", **{"github.event.action": "synchronize", "github.event.pull_request.draft": False})
 
 
+# Qualification jobs that check the candidate source itself rather than its verification receipts.
+CANDIDATE_CHECKS = {"static", "custody"}
+
+
 def is_verdict(step):
     return any(argv[1:3] == ["scripts/ci_verification.py", "gate"] for argv in step.commands())
 
@@ -40,7 +44,7 @@ def gate_receives_needs(job):
 
 class RequiredAggregateLaws(unittest.TestCase):
     def test_each_aggregate_judges_every_blocking_job_even_after_failures(self):
-        for name, gate in (("ci", "check"), ("nightly", "nightly"), ("qualification", "qualification")):
+        for name, gate in (("ci", "check"), ("nightly-verification", "nightly"), ("qualification", "qualification")):
             with self.subTest(workflow=name):
                 jobs = workflow(name).jobs
                 # A job that cannot fail the run, or that reports the aggregate's own result, is not a dependency.
@@ -109,7 +113,11 @@ class CertificationLaws(unittest.TestCase):
         writes = {scope for scope, level in self.dco.permissions.items() if level == "write"}
         self.assertEqual(writes, {"checks", "statuses"})
         concurrency = self.dco.raw["concurrency"]
-        self.assertNotIn("${{", concurrency["group"])
+        group = lambda **values: render(concurrency["group"], event("pull_request_target", **values))
+        first, second = group(**{"github.event.pull_request.number": 1}), group(**{"github.event.pull_request.number": 2})
+        queue = group(**{"github.event.merge_group.head_ref": "refs/heads/gh-readonly-queue/main/pr-1"})
+        self.assertEqual(len({first, second, queue}), 3)
+        self.assertEqual(first, group(**{"github.event.pull_request.number": 1, "github.run_id": 9}))
         self.assertIs(concurrency["cancel-in-progress"], False)
         self.assertFalse(self.job.permissions)
         self.assertFalse(any(step.continues for step in self.job.steps))
@@ -229,12 +237,12 @@ class QualificationSourceLaws(unittest.TestCase):
             for step in checkouts:
                 self.assertEqual(render(step.inputs["ref"], selected), "b" * 40, name)
                 self.assertEqual(render(step.inputs["ref"], default), "c" * 40, name)
-        qualification = workflow("qualification")
-        controllers = [job for job in qualification.jobs.values() if job.checkouts()]
-        self.assertTrue(controllers)
-        for job in controllers:
-            for step in job.checkouts():
-                self.assertEqual(render(step.inputs["ref"], selected), "d" * 40, job.name)
+        # Only the candidate checks run the selected source; every other qualification job runs its controller.
+        candidate = {**selected, "needs": {"source": {"outputs": {"source-sha": "e" * 40}}}}
+        refs = {job.name: {render(step.inputs.get("ref", ""), candidate) for step in job.checkouts()}
+                for job in workflow("qualification").jobs.values() if job.checkouts()}
+        self.assertEqual({name for name, found in refs.items() if found == {"e" * 40}}, CANDIDATE_CHECKS)
+        self.assertEqual({name for name, found in refs.items() if found == {"d" * 40}}, set(refs) - CANDIDATE_CHECKS)
 
     def test_qualification_publishes_only_its_completed_attempt_receipt(self):
         job = workflow("qualification").jobs["qualification"]
