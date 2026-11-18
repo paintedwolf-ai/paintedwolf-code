@@ -104,8 +104,10 @@ func outsideNativeFixture(t *testing.T) (*sourceledger.Store, tools.ToolContext,
 	ctx := t.Context()
 	home, err := os.UserHomeDir()
 	testutil.FailErr(t, "find home directory", err)
-	// Default temporary roots are intentionally excluded from outside history.
-	base, err := os.MkdirTemp(home, "painted-wolf-outside-move-")
+	if hostHome := os.Getenv("PW_TEST_HOST_HOME"); hostHome != "" {
+		home = hostHome
+	}
+	base, err := os.MkdirTemp(home, "painted-wolf-outside-move-") //nolint:usetesting // Outside history excludes fixture scratch roots.
 	testutil.FailErr(t, "create outside fixture", err)
 	t.Cleanup(func() { testutil.FailErr(t, "remove outside fixture", os.RemoveAll(base)) })
 	inside, outside := filepath.Join(base, "project"), filepath.Join(base, "other")
