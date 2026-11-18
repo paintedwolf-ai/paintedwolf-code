@@ -159,9 +159,8 @@ const promptsDir = "lycaon/internal/prompts/"
 var readerFactsTree = map[string]string{
 	promptsDir + "reader.go": "package prompts\n\ntype Reader struct{ facts map[string]any }\n\n" +
 		"func (r Reader) Facts() map[string]any { return r.facts }\n\n" +
-		"type ReaderFacts struct{ Root string }\n\nfunc (f ReaderFacts) Map() map[string]any { return map[string]any{\"root\": f.Root} }\n\n" +
-		"func project(f ReaderFacts) map[string]any { return f.Map() }\n",
-	promptsDir + "reader_facts.go":       "package prompts\n\nfunc build() ReaderFacts { return ReaderFacts{Root: \"@a\"} }\n",
+		"type ReaderFacts struct{ Root string }\n\nfunc (f ReaderFacts) Map() map[string]any { return map[string]any{\"root\": f.Root} }\n",
+	promptsDir + "reader_facts.go":       "package prompts\n\nfunc buildReaderFacts() map[string]any { return ReaderFacts{Root: \"@a\"}.Map() }\n",
 	promptsDir + "reader_facts_vocab.go": "package prompts\n\nfunc Vars(r Reader, occurrence map[string]any) (map[string]any, error) {\n\tout := r.Facts()\n\tfor k, v := range occurrence {\n\t\tout[k] = v\n\t}\n\treturn out, nil\n}\n",
 }
 

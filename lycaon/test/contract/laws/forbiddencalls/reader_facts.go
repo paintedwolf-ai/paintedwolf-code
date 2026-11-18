@@ -23,7 +23,7 @@ var readerFacts = []laws.Rule{{
 	// data that would shadow a reader fact. Reading the raw facts anywhere
 	// else renders a template without that check.
 	Name:    "prompt-vars-through-vars",
-	Anchors: []laws.Anchor{laws.Func("internal/prompts", "Vars"), laws.Decl("internal/prompts", "Reader.Facts"), laws.Decl("internal/prompts", "ReaderFacts.Map")},
+	Anchors: []laws.Anchor{laws.Func("internal/prompts", "Vars"), laws.Func("internal/prompts", "buildReaderFacts"), laws.Decl("internal/prompts", "Reader.Facts"), laws.Decl("internal/prompts", "ReaderFacts.Map")},
 	Exempt: []laws.Exemption{
 		{Key: "internal/prompts/command_guidance_debug.go:BuildCommandGuidanceSnapshot", Reason: "the debug snapshot renders raw facts; TS11 #2435 moves it to Vars"},
 		{Key: "internal/prompts/skill_template_vars.go:SkillVars", Reason: "falls back to raw facts when Vars fails; TS11 #2435 returns the error instead"},
@@ -46,7 +46,7 @@ var readerFacts = []laws.Rule{{
 						}
 					}
 					door, guarded := readerFactsDoors[key]
-					if !guarded || f.Site(n.Pos()) == door || f.Rel == door || r.Exempt(f.Site(n.Pos())) {
+					if !guarded || f.Site(n.Pos()) == door || r.Exempt(f.Site(n.Pos())) {
 						return true
 					}
 					r.ReportAt(n.Pos(), "%s outside %s; build template variables with prompts.Vars", key, door)
