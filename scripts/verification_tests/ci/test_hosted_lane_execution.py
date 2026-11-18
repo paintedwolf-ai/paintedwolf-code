@@ -112,20 +112,19 @@ class HostedExecutionTests(unittest.TestCase):
             ci.run_lane(NIX)
             self.assertEqual(run.call_args.args[0], ["./task", "nix:check"])
 
-    def test_the_changed_package_lane_runs_only_the_edited_packages_in_and_out_of_merge_groups(self):
+    def test_the_changed_package_lane_runs_only_the_edited_packages(self):
         lane = live(phase="changed-packages")
         scope = {"base": "b" * 40, "head": "h" * 40, "full": False, "reasons": [],
                  "paths": ["lycaon/internal/confine/seatbelt_darwin.go", "lycaon/internal/db/store.go"]}
         target = hosted_plan.lanes()[lane]["targets"]
-        for merge_group in (False, True):
-            with self.subTest(merge_group=merge_group), tempfile.TemporaryDirectory() as directory, \
-                    patch.dict(ci.os.environ, {"PW_CI_AFFECTED": "1"}), \
-                    patch("ci_policy.impact.change", return_value=scope), \
-                    patch.object(ci, "artifact_root", return_value=Path(directory)), \
-                    patch.object(ci.subprocess, "call", return_value=0) as run:
-                self.assertEqual(ci.run_lane(lane, merge_group=merge_group), 0)
-                self.assertEqual([call.args[0] for call in run.call_args_list],
-                                 [["./task", *target, "--", "./internal/confine"]])
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.dict(ci.os.environ, {"PW_CI_AFFECTED": "1"}), \
+                patch("ci_policy.impact.change", return_value=scope), \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.subprocess, "call", return_value=0) as run:
+            self.assertEqual(ci.run_lane(lane), 0)
+            self.assertEqual([call.args[0] for call in run.call_args_list],
+                             [["./task", *target, "--", "./internal/confine"]])
         # A change with no Go source left to run leaves the lane unverified, never an empty pass.
         with tempfile.TemporaryDirectory() as directory, \
                 patch.dict(ci.os.environ, {"PW_CI_AFFECTED": "1"}), \

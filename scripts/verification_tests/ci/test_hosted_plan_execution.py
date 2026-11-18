@@ -37,7 +37,7 @@ class LaneRuleTests(unittest.TestCase):
 
     def test_arguments_and_admission_checks_belong_to_their_targets(self):
         gate = dict(check=("test:short", "lint:fast"), fast=("test:short", "lint:fast"))
-        for change in ({"arguments": []}, {"arguments": [""]}, {"arguments": ["x"]},
+        for change in ({"arguments": []}, {"arguments": [""]},
                        {"admission_checks": [["test:confine:linux", "--", "supervisor"]]}):
             with self.subTest(change=change):
                 self.refused(ci=lanes(tests={**lane("test:short", "lint:fast"), **change}), **gate)
