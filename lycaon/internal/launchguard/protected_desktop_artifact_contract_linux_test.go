@@ -7,12 +7,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -107,4 +110,35 @@ func TestRealDesktopSelectionRefusesMissingArtifactWithoutRunningTheGoLeg(t *tes
 	if !errors.As(err, &exited) || exited.ExitCode() != 2 || !strings.Contains(string(output), "unverified: launch-desktop requires") {
 		t.Fatalf("missing real-desktop input did not refuse qualification: %v\n%s", err, output)
 	}
+}
+
+func fixtureArchitecture(t *testing.T) string {
+	t.Helper()
+	arch, err := releaseFixtureArchitecture()
+	testutil.FailErr(t, "read release architecture", err)
+	return arch
+}
+
+func releaseFixtureArchitecture() (string, error) {
+	path := filepath.Join(configlayout.FindModuleRoot(), "..", "packaging", "release-platforms.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	var catalog struct {
+		Platforms []struct {
+			OperatingSystem string `json:"goos"`
+			GoArch          string `json:"goarch"`
+			ArtifactArch    string `json:"artifact_arch"`
+		} `json:"platforms"`
+	}
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		return "", err
+	}
+	for _, platform := range catalog.Platforms {
+		if platform.OperatingSystem == runtime.GOOS && platform.GoArch == runtime.GOARCH && platform.ArtifactArch != "" {
+			return platform.ArtifactArch, nil
+		}
+	}
+	return "", fmt.Errorf("release catalog has no architecture for %s/%s", runtime.GOOS, runtime.GOARCH)
 }

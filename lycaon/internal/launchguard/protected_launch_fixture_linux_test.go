@@ -26,7 +26,6 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -310,37 +309,6 @@ func runVaultServer(dir, vaultBin, uidStr, gidStr string) error {
 		"--locks", filepath.Join(dir, "locks"),
 	}
 	return syscall.Exec(vaultBin, args, []string{"PATH=/usr/bin:/bin"})
-}
-
-func fixtureArchitecture(t *testing.T) string {
-	t.Helper()
-	arch, err := releaseFixtureArchitecture()
-	testutil.FailErr(t, "read release architecture", err)
-	return arch
-}
-
-func releaseFixtureArchitecture() (string, error) {
-	path := filepath.Join(configlayout.FindModuleRoot(), "..", "packaging", "release-platforms.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	var catalog struct {
-		Platforms []struct {
-			OperatingSystem string `json:"goos"`
-			GoArch          string `json:"goarch"`
-			ArtifactArch    string `json:"artifact_arch"`
-		} `json:"platforms"`
-	}
-	if err := json.Unmarshal(data, &catalog); err != nil {
-		return "", err
-	}
-	for _, platform := range catalog.Platforms {
-		if platform.OperatingSystem == runtime.GOOS && platform.GoArch == runtime.GOARCH && platform.ArtifactArch != "" {
-			return platform.ArtifactArch, nil
-		}
-	}
-	return "", fmt.Errorf("release catalog has no architecture for %s/%s", runtime.GOOS, runtime.GOARCH)
 }
 
 // sudoFixture runs this test binary's fixture mode as root.
