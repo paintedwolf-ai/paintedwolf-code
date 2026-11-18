@@ -568,7 +568,7 @@ func runOneProcWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	if err := errors.Join(fssync.Always(flushed), flushed.Close()); err != nil {
+	if err := errors.Join(fssync.File(flushed), flushed.Close()); err != nil {
 		t.Fatalf("flush: %v", err)
 	}
 	cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", "cat g && printf 'shell\\n' > h")

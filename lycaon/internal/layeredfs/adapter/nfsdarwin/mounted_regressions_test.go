@@ -148,7 +148,7 @@ func TestReadOnlyCreateAndLaterChmodKeepAcknowledgedBytes(t *testing.T) {
 	if _, err := f.Write([]byte("after chmod")); err != nil {
 		t.Fatalf("write after fchmod: %v", err)
 	}
-	if err := fssync.Always(f); err != nil {
+	if err := fssync.File(f); err != nil {
 		t.Fatalf("fsync after fchmod: %v", err)
 	}
 	if err := f.Close(); err != nil {

@@ -102,7 +102,7 @@ func platformHardLink(req HardLinkRequest) error {
 	if err := renameWindowsEntry(stagedHandle, dstParent.handle, dstParent.name, req.Replace); err != nil {
 		return err
 	}
-	return flushHandle(dstParent.handle)
+	return windows.FlushFileBuffers(dstParent.handle)
 }
 
 func stageWindowsHardLink(srcHandle windows.Handle, dstParent *windowsParent) (string, stagingHold, error) {
@@ -190,7 +190,7 @@ func MkdirAll(loc Location, _ os.FileMode) (createdCount int, err error) {
 		}
 		if created {
 			anyCreated = true
-			if err := flushHandle(handle); err != nil {
+			if err := windows.FlushFileBuffers(handle); err != nil {
 				_ = windows.CloseHandle(next)
 				return createdCount, err
 			}
@@ -201,5 +201,5 @@ func MkdirAll(loc Location, _ os.FileMode) (createdCount int, err error) {
 	if !anyCreated {
 		return createdCount, nil
 	}
-	return createdCount, flushHandle(handle)
+	return createdCount, windows.FlushFileBuffers(handle)
 }

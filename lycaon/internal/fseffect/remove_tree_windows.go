@@ -33,7 +33,7 @@ func RemoveTreeGuarded(loc Location, expected string) error {
 	if err := removeWindowsTree(handle); err != nil {
 		return err
 	}
-	return flushHandle(parent.handle)
+	return windows.FlushFileBuffers(parent.handle)
 }
 
 func removeWindowsTree(handle windows.Handle) error {

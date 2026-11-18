@@ -4,17 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lycaon/lycaon/internal/fssync"
 	"golang.org/x/sys/windows"
 )
-
-// flushHandle flushes a held handle under the process durability policy.
-func flushHandle(handle windows.Handle) error {
-	if fssync.Relaxed() {
-		return nil
-	}
-	return windows.FlushFileBuffers(handle)
-}
 
 func SyncDirectory(root *os.Root, path string) error {
 	if filepath.Clean(path) == "." {
@@ -27,7 +18,7 @@ func SyncDirectory(root *os.Root, path string) error {
 			return err
 		}
 		defer func() { _ = windows.CloseHandle(handle) }()
-		return flushHandle(handle)
+		return windows.FlushFileBuffers(handle)
 	}
 	parent, err := openWindowsParent(Location{Root: root.Name(), Rel: path}, false, true)
 	if err != nil {
@@ -39,5 +30,5 @@ func SyncDirectory(root *os.Root, path string) error {
 		return err
 	}
 	defer func() { _ = windows.CloseHandle(handle) }()
-	return flushHandle(handle)
+	return windows.FlushFileBuffers(handle)
 }
