@@ -14,7 +14,7 @@ import (
 )
 
 func TestExpiredScanClaimBecomesExplicitFailure(t *testing.T) {
-	sqlDB := testdbfixture.Open(t, "store.db")
+	sqlDB := testdbfixture.Open(t, "store.DB()")
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
 	store := NewSQLStore(sqlDB)
@@ -48,7 +48,7 @@ func TestExpiredScanClaimBecomesExplicitFailure(t *testing.T) {
 }
 
 func TestScanCompletionRequiresCurrentClaim(t *testing.T) {
-	sqlDB := testdbfixture.Open(t, "store.db")
+	sqlDB := testdbfixture.Open(t, "store.DB()")
 	store := NewSQLStore(sqlDB)
 	testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), api.CodeScan{
 		ID: "scan-1", CanonicalPath: t.TempDir(), Categories: []api.ScanCategory{api.ScanCategorySAST},

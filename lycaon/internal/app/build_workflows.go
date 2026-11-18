@@ -149,7 +149,7 @@ func (b *serveBuilder) wireWorkflowConditions() error {
 		ModuleRoot:              b.catalog.ModuleRoot,
 		PlanCloseout:            b.workerRuntime.PlanCloseoutComplete,
 		PlanWorkIDs:             b.workerRuntime.PlanWorkIDs,
-		ScanStore:               b.scanning.Store,
+		ScanReads:               b.scanning.Store.Reads,
 		ScanObligation:          b.scanning.Obligation,
 		Snapshots:               b.storage.SourceLedger.Snapshots,
 		GatesCfg:                b.scanning.GatesCfg,
@@ -191,6 +191,6 @@ func (b *serveBuilder) wireWorkflowConditions() error {
 	b.workflows.Manager.Verdicts.Questions.WorkerTasks = workflowTaskQuery1
 	b.workflows.Manager.Verdicts.WorkerTasks = workflowTaskQuery1
 	b.security.BindSpawnAgents(b.workflows.Manager.Policy.AllowedAgents)
-	b.workflows.Manager.Verdicts.Evidence.EvidenceDigests = append(b.workflows.Manager.Verdicts.Evidence.EvidenceDigests, scan.WorkflowEvidenceDigest(b.scanning.Store))
+	b.workflows.Manager.Verdicts.Evidence.EvidenceDigests = append(b.workflows.Manager.Verdicts.Evidence.EvidenceDigests, scan.WorkflowEvidenceDigest(b.scanning.Store.Reads))
 	return nil
 }

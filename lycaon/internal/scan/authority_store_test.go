@@ -18,7 +18,7 @@ import (
 
 func authorityTestStore(t *testing.T) *SQLStore {
 	t.Helper()
-	database := testdbfixture.Open(t, "store.db")
+	database := testdbfixture.Open(t, "store.DB()")
 	return NewSQLStore(database)
 }
 

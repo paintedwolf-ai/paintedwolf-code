@@ -14,7 +14,7 @@ import (
 
 func newScanStore(t *testing.T) (*SQLStore, context.Context) {
 	t.Helper()
-	sqlDB := testdbfixture.Open(t, "store.db")
+	sqlDB := testdbfixture.Open(t, "store.DB()")
 	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, sqlDB, "sess-1", testdbseed.DefaultProjectID)
 	return NewSQLStore(sqlDB), context.Background()

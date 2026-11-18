@@ -73,7 +73,7 @@ func BenchmarkAssessmentViewLargeHistory(b *testing.B) {
 }
 
 func benchmarkAssessmentView(b *testing.B, history int) {
-	store := NewSQLStore(testdbfixture.Open(b, "store.db"))
+	store := NewSQLStore(testdbfixture.Open(b, "store.DB()"))
 	root := b.TempDir()
 	findings := make([]api.SecurityFinding, 20000)
 	for i := range findings {
@@ -100,7 +100,7 @@ func benchmarkAssessmentView(b *testing.B, history int) {
 			}
 		}
 		if i < 2 {
-			_, err = store.db.ExecContext(b.Context(), "UPDATE code_scans SET ingest_json = ? WHERE id = ?", `{"unused":"`+strings.Repeat("x", 4<<20)+`"}`, s.ID)
+			_, err = store.DB().ExecContext(b.Context(), "UPDATE code_scans SET ingest_json = ? WHERE id = ?", `{"unused":"`+strings.Repeat("x", 4<<20)+`"}`, s.ID)
 			if err != nil {
 				b.Fatalf("seed historical payload: %v", err)
 			}
@@ -130,9 +130,9 @@ func TestOpeningProjectionsKeepEvidenceAndWarningCounts(t *testing.T) {
 		testutil.FailErr(t, "complete scan", err)
 	}
 	// Opening projections read aggregates without decoding detail payloads.
-	_, err := store.db.ExecContext(t.Context(), `UPDATE scan_summaries SET summary_json = '[]'`)
+	_, err := store.DB().ExecContext(t.Context(), `UPDATE scan_summaries SET summary_json = '[]'`)
 	testutil.FailErr(t, "isolate list projection", err)
-	_, err = store.db.ExecContext(t.Context(), `UPDATE scan_finding_sets SET warnings_json = '[1]'`)
+	_, err = store.DB().ExecContext(t.Context(), `UPDATE scan_finding_sets SET warnings_json = '[1]'`)
 	testutil.FailErr(t, "isolate warning projection", err)
 	view, err := store.Findings.AssessmentView(t.Context(), []string{root})
 	testutil.FailErr(t, "read assessment", err)

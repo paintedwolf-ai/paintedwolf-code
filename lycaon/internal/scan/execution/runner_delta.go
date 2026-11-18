@@ -219,7 +219,7 @@ func (w *fileFindingCacheWriter) flush(ctx context.Context) error {
 	if len(w.pending) == 0 {
 		return ctx.Err()
 	}
-	err := w.runner.Store.Findings.SaveBlobFindings(ctx, w.fingerprint, w.pending, time.Now().UTC())
+	err := w.runner.findings.SaveBlobFindings(ctx, w.fingerprint, w.pending, time.Now().UTC())
 	w.pending = w.pending[:0]
 	return err
 }

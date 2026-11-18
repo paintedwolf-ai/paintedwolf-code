@@ -76,7 +76,7 @@ func TestScanFailsWhenTheBoundSnapshotIsNotResident(t *testing.T) {
 
 	ran := false
 	runner := &Runner{
-		Store: sqlStore, Snapshots: snapshots, Broker: backgroundwork.Process(),
+		reads: sqlStore.Reads, runs: sqlStore.Runs, findings: sqlStore.Findings, ignores: sqlStore.Ignores, database: sqlStore.DB(), Snapshots: snapshots, Broker: backgroundwork.Process(),
 		Registry: recordingRegistry{onRun: func(scanbase.ScanRequest) { ran = true }},
 	}
 	claimed, err := sqlStore.Runs.ClaimNext(t.Context())
@@ -116,7 +116,7 @@ func TestScanUsesIsolatedSnapshotWhileLiveFilesMove(t *testing.T) {
 
 	var scanned []string
 	runner := &Runner{
-		Store: sqlStore, Snapshots: snapshots, Broker: backgroundwork.Process(),
+		reads: sqlStore.Reads, runs: sqlStore.Runs, findings: sqlStore.Findings, ignores: sqlStore.Ignores, database: sqlStore.DB(), Snapshots: snapshots, Broker: backgroundwork.Process(),
 		Registry: recordingRegistry{onRun: func(req scanbase.ScanRequest) {
 			scanned = req.Paths
 			if req.ProjectDir == canonical {
@@ -168,7 +168,7 @@ func TestScanAcceptsIdenticalContentWithNewMetadata(t *testing.T) {
 	modified := info.ModTime().Add(time.Hour)
 	testutil.FailErr(t, "touch identical content", os.Chtimes(path, modified, modified))
 	runner := &Runner{
-		Store: sqlStore, Snapshots: snapshots, Broker: backgroundwork.Process(),
+		reads: sqlStore.Reads, runs: sqlStore.Runs, findings: sqlStore.Findings, ignores: sqlStore.Ignores, database: sqlStore.DB(), Snapshots: snapshots, Broker: backgroundwork.Process(),
 		Registry: recordingRegistry{},
 	}
 	claimed, err := sqlStore.Runs.ClaimNext(t.Context())

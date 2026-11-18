@@ -54,7 +54,7 @@ func (s *RunStore) LandedChangeForScan(ctx context.Context, scanID string) (*Lan
 }
 
 // LatestRequiredLandedChangeForSession returns the newest required generation landed by sessionID's workers.
-func (s *RunStore) LatestRequiredLandedChangeForSession(ctx context.Context, sessionID string) (*LandedChange, error) {
+func (s *ReadStore) LatestRequiredLandedChangeForSession(ctx context.Context, sessionID string) (*LandedChange, error) {
 	if s == nil || s.tx.db == nil || strings.TrimSpace(sessionID) == "" {
 		return nil, nil
 	}
@@ -69,7 +69,7 @@ func (s *RunStore) LatestRequiredLandedChangeForSession(ctx context.Context, ses
 }
 
 // LatestRequiredScanForSession returns the cumulative landing scan for sessionID.
-func (s *RunStore) LatestRequiredScanForSession(ctx context.Context, sessionID string) (*api.CodeScan, error) {
+func (s *ReadStore) LatestRequiredScanForSession(ctx context.Context, sessionID string) (*api.CodeScan, error) {
 	landed, err := s.LatestRequiredLandedChangeForSession(ctx, sessionID)
 	if err != nil || landed == nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (s *RunStore) LatestRequiredScanForSession(ctx context.Context, sessionID s
 	if strings.TrimSpace(landed.ScanID) == "" {
 		return nil, fmt.Errorf("landed change %s is missing its scan obligation", landed.ID)
 	}
-	rec, err := s.reads.Get(ctx, landed.ScanID)
+	rec, err := s.Get(ctx, landed.ScanID)
 	if err != nil {
 		return nil, err
 	}

@@ -16,7 +16,7 @@ import (
 func TestFindingHistoryAndLedgerRollBackWithoutTheirEvent(t *testing.T) {
 	store := authorityTestStore(t)
 	root := t.TempDir()
-	testdbseed.InsertProjectRoot(t, store.db, testdbseed.DefaultProjectID, root)
+	testdbseed.InsertProjectRoot(t, store.DB(), testdbseed.DefaultProjectID, root)
 	first := authorityScan("history-event", "assessment-event", root, "snapshot-event", "sast", api.ScanTargetFull, nil)
 	testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), first, nil, ""))
 	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "finding", "a.go", 1)

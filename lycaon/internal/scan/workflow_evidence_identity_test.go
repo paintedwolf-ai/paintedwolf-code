@@ -32,7 +32,7 @@ func TestWorkflowInventoryKeepsBoundEmptyScanDespiteNewAmbientFindings(t *testin
 		t.Fatal("ambient control must contain a persisted finding group")
 	}
 	for _, runID := range []string{"review-run", "absent-run"} {
-		raw, err := WorkflowAdvisoryInventory(t.Context(), ledger, runID)
+		raw, err := WorkflowAdvisoryInventory(t.Context(), ledger.Reads, runID)
 		testutil.FailErr(t, "project run inventory", err)
 		var inventory struct {
 			ScanIDs     []string `json:"scan_ids"`

@@ -29,7 +29,7 @@ type ConditionDependencies struct {
 	ModuleRoot              string
 	PlanCloseout            func(ctx context.Context, sessionID string) (bool, error)
 	PlanWorkIDs             func(ctx context.Context, sessionID string) ([]string, error)
-	ScanStore               *scan.SQLStore
+	ScanReads               *scan.ReadStore
 	ScanObligation          *scan.WorkflowObligation
 	Snapshots               *sourcesnapshot.Store
 	GatesCfg                scancfg.GatesConfig
@@ -64,7 +64,7 @@ func (r *Runtime) BuildConditions(ctx context.Context, deps ConditionDependencie
 		PlanCloseout:            deps.PlanCloseout,
 		SourceVerifyPassed:      deps.SourceVerifyPassed,
 		DeliveryReported:        deps.DeliveryReported,
-		ScanLedger:              deps.ScanStore,
+		ScanLedger:              deps.ScanReads,
 		SourceSnapshots:         deps.Snapshots,
 		ScanProactiveCategories: proactiveCategories,
 		SecurityScannersEnabled: deps.SecurityScannersEnabled,

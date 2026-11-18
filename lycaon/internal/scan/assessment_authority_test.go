@@ -30,7 +30,7 @@ func TestAssessmentAuthorityRequiresDeclaredCoverage(t *testing.T) {
 				t.Fatalf("scan authority = %t, want %t", got, wantAuthority)
 			}
 			var complete bool
-			err := store.db.QueryRowContext(t.Context(),
+			err := store.DB().QueryRowContext(t.Context(),
 				"SELECT is_complete FROM security_assessments WHERE id = ?", record.AssessmentID).Scan(&complete)
 			testutil.FailErr(t, "read persisted authority", err)
 			if complete != wantAuthority {

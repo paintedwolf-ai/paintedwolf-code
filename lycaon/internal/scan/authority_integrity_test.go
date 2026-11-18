@@ -23,9 +23,9 @@ func TestScanReadRequiresPersistedAuthorityFacts(t *testing.T) {
 	testutil.FailErr(t, "insert completed scan", store.Runs.Insert(t.Context(), record, nil, ""))
 	ingest, err := json.Marshal(IngestArtifacts{CoverageStatus: api.ScanCoverageComplete})
 	testutil.FailErr(t, "encode ingest result", err)
-	_, err = store.db.ExecContext(t.Context(), "UPDATE code_scans SET ingest_json = ? WHERE id = ?", string(ingest), record.ID)
+	_, err = store.DB().ExecContext(t.Context(), "UPDATE code_scans SET ingest_json = ? WHERE id = ?", string(ingest), record.ID)
 	testutil.FailErr(t, "store ingest result", err)
-	_, err = store.db.ExecContext(t.Context(), "DELETE FROM scan_run_facts WHERE scan_id = ?", record.ID)
+	_, err = store.DB().ExecContext(t.Context(), "DELETE FROM scan_run_facts WHERE scan_id = ?", record.ID)
 	testutil.FailErr(t, "remove required authority facts", err)
 	got, err := store.Reads.Get(t.Context(), record.ID)
 	if got != nil || !errors.Is(err, sql.ErrNoRows) {
@@ -98,7 +98,7 @@ func TestScanReadRequiresReferencedFindingSet(t *testing.T) {
 	record := authorityScan("scan", "assessment", t.TempDir(), "snapshot", "sast", api.ScanTargetFull, nil)
 	testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), record, nil, ""))
 	completed := completeNextScan(t, store)
-	_, err := store.db.ExecContext(t.Context(), "DELETE FROM scan_finding_sets WHERE id = ?", completed.FindingSetID)
+	_, err := store.DB().ExecContext(t.Context(), "DELETE FROM scan_finding_sets WHERE id = ?", completed.FindingSetID)
 	testutil.FailErr(t, "remove referenced finding set", err)
 	got, err := store.Reads.Get(t.Context(), record.ID)
 	if got != nil || !errors.Is(err, sql.ErrNoRows) {
@@ -110,7 +110,7 @@ func TestClaimNextRollsBackMissingAuthorityFacts(t *testing.T) {
 	store := authorityTestStore(t)
 	record := authorityScan("scan", "assessment", t.TempDir(), "snapshot", "sast", api.ScanTargetFull, nil)
 	testutil.FailErr(t, "insert pending scan", store.Runs.Insert(t.Context(), record, nil, ""))
-	_, err := store.db.ExecContext(t.Context(), "DELETE FROM scan_run_facts WHERE scan_id = ?", record.ID)
+	_, err := store.DB().ExecContext(t.Context(), "DELETE FROM scan_run_facts WHERE scan_id = ?", record.ID)
 	testutil.FailErr(t, "remove required authority facts", err)
 	claimed, err := store.Runs.ClaimNext(t.Context())
 	if claimed != nil || !errors.Is(err, sql.ErrNoRows) {

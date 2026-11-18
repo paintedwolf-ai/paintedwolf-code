@@ -106,7 +106,7 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 		SessionWorkIDs:          planSvc.SessionWorkIDs,
 		Evidence:                conditions.StoreEvidenceReader{Store: evidenceStore},
 		PlanCloseout:            planSvc.CloseoutComplete,
-		ScanLedger:              store,
+		ScanLedger:              store.Reads,
 		SourceSnapshots:         coord.SnapshotStore(),
 		ScanProactiveCategories: proactive,
 	})

@@ -46,7 +46,7 @@ func TestScanStubPredicatesWithSQLiteLedger(t *testing.T) {
 	}
 
 	deps := scanDomainDeps(stubScanLedger{}, nil)
-	deps.ScanLedger = store
+	deps.ScanLedger = store.Reads
 	deps.SourceSnapshots = staticSourceSnapshot{id: "head-sql"}
 	reg, err := conditions.NewDefaultRegistry(deps)
 	testutil.FailErr(t, "build conditions registry", err)

@@ -13,7 +13,7 @@ import (
 )
 
 func TestSQLStoreListByWorkflowRunID(t *testing.T) {
-	sqlDB := testdbfixture.Open(t, "store.db")
+	sqlDB := testdbfixture.Open(t, "store.DB()")
 
 	store := NewSQLStore(sqlDB)
 	ctx := context.Background()
@@ -49,7 +49,7 @@ func TestSQLStoreListByWorkflowRunID(t *testing.T) {
 }
 
 func TestSQLStoreBindsReusableScanToMultipleContexts(t *testing.T) {
-	sqlDB := testdbfixture.Open(t, "store.db")
+	sqlDB := testdbfixture.Open(t, "store.DB()")
 
 	store := NewSQLStore(sqlDB)
 	ctx := context.Background()
@@ -104,7 +104,7 @@ func TestSQLStoreBindsReusableScanToMultipleContexts(t *testing.T) {
 }
 
 func TestSQLStoreTracksTerminalWorkflowDelivery(t *testing.T) {
-	sqlDB := testdbfixture.Open(t, "store.db")
+	sqlDB := testdbfixture.Open(t, "store.DB()")
 	store := NewSQLStore(sqlDB)
 	ctx := t.Context()
 	testdbseed.InsertWorkflowRun(t, sqlDB, "run-terminal", "session-terminal", testdbseed.DefaultProjectID)
@@ -138,7 +138,7 @@ func TestSQLStoreTracksTerminalWorkflowDelivery(t *testing.T) {
 }
 
 func TestSQLStoreCodeScanCRUD(t *testing.T) {
-	sqlDB := testdbfixture.Open(t, "store.db")
+	sqlDB := testdbfixture.Open(t, "store.DB()")
 
 	store := NewSQLStore(sqlDB)
 	rec := api.CodeScan{
@@ -163,7 +163,7 @@ func TestSQLStoreCodeScanCRUD(t *testing.T) {
 }
 
 func TestSQLStoreListOpen(t *testing.T) {
-	sqlDB := testdbfixture.Open(t, "store.db")
+	sqlDB := testdbfixture.Open(t, "store.DB()")
 
 	store := NewSQLStore(sqlDB)
 	ctx := t.Context()
@@ -182,7 +182,7 @@ func TestSQLStoreListOpen(t *testing.T) {
 }
 
 func TestSQLStoreListBySessionIDTieBreaksByInsertOrder(t *testing.T) {
-	sqlDB := testdbfixture.Open(t, "store.db")
+	sqlDB := testdbfixture.Open(t, "store.DB()")
 	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, sqlDB, "sess-1", testdbseed.DefaultProjectID)
 
@@ -221,7 +221,7 @@ func TestSQLStoreListBySessionIDTieBreaksByInsertOrder(t *testing.T) {
 }
 
 func TestSQLStoreSessionSnapshotQueries(t *testing.T) {
-	sqlDB := testdbfixture.Open(t, "store.db")
+	sqlDB := testdbfixture.Open(t, "store.DB()")
 	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, sqlDB, "sess-snap", testdbseed.DefaultProjectID)
 

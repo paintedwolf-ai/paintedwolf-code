@@ -20,7 +20,7 @@ func (h blindReadHandle) QueryRowContext(ctx context.Context, _ string, _ ...any
 }
 
 func TestClaimNextDoesNotDependOnReadPoolVisibility(t *testing.T) {
-	database := testdbfixture.Open(t, "store.db")
+	database := testdbfixture.Open(t, "store.DB()")
 	store := NewSQLStore(blindReadHandle{Handle: database})
 	testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), api.CodeScan{
 		ID:                   "scan-1",

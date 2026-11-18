@@ -91,7 +91,7 @@ func (v ResultViews) runScanPack(
 	if !waits {
 		return v.FullPassReceipt(ctx, pass, ReceiptOptions{})
 	}
-	return waitForv.FullPassReceipt(ctx, pass, scanPackWaitDuration(args["timeout_ms"]))
+	return v.waitForFullPassReceipt(ctx, pass, scanPackWaitDuration(args["timeout_ms"]))
 }
 
 // scanRootDisplay renders the scan root the way the model addresses the

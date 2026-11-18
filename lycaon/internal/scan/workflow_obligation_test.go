@@ -73,7 +73,7 @@ func TestWorkflowObligationStatusCountsThePassItAskedFor(t *testing.T) {
 				{ScannerID: "lycaon-sast", Phase: tc.phase},
 			}}
 			obligation := &WorkflowObligation{
-				Ledger: stubWorkflowScanLedger{scans: tc.scans, passes: []FullPass{pass}},
+				Reads: stubWorkflowScanLedger{scans: tc.scans, passes: []FullPass{pass}}, Passes: stubWorkflowScanLedger{scans: tc.scans, passes: []FullPass{pass}},
 				Params: func(context.Context, string, string, string) (map[string]any, error) {
 					return map[string]any{"categories": []any{"security"}, "full": true}, nil
 				},
@@ -141,7 +141,7 @@ func TestWorkflowObligationStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			obligation := &WorkflowObligation{
-				Ledger: stubWorkflowScanLedger{scans: tt.scans},
+				Reads: stubWorkflowScanLedger{scans: tt.scans}, Passes: stubWorkflowScanLedger{scans: tt.scans},
 				Params: func(context.Context, string, string, string) (map[string]any, error) {
 					return map[string]any{"categories": []any{"security"}, "full": true}, nil
 				},
@@ -214,7 +214,7 @@ func TestWorkflowObligationReportsLookupErrors(t *testing.T) {
 		t.Run(step, func(t *testing.T) {
 			lookupErr := errors.New("lookup unavailable")
 			obligation := &WorkflowObligation{
-				Ledger: stubWorkflowScanLedger{}, History: authorityTestStore(t),
+				Reads: stubWorkflowScanLedger{}, Passes: stubWorkflowScanLedger{}, History: authorityTestStore(t).Findings,
 				Params: func(context.Context, string, string, string) (map[string]any, error) {
 					if step == "params" {
 						return nil, lookupErr
@@ -240,7 +240,7 @@ func TestWorkflowObligationReportsLookupErrors(t *testing.T) {
 // The phase note follows the newest pass the run is bound to: the one its
 // latest phase entry requested or joined.
 func TestWorkflowObligationExplainFullPassNamesNewestPass(t *testing.T) {
-	obligation := &WorkflowObligation{Ledger: stubWorkflowScanLedger{passes: []FullPass{{ID: "pass-new"}, {ID: "pass-old"}}}}
+	obligation := &WorkflowObligation{Reads: stubWorkflowScanLedger{passes: []FullPass{{ID: "pass-new"}, {ID: "pass-old"}}}, Passes: stubWorkflowScanLedger{passes: []FullPass{{ID: "pass-new"}, {ID: "pass-old"}}}}
 	run := &api.WorkflowRun{ID: "run-1", ProjectID: "project-1"}
 	full := map[string]any{"categories": []any{"security"}, "full": true}
 
@@ -255,12 +255,12 @@ func TestWorkflowObligationExplainFullPassNamesNewestPass(t *testing.T) {
 		params map[string]any
 		ledger stubWorkflowScanLedger
 	}{
-		"delta obligation":    {run: run, params: map[string]any{"categories": []any{"security"}}, ledger: obligation.Ledger.(stubWorkflowScanLedger)},
+		"delta obligation":    {run: run, params: map[string]any{"categories": []any{"security"}}, ledger: obligation.Passes.(stubWorkflowScanLedger)},
 		"no bound pass":       {run: run, params: full},
-		"run with no project": {run: &api.WorkflowRun{ID: "run-1"}, params: full, ledger: obligation.Ledger.(stubWorkflowScanLedger)},
+		"run with no project": {run: &api.WorkflowRun{ID: "run-1"}, params: full, ledger: obligation.Passes.(stubWorkflowScanLedger)},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got, err := (&WorkflowObligation{Ledger: tc.ledger}).ExplainFullPass(context.Background(), tc.run, tc.params)
+			got, err := (&WorkflowObligation{Reads: tc.ledger, Passes: tc.ledger}).ExplainFullPass(context.Background(), tc.run, tc.params)
 			testutil.FailErr(t, "explain full pass", err)
 			if got != nil {
 				t.Fatalf("pass = %+v, want none", got)
@@ -293,7 +293,7 @@ func TestResultsAvailableAcceptsNormalPartialCoverage(t *testing.T) {
 	} {
 		t.Run(tc.gate+string(tc.status), func(t *testing.T) {
 			scan := api.CodeScan{ID: "scan", ScannerID: "sast", Status: tc.status, CoverageStatus: api.ScanCoveragePartial}
-			obligation := &WorkflowObligation{Ledger: stubWorkflowScanLedger{scans: []api.CodeScan{scan}}, Params: func(context.Context, string, string, string) (map[string]any, error) {
+			obligation := &WorkflowObligation{Reads: stubWorkflowScanLedger{scans: []api.CodeScan{scan}}, Passes: stubWorkflowScanLedger{scans: []api.CodeScan{scan}}, Params: func(context.Context, string, string, string) (map[string]any, error) {
 				return map[string]any{"categories": []any{"security"}, "full": true, "gate": tc.gate}, nil
 			}}
 			got, err := obligation.Status(t.Context(), "run", "ingest")
@@ -331,7 +331,7 @@ func TestSecurityCloseoutCheckerAndSessionGuidance(t *testing.T) {
 	`, projectDir, now)
 	testutil.FailErr(t, "insert landed change", err)
 
-	landed, err := store.Runs.LatestRequiredLandedChangeForSession(t.Context(), "sess-scan")
+	landed, err := store.Reads.LatestRequiredLandedChangeForSession(t.Context(), "sess-scan")
 	testutil.FailErr(t, "latest landed change", err)
 	if landed == nil || landed.ID != "lc-1" || landed.ScanID != "scan-sess-1" {
 		t.Fatalf("landed = %+v", landed)
