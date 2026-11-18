@@ -34,7 +34,8 @@ webE2e("Review shows an outside edit and its retained versions in the chat that 
       const checkpoints = `/v1/sessions/${sessionId}/checkpoints`;
       await expect.poll(async () => {
         const response = await apiJson<CheckpointListResponse>(request, "GET", `${checkpoints}?kind=tool_approval`);
-        approval = response.checkpoints.find((item) => item.tool_approval?.plan?.subject?.kind === "write_root_set");
+        approval = response.checkpoints.find((item) =>
+          item.tool_approval?.plan?.reasons.includes("outside_roots_write"));
         return approval?.tool_approval?.plan?.recommended_option_id;
       }, { timeout: 30_000 }).toBeTruthy();
       await apiJson(request, "POST", `${checkpoints}/${approval!.id}`, {
