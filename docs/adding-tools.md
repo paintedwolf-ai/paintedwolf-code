@@ -13,7 +13,7 @@ The six read-only analysis tools (`jq`, `grep`, `find`, `list_dir`, `stat`, `wc`
 | First-party Go tools | [`internal/tools/native`](../lycaon/internal/tools/native) and its [family subpackages](package-layering.md#native-tool-family-subpackages) |
 | Shared envelope | [`internal/tools/safecmd`](../lycaon/internal/tools/safecmd) |
 | Confined MCP | [`internal/mcp`](../lycaon/internal/mcp) (`prepareStdioCommand` + per-call caps, shape, and `mcp_error_code`) |
-| Contract guards | [`forbidden-calls/envelope-only-tools-use-safecmd`](../lycaon/test/contract/laws/forbiddencalls/test_infrastructure.go) · [`forbidden-calls/mcp-error-bridge-reads-codes`](../lycaon/test/contract/laws/forbiddencalls/guidance.go) |
+| Contract guards | [`forbidden-calls/envelope-only-tools-use-safecmd`](../lycaon/test/contract/invariants/forbiddencalls/test_infrastructure.go) · [`forbidden-calls/mcp-error-bridge-reads-codes`](../lycaon/test/contract/invariants/forbiddencalls/guidance.go) |
 
 ## Envelope contract
 
