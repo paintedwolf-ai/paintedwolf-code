@@ -74,6 +74,7 @@ func TestCoordinatorCoreVarWhitelist(t *testing.T) {
 		sort.Strings(ids)
 		for _, id := range ids {
 			t.Run(fmt.Sprintf("%s/%d-roots", id, rootCount), func(t *testing.T) {
+				t.Parallel()
 				vars, supplied := coordinatorCoreVars(t, id, rootCount)
 				for _, ref := range refs {
 					ref, _, _ = strings.Cut(ref, ".")
