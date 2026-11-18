@@ -850,6 +850,18 @@ type InvocationProgramProgress struct {
 	SettledAt               sql.NullString `json:"settled_at"`
 }
 
+type InvocationProgramPublications struct {
+	ProgramID           string `json:"program_id"`
+	SessionID           string `json:"session_id"`
+	State               string `json:"state"`
+	IntentJson          string `json:"intent_json"`
+	IntentDigest        string `json:"intent_digest"`
+	PrimaryCustodyStart int64  `json:"primary_custody_start"`
+	ChatSessionID       string `json:"chat_session_id"`
+	SharedCustodyStart  int64  `json:"shared_custody_start"`
+	Materialized        int64  `json:"materialized"`
+}
+
 type InvocationProgramRevisionPinSegments struct {
 	ProgramID    string `json:"program_id"`
 	ExecutionID  string `json:"execution_id"`

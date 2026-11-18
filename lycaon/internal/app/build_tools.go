@@ -51,17 +51,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 	}); err != nil {
 		return fmt.Errorf("wait tool: %w", err)
 	}
-	if commands := b.execution.Host.Commands; commands != nil {
-		commands.SetProgramParking(loopwake.ProgramParking{Subscriptions: subscriptions})
-		commands.SetProgramEffects(b.sessions.Manager.Runner.Transcript)
-		subscriptions.SetLostProgramResult(commands.ProgramReceiptResult)
-	}
-	if err := b.registerRecovery(bootrecovery.Entry{
-		Name: "agent-wait-leases", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
-		Run: func(ctx context.Context) error {
-			return loopwake.RecoverWaitLeases(ctx, b.server.Coordinator.CoordinatorLoop().Waits.Subscriptions, waitStore)
-		},
-	}); err != nil {
+	if err := b.wireWaitRecovery(subscriptions, waitStore); err != nil {
 		return err
 	}
 

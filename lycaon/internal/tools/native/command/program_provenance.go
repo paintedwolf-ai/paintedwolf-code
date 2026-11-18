@@ -14,9 +14,17 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
-type ProgramProvenance interface {
-	CommitProgramHTTPProvenance(ctx context.Context, sessionID, projectDir string, prov evidence.ProgramHTTPProvenance) (string, error)
+type programCustodyReader interface {
 	ExternalCustodyURLsForPaths(ctx context.Context, sessionID, projectDir string, paths []string) ([]string, error)
+}
+
+type ProgramProvenance interface {
+	BeginProgramPublication(ctx context.Context, sessionID, programID string) error
+	StageProgramPublication(ctx context.Context, target evidence.ProgramProvenanceTarget, prov evidence.ProgramHTTPProvenance) error
+	CommitProgramPublication(ctx context.Context, sessionID, programID string) error
+	MarkProgramPublicationMaterialized(ctx context.Context, sessionID, programID string) error
+	ListRecoverableProgramPublications(ctx context.Context, afterProgramID string, limit int) ([]evidence.ProgramPublicationKey, error)
+	programCustodyReader
 }
 
 type programProvenanceState struct {
@@ -28,6 +36,7 @@ type programProvenanceState struct {
 	custodyTrees         map[string][]string
 	clearedFiles         map[string]bool
 	activeTrackers       []*opProvenanceTracker
+	custodyErr           error
 }
 
 type opProvenanceTracker struct {
@@ -154,7 +163,11 @@ func (r *programRun) observeContentFlow(ctx context.Context, tracker *opProvenan
 	if len(flow.Files) == 0 {
 		return
 	}
-	urls := r.lookupCustodyURLs(ctx, []string{source})
+	urls, err := r.lookupCustodyURLs(ctx, []string{source})
+	if err != nil {
+		r.recordCustodyError(err)
+		return
+	}
 	for _, file := range flow.Files {
 		r.addCustodyFile(r.normalizeProvenancePath("", file), urls)
 	}
@@ -174,7 +187,12 @@ func (r *programRun) noteInputRedirectRead(tracker *opProvenanceTracker, normPat
 		return
 	}
 	r.provenance.mu.Unlock()
-	if urls := r.lookupCustodyURLs(context.Background(), []string{normPath}); len(urls) > 0 {
+	urls, err := r.lookupCustodyURLs(context.Background(), []string{normPath})
+	if err != nil {
+		r.recordCustodyError(err)
+		return
+	}
+	if len(urls) > 0 {
 		r.markPipedExternalOutput(urls)
 	}
 }
@@ -242,7 +260,12 @@ func (r *programRun) finishOpTracker(ctx context.Context, tracker *opProvenanceT
 	// network reaches whichever streams the op wrote.
 	var streamURLs []string
 	if len(readPaths) > 0 {
-		streamURLs = r.lookupCustodyURLs(ctx, readPaths)
+		urls, err := r.lookupCustodyURLs(ctx, readPaths)
+		if err != nil {
+			r.recordCustodyError(err)
+			return
+		}
+		streamURLs = urls
 	}
 	streamURLs = appendUniqueProvenanceStrings(streamURLs, networkURLs...)
 	if len(streamURLs) > 0 {
@@ -354,122 +377,50 @@ func (r *programRun) clearCustodyFile(normPath string) {
 	r.provenance.clearedFiles[normPath] = true
 }
 
-func (r *programRun) lookupCustodyURLs(ctx context.Context, normPaths []string) []string {
-	var urls []string
-	var storeQueryPaths []string
+func (r *programRun) recordCustodyError(err error) {
 	r.provenance.mu.Lock()
-	for _, p := range normPaths {
-		if p == "" {
-			continue
-		}
-		if inProg, ok := r.provenance.custodyFiles[p]; ok && len(inProg) > 0 {
-			urls = appendUniqueProvenanceStrings(urls, inProg...)
-		} else if !r.provenance.clearedFiles[p] {
-			urls = appendUniqueProvenanceStrings(urls, r.treeCustodyLocked(p)...)
-		}
-		if r.provenance.clearedFiles == nil || !r.provenance.clearedFiles[p] {
-			storeQueryPaths = appendUniqueProvenanceStrings(storeQueryPaths, p)
-		}
-	}
-	r.provenance.mu.Unlock()
-
-	store := r.custody
-	if store == nil || len(storeQueryPaths) == 0 {
-		return urls
-	}
-	projDir := r.projectDir()
-	sessionIDs := []string{r.tc.Identity.SessionID}
-	if chatID := r.tc.ChatSessionID(); chatID != "" && chatID != r.tc.Identity.SessionID {
-		sessionIDs = append(sessionIDs, chatID)
-	}
-	for _, sid := range sessionIDs {
-		if sid == "" {
-			continue
-		}
-		if found, err := store.ExternalCustodyURLsForPaths(ctx, sid, projDir, storeQueryPaths); err == nil && len(found) > 0 {
-			urls = appendUniqueProvenanceStrings(urls, found...)
-		}
-	}
-	return urls
-}
-
-func (r *programRun) noteNativeFileMutation(ctx context.Context, commandName string, targets []commandprogram.PathTarget) {
-	if r == nil || len(targets) == 0 {
-		return
-	}
-	switch commandName {
-	case "rm":
-		for _, t := range targets {
-			r.clearCustodyFile(r.normalizeProvenancePath("", t.Path))
-		}
-	case "cp", "mv":
-		var srcPaths, dstPaths []string
-		for _, t := range targets {
-			norm := r.normalizeProvenancePath("", t.Path)
-			if norm == "" {
-				continue
-			}
-			if t.Write {
-				dstPaths = appendUniqueProvenanceStrings(dstPaths, norm)
-			} else {
-				srcPaths = appendUniqueProvenanceStrings(srcPaths, norm)
-			}
-		}
-		if len(dstPaths) == 0 && len(targets) >= 2 {
-			if last := r.normalizeProvenancePath("", targets[len(targets)-1].Path); last != "" {
-				dstPaths = []string{last}
-				srcPaths = nil
-				for _, t := range targets[:len(targets)-1] {
-					if norm := r.normalizeProvenancePath("", t.Path); norm != "" {
-						srcPaths = appendUniqueProvenanceStrings(srcPaths, norm)
-					}
-				}
-			}
-		}
-		srcURLs := r.lookupCustodyURLs(ctx, srcPaths)
-		if commandName == "mv" {
-			for _, src := range srcPaths {
-				if !slices.Contains(dstPaths, src) {
-					r.clearCustodyFile(src)
-				}
-			}
-		}
-		for _, dst := range dstPaths {
-			if len(srcURLs) > 0 {
-				r.addCustodyFile(dst, srcURLs)
-			} else {
-				r.clearCustodyFile(dst)
-			}
-		}
+	defer r.provenance.mu.Unlock()
+	if r.provenance.custodyErr == nil {
+		r.provenance.custodyErr = err
 	}
 }
 
-func (r *ProgramRuntime) commitProgramHTTPProvenance(ctx context.Context, run *programRun, hasModelVisibleOutput bool) {
-	if r == nil || run == nil || r.Provenance == nil {
-		return
-	}
+func (r *programRun) custodyError() error {
+	r.provenance.mu.Lock()
+	defer r.provenance.mu.Unlock()
+	return r.provenance.custodyErr
+}
+
+func (r *ProgramRuntime) programHTTPProvenance(ctx context.Context, run *programRun, hasModelVisibleOutput bool) (evidence.ProgramHTTPProvenance, error) {
 	store := r.Provenance
 	run.provenance.mu.Lock()
+	if err := run.provenance.custodyErr; err != nil {
+		run.provenance.mu.Unlock()
+		return evidence.ProgramHTTPProvenance{}, err
+	}
 	ingested := run.provenance.directExternalOutput || (run.provenance.pipedExternalOutput && hasModelVisibleOutput)
 	var observedURLs []string
 	if ingested {
 		observedURLs = appendUniqueProvenanceStrings(observedURLs, run.provenance.externalURLs...)
 	}
 	var custodyPaths []string
-	for p, urls := range run.provenance.custodyFiles {
-		if len(urls) == 0 {
-			continue
+	for path, urls := range run.provenance.custodyFiles {
+		if len(urls) > 0 {
+			custodyPaths = append(custodyPaths, path)
 		}
-		custodyPaths = append(custodyPaths, p)
-		observedURLs = appendUniqueProvenanceStrings(observedURLs, urls...)
 	}
 	sort.Strings(custodyPaths)
+	for _, path := range custodyPaths {
+		observedURLs = appendUniqueProvenanceStrings(observedURLs, run.provenance.custodyFiles[path]...)
+	}
 	var custodyTrees []string
-	for p, urls := range run.provenance.custodyTrees {
-		custodyTrees = append(custodyTrees, p)
-		observedURLs = appendUniqueProvenanceStrings(observedURLs, urls...)
+	for path := range run.provenance.custodyTrees {
+		custodyTrees = append(custodyTrees, path)
 	}
 	sort.Strings(custodyTrees)
+	for _, path := range custodyTrees {
+		observedURLs = appendUniqueProvenanceStrings(observedURLs, run.provenance.custodyTrees[path]...)
+	}
 	var clearedCandidates []string
 	for p, cleared := range run.provenance.clearedFiles {
 		if cleared && p != "" {
@@ -482,40 +433,31 @@ func (r *ProgramRuntime) commitProgramHTTPProvenance(ctx context.Context, run *p
 	commitCtx := context.WithoutCancel(ctx)
 	projDir := run.projectDir()
 	var clearedPaths []string
-	for _, p := range clearedCandidates {
-		if existing, err := store.ExternalCustodyURLsForPaths(commitCtx, run.tc.Identity.SessionID, projDir, []string{p}); err == nil && len(existing) > 0 {
-			clearedPaths = append(clearedPaths, p)
-			continue
-		}
+	for _, path := range clearedCandidates {
+		sessions := []string{run.tc.Identity.SessionID}
 		if chatID := run.tc.ChatSessionID(); chatID != "" && chatID != run.tc.Identity.SessionID {
-			if existing, err := store.ExternalCustodyURLsForPaths(commitCtx, chatID, projDir, []string{p}); err == nil && len(existing) > 0 {
-				clearedPaths = append(clearedPaths, p)
+			sessions = append(sessions, chatID)
+		}
+		for _, sessionID := range sessions {
+			existing, err := store.ExternalCustodyURLsForPaths(commitCtx, sessionID, projDir, []string{path})
+			if err != nil {
+				return evidence.ProgramHTTPProvenance{}, err
+			}
+			if len(existing) > 0 {
+				clearedPaths = append(clearedPaths, path)
+				break
 			}
 		}
 	}
 
-	if !ingested && len(custodyPaths) == 0 && len(custodyTrees) == 0 && len(clearedPaths) == 0 {
-		return
-	}
-	prov := evidence.ProgramHTTPProvenance{
+	return evidence.ProgramHTTPProvenance{
 		ProgramID:        run.root.Identity.ProgramID,
 		UntrustedContent: ingested,
 		ObservedURLs:     observedURLs,
 		CustodyPaths:     custodyPaths,
 		CustodyTrees:     custodyTrees,
 		ClearedPaths:     clearedPaths,
-	}
-	_, _ = store.CommitProgramHTTPProvenance(commitCtx, run.tc.Identity.SessionID, projDir, prov)
-	if chatID := run.tc.ChatSessionID(); chatID != "" && chatID != run.tc.Identity.SessionID && (len(custodyPaths) > 0 || len(custodyTrees) > 0 || len(clearedPaths) > 0) {
-		_, _ = store.CommitProgramHTTPProvenance(commitCtx, chatID, projDir, evidence.ProgramHTTPProvenance{
-			ProgramID:        run.root.Identity.ProgramID,
-			UntrustedContent: false,
-			ObservedURLs:     observedURLs,
-			CustodyPaths:     custodyPaths,
-			CustodyTrees:     custodyTrees,
-			ClearedPaths:     clearedPaths,
-		})
-	}
+	}, nil
 }
 
 func appendUniqueProvenanceStrings(dst []string, values ...string) []string {
