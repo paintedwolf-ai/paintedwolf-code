@@ -141,7 +141,14 @@ Contract suites live in domain packages under `lycaon/test/contract/`:
 `host`, `hosted`, `maintainability`, `persistence`, `prompts`, `providers`, `release`,
 `runner`, `scanning`, `security`, `sessions`, `tools`, `wire`, and `workflows`.
 The root package keeps the source-snapshot tests. The `test:contract` target
-discovers the complete subtree. Shared support lives under `internal/`: `check`
+discovers the subtree except `hosted`, `release` and `runner`, which execute the
+verification and release scripts against stub tools: they run where what they import
+changes, where CI tooling changes, and in every full profile. The structure laws of
+workflows, the Taskfile and the verification plan (custody, job ancestry, artifact
+flow, gated inventories, references that must resolve) are Python tests in
+`scripts/verification_tests/ci` that parse the YAML and JSON, evaluate workflow
+expressions and run scripts on stub hosts; none asserts on workflow text. Shared
+support lives under `internal/`: `check`
 (failure labels, repository root, source and Go AST corpora), `wirespec` (OpenAPI
 and client parsing), and the `catalogfixture`, `toolfixture`, `workflowfixture`,
 and `guidancescan` fixtures. Keep a scanner with the contract it proves and use
@@ -993,11 +1000,12 @@ Markdown under `docs/` and the repository's policy and community files, adds
 nothing to that baseline; `CHANGELOG.md`, which Den embeds, and OpenAPI
 documentation are build inputs and widen the gate. CI's own logic and tests under
 `scripts/ci_policy/` and `scripts/verification_tests/`, and workflows, add only the
-runner lane, because no product test reads them. The files that decide how every
+runner lane and the machinery's Go tests, because no product test reads them. The files that decide how every
 lane runs (`ci.yml`, `verification.yml`, lane planning and execution) still widen.
 Any file in a Go package's tree under `internal/`, `cmd/`, or `test/`, whether
 source, embedded data, or a test fixture, seeds the nearest package's reverse import
-closure, including test imports. Contract and smoke packages remain mandatory.
+closure, including test imports. Contract and smoke packages remain mandatory;
+the machinery's Go tests join through that closure.
 Unknown paths, dependencies, build inputs, generated contracts, shipped
 configuration, verification policy, public package contracts, and nested modules
 such as the harness fixture projects expand to the full `check` profile. A missing

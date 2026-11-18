@@ -104,6 +104,25 @@ class AdmissionTests(unittest.TestCase):
         graph = {'a': [], 'b': ['a', 'c'], 'c': ['b'], 'test': ['c'], 'unrelated': []}
         self.assertEqual(impact.reverse_closure(graph, {'a'}), {'a', 'b', 'c', 'test'})
 
+    def test_machinery_tests_run_for_what_they_import_or_read_not_for_every_change(self):
+        module = 'github.com/lycaon/lycaon/'
+        records = [('internal/db', {}), ('internal/other', {}), ('test/contract/authority', {}),
+                   ('test/contract/release', {'TestImports': ['internal/db']}),
+                   ('test/contract/runner', {}), ('test/contract/runners', {}), ('test/smoke', {})]
+        output = '\n'.join(json.dumps({
+            'ImportPath': module + directory, 'Dir': str(impact.ROOT / 'lycaon' / directory),
+            **{kind: [module + dependency for dependency in dependencies] for kind, dependencies in edges.items()},
+        }) for directory, edges in records)
+        result = impact.subprocess.CompletedProcess([], 0, stdout=output, stderr='')
+        unconditional = ['./test/contract/authority', './test/contract/runners', './test/smoke']
+        for paths, expected in (
+                (['lycaon/internal/other/a.go'], ['./internal/other', *unconditional]),
+                (['lycaon/internal/db/a.go'], ['./internal/db', './test/contract/release', *unconditional]),
+                (['.github/workflows/release.yml'],
+                 sorted([*unconditional, './test/contract/release', './test/contract/runner']))):
+            with self.subTest(paths=paths), patch.object(impact.subprocess, 'run', return_value=result):
+                self.assertEqual(impact.go_scope({'full': False, 'paths': paths}), sorted(expected))
+
     def test_owner_change_selects_production_and_relocated_test_callers(self):
         module = 'github.com/lycaon/lycaon/'
         owner = 'internal/tools/toolcontext'

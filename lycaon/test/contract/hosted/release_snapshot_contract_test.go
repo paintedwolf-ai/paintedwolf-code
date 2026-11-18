@@ -4,75 +4,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"gopkg.in/yaml.v3"
 )
-
-func TestSelectedReleaseTagPinsEverySourceCheckout(t *testing.T) {
-	for name, job := range hostedJobs(t, "release") {
-		count := 0
-		for _, step := range job.Steps {
-			if !strings.HasPrefix(step.Uses, "actions/checkout@") || step.With["repository"] != "" {
-				continue
-			}
-			if step.With["path"] == ".release-controller" {
-				want := "refs/heads/main"
-				if name == "prepare-bundle-upgrade" {
-					want = "${{ github.workflow_sha }}"
-				}
-				if step.With["ref"] != want {
-					t.Errorf("%s controller uses %q, want %q", name, step.With["ref"], want)
-				}
-				continue
-			}
-			count++
-			if name == "classify" && count == 1 {
-				if step.With["ref"] != "refs/heads/main" {
-					t.Errorf("classify controller checkout uses %q, want refs/heads/main", step.With["ref"])
-				}
-				continue
-			}
-			want := "${{ needs.classify.outputs.source_sha }}"
-			switch name {
-			case "classify":
-				want = "${{ steps.source.outputs.source_sha }}"
-			case "bundle-upgrade", "replay-bundle-upgrade":
-				want = "${{ github.workflow_sha }}"
-			}
-			if step.With["ref"] != want {
-				t.Errorf("%s checkout %d uses %q, want %q", name, count, step.With["ref"], want)
-			}
-		}
-	}
-}
-
-func TestUpgradeRehearsalCheckoutsPreserveSourceAndControllerIdentity(t *testing.T) {
-	jobs := hostedJobs(t, "release")
-	for name, expected := range map[string]map[string]string{
-		"prepare-bundle-upgrade": {"": "${{ needs.classify.outputs.source_sha }}", ".release-controller": "${{ github.workflow_sha }}"},
-		"bundle-upgrade":         {"": "${{ github.workflow_sha }}"},
-		"replay-bundle-upgrade":  {"": "${{ github.workflow_sha }}"},
-	} {
-		seen := map[string]bool{}
-		for _, step := range jobs[name].Steps {
-			if !strings.HasPrefix(step.Uses, "actions/checkout@") {
-				continue
-			}
-			path := step.With["path"]
-			want, known := expected[path]
-			if !known || seen[path] || step.With["ref"] != want || step.With["repository"] != "" || step.With["persist-credentials"] != "false" {
-				t.Errorf("%s has an unexpected or mutable checkout at %q: %v", name, path, step.With)
-			}
-			seen[path] = true
-		}
-		if len(seen) != len(expected) {
-			t.Errorf("%s checks out %v, want source/controller paths %v", name, seen, expected)
-		}
-	}
-}
 
 func TestSelectedReleaseControllerAdmission(t *testing.T) {
 	root, repo := contractcheck.RepoRoot(t), t.TempDir()
@@ -124,8 +61,13 @@ func TestSelectedReleaseControllerAdmission(t *testing.T) {
 	contractcheck.FailErr(t, "create test executables", os.Mkdir(filepath.Join(repo, "bin"), 0o755))
 	// Qualification API evidence is mocked; provenance and workflow shell run unchanged.
 	write("bin/python3", "#!/bin/sh\nif [ \"$1\" = scripts/ci_verification.py ]; then\n printf '%s' \"$3\" > \"$QUALIFICATION_RECORD\"\n exit \"$QUALIFICATION_STATUS\"\nfi\nexec \""+python+"\" \"$@\"\n", 0o755)
+	var release struct {
+		Jobs map[string]struct{ Steps []struct{ Run string } }
+	}
+	contractcheck.FailErr(t, "decode release workflow",
+		yaml.Unmarshal([]byte(contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml")), &release))
 	admission := ""
-	for _, step := range hostedWorkflowFile(t, "release").Jobs["classify"].Steps {
+	for _, step := range release.Jobs["classify"].Steps {
 		if strings.Contains(step.Run, "source_sha=") {
 			admission = step.Run
 			break
@@ -168,43 +110,5 @@ func TestSelectedReleaseControllerAdmission(t *testing.T) {
 				t.Fatalf("qualification checked %q instead of %s", checked, selected)
 			}
 		})
-	}
-}
-
-func TestReleaseCompatibilityCannotBeSkippedForEitherChannel(t *testing.T) {
-	jobs := hostedJobs(t, "release")
-	stable, guard, wire := false, false, false
-	for _, step := range jobs["classify"].Steps {
-		if strings.Contains(step.Run, "/releases/latest") {
-			stable = true
-			if step.If != "" || step.Continue || !strings.Contains(step.Run, "release-compatibility-baseline.py") || !strings.Contains(step.Run, `--publish "${PUBLISH}"`) || step.Env["SOURCE_SHA"] != "${{ steps.source.outputs.source_sha }}" {
-				t.Fatal("published stable baseline is not mandatory for the selected source")
-			}
-		}
-	}
-	for _, step := range jobs["compatibility"].Steps {
-		if strings.Contains(step.Run, "--compatibility-only") {
-			guard = true
-			if step.If != "" || step.Continue || step.Env["BASELINE_SHA"] != "${{ needs.classify.outputs.baseline_sha }}" || !strings.Contains(step.Run, "--source-root") || !strings.Contains(step.Run, "--published-versions") || step.Env["PUBLISHED_VERSIONS"] != "${{ needs.classify.outputs.published_versions }}" {
-				t.Fatal("compatibility enforcement can skip a release or inspect another source")
-			}
-		}
-		if strings.Contains(step.Run, "./task openapi:diff") {
-			wire = true
-			if step.Continue || !strings.Contains(step.Run, "--baseline-ref") {
-				t.Fatal("OpenAPI report failures or its stable baseline are not enforced")
-			}
-		}
-	}
-	if !slices.Contains(hostedNeeds(t, jobs["build-release"]), "compatibility") {
-		t.Fatal("build-release can start before cheap compatibility checks")
-	}
-	for _, step := range jobs["compatibility"].Steps {
-		if strings.Contains(step.Uses, "setup-verification") || strings.Contains(step.Uses, "setup-bialy") || strings.Contains(step.Run, "setup-dev") || strings.Contains(step.Run, "build:lycaon") {
-			t.Fatal("compatibility gate provisions or builds the app")
-		}
-	}
-	if !stable || !guard || !wire {
-		t.Fatalf("release assurance missing: stable=%v guard=%v wire=%v", stable, guard, wire)
 	}
 }

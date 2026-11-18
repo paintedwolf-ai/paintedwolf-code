@@ -9,7 +9,6 @@
   "ceiling": 54,
   "reviewed_shape": "a9017ffa12b68cc896935d384dea9b5d4ff6016ed433e76d3492f891a66cbca7",
   "boundaries": {
-    "lycaon/test/contract/runner/release_lane_invariants_contract_test.go": "beeca6ee53a62894a8f756a3b9cf707e4db4dbec9a5eb380a5189a6aea421d96",
     "lycaon/test/contract/runner/release_public_artifacts_contract_test.go": "e9b089c27ff051d41d81391c1b6ce6b45a8b254c7835852a78363716018beeda",
     "scripts/verification_tests/distribution/test_release_repository_setup_execution.py": "940d1eb6b053d3c79c8ae03a34864b8320a29a05263d0cb7f1bddcd3050654ca",
     "scripts/verification_tests/distribution/test_repository_setup_admission_execution.py": "0a8be93e3888f52c6e55be06f6f24c1cb03f1c45075073fd3e8849b83404beaf",
