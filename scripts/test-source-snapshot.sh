@@ -135,7 +135,6 @@ preserve_fuzz_failures() {
 
 # VARIABLE=pathspec entries identify fixture refreshes to retain after snapshot cleanup.
 FIXTURE_REFRESHES=(
-  "UPDATE_SCHEMA_LOCK=lycaon/internal/db/schema.sql.lock.json"
   "UPDATE_REPORT_GOLDEN=lycaon/internal/report/testdata/golden"
   "UPDATE_ANCHOR_KICK_GOLDEN=lycaon/internal/coordinator/anchor/testdata/golden/kicks"
   "UPDATE_CITATION_GROUNDING_PARITY_GOLDENS=lycaon/test/fixtures/citation-grounding-parity"

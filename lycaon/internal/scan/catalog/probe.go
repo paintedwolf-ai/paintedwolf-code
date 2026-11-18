@@ -36,7 +36,7 @@ func ProbeScanner(ctx context.Context, scannerID string, probe []string) ProbeRe
 	}
 
 	stdout, stderr, exitCode, err := exec.RunSeparate(ctx, probe[0], probe[1:], exec.ExecOpts{
-		Launch:          exec.ExternalScannerLaunch(scannerID),
+		Launch:          probeLaunch(scannerID),
 		Timeout:         ProbeTimeout,
 		MaxOutputBytes:  exec.DefaultMaxOutputBytes,
 		ProcessPriority: exec.ProcessPriorityBelowNormal,
@@ -72,3 +72,6 @@ func firstLine(b []byte) string {
 	}
 	return strings.TrimSpace(s)
 }
+
+// probeLaunch runs a probe the way its external scanner runs: unconfined.
+func probeLaunch(scannerID string) exec.LaunchPlan { return exec.ExternalScannerLaunch(scannerID) }

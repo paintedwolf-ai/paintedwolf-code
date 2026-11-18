@@ -168,12 +168,12 @@ test_run_prune_abandoned
 
     def test_fixture_refresh_copies_back_only_its_own_paths(self):
         golden = Path("lycaon/internal/report/testdata/golden")
-        lock = Path("lycaon/internal/db/schema.sql.lock.json")
+        baseline = Path("lycaon/internal/oar/testdata/corpus_baseline.json")
         (self.repo / golden).mkdir(parents=True)
-        (self.repo / lock).parent.mkdir(parents=True)
+        (self.repo / baseline).parent.mkdir(parents=True)
         for name in "abce":
             (self.repo / golden / f"{name}.pdf").write_text(f"old-{name}")
-        (self.repo / lock).write_text("old-lock")
+        (self.repo / baseline).write_text("old-baseline")
         self.commit_all("goldens")
 
         def read(name):
@@ -187,24 +187,24 @@ printf new-b > {golden}/b.pdf
 printf new-d > {golden}/d.pdf
 printf new-e > {golden}/e.pdf
 rm {golden}/c.pdf
-printf new-lock > {lock}
+printf new-baseline > {baseline}
 printf peer-b > "$1/{golden}/b.pdf"
 rm -f "$1/{golden}/e.pdf"
 '''
         plain = self.snapshot("bash", "-c", refresh, "refresh", str(self.repo))
         self.assertEqual(plain.returncode, 0, plain.stderr)
-        self.assertEqual((read("a"), read("d"), (self.repo / lock).read_text()), ("old-a", None, "old-lock"))
+        self.assertEqual((read("a"), read("d"), (self.repo / baseline).read_text()), ("old-a", None, "old-baseline"))
         (self.repo / golden / "b.pdf").write_text("old-b")
 
         golden_refresh = self.snapshot("bash", "-c", refresh, "refresh", str(self.repo), env={"UPDATE_REPORT_GOLDEN": "1"})
         self.assertEqual(golden_refresh.returncode, 0, golden_refresh.stderr)
         self.assertEqual({name: read(name) for name in "abcde"},
                          {"a": "new-a", "b": "peer-b", "c": "old-c", "d": "new-d", "e": None})
-        self.assertEqual((self.repo / lock).read_text(), "old-lock")
+        self.assertEqual((self.repo / baseline).read_text(), "old-baseline")
 
-        lock_refresh = self.snapshot("bash", "-c", refresh, "refresh", str(self.repo), env={"UPDATE_SCHEMA_LOCK": "1"})
-        self.assertEqual(lock_refresh.returncode, 0, lock_refresh.stderr)
-        self.assertEqual((self.repo / lock).read_text(), "new-lock")
+        baseline_refresh = self.snapshot("bash", "-c", refresh, "refresh", str(self.repo), env={"UPDATE_CORPUS_BASELINE": "1"})
+        self.assertEqual(baseline_refresh.returncode, 0, baseline_refresh.stderr)
+        self.assertEqual((self.repo / baseline).read_text(), "new-baseline")
 
 
 if __name__ == "__main__":

@@ -100,21 +100,31 @@ func TestDisconnectedGroupsViaIntermediate(t *testing.T) {
 
 func TestSubsystemUnusedEntryPointReported(t *testing.T) {
 	t.Parallel()
+	// Both members are declared entry points; only internal/db has a consumer
+	// outside the subsystem.
 	g := graphFor(map[string][]string{
-		"internal/db": {"app"},
-	}, nil)
+		"internal/db":         {"app"},
+		"internal/db/migrate": nil,
+	}, map[string][]string{
+		"internal/db": {"internal/db/migrate"},
+	})
 	d, err := Analyze(g, "internal/db", Declaration{
 		Kind:        subsystem,
 		Description: "SQL adapter.",
-		EntryPoints: []string{module + "/internal/db"},
+		EntryPoints: []string{module + "/internal/db", module + "/internal/db/migrate"},
 	})
 	if err != nil {
 		t.Fatalf("analyze: %v", err)
 	}
-	lines := d.describe()
-	joined := strings.Join(lines, "\n")
-	if !strings.Contains(joined, "kind: subsystem") || !strings.Contains(joined, "entry points: "+module+"/internal/db") {
-		t.Fatalf("describe = %#v", lines)
+	want := []string{
+		"kind: subsystem",
+		"isolated member: internal/db",
+		"isolated member: internal/db/migrate",
+		"unused entry point: " + module + "/internal/db/migrate",
+		"entry points: " + module + "/internal/db",
+	}
+	if got := d.describe(); !slices.Equal(got, want) {
+		t.Fatalf("describe = %#v, want %#v", got, want)
 	}
 }
 

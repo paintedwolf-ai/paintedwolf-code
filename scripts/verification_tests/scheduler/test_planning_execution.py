@@ -287,7 +287,7 @@ class PlanningTests(unittest.TestCase):
                      ["check", "CONFIG=other"]):
             with self.subTest(args=args):
                 self.assertIsNone(planning.request(args, {}))
-        self.assertIsNone(planning.request(["check"], {"UPDATE_SCHEMA_LOCK": "1"}))
+        self.assertIsNone(planning.request(["check"], {"UPDATE_REPORT_GOLDEN": "1"}))
         self.assertIsNone(planning.request(["check"], {"PW_TEST_REPLAY_MANIFEST": "replay.json"}))
         self.assertIsNone(planning.request(["check"], {"GOFLAGS": "-count=2"}))
         self.assertIsNone(planning.request(["check"], {"GOFLAGS": "-failfast"}))
@@ -303,7 +303,7 @@ class PlanningTests(unittest.TestCase):
                      ["test:digest", "--", "-args", "-custom"],
                      ["den:test:digest", "--", "outside-src.test.ts", "--bogus"],
                      ["den:harness:test", "--", "e2e/fixture.spec.ts", "--workers=1"]):
-            for env in ({}, {"UPDATE_SCHEMA_LOCK": "1"}, {"PW_TEST_REPLAY_MANIFEST": "replay.json"}):
+            for env in ({}, {"UPDATE_REPORT_GOLDEN": "1"}, {"PW_TEST_REPLAY_MANIFEST": "replay.json"}):
                 with self.subTest(args=args, env=env), self.assertRaisesRegex(ValueError, "unsupported flag"):
                     planning.request(args, env)
 
@@ -364,7 +364,7 @@ class PlanningTests(unittest.TestCase):
         agent = {"CODEX_THREAD_ID": "one", "CLAUDE_CODE_SESSION_ID": "two", "CLAUDE_CODE_MESSAGING_TOKEN": "secret",
                  "SENTRY-TRACE": "trace", "SSH_AUTH_SOCK": "/socket", "TERM": "xterm"}
         declared = {"PATH": "/bin", "HOME": "/home/user", "GOFLAGS": "-mod=mod", "LC_ALL": "C",
-                    "PW_TEST_WORKERS": "2", "UPDATE_SCHEMA_LOCK": "1"}
+                    "PW_TEST_WORKERS": "2", "UPDATE_REPORT_GOLDEN": "1"}
         scheduler = {"PW_TEST_RESOURCE_FD": "201", "PW_TEST_EXECUTION_TICKET": "1", "PW_TEST_STAGE_EVENTS": "x"}
         # This run's state and a live network route are not inputs to a shared stage.
         host = {"LYCAON_LOG_FILE": "/c/debug/a/sidecar.log", "HTTPS_PROXY": "http://127.0.0.1:51845"}

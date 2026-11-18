@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/exec"
 )
 
 func TestProbeScannerReportsWorkingBinary(t *testing.T) {
@@ -57,5 +59,13 @@ func TestProbeScannerWithoutProbeCommand(t *testing.T) {
 	res := ProbeScanner(context.Background(), "none", nil)
 	if res.OK {
 		t.Fatal("OK = true without a probe command")
+	}
+}
+
+// A probe runs the scanner's binary the way the external driver does.
+func TestProbeLaunchesAsUnconfinedExternalScanner(t *testing.T) {
+	plan := probeLaunch("fake-ext")
+	if plan.Kind != exec.LaunchExternalScanner || plan.Subject != "fake-ext" || plan.Confinement != nil {
+		t.Fatalf("launch = %s/%q confinement=%v, want %s/fake-ext unconfined", plan.Kind, plan.Subject, plan.Confinement, exec.LaunchExternalScanner)
 	}
 }

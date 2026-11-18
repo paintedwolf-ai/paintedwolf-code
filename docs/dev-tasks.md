@@ -1058,14 +1058,14 @@ Vitest failures retain the JSON, console, and runner-outcome reports. The outcom
 
 Go and Vitest digests, `check-fast`, `check:digest`, and `check` capture the complete tracked and untracked source state twice. Matching tree ids become an immutable synthetic commit in a detached scratch worktree, so every leg sees one coherent source tree while editors and generators continue in the shared checkout. Failed Go manifests retain the synthetic commit through a namespaced Git ref for exact replay. Managed frontend packages, staged sidecars, bundled notices, and the pinned Git engine are mounted into the scratch worktree as runtime dependencies. Source captures serialize through the snapshot reservation; independent execution overlaps within the shared resource and worker budget.
 
-Anything a run writes into the scratch worktree is discarded with it, which matters for the tests that rewrite their own fixtures on request. Their refresh variables — `UPDATE_SCHEMA_LOCK`, `UPDATE_REPORT_GOLDEN`, `UPDATE_ANCHOR_KICK_GOLDEN`, `UPDATE_CITATION_GROUNDING_PARITY_GOLDENS`, `UPDATE_CORPUS_BASELINE`, and `UPDATE_RUST_HOST_WIRE_FIXTURES` — are listed with their paths in `FIXTURE_REFRESHES` in `scripts/test-source-snapshot.sh`, and on exit the files the run changed under a set variable's path are copied back to the checkout. A refresh variable missing from that list is a false green: the test writes into the discarded tree, then compares against what it just wrote. A file changed in the checkout during the run is not overwritten; the run says so, and the refresh is rerun. For example, after a deliberate change to report copy:
+Anything a run writes into the scratch worktree is discarded with it, which matters for the tests that rewrite their own fixtures on request. Their refresh variables — `UPDATE_REPORT_GOLDEN`, `UPDATE_ANCHOR_KICK_GOLDEN`, `UPDATE_CITATION_GROUNDING_PARITY_GOLDENS`, `UPDATE_CORPUS_BASELINE`, and `UPDATE_RUST_HOST_WIRE_FIXTURES` — are listed with their paths in `FIXTURE_REFRESHES` in `scripts/test-source-snapshot.sh`, and on exit the files the run changed under a set variable's path are copied back to the checkout. A refresh variable missing from that list is a false green: the test writes into the discarded tree, then compares against what it just wrote. A file changed in the checkout during the run is not overwritten; the run says so, and the refresh is rerun. For example, after a deliberate change to report copy:
 
 ```bash
 UPDATE_REPORT_GOLDEN=1 ./task test:digest -- ./internal/report/...
 ./task test:digest -- ./internal/report/...
 ```
 
-The second run, without the variable, is the one that proves the goldens match. Set a refresh variable only when the fixture change is deliberate — it is the review boundary, and the resulting diff is reviewed with the change that caused it. The schema lock's own boundary is described in [SQL persistence](sql-persistence.md).
+The second run, without the variable, is the one that proves the goldens match. Set a refresh variable only when the fixture change is deliberate — it is the review boundary, and the resulting diff is reviewed with the change that caused it.
 
 Go compilation artifacts retain the normal persistent `GOCACHE`, selected before home isolation. Source snapshots reuse leased directory slots keyed by the Git repository, so unchanged packages retain their absolute compilation paths. Concurrent snapshots use separate slots; live descendants retain their source slot until they exit. Lint diagnostics record absolute positions, so each slot keeps its own diagnostic cache in the OS cache directory, keyed by the slot's path and selected through `PW_TEST_CHECKOUT_CACHE`; the slot's lease covers it, and it persists across runs, so a later lint reanalyzes only changed packages and their dependents. golangci-lint removes entries unused for five days. Persistent checkouts keep their own directories the same way. The cache is resolved before the digest isolates its home, so changing `HOME` does not create another snapshot cache. `test-source-snapshot.sh diagnostics-cache` prints the first slot's cache, which hosted runners restore and main's cache warmer publishes.
 
@@ -1872,8 +1872,8 @@ Every release tag clears the same gate:
 1. `VERSION`, `RELEASE_BUILD`, their generated Den/native projections, and a
    non-empty changelog entry agree. OpenAPI describes the wire contract and is
    independent of product release cadence.
-2. The committed schema lock matches the current baseline. Product SemVer and
-   SQLite `user_version` stay independent.
+2. The committed schema version lock matches the host's `SchemaVersion`. Product
+   SemVer and SQLite `user_version` stay independent.
 3. `./task upgrade:corpus:prepare` has produced the versioned fixture and both corpus
    boot modes pass.
 4. `./task release:preflight -- --static`, `./task release:preflight -- --require-corpus` and passing CI checks (`check`, `e2e`) on the exact,

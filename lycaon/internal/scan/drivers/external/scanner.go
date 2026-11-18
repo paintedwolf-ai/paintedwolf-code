@@ -116,7 +116,7 @@ func (s *Scanner) runTarget(ctx context.Context, projectDir, target string) (*sc
 	// Scanners write progress and warnings to stderr and the report to stdout;
 	// a merged buffer would not parse.
 	out, errOut, exitCode, err := exec.RunSeparate(ctx, binary, args, exec.ExecOpts{
-		Launch:          exec.ExternalScannerLaunch(s.entry.ID),
+		Launch:          s.launch(),
 		Dir:             workdir,
 		Timeout:         timeout,
 		NoTimeout:       s.entry.RuntimePolicy().HardLimitSec == 0,
@@ -332,3 +332,6 @@ func scannerEnvironment(base []string, names []string) []string {
 	}
 	return out
 }
+
+// launch runs an operator-installed scanner outside agent confinement.
+func (s *Scanner) launch() exec.LaunchPlan { return exec.ExternalScannerLaunch(s.entry.ID) }

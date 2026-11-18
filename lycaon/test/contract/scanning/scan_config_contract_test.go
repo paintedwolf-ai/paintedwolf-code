@@ -3,6 +3,7 @@ package contract
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -50,30 +51,32 @@ var wantRulesProvenanceVendorIDs = []string{
 	"apiiro-malicious",
 }
 
+// Every vendored rule tree has a provenance entry and every provenance entry
+// has its rule tree.
 func TestRulesProvenanceVendorsSchema(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	provPath := filepath.Join(lycaonRoot, "config", "runtime", "scanners", "rules-provenance.yaml")
-	raw, err := os.ReadFile(provPath)
-	contractcheck.FailErr(t, "read file", err)
-	if !strings.Contains(string(raw), "\nvendors:") && !strings.HasPrefix(string(raw), "vendors:") {
-		t.Fatal("rules-provenance.yaml missing vendors: block")
+	vendorRoot := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "config", "runtime", "scanners", "rules", "vendor")
+	entries, err := os.ReadDir(vendorRoot)
+	contractcheck.FailErr(t, "read vendored rule trees", err)
+	var onDisk []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			onDisk = append(onDisk, entry.Name())
+		}
 	}
-
+	if len(onDisk) == 0 {
+		t.Fatalf("no vendored rule trees under %s", vendorRoot)
+	}
 	prov, err := rules.LoadRulesProvenance()
 	contractcheck.FailErr(t, "rules.LoadRulesProvenance failed", err)
-	if len(prov.Vendors) != len(wantRulesProvenanceVendorIDs) {
-		t.Fatalf("vendor catalog count = %d, want %d", len(prov.Vendors), len(wantRulesProvenanceVendorIDs))
-	}
-	got := make(map[string]struct{}, len(prov.Vendors))
+	declared := make([]string, 0, len(prov.Vendors))
 	for _, vendor := range prov.Vendors {
-		got[vendor.ID] = struct{}{}
+		declared = append(declared, vendor.ID)
 	}
-	for _, want := range wantRulesProvenanceVendorIDs {
-		if _, ok := got[want]; !ok {
-			t.Fatalf("rules-provenance vendors missing id %q", want)
-		}
+	slices.Sort(onDisk)
+	slices.Sort(declared)
+	if !slices.Equal(declared, onDisk) {
+		t.Fatalf("provenance vendors = %v, vendored rule trees = %v", declared, onDisk)
 	}
 }
 
