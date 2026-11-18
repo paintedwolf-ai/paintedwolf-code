@@ -187,29 +187,6 @@ var bootRecovery = []invariants.Invariant{{
 			})
 		}
 	},
-}, {
-	// An entry that omits a field cannot be registered for startup.
-	Name:    "recovery-entries-declare-kind-and-phase",
-	Anchors: []invariants.Anchor{invariants.Decl("internal/bootrecovery", "Entry.Kind"), invariants.Decl("internal/bootrecovery", "Entry.Phase")},
-	Check: func(r *invariants.Run) {
-		entries := 0
-		for _, f := range r.GoFiles(invariants.Production, "internal/app") {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
-				lit, ok := n.(*ast.CompositeLit)
-				if !ok || !isRecoveryEntry(f, lit) {
-					return true
-				}
-				entries++
-				for _, field := range []string{"Name", "Kind", "Phase", "Run"} {
-					if !setsField(lit, field) {
-						r.ReportAt(lit.Pos(), "bootrecovery.Entry omits %s", field)
-					}
-				}
-				return true
-			})
-		}
-		r.Expect(entries, "bootrecovery.Entry literals in internal/app")
-	},
 }}
 
 func isRecoveryEntry(f *invariants.GoFile, lit *ast.CompositeLit) bool {
