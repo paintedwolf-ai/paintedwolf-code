@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcescope"
@@ -36,10 +38,11 @@ type outsideSnapshotPort interface {
 // outsideFolder is one outside write root of a window. Its verdict is set once,
 // when its baseline fails or its settlement ends.
 type outsideFolder struct {
-	spec    OutsideRootSpec
-	rel     string
-	start   string
-	verdict *FolderCoverage
+	spec     OutsideRootSpec
+	rel      string
+	start    sourcesnapshot.Snapshot
+	identity os.FileInfo
+	verdict  *FolderCoverage
 }
 
 // outsideObservation is a window's before-and-after comparison of the command's
@@ -139,12 +142,12 @@ func (o *outsideObservation) settle(folder *outsideFolder, verdict FolderCoverag
 func (o *outsideObservation) pending() []*outsideFolder {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	if o.unconfined {
+	if o.unconfined || o.missed {
 		return nil
 	}
 	var out []*outsideFolder
 	for _, folder := range o.folders {
-		if folder.verdict == nil && folder.start != "" {
+		if folder.verdict == nil && folder.start.ID != "" {
 			out = append(out, folder)
 		}
 	}
@@ -159,13 +162,32 @@ func (s *Commands) outsideNamespace(ctx context.Context, projectID string) (stri
 	return id, err
 }
 
-// snapshotOutside captures one outside folder under the outside scope.
-func (s *Commands) snapshotOutside(ctx context.Context, spec OutsideRootSpec) (sourcesnapshot.Snapshot, error) {
-	return s.outsideSnapshots.Ensure(ctx, sourcesnapshot.Request{
-		Roots: []sourcesnapshot.Root{{Path: spec.Path}},
+func (s *Commands) snapshotOutside(ctx context.Context, spec OutsideRootSpec, identity os.FileInfo) (sourcesnapshot.Snapshot, error) {
+	before, err := outsideFolderIdentity(spec.Path, identity)
+	if err != nil {
+		return sourcesnapshot.Snapshot{}, err
+	}
+	snapshot, err := s.outsideSnapshots.Ensure(ctx, sourcesnapshot.Request{
+		Roots:     []sourcesnapshot.Root{{Path: spec.Path}},
 		Scope:     s.outsideSnapshots.OutsideScope(spec.Path, spec.Omit),
 		Unwatched: true,
 	})
+	if err == nil {
+		_, err = outsideFolderIdentity(spec.Path, before)
+	}
+	return snapshot, err
+}
+
+// A replacement folder does not inherit the original observation.
+func outsideFolderIdentity(folder string, want os.FileInfo) (os.FileInfo, error) {
+	info, err := os.Lstat(folder)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() || fspath.CanonicalPath(folder) != folder || (want != nil && !os.SameFile(want, info)) {
+		return nil, &os.PathError{Op: "observe", Path: folder, Err: os.ErrInvalid}
+	}
+	return info, nil
 }
 
 // baselineOutside records the starting state of the folders specs add to the
@@ -180,7 +202,11 @@ func (s *Commands) baselineOutside(ctx context.Context, w *openCommandWindow, sp
 	defer cancel()
 	var starts []string
 	for _, folder := range added {
-		snapshot, err := s.snapshotOutside(ctx, folder.spec)
+		identity, err := outsideFolderIdentity(folder.spec.Path, nil)
+		var snapshot sourcesnapshot.Snapshot
+		if err == nil {
+			snapshot, err = s.snapshotOutside(ctx, folder.spec, identity)
+		}
 		if err != nil {
 			slog.InfoContext(ctx, "command window outside baseline", "window_id", w.id, "folder", folder.spec.Path, "err", err)
 			w.outside.settle(folder, notObserved(w.outside.rootID, folder.rel, folder.spec.Path,
@@ -188,7 +214,7 @@ func (s *Commands) baselineOutside(ctx context.Context, w *openCommandWindow, sp
 			continue
 		}
 		w.outside.mu.Lock()
-		folder.start = snapshot.ID
+		folder.start, folder.identity = snapshot, identity
 		w.outside.mu.Unlock()
 		starts = append(starts, snapshot.ID)
 	}
@@ -235,14 +261,18 @@ func (s *Commands) compareOutside(ctx context.Context, w *openCommandWindow, fol
 	if err := ctx.Err(); err != nil {
 		return gap(err, api.SourceWindowGapCanceled)
 	}
-	end, err := s.snapshotOutside(ctx, folder.spec)
+	end, err := s.snapshotOutside(ctx, folder.spec, folder.identity)
 	if err != nil {
 		return gap(err, api.SourceWindowGapIoError)
 	}
-	if err := s.inventory.recordOutsideChanges(ctx, w, w.outside.rootID, folder.start, end.ID); err != nil {
+	comparison := outsideComparison{
+		start: folder.start, end: end,
+		beforeGaps: boundaryPaths(folder.start.Boundaries), afterGaps: boundaryPaths(end.Boundaries),
+	}
+	if err := s.inventory.recordOutsideChanges(ctx, w, w.outside.rootID, comparison); err != nil {
 		return gap(err, api.SourceWindowGapSettlementFailed)
 	}
-	return observedCoverage(w.outside.rootID, folder.rel, folder.spec.Path, end.Boundaries)
+	return observedCoverage(w.outside.rootID, folder.rel, folder.spec.Path, comparison.boundaries())
 }
 
 // recordOutsideChanges records what differs between two snapshots of an outside
@@ -250,11 +280,14 @@ func (s *Commands) compareOutside(ctx context.Context, w *openCommandWindow, fol
 // already holds the new state was recorded by the tool that wrote it; a tracked
 // file reconciles from its head, and an untracked one is admitted from the
 // snapshots, as a window admits untracked files under an attached root.
-func (s *Inventory) recordOutsideChanges(ctx context.Context, w *openCommandWindow, rootID, startID, endID string) error {
+func (s *Inventory) recordOutsideChanges(ctx context.Context, w *openCommandWindow, rootID string, comparison outsideComparison) error {
 	cause := observationCause{batchID: newID(), window: w}
 	now := time.Now().UTC()
 	var admitted []RecordInput
-	err := s.snapshots.Diff(ctx, startID, endID, func(change sourcesnapshot.Change) error {
+	err := s.snapshots.Diff(ctx, comparison.start.ID, comparison.end.ID, func(change sourcesnapshot.Change) error {
+		if !comparison.observed(change) {
+			return nil
+		}
 		rel, ok := projectroot.OutsideRel(filepath.Join(change.RootPath(), filepath.FromSlash(change.Path())))
 		if !ok {
 			return nil

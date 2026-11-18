@@ -16,8 +16,7 @@ type publishedRoot struct {
 	boundaries []Boundary
 }
 
-// publish names the roots' manifests in one snapshot and moves the head to
-// it. The manifests are already written and pinned by their candidates.
+// publish commits a snapshot over the pinned manifests. A tracked capture moves its head.
 func (s *Store) publish(ctx context.Context, req Request, roots []publishedRoot, quality CaptureQuality, admissionMode AdmissionMode) (Snapshot, error) {
 	out := Snapshot{
 		RootsKey: rootsKey(req.Roots), Quality: quality.Normalized(),
@@ -70,11 +69,13 @@ func (s *Store) publish(ctx context.Context, req Request, roots []publishedRoot,
 			return Snapshot{}, err
 		}
 	}
-	if err := q.UpsertSourceSnapshotHead(ctx, db.UpsertSourceSnapshotHeadParams{
-		RootsKey: out.RootsKey, SnapshotID: out.ID,
-		PublishedTs: db.FormatTime(time.Now().UTC()),
-	}); err != nil {
-		return Snapshot{}, err
+	if !req.Unwatched {
+		if err := q.UpsertSourceSnapshotHead(ctx, db.UpsertSourceSnapshotHeadParams{
+			RootsKey: out.RootsKey, SnapshotID: out.ID,
+			PublishedTs: db.FormatTime(time.Now().UTC()),
+		}); err != nil {
+			return Snapshot{}, err
+		}
 	}
 	return out, tx.Commit()
 }

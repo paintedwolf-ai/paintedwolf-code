@@ -198,6 +198,12 @@ func (s *Store) Ensure(ctx context.Context, req Request) (Snapshot, error) {
 	}
 	req.Verify = req.Verify.Normalized()
 	key := rootsKey(req.Roots) + "\x00" + string(req.Verify)
+	if req.Scope != nil {
+		key += "\x00scope:" + req.Scope.Identity()
+	}
+	if req.Unwatched {
+		key += "\x00unwatched"
+	}
 
 admit:
 	if err := ctx.Err(); err != nil {
