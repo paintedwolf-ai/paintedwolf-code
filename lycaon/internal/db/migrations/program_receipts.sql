@@ -112,6 +112,7 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     complete INTEGER NOT NULL DEFAULT 0 CHECK (complete IN (0,1)),
     publication_eligible INTEGER NOT NULL DEFAULT 0 CHECK (publication_eligible IN (0,1)),
     publication_basis INTEGER NOT NULL DEFAULT 0 CHECK (publication_basis IN (0,1)),
+    consumer_closed INTEGER NOT NULL DEFAULT 0 CHECK (consumer_closed IN (0,1)),
     effect_certainty TEXT NOT NULL DEFAULT 'none' CHECK (effect_certainty IN ('none','completed','attempted','unknown')),
     evidence_kind TEXT NOT NULL DEFAULT '',
     evidence_ref TEXT NOT NULL DEFAULT '',

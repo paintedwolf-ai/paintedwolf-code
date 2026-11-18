@@ -122,7 +122,7 @@ func TestRedirectedWritesAlwaysNameTheirFiles(t *testing.T) {
 			}
 		}
 
-		values := composeActivityGroups(groups, true)
+		values := composeActivityGroups(groups, activityProgramSettled)
 		row := map[string]int{}
 		for r, activity := range values {
 			for _, id := range activity.ExecutionIDs {

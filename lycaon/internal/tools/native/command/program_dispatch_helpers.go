@@ -189,7 +189,7 @@ func (d *ProgramDispatcher) SettleExecution(ctx context.Context, invocation tool
 		// Descendants own their effects; a structural node only aggregates them.
 		result.EffectCertainty = toolcontract.EffectUnknown
 	}
-	return d.settleWith(ctx, entry.child, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: entry.ownerInvoked, JobHandle: record.JobHandle, Conflict: revisionConflict(record.Diagnostic)})
+	return d.settleWith(ctx, entry.child, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: entry.ownerInvoked, JobHandle: record.JobHandle, Conflict: revisionConflict(record.Diagnostic), ConsumerClosedExecutions: record.ConsumerClosedExecutions})
 }
 
 var compiledStructuralDefinitions sync.Map

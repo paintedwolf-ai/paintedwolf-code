@@ -165,6 +165,7 @@ func (f *frame) settlePipeline(ctx context.Context, run *childRun, stages []comm
 	if stop, ok := f.state.latch.Stop(); ok {
 		aggregate = stop.Result
 	}
+	run.record.ConsumerClosedExecutions = out.ConsumerClosedExecutions
 	run.settle(ctx, aggregate, errors.Join(stageErr, settleErr))
 	if err := f.state.control.Record(run.inv.Identity.ExecutionID, aggregate, true, false); err != nil {
 		return err

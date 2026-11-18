@@ -49,6 +49,7 @@ type PipelineOutcome struct {
 	Complete, PublicationEligible bool
 	PublicationBasis              toolcontract.PublicationBasis
 	PipeStatuses                  []int
+	ConsumerClosedExecutions      []string
 }
 
 var pipelineStageMaximum = sync.OnceValues(func() (int, error) {
@@ -142,6 +143,7 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 		effective := result
 		inputComplete := stage.RequiredInputComplete
 		if expected {
+			out.ConsumerClosedExecutions = append(out.ConsumerClosedExecutions, stage.ExecutionID)
 			effective.Status = 0
 			effective.Terminal = toolcontract.ProducerCompleted
 			effective.Complete = true
@@ -164,5 +166,8 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 		out.PublicationEligible = false
 	}
 	out.PublicationEligible = out.PublicationEligible && out.Complete && firstError == nil
+	if !out.Complete || firstError != nil {
+		out.ConsumerClosedExecutions = nil
+	}
 	return out, firstError
 }
