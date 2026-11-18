@@ -41,14 +41,15 @@ type inventoryFlight struct {
 
 // Inventory caches discovery paths and captures fresh file bytes on each scan.
 type Inventory struct {
-	mu       sync.Mutex
-	roots    map[string]*inventoryRoot
-	stop     func()
-	ctx      context.Context
-	cancel   context.CancelFunc
-	slots    chan struct{}
-	walk     func(context.Context, string) ([]governance.ResolvedAgentsMD, error)
-	coverage func(string) repochange.WatchCoverage
+	mu        sync.Mutex
+	roots     map[string]*inventoryRoot
+	stop      func()
+	ctx       context.Context
+	cancel    context.CancelFunc
+	refreshes sync.WaitGroup
+	slots     chan struct{}
+	walk      func(context.Context, string) ([]governance.ResolvedAgentsMD, error)
+	coverage  func(string) repochange.WatchCoverage
 }
 
 func NewInventory() *Inventory {
@@ -58,11 +59,14 @@ func NewInventory() *Inventory {
 	return i
 }
 
-var processInventory = sync.OnceValue(NewInventory)
-
-func ProcessInventory() *Inventory { return processInventory() }
-
-func (i *Inventory) Close() { i.cancel(); i.stop() }
+// Close stops admission and waits for active discovery to return.
+func (i *Inventory) Close() {
+	i.mu.Lock()
+	i.cancel()
+	i.mu.Unlock()
+	i.stop()
+	i.refreshes.Wait()
+}
 
 // Scan joins a shared directory index with the current contributed bytes.
 func (i *Inventory) Scan(ctx context.Context, roots []string) (Manifest, error) {
@@ -76,6 +80,9 @@ func (i *Inventory) ScanRecent(ctx context.Context, roots []string, maxAge time.
 }
 
 func (i *Inventory) scan(ctx context.Context, roots []string, maxAge time.Duration) (Manifest, error) {
+	if err := i.ctx.Err(); err != nil {
+		return Manifest{}, err
+	}
 	roots = cleanRoots(roots)
 	indices := make(map[string][]governance.ResolvedAgentsMD, len(roots))
 	for _, root := range roots {
@@ -121,6 +128,9 @@ func (i *Inventory) changed(_ context.Context, ev repochange.Event) {
 	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
+	if i.ctx.Err() != nil {
+		return
+	}
 	for root, entry := range i.roots {
 		projectRel, err := filepath.Rel(ev.ProjectDir, root)
 		rootInsideEvent := err == nil && projectRel != ".." && !strings.HasPrefix(projectRel, ".."+string(filepath.Separator))
@@ -176,6 +186,10 @@ func (i *Inventory) read(ctx context.Context, root string, maxAge time.Duration)
 	}
 	repochange.EnsureRoot(ctx, root)
 	i.mu.Lock()
+	if err := i.ctx.Err(); err != nil {
+		i.mu.Unlock()
+		return nil, err
+	}
 	entry := i.roots[root]
 	if entry == nil {
 		if len(i.roots) >= inventoryRoots*2 {
@@ -212,7 +226,9 @@ func (i *Inventory) read(ctx context.Context, root string, maxAge time.Duration)
 		flight = &inventoryFlight{done: make(chan struct{}), full: full}
 		entry.flight = flight
 		entry.full, entry.dirty = false, make(map[string]struct{})
-		go i.refresh(context.WithoutCancel(ctx), root, entry, flight, full, dirty, previous)
+		i.refreshes.Go(func() {
+			i.refresh(context.WithoutCancel(ctx), root, entry, flight, full, dirty, previous)
+		})
 	}
 	i.mu.Unlock()
 	select {

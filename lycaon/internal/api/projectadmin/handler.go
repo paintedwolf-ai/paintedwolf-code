@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/projectignore"
 	"github.com/lycaon/lycaon/internal/projectremoval"
 	"github.com/lycaon/lycaon/internal/rules"
@@ -154,6 +155,7 @@ type Trust struct {
 	Extensions *extensionadmin.Mutations
 	Registry   project.Registry
 	Settings   *settings.Service
+	inventory  *projectcontrib.Inventory
 	responses  *httpio.Responder
 }
 
@@ -187,7 +189,12 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 	h.Roots = &Roots{DataDir: deps.DataDir, Git: deps.Git, MutationGate: deps.MutationGate, ProjectRules: deps.ProjectRules, Registry: deps.Registry, ScanCadence: deps.ScanCadence, Sessions: deps.Sessions, Settings: deps.Settings, Store: deps.Store, background: background, responses: responses, sourceEditor: deps.Sources.Editor, sourceViews: deps.Sources.Views, sourceWatch: deps.Sources.Watch, sourceWorkspace: deps.Sources.Workspace}
 	h.Sandboxes = &Sandboxes{Board: deps.Board, Sessions: deps.Sessions, WorkerBranchRoot: deps.WorkerBranchRoot, Workers: deps.Workers, background: background}
 	h.Secrets = &Secrets{ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, Registry: deps.Registry, SecretIgnores: deps.SecretIgnores, responses: responses}
-	h.Trust = &Trust{Events: deps.Events, Extensions: deps.Extensions.Mutations, Registry: deps.Registry, Settings: deps.Settings, responses: responses}
+	inventory := projectcontrib.NewInventory()
+	background.GoService(func(ctx context.Context) {
+		<-ctx.Done()
+		inventory.Close()
+	})
+	h.Trust = &Trust{Events: deps.Events, Extensions: deps.Extensions.Mutations, Registry: deps.Registry, Settings: deps.Settings, inventory: inventory, responses: responses}
 	h.Verification = &Verification{Events: deps.Events, LLMService: deps.LLMService, Registry: deps.Registry, Sessions: deps.Sessions, Settings: deps.Settings, background: background}
 	h.Projects.Roots = h.Roots
 	h.Projects.Verification = h.Verification
