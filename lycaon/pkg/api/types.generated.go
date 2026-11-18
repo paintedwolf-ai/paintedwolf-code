@@ -4311,7 +4311,30 @@ type LocalGenerationStatus struct {
 	// Authenticated revision held by the admitted model process.
 	Revision string `json:"revision,omitempty"`
 	// Admitted context capacity of the ready process.
-	ContextTokens int `json:"context_tokens,omitempty"`
+	ContextTokens   int              `json:"context_tokens,omitempty"`
+	SelectedModel   string           `json:"selected_model,omitempty"`
+	TargetModel     string           `json:"target_model,omitempty"`
+	DownloadedBytes int              `json:"downloaded_bytes,omitempty"`
+	TotalBytes      int              `json:"total_bytes,omitempty"`
+	SeedAvailable   bool             `json:"seed_available,omitempty"`
+	AvailableModels []LocalModelTier `json:"available_models,omitempty"`
+}
+
+// LocalModelSelectionRequest
+type LocalModelSelectionRequest struct {
+	Model      string `json:"model"`
+	BundlePath string `json:"bundle_path,omitempty"`
+}
+
+// LocalModelTier
+type LocalModelTier struct {
+	ID                string `json:"id"`
+	DisplayName       string `json:"display_name"`
+	DownloadBytes     int    `json:"download_bytes"`
+	MinMemoryBytes    int    `json:"min_memory_bytes"`
+	Eligible          bool   `json:"eligible"`
+	Recommended       bool   `json:"recommended"`
+	DownloadAvailable bool   `json:"download_available"`
 }
 
 // LockVaultRequest

@@ -21,6 +21,7 @@ export const API_OPERATIONS = {
   beginProjectManagedSecretReveal: { method: "POST", path: "/v1/projects/{id}/secrets/{secret_id}/reveal-challenges" },
   bindGitWorktree: { method: "PUT", path: "/v1/sessions/{id}/git-worktree" },
   browseProjectSource: { method: "GET", path: "/v1/projects/{id}/source/browse" },
+  cancelLocalModelTransfer: { method: "POST", path: "/v1/providers/{provider_id}/local-model/cancel" },
   cancelMcpOAuth: { method: "POST", path: "/v1/mcp/providers/{provider_id}/oauth/cancel" },
   cancelProjectPromotion: { method: "DELETE", path: "/v1/projects/{id}/promotion" },
   cancelSourceOperation: { method: "POST", path: "/v1/projects/{id}/source/operations/{operation_id}/cancel" },
@@ -122,6 +123,7 @@ export const API_OPERATIONS = {
   getHostResources: { method: "GET", path: "/v1/host-resources" },
   getLimitsSettings: { method: "GET", path: "/v1/settings/limits" },
   getLocalData: { method: "GET", path: "/v1/local-data" },
+  getLocalModelStatus: { method: "GET", path: "/v1/providers/{provider_id}/local-model" },
   getModelPolicySettings: { method: "GET", path: "/v1/settings/model-policy" },
   getPowerSettings: { method: "GET", path: "/v1/settings/power" },
   getPreflight: { method: "GET", path: "/v1/preflight" },
@@ -252,6 +254,7 @@ export const API_OPERATIONS = {
   releaseSourceViewportInterest: { method: "DELETE", path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}" },
   reloadEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/reload" },
   reloadExtensionPack: { method: "POST", path: "/v1/extensions/packs/{pack_id}/reload" },
+  removeLocalModel: { method: "DELETE", path: "/v1/providers/{provider_id}/local-model" },
   renameProjectSource: { method: "POST", path: "/v1/projects/{id}/source/rename" },
   repairLocalGeneration: { method: "POST", path: "/v1/providers/{provider_id}/repair" },
   replaceEditorDocument: { method: "PUT", path: "/v1/projects/{id}/editor-documents/{document_id}" },
@@ -295,6 +298,7 @@ export const API_OPERATIONS = {
   searchContributionSource: { method: "POST", path: "/v1/projects/{id}/contribution-search/{source_id}" },
   searchProjectSource: { method: "GET", path: "/v1/projects/{id}/source/search" },
   searchSourceView: { method: "GET", path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/search" },
+  selectLocalModel: { method: "PUT", path: "/v1/providers/{provider_id}/local-model" },
   sendPrompt: { method: "POST", path: "/v1/sessions/{id}/prompts" },
   startFullScan: { method: "POST", path: "/v1/projects/{id}/scans" },
   startMcpOAuth: { method: "POST", path: "/v1/mcp/providers/{provider_id}/oauth/start" },
@@ -368,6 +372,7 @@ export type OperationPathParameters = {
   beginProjectManagedSecretReveal: { id: string | number; secret_id: string | number; };
   bindGitWorktree: { id: string | number; };
   browseProjectSource: { id: string | number; };
+  cancelLocalModelTransfer: { provider_id: string | number; };
   cancelMcpOAuth: { provider_id: string | number; };
   cancelProjectPromotion: { id: string | number; };
   cancelSourceOperation: { id: string | number; operation_id: string | number; };
@@ -469,6 +474,7 @@ export type OperationPathParameters = {
   getHostResources: Record<string, never>;
   getLimitsSettings: Record<string, never>;
   getLocalData: Record<string, never>;
+  getLocalModelStatus: { provider_id: string | number; };
   getModelPolicySettings: Record<string, never>;
   getPowerSettings: Record<string, never>;
   getPreflight: Record<string, never>;
@@ -599,6 +605,7 @@ export type OperationPathParameters = {
   releaseSourceViewportInterest: { id: string | number; view_id: string | number; interest_id: string | number; };
   reloadEditorDocument: { id: string | number; document_id: string | number; };
   reloadExtensionPack: { pack_id: string | number; };
+  removeLocalModel: { provider_id: string | number; };
   renameProjectSource: { id: string | number; };
   repairLocalGeneration: { provider_id: string | number; };
   replaceEditorDocument: { id: string | number; document_id: string | number; };
@@ -642,6 +649,7 @@ export type OperationPathParameters = {
   searchContributionSource: { id: string | number; source_id: string | number; };
   searchProjectSource: { id: string | number; };
   searchSourceView: { id: string | number; view_id: string | number; presentation_id: string | number; };
+  selectLocalModel: { provider_id: string | number; };
   sendPrompt: { id: string | number; };
   startFullScan: { id: string | number; };
   startMcpOAuth: { provider_id: string | number; };

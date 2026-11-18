@@ -31,6 +31,7 @@ var (
 	operationBeginProjectManagedSecretReveal    = generatedOperation{ID: "beginProjectManagedSecretReveal", Method: "POST", Path: "/v1/projects/{id}/secrets/{secret_id}/reveal-challenges", Params: []string{"id", "secret_id"}}
 	operationBindGitWorktree                    = generatedOperation{ID: "bindGitWorktree", Method: "PUT", Path: "/v1/sessions/{id}/git-worktree", Params: []string{"id"}, RecordsPersonAction: true}
 	operationBrowseProjectSource                = generatedOperation{ID: "browseProjectSource", Method: "GET", Path: "/v1/projects/{id}/source/browse", Params: []string{"id"}}
+	operationCancelLocalModelTransfer           = generatedOperation{ID: "cancelLocalModelTransfer", Method: "POST", Path: "/v1/providers/{provider_id}/local-model/cancel", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationCancelMcpOAuth                     = generatedOperation{ID: "cancelMcpOAuth", Method: "POST", Path: "/v1/mcp/providers/{provider_id}/oauth/cancel", Params: []string{"provider_id"}}
 	operationCancelProjectPromotion             = generatedOperation{ID: "cancelProjectPromotion", Method: "DELETE", Path: "/v1/projects/{id}/promotion", Params: []string{"id"}, RecordsPersonAction: true}
 	operationCancelSourceOperation              = generatedOperation{ID: "cancelSourceOperation", Method: "POST", Path: "/v1/projects/{id}/source/operations/{operation_id}/cancel", Params: []string{"id", "operation_id"}, RecordsPersonAction: true}
@@ -132,6 +133,7 @@ var (
 	operationGetHostResources                   = generatedOperation{ID: "getHostResources", Method: "GET", Path: "/v1/host-resources"}
 	operationGetLimitsSettings                  = generatedOperation{ID: "getLimitsSettings", Method: "GET", Path: "/v1/settings/limits"}
 	operationGetLocalData                       = generatedOperation{ID: "getLocalData", Method: "GET", Path: "/v1/local-data"}
+	operationGetLocalModelStatus                = generatedOperation{ID: "getLocalModelStatus", Method: "GET", Path: "/v1/providers/{provider_id}/local-model", Params: []string{"provider_id"}}
 	operationGetModelPolicySettings             = generatedOperation{ID: "getModelPolicySettings", Method: "GET", Path: "/v1/settings/model-policy"}
 	operationGetPowerSettings                   = generatedOperation{ID: "getPowerSettings", Method: "GET", Path: "/v1/settings/power"}
 	operationGetPreflight                       = generatedOperation{ID: "getPreflight", Method: "GET", Path: "/v1/preflight"}
@@ -262,6 +264,7 @@ var (
 	operationReleaseSourceViewportInterest      = generatedOperation{ID: "releaseSourceViewportInterest", Method: "DELETE", Path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}", Params: []string{"id", "view_id", "interest_id"}}
 	operationReloadEditorDocument               = generatedOperation{ID: "reloadEditorDocument", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/reload", Params: []string{"id", "document_id"}, RecordsPersonAction: true}
 	operationReloadExtensionPack                = generatedOperation{ID: "reloadExtensionPack", Method: "POST", Path: "/v1/extensions/packs/{pack_id}/reload", Params: []string{"pack_id"}, RecordsPersonAction: true}
+	operationRemoveLocalModel                   = generatedOperation{ID: "removeLocalModel", Method: "DELETE", Path: "/v1/providers/{provider_id}/local-model", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationRenameProjectSource                = generatedOperation{ID: "renameProjectSource", Method: "POST", Path: "/v1/projects/{id}/source/rename", Params: []string{"id"}, RecordsPersonAction: true}
 	operationRepairLocalGeneration              = generatedOperation{ID: "repairLocalGeneration", Method: "POST", Path: "/v1/providers/{provider_id}/repair", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationReplaceEditorDocument              = generatedOperation{ID: "replaceEditorDocument", Method: "PUT", Path: "/v1/projects/{id}/editor-documents/{document_id}", Params: []string{"id", "document_id"}}
@@ -305,6 +308,7 @@ var (
 	operationSearchContributionSource           = generatedOperation{ID: "searchContributionSource", Method: "POST", Path: "/v1/projects/{id}/contribution-search/{source_id}", Params: []string{"id", "source_id"}}
 	operationSearchProjectSource                = generatedOperation{ID: "searchProjectSource", Method: "GET", Path: "/v1/projects/{id}/source/search", Params: []string{"id"}}
 	operationSearchSourceView                   = generatedOperation{ID: "searchSourceView", Method: "GET", Path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/search", Params: []string{"id", "view_id", "presentation_id"}}
+	operationSelectLocalModel                   = generatedOperation{ID: "selectLocalModel", Method: "PUT", Path: "/v1/providers/{provider_id}/local-model", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationSendPrompt                         = generatedOperation{ID: "sendPrompt", Method: "POST", Path: "/v1/sessions/{id}/prompts", Params: []string{"id"}, RecordsPersonAction: true}
 	operationStartFullScan                      = generatedOperation{ID: "startFullScan", Method: "POST", Path: "/v1/projects/{id}/scans", Params: []string{"id"}, RecordsPersonAction: true}
 	operationStartMcpOAuth                      = generatedOperation{ID: "startMcpOAuth", Method: "POST", Path: "/v1/mcp/providers/{provider_id}/oauth/start", Params: []string{"provider_id"}}
@@ -371,6 +375,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationBeginProjectManagedSecretReveal,
 	operationBindGitWorktree,
 	operationBrowseProjectSource,
+	operationCancelLocalModelTransfer,
 	operationCancelMcpOAuth,
 	operationCancelProjectPromotion,
 	operationCancelSourceOperation,
@@ -472,6 +477,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetHostResources,
 	operationGetLimitsSettings,
 	operationGetLocalData,
+	operationGetLocalModelStatus,
 	operationGetModelPolicySettings,
 	operationGetPowerSettings,
 	operationGetPreflight,
@@ -602,6 +608,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationReleaseSourceViewportInterest,
 	operationReloadEditorDocument,
 	operationReloadExtensionPack,
+	operationRemoveLocalModel,
 	operationRenameProjectSource,
 	operationRepairLocalGeneration,
 	operationReplaceEditorDocument,
@@ -645,6 +652,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationSearchContributionSource,
 	operationSearchProjectSource,
 	operationSearchSourceView,
+	operationSelectLocalModel,
 	operationSendPrompt,
 	operationStartFullScan,
 	operationStartMcpOAuth,

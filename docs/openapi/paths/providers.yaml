@@ -303,3 +303,130 @@ paths:
           $ref: ../components/responses.yaml#/components/responses/TooManyRequests
         default:
           $ref: ../components/responses.yaml#/components/responses/Error
+  /v1/providers/{provider_id}/local-model:
+    get:
+      tags: [providers]
+      operationId: getLocalModelStatus
+      summary: Inspect local model selection
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Current local model status
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/local-runtime.yaml#/components/schemas/LocalGenerationStatus
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        'default':
+          $ref: ../components/responses.yaml#/components/responses/Error
+    put:
+      tags: [providers]
+      operationId: selectLocalModel
+      x-person-action: record
+      summary: Start a local model download or offline import
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/settings/local-runtime.yaml#/components/schemas/LocalModelSelectionRequest
+      responses:
+        '200':
+          description: Current local model status
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/local-runtime.yaml#/components/schemas/LocalGenerationStatus
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        'default':
+          $ref: ../components/responses.yaml#/components/responses/Error
+    delete:
+      tags: [providers]
+      operationId: removeLocalModel
+      x-person-action: record
+      summary: Remove the local model
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Current local model status
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/local-runtime.yaml#/components/schemas/LocalGenerationStatus
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        'default':
+          $ref: ../components/responses.yaml#/components/responses/Error
+  /v1/providers/{provider_id}/local-model/cancel:
+    post:
+      tags: [providers]
+      operationId: cancelLocalModelTransfer
+      x-person-action: record
+      summary: Cancel a local model transfer
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Current local model status
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/local-runtime.yaml#/components/schemas/LocalGenerationStatus
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        'default':
+          $ref: ../components/responses.yaml#/components/responses/Error

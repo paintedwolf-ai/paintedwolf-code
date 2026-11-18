@@ -8,7 +8,7 @@ components:
       properties:
         state:
           type: string
-          enum: [idle, loading, ready, repairing, unavailable, repair_required, insufficient_memory, stopped]
+          enum: [idle, loading, ready, repairing, unavailable, repair_required, insufficient_memory, downloading, opted_out, stopped]
           description: Current host runtime state, independent of cached model discovery.
         recovery_action:
           type: string
@@ -24,6 +24,50 @@ components:
           type: integer
           minimum: 0
           description: Admitted context capacity of the ready process.
+        selected_model:
+          type: string
+        target_model:
+          type: string
+        downloaded_bytes:
+          type: integer
+        total_bytes:
+          type: integer
+        seed_available:
+          type: boolean
+        available_models:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalModelTier'
+    LocalModelSelectionRequest:
+      x-go-generate: true
+      type: object
+      required: [model]
+      additionalProperties: false
+      properties:
+        model:
+          type: string
+        bundle_path:
+          type: string
+    LocalModelTier:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, display_name, download_bytes, min_memory_bytes, eligible, recommended, download_available]
+      properties:
+        id:
+          type: string
+        display_name:
+          type: string
+        download_bytes:
+          type: integer
+        min_memory_bytes:
+          type: integer
+        eligible:
+          type: boolean
+        recommended:
+          type: boolean
+        download_available:
+          type: boolean
     LocalGenerationRepairResult:
       x-go-generate: true
       type: object
