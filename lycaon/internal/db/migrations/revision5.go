@@ -19,15 +19,19 @@ type Part struct {
 	Writes func(ctx context.Context, store DBTX, storeBytes uint64) (uint64, error)
 }
 
-// Revision5 is the single step from the shipped revision-4 shape. Until a build
-// holding revision 5 is published, release candidates included, schema changes
-// join these parts instead of advancing SchemaVersion.
-func Revision5(target Baseline) Step {
+const (
+	revision5ID       = "source-manifests-and-command-records"
+	revision5Checksum = "8e1afb6494bcc70516ccbb226a0128d9d2d566bac1d05a829ed98aa7daeb93ae"
+)
+
+var releasedRevision5 = Baseline{Revision: 5, Shape: "a1c252d46e94940750d9b239e96716d7f8d3a612fb1a2d24969085876aac2aaa"}
+
+// Revision5 upgrades to the released manifest and command-record schema.
+func Revision5() Step {
 	return composeStep(Step{
-		ID:       "source-manifests-and-command-records",
-		Checksum: "8405913f4ef59df8f3e5be7ae195ed139f9f82cc8839f5a9fd7491b2f063e009",
-		From:     manifestLayoutSource, To: target,
-	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords(), SessionMode())
+		ID: revision5ID, Checksum: revision5Checksum,
+		From: manifestLayoutSource, To: releasedRevision5,
+	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords())
 }
 
 func composeStep(step Step, parts ...Part) Step {

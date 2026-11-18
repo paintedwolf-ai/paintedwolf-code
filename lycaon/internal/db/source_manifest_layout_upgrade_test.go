@@ -28,7 +28,7 @@ func seedLegacyManifestStore(t *testing.T, dir string, rootEntries map[string]in
 	defer func() { _ = source.Close() }()
 	released, err := inspectSchema(t.Context(), source)
 	testutil.FailErr(t, "inspect released store", err)
-	if released != migrations.Revision5(released).From {
+	if released != migrations.Revision5().From {
 		t.Fatalf("released store is %+v, not the registered revision-4 source", released)
 	}
 	want := map[string]map[string][]string{}

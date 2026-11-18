@@ -78,9 +78,8 @@ func assertRetainedStorageFallback(t *testing.T, plan Plan) {
 }
 
 func retainedStorageContractPlan() Plan {
-	target := Baseline{Revision: 5, Shape: "a1c252d46e94940750d9b239e96716d7f8d3a612fb1a2d24969085876aac2aaa"}
-	step := Revision5(target)
-	return Plan{Source: step.From, Target: target, steps: []Step{step}}
+	target := Baseline{Revision: 6, Shape: strings.Repeat("6", 64)}
+	return Plan{Source: manifestLayoutSource, Target: target, steps: []Step{Revision5(), Revision6(target)}}
 }
 
 func TestRetainedSorterBudgetCoversMergeFanoutBoundaries(t *testing.T) {
@@ -149,6 +148,22 @@ func TestRetainedSorterBudgetRejectsMergeAndFinalSumOverflow(t *testing.T) {
 				t.Fatal("accepted an overflowing scratch reservation")
 			}
 		})
+	}
+}
+
+func TestRetainedStorageIncludesSessionLineageAndRootIndex(t *testing.T) {
+	if !retainedRouteTree("sessions") {
+		t.Fatal("session tree omitted from retained inventory")
+	}
+	empty, err := sessionModeScratch(retainedTree{}, 4096)
+	testutil.FailErr(t, "reserve scratch for empty session tree", err)
+	reserve, err := sessionModeScratch(retainedTree{cells: 10000, record: 1024}, 4096)
+	testutil.FailErr(t, "reserve scratch for populated session lineage", err)
+	if reserve <= empty {
+		t.Fatalf("session rows did not increase scratch reservation: %d <= %d", reserve, empty)
+	}
+	if _, err := sessionModeScratch(retainedTree{cells: math.MaxUint64, record: 1024}, 4096); err == nil {
+		t.Fatal("accepted an overflowing session scratch reservation")
 	}
 }
 

@@ -1,15 +1,25 @@
 ALTER TABLE sessions ADD COLUMN root_session_id TEXT NOT NULL DEFAULT '' REFERENCES sessions(id) ON DELETE CASCADE;
 ALTER TABLE sessions ADD COLUMN mode TEXT CHECK (mode IN ('agent', 'ask'));
 
-WITH RECURSIVE lineage(id, root_session_id, project_id, owner_person_id) AS MATERIALIZED (
+CREATE TEMP TABLE session_migration_lineage (
+    id TEXT PRIMARY KEY,
+    root_session_id TEXT NOT NULL
+) STRICT, WITHOUT ROWID;
+
+WITH RECURSIVE lineage(id, root_session_id, project_id, owner_person_id) AS (
     SELECT id, id, project_id, owner_person_id FROM sessions WHERE parent_session_id IS NULL
     UNION ALL
     SELECT child.id, p.root_session_id, child.project_id, child.owner_person_id FROM lineage p
     JOIN sessions child ON child.parent_session_id = p.id
         AND child.project_id = p.project_id AND child.owner_person_id = p.owner_person_id
 )
-UPDATE sessions SET root_session_id = (SELECT root_session_id FROM lineage WHERE id = sessions.id),
+INSERT INTO session_migration_lineage (id, root_session_id)
+SELECT id, root_session_id FROM lineage;
+
+UPDATE sessions SET root_session_id = (SELECT root_session_id FROM session_migration_lineage WHERE id = sessions.id),
     mode = CASE WHEN parent_session_id IS NULL THEN 'agent' END;
+
+DROP TABLE session_migration_lineage;
 
 ALTER TABLE sessions ADD COLUMN started INTEGER NOT NULL DEFAULT 0 CHECK (
         started IN (0, 1) AND

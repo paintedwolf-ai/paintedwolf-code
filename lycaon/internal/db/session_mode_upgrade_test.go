@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestRevision5BackfillsSessionModeFromRetainedAdmission(t *testing.T) {
+func TestRevision6BackfillsSessionModeFromRetainedAdmission(t *testing.T) {
 	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "store.db")
 	source := releasedRevision4Store(t, path)
@@ -32,6 +32,14 @@ func TestRevision5BackfillsSessionModeFromRetainedAdmission(t *testing.T) {
 	upgraded, err := sql.Open("sqlite", path)
 	testutil.FailErr(t, "open upgraded store", err)
 	defer upgraded.Close()
+	var applied int
+	err = upgraded.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations
+		WHERE id = 'session-mode-authority' AND from_revision = 5 AND to_revision = 6`).Scan(&applied)
+	testutil.FailErr(t, "read session mode migration ledger", err)
+	if applied != 1 {
+		t.Fatalf("session mode migration applied %d times", applied)
+	}
+
 	for _, want := range []struct {
 		id, root, mode string
 		started        int

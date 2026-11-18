@@ -31,7 +31,11 @@ func (p Plan) PrepareRetainedStorage(ctx context.Context, database DBTX) (Plan, 
 	if err != nil {
 		return p, err
 	}
-	p.scratchBytes, err = storageSum(p.scratchBytes, scratch)
+	modeScratch, err := sessionModeScratch(trees["sessions"], pageBytes)
+	if err != nil {
+		return p, err
+	}
+	p.scratchBytes, err = storageSum(p.scratchBytes, max(scratch, modeScratch))
 	p.retainedStoragePrepared = err == nil
 	p.retainedEntryRows = trees["source_manifest_entries"].cells
 	p.retainedTrees = trees

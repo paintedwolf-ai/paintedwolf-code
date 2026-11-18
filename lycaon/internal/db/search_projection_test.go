@@ -149,7 +149,13 @@ func TestToolResultPathUpgradeRepairsPagedProjectionAndFTS(t *testing.T) {
 	testutil.FailErr(t, "open projection fixture", err)
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
 	const session = "path-repair"
-	testdbseed.InsertSessionWithRoot(t, database, session, testdbseed.DefaultProjectID, t.TempDir())
+	root := testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	const stamped = "2026-10-15T00:00:00Z"
+	_, err = database.ExecContext(t.Context(), `
+		INSERT INTO sessions(id, project_id, owner_person_id, workspace_root_id, posture, created_at, activity_at, updated_at)
+		VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', ?, ?, ?)`,
+		session, testdbseed.DefaultProjectID, root, stamped, stamped, stamped)
+	testutil.FailErr(t, "seed released session", err)
 	tx, err := database.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin retained observation fixture", err)
 	const target = "\u00a0observations.txt\t"
