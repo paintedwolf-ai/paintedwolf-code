@@ -1,6 +1,8 @@
 package sourceledger
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -81,4 +83,25 @@ func TestOutsideComparisonRefusesReplacedRoot(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestJoiningLaunchWithCanceledWaitDoesNotStartSecondBaseline(t *testing.T) {
+	store, ctx, root := openLedgerOnDisk(t)
+	dir := outsideDir(t)
+	window := openOutsideWindow(t, store, ctx, root)
+	fault := installSnapshots(store, &faultySnapshots{})
+	joins := window.window.outside.joins
+	joins <- struct{}{}
+	wait, cancel := context.WithCancel(ctx)
+	cancel()
+	err := window.AddOutsideRoots(wait, []OutsideRootSpec{{Path: dir}})
+	<-joins
+	if !errors.Is(err, context.Canceled) || fault.captures() != 0 {
+		t.Fatalf("join = %v, captures = %d; want canceled wait before any capture", err, fault.captures())
+	}
+	testutil.FailErr(t, "join after the prior launch releases", window.AddOutsideRoots(ctx, []OutsideRootSpec{{Path: dir}}))
+	if fault.captures() != 1 {
+		t.Fatalf("captures = %d, want one baseline after admission", fault.captures())
+	}
+	closeAndSettle(t, ctx, window)
 }

@@ -179,7 +179,7 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 		return nil, err
 	}
 	window := &openCommandWindow{
-		outside: &outsideObservation{rootID: outsideID}, retained: newRetainedSet(),
+		outside: &outsideObservation{rootID: outsideID, joins: make(chan struct{}, 1)}, retained: newRetainedSet(),
 		id: newID(), projectID: in.ProjectID,
 		roots: append([]RootSpec(nil), in.Roots...), sessionID: strings.TrimSpace(in.SessionID),
 		turn: in.Turn, toolCallID: strings.TrimSpace(in.ToolCallID), toolName: in.ToolName,

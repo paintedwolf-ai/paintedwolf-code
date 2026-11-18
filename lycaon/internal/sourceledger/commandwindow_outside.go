@@ -51,6 +51,7 @@ type outsideFolder struct {
 type outsideObservation struct {
 	// rootID is the project's outside namespace; empty means none is observed.
 	rootID string
+	joins  chan struct{}
 
 	mu         sync.Mutex
 	folders    []*outsideFolder
@@ -223,17 +224,26 @@ func (s *Commands) baselineOutside(ctx context.Context, w *openCommandWindow, sp
 
 // AddOutsideRoots joins write roots a later launch of the window's program may
 // write, recording their baselines before it starts.
-func (o *OpenCommandWindow) AddOutsideRoots(ctx context.Context, specs []OutsideRootSpec) {
-	if o == nil || o.store == nil {
-		return
+func (o *OpenCommandWindow) AddOutsideRoots(ctx context.Context, specs []OutsideRootSpec) error {
+	if o == nil || o.store == nil || len(specs) == 0 || o.window.outside.rootID == "" {
+		return nil
+	}
+	// Concurrent launches wait until a joining root has a baseline and its before-images.
+	joins := o.window.outside.joins
+	select {
+	case joins <- struct{}{}:
+		defer func() { <-joins }()
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 	starts := o.store.baselineOutside(ctx, o.window, specs)
 	if len(starts) == 0 {
-		return
+		return nil
 	}
 	if err := o.store.retention.Retain(ctx, o.window.id, o.window.retained, starts...); err != nil {
 		slog.WarnContext(ctx, "command window outside retention", "window_id", o.window.id, "err", err)
 	}
+	return ctx.Err()
 }
 
 // settleOutside compares each outside folder with its baseline and records what

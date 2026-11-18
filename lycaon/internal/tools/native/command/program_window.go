@@ -79,7 +79,9 @@ func (w *programWindow) enter(ctx context.Context, launch tools.ToolContext, bou
 	if w.window.open == nil {
 		return w.unobserved(ctx)
 	}
-	w.window.open.AddOutsideRoots(waitCtx, outsideRootSpecs(launch))
+	if err := w.window.open.AddOutsideRoots(waitCtx, outsideRootSpecs(launch)); err != nil {
+		return w.unobserved(ctx)
+	}
 	w.window.noteBoundary(boundary)
 	release, err := w.window.open.Hold(waitCtx)
 	if err != nil {
