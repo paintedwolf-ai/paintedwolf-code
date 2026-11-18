@@ -286,71 +286,7 @@ func BareFactName(published string) string {
 	return strings.TrimPrefix(published, oarcopy.HostFactNamespace+".")
 }
 
-// ValidateCatalogueTiers errors when a declaration is untiered, a locked core
-// name is absent from the live catalogue, or a claimed standard profile is only
-// partly provided.
-func ValidateCatalogueTiers() error {
-	facts := map[string]FactTier{}
-	for _, d := range factDecls {
-		switch d.tier {
-		case FactTierCore, FactTierStandard, FactTierHost:
-		default:
-			return fmt.Errorf("fact %q has no tier", d.name)
-		}
-		if (d.tier == FactTierStandard) != (d.profile != "") {
-			return fmt.Errorf("fact %q tier %q and profile %q disagree", d.name, d.tier, d.profile)
-		}
-		facts[d.name] = d.tier
-	}
-	fns := map[string]FactTier{}
-	for _, f := range observationFns {
-		switch f.tier {
-		case FactTierCore, FactTierStandard, FactTierHost:
-		default:
-			return fmt.Errorf("fact %q has no tier", f.name)
-		}
-		fns[f.name] = f.tier
-	}
-	for _, name := range requiredCoreFacts {
-		tier, ok := facts[name]
-		if !ok {
-			return fmt.Errorf("core fact %q is not in FactCatalogue()", name)
-		}
-		if tier != FactTierCore {
-			return fmt.Errorf("core fact %q is declared %q", name, tier)
-		}
-	}
-	for _, name := range requiredCoreFunctions {
-		tier, ok := fns[name]
-		if !ok {
-			return fmt.Errorf("core fact %q is not in FactCatalogue()", name)
-		}
-		if tier != FactTierCore {
-			return fmt.Errorf("core fact %q is declared %q", name, tier)
-		}
-	}
-	for profile, members := range standardProfileFacts {
-		for _, name := range members {
-			tier, ok := facts[name]
-			if !ok {
-				if _, isFn := fns[name]; isFn {
-					continue
-				}
-				return fmt.Errorf("standard profile %q member %q is not in FactCatalogue()", profile, name)
-			}
-			if tier != FactTierStandard {
-				return fmt.Errorf("standard profile %q member %q is declared %q", profile, name, tier)
-			}
-		}
-	}
-	return nil
-}
-
-var (
-	requiredCoreFacts     = oarcopy.RequiredCoreFacts()
-	requiredCoreFunctions = oarcopy.RequiredCoreFunctions()
-	standardProfileFacts  = oarcopy.StandardProfileFacts()
-)
+var standardProfileFacts = oarcopy.StandardProfileFacts()
 
 // StandardProfiles returns the profile names in stable order.
 func StandardProfiles() []string {
@@ -360,9 +296,4 @@ func StandardProfiles() []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-// StandardProfileMembers returns a profile's frozen membership.
-func StandardProfileMembers(profile string) []string {
-	return append([]string(nil), standardProfileFacts[profile]...)
 }
