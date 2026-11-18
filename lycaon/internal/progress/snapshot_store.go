@@ -56,7 +56,7 @@ func (s *SQLStore) Update(ctx context.Context, sessionID string, change func(Sna
 		if content == snapshot.Content && slices.Equal(nextIDs, snapshot.ItemIDs) {
 			return nil
 		}
-		itemIDsJSON, err := json.Marshal(nextIDs)
+		itemIDsJSON, err := marshalItemIDs(nextIDs)
 		if err != nil {
 			return err
 		}
@@ -78,6 +78,14 @@ func (s *SQLStore) Update(ctx context.Context, sessionID string, change func(Sna
 		return nil
 	})
 	return snapshot, err
+}
+
+// marshalItemIDs stores an array even when the document has no checklist.
+func marshalItemIDs(ids []string) ([]byte, error) {
+	if ids == nil {
+		ids = []string{}
+	}
+	return json.Marshal(ids)
 }
 
 func nextSnapshotTime(previous string) time.Time {

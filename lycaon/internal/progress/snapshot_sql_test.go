@@ -95,3 +95,31 @@ func TestSQLProgressKeepsAtomicSnapshotOnRejectedOrCanceledUpdates(t *testing.T)
 		t.Fatalf("canceled update: %v", err)
 	}
 }
+
+func TestSQLProgressReplacesChecklistWithPlainTextOrEmptyDocument(t *testing.T) {
+	store := progresstest.New(t, "session")
+	store.BindRun("session", "run-1")
+	t.Run("set prose", func(t *testing.T) {
+		testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Deliver"))
+		testutil.FailErr(t, "replace checklist with prose", store.Set("session", "Deliver the changes."))
+		snapshot, err := store.Snapshot(t.Context(), "session")
+		testutil.FailErr(t, "read replacement", err)
+		if snapshot.Content != "Deliver the changes." || len(snapshot.ItemIDs) != 0 || snapshot.RunID != "run-1" {
+			t.Fatalf("plain progress snapshot = %+v", snapshot)
+		}
+	})
+	t.Run("clear through update", func(t *testing.T) {
+		testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Deliver"))
+		before, err := store.Snapshot(t.Context(), "session")
+		testutil.FailErr(t, "read checklist", err)
+		_, err = store.Update(t.Context(), "session", func(progress.Snapshot) (progress.Document, error) {
+			return progress.Document{}, nil
+		})
+		testutil.FailErr(t, "clear checklist", err)
+		after, err := store.Snapshot(t.Context(), "session")
+		testutil.FailErr(t, "read cleared progress", err)
+		if after.Content != "" || len(after.ItemIDs) != 0 || after.RunID != before.RunID || after.Revision == before.Revision {
+			t.Fatalf("cleared progress snapshot = %+v", after)
+		}
+	})
+}
