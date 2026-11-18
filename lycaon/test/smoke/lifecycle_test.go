@@ -231,6 +231,8 @@ func ownedProcesses(t *testing.T, enginePID int, token string) []osprocess.Incar
 	out, err := exec.CommandContext(t.Context(), "ps", "-axo", "pid=,ppid=,command=").Output()
 	testutil.FailErr(t, "list processes", err)
 	children := map[int][]int{}
+	parents := map[int]int{}
+	commands := map[int]string{}
 	tokened := map[int]bool{}
 	scanner := bufio.NewScanner(bytes.NewReader(out))
 	for scanner.Scan() {
@@ -244,7 +246,9 @@ func ownedProcesses(t *testing.T, enginePID int, token string) []osprocess.Incar
 			continue
 		}
 		children[ppid] = append(children[ppid], pid)
-		if strings.Contains(strings.Join(fields[2:], " "), token) {
+		parents[pid] = ppid
+		commands[pid] = strings.Join(fields[2:], " ")
+		if strings.Contains(commands[pid], token) {
 			tokened[pid] = true
 		}
 	}
@@ -272,7 +276,12 @@ func ownedProcesses(t *testing.T, enginePID int, token string) []osprocess.Incar
 		}
 	}
 	if !detached {
-		t.Fatalf("no process carrying the command token runs in a session of its own; owned %v, tokened %v", pids, tokened)
+		var described []string
+		for pid := range pids {
+			sid, err := unix.Getsid(pid)
+			described = append(described, fmt.Sprintf("%d(parent %d, session %d %v, token %t): %s", pid, parents[pid], sid, err, tokened[pid], commands[pid]))
+		}
+		t.Fatalf("no process carrying the command token runs in a session of its own:\n%s", strings.Join(described, "\n"))
 	}
 	var owned []osprocess.Incarnation
 	for pid := range pids {
