@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -62,7 +63,7 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 	mgr.SetCoordinatorTurnFrameSource(frameLoader)
 
 	dir := t.TempDir()
-	blueprintMgr := blueprint.NewManager(blueprint.NewFileStoreForTest(dir))
+	blueprintMgr := blueprint.NewManager(blueprinttest.NewFileStore(dir))
 	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
 	wfMgr.Blueprints.Getter = blueprintMgr
 	wfMgr.Presentation.BlueprintGetter = blueprintMgr
