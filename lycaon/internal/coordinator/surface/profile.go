@@ -45,6 +45,7 @@ type TurnProfile struct {
 	SurfaceID       string
 	SurfaceTemplate string
 	ModeRefs        []string // len 1 or 2: [base] or [base, overlay]
+	SessionMode     api.SessionMode
 }
 
 // RunStateOverlay is a mode-agnostic overlay partial suffix (feedback, gates, running).
@@ -268,7 +269,7 @@ func ResolveTurnProfileForSurface(
 		if err != nil {
 			panic(fmt.Sprintf("coordinator surface mode: %v", err))
 		}
-		return TurnProfile{SurfaceID: surfaceID, SurfaceTemplate: "agents/coordinator-surface-ask.md", ModeRefs: []string{modeRef}}
+		return TurnProfile{SurfaceID: surfaceID, SurfaceTemplate: "agents/coordinator-surface-ask.md", ModeRefs: []string{modeRef}, SessionMode: sess.Mode}
 	}
 	overlay := ResolveRunStateOverlay(runCtx)
 	base, err := resolveBaseModeRef(surfaceID, runCtx)
@@ -319,7 +320,11 @@ func CompileToolPlan(profile TurnProfile, rootCount int) (toolsurface.Plan, erro
 	if err != nil {
 		return toolsurface.Plan{}, err
 	}
-	return compileToolPlan(row, rootCount)
+	plan, err := compileToolPlan(row, rootCount)
+	if err == nil && profile.SessionMode == api.SessionModeAsk {
+		plan = applyAskCatalogCeiling(plan)
+	}
+	return plan, err
 }
 
 // CompileToolPlans resolves every declared coordinator surface.

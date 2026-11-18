@@ -86,6 +86,19 @@ describe("session mode intent", () => {
     expect(sessionModeView(store, session.id)).toMatchObject({ mode: "agent", upgrade: undefined, show: false });
   });
 
+  it.each([
+    new LycaonApiError("Timed out", 408, "invalid_request"),
+    new LycaonApiError("Proxy reply", 404, "internal_error"),
+  ])("retains an ambiguous HTTP result for reconciliation", async (error) => {
+    const store = createAppStore();
+    store.actions.setCurrentSession(session);
+    const getSession = vi.fn().mockResolvedValue(session);
+    const client = stubClient({ updateSession: async () => { throw error; }, getSession });
+    expect(await upgradeSessionMode(store, client, session.id)).toBe(false);
+    expect(getSession).toHaveBeenCalledWith(session.id);
+    expect(sessionModeView(store, session.id).upgrade).toBe("reconciling");
+  });
+
   it("clears pending after a confirmed rejection and surfaces the host error", async () => {
     const store = createAppStore();
     store.actions.setCurrentSession(session);

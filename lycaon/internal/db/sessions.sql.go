@@ -2365,7 +2365,7 @@ func (q *Queries) ListSessionTreeMembers(ctx context.Context, id string) ([]List
 const listSessionTreeSpillRefs = `-- name: ListSessionTreeSpillRefs :many
 WITH RECURSIVE tree(id) AS (
     SELECT sessions.id FROM sessions WHERE sessions.id = ?1
-    UNION ALL
+    UNION
     SELECT s.id FROM sessions s JOIN tree t ON s.parent_session_id = t.id
 )
 SELECT DISTINCT r.project_id, r.rel_path

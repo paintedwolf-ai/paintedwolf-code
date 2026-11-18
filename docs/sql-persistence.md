@@ -81,7 +81,7 @@ These steps migrate SQL only. Every non-SQL durable format retains its explicit 
 
 Unknown shapes, including earlier development shapes with revision 1, remain untouched and enter recovery. Development may explicitly recreate its store with `LYCAON_DB_FRESH=1` or `./task db:wipe`; an upgrade failure never triggers that reset. Credentials, configuration and unrelated preferences remain outside the database reset boundary.
 
-Root sessions hold the effective Agent or Ask mode and a permanent admission latch. Each worker records its root alongside its immediate parent. The verified authority view checks both links and the project and person bindings by indexed identity. A damaged link leaves the session available for diagnostics but provides no execution authority. Prompt and workflow admission commit the mode and latch in the same transaction as the receipt. Revision 5 derives the latch from retained session-tree activity and leaves an unused ambient workflow attachment unstarted.
+Root sessions hold the effective Agent or Ask mode and a permanent admission latch. Each worker records its root alongside its immediate parent. The verified authority view checks both links and the project and person bindings by indexed identity. A session with damaged lineage remains available for diagnostics. Execution requires verified lineage. Prompt and workflow admission commit the mode and latch in the same transaction as the receipt. Revision 5 derives the latch from retained session-tree activity and leaves an unused ambient workflow attachment unstarted.
 
 ### Locks
 

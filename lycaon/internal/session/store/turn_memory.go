@@ -43,9 +43,6 @@ func beginTurnMemory(ctx context.Context, s *memoryCore, in TurnStart) (TurnExec
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, err := resolveEffectiveModeLocked(s, in.SessionID); err != nil {
-		return TurnExecution{}, err
-	}
 	if workerJobID := strings.TrimSpace(in.WorkerJobID); workerJobID != "" {
 		turnIDs := s.workerTurns[workerJobID]
 		for i := len(turnIDs) - 1; i >= 0; i-- {

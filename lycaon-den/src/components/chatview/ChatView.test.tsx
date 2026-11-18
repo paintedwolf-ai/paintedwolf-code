@@ -149,6 +149,40 @@ afterEach(() => {
 });
 
 describe("ChatView composer", () => {
+  it("keeps Ask selection local and marks an armed workflow that requires Agent", () => {
+    const updateSession = vi.fn();
+    const { onSend, composer, setWorkflows } = mountChat({ session: { started: false }, client: { updateSession } });
+    setWorkflows({ catalog: [{ ...planWorkflow, requires_agent: true }] });
+    const group = screen.getByRole("radiogroup", { name: "Session mode" });
+    const launcher = screen.getByTestId("session-workflow-launcher");
+    expect(group.compareDocumentPosition(launcher) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("session-launcher-tile-plan"));
+    fireEvent.click(screen.getByRole("radio", { name: "Ask" }));
+    expect(updateSession).not.toHaveBeenCalled();
+    expect(screen.getByTestId("workflow-arm-chip").textContent).toContain("requires Agent mode");
+    typeDraft(composer(), "Plan this change");
+    fireEvent.click(screen.getByTestId("composer-send"));
+    expect(onSend).not.toHaveBeenCalled();
+    expect(composer().value).toBe("Plan this change");
+    fireEvent.click(screen.getByTestId("workflow-arm-chip-clear"));
+    expect(composer().placeholder).toBe("Ask a question…");
+  });
+
+  it("removes the confirmed Agent control and returns focus to the same composer", async () => {
+    const upgrade = vi.fn(async () => ({ id: SESSION, mode: "agent", started: true }));
+    const { composer, appStore } = mountChat({ session: { mode: "ask" }, client: { updateSession: upgrade } });
+    const agent = screen.getByRole("radio", { name: "Agent" });
+    agent.focus();
+    fireEvent.click(agent);
+    await waitFor(() => expect(screen.queryByRole("radiogroup", { name: "Session mode" })).toBeNull());
+    expect(upgrade).toHaveBeenCalledWith(SESSION, { mode: "agent" });
+    await waitFor(() => expect(document.activeElement).toBe(composer()));
+
+    appStore.actions.mergeSession({ id: SESSION, status: "idle", current_turn: 0 });
+    expect(screen.queryByRole("radiogroup", { name: "Session mode" })).toBeNull();
+  });
+
   it("sends a typed prompt to the session", async () => {
     const { onSend, composer } = mountChat();
     await sendDraft(composer(), "Explain the build");

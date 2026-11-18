@@ -114,6 +114,7 @@ func (l *promptContext) coordinatorToolsForTurn(
 		all = l.appendActivatedOpenWorldMetas(all, activated)
 	}
 	if profileID != prompts.CoordinatorProfileID {
+		all = l.askEnabledMCPMetas(ctx, sess, all)
 		plan := l.compileWorkerToolPlan(ctx, sess, all, activated)
 		if sess != nil && sess.Mode == api.SessionModeAsk {
 			plan = clampAskMode(plan, all)
@@ -150,6 +151,7 @@ func (l *promptContext) coordinatorToolsForTurn(
 	if openWorld {
 		all = appendMissingMetas(all, l.liveMCPMetas())
 	}
+	all = l.askEnabledMCPMetas(ctx, sess, all)
 	mcpPlan := l.mcpToolPlan(ctx, sess, all, activated)
 	plan = l.compileRuntimeToolPlan(plan, frame.RunContext, all, activated, mcpPlan, openWorld, sess)
 	plan = filterToolPlanForRootCount(plan, rootCount)

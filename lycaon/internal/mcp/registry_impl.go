@@ -473,7 +473,9 @@ func (r *ProviderCatalog) ToolLoadingModes(ctx context.Context, projectDir strin
 	view := r.projectView(ctx, projectDir)
 	out := make(map[string]bool, len(view.catalog))
 	for _, entry := range view.catalog {
-		out[entry.ID] = entry.AlwaysLoadsTools()
+		if entry.Enabled {
+			out[entry.ID] = entry.AlwaysLoadsTools()
+		}
 	}
 	return out
 }

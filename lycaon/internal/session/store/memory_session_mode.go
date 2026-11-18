@@ -7,16 +7,17 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *memorySessions) ResolveEffectiveMode(ctx context.Context, id string) (RootAuthority, error) {
-	if s == nil || s.core == nil {
+// ResolveEffectiveMode reads verified root authority for effect admission.
+func (s *Memory) ResolveEffectiveMode(ctx context.Context, id string) (RootAuthority, error) {
+	if s == nil || s.memoryCore == nil {
 		return RootAuthority{}, ErrSessionModeUnavailable
 	}
 	if err := ctx.Err(); err != nil {
 		return RootAuthority{}, err
 	}
-	s.core.mu.RLock()
-	defer s.core.mu.RUnlock()
-	return resolveEffectiveModeLocked(s.core, id)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return resolveEffectiveModeLocked(s.memoryCore, id)
 }
 
 func resolveEffectiveModeLocked(s *memoryCore, id string) (RootAuthority, error) {

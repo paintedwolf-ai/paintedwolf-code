@@ -34,7 +34,7 @@ async function mutateQueue(
   try {
     const draft = await client.updateSessionQueue(sessionId, {
       ...body,
-      ...(upgrading && { mode: "agent" }),
+      ...(upgrading && { mode: "agent" as const }),
       expected_revision: expectedRevision,
     });
     appStore.actions.setQueueDraft(sessionId, epoch, draft);

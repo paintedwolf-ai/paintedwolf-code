@@ -69,6 +69,7 @@ func (m *Context) Build() promptloop.ContextDeps {
 		Tools:                 m.Tools,
 		ResolveEffectiveMode:  m.Sessions.ResolveEffectiveMode,
 		ActivateAgentWorkflow: m.ActivateAgentWorkflow,
+		RefreshRoundMachine:   m.Profiles.CompileMachine,
 		RootSessionID: func(ctx context.Context, sessionID string) string {
 			return sessiontree.RootID(ctx, m.Sessions, sessionID)
 		},
@@ -200,6 +201,9 @@ func (m *Context) procedureReader(ctx context.Context, sess *api.Session, profil
 	var remaining []string
 	if offeredSet["request_tools"] {
 		for _, name := range deferred {
+			if sess != nil && sess.Mode == api.SessionModeAsk && !tools.AllowedInAsk(tools.ToolMeta{Name: name}) {
+				continue
+			}
 			if !offeredSet[name] {
 				remaining = append(remaining, name)
 			}

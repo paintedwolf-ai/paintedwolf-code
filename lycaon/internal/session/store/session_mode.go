@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
@@ -20,16 +19,6 @@ type RootAuthority struct {
 	RootSessionID string
 	Mode          api.SessionMode
 	Started       bool
-}
-
-// ResolveEffectiveMode reads verified root authority for effect admission.
-func ResolveEffectiveMode(ctx context.Context, store interface {
-	ResolveEffectiveMode(context.Context, string) (RootAuthority, error)
-}, id string) (RootAuthority, error) {
-	if store == nil {
-		return RootAuthority{}, ErrSessionModeUnavailable
-	}
-	return store.ResolveEffectiveMode(ctx, id)
 }
 
 // WithModeIntent validates a proposed transition without persisting it.

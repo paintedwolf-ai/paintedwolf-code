@@ -133,6 +133,9 @@ loop:
 		sess = authority.sessionView(sess)
 		setup.sess = sess
 		in.ToolCtx = authority.toolContext(baseToolCtx)
+		if previous != authority.Mode && l.Context.Deps.RefreshRoundMachine != nil {
+			st.machine = l.Context.Deps.RefreshRoundMachine(ctx, sess, profileID)
+		}
 		sentBeforeCall, err := l.Inbox.takeUserSend(ctx, id, st, &userPrompt)
 		if err != nil {
 			return nil, err

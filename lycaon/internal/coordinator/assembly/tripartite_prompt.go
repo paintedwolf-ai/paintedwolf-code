@@ -41,6 +41,9 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 		if len(declared) == 0 {
 			declared = spawn.AmbientAllowedAgents()
 		}
+		if sess.Mode == api.SessionModeAsk {
+			declared = prompts.ReadOnlyAgents(declared)
+		}
 		resolved := inject.ResolveAgentRoster(profile.SurfaceID, declared, rootCount, false, webSearchEnabled)
 		roster = &resolved
 	}

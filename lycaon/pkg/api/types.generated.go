@@ -6741,7 +6741,7 @@ type Session struct {
 	// Computed on read from workspace_root_id or primary root; omitted when project has no roots
 	WorkspacePath string         `json:"workspace_path,omitempty"`
 	Posture       SessionPosture `json:"posture"`
-	// Effective mode of the root chat. Read-only.
+	// Effective mode of the root chat.
 	Mode SessionMode `json:"mode"`
 	// True once the root chat has admitted a prompt or workflow. Rewind preserves this fact.
 	Started bool `json:"started"`
@@ -6904,7 +6904,7 @@ type SessionProtectionState struct {
 
 // SessionSummary Metadata-only chat list row; worker child sessions are never listed
 type SessionSummary struct {
-	// Effective mode of the root chat. Read-only.
+	// Effective mode of the root chat.
 	Mode SessionMode `json:"mode"`
 	// True once the root chat has admitted a prompt or workflow. Rewind preserves this fact.
 	Started   bool   `json:"started"`

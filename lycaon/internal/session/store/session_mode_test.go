@@ -34,6 +34,14 @@ func runModeStoreCases(t *testing.T, check func(*testing.T, modeStore)) {
 	})
 }
 
+func TestSessionModeResolutionFailsClosedWithoutStore(t *testing.T) {
+	for _, st := range []modeStore{(*Memory)(nil), (*SQL)(nil)} {
+		if _, err := st.ResolveEffectiveMode(t.Context(), "root"); !errors.Is(err, ErrSessionModeUnavailable) {
+			t.Fatalf("nil %T authority lookup = %v", st, err)
+		}
+	}
+}
+
 func TestSessionModeInheritedAndLatchedByAdmission(t *testing.T) {
 	runModeStoreCases(t, func(t *testing.T, st modeStore) {
 		ctx := t.Context()
@@ -47,17 +55,15 @@ func TestSessionModeInheritedAndLatchedByAdmission(t *testing.T) {
 
 		ask := api.SessionModeAsk
 		input := modePrompt(root, &ask)
-		if _, _, err := st.PutPromptSubmission(ctx, input); err != nil {
-			testutil.FailErr(t, "admit Ask prompt", err)
-		}
+		_, _, err = st.PutPromptSubmission(ctx, input)
+		testutil.FailErr(t, "admit Ask prompt", err)
 		assertSessionMode(t, st, root.ID, root.ID, ask, true)
 		assertSessionMode(t, st, grandchild.ID, root.ID, ask, true)
 		if _, err := st.SetMode(ctx, child.ID, api.SessionModeAgent); !errors.Is(err, ErrChildSessionMode) {
 			t.Fatalf("worker mode update = %v", err)
 		}
-		if _, err := st.SetMode(ctx, root.ID, api.SessionModeAgent); err != nil {
-			testutil.FailErr(t, "upgrade root to Agent", err)
-		}
+		_, err = st.SetMode(ctx, root.ID, api.SessionModeAgent)
+		testutil.FailErr(t, "upgrade root to Agent", err)
 		if _, inserted, err := st.PutPromptSubmission(ctx, input); inserted || err != nil {
 			t.Fatalf("retry Ask prompt after upgrade: inserted = %v, err = %v", inserted, err)
 		}
@@ -111,6 +117,28 @@ func TestSessionModeFirstPromptRacesPreStartPatch(t *testing.T) {
 	})
 }
 
+func TestSessionModeRejectsMalformedInputAndMissingSessions(t *testing.T) {
+	runModeStoreCases(t, func(t *testing.T, st modeStore) {
+		ctx := t.Context()
+		invalid := api.SessionMode("")
+		if _, err := st.Create(ctx, api.CreateSessionRequest{Mode: &invalid}, testdbseed.DefaultProjectID); !errors.Is(err, ErrInvalidSessionMode) {
+			t.Fatalf("create with malformed mode = %v", err)
+		}
+		if _, err := st.SetMode(ctx, "missing", api.SessionModeAsk); !errors.Is(err, ErrSessionNotFound) {
+			t.Fatalf("set missing session mode = %v", err)
+		}
+		root, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+		testutil.FailErr(t, "create new session", err)
+		if _, err := st.SetMode(ctx, root.ID, invalid); !errors.Is(err, ErrInvalidSessionMode) {
+			t.Fatalf("patch with malformed mode = %v", err)
+		}
+		if _, _, err := st.PutPromptSubmission(ctx, modePrompt(root, &invalid)); !errors.Is(err, ErrInvalidSessionMode) {
+			t.Fatalf("prompt with malformed mode = %v", err)
+		}
+		assertSessionMode(t, st, root.ID, root.ID, api.SessionModeAgent, false)
+	})
+}
+
 func TestSessionModeDirectTurnLatchesAuthority(t *testing.T) {
 	runModeStoreCases(t, func(t *testing.T, st modeStore) {
 		mode := api.SessionModeAsk
@@ -120,6 +148,38 @@ func TestSessionModeDirectTurnLatchesAuthority(t *testing.T) {
 		testutil.FailErr(t, "begin direct turn", err)
 		assertSessionMode(t, st, root.ID, root.ID, mode, true)
 	})
+}
+
+func TestSessionModeWorkflowAdmissionRollsBackWithCaller(t *testing.T) {
+	ctx := t.Context()
+	database := testdbfixture.Open(t, "mode.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	st := NewSQL(database)
+	root, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create unstarted chat", err)
+	intent := api.SessionModeAsk
+	failedRun := errors.New("simulate failure inserting a workflow run")
+	err = st.WithModeAdmission(ctx, root.ID, func(ctx context.Context) error {
+		tx, err := database.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback() }()
+		err = st.AdmitModeInTx(ctx, tx, root.ID, &intent, func(mode api.SessionMode) error {
+			if mode != intent {
+				return errors.New("workflow validation received the wrong mode")
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		return failedRun
+	})
+	if !errors.Is(err, failedRun) {
+		t.Fatalf("workflow admission error = %v", err)
+	}
+	assertSessionMode(t, st, root.ID, root.ID, api.SessionModeAgent, false)
 }
 
 func TestCorruptSessionModeDoesNotPreventDiagnosisOrDelete(t *testing.T) {

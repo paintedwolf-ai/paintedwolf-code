@@ -7995,8 +7995,8 @@ export interface components {
             prompt_pending?: boolean;
         };
         Session: {
-            /** @description Effective mode of the root chat. Read-only. */
-            mode: components["schemas"]["SessionMode"];
+            /** @description Effective mode of the root chat. */
+            readonly mode: components["schemas"]["SessionMode"];
             /** @description True once the root chat has admitted a prompt or workflow. Rewind preserves this fact. */
             readonly started: boolean;
             /**
@@ -8163,8 +8163,8 @@ export interface components {
         SessionListOrder: "asc" | "desc";
         /** @description Metadata-only chat list row; worker child sessions are never listed */
         SessionSummary: {
-            /** @description Effective mode of the root chat. Read-only. */
-            mode: components["schemas"]["SessionMode"];
+            /** @description Effective mode of the root chat. */
+            readonly mode: components["schemas"]["SessionMode"];
             /** @description True once the root chat has admitted a prompt or workflow. Rewind preserves this fact. */
             readonly started: boolean;
             /** Format: uuid */

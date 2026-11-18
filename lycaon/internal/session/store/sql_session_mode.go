@@ -11,18 +11,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *sqlSessions) ResolveEffectiveMode(ctx context.Context, id string) (RootAuthority, error) {
-	if s == nil || s.core == nil || s.core.db == nil {
+// ResolveEffectiveMode reads verified root authority for effect admission.
+func (s *SQL) ResolveEffectiveMode(ctx context.Context, id string) (RootAuthority, error) {
+	if s == nil || s.sqlCore == nil || s.db == nil {
 		return RootAuthority{}, ErrSessionModeUnavailable
 	}
-	return resolveEffectiveModeSQL(ctx, s.core.queries, id)
-}
-
-func (s *sqlSessions) ResolveEffectiveModeTx(ctx context.Context, tx *sql.Tx, id string) (RootAuthority, error) {
-	if s == nil || s.core == nil || tx == nil {
-		return RootAuthority{}, ErrSessionModeUnavailable
-	}
-	return resolveEffectiveModeSQL(ctx, s.core.queries.WithTx(tx), id)
+	return resolveEffectiveModeSQL(ctx, s.queries, id)
 }
 
 func resolveEffectiveModeSQL(ctx context.Context, q *db.Queries, id string) (RootAuthority, error) {
@@ -69,9 +63,11 @@ func lockModeAdmission(ctx context.Context, s *sqlCore, id string) (func(), erro
 }
 
 // SetMode applies a lifecycle mode command independently of prompt execution.
-func (s *sqlSessions) SetMode(ctx context.Context, id string, mode api.SessionMode) (out *api.Session, err error) {
-	err = s.WithModeAdmission(ctx, id, func(ctx context.Context) error {
-		out, err = s.setModeLocked(ctx, id, mode)
+func (s *sqlSessions) SetMode(ctx context.Context, id string, mode api.SessionMode) (*api.Session, error) {
+	var out *api.Session
+	err := s.WithModeAdmission(ctx, id, func(ctx context.Context) error {
+		session, err := s.setModeLocked(ctx, id, mode)
+		out = session
 		return err
 	})
 	if errors.Is(err, sql.ErrNoRows) {

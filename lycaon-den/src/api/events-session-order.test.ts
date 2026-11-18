@@ -10,6 +10,9 @@ import { resetSessionEventRevisions, subscribeEvents, type EventSubscription } f
 import type { LLMCallEvent, SessionEvent, SessionHostError } from "./types.ts";
 import { LycaonApiError } from "./http.ts";
 import { refreshSessionSnapshot } from "./session-snapshot-refresh.ts";
+import { sessionModeView } from "../chat/session/session-mode-state.ts";
+import { upgradeSessionMode } from "../chat/session/session-mode-upgrade.ts";
+import { deferred } from "../chat/session/session-lifecycle-test-fixture.ts";
 import { stopChatActivity } from "../chat/session/session-lifecycle.ts";
 import { isChatActivityLive } from "../chat/session/session-activity.ts";
 import { appliedSessionRevision } from "./session-event-revisions.ts";
@@ -29,10 +32,10 @@ afterEach(() => {
   resetTurnOutcomesForTests();
 });
 
-function setup() {
+function setup(mode: Session["mode"] = "agent") {
   const store = createAppStore();
   store.actions.setCurrentSession({
-    mode: "agent" as const,
+    mode,
     started: true,
     root_session_id: sessionId,
     id: sessionId, owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: projectId, status: "busy", posture: "build",
@@ -94,6 +97,22 @@ async function deliver(
 }
 
 describe("session event revision ordering", () => {
+  it("keeps the confirmed Agent effect when its PATCH response is lost after the mode event", async () => {
+    const { store } = setup("ask");
+    const patch = deferred<Session>();
+    const getSession = vi.fn();
+    const upgrade = upgradeSessionMode(store, stubClient({ updateSession: () => patch.promise, getSession }), sessionId);
+    expect(sessionModeView(store, sessionId).upgrade).toBe("sending");
+    await deliver(store, [
+      { revision: 6, data: { status: "busy", mode: "agent", started: true } },
+      { revision: 7, data: { status: "busy" } },
+    ]);
+    patch.reject(new Error("Response lost"));
+    expect(await upgrade).toBe(true);
+    expect(getSession).not.toHaveBeenCalled();
+    expect(sessionModeView(store, sessionId)).toMatchObject({ mode: "agent", show: false, upgrade: undefined });
+  });
+
   it("projects ordered root mode updates onto an open and cached descendant", async () => {
     const { store } = setup();
     const child = { ...store.state.currentSession!, id: "worker-child", parent_session_id: "worker-parent", mode: "ask" as const };

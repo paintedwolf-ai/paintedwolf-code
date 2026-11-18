@@ -37,6 +37,7 @@ type ContextDeps struct {
 	RootSessionID         func(ctx context.Context, sessionID string) string
 	ResolveEffectiveMode  func(ctx context.Context, sessionID string) (store.RootAuthority, error)
 	ActivateAgentWorkflow func(ctx context.Context, sessionID string) error
+	RefreshRoundMachine   func(context.Context, *api.Session, string) inject.Machine
 	Policy                toolpolicy.Engine
 	BuildMessages         func(ctx context.Context, sess *api.Session, history []api.Message, frame *inject.CoordinatorTurnFrame) ([]api.Message, error)
 	ImplementSessionState func(ctx context.Context, sess *api.Session) surface.ImplementSessionState

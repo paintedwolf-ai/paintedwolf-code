@@ -95,7 +95,8 @@ components:
       properties:
         mode:
           $ref: '#/components/schemas/SessionMode'
-          description: Effective mode of the root chat. Read-only.
+          readOnly: true
+          description: Effective mode of the root chat.
         started:
           type: boolean
           readOnly: true
@@ -277,7 +278,8 @@ components:
       properties:
         mode:
           $ref: '#/components/schemas/SessionMode'
-          description: Effective mode of the root chat. Read-only.
+          readOnly: true
+          description: Effective mode of the root chat.
         started:
           type: boolean
           readOnly: true

@@ -6,7 +6,8 @@ import { confirmSessionModeAdmission, sessionModeView, setSessionModeUpgrade } f
 
 function isConfirmedRefusal(error: unknown): boolean {
   return error instanceof LycaonApiError &&
-    error.status !== undefined && error.status >= 400 && error.status < 500;
+    error.status !== undefined && error.status >= 400 && error.status < 500 &&
+    error.status !== 408 && error.code !== "internal_error";
 }
 
 async function requestSessionModeUpgrade(appStore: AppStore, client: LycaonClient, sessionId: string): Promise<boolean> {

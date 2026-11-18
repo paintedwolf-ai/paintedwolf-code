@@ -1,6 +1,8 @@
 package promptloop
 
 import (
+	"context"
+
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -8,6 +10,21 @@ import (
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func (l *promptContext) askEnabledMCPMetas(ctx context.Context, sess *api.Session, metas []tools.ToolMeta) []tools.ToolMeta {
+	if sess == nil || sess.Mode != api.SessionModeAsk || l.Deps.MCPAlwaysLoad == nil {
+		return metas
+	}
+	enabled := l.Deps.MCPAlwaysLoad(ctx, sess)
+	out := make([]tools.ToolMeta, 0, len(metas))
+	for _, meta := range metas {
+		_, enabledProvider := enabled[meta.SourceID]
+		if !meta.IsMCP() || enabledProvider {
+			out = append(out, meta)
+		}
+	}
+	return out
+}
 
 func clampAskMode(plan toolsurface.Plan, metas []tools.ToolMeta) toolsurface.Plan {
 	allowed := make(map[string]bool, len(metas))
@@ -26,13 +43,7 @@ func readOnlySpawnAllowlist(agents []string) []string {
 	if agents == nil {
 		agents = spawn.AmbientAllowedAgents()
 	}
-	out := make([]string, 0, len(agents))
-	for _, agent := range agents {
-		if writes, known := prompts.AgentMutationCapable(agent); known && !writes {
-			out = append(out, agent)
-		}
-	}
-	return out
+	return prompts.ReadOnlyAgents(agents)
 }
 
 func addAskWorkflowTools(plan toolsurface.Plan, run api.CoordinatorRunContext, rootCount int) toolsurface.Plan {

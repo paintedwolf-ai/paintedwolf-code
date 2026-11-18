@@ -47,23 +47,23 @@ func TestAskFinalPlanClampsLoadedAndImpliedCalls(t *testing.T) {
 func TestRoundAuthorityKeepsWorkerScopeAcrossUpgradeAndFailsClosed(t *testing.T) {
 	root := store.RootAuthority{RootSessionID: "root", Mode: api.SessionModeAsk, Started: true}
 	var readErr error
-	context := &promptContext{Deps: ContextDeps{ResolveEffectiveMode: func(context.Context, string) (store.RootAuthority, error) {
+	prompt := &promptContext{Deps: ContextDeps{ResolveEffectiveMode: func(context.Context, string) (store.RootAuthority, error) {
 		return root, readErr
 	}}}
 	worker := &api.Session{ID: "worker", ParentSessionID: "root", Mode: api.SessionModeAsk}
-	ask, err := context.roundAuthority(t.Context(), worker, true)
+	ask, err := prompt.roundAuthority(t.Context(), worker, true)
 	testutil.FailErr(t, "read Ask round", err)
 	if tc := ask.toolContext(tools.ToolContext{}); !tc.Source.AskMode || !tc.Source.ReadOnly || tc.Identity.RootSessionID != "root" {
 		t.Fatalf("Ask round flags = %+v", tc.Source)
 	}
 	root.Mode = api.SessionModeAgent
-	agent, err := context.roundAuthority(t.Context(), worker, true)
+	agent, err := prompt.roundAuthority(t.Context(), worker, true)
 	testutil.FailErr(t, "read Agent round", err)
 	if tc := agent.toolContext(tools.ToolContext{}); tc.Source.AskMode || !tc.Source.ReadOnly {
 		t.Fatalf("Agent worker flags = %+v", tc.Source)
 	}
 	readErr = errors.New("root unavailable")
-	if _, err := context.roundAuthority(t.Context(), worker, true); !errors.Is(err, readErr) {
+	if _, err := prompt.roundAuthority(t.Context(), worker, true); !errors.Is(err, readErr) {
 		t.Fatalf("round authority error = %v", err)
 	}
 }

@@ -141,7 +141,7 @@ func listProjectSummariesSQL(ctx context.Context, s *sqlCore, q SummaryQuery) (S
 
 	// #nosec G202 -- query fragments come from closed package constants.
 	listSQL := `
-SELECT s.id, s.project_id, s.owner_person_id, s.title, s.posture, s.mode, s.started, s.status, s.archived_at, s.pin_rank,
+SELECT s.id, s.project_id, s.owner_person_id, s.title, s.posture, COALESCE(s.mode, ''), s.started = 1, s.status, s.archived_at, s.pin_rank,
        s.created_at, s.activity_at,
        (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
 FROM sessions s
