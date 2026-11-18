@@ -10,6 +10,7 @@ import (
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -84,10 +85,12 @@ func TestSourceLedger(t *testing.T) (*sourceledger.Store, *db.Store, TestDeps) {
 	}
 }
 
-// withSessionStore serves sessions from store.
-
 func WithSessionStore(store *sessionstore.Repositories) TestDeps {
-	return func(d *hostapi.Dependencies) { d.Core.Store = store }
+	return func(d *hostapi.Dependencies) {
+		d.Core.Store = store
+		d.Core.Database = store.DB()
+		d.Core.Projects = project.NewSQLRegistry(store.DB())
+	}
 }
 
 // withWorkers serves worker jobs from queue.
