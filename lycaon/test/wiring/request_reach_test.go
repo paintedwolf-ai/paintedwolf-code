@@ -60,15 +60,9 @@ func hostText(m api.Message) []string {
 }
 
 // requestReach lists what one recorded request names that it does not offer.
-// A deferred schema is not offered: its tool must be requested first.
 func requestReach(t *testing.T, names *toolvocab.Catalog, req modelcall.CompletionRequest, posture api.SessionPosture) []string {
 	offered := map[string]bool{}
-	var deferred []string
 	for _, meta := range req.Tools {
-		if meta.Deferred {
-			deferred = append(deferred, meta.Name)
-			continue
-		}
 		offered[meta.Name] = true
 	}
 	for marker := range commandReach(t, req.Debug.ProfileID, req.Debug.Surface, posture) {
@@ -78,11 +72,7 @@ func requestReach(t *testing.T, names *toolvocab.Catalog, req modelcall.Completi
 	for i, m := range req.Messages {
 		for _, text := range hostText(m) {
 			for _, name := range toolvocab.UnreachableNames(names, text, offered) {
-				state := "not offered"
-				if slices.Contains(deferred, name) {
-					state = "deferred"
-				}
-				out = append(out, fmt.Sprintf("message %d (%s/%s/%s) names %s (%s): %s", i, m.Role, m.Origin, m.Kind, name, state, lineWith(text, name)))
+				out = append(out, fmt.Sprintf("message %d (%s/%s/%s) names %s: %s", i, m.Role, m.Origin, m.Kind, name, lineWith(text, name)))
 			}
 		}
 	}
