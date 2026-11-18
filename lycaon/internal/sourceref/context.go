@@ -12,7 +12,7 @@ import (
 )
 
 func Key(t api.NavigationTarget) string {
-	return t.ProjectID + "\x00" + t.RootID + "\x00" + t.WorkerID + "\x00" + t.Path
+	return t.ProjectID + "\x00" + t.RootID + "\x00" + t.WorkerID + "\x00" + t.Path + "\x00" + t.FileID
 }
 
 // Merge preserves truncation from each input context.
@@ -48,7 +48,10 @@ func Merge(contexts ...*api.SourceContext) *api.SourceContext {
 		if a.WorkerID != b.WorkerID {
 			return a.WorkerID < b.WorkerID
 		}
-		return a.Path < b.Path
+		if a.Path != b.Path {
+			return a.Path < b.Path
+		}
+		return a.FileID < b.FileID
 	})
 	return out
 }
@@ -57,7 +60,8 @@ func Valid(t api.NavigationTarget) bool {
 	return t.ProjectID != "" && t.RootID != "" && t.Path != "" && len(t.Path) <= 4096 &&
 		!strings.ContainsAny(t.Path, "\\\x00\r\n") && !strings.HasPrefix(t.Path, "/") &&
 		path.Clean(t.Path) == t.Path && t.Path != ".." && !strings.HasPrefix(t.Path, "../") &&
-		(t.EntryKind == api.NavigationEntryKindFile || t.EntryKind == api.NavigationEntryKindFolder)
+		(t.EntryKind == api.NavigationEntryKindFile || t.EntryKind == api.NavigationEntryKindFolder) &&
+		(t.FileID == "" || (t.EntryKind == api.NavigationEntryKindFile && t.WorkerID == ""))
 }
 
 var identifierRE = regexp.MustCompile(`[-\p{L}\p{N}_@./\\]+`)

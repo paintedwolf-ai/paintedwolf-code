@@ -30342,6 +30342,10 @@ components:
           format: uuid
         path:
           type: string
+        file_id:
+          type: string
+          format: uuid
+          description: Host-recorded logical identity for a file outside the project folders.
         entry_kind:
           $ref: '#/components/schemas/NavigationEntryKind'
         worker_id:
@@ -30410,6 +30414,10 @@ components:
         path:
           type: string
           minLength: 1
+        file_id:
+          type: string
+          format: uuid
+          description: Host-recorded logical identity for a file outside the project folders.
         entry_kind:
           $ref: '#/components/schemas/NavigationEntryKind'
         status:
@@ -30419,7 +30427,7 @@ components:
           description: True only for an authored Markdown destination, rather than an inferred prose path.
         deleted:
           type: boolean
-          description: The exact path is absent and has retained deletion history. Availability is rechecked when opening; this never pins the link to a file or version.
+          description: The current address is absent and has retained deletion history. Availability is rechecked when opening.
         worker_id:
           type: string
           format: uuid

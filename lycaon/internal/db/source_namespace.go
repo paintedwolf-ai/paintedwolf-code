@@ -19,7 +19,7 @@ func RetargetEditorDocument(ctx context.Context, q *Queries, projectID, branchID
 		    WHERE destination.project_id = editor_documents.project_id AND destination.branch_id = editor_documents.branch_id
 		      AND destination.root_id = ? AND destination.path = ?
 		  )
-	`, toRootID, toPath, FormatTime(at), projectID, branchID, fileID, fromRootID, fromPath, toRootID, toPath)
+	`, toRootID, toPath, at.UTC().Format(time.RFC3339Nano), projectID, branchID, fileID, fromRootID, fromPath, toRootID, toPath)
 	return err
 }
 

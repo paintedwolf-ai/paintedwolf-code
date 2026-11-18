@@ -111,6 +111,7 @@ export function openFilesBuffer(
     }
     const existing = state.byKey[key];
     if (existing) {
+      if (args.fileId && existing.fileId === args.fileId && existing.rootId === args.rootId) existing.rootLabel = args.rootLabel;
       if (args.revealLine != null) existing.revealLine = args.revealLine;
       if (args.revealColumn != null) existing.revealColumn = args.revealColumn;
       else if (args.revealLine != null) existing.revealColumn = null;
