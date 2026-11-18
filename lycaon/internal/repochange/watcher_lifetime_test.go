@@ -2,6 +2,7 @@ package repochange
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"testing/synctest"
 )
@@ -79,6 +80,33 @@ func TestFinalWatcherLeaseSettlesAcceptedChangesAcrossRestart(t *testing.T) {
 		}
 		if err := releaseNew(t.Context()); err != nil {
 			t.Fatalf("release new stream generation: %v", err)
+		}
+	})
+}
+
+func TestWatcherRetirementCanRetryCanceledJoin(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var lifetime streamLifetimes
+		release := lifetime.acquire()
+		root := t.TempDir()
+		entered, finish := make(chan struct{}), make(chan struct{})
+		t.Cleanup(RegisterObserver(func(_ context.Context, event Event) {
+			if event.ProjectDir == root {
+				close(entered)
+				<-finish
+			}
+		}))
+		refs := &refObserver{root: root, work: &lifetime.registry().work}
+		refs.schedule(t.Context())
+		<-entered
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		if err := release(ctx); !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled retirement = %v, want context cancellation", err)
+		}
+		close(finish)
+		if err := release(t.Context()); err != nil {
+			t.Fatalf("retry watcher retirement: %v", err)
 		}
 	})
 }
