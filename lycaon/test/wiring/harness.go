@@ -3,7 +3,7 @@ package wiring
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
+	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io/fs"
 	"os"
@@ -121,7 +121,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	if o.useBundledScanners {
 		cfg.TestAdvisoryDatabase = scantest.OSVExport(t)
 	} else {
-		cfg.TestScanRegistry = &scantest.MockRegistry{Scanner: &scantest.MockScanner{
+		cfg.TestScanRegistry = &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{
 			// Match the bundled secret scanner categories.
 			CategoryList: []wire.ScanCategory{wire.ScanCategorySecret, wire.ScanCategorySecurity, wire.ScanCategorySCA},
 			Result:       &scanoutput.Result{FindingsCount: 0},

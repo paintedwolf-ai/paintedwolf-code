@@ -24,7 +24,7 @@ func TestPlanDomainIDsRegisteredOnBoot(t *testing.T) {
 
 func TestVocabularyExportPlanCatalogStatus(t *testing.T) {
 	t.Parallel()
-	seen := map[string]vocabulary.CatalogEntry{}
+	seen := map[string]vocabularytest.CatalogEntry{}
 	for _, row := range vocabularytest.ExportCatalog() {
 		if row.Domain == "plan" {
 			seen[row.ID] = row

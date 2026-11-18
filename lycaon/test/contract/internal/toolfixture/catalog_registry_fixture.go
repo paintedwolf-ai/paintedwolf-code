@@ -3,7 +3,8 @@ package toolfixture
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
+	"github.com/lycaon/lycaon/internal/scan"
+	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	"path/filepath"
 	"testing"
 
@@ -199,7 +200,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 
 	sqlDB := testdbfixture.Open(t, "scan-boot.db")
 	coord := scantest.Coordinator(t, scan.NewSQLStore(sqlDB), nil)
-	if err := scantoolapi.RegisterScanTools(rt.Registry, coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scancadence.New(scan.StoreFromCoordinator(coord), coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
+	if err := scantoolapi.RegisterScanTools(rt.Registry, coord, &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{}}, scancadence.New(scan.StoreFromCoordinator(coord), coord, &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
 		contractcheck.FailErr(t, "scan.RegisterScanTools failed", err)
 	}
 	secretValues := credentialstore.NewEmpty(credentialstore.Slot{

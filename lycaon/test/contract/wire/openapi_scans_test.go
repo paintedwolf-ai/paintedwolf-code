@@ -3,8 +3,9 @@ package contract
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
+	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
@@ -38,14 +39,14 @@ func TestOpenAPIScansRealServer(t *testing.T) {
 
 	scanStore := scan.NewSQLStore(sqlDB)
 	coord := scantest.Coordinator(t, scanStore, nil)
-	mock := &scantest.MockScanner{Result: &scanoutput.Result{
+	mock := &scannerfixture.MockScanner{Result: &scanoutput.Result{
 		FindingsCount: 2,
 		Findings: []wire.SecurityFinding{
 			findingstest.Finding("mock:first", wire.FindingLevelHigh, "first finding", "main.go", 1),
 			findingstest.Finding("mock:second", wire.FindingLevelMedium, "second finding", "main.go", 1),
 		},
 	}}
-	reg := &scantest.MockRegistry{Scanner: mock}
+	reg := &scannerfixture.MockRegistry{Scanner: mock}
 	ing := &scan.IngesterImpl{
 		Module:                  scancfg.DefaultModuleConfig(),
 		Budget:                  scancfg.NewFindingBudget(scancfg.DefaultAgentBudget()),
