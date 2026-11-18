@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
+
 	"github.com/lycaon/lycaon/internal/findings/findingstest"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -103,7 +105,7 @@ func TestWorkerChildDelegationProjectDirInvariantContract(t *testing.T) {
 	_, err = worker.NewSQLQueue(sqlDB, 4).Enqueue(ctx, task)
 	contractcheck.FailErr(t, "enqueue", err)
 
-	mgr := session.NewHost(sessions, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	mgr := session.NewHost(sessions, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer, Prompt: "write", WorkerJobID: task.ID,
 	})

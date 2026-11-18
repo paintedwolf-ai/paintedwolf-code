@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -17,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -31,7 +32,7 @@ func TestSessionCompactionAndAbortKeepEveryMessageRow(t *testing.T) {
 	st := store.NewSQL(database)
 	mockConfig, err := llm.LoadMockConfig()
 	testutil.FailErr(t, "load mock config", err)
-	host := session.NewHost(st, session.Models{Client: llm.NewMockProvider(mockConfig), Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	host := session.NewHost(st, session.Models{Client: llm.NewMockProvider(mockConfig), Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	host.SetDataDir(t.TempDir())
 	oartest.InstallCloseoutPolicy(t, host)
 	cfg := compaction.DefaultCompactionConfig()

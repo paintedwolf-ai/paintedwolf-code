@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
+
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workspace"
@@ -186,7 +188,7 @@ func TestIsolatedFanOutRequiresWorkspaceBinder(t *testing.T) {
 		workers := &refusingDispatchWorkers{orchestration.NewMemoryTopologyWorkers()}
 		orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
 			Workers: workers,
-			Agents:  orchestration.NewMemoryAgentRegistryForTest(),
+			Agents:  orchestrationtest.Registry(t),
 		})
 		_, err := orch.Run(t.Context(), isolatedFanOut("sess-unbound"))
 		if !errors.Is(err, orchestration.ErrIsolationUnavailable) {
@@ -203,7 +205,7 @@ func TestIsolatedFanOutRequiresWorkspaceBinder(t *testing.T) {
 		orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
 			Workers:    workers,
 			Workspaces: binder,
-			Agents:     orchestration.NewMemoryAgentRegistryForTest(),
+			Agents:     orchestrationtest.Registry(t),
 		})
 		_, err := orch.Run(t.Context(), isolatedFanOut("sess-bound"))
 		if !errors.Is(err, errDispatchRefused) {

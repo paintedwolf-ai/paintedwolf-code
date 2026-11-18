@@ -9,13 +9,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,7 +26,7 @@ var errStoreUnreadable = errors.New("session store unreadable")
 
 // lookupStore answers every read of a session row with err.
 type lookupStore struct {
-	*store.Memory
+	*store.SQL
 	err error
 }
 
@@ -69,8 +71,8 @@ type routeAnswer struct {
 // whose store answers lookups with err.
 func sessionRouteCodes(t *testing.T, err error) map[string]routeAnswer {
 	t.Helper()
-	failing := lookupStore{Memory: store.NewMemory(), err: err}
-	reg := tools.NewStubRegistry()
+	failing := lookupStore{SQL: storetest.New(t), err: err}
+	reg := toolstest.NewRegistry()
 	host := session.NewHost(failing, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Limits: settings.DefaultSessionLimits()}, reg)
 	host.SetDataDir(t.TempDir())
 	wireTestBindingRegistry(t)

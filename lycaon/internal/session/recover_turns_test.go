@@ -374,7 +374,6 @@ func TestRecoverOrphanedTurnsWithdrawsUnsettledLiveDrafts(t *testing.T) {
 		name string
 		open func(*testing.T) Store
 	}{
-		{name: "memory", open: func(*testing.T) Store { return store.NewMemory() }},
 		{name: "sql", open: func(t *testing.T) Store {
 			database := testdbfixture.Open(t, "recover-drafts.db")
 			testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())

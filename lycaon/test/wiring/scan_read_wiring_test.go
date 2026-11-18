@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
+
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/apitest"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
@@ -26,7 +28,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	openapi "github.com/lycaon/lycaon/test/openapi"
 )
@@ -73,8 +74,8 @@ func TestScanCompletedByRunnerReadsThroughServer(t *testing.T) {
 	runner := scanexecution.NewRunner(scanStore, reg, ing, scancfg.DefaultRunnerConfig(), &events.Publisher{Hub: hub})
 	runner.Snapshots = coord.SnapshotStore()
 
-	sessStore := store.NewMemory()
-	mgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	sessStore := store.NewSQL(sqlDB)
+	mgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{
 		Core:  api.CoreDependencies{Store: sessStore, Projects: projReg, Sessions: mgr},
 		Scans: api.ScansDependencies{ScanCoordinator: coord, ScannerRegistry: reg},

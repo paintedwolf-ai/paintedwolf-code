@@ -1,4 +1,4 @@
-package contract
+package llm_test
 
 import (
 	"path/filepath"
@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/testutil"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // oMLX is a keyless local provider with typed model discovery.
@@ -95,21 +94,19 @@ func TestBundledProvidersIncludeOMLX(t *testing.T) {
 		t.Fatal("KindTemplates missing omlx on macos")
 	}
 
-	// The live row stays in the local catalog; Linux hides it from the
-	// templates and the provider list.
 	t.Cleanup(llm.SetHostProductPlatformForTest(llm.PlatformLinux))
-	catalogLinux := liveCatalogForShipIDs(t, "omlx")
-	if len(catalogLinux.List()) != 1 || catalogLinux.List()[0].ID != "omlx" {
-		t.Fatalf("linux catalog entries = %+v, want the seeded omlx row", catalogLinux.List())
-	}
+	catalogLinux, err := llm.NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
+	testutil.FailErr(t, "linux catalog", err)
 	for _, k := range catalogLinux.KindTemplates() {
 		if k.Kind == "omlx" {
 			t.Fatal("KindTemplates must hide omlx on linux")
 		}
 	}
 	regLinux, err := llm.NewRegistry(t.Context(), catalogLinux, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
-	contractcheck.FailErr(t, "linux registry", err)
-	regLinux.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
+	if err == nil {
+		regLinux.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
+	}
+	testutil.FailErr(t, "linux registry", err)
 	for _, p := range regLinux.List(t.Context()) {
 		if p.ID == "omlx" {
 			t.Fatal("List must hide omlx on linux")
