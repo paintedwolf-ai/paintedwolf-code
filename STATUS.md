@@ -1,10 +1,10 @@
 # Status
 
-**State**: implemented in [PR #2467](https://github.com/paintedwolf-ai/paintedwolf-code/pull/2467), ready at `69e63f6bb254ed06c47b8314fd83b745562c4e7d`; final-head CI pending. No merge or deployment performed.
+**State**: implemented in [PR #2467](https://github.com/paintedwolf-ai/paintedwolf-code/pull/2467), ready at `bb305d34ea820ad39101299ab8a57f2744d37152`; final-head CI pending. No merge or deployment performed.
 
 | Id | Branch | Head | PR | State |
 |---|---|---|---|---|
-| `PU01` + `PU02` | `fix/plan-transcript-transactions` | `69e63f6bb254ed06c47b8314fd83b745562c4e7d` | #2467 | final CI pending |
+| `PU01` + `PU02` | `fix/plan-transcript-transactions` | `bb305d34ea820ad39101299ab8a57f2744d37152` | #2467 | final CI pending |
 
 ## Worktrees
 
@@ -48,7 +48,7 @@
 - Current main `0efb0f49c8` still uses the one-second coalescer and separate plan/transcript commits. Inspected all 166 open PRs and relevant diffs. #2472 fixes delivery of already committed outbox records, not atomic plan publication. #2567 removes memory progress fixtures; #2538 restructures session repositories. Both need composition with this PR, neither supersedes its behavior.
 - Preserved the intervening work through `973d626297`. CI run 44271458330 found an unreachable extracted `MemoryStore.update` helper and insufficient changed-statement coverage for decision-resolution errors. Kept the memory mutation cohesive in `Update`, preserving unlock-before-notification and cancellation behavior. Added durable rollback/retry tests for each worker decision persistence boundary and missing/foreign decisions.
 - Linux progress and worker suites at `2aec4fbdb83` passed 717 tests/subtests, with 3 skipped and one stress-tagged file excluded. Receipt and logs: `evidence/verification/resume-progress-worker/`.
-- Merged current main cleanly. Final head is `69e63f6bb254ed06c47b8314fd83b745562c4e7d`; CI run [44361006053](https://github.com/paintedwolf-ai/paintedwolf-code/actions/runs/44361006053).
+- Merged main `0efb0f49c8` cleanly as `69e63f6bb2`. CI run [44361006053](https://github.com/paintedwolf-ai/paintedwolf-code/actions/runs/44361006053) passed lint and confirmed worker changed coverage at 84%, but workflow changed coverage remained 50%. Added registered fanout failure/replay recovery and child phase-entry error propagation tests in `bb305d34ea8`. Final-head CI: [44367934936](https://github.com/paintedwolf-ai/paintedwolf-code/actions/runs/44367934936); Linux `coverage:changes` reproduction pending.
 - The previous run also failed an unchanged Linux launch-guard test while starting its fixture (entry descriptor was an eventpoll descriptor rather than a sealed specification). The same focused Linux test passed at the current head (3 tests/subtests, no skips); no launch-guard source was changed. Receipt: `evidence/verification/resume-launchguard/`.
 
 ## Remaining work
