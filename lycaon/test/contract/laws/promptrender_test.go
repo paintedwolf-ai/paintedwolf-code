@@ -1,7 +1,13 @@
 package laws_test
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/protectedpath"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 
 	"github.com/lycaon/lycaon/test/contract/laws"
 	"github.com/lycaon/lycaon/test/contract/laws/promptrender"
@@ -49,6 +55,45 @@ func TestPromptRenderFailsClosed(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			expect(t, laws.Evaluate(fixture(t, tc.files), tc.rule), tc.want, tc.violations)
+		})
+	}
+}
+
+const seededKick = "coordinator-roots-changed"
+
+// P13 on the coordinator kick row: a guidance template, served through the
+// checkout's prompt overlay, that names a tool no coordinator surface offers
+// fails on every surface; the stock template and a rewording of it that keeps
+// its names pass.
+func TestPromptRenderReachFailsOnASeededTemplate(t *testing.T) {
+	t.Parallel()
+	kicks := rule(t, promptrender.Family, "coordinator-kicks-name-only-offered-tools")
+	stockKick, err := os.ReadFile(filepath.Join(contractcheck.RepoRoot(t), guidance+seededKick+".md"))
+	contractcheck.FailErr(t, "read the stock kick", err)
+	overlay := "lycaon/" + protectedpath.PromptFilesDirName + "/kicks/" + seededKick + ".md"
+	anchors := map[string]string{
+		"lycaon/internal/prompts/render.go": "package prompts\n\ntype FileTemplateEngine struct{}\n\nfunc (e *FileTemplateEngine) RenderKick() {}\n",
+	}
+	reworded := "To keep you oriented: " + strings.ReplaceAll(string(stockKick), "\n\n", "\n\nIn addition: ")
+	seeded := string(stockKick) + "\nTo settle this, call `complete_leg`.\n"
+	for name, tc := range map[string]struct {
+		overlay string
+		want    outcome
+	}{
+		"stock template": {want: passes},
+		"reworded":       {overlay: reworded, want: passes},
+		"seeded tool":    {overlay: seeded, want: violates},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			files := with(anchors, map[string]string{overlay: tc.overlay})
+			res := laws.Evaluate(fixture(t, files), kicks)
+			expect(t, res, tc.want, 0)
+			for _, v := range res.Violations {
+				if !strings.Contains(v, "kick "+seededKick+" ") || !strings.Contains(v, "complete_leg") {
+					t.Errorf("violation outside the seeded template and tool: %s", v)
+				}
+			}
 		})
 	}
 }

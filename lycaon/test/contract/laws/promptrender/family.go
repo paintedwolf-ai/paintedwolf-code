@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -17,7 +18,7 @@ import (
 )
 
 // Family is the prompt-render rule table.
-var Family = laws.Family{Name: "prompt-render", Rules: []laws.Rule{
+var Family = laws.Family{Name: "prompt-render", Rules: append([]laws.Rule{
 	{Name: "agent-personas-render", Anchors: []laws.Anchor{personaRenderer}, Check: agentPersonasRender},
 	{Name: "agent-templates-render", Anchors: []laws.Anchor{personaRenderer}, Check: agentTemplatesRender},
 	{Name: "coordinator-kicks-render-non-empty", Anchors: []laws.Anchor{kickRenderer}, Check: coordinatorKicksRenderNonEmpty},
@@ -27,7 +28,7 @@ var Family = laws.Family{Name: "prompt-render", Rules: []laws.Rule{
 	{Name: "templates-render-no-host-paths", Anchors: []laws.Anchor{laws.Dir("lycaon/config/packs/painted-wolf/platform/guidance")}, Exempt: []laws.Exemption{
 		{Key: "config/packs/painted-wolf/platform/guidance/curator/user.md: c.path", Reason: "the curator's evidence path is a display path, not a host root"},
 	}, Check: templatesRenderNoHostPaths},
-}}
+}, reachRules...)}
 
 var (
 	personaRenderer = laws.Func("internal/prompts", "RenderPersona")
@@ -36,7 +37,13 @@ var (
 
 // stock is the stock catalog, read once per corpus.
 func stock(r *laws.Run) *Stock {
-	return laws.Part(r.Corpus, "stock prompt catalog", func() (*Stock, error) { return LoadStock(context.Background()) })
+	return laws.Part(r.Corpus, "stock prompt catalog", func() (*Stock, error) {
+		s, err := LoadStock(context.Background())
+		if err == nil {
+			s.Site = r.Corpus.Path("lycaon/" + protectedpath.PromptFilesDirName)
+		}
+		return s, err
+	})
 }
 
 // skillRenders is every stock skill rendered for every reader, once per
