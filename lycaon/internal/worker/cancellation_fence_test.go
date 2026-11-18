@@ -272,7 +272,7 @@ func (cancellationOutcomeExecutor) AbortWorkerRuntime(context.Context, api.Worke
 func TestPollerCancellationOutranksProviderOutcome(t *testing.T) {
 	for _, runErr := range []error{nil, errors.New("provider failure"), fmt.Errorf("stopped: %w", lifecycle.ErrStopping)} {
 		t.Run(fmt.Sprint(runErr), func(t *testing.T) {
-			q := cancellationQueue(t, "sql")
+			q := cancellationQueue(t)
 			id := enqueueCancellationWorker(t, q)
 			task := claimCancellationWorker(t, q)
 			ctx, cancel := context.WithCancel(t.Context())
@@ -298,7 +298,7 @@ func TestPollerCancellationOutranksProviderOutcome(t *testing.T) {
 }
 
 func TestSQLClaimConcurrencyCapIsAtomic(t *testing.T) {
-	q := cancellationQueue(t, "sql")
+	q := cancellationQueue(t)
 	enqueueCancellationWorker(t, q)
 	enqueueCancellationWorker(t, q)
 	var wg sync.WaitGroup

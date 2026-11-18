@@ -9,7 +9,7 @@ import (
 )
 
 func (p PromoteRoots) WritePrimaryBytes(task *api.WorkerTask, qualifiedPath string, content []byte) error {
-	qualifiedPath = filepath.ToSlash(filepath.Clean(strings.TrimSpace(qualifiedPath)))
+	qualifiedPath = filepath.ToSlash(strings.TrimSpace(qualifiedPath))
 	if qualifiedPath == "" || qualifiedPath == "." || sandbox.HasParentTraversal(qualifiedPath) {
 		return nil
 	}

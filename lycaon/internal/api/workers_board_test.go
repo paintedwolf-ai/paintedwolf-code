@@ -58,7 +58,7 @@ func TestWorkersBoardAndCancelHandlers(t *testing.T) {
 	coord, err := sessStore.Create(ctx, wire.CreateSessionRequest{ProjectID: proj.ID, Posture: wire.SessionPostureBuild}, proj.ID)
 	testutil.FailErr(t, "create session", err)
 
-	queue := workertest.NewQueue(t, 2, proj.ID, coord.ID, coord.ID)
+	queue := workertest.NewQueue(t, 2, proj.ID, coord.ID)
 	_, err = queue.Enqueue(ctx, wire.WorkerTask{
 		ID:              "job-pending",
 		ParentSessionID: coord.ID,

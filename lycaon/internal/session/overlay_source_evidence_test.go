@@ -198,7 +198,7 @@ func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	}
 }
 
-type failingSecretInheritanceStore struct{ *store.SQL }
+type failingSecretInheritanceStore struct{ *store.Memory }
 
 func (*failingSecretInheritanceStore) SeedSecretExposure(context.Context, string) error {
 	return errors.New("evidence store unavailable")

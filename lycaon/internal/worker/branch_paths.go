@@ -36,7 +36,7 @@ func PromoteRootsForTask(task *api.WorkerTask, roots []projectroot.RootRef) Prom
 
 // ReadPairBytes loads exact primary and branch bytes for a qualified promote path.
 func (p PromoteRoots) ReadPairBytes(task *api.WorkerTask, qualifiedPath string) (primary, branch []byte, branchPresent bool, err error) {
-	qualifiedPath = filepath.ToSlash(filepath.Clean(strings.TrimSpace(qualifiedPath)))
+	qualifiedPath = filepath.ToSlash(strings.TrimSpace(qualifiedPath))
 	if qualifiedPath == "" {
 		return nil, nil, false, nil
 	}
@@ -106,6 +106,9 @@ func (p PromoteRoots) identityAt(task *api.WorkerTask, rootID, scopeRel string) 
 		return promoteIdentity{}, projectroot.ErrNoProjectRoots
 	}
 	scopeRel = filepath.ToSlash(filepath.Clean(strings.TrimSpace(scopeRel)))
+	if !filepath.IsLocal(scopeRel) || strings.ContainsRune(scopeRel, 0) {
+		return promoteIdentity{}, fmt.Errorf("invalid root-relative promote path %q", scopeRel)
+	}
 	if len(p.Roots) <= 1 {
 		rel := filepath.FromSlash(scopeRel)
 		id := promoteIdentity{
@@ -164,7 +167,7 @@ func (p PromoteRoots) fileAbs(task *api.WorkerTask, qualifiedPath string) (prima
 }
 
 func (p PromoteRoots) writePrimaryBytes(task *api.WorkerTask, qualifiedPath string, content []byte, restoreMode *os.FileMode, verify func(fseffect.Target) error) error {
-	qualifiedPath = filepath.ToSlash(filepath.Clean(strings.TrimSpace(qualifiedPath)))
+	qualifiedPath = filepath.ToSlash(strings.TrimSpace(qualifiedPath))
 	if qualifiedPath == "" || qualifiedPath == "." || sandbox.HasParentTraversal(qualifiedPath) {
 		return nil
 	}
@@ -267,7 +270,7 @@ func syncPromoteDirectoryTree(root, leaf string) error {
 }
 
 func (p PromoteRoots) dropPrimary(task *api.WorkerTask, qualifiedPath string, verify func(fseffect.Target) error) error {
-	qualifiedPath = filepath.ToSlash(filepath.Clean(strings.TrimSpace(qualifiedPath)))
+	qualifiedPath = filepath.ToSlash(strings.TrimSpace(qualifiedPath))
 	if qualifiedPath == "" || qualifiedPath == "." || sandbox.HasParentTraversal(qualifiedPath) {
 		return nil
 	}

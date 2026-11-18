@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/db"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -51,7 +52,7 @@ func newExecutionStack(t *testing.T) (*session.Host, *SQLQueue, *LocalWorkerExec
 	t.Helper()
 	queue := newTestQueue(t, DefaultWorkersConfig().Poller.MaxConcurrency, testdbseed.DefaultProjectID)
 	testdbseed.InsertProjectRoot(t, queue.db, testdbseed.DefaultProjectID, t.TempDir())
-	store := store.NewSQL(queue.db)
+	store := store.NewSQL(queue.db.(db.ReadHandle))
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wireExecutionCloseoutPolicy(t, mgr)
 	cfg := DefaultWorkersConfig()
