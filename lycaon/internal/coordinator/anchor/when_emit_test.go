@@ -2,21 +2,17 @@ package anchor_test
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestEmitHonorsConditionWhenFalse(t *testing.T) {
 	reg := loadTestRegistry(t)
-	dir := t.TempDir()
 	doc := map[string]any{
 		"on":       "compose.done",
 		"selector": map[string]any{"surface": "coordinator"},
@@ -27,10 +23,9 @@ func TestEmitHonorsConditionWhenFalse(t *testing.T) {
 	}
 	raw, err := yaml.Marshal(doc)
 	testutil.FailErr(t, "marshal", err)
-	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "compose-done.yaml"), raw, 0o644))
 
-	loaderReg, err := anchor.LoadRegistry(extpacks.OnDisk(dir), "")
-	testutil.FailErr(t, "LoadRegistry", err)
+	loaderReg, err := anchor.LoadRegistryFromConfigRootWithCatalog(bindingCatalog("fixture", raw))
+	testutil.FailErr(t, "load effective binding", err)
 	anchor.SetDefaultRegistry(loaderReg)
 	t.Cleanup(func() { anchor.SetDefaultRegistry(reg) })
 
@@ -45,7 +40,6 @@ func TestEmitHonorsConditionWhenFalse(t *testing.T) {
 
 func TestEmitMatchHonorsConditionWhenPhase(t *testing.T) {
 	reg := loadTestRegistry(t)
-	dir := t.TempDir()
 	doc := map[string]any{
 		"on":       "phase.entered",
 		"selector": map[string]any{"surface": "phase"},
@@ -56,10 +50,9 @@ func TestEmitMatchHonorsConditionWhenPhase(t *testing.T) {
 	}
 	raw, err := yaml.Marshal(doc)
 	testutil.FailErr(t, "marshal", err)
-	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "phase-entered.yaml"), raw, 0o644))
 
-	loaderReg, err := anchor.LoadRegistry(extpacks.OnDisk(dir), "")
-	testutil.FailErr(t, "LoadRegistry", err)
+	loaderReg, err := anchor.LoadRegistryFromConfigRootWithCatalog(bindingCatalog("fixture", raw))
+	testutil.FailErr(t, "load effective binding", err)
 	anchor.SetDefaultRegistry(loaderReg)
 	t.Cleanup(func() { anchor.SetDefaultRegistry(reg) })
 

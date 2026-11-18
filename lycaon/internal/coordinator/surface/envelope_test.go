@@ -186,21 +186,6 @@ func pendingMergeHistory() []api.Message {
 	}}
 }
 
-func TestPendingOverlaySummaryIDs(t *testing.T) {
-	ids := surface.PendingOverlaySummaryIDs(pendingMergeHistory())
-	if len(ids) != 1 || ids[0] != "j1" {
-		t.Fatalf("ids = %v want [j1]", ids)
-	}
-
-	superseded := append(pendingMergeHistory(), api.Message{
-		Role:          api.MessageRoleAssistant,
-		WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "j1", Status: "promoted"},
-	})
-	if ids := surface.PendingOverlaySummaryIDs(superseded); len(ids) != 0 {
-		t.Fatalf("superseded overlay summary ids = %v, want []", ids)
-	}
-}
-
 func TestPartialWorkerSummaryJobIDs(t *testing.T) {
 	history := []api.Message{{
 		Role:          api.MessageRoleAssistant,
