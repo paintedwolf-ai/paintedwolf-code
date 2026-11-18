@@ -21,7 +21,7 @@ import (
 
 // Queued prompts belong to the discarded timeline.
 func TestRewindClearsTheNextTurnQueue(t *testing.T) {
-	mgr, sessionID, _ := newCheckpointTestSession(t)
+	mgr, sessionID, _, repositories := newCheckpointTestSession(t)
 	ctx := context.Background()
 
 	_, err := mgr.Submissions.Prompt(ctx, sessionID, "the ask")
@@ -34,25 +34,25 @@ func TestRewindClearsTheNextTurnQueue(t *testing.T) {
 	}
 
 	operationID := uuid.NewString()
-	first, err := rewindTest(t, mgr, ctx, operationID, sessionID, anchor)
+	first, err := rewindTest(t, mgr, repositories, ctx, operationID, sessionID, anchor)
 	testutil.FailErr(t, "rewind", err)
 
 	if got := mgr.Chats.Drafts.Snapshot(sessionID); len(got.QueueItems) != 0 {
 		t.Fatalf("queue still holds %d item(s) after rewind", len(got.QueueItems))
 	}
-	replayed, err := rewindTest(t, mgr, ctx, operationID, sessionID, anchor)
+	replayed, err := rewindTest(t, mgr, repositories, ctx, operationID, sessionID, anchor)
 	testutil.FailErr(t, "replay rewind", err)
 	if !reflect.DeepEqual(replayed, first) {
 		t.Fatalf("rewind replay = %+v, want exact %+v", replayed, first)
 	}
-	if _, err := rewindTest(t, mgr, ctx, operationID, sessionID, uuid.NewString()); !errors.Is(err, checkpointcontrol.ErrRewindOperationConflict) {
+	if _, err := rewindTest(t, mgr, repositories, ctx, operationID, sessionID, uuid.NewString()); !errors.Is(err, checkpointcontrol.ErrRewindOperationConflict) {
 		t.Fatalf("rewind operation reuse = %v, want checkpointcontrol.ErrRewindOperationConflict", err)
 	}
 }
 
 // Removing the open anchor resets pre-image capture for the next prompt.
 func TestRewindClosesTheCaptureInterval(t *testing.T) {
-	mgr, sessionID, dir := newCheckpointTestSession(t)
+	mgr, sessionID, dir, repositories := newCheckpointTestSession(t)
 	ctx := context.Background()
 
 	_, err := mgr.Submissions.Prompt(ctx, sessionID, "the ask")
@@ -60,10 +60,10 @@ func TestRewindClosesTheCaptureInterval(t *testing.T) {
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
 	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", "foo.go")
 
-	_, err = rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor)
+	_, err = rewindTest(t, mgr, repositories, ctx, uuid.NewString(), sessionID, anchor)
 	testutil.FailErr(t, "rewind", err)
 
-	checkpoint := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind)
+	checkpoint := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, repositories.Rewind)
 	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", "foo.go")
 	if _, err := checkpoint.Load(ctx, sessionID, anchor); !errors.Is(err, sessionstore.ErrCheckpointMissing) {
 		t.Fatalf("capture recreated the rewound anchor: %v", err)
@@ -82,7 +82,7 @@ func TestRewindClosesTheCaptureInterval(t *testing.T) {
 
 // Rewind restores project decisions and the format marker published with them.
 func TestRewindUndoesTurnChangesToTheProjectOverlay(t *testing.T) {
-	mgr, sessionID, dir := newCheckpointTestSession(t)
+	mgr, sessionID, dir, repositories := newCheckpointTestSession(t)
 	ctx := context.Background()
 	blueprint := settingsoverlay.DirName() + "/blueprints/feature.md"
 	ignores := settingsoverlay.DirName() + "/ignores.yaml"
@@ -103,14 +103,14 @@ func TestRewindUndoesTurnChangesToTheProjectOverlay(t *testing.T) {
 	testutil.FailErr(t, "turn accepts a finding",
 		os.WriteFile(abs(ignores), []byte("version: 1\nfindings:\n  - path: test/**\n    reason: reviewed fixture\n"), 0o644))
 	testutil.FailErr(t, "validate current overlay", settingsoverlay.CheckFormat(dir))
-	recordRewindTestEffect(t, mgr, sessionID, blueprint, []byte("# original plan\n"), []byte("# agent plan\n"), api.SourceChangeOpWrite)
+	recordRewindTestEffect(t, mgr, repositories, sessionID, blueprint, []byte("# original plan\n"), []byte("# agent plan\n"), api.SourceChangeOpWrite)
 	for _, rel := range []string{formatMarker, ignores} {
 		raw, err := os.ReadFile(abs(rel))
 		testutil.FailErr(t, "read overlay", err)
-		recordRewindTestEffect(t, mgr, sessionID, rel, nil, raw, api.SourceChangeOpCreate)
+		recordRewindTestEffect(t, mgr, repositories, sessionID, rel, nil, raw, api.SourceChangeOpCreate)
 	}
 
-	result, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor)
+	result, err := rewindTest(t, mgr, repositories, ctx, uuid.NewString(), sessionID, anchor)
 	testutil.FailErr(t, "rewind", err)
 
 	got, err := os.ReadFile(abs(blueprint))
@@ -136,15 +136,15 @@ func TestRewindUndoesTurnChangesToTheProjectOverlay(t *testing.T) {
 
 // Rewind and active writes are mutually exclusive.
 func TestRewindRefusesWhileBusy(t *testing.T) {
-	mgr, sessionID, _ := newCheckpointTestSession(t)
+	mgr, sessionID, _, repositories := newCheckpointTestSession(t)
 	ctx := context.Background()
 
 	_, err := mgr.Submissions.Prompt(ctx, sessionID, "the ask")
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
 
-	testutil.FailErr(t, "mark busy", mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Sessions.SetSessionStatus(ctx, sessionID, api.SessionStatusBusy))
-	_, err = rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor)
+	testutil.FailErr(t, "mark busy", repositories.Sessions.SetSessionStatus(ctx, sessionID, api.SessionStatusBusy))
+	_, err = rewindTest(t, mgr, repositories, ctx, uuid.NewString(), sessionID, anchor)
 	if err == nil {
 		t.Fatal("rewind succeeded on a busy session")
 	}
@@ -155,7 +155,7 @@ func TestRewindRefusesWhileBusy(t *testing.T) {
 
 // Rewind clears separately persisted progress so deleted commitments stay out of the next prompt.
 func TestRewindClearsTheProgressChecklist(t *testing.T) {
-	mgr, sessionID, _ := newCheckpointTestSession(t)
+	mgr, sessionID, _, repositories := newCheckpointTestSession(t)
 	mgr.SetProgressStore(progress.NewMemoryStore())
 	ctx := context.Background()
 
@@ -168,7 +168,7 @@ func TestRewindClearsTheProgressChecklist(t *testing.T) {
 		t.Fatal("progress setup failed")
 	}
 
-	_, err = rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor)
+	_, err = rewindTest(t, mgr, repositories, ctx, uuid.NewString(), sessionID, anchor)
 	testutil.FailErr(t, "rewind", err)
 
 	if got := mgr.RewindRuntime.Progress.Get(t.Context(), sessionID); got != "" {

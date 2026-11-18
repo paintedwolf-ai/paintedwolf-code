@@ -362,7 +362,7 @@ func TestAppendHostEventStampedWithActiveRun(t *testing.T) {
 	if err := mgr.ProjectControl.AppendHostEvent(context.Background(), sessionID, hostmarker.OverlayPromoteEventPrefix, map[string]any{"overlay": "o1"}, ""); err != nil {
 		testutil.FailErr(t, "appendHostEvent failed", err)
 	}
-	msgs, err := mgr.Coordinator.Context.Sessions.(*store.Repositories).Transcript.GetMessages(context.Background(), sessionID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "GetMessages failed", err)
 	var found bool
 	for _, m := range msgs {
@@ -383,7 +383,7 @@ func TestAppendHostEventUnstampedWhenNoActiveRun(t *testing.T) {
 	if err := mgr.ProjectControl.AppendHostEvent(context.Background(), sessionID, hostmarker.OverlayRejectEventPrefix, map[string]any{"overlay": "o2"}, ""); err != nil {
 		testutil.FailErr(t, "appendHostEvent failed", err)
 	}
-	msgs, err := mgr.Coordinator.Context.Sessions.(*store.Repositories).Transcript.GetMessages(context.Background(), sessionID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "GetMessages failed", err)
 	for _, m := range msgs {
 		if m.Role == api.MessageRoleTool && m.WorkflowRunID != "" {

@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -51,7 +50,7 @@ func setupHostEventManager(t *testing.T, promoter OverlayPromoter) (*Host, strin
 
 func transcriptContent(t *testing.T, mgr *Host, sessionID string) []string {
 	t.Helper()
-	msgs, err := mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Transcript.GetMessages(context.Background(), sessionID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("get messages: %v", err)
 	}
@@ -80,7 +79,7 @@ func TestManagerPromoteOverlayAppendsHostEvent(t *testing.T) {
 	if out.Status != api.WorkerMergeStatusMerged {
 		t.Fatalf("status=%q want merged", out.Status)
 	}
-	messages, err := mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Transcript.GetMessages(context.Background(), sessionID)
+	messages, err := mgr.Runner.Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "get promotion messages", err)
 	if len(messages) != 1 || messages[0].ToolResult.OverlayPromotion == nil || messages[0].ToolResult.OverlayPromotion.Files[0].After != "merged" {
 		t.Fatalf("promotion metadata missing from durable message: %#v", messages)

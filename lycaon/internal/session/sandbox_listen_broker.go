@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -13,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -22,7 +22,7 @@ import (
 // Listener grants preserve mediated egress.
 type ListenCheckpointBroker struct {
 	Checkpoints hitl.CheckpointManager
-	Store       *sessionstore.Repositories
+	Store       sessiontree.Reader
 	Runtime     *approvalstate.SandboxPortGrantRuntime
 	Provenance  LoopbackProvenanceResolver
 	Authority   hitl.ApprovalGate

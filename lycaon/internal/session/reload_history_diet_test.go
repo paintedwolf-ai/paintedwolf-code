@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
@@ -205,7 +204,7 @@ func rejectVerdictCloseout(t *testing.T, mgr *Host, sess *api.Session, workersId
 }
 
 func TestVerdictCloseoutSkipsWhenInvokeGated(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 
 	if _, block := mgr.Coordinator.Guards.MissingVerdict(
@@ -216,7 +215,7 @@ func TestVerdictCloseoutSkipsWhenInvokeGated(t *testing.T) {
 }
 
 func TestCloseoutBlocksOnMissingReviewVerdict(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 
 	reject, block := rejectVerdictCloseout(t, mgr, sess, true)
@@ -229,7 +228,7 @@ func TestCloseoutBlocksOnMissingReviewVerdict(t *testing.T) {
 }
 
 func TestCloseoutAllowsWhenVerdictRecorded(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: false}))
 
 	if _, block := rejectVerdictCloseout(t, mgr, sess, true); block {
@@ -238,7 +237,7 @@ func TestCloseoutAllowsWhenVerdictRecorded(t *testing.T) {
 }
 
 func TestVerdictCloseoutSkipsBusyWorkers(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 
 	if _, block := rejectVerdictCloseout(t, mgr, sess, false); block {
@@ -247,7 +246,7 @@ func TestVerdictCloseoutSkipsBusyWorkers(t *testing.T) {
 }
 
 func TestVerdictCloseoutHoldsRegardlessOfSurface(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 
 	if _, block := rejectVerdictCloseout(t, mgr, sess, true); !block {
@@ -256,7 +255,7 @@ func TestVerdictCloseoutHoldsRegardlessOfSurface(t *testing.T) {
 }
 
 func TestVerdictCloseoutBoundedPerPrompt(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 	ctx := context.Background()
 
@@ -277,30 +276,30 @@ func TestVerdictCloseoutBoundedPerPrompt(t *testing.T) {
 
 // A partial apply panic rolls back within the same request.
 func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
-	mgr, sessionID, dir := newCheckpointTestSession(t)
-	ctx := checkpointCaller(t, mgr)
+	mgr, sessionID, dir, repositories := newCheckpointTestSession(t)
+	ctx := checkpointCaller(t, mgr, repositories)
 
 	anchor := api.Message{
 		ID: "u-two-files", Role: api.MessageRoleUser, Content: "change two files",
 		Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser,
 		TrustTier: api.ContentTrustTierTrusted,
 	}
-	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Transcript.AppendMessages(ctx, sessionID, anchor))
+	testutil.FailErr(t, "append", repositories.Transcript.AppendMessages(ctx, sessionID, anchor))
 
 	pathA := filepath.Join(dir, "a.txt")
 	pathB := filepath.Join(dir, "b.txt")
 	testutil.FailErr(t, "seed a", os.WriteFile(pathA, []byte("before-a"), 0o640))
 	testutil.FailErr(t, "seed b", os.WriteFile(pathB, []byte("before-b"), 0o640))
 
-	cpStore := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind)
+	cpStore := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, repositories.Rewind)
 	_, err := cpStore.Open(t.Context(), sessionID, anchor.ID)
 	testutil.FailErr(t, "open checkpoint", err)
 	testutil.FailErr(t, "capture a", cpStore.CapturePreImage(t.Context(), sessionID, anchor.ID, "a.txt", ""))
 	testutil.FailErr(t, "capture b", cpStore.CapturePreImage(t.Context(), sessionID, anchor.ID, "b.txt", ""))
 	testutil.FailErr(t, "turn writes a", os.WriteFile(pathA, []byte("after-a"), 0o640))
 	testutil.FailErr(t, "turn writes b", os.WriteFile(pathB, []byte("after-b"), 0o640))
-	recordRewindTestEffect(t, mgr, sessionID, "a.txt", []byte("before-a"), []byte("after-a"), api.SourceChangeOpWrite)
-	recordRewindTestEffect(t, mgr, sessionID, "b.txt", []byte("before-b"), []byte("after-b"), api.SourceChangeOpWrite)
+	recordRewindTestEffect(t, mgr, repositories, sessionID, "a.txt", []byte("before-a"), []byte("after-a"), api.SourceChangeOpWrite)
+	recordRewindTestEffect(t, mgr, repositories, sessionID, "b.txt", []byte("before-b"), []byte("after-b"), api.SourceChangeOpWrite)
 
 	// Apply a.txt before injecting a panic on b.txt.
 	originalSource := mgr.Chats.Rewinds.SourceRewinds()
@@ -312,7 +311,7 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 	mgr.Chats.Rewinds.SetSourceRewinds(faultSource)
 
 	operationID := uuid.NewString()
-	_, err = rewindTest(t, mgr, ctx, operationID, sessionID, anchor.ID)
+	_, err = rewindTest(t, mgr, repositories, ctx, operationID, sessionID, anchor.ID)
 	if err == nil {
 		t.Fatal("RewindToPrompt returned no error; want the panic surfaced as a rewind failure, not swallowed")
 	}
@@ -338,7 +337,7 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 		t.Fatal("a rolled-back rewind must leave the transcript intact")
 	}
 
-	op, err := mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind.GetRewindOperation(ctx, operationID)
+	op, err := repositories.Rewind.GetRewindOperation(ctx, operationID)
 	testutil.FailErr(t, "get rewind operation", err)
 	if op == nil || op.Status != "rolled_back" {
 		t.Fatalf("rewind operation status = %+v, want rolled_back", op)
@@ -346,7 +345,7 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 
 	// Retry in the same process after rollback.
 	mgr.Chats.Rewinds.SetSourceRewinds(originalSource)
-	result, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID)
+	result, err := rewindTest(t, mgr, repositories, ctx, uuid.NewString(), sessionID, anchor.ID)
 	testutil.FailErr(t, "rewind after recovery", err)
 	if result == nil {
 		t.Fatal("rewind after recovery returned a nil result")

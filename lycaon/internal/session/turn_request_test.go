@@ -268,7 +268,7 @@ func evidenceFileBytes(t *testing.T, m *Host, sess *api.Session) []byte {
 }
 
 func TestSourceRunEvidenceIsScreenedBeforeItIsPersisted(t *testing.T) {
-	mgr, sess, _ := verifyGateHarness(t, "")
+	mgr, sess, _, _ := verifyGateHarness(t, "")
 	mgr.Runner.Transcript.SetRedactor(evidenceScreenRedactor)
 	recordVerify(t, mgr, sess, "deploy --token "+evidenceBoundarySecret, 0)
 
@@ -280,7 +280,7 @@ func TestSourceRunEvidenceIsScreenedBeforeItIsPersisted(t *testing.T) {
 }
 
 func TestScreenedEvidenceStillMatchesTheDeclaredCommand(t *testing.T) {
-	mgr, sess, history := verifyGateHarness(t, "make test")
+	mgr, sess, history, _ := verifyGateHarness(t, "make test")
 	mgr.Runner.Transcript.SetRedactor(evidenceScreenRedactor)
 	recordVerify(t, mgr, sess, "make test", 0)
 

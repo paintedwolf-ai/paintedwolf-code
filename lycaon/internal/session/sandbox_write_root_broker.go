@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"strings"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolapproval"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -24,7 +24,7 @@ import (
 // WriteRootCheckpointBroker resolves write-root approval plans.
 type WriteRootCheckpointBroker struct {
 	Checkpoints hitl.CheckpointManager
-	Store       *sessionstore.Repositories
+	Store       sessiontree.Reader
 	Runtime     *approvalstate.SandboxPathGrantRuntime
 	// ReadRuntime holds chat read-path leases, a separate namespace from
 	// write roots: a grant in one never covers the other.

@@ -38,7 +38,7 @@ func acquireCoordinatorSources(m *Host, store *sessionstore.Repositories, client
 			Guidance: m.Coordinator.Guidance, Policy: m.ToolPolicy, WorkerState: m.Workers.State},
 		DataDir: m.Workspace.DataDir, Feedback: m.Coordinator.Feedback, Guards: m.Coordinator.Guards,
 		History: m.Runner.History, Naming: m.Chats.Naming, Processes: m.Processes,
-		Sessions: store, Verification: m.Verification, Workspace: m.Workspace,
+		SessionStore: store.Sessions, EvidenceStore: store.Evidence, Verification: m.Verification, Workspace: m.Workspace,
 	}
 	m.Coordinator.Control = &promptsource.Control{Batch: m.Coordinator.Batch, GracefulCancel: m.Workers.Cancel, Approvals: nil, Obligations: nil, Processes: m.Processes, Runtime: nil, Workflow: nil}
 	m.Coordinator.Inbox = &promptsource.Inbox{Guidance: m.Coordinator.Guidance, Submissions: m.Submissions}

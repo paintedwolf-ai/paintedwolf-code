@@ -26,7 +26,7 @@ import (
 )
 
 func TestOverCapTurnMarksTheCheckpointTruncated(t *testing.T) {
-	mgr, sessionID, dir := newCheckpointTestSession(t)
+	mgr, sessionID, dir, repositories := newCheckpointTestSession(t)
 	ctx := context.Background()
 	testutil.FailErr(t, "mkdir src", os.MkdirAll(filepath.Join(dir, "src"), 0o755))
 
@@ -41,7 +41,7 @@ func TestOverCapTurnMarksTheCheckpointTruncated(t *testing.T) {
 		mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", rel)
 	}
 
-	man, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind).Load(t.Context(), sessionID, anchor)
+	man, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, repositories.Rewind).Load(t.Context(), sessionID, anchor)
 	testutil.FailErr(t, "load manifest", err)
 	if len(man.Paths) != sessioncheckpoint.MaxPaths {
 		t.Fatalf("captured %d paths, want the cap %d", len(man.Paths), sessioncheckpoint.MaxPaths)

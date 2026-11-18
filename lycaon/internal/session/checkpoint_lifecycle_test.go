@@ -35,7 +35,7 @@ func TestRemoveOrphanCheckpointsKeepsLiveSessionsOnly(t *testing.T) {
 	testutil.FailErr(t, "create live session", err)
 	liveSessionID := live.ID
 
-	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind)
+	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, sessions.Rewind)
 	_, err = store.Open(t.Context(), liveSessionID, "anchor-live")
 	testutil.FailErr(t, "open live anchor", err)
 	dead, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -56,8 +56,8 @@ func TestRemoveOrphanCheckpointsKeepsLiveSessionsOnly(t *testing.T) {
 }
 
 func TestDeleteSessionRemovesCheckpoints(t *testing.T) {
-	mgr, sessionID, dir := newCheckpointTestSession(t)
-	checkpoint := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Rewind)
+	mgr, sessionID, dir, repositories := newCheckpointTestSession(t)
+	checkpoint := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, repositories.Rewind)
 	_, err := checkpoint.Open(t.Context(), sessionID, "anchor")
 	testutil.FailErr(t, "open checkpoint", err)
 
@@ -210,7 +210,7 @@ func TestCompactionFitThenReplace(t *testing.T) {
 }
 
 func TestSettlementCannotCompleteWithOpenWorkflowGates(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub})

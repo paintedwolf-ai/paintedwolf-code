@@ -18,7 +18,7 @@ func (s pinnedSurface) PromptTurnSurfaceID(string) string { return string(s) }
 
 // AC-COMPAT-09: WAIT_HIDDEN_TEXT fires through the real guard and stock policy.
 func TestBeforeWaitReadsSurfaceAndDurableNotes(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	calls := []api.ToolCall{{ID: "wait-1", Name: "wait"}}
 	for _, tc := range []struct {
 		name, surface string
@@ -59,7 +59,7 @@ func TestWithheldNoticesStateTheirOwnDefect(t *testing.T) {
 		{guidance.MidTurnNoteImageCode, "https://example.test/unseen.png"},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
-			mgr, sess := newSynthesisDelayManager(t)
+			mgr, sess, _ := newSynthesisDelayManager(t)
 			gc := oar.NewGuardContext()
 			gc.Session.SessionID = sess.ID
 			gc.Rejection.RejectObservation = guidance.MidTurnObservation(tc.code)
@@ -80,7 +80,7 @@ func TestWithheldNoticesStateTheirOwnDefect(t *testing.T) {
 }
 
 func TestWithheldTextBecomesOneStructuredNotice(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	gc := oar.NewGuardContext()
 	gc.Session.SessionID = sess.ID
 	gc.Session.MidTurnCitationsRequired = true

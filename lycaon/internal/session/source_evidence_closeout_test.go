@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/decisions/decisionstest"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
@@ -30,7 +29,7 @@ import (
 
 func sourceEvidenceCloseoutHarness(t *testing.T) (*Host, *api.Session, []api.Message) {
 	t.Helper()
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetDataDir(t.TempDir())
 	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
 	mgr.Verification.SetRevisionSource(func(_ context.Context, root string) (string, string) {
@@ -106,7 +105,7 @@ func (q sourceEvidenceWorkerQueue) ListBySession(context.Context, string, string
 
 func workerSourceEvidenceCloseoutHarness(t *testing.T) (*Host, *api.Session, *api.WorkerTask, []api.Message) {
 	t.Helper()
-	mgr, parent := newSynthesisDelayManager(t)
+	mgr, parent, repositories := newSynthesisDelayManager(t)
 	mgr.Verification.SetRevisionSource(func(_ context.Context, root string) (string, string) {
 		return invocation.SourceRevisionForRoot(root)
 	})
@@ -117,7 +116,7 @@ func workerSourceEvidenceCloseoutHarness(t *testing.T) (*Host, *api.Session, *ap
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"a.go"}}
 	snap := testbaseline.Capture(t, primary)
 	raw := snap
-	child, err := mgr.Coordinator.Context.Sessions.(*sessionstore.Repositories).Sessions.CreateChild(context.Background(), parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := repositories.Sessions.CreateChild(context.Background(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild", err)
 	task := &api.WorkerTask{
 		ID: "job-worker", ParentSessionID: parent.ID, ChildSessionID: child.ID,

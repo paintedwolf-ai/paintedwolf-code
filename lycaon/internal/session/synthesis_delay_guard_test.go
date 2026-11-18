@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,7 +31,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newSynthesisDelayManager(t *testing.T) (*Host, *api.Session) {
+func newSynthesisDelayManager(t *testing.T) (*Host, *api.Session, *sessionstore.Repositories) {
 	t.Helper()
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	hints, err := guidance.LoadHintConfigStock()
@@ -56,7 +57,7 @@ func newSynthesisDelayManager(t *testing.T) (*Host, *api.Session) {
 	pipeline.EnableAnchor(oar.AnchorCoordinatorMidTurnNote)
 	pipeline.EnableAnchor(oar.AnchorWorkerReportCheck)
 	mgr.SetOARPipeline(pipeline, oar.NewRenderer(rejectFmt, synthesisDelayNudge{f: rejectFmt}))
-	return mgr, sess
+	return mgr, sess, store
 }
 
 type synthesisDelayNudge struct {
@@ -74,7 +75,7 @@ func rejectCloseout(t *testing.T, mgr *Host, sess *api.Session, surfaceID string
 }
 
 func TestCloseoutSkipsOpenProgressWhenInvokeGated(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [ ] review")
 
 	if _, block := mgr.Coordinator.Guards.OpenProgress(
@@ -85,7 +86,7 @@ func TestCloseoutSkipsOpenProgressWhenInvokeGated(t *testing.T) {
 }
 
 func TestCloseoutBlocksOnOpenSteps(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [x] survey\n- [ ] review")
 
 	reject, block := rejectCloseout(t, mgr, sess, "implement_investigate", true)
@@ -98,7 +99,7 @@ func TestCloseoutBlocksOnOpenSteps(t *testing.T) {
 }
 
 func TestCloseoutAllowsWhenTerminal(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	// Done, skipped, and optional steps do not block closeout.
 	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [x] survey\n- [~] review\n- [>] synthesize report")
 
@@ -108,7 +109,7 @@ func TestCloseoutAllowsWhenTerminal(t *testing.T) {
 }
 
 func TestCloseoutSkipsReadOnlySynthesisAndNonProseSurfaces(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [ ] review")
 
 	if _, block := rejectCloseout(t, mgr, sess, "implement_synthesis", true); block {
@@ -124,7 +125,7 @@ func TestCloseoutSkipsReadOnlySynthesisAndNonProseSurfaces(t *testing.T) {
 }
 
 func TestCloseoutBoundedPerPrompt(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [ ] review")
 	ctx := context.Background()
 
@@ -143,7 +144,7 @@ func TestCloseoutBoundedPerPrompt(t *testing.T) {
 }
 
 func TestCloseoutPendingProgressDoesNotArmWorkerCompletionLatch(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register progress", native.RegisterUpdateProgressTool(reg, mgr.RewindRuntime.Progress, func(_ context.Context, id string) string { return id }, nil))
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")

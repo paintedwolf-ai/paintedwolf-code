@@ -367,17 +367,18 @@ func TestAbortPropagatesProjectDirToWorkerAbort(t *testing.T) {
 	}
 }
 
-type treeOnlyStopStore struct{ *store.Repositories }
+type treeOnlyStopStore struct{ store.SessionRepository }
 
 func (s treeOnlyStopStore) List(context.Context) ([]*api.Session, error) {
 	return nil, errors.New("stop must not list unrelated sessions")
 }
 
 func TestAbortDoesNotListUnrelatedSessions(t *testing.T) {
-	st := treeOnlyStopStore{SQL: storetest.New(t, testdbseed.DefaultProjectID)}
-	root, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	st := storetest.New(t, testdbseed.DefaultProjectID)
+	st.Sessions = treeOnlyStopStore{st.Sessions}
+	root, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create stop root", err)
-	_, err = st.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "implementer"})
+	_, err = st.Sessions.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create stop child", err)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	testutil.FailErr(t, "stop tree without global session list", mgr.Stops.Abort(t.Context(), root.ID, "user stopped"))

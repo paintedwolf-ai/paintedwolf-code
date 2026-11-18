@@ -157,7 +157,7 @@ func TestWorkerUsesItsChatsApprovedWriteRoot(t *testing.T) {
 	rt := approvalstate.NewSandboxPathGrantRuntime()
 	approved := filepath.Join(t.TempDir(), "approved")
 	rt.GrantChat(parent.ID, approved, "grant-approved", "cp-1", nil)
-	broker := &WriteRootCheckpointBroker{Checkpoints: unusedWriteRootCheckpoints{t: t}, Runtime: rt, Store: store}
+	broker := &WriteRootCheckpointBroker{Checkpoints: unusedWriteRootCheckpoints{t: t}, Runtime: rt, Store: store.Sessions}
 	got, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: child.ID, ParentSessionID: parent.ID, ProposedWriteRoot: approved,
 	})
