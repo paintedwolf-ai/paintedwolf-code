@@ -567,7 +567,7 @@ func TestLocalDefaultRoleResolution(t *testing.T) {
 	}
 
 	// StaticModelRouter.WithLocalDefault routes unset slots to the bundled local model.
-	store := NewInMemoryPolicyStore(hybridPolicy)
+	store := newPolicyFixture(t, hybridPolicy)
 	router := NewStaticModelRouter(store).WithLocalDefault(func(context.Context) bool { return true })
 	coordSel, err := router.Coordinator(t.Context())
 	testutil.FailErr(t, "router coordinator", err)

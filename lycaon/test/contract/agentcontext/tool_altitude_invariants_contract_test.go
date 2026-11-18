@@ -230,8 +230,7 @@ func TestAltitudeGlossIsFenced(t *testing.T) {
 			strings.Join(gloss, ","),
 		)},
 	}
-	cur, err := llm.NewTestRegistrySummarizer(provider)
-	contractcheck.FailErr(t, "NewTestRegistrySummarizer", err)
+	cur := newCuratorFixture(t, provider)
 	got, err := cur.Curate(context.Background(), snapshot, llm.CurationFocus{Target: "focus"}, 3)
 	contractcheck.FailErr(t, "Curate", err)
 	if len(got.Gloss) > 5 {

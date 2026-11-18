@@ -102,7 +102,6 @@ type ProviderCatalog struct {
 	mu         sync.RWMutex
 	mutationMu sync.Mutex
 	localPath  string
-	included   bool
 	templates  *catalogruntime.Catalog[ProviderEntry]
 	entries    *catalogruntime.Catalog[CatalogEntry]
 	capacity   CapacityPolicy
@@ -125,11 +124,7 @@ func NewProviderCatalog() (*ProviderCatalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &ProviderCatalog{localPath: localPath, included: PlatformsSupportedHere(IncludedProviderEntry().Platforms)}
-	if err := c.Reload(); err != nil {
-		return nil, err
-	}
-	return c, nil
+	return NewProviderCatalogAt(localPath)
 }
 
 // Reload reads templates and local instances.
@@ -217,7 +212,7 @@ func (c *ProviderCatalog) Reload() error {
 			ID: entry.ID, Spec: entry,
 		})
 	}
-	if !hasIncluded && c.included {
+	if !hasIncluded && PlatformsSupportedHere(IncludedProviderEntry().Platforms) {
 		entry, err := resolveLocalEntry(IncludedProviderEntry(), shipByKind)
 		if err != nil {
 			return err

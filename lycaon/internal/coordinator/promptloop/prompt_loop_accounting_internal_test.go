@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/llm/policytest"
 	"strings"
 	"testing"
 
@@ -298,7 +299,7 @@ func TestResolveUsageMetaPrefersCompletionFields(t *testing.T) {
 
 func TestResolveUsageMetaUsesRouterSelection(t *testing.T) {
 	// Empty completion metadata uses the routed selection.
-	policy := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
+	policy := policytest.New(t, llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "openai", Model: "gpt-4o"},
 	})
 	svc := &llm.Service{Registry: &llm.Registry{}, Router: llm.NewStaticModelRouter(policy)}

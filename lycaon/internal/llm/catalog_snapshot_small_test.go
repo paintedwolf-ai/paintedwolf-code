@@ -250,11 +250,7 @@ providers:
 		}
 	}
 
-	list := reg.List(t.Context())
-	if len(list) != 1 {
-		t.Fatalf("list len = %d", len(list))
-	}
-	meta := list[0]
+	meta := providerMetaByID(t, reg.List(t.Context()), "openai")
 	if !meta.ReadyToAssign {
 		t.Fatal("expected ready_to_assign")
 	}

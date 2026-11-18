@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/llm/policytest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/events"
@@ -222,7 +223,7 @@ func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
 	testutil.FailErr(t, "register naming provider", providers.Register(blocker))
 	svc := &llm.Service{
 		Registry: providers,
-		Policy: llm.NewInMemoryPolicyStore(llm.ModelPolicy{
+		Policy: policytest.New(t, llm.ModelPolicy{
 			Lite: llm.ModelRef{ProviderID: blocker.ID(), Model: "naming-model"},
 		}),
 		Utility: llm.NewUtilityPlane(),
@@ -289,7 +290,7 @@ func TestCurationSharesLocalCoordinator(t *testing.T) {
 	ctx := context.Background()
 	registry := &llm.Registry{}
 	testutil.FailErr(t, "register ollama", registry.Register(ollamaprovider.New("ollama-1", "http://localhost:11434/v1", "", nil)))
-	policy := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
+	policy := policytest.New(t, llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "ollama-1", Model: "gemma4:e2b"},
 		Lite:        llm.ModelRef{ProviderID: "ollama-1", Model: "gemma4:e2b"},
 	})
@@ -367,7 +368,7 @@ func TestEngineShutdownCancelsAndDrainsDetachedNaming(t *testing.T) {
 	providers := &llm.Registry{}
 	providers.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	testutil.FailErr(t, "register naming provider", providers.Register(blocker))
-	svc := &llm.Service{Registry: providers, Policy: llm.NewInMemoryPolicyStore(llm.ModelPolicy{Lite: llm.ModelRef{ProviderID: blocker.ID(), Model: "naming-model"}}), Utility: llm.NewUtilityPlane()}
+	svc := &llm.Service{Registry: providers, Policy: policytest.New(t, llm.ModelPolicy{Lite: llm.ModelRef{ProviderID: blocker.ID(), Model: "naming-model"}}), Utility: llm.NewUtilityPlane()}
 	mgr := NewHost(sessionStore, Models{Client: blocker, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)

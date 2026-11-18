@@ -121,11 +121,7 @@ func TestCloudflarePlaceholderWithSavedKeyIsNotAssignable(t *testing.T) {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
 	testutil.FailErr(t, "create registry", err)
-	providers := registry.List(t.Context())
-	if len(providers) != 1 {
-		t.Fatalf("provider count = %d, want 1", len(providers))
-	}
-	provider := providers[0]
+	provider := providerMetaByID(t, registry.List(t.Context()), "cloudflare-workers-ai-1")
 	if provider.Configured || provider.ReadyToAssign {
 		t.Fatalf("placeholder provider is ready: configured=%v, assignable=%v",
 			provider.Configured, provider.ReadyToAssign)

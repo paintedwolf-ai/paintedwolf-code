@@ -24,7 +24,7 @@ func TestRegistrySummarizerSourceDataAndLocalDefault(t *testing.T) {
 	publishIncludedModelFixture(t, reg, localProvider)
 
 	// An unset Lite role uses the included model.
-	policy := NewInMemoryPolicyStore(ModelPolicy{
+	policy := newPolicyFixture(t, ModelPolicy{
 		Coordinator: ModelRef{ProviderID: "anthropic", Model: "claude-sonnet-4-6"},
 	})
 	summarizer := &RegistrySummarizer{
@@ -95,7 +95,7 @@ func TestSimpleCompactorKeepsSourceOutOfLiveHistory(t *testing.T) {
 	testutil.FailErr(t, "Register nativegen", reg.Register(localProvider))
 	publishIncludedModelFixture(t, reg, localProvider)
 
-	policy := NewInMemoryPolicyStore(ModelPolicy{
+	policy := newPolicyFixture(t, ModelPolicy{
 		Coordinator: ModelRef{ProviderID: "anthropic", Model: "claude-sonnet-4-6"},
 	})
 	summarizer := &RegistrySummarizer{

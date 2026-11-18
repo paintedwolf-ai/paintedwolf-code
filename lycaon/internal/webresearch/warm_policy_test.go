@@ -1,6 +1,7 @@
 package webresearch
 
 import (
+	"github.com/lycaon/lycaon/internal/llm/policytest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
@@ -11,7 +12,7 @@ import (
 func TestWarmSummarizerSharesCoordinatorFromPolicy(t *testing.T) {
 	discovery := NewDiscovery(newTestCrawler())
 
-	dedicated := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
+	dedicated := policytest.New(t, llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "openai", Model: "gpt-4o"},
 		Lite:        llm.ModelRef{ProviderID: "ollama", Model: "llama3.1"},
 	})
@@ -20,7 +21,7 @@ func TestWarmSummarizerSharesCoordinatorFromPolicy(t *testing.T) {
 		t.Fatal("want dedicated lite provider")
 	}
 
-	shared := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
+	shared := policytest.New(t, llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "openai", Model: "gpt-4o"},
 		Lite:        llm.ModelRef{ProviderID: "openai", Model: "gpt-4o-mini"},
 	})

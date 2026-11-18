@@ -2,6 +2,7 @@ package modeladmin
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/llm/policytest"
 	"net/http/httptest"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 
 func TestEffectivePolicyResolvesInheritedLiteWithoutChangingOverlay(t *testing.T) {
 	remote := llm.ModelRef{ProviderID: "remote", Model: "chosen"}
-	handler := &Handler{service: &llm.Service{Policy: llm.NewInMemoryPolicyStore(llm.ModelPolicy{Coordinator: remote}), Registry: &llm.Registry{}}}
+	handler := &Handler{service: &llm.Service{Policy: policytest.New(t, llm.ModelPolicy{Coordinator: remote}), Registry: &llm.Registry{}}}
 	for _, effective := range []bool{true, false} {
 		path := "/v1/settings/model-policy"
 		if effective {
