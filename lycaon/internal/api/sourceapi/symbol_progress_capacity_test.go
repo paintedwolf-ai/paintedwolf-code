@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -24,7 +25,7 @@ func TestSymbolFederationDoesNotCycleBeyondRetainedProjectCapacity(t *testing.T)
 		for i := range 49 {
 			testutil.FailErr(t, "write project declaration", os.WriteFile(filepath.Join(root, fmt.Sprintf("f%03d.go", i)), []byte("package p\nfunc Target() {}\n"), 0600))
 		}
-		p, err := project.CreateWithRoot(t.Context(), e.registry, root)
+		p, err := projecttest.CreateWithRoot(t.Context(), e.registry, root)
 		testutil.FailErr(t, "attach project", err)
 		projects = append(projects, p)
 		testutil.FailErr(t, "prepare project index", catalogtest.AwaitIndex(t.Context(), sourcecatalog.Process(), p.ID, sourcecatalog.Root{ID: p.Roots[0].ID, Path: p.Roots[0].Path}))

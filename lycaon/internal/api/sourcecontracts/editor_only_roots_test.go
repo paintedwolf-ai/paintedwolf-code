@@ -15,7 +15,8 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/editordoc"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -36,7 +37,7 @@ func TestEditorOperationsWorkInEditorOnlyRoots(t *testing.T) {
 			dir := filepath.Join(class.Path, "edit-"+uuid.NewString()[:8])
 			testutil.FailErr(t, "create folder", os.MkdirAll(dir, 0o700))
 			testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(dir, "seed.txt"), []byte("seed"), 0o600))
-			p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, class.Path)
+			p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, class.Path)
 			testutil.FailErr(t, "create project", err)
 			if admitted, _ := p.Roots[0].Admission(); admitted {
 				t.Fatalf("%s is admitted; the case needs an editor-only root", class.Path)

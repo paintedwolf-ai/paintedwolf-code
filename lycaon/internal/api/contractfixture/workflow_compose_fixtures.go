@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
@@ -24,7 +25,7 @@ func NewComposeTestServer(t *testing.T) (*api.Server, wire.Session, *workflowcom
 	store := sessionFixture
 	projReg := project.NewSQLRegistry(sessionFixture.DB())
 	dir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), projReg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), projReg, dir)
 	testutil.FailErr(t, "reg.Create failed", err)
 	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID}, p.ID)
 	testutil.FailErr(t, "create session in store", err)

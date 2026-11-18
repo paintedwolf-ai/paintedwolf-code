@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -22,7 +23,7 @@ func TestSourceViewNotificationsAnnounceOnlyObservableChanges(t *testing.T) {
 	root := t.TempDir()
 	testutil.FailErr(t, "create directory", os.Mkdir(filepath.Join(root, "src"), 0o700))
 	testutil.FailErr(t, "create file", os.WriteFile(filepath.Join(root, "src", "main.go"), []byte("package main\n"), 0o600))
-	project, err := project.CreateWithRoot(t.Context(), server.Workspace.ProjectRegistry, root)
+	project, err := projecttest.CreateWithRoot(t.Context(), server.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "create project", err)
 	physical, err := server.Workspace.ProjectRegistry.Get(t.Context(), project.ID)
 	testutil.FailErr(t, "resolve workspace", err)

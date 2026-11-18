@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -26,7 +27,7 @@ func NewPersistTestServer(t *testing.T) (*api.Server, wire.Session, workflowdraf
 	store := sessionFixture
 	projectDir := t.TempDir()
 	projReg := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), projReg, projectDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), projReg, projectDir)
 	testutil.FailErr(t, "reg.Create failed", err)
 	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID}, p.ID)
 	testutil.FailErr(t, "create session in store", err)

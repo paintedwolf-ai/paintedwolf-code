@@ -13,7 +13,8 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/editordoc"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -26,7 +27,7 @@ func TestProjectSourceLifecycleHistoryRoutes(t *testing.T) {
 		d.Source.EditorDocuments = editordoc.New(editordoc.NewStore(database), ledger, ledger.History, d.Core.Projects)
 	})
 	root := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "create project", err)
 	testdbseed.InsertProjectRootWithID(t, database, p.ID, p.Roots[0].ID, root)
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(root, "note.txt"), []byte("kept"), 0o640))

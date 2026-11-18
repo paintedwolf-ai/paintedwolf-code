@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -335,7 +336,7 @@ func TestCreateSessionByProjectID(t *testing.T) {
 
 	dir := t.TempDir()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	opened, err := project.CreateWithRoot(t.Context(), reg, dir)
+	opened, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	if err != nil {
 		t.Fatalf("open project: %v", err)
 	}

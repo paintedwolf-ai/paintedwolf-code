@@ -71,12 +71,12 @@ func TestW10ReachMatrix(t *testing.T) {
 
 	projA := t.TempDir()
 	writeProjectExtensions(t, projA, "disabled:\n  - guidance/coordinator-gate-blocked\n")
-	pA, err := project.CreateWithRoot(ctx, reg, projA)
+	pA, err := projecttest.CreateWithRoot(ctx, reg, projA)
 	testutil.FailErr(t, "CreateWithRoot A", err)
 
 	projB := t.TempDir()
 	writeProjectExtensions(t, projB, "disabled: []\n")
-	pB, err := project.CreateWithRoot(ctx, reg, projB)
+	pB, err := projecttest.CreateWithRoot(ctx, reg, projB)
 	testutil.FailErr(t, "CreateWithRoot B", err)
 
 	viewA := m.Catalog.ViewForProject(ctx, pA.ID)
@@ -134,7 +134,7 @@ func TestW11GateMatrix(t *testing.T) {
 			m.SetProjectRegistry(reg)
 			projDir := t.TempDir()
 			writeProjectExtensions(t, projDir, "disabled:\n  - guidance/coordinator-gate-blocked\n")
-			p, err := project.CreateWithRoot(ctx, reg, projDir)
+			p, err := projecttest.CreateWithRoot(ctx, reg, projDir)
 			testutil.FailErr(t, "CreateWithRoot", err)
 			if !tc.projectOn {
 				if _, err := reg.SetTrustEnabled(ctx, p.ID, map[string]bool{projectcontrib.SurfaceExtensionConfig: false}); err != nil {
@@ -253,7 +253,7 @@ func TestW13NoSharedMutation(t *testing.T) {
 			body = "disabled:\n  - " + disable + "\n"
 		}
 		writeProjectExtensions(t, dir, body)
-		p, err := project.CreateWithRoot(ctx, reg, dir)
+		p, err := projecttest.CreateWithRoot(ctx, reg, dir)
 		testutil.FailErr(t, "CreateWithRoot", err)
 		return p
 	}
@@ -329,7 +329,7 @@ func TestW14FailureDegradesToDevice(t *testing.T) {
 	m.SetProjectRegistry(reg)
 	dir := t.TempDir()
 	writeProjectExtensions(t, dir, "disabled: []\n")
-	p, err := project.CreateWithRoot(ctx, reg, dir)
+	p, err := projecttest.CreateWithRoot(ctx, reg, dir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	good := m.Catalog.ViewForProject(ctx, p.ID)
 	if good == nil {

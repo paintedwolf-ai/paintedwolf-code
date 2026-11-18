@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -75,7 +76,7 @@ func NewReportTestHarness(t *testing.T, opts ...TestDeps) *ReportTestHarness {
 	scanStore := scan.NewSQLStore(sqlDB)
 	workDir := t.TempDir()
 	projReg := project.NewSQLRegistry(sqlDB)
-	p, err := project.CreateWithRoot(t.Context(), projReg, workDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), projReg, workDir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	name := "acme/app"
 	_, err = projReg.Patch(t.Context(), p.ID, project.PatchParams{Name: &name})

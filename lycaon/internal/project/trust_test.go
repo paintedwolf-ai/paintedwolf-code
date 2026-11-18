@@ -69,7 +69,7 @@ func TestMarkTrustSeenRoundTrips(t *testing.T) {
 	t.Parallel()
 	reg := newProjectRegistry(t)
 	ctx := context.Background()
-	p, err := CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := createWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "CreateWithRoot", err)
 	if len(p.TrustSeen) != 0 {
 		t.Fatalf("new project already had seen records: %+v", p.TrustSeen)
@@ -91,7 +91,7 @@ func TestMarkTrustSeenRejectsStaleOpening(t *testing.T) {
 	t.Parallel()
 	reg := newProjectRegistry(t)
 	ctx := context.Background()
-	p, err := CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := createWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "CreateWithRoot", err)
 
 	_, err = reg.MarkTrustSeen(ctx, p.ID, p, map[string]SeenRecord{"skills": {Stamp: "one"}})
@@ -106,7 +106,7 @@ func TestSetTrustEnabledPersists(t *testing.T) {
 	t.Parallel()
 	reg := newProjectRegistry(t)
 	ctx := context.Background()
-	p, err := CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := createWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "CreateWithRoot", err)
 
 	off, err := reg.SetTrustEnabled(ctx, p.ID, map[string]bool{"prompt_overrides": false})

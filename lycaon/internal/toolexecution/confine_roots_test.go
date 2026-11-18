@@ -268,7 +268,7 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 	reg := projecttest.NewRegistry(t)
 	for _, tc := range cases {
 		testutil.FailErr(t, "mkdir "+tc.name, os.MkdirAll(tc.dir, 0o700))
-		p, err := project.CreateWithRoot(t.Context(), reg, tc.dir)
+		p, err := projecttest.CreateWithRoot(t.Context(), reg, tc.dir)
 		if err != nil {
 			t.Fatalf("%s: project registration should succeed, got %v", tc.name, err)
 		}
@@ -284,7 +284,7 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 		}
 	}
 
-	if _, err := project.CreateWithRoot(t.Context(), reg, string(filepath.Separator)); err != nil {
+	if _, err := projecttest.CreateWithRoot(t.Context(), reg, string(filepath.Separator)); err != nil {
 		t.Fatalf("filesystem root project registration should succeed, got %v", err)
 	}
 	if reject := tools.ValidateAttachedRootsForAction([]string{string(filepath.Separator)}); reject == nil ||

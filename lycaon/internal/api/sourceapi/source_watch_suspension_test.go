@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -13,7 +13,7 @@ import (
 
 func TestSuspendedAndDeletedProjectsCannotRebindCopiedWatch(t *testing.T) {
 	server := newSourceHandlerFixture(t, func(d *Deps) { d.WatchNeedsSeed = func(string) bool { return false } })
-	p, err := project.CreateWithRoot(t.Context(), server.Watch.ProjectRegistry, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), server.Watch.ProjectRegistry, t.TempDir())
 	testutil.FailErr(t, "create watched project", err)
 	t.Cleanup(func() { _ = sourcefeed.StopProjectWatch(t.Context(), p.ID) })
 	if !server.Watch.ensureWorkspaceWatch(t.Context(), p) {

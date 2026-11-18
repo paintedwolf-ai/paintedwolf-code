@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -125,7 +126,7 @@ func NewWorktreeTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, *se
 	mgr := session.NewHost(mem, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	WireTestBindingRegistry(t)
 	reg := project.NewSQLRegistry(database)
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open", err)
 	mgr.SetProjectRegistry(reg)
 	srv := NewServerForTest(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{

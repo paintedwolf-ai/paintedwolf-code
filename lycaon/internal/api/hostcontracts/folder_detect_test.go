@@ -6,6 +6,7 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -21,7 +22,7 @@ suggest:
     version: ^1.0.0
 `)
 
-	p, err := project.CreateWithRoot(t.Context(), reg, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, root)
 	testutil.FailErr(t, "create project", err)
 	out := contractfixture.DetectFolder(t, srv, root)
 	if out.ProjectID != p.ID {
@@ -79,7 +80,7 @@ func TestFolderDetectDistinguishesSingleAndMultiRootMatches(t *testing.T) {
 	}
 
 	// Adding a dedicated single-root project puts the single-root match first and populates project_id.
-	single, err := project.CreateWithRoot(t.Context(), reg, sharedDir)
+	single, err := projecttest.CreateWithRoot(t.Context(), reg, sharedDir)
 	testutil.FailErr(t, "create single-root project", err)
 	testutil.FailErr(t, "touch multi-root", reg.TouchLastOpened(t.Context(), multi.ID))
 
@@ -115,7 +116,7 @@ func TestFolderDetectOmitsDisabledExtensionSuggestions(t *testing.T) {
 		srv, reg := contractfixture.ExtensionsScopeServer(t)
 		root := t.TempDir()
 		contractfixture.WriteExtensionSuggestion(t, root)
-		p, err := project.CreateWithRoot(t.Context(), reg, root)
+		p, err := projecttest.CreateWithRoot(t.Context(), reg, root)
 		testutil.FailErr(t, "create project", err)
 		_, err = reg.SetTrustEnabled(t.Context(), p.ID,
 			map[string]bool{projectcontrib.SurfaceExtensionSuggestions: false})
