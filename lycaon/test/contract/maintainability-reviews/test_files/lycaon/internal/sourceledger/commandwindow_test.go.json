@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/sourceledger/commandwindow_test.go",
+  "kind": "test_suite",
+  "workstream": "repository-change-lifetime",
+  "disposition": "retain",
+  "reason": "Retain the 426-line command-window persistence suite covering admission, settlement and retained start objects. Real watcher coverage and explicit root loss replace global controls without changing those contracts.",
+  "reviewed_commit": "2be34334b2fa7bfea29ebceecc19fa6478bc8a1d",
+  "ceiling": 426,
+  "boundaries": {
+    "lycaon/internal/sourceledger/commandwindow_test.go": "2be1cdbe354090a7daf485da4458700475e47605e9fae51016bde8d6ed45ddfc"
+  }
+}

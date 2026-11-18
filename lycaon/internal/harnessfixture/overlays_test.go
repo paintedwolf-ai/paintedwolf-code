@@ -31,7 +31,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 	testutil.FailErr(t, "create parent", err)
 	queue := &fixtureQueue{SQLQueue: worker.NewSQLQueue(database, 2)}
 	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}))
-	ledger := sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
+	ledger := sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"), sourceledger.Timing{})
 	queue.SetBaselineStore(ledger.Baselines)
 	queue.SetProjectStore(projects)
 	queue.SetWorkerWorkspaceManager(manager)

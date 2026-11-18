@@ -1,12 +1,13 @@
 package execution
 
 import (
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/repochange"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 
@@ -21,9 +22,9 @@ func TestCurrentScanCacheSurvivesUnavailableBaseBytes(t *testing.T) {
 	store := scanbase.NewSQLStore(testdbfixture.Open(t, "cache.db"))
 	snapshots := testSnapshots(t, store)
 	root := t.TempDir()
-	repochange.ResetWatchersForTest()
-	repochange.MarkCoverageCompleteForTest(root)
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Watch(t, root)
+	repochangetest.Acquire(t)
 	writeScanSource(t, root, "a.go", "package a\n")
 	base, err := snapshots.EnsurePath(t.Context(), root, sourcesnapshot.VerifyContent)
 	testutil.FailErr(t, "capture base", err)

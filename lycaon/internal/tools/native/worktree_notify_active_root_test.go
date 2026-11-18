@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -17,8 +18,7 @@ import (
 // Catalog invalidation must follow the root a mutated path resolves against
 // under the session's active root, not the primary root.
 func TestWorktreeChangesFollowTheActiveRoot(t *testing.T) {
-	t.Cleanup(repochange.ResetObserversForTest)
-	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) }) // t.Context() is already canceled during cleanup
+	repochangetest.Acquire(t)
 
 	base := t.TempDir()
 	primary, secondary := filepath.Join(base, "app"), filepath.Join(base, "den")
@@ -27,12 +27,12 @@ func TestWorktreeChangesFollowTheActiveRoot(t *testing.T) {
 		{ID: "active", Label: "den", Path: secondary},
 	}
 	events := make(chan repochange.Event, 8)
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		if ev.Kind != repochange.WorktreeChanged || (ev.ProjectDir != primary && ev.ProjectDir != secondary) {
 			return
 		}
 		events <- ev
-	})
+	}))
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess"},
 		Source: tools.InvocationSource{Roots: roots, ActiveRootID: "active",

@@ -28,7 +28,7 @@ func TestRecursiveWatchIsCompleteBeyondTheDirectoryCap(t *testing.T) {
 	const dirs = 12
 	root := fanoutWorktree(t, dirs, 2)
 
-	reg := &WatcherRegistry{
+	reg := &watcherRegistry{
 		byDir:   map[string]*worktreeWatcher{},
 		maxDirs: 2,
 		budget:  watchfd.NewBudget(0),
@@ -37,6 +37,7 @@ func TestRecursiveWatchIsCompleteBeyondTheDirectoryCap(t *testing.T) {
 	reg.Ensure(t.Context(), root)
 	reg.Seed(t.Context(), root, fanoutWatchDirectories(root, dirs, 2))
 
+	testutil.WaitFor(t, "watch coverage is complete", func() bool { return reg.Coverage(root).Complete })
 	coverage := reg.Coverage(root)
 	if !coverage.Watching || !coverage.Complete || coverage.Truncated != 0 || !coverage.Recursive {
 		t.Fatalf("coverage = %+v, want a complete recursive watch", coverage)
@@ -80,7 +81,6 @@ func TestRecursiveDirWatchedFollowsTheRootGeometry(t *testing.T) {
 // whole reason coverage may call itself complete without registrations.
 func TestRecursiveWatchObservesWritesInUnseededDirectories(t *testing.T) {
 	skipUnlessRecursive(t)
-	t.Cleanup(ResetObserversForTest)
 	t.Cleanup(func() { ResetDebouncerForTest(context.Background()) })
 	root := t.TempDir()
 	deep := filepath.Join(root, "src", "generated", "nested")

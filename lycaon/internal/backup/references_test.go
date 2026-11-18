@@ -118,7 +118,7 @@ func TestBackupRequiresStoredSourceButAllowsMetadataOnly(t *testing.T) {
 	config := t.TempDir()
 	database := testdbfixture.OpenPath(t, filepath.Join(config, "store.db"))
 	rootID := testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
-	ledger := sourceledger.New(database, filepath.Join(config, "source-content"))
+	ledger := sourceledger.New(database, filepath.Join(config, "source-content"), sourceledger.Timing{})
 	input := sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "large.txt"}, ProjectID: testdbseed.DefaultProjectID, Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
 		AfterSHA256: textfile.SHA256([]byte("metadata only")), AfterSize: 13}

@@ -121,7 +121,7 @@ func newFirefoxWorkerFixture(t *testing.T, source string) *layeredWorkerFixture 
 	selector.BudgetFor = adapter.ZeroBudget
 	manager := workspace.NewManager(branches, selector).WithPrivateGit(git)
 	queue := NewSQLQueue(database, 4)
-	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content")).Baselines)
+	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"), sourceledger.Timing{}).Baselines)
 	queue.SetWorkerWorkspaceManager(manager)
 	return &layeredWorkerFixture{db: database, queue: queue, manager: manager, source: source, branches: branches}
 }

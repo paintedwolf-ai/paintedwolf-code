@@ -10,12 +10,14 @@ import (
 // DefaultDebounce is the coalesce window for WorktreeChanged bursts.
 const DefaultDebounce = 75 * time.Millisecond
 
-// Debouncer coalesces WorktreeChanged Notify calls per project dir.
-type Debouncer struct {
+// debouncer coalesces WorktreeChanged Notify calls per project dir.
+type debouncer struct {
 	delay time.Duration
 
 	mu      sync.Mutex
 	pending map[string]*debounceEntry
+	active  map[*debounceEntry]struct{}
+	closed  bool
 	// flushed records when each dir last delivered, so a consumer that trusts
 	// delivered events can wait for the pipeline to drain first.
 	flushed map[string]time.Time
@@ -26,11 +28,11 @@ type Debouncer struct {
 // from disk calls it first, because a write that just landed reaches the
 // platform stream and the debouncer only after a delay.
 func WaitQuiet(ctx context.Context, dir string, grace, maxWait time.Duration) {
-	globalDebounce.WaitQuiet(ctx, dir, grace, maxWait)
+	processWatchers().debounce.WaitQuiet(ctx, dir, grace, maxWait)
 }
 
-// WaitQuiet is the Debouncer form of the package-level WaitQuiet.
-func (d *Debouncer) WaitQuiet(ctx context.Context, dir string, grace, maxWait time.Duration) {
+// WaitQuiet is the instance form of the package-level WaitQuiet.
+func (d *debouncer) WaitQuiet(ctx context.Context, dir string, grace, maxWait time.Duration) {
 	if d == nil || maxWait <= 0 {
 		return
 	}
@@ -43,6 +45,9 @@ func (d *Debouncer) WaitQuiet(ctx context.Context, dir string, grace, maxWait ti
 	for {
 		d.mu.Lock()
 		_, busy := d.pending[key]
+		for entry := range d.active {
+			busy = busy || entry.root == key
+		}
 		last := d.flushed[key]
 		d.mu.Unlock()
 		if last.Before(started) {
@@ -77,28 +82,28 @@ func (d *Debouncer) WaitQuiet(ctx context.Context, dir string, grace, maxWait ti
 
 type debounceEntry struct {
 	timer   *time.Timer
+	root    string
+	done    chan struct{}
 	changes map[string]WorktreeChangeKind
 	source  Source
 	epoch   Epoch
 }
 
-// NewDebouncer returns a coalescing Notify helper. delay ≤ 0 uses DefaultDebounce.
-func NewDebouncer(delay time.Duration) *Debouncer {
+// newDebouncer returns a coalescing Notify helper. delay ≤ 0 uses DefaultDebounce.
+func newDebouncer(delay time.Duration) *debouncer {
 	if delay <= 0 {
 		delay = DefaultDebounce
 	}
-	return &Debouncer{delay: delay, pending: map[string]*debounceEntry{}, flushed: map[string]time.Time{}}
+	return &debouncer{delay: delay, pending: map[string]*debounceEntry{}, active: map[*debounceEntry]struct{}{}, flushed: map[string]time.Time{}}
 }
-
-var globalDebounce = NewDebouncer(DefaultDebounce)
 
 // NotifyWorktreeDebounced merges paths for dir and fires one WorktreeChanged after delay.
 func NotifyWorktreeDebounced(ctx context.Context, dir string, paths []string, source Source) {
-	globalDebounce.NotifyWorktree(ctx, dir, paths, source)
+	processWatchers().debounce.NotifyWorktree(ctx, dir, paths, source)
 }
 
 // NotifyWorktree schedules a coalesced WorktreeChanged for dir.
-func (d *Debouncer) NotifyWorktree(ctx context.Context, dir string, paths []string, source Source) {
+func (d *debouncer) NotifyWorktree(ctx context.Context, dir string, paths []string, source Source) {
 	changes := make([]WorktreeChange, 0, len(paths))
 	for _, path := range paths {
 		changes = append(changes, WorktreeChange{Path: path, Kind: WorktreeChangeUnknown})
@@ -107,32 +112,36 @@ func (d *Debouncer) NotifyWorktree(ctx context.Context, dir string, paths []stri
 }
 
 func NotifyWorktreeChangesDebounced(ctx context.Context, dir string, changes []WorktreeChange, source Source) {
-	globalDebounce.NotifyWorktreeChanges(ctx, dir, changes, source)
+	processWatchers().debounce.NotifyWorktreeChanges(ctx, dir, changes, source)
 }
 
 // NotifyWorktreeChanges schedules a coalesced WorktreeChanged with structured path facts.
-func (d *Debouncer) NotifyWorktreeChanges(ctx context.Context, dir string, changes []WorktreeChange, source Source) {
+func (d *debouncer) NotifyWorktreeChanges(ctx context.Context, dir string, changes []WorktreeChange, source Source) <-chan struct{} {
 	if d == nil {
 		Notify(ctx, Event{ProjectDir: dir, Kind: WorktreeChanged, Changes: changes, Source: source})
-		return
+		return nil
 	}
 	key, err := filepath.Abs(dir)
 	if err != nil || key == "" {
-		return
+		return nil
 	}
 	if source == "" {
 		source = SourceMutation
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.closed {
+		return nil
+	}
 	ent := d.pending[key]
 	if ent == nil {
-		ent = &debounceEntry{changes: map[string]WorktreeChangeKind{}, source: source, epoch: Advance(key)}
+		ent = &debounceEntry{root: key, done: make(chan struct{}), changes: map[string]WorktreeChangeKind{}, source: source, epoch: Advance(key)}
 		d.pending[key] = ent
+		d.active[ent] = struct{}{}
 		// Preserve context values after the mutating call returns.
 		flushCtx := context.WithoutCancel(ctx)
 		ent.timer = time.AfterFunc(d.delay, func() {
-			d.flush(flushCtx, key)
+			d.deliver(flushCtx, key, ent)
 		})
 	}
 	if ent != nil && len(ent.changes) > 0 {
@@ -152,10 +161,10 @@ func (d *Debouncer) NotifyWorktreeChanges(ctx context.Context, dir string, chang
 			// whole tree; naming the root says so in one entry.
 			clear(ent.changes)
 			ent.changes["."] = WorktreeChangeResync
-			return
+			return ent.done
 		}
 		if ent.changes["."] == WorktreeChangeResync {
-			return
+			return ent.done
 		}
 		if previous, found := ent.changes[path]; found {
 			ent.changes[path] = mergeWorktreeChangeKind(previous, change.Kind)
@@ -163,65 +172,56 @@ func (d *Debouncer) NotifyWorktreeChanges(ctx context.Context, dir string, chang
 			ent.changes[path] = change.Kind
 		}
 	}
+	return ent.done
 }
 
 // maxDebouncePaths bounds one flush. Past it the flush names the root, which
 // every consumer reads as a whole-tree change.
 const maxDebouncePaths = 65536
 
-func (d *Debouncer) flush(ctx context.Context, key string) {
+func (d *debouncer) deliver(ctx context.Context, key string, ent *debounceEntry) {
 	d.mu.Lock()
-	ent := d.pending[key]
-	delete(d.pending, key)
-	if ent != nil {
-		d.flushed[key] = time.Now()
-	}
-	d.mu.Unlock()
-	if ent == nil {
+	if d.pending[key] != ent {
+		d.mu.Unlock()
 		return
 	}
+	delete(d.pending, key)
+	d.mu.Unlock()
+	defer func() {
+		d.mu.Lock()
+		delete(d.active, ent)
+		d.flushed[key] = time.Now()
+		close(ent.done)
+		d.mu.Unlock()
+	}()
 	changes := make([]WorktreeChange, 0, len(ent.changes))
 	for path, kind := range ent.changes {
 		changes = append(changes, WorktreeChange{Path: path, Kind: kind})
 	}
 	Notify(ctx, Event{
-		ProjectDir:    key,
-		Kind:          WorktreeChanged,
-		Changes:       changes,
-		Source:        ent.source,
-		WorktreeEpoch: ent.epoch.Value,
-		EpochBootID:   ent.epoch.BootID,
+		ProjectDir: key, Kind: WorktreeChanged, Changes: changes,
+		Source: ent.source, WorktreeEpoch: ent.epoch.Value, EpochBootID: ent.epoch.BootID,
 	})
 }
 
-// flushForTestPasses bounds work from continuous producers.
-const flushForTestPasses = 8
-
-// FlushForTest synchronously drains pending timers.
-func (d *Debouncer) FlushForTest(ctx context.Context) {
-	if d == nil {
-		return
-	}
-	for range flushForTestPasses {
-		d.mu.Lock()
-		keys := make([]string, 0, len(d.pending))
-		for k, ent := range d.pending {
-			if ent.timer != nil {
-				ent.timer.Stop()
-			}
-			keys = append(keys, k)
-		}
-		d.mu.Unlock()
-		if len(keys) == 0 {
-			return
-		}
-		for _, k := range keys {
-			d.flush(ctx, k)
+// retire seals new bursts and settles every accepted delivery.
+func (d *debouncer) retire(ctx context.Context) error {
+	d.mu.Lock()
+	d.closed = true
+	entries := make([]*debounceEntry, 0, len(d.active))
+	for ent := range d.active {
+		entries = append(entries, ent)
+		if ent.timer.Stop() {
+			go d.deliver(context.WithoutCancel(ctx), ent.root, ent)
 		}
 	}
-}
-
-// ResetDebouncerForTest drains the global debouncer.
-func ResetDebouncerForTest(ctx context.Context) {
-	globalDebounce.FlushForTest(ctx)
+	d.mu.Unlock()
+	for _, ent := range entries {
+		select {
+		case <-ent.done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }

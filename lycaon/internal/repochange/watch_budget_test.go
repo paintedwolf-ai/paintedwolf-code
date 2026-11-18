@@ -14,8 +14,8 @@ import (
 )
 
 // newBudgetedRegistry returns a registry capped at `descriptors`.
-func newBudgetedRegistry(descriptors int) *WatcherRegistry {
-	return &WatcherRegistry{
+func newBudgetedRegistry(descriptors int) *watcherRegistry {
+	return &watcherRegistry{
 		byDir:   map[string]*worktreeWatcher{},
 		maxDirs: watchfd.MaxDirs,
 		budget:  watchfd.NewBudget(descriptors),
@@ -47,7 +47,7 @@ func fanoutWorktree(t *testing.T, dirs, filesPerDir int) string {
 	return root
 }
 
-func (r *WatcherRegistry) spentForTest() int {
+func (r *watcherRegistry) spentForTest() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	total := 0
@@ -328,6 +328,7 @@ func TestCoverageIsCompleteWhenEverythingRegisters(t *testing.T) {
 	reg.Ensure(t.Context(), root)
 	reg.Seed(t.Context(), root, fanoutWatchDirectories(root, 3, 2))
 
+	testutil.WaitFor(t, "watch coverage is complete", func() bool { return reg.Coverage(root).Complete })
 	coverage := reg.Coverage(root)
 	if !coverage.Watching || !coverage.Complete || coverage.Truncated != 0 {
 		t.Fatalf("coverage = %+v, want a complete watch", coverage)
@@ -367,6 +368,7 @@ func TestReseedingChargesTheBudgetOnce(t *testing.T) {
 	if spent := reg.spentForTest(); spent != spentOnce {
 		t.Fatalf("re-seeding moved spent budget from %d to %d", spentOnce, spent)
 	}
+	testutil.WaitFor(t, "watch coverage is complete", func() bool { return reg.Coverage(root).Complete })
 	coverage := reg.Coverage(root)
 	if coverage.Watched != watchedOnce {
 		t.Fatalf("re-seeding moved watched dirs from %d to %d", watchedOnce, coverage.Watched)
@@ -399,6 +401,7 @@ func TestTruncatedCoverageHealsWhenCapacityFrees(t *testing.T) {
 	reg.CloseRoot(crowded)
 	reg.Seed(t.Context(), small, fanoutWatchDirectories(small, 2, 2))
 
+	testutil.WaitFor(t, "healed watch coverage is complete", func() bool { return reg.Coverage(small).Complete })
 	if coverage := reg.Coverage(small); !coverage.Complete {
 		t.Fatalf("coverage = %+v, want a re-seed after freed capacity to heal", coverage)
 	}
@@ -413,12 +416,11 @@ func TestTruncatedCoverageHealsWhenCapacityFrees(t *testing.T) {
 func TestCoverageShortfallDoesNotPublishMutation(t *testing.T) {
 	root := t.TempDir()
 	var changes atomic.Int32
-	RegisterObserver(func(_ context.Context, event Event) {
+	t.Cleanup(RegisterObserver(func(_ context.Context, event Event) {
 		if event.ProjectDir == root && event.Kind == WorktreeChanged {
 			changes.Add(1)
 		}
-	})
-	defer ResetObserversForTest()
+	}))
 	defer ResetDebouncerForTest(context.Background())
 	watcher := &worktreeWatcher{root: root, watched: make(map[string]int)}
 	before := CurrentEpoch(root)
@@ -436,7 +438,7 @@ func TestCoverageShortfallDoesNotPublishMutation(t *testing.T) {
 
 func TestWatchCoverageSeparatesLazyPolicyFromTruncation(t *testing.T) {
 	root := t.TempDir()
-	reg := NewWatcherRegistry()
+	reg := newWatcherRegistry()
 	t.Cleanup(reg.CloseAll)
 	if err := os.MkdirAll(filepath.Join(root, "node_modules", "library"), 0700); err != nil {
 		t.Fatalf("create lazy library: %v", err)

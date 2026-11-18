@@ -23,7 +23,7 @@ func TestExternalWatchRevalidatesDirectoriesAndHeadOnlyBatches(t *testing.T) {
 			database := testdbfixture.Open(t, "editor.db")
 			var documents *editordoc.Service
 			srv := newTestServer(t, func(d *Dependencies) {
-				sourceHistory15 := sourceledger.New(database, "")
+				sourceHistory15 := sourceledger.New(database, "", sourceledger.Timing{})
 				documents = editordoc.New(editordoc.NewStore(database), sourceHistory15, sourceHistory15.History, d.Core.Projects)
 				d.Source.EditorDocuments = documents
 			})

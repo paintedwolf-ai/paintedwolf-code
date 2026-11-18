@@ -431,7 +431,7 @@ func fillSources(t *testing.T, d *Deps) {
 		}
 	}
 	if d.SourceLedger == nil {
-		d.SourceLedger = sourceledger.New(d.Database, t.TempDir())
+		d.SourceLedger = sourceledger.New(d.Database, t.TempDir(), sourceledger.Timing{})
 	}
 	if d.SourceMutations == nil {
 		d.SourceMutations = projectsource.NewSourceMutationService(d.Database, d.SourceLedger)

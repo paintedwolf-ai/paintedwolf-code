@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -19,7 +20,7 @@ import (
 // holdSettlePeriods keeps every settle period running until the returned func ends them.
 func holdSettlePeriods(store *Store) func() {
 	gate := make(chan time.Time)
-	store.Commands.SetWindowSettleGateForTest(gate)
+	setWindowTimer(store.Commands, func() <-chan time.Time { return gate })
 	return sync.OnceFunc(func() { close(gate) })
 }
 
@@ -38,7 +39,7 @@ func (p beforePassCompletes) notePassCompleted(projectID string, roots []RootSpe
 // still reconciles what landed after that capture.
 func TestPassInFlightAtCloseDoesNotLoseTrailingOutput(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
-	repochange.MarkCoverageCompleteForTest(root)
+	repochangetest.Watch(t, root)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	writeRootFile(t, root, "seed.txt", "seed\n")
 	window := openTestWindow(t, store, ctx, root, "./gen.sh")
@@ -65,7 +66,7 @@ func TestPassInFlightAtCloseDoesNotLoseTrailingOutput(t *testing.T) {
 // A pass on another branch observed another tree.
 func TestPassOnAnotherBranchDoesNotEndTheWindowsWait(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
-	repochange.MarkCoverageCompleteForTest(root)
+	repochangetest.Watch(t, root)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	writeRootFile(t, root, "seed.txt", "seed\n")
 	window := openTestWindow(t, store, ctx, root, "./gen.sh")
@@ -106,13 +107,12 @@ func TestSomeoneElsesEditEndsAWindowsClaimOnTheFile(t *testing.T) {
 		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, SessionID: "s1", Turn: 1, After: []byte("agent\n"),
 	})
 	writeRootFile(t, root, "written.txt", "agent\n")
-	idled := idleObserver(store)
 	window, release := programWindow(t, store, ctx, root)
 	writeRootFile(t, root, "gen.txt", "generated\n")
 	writeRootFile(t, root, "kept.txt", "generated\n")
 	deliverWrites(ctx, root, "gen.txt", "kept.txt")
 	release()
-	testutil.Receive(t, "the window goes idle", idled)
+	awaitIdle(t, window)
 	if authored := sessionAuthored(t, store, ctx, "s1"); !slices.Contains(authored, "gen.txt") || !slices.Contains(authored, "kept.txt") {
 		t.Fatalf("authored before the edit = %v", authored)
 	}
@@ -135,12 +135,12 @@ func TestSomeoneElsesEditEndsAWindowsClaimOnTheFile(t *testing.T) {
 // A launch after a gap pays its own anchor even where a slow pass just finished,
 // because that pass predates the gap.
 func TestReanchorDoesNotReuseASlowPassOverTheGap(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
+	loseInventoryCoverage(store, root)
 	clock := manualLedgerClock(store)
 	writeRootFile(t, root, "seed.txt", "seed\n")
-	idled := idleObserver(store)
 	window, first := programWindow(t, store, ctx, root)
 
 	real := store.Commands.inventory
@@ -150,7 +150,7 @@ func TestReanchorDoesNotReuseASlowPassOverTheGap(t *testing.T) {
 		clock.advance(store.Commands.observationBudget + time.Second)
 	}}
 	first()
-	testutil.Receive(t, "the slow grace pass ends", idled)
+	awaitIdle(t, window)
 	store.Commands.inventory = real
 
 	writeRootFile(t, root, "notes.md", "a person's save\n")
@@ -158,7 +158,7 @@ func TestReanchorDoesNotReuseASlowPassOverTheGap(t *testing.T) {
 	testutil.FailErr(t, "hold after the gap", err)
 	writeRootFile(t, root, "second.txt", "second\n")
 	second()
-	testutil.Receive(t, "the window goes idle again", idled)
+	awaitIdle(t, window)
 	effects := newestEffects(t, store, ctx)
 	wantOutsideEffect(t, effects, "notes.md")
 	if effects["second.txt"].CommandWindowID != window.ID {
@@ -186,12 +186,12 @@ func (a arrivalsAtPass) EnsureInventory(ctx context.Context, req InventoryReques
 // start waits for them. A save reaches the change token only once its event has
 // come off the platform stream, so an open that did not wait would claim it.
 func TestOpenWaitsForWatcherEventsStillArriving(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
 	// The wait under test runs on its production values.
-	store.Commands.SetWindowStartQuietForTest(windowStartQuietGrace, windowStartQuietWait)
-	repochange.MarkCoverageCompleteForTest(root)
+	store.Commands.startQuietGrace, store.Commands.startQuietWait = windowStartQuietGrace, windowStartQuietWait
+	repochangetest.Watch(t, root)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	writeRootFile(t, root, "seed.txt", "seed\n")
 	forceTestPass(t, store, ctx, root)
@@ -239,7 +239,7 @@ func (d deadlineRecorder) EnsureInventory(ctx context.Context, req InventoryRequ
 // A pass that hangs must not leave a closed window claiming drift forever.
 func TestTrustedCloseSettlesUnderADeadline(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
-	repochange.MarkCoverageCompleteForTest(root)
+	repochangetest.Watch(t, root)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	window := openTestWindow(t, store, ctx, root, "make")
 	recorder := deadlineRecorder{store.Commands.inventory, make(chan bool, 1)}

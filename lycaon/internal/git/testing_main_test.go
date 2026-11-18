@@ -1,6 +1,8 @@
 package git
 
 import (
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,7 +15,6 @@ import (
 	lyexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/gitengine"
-	"github.com/lycaon/lycaon/internal/repochange"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -36,8 +37,7 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "bundled git is not staged; run ./task gitengine:fetch: %v\n", err)
 		os.Exit(1)
 	}
-	// Status cache tests count loads; a watcher event invalidates one mid-load.
-	repochange.DisableWatchersForTest()
+	releaseWatchers := repochangetest.Suite()
 	// Detached auto-maintenance rewrites shared templates while tests clone them.
 	for key, value := range map[string]string{
 		"GIT_CONFIG_COUNT":   "2",
@@ -60,6 +60,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	code := m.Run()
+	releaseWatchers()
 	_ = os.RemoveAll(templateRoot)
 	os.Exit(code)
 }

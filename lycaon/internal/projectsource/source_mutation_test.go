@@ -26,7 +26,7 @@ func sourceMutationFixture(t *testing.T) (*SourceMutationService, *Project, stri
 	rootPath := t.TempDir()
 	sqlDB := testdbfixture.Open(t, "store.db")
 	rootID := testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, rootPath)
-	ledger := sourceledger.New(sqlDB, filepath.Join(t.TempDir(), "source-content"))
+	ledger := sourceledger.New(sqlDB, filepath.Join(t.TempDir(), "source-content"), sourceledger.Timing{})
 	service := NewSourceMutationService(sqlDB, ledger)
 	installTestTrash(t, service)
 	p := &Project{ID: testdbseed.DefaultProjectID, Roots: []Root{{ID: rootID, ProjectID: testdbseed.DefaultProjectID, Path: rootPath, IsPrimary: true}}}

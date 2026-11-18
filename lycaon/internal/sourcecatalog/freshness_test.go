@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -16,9 +17,9 @@ import (
 func countedCatalog(t *testing.T, during func(call int32, root Root)) (*Catalog, Root, *atomic.Int32) {
 	t.Helper()
 	root := Root{ID: "root", Path: t.TempDir()}
-	t.Cleanup(repochange.ResetWatchersForTest)
-	repochange.MarkCoverageCompleteForTest(root.Path)
+	repochangetest.Acquire(t)
 	writeCatalogFile(t, root.Path, "a.txt")
+	repochangetest.Watch(t, root.Path)
 	catalog := New()
 	var walks atomic.Int32
 	catalog.build = func(ctx context.Context, roots []Root, policy walkPolicy) (Snapshot, error) {

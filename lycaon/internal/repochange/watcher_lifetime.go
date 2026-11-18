@@ -1,27 +1,67 @@
 package repochange
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
-var watcherLifetimes struct {
+type streamLifetimes struct {
 	sync.Mutex
-	owners int
+	leases  int
+	retired bool
+	current *watcherRegistry
 }
 
-// AcquireWatcherLifetime keeps shared filesystem streams alive while an engine uses them.
-// The final engine retires streams also started by shared inventories and caches.
-func AcquireWatcherLifetime() func() {
-	watcherLifetimes.Lock()
-	watcherLifetimes.owners++
-	watcherLifetimes.Unlock()
+var watcherLifetimes streamLifetimes
+
+func processWatchers() *watcherRegistry { return watcherLifetimes.registry() }
+
+func (l *streamLifetimes) registry() *watcherRegistry {
+	l.Lock()
+	defer l.Unlock()
+	return l.registryLocked()
+}
+
+func (l *streamLifetimes) registryLocked() *watcherRegistry {
+	if l.current == nil {
+		l.current = newWatcherRegistry()
+	}
+	return l.current
+}
+
+// AcquireWatcherLifetime shares streams until the final engine retires their delivery.
+func AcquireWatcherLifetime() func(context.Context) error { return watcherLifetimes.acquire() }
+
+func (l *streamLifetimes) acquire() func(context.Context) error {
+	l.Lock()
+	if l.retired {
+		l.current = newWatcherRegistry()
+		l.retired = false
+	}
+	l.registryLocked()
+	l.leases++
+	l.Unlock()
 	var once sync.Once
-	return func() {
+	var retired *watcherRegistry
+	return func(ctx context.Context) error {
 		once.Do(func() {
-			watcherLifetimes.Lock()
-			defer watcherLifetimes.Unlock()
-			watcherLifetimes.owners--
-			if watcherLifetimes.owners == 0 {
-				CloseWatchers()
+			l.Lock()
+			l.leases--
+			if l.leases == 0 {
+				retired = l.current
+				l.retired = true
+			}
+			l.Unlock()
+			if retired != nil {
+				retired.CloseAll()
 			}
 		})
+		if retired == nil {
+			return nil
+		}
+		if err := retired.work.Wait(ctx); err != nil {
+			return err
+		}
+		return retired.debounce.retire(ctx)
 	}
 }

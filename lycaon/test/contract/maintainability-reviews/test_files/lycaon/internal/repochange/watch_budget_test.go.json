@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/repochange/watch_budget_test.go",
+  "kind": "test_suite",
+  "workstream": "repository-change-lifetime",
+  "disposition": "retain",
+  "reason": "Retain the 399-line descriptor and coverage matrix with its shared measured-budget fixture. It checks wide directories, truncation, reseeding and returned capacity against the same accounting contract. Startup assertions wait for actual complete coverage.",
+  "reviewed_commit": "2be34334b2fa7bfea29ebceecc19fa6478bc8a1d",
+  "ceiling": 399,
+  "boundaries": {
+    "lycaon/internal/repochange/watch_budget_test.go": "2c35bde80d650f9940232d243c6bc8c739776e1b2010ce2cdcf7f7055502dbce"
+  }
+}
