@@ -1,10 +1,11 @@
 package policytest
 
 import (
-	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // New persists a model policy in an isolated store.

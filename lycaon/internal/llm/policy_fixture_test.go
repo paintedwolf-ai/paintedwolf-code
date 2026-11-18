@@ -1,9 +1,10 @@
 package llm
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func newPolicyFixture(t *testing.T, policy ModelPolicy) *PolicyStore {

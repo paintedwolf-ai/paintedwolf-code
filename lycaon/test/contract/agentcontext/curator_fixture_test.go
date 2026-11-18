@@ -1,11 +1,12 @@
 package contract
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/policytest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"testing"
 )
 
 func newCuratorFixture(t *testing.T, provider modelcall.Provider) *llm.RegistrySummarizer {
