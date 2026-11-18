@@ -1,17 +1,14 @@
 package app
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 )
 
 func TestPerformanceGaugesCarryStoreWorkAndMaintenance(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "store.db"))
-	testutil.FailErr(t, "open store", err)
-	t.Cleanup(func() { _ = store.Close() })
+	store := testdbfixture.Open(t, "store.db")
 	gauges := (&runtimeResources{db: store}).performanceGauges()
 	for name := range db.ProcessWork().Counters() {
 		if _, ok := gauges["store_"+name]; !ok {

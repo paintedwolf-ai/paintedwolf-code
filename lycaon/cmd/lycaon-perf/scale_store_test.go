@@ -5,15 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestCountOwnedRowsFollowsCascadingKeys(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.db")
-	store, err := db.Open(path)
-	testutil.FailErr(t, "open store", err)
+	store := testdbfixture.OpenPath(t, path)
 	for _, project := range []string{"owned", "other"} {
 		testdbseed.InsertProjectRootWithID(t, store, project, project+"-root", filepath.Join(t.TempDir(), project))
 	}

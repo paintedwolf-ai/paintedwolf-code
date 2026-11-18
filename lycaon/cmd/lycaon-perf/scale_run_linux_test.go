@@ -98,7 +98,8 @@ func fakeEngine(args []string) int {
 		observability.RecordWork("store.upgrade", map[string]int64{"pages_fetched": 1_000 + fileBytes(path)/1_024, "peak_resident_bytes": 64 << 20})
 		return serveFake(ctx, http.NewServeMux())
 	}
-	store, err := db.Open(path)
+	// The engine stand-in opens its store the way the engine does.
+	store, err := db.OpenWithOptions(ctx, path, db.UpgradeHooks{}, db.StoreOptions{})
 	if err != nil {
 		return 1
 	}
