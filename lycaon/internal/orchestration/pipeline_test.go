@@ -54,7 +54,7 @@ func TestPipelineTopologyLegAgentTypes(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess)
 
 	spec := orchestration.TopologySpec{
 		Pattern: orchestration.TopologyPipeline,
@@ -107,7 +107,7 @@ func TestPipelineUnknownProfileFailsRun(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess)
 
 	spec := orchestration.TopologySpec{
 		Pattern: orchestration.TopologyPipeline,
@@ -159,7 +159,7 @@ func TestPipelineSequentialDispatchOrder(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess)
 
 	result, err := orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -192,7 +192,7 @@ func TestPipelineReviewTestUnlockAfterImplement(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess)
 
 	if _, err := orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -229,7 +229,7 @@ func TestPipelineFullDefaultPipelineMockRun(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess)
 
 	result, err := orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,

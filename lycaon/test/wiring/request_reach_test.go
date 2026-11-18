@@ -318,7 +318,7 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 	ctx := context.Background()
 	t.Cleanup(h.StartBackgroundWorkers(t, ctx))
 	dir := t.TempDir()
-	writeTestProjectApprovalsAllowWrite(t, dir)
+	WriteTestProjectApprovalsAllowWrite(t, dir)
 	_ = WriteImplementFixture(t, dir)
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
