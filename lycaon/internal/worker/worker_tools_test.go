@@ -296,7 +296,7 @@ func TestShelvedChangesLeavePendingPromotion(t *testing.T) {
 		Prompt: "fix", Brief: "fix", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}, OverlayID: "job-1",
 	}))
 	root := filepath.Join(testbaseline.DataDir(t, f.db), "worker-branches", "job-1")
-	bound, err := f.queue.store.SetWorkerWorkspace(t.Context(), "job-1", root, testbaseline.Durable(t, f.db, "job-1", t.TempDir()))
+	bound, err := f.queue.store.SetWorkerWorkspace(t.Context(), "job-1", root, testbaseline.Durable(t, "root", f.db, "job-1", t.TempDir()))
 	if err != nil || !bound {
 		t.Fatalf("bind workspace: bound=%v err=%v", bound, err)
 	}
@@ -475,7 +475,7 @@ func TestLandingDisposesEarlierRoundsByAncestry(t *testing.T) {
 	f.deliverWith(t, "job-4", "checkpoint-4")
 
 	root := filepath.Join(testbaseline.DataDir(t, f.db), "worker-branches", "lane.1")
-	bound, err := f.queue.store.SetWorkerWorkspace(t.Context(), "job-4", root, testbaseline.Durable(t, f.db, "job-4", t.TempDir()))
+	bound, err := f.queue.store.SetWorkerWorkspace(t.Context(), "job-4", root, testbaseline.Durable(t, "root", f.db, "job-4", t.TempDir()))
 	if err != nil || !bound {
 		t.Fatalf("bind workspace: bound=%v err=%v", bound, err)
 	}

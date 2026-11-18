@@ -37,7 +37,7 @@ func TestBeginMergeApplyClaimsPendingOnce(t *testing.T) {
 		Scope:           &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"a.go"}},
 	})
 	testutil.FailErr(t, "Enqueue", err)
-	bound, err := store.SetWorkerWorkspace(ctx, id, filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", id), testbaseline.Durable(t, sqlDB, id, t.TempDir()))
+	bound, err := store.SetWorkerWorkspace(ctx, id, filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", id), testbaseline.Durable(t, "root", sqlDB, id, t.TempDir()))
 	testutil.FailErr(t, "SetWorkerWorkspace", err)
 	if !bound {
 		t.Fatal("expected workspace root CAS to win on an unbound job")
@@ -335,7 +335,7 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 
 	overlay := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", jobID)
 	testutil.FailErr(t, "MkdirAll overlay", os.MkdirAll(overlay, 0o755))
-	baselinePath := testbaseline.Durable(t, sqlDB, jobID, primary)
+	baselinePath := testbaseline.Durable(t, "root", sqlDB, jobID, primary)
 	cpStore := openRecoveryCheckpointStore(t)
 	cpStoreDir := cpStore.RootDir()
 

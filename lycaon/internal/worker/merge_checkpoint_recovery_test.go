@@ -32,7 +32,7 @@ func TestEmptyCheckpointPromotionRollsBackRefsOnCommitFailure(t *testing.T) {
 	testutil.FailErr(t, "enqueue worker", err)
 	t.Cleanup(func() { session.ClearTaskCheckpointPreview(id) })
 	overlay := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", id)
-	baseline := testbaseline.Durable(t, sqlDB, id, primary)
+	baseline := testbaseline.Durable(t, "root", sqlDB, id, primary)
 	cpStore := openRecoveryCheckpointStore(t)
 	core, err := layeredfs.New(layeredfs.Config{ViewID: "refs-only", BackingDir: t.TempDir(), Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}}})
 	testutil.FailErr(t, "worker view", err)
@@ -112,7 +112,7 @@ func TestCheckpointPromotionSingleStageCleanAndStage1Resolutions(t *testing.T) {
 
 	overlay := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", jobID)
 	testutil.FailErr(t, "mkdir overlay", os.MkdirAll(overlay, 0o755))
-	baseline := testbaseline.Durable(t, sqlDB, jobID, primary)
+	baseline := testbaseline.Durable(t, "root", sqlDB, jobID, primary)
 	cpStore := openRecoveryCheckpointStore(t)
 
 	core, err := layeredfs.New(layeredfs.Config{

@@ -17,7 +17,8 @@ import (
 
 func promoteTask(t *testing.T, primary, branch string, baseline map[string]testbaseline.File, paths []string) *api.WorkerTask {
 	t.Helper()
-	raw := testbaseline.FromFiles(t, baseline)
+	raw := testbaseline.FromFiles(t, "root", baseline)
+	testbaseline.RecordBranch(t, "root", primary, branch)
 	return &api.WorkerTask{
 		ID:                    "job-1",
 		ParentSessionID:       "sess-1",

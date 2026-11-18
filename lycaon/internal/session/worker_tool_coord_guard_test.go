@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
@@ -197,12 +198,12 @@ func TestWorkspaceSnapshotWalksTree(t *testing.T) {
 
 func TestEmptyWorkspaceBaselineIsValidAndDetectsLaterCreation(t *testing.T) {
 	dir := t.TempDir()
-	ref := testbaseline.Capture(t, dir)
+	ref := testbaseline.Capture(t, "root", dir)
 	baseline, err := workspacebaseline.Open(t.Context(), ref, workspacebaseline.ContentStore(ref))
 	testutil.FailErr(t, "open empty baseline", err)
 	defer func() { _ = baseline.Close() }()
 	testutil.FailErr(t, "write greenfield file", os.WriteFile(filepath.Join(dir, "new.go"), []byte("package new\n"), 0o644))
-	changed, err := baseline.Changes(t.Context(), nil, dir)
+	changed, err := baseline.Changes(t.Context(), []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}}, dir)
 	testutil.FailErr(t, "compare empty baseline", err)
 	if len(changed) != 1 || changed[0] != "new.go" {
 		t.Fatalf("changed = %v", changed)

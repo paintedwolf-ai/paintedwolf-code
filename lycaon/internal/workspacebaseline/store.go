@@ -28,15 +28,13 @@ type Store struct {
 }
 
 // New shares the ledger's object store and reference lease. A nil database is
-// reserved for transient queues whose entire storage root has one owner.
+// reserved for isolated, transient storage.
 func New(database db.Handle, blobs *sourceblob.Store, root string) *Store {
 	return &Store{db: database, queries: db.New(database), blobs: blobs, root: root}
 }
 
 type CaptureFile struct {
-	// RootID and ScopeRel carry the structured identity; Path is the display
-	// spelling format 1 manifests were keyed by. RootID is empty only for a
-	// branch captured without its roots.
+	// RootID and ScopeRel identify the file; Path is its display spelling.
 	RootID   string
 	ScopeRel string
 	Path     string
@@ -104,6 +102,9 @@ type OverlayCapture struct {
 // for each removal. Together with the baseline it is enough to rebuild the
 // branch tree, so the tree itself becomes reclaimable.
 func (s *Store) CaptureOverlay(ctx context.Context, jobID, baselinePath string, roots []projectroot.RootRef, branch string) (OverlayCapture, error) {
+	if err := validateRoots(roots); err != nil {
+		return OverlayCapture{}, err
+	}
 	baseline, err := Open(ctx, baselinePath, s.blobs)
 	if err != nil {
 		return OverlayCapture{}, err
@@ -136,8 +137,8 @@ func (s *Store) CaptureOverlay(ctx context.Context, jobID, baselinePath string, 
 
 // captureIdentity returns a captured file's structured identity and display path.
 func captureIdentity(file CaptureFile) (rootID, scopeRel, display string, err error) {
-	if file.ScopeRel == "" {
-		return "", "", "", fmt.Errorf("workspace baseline: %q has no root-relative path", file.Path)
+	if err := validateIdentity(file.RootID, file.ScopeRel); err != nil {
+		return "", "", "", err
 	}
 	display = file.Path
 	if display == "" {
@@ -400,7 +401,7 @@ func createManifest(ctx context.Context, path string) (*sql.DB, error) {
 	d.SetMaxOpenConns(1)
 	_, err = d.ExecContext(ctx, `PRAGMA journal_mode=DELETE; PRAGMA synchronous=EXTRA; PRAGMA cache_size=-4096;
  CREATE TABLE manifest(version INTEGER PRIMARY KEY CHECK(version=2)) STRICT;
- CREATE TABLE files(root_id TEXT NOT NULL, scope_rel TEXT NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, sha256 TEXT NOT NULL, opaque INTEGER NOT NULL, mode INTEGER NOT NULL, link_target TEXT NOT NULL, deleted INTEGER NOT NULL, PRIMARY KEY(root_id, scope_rel)) STRICT, WITHOUT ROWID;
+ CREATE TABLE files(root_id TEXT NOT NULL CHECK(root_id <> ''), scope_rel TEXT NOT NULL CHECK(scope_rel <> ''), path TEXT NOT NULL, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, sha256 TEXT NOT NULL, opaque INTEGER NOT NULL, mode INTEGER NOT NULL, link_target TEXT NOT NULL, deleted INTEGER NOT NULL, PRIMARY KEY(root_id, scope_rel)) STRICT, WITHOUT ROWID;
  CREATE INDEX files_path ON files(path);`)
 	if err == nil {
 		_, err = d.ExecContext(ctx, "INSERT INTO manifest VALUES(2)")

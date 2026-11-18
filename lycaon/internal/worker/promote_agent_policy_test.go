@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -45,6 +46,7 @@ func TestPromoteOverlayNeverLandsTheProjectOverlay(t *testing.T) {
 		WorkspacePath: primary, WorkspaceRoot: overlay, WorkspaceBaselinePath: baseline,
 		MergeStatus: api.WorkerMergeStatusPending, AgentType: "implementer", Scope: &scope, Status: api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t)}
 
 	var named []api.WorkerPromoteResolution

@@ -227,7 +227,8 @@ func TestTaskScopeCapExceeded(t *testing.T) {
 func TestOverlayChangedPathsFeedWorkerProof(t *testing.T) {
 	dir := t.TempDir()
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"space_pacifism/main.py"}}
-	baseline := testbaseline.Capture(t, dir)
+	baseline := testbaseline.Capture(t, "root", dir)
+	testbaseline.RecordBranch(t, "root", dir, dir)
 	if err := os.MkdirAll(filepath.Join(dir, "space_pacifism"), 0o755); err != nil {
 		testutil.FailErr(t, "create directory", err)
 	}

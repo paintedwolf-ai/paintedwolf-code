@@ -28,7 +28,7 @@ func sealedBranch(t testing.TB, files map[string][]byte) (branch string, reader 
 	}
 	testutil.FailErr(t, "mkdir branch", os.MkdirAll(branch, 0o755))
 	store := workspacebaseline.New(nil, blobs, filepath.Join(root, "manifests"))
-	manifest, err := store.Capture(context.Background(), "job", workspacebaseline.Branch(nil, branch))
+	manifest, err := store.Capture(context.Background(), "job", workspacebaseline.Branch(singleRoots(), branch))
 	testutil.FailErr(t, "capture", err)
 	reader, err = workspacebaseline.Open(context.Background(), manifest, blobs)
 	testutil.FailErr(t, "open", err)
@@ -51,18 +51,18 @@ func TestChangeSetNamesEachKindInPathOrder(t *testing.T) {
 	testutil.FailErr(t, "dir in place of file", os.Mkdir(filepath.Join(branch, "dir", "swap"), 0o755))
 	writeFile(t, filepath.Join(branch, "made.txt"), []byte("made\n"), 0o644)
 
-	changes, err := reader.ChangeSet(t.Context(), nil, branch)
+	changes, err := reader.ChangeSet(t.Context(), singleRoots(), branch)
 	testutil.FailErr(t, "change set", err)
 	want := []workspacebaseline.Change{
-		{RootID: "", ScopeRel: "dir/swap", Path: "dir/swap", Kind: workspacebaseline.ChangeDeleted},
-		{RootID: "", ScopeRel: "edit.txt", Path: "edit.txt", Kind: workspacebaseline.ChangeModified},
-		{RootID: "", ScopeRel: "gone.txt", Path: "gone.txt", Kind: workspacebaseline.ChangeDeleted},
-		{RootID: "", ScopeRel: "made.txt", Path: "made.txt", Kind: workspacebaseline.ChangeCreated},
+		{RootID: "root", ScopeRel: "dir/swap", Path: "dir/swap", Kind: workspacebaseline.ChangeDeleted},
+		{RootID: "root", ScopeRel: "edit.txt", Path: "edit.txt", Kind: workspacebaseline.ChangeModified},
+		{RootID: "root", ScopeRel: "gone.txt", Path: "gone.txt", Kind: workspacebaseline.ChangeDeleted},
+		{RootID: "root", ScopeRel: "made.txt", Path: "made.txt", Kind: workspacebaseline.ChangeCreated},
 	}
 	if fmt.Sprint(changes) != fmt.Sprint(want) {
 		t.Fatalf("changes = %+v, want %+v", changes, want)
 	}
-	paths, err := reader.Changes(t.Context(), nil, branch)
+	paths, err := reader.Changes(t.Context(), singleRoots(), branch)
 	testutil.FailErr(t, "changes", err)
 	if len(paths) != len(want) || paths[1] != "edit.txt" {
 		t.Fatalf("paths = %v", paths)
@@ -73,7 +73,7 @@ func TestChangeSetStopsOnACanceledContext(t *testing.T) {
 	branch, reader := sealedBranch(t, map[string][]byte{"a.txt": []byte("a\n")})
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := reader.ChangeSet(ctx, nil, branch); !errors.Is(err, context.Canceled) {
+	if _, err := reader.ChangeSet(ctx, singleRoots(), branch); !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want canceled", err)
 	}
 }
@@ -88,7 +88,7 @@ func TestChangeSetStopsWhenCanceledMidComparison(t *testing.T) {
 	t.Run("manifest pass", func(t *testing.T) {
 		branch, reader := sealedBranch(t, files)
 		ctx := &cancelAfterChecks{Context: t.Context(), remaining: 8}
-		if _, err := reader.ChangeSet(ctx, nil, branch); !errors.Is(err, context.Canceled) {
+		if _, err := reader.ChangeSet(ctx, singleRoots(), branch); !errors.Is(err, context.Canceled) {
 			t.Fatalf("err = %v, want canceled", err)
 		}
 		if ctx.checks > 16 {
@@ -100,7 +100,7 @@ func TestChangeSetStopsWhenCanceledMidComparison(t *testing.T) {
 		// The manifest pass checks once per entry, and the walk follows it. Removing
 		// the check from either pass leaves too few to reach the cancellation.
 		ctx := &cancelAfterChecks{Context: t.Context(), remaining: len(files) + 8}
-		_, err := reader.ChangeSet(ctx, nil, branch)
+		_, err := reader.ChangeSet(ctx, singleRoots(), branch)
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("err = %v, want canceled", err)
 		}
@@ -127,21 +127,21 @@ func TestChangeSetListsFilesUnderAParentThatBecameAFile(t *testing.T) {
 	testutil.FailErr(t, "remove dir", os.RemoveAll(filepath.Join(branch, "dir")))
 	writeFile(t, filepath.Join(branch, "dir"), []byte("now a file\n"), 0o644)
 
-	changes, err := reader.ChangeSet(t.Context(), nil, branch)
+	changes, err := reader.ChangeSet(t.Context(), singleRoots(), branch)
 	testutil.FailErr(t, "change set", err)
 	want := []workspacebaseline.Change{
-		{RootID: "", ScopeRel: "dir", Path: "dir", Kind: workspacebaseline.ChangeCreated},
-		{RootID: "", ScopeRel: "dir/x.go", Path: "dir/x.go", Kind: workspacebaseline.ChangeDeleted},
+		{RootID: "root", ScopeRel: "dir", Path: "dir", Kind: workspacebaseline.ChangeCreated},
+		{RootID: "root", ScopeRel: "dir/x.go", Path: "dir/x.go", Kind: workspacebaseline.ChangeDeleted},
 	}
 	if fmt.Sprint(changes) != fmt.Sprint(want) {
 		t.Fatalf("changes = %+v, want %+v", changes, want)
 	}
-	inBaseline, err := reader.ComparePath(t.Context(), nil, branch, "dir/x.go")
+	inBaseline, err := reader.ComparePath(t.Context(), singleRoots(), branch, "dir/x.go")
 	testutil.FailErr(t, "compare baseline path", err)
 	if inBaseline.Kind != workspacebaseline.ChangeDeleted || inBaseline.Before != "x\n" {
 		t.Fatalf("baseline path = %+v, want deleted", inBaseline)
 	}
-	never, err := reader.ComparePath(t.Context(), nil, branch, "dir/never.go")
+	never, err := reader.ComparePath(t.Context(), singleRoots(), branch, "dir/never.go")
 	testutil.FailErr(t, "compare unknown path", err)
 	if !never.Absent || never.Kind != "" {
 		t.Fatalf("unknown path = %+v, want absent", never)
@@ -180,7 +180,7 @@ func TestComparePathReadsBothSides(t *testing.T) {
 		{"shrunk.txt", workspacebaseline.ChangeModified, "was small\n", "", true, false, false},
 	} {
 		t.Run(c.path, func(t *testing.T) {
-			got, err := reader.ComparePath(t.Context(), nil, branch, c.path)
+			got, err := reader.ComparePath(t.Context(), singleRoots(), branch, c.path)
 			testutil.FailErr(t, "compare", err)
 			if got.Kind != c.kind || got.Before != c.before || got.After != c.after || got.HasBefore != c.hasBefore || got.HasAfter != c.hasAfter || got.Absent != c.absent {
 				t.Fatalf("got %+v, want %+v", got, c)
@@ -210,13 +210,13 @@ func TestMoveUnchangedComparesBaselineContentWithTheLiveFile(t *testing.T) {
 		{"a/same.go", "b/gone.go", false},
 		{"a/same.go", "b/new.go", false},
 	} {
-		got, err := reader.MoveUnchanged(t.Context(), nil, branch, workspacebaseline.PathMove{From: c.from, To: c.to})
+		got, err := reader.MoveUnchanged(t.Context(), singleRoots(), branch, workspacebaseline.PathMove{From: c.from, To: c.to})
 		testutil.FailErr(t, "move unchanged", err)
 		if got != c.want {
 			t.Fatalf("%s to %s = %v, want %v", c.from, c.to, got, c.want)
 		}
 	}
-	if _, err := reader.MoveUnchanged(t.Context(), nil, branch, workspacebaseline.PathMove{From: "a/same.go", To: "../out"}); err == nil {
+	if _, err := reader.MoveUnchanged(t.Context(), singleRoots(), branch, workspacebaseline.PathMove{From: "a/same.go", To: "../out"}); err == nil {
 		t.Fatal("a path that climbs out of the branch was compared")
 	}
 }
@@ -229,13 +229,13 @@ func TestComparePathRefusesWhatLeavesTheBranch(t *testing.T) {
 	testutil.FailErr(t, "file link", os.Symlink(filepath.Join(outside, "secret.txt"), filepath.Join(branch, "alias.txt")))
 
 	for _, path := range []string{"linked/secret.txt", "alias.txt"} {
-		got, err := reader.ComparePath(t.Context(), nil, branch, path)
+		got, err := reader.ComparePath(t.Context(), singleRoots(), branch, path)
 		testutil.FailErr(t, "compare "+path, err)
 		if got.Kind != workspacebaseline.ChangeCreated || got.HasAfter || got.After != "" {
 			t.Fatalf("%s = %+v, want a change with no text from outside the branch", path, got)
 		}
 	}
-	if _, err := reader.ComparePath(t.Context(), nil, branch, "../outside"); err == nil {
+	if _, err := reader.ComparePath(t.Context(), singleRoots(), branch, "../outside"); err == nil {
 		t.Fatal("a path that climbs out of the branch was compared")
 	}
 }
@@ -293,7 +293,7 @@ func BenchmarkChangeSet(b *testing.B) {
 				}
 			}
 			store := workspacebaseline.New(nil, blobs, filepath.Join(root, "manifests"))
-			manifest, err := store.Capture(b.Context(), "job", workspacebaseline.Branch(nil, branch))
+			manifest, err := store.Capture(b.Context(), "job", workspacebaseline.Branch(singleRoots(), branch))
 			if err != nil {
 				testutil.FailErr(b, "store.Capture failed", err)
 			}
@@ -307,7 +307,7 @@ func BenchmarkChangeSet(b *testing.B) {
 				if err != nil {
 					testutil.FailErr(b, "workspacebaseline.Open failed", err)
 				}
-				changes, err := reader.ChangeSet(b.Context(), nil, branch)
+				changes, err := reader.ChangeSet(b.Context(), singleRoots(), branch)
 				if err != nil {
 					testutil.FailErr(b, "reader.ChangeSet failed", err)
 				}
@@ -318,4 +318,8 @@ func BenchmarkChangeSet(b *testing.B) {
 			}
 		})
 	}
+}
+
+func singleRoots() []projectroot.RootRef {
+	return []projectroot.RootRef{{ID: "root", Path: "/project", IsPrimary: true}}
 }

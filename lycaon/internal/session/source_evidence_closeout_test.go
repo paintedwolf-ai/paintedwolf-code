@@ -114,7 +114,7 @@ func workerSourceEvidenceCloseoutHarness(t *testing.T) (*Host, *api.Session, *ap
 	testutil.FailErr(t, "MkdirAll", os.MkdirAll(overlay, 0o755))
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(overlay, "a.go"), []byte("package a\n"), 0o644))
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"a.go"}}
-	snap := testbaseline.Capture(t, primary)
+	snap := testbaseline.Capture(t, "root", primary)
 	raw := snap
 	child, err := mgr.Coordinator.Context.Sessions.(Store).CreateChild(context.Background(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild", err)

@@ -30,8 +30,7 @@ const (
 )
 
 // Change is one path the branch tree no longer holds as the baseline recorded it.
-// RootID and ScopeRel carry the structured identity; Path is the display spelling
-// kept for legacy readers.
+// RootID and ScopeRel identify the file; Path is its display spelling.
 type Change struct {
 	RootID   string
 	ScopeRel string
@@ -97,7 +96,7 @@ func (r *Reader) eachChange(ctx context.Context, roots []projectroot.RootRef, br
 			return err
 		}
 		if kind != "" {
-			if err := visit(Change{RootID: entry.RootID, ScopeRel: entry.ScopeRel, Path: entry.Path, Kind: kind}); err != nil {
+			if err := visit(Change{RootID: entry.RootID, ScopeRel: entry.ScopeRel, Path: projectroot.BaselineDisplayPath(roots, entry.RootID, entry.ScopeRel), Kind: kind}); err != nil {
 				return err
 			}
 		}
@@ -162,7 +161,7 @@ func (r *Reader) ComparePath(ctx context.Context, roots []projectroot.RootRef, b
 	}
 	abs := filepath.Join(base, rel)
 	out := PathComparison{Abs: abs}
-	before, inBaseline, err := r.Lookup(ctx, path)
+	before, inBaseline, err := r.lookupPath(ctx, roots, path)
 	if err != nil {
 		return PathComparison{}, err
 	}
@@ -197,7 +196,7 @@ func (r *Reader) baselineText(ctx context.Context, path string, before File, inB
 	if before.Opaque || before.SHA256 == "" {
 		return "", false
 	}
-	text, _, err := r.Content(ctx, path)
+	text, _, err := r.content(ctx, path, before)
 	if err != nil {
 		return "", false
 	}
@@ -237,7 +236,7 @@ type PathMove struct{ From, To string }
 // MoveUnchanged reports whether the file now at To has the bytes the baseline holds
 // at From. A body the baseline did not pin, or a file it cannot read, is no match.
 func (r *Reader) MoveUnchanged(ctx context.Context, roots []projectroot.RootRef, branch string, move PathMove) (bool, error) {
-	before, inBaseline, err := r.Lookup(ctx, move.From)
+	before, inBaseline, err := r.lookupPath(ctx, roots, move.From)
 	if err != nil {
 		return false, err
 	}
@@ -299,14 +298,14 @@ func LocateInBranch(roots []projectroot.RootRef, branch, path string) (BranchLoc
 // qualifies paths outside the primary root as @label/rel.
 func manifestRoot(roots []projectroot.RootRef, path string) (projectroot.RootRef, string, error) {
 	if len(roots) == 1 {
-		return roots[0], path, nil
+		return roots[0], filepath.ToSlash(filepath.Clean(path)), nil
 	}
 	primary, err := projectroot.PrimaryRoot(roots)
 	if err != nil {
 		return projectroot.RootRef{}, "", err
 	}
 	if !strings.HasPrefix(path, "@") {
-		return primary, path, nil
+		return primary, filepath.ToSlash(filepath.Clean(path)), nil
 	}
 	label, rel, ok := strings.Cut(path[1:], "/")
 	if !ok {
@@ -324,6 +323,12 @@ func manifestRoot(roots []projectroot.RootRef, path string) (projectroot.RootRef
 // its place there. Multi-root trees keep one directory per root under the
 // branch; single-root trees keep the root's files at the branch top.
 func branchLocationAt(roots []projectroot.RootRef, branch, rootID, scopeRel string) (base, rel string, err error) {
+	if err := validateIdentity(rootID, scopeRel); err != nil {
+		return "", "", err
+	}
+	if err := requireRoot(roots, rootID); err != nil {
+		return "", "", err
+	}
 	base = branch
 	if len(roots) > 1 {
 		dir, err := projectroot.BranchDirForID(rootID)
@@ -389,6 +394,9 @@ type OverlayChange struct {
 // EachOverlayChange visits a sealed overlay's paths with their baseline state. It reads only the
 // immutable manifests and their pinned content, never a working tree.
 func EachOverlayChange(ctx context.Context, baselinePath, overlayPath string, roots []projectroot.RootRef, visit func(OverlayChange) error) error {
+	if err := validateRoots(roots); err != nil {
+		return err
+	}
 	blobs := ContentStore(baselinePath)
 	baseline, err := Open(ctx, baselinePath, blobs)
 	if err != nil {
@@ -405,18 +413,17 @@ func EachOverlayChange(ctx context.Context, baselinePath, overlayPath string, ro
 		err := blobs.CopySHA(ctx, sha, &content)
 		return content.Bytes(), err
 	}
-	return overlay.Each(ctx, func(path string, final File) error {
-		root, rel, err := manifestRoot(roots, path)
+	return overlay.EachIdentity(ctx, roots, func(entry Entry) error {
+		if err := requireRoot(roots, entry.RootID); err != nil {
+			return err
+		}
+		base, exists, err := baseline.LookupIdentity(ctx, roots, entry.RootID, entry.ScopeRel)
 		if err != nil {
 			return err
 		}
-		base, exists, err := baseline.Lookup(ctx, path)
-		if err != nil {
-			return err
+		if entry.File.Opaque && entry.File.LinkTarget == "" {
+			return fmt.Errorf("overlay body for %s was not captured", entry.Path)
 		}
-		if final.Opaque && final.LinkTarget == "" {
-			return fmt.Errorf("overlay body for %s was not captured", path)
-		}
-		return visit(OverlayChange{RootID: root.ID, Rel: rel, Final: final, Base: base, BaseExists: exists, Body: body})
+		return visit(OverlayChange{RootID: entry.RootID, Rel: entry.ScopeRel, Final: entry.File, Base: base, BaseExists: exists, Body: body})
 	})
 }

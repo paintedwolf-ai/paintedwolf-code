@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -35,6 +36,7 @@ func TestPromoteOverlayLandsNewFilesOnPrimary(t *testing.T) {
 		Scope:                 &scope,
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	store := &mergeStoreStub{}
 	svc := &worker.MergeService{
 		Queue: &mergeQueueStub{task: task},
