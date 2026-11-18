@@ -2,6 +2,7 @@ import type { Accessor } from "solid-js";
 import type { LycaonClient } from "../../../api/client.ts";
 import type { ChatContentReference, ChatContentRow, RedactedSpan } from "../../../api/types.ts";
 import { PRETTY_MAX_INPUT } from "../../../components/source/pretty/pretty-rescan.ts";
+import { readRetainedSnapshot } from "./retained-snapshot.ts";
 import { ByteCache, retainedValueBytes } from "../../../utils/byte-cache.ts";
 
 /** One display row. Rows partition the document text, so each keeps its line break. */
@@ -125,45 +126,9 @@ export function createChatContentAccess(options: {
       const cacheKey = `${prefix}snapshot`;
       const cached = snapshots.get(cacheKey);
       if (cached?.revision === reference.sha256) return cached;
-      const parts: string[] = [];
-      const spans: RedactedSpan[] = [];
-      let utf16Total = 0;
-      for (let offset = 0; offset < reference.total_runes; ) {
-        const page = await client.getChatContent(
-          sessionId,
-          messageId,
-          reference,
-          { offset, limit: Math.min(16384, reference.total_runes - offset) },
-          signal,
-        );
-        if (signal.aborted) throw new DOMException("Canceled", "AbortError");
-        if (!page || page.reference?.sha256 !== reference.sha256) return null;
-        if (page.offset !== offset || page.end_offset <= offset || page.end_offset > reference.total_runes) {
-          return null;
-        }
-        const pageRunes = Array.from(page.text).length;
-        if (pageRunes !== page.end_offset - page.offset) return null;
-        if (!Array.isArray(page.spans)) return null;
-        for (const span of page.spans) {
-          if (
-            typeof span.start !== "number" ||
-            typeof span.length !== "number" ||
-            span.start < 0 ||
-            span.length < 0 ||
-            span.start + span.length > pageRunes
-          ) {
-            return null;
-          }
-          spans.push({ ...span, start: offset + span.start });
-        }
-        utf16Total += page.text.length;
-        if (utf16Total > PRETTY_MAX_INPUT) return null;
-        parts.push(page.text);
-        offset = page.end_offset;
-        if (offset === reference.total_runes && page.complete === false) return null;
-      }
-      const result: ChatContentBoundedSnapshot = { revision: reference.sha256, text: parts.join(""), spans };
-      snapshots.set(cacheKey, result, retainedValueBytes(result) + cacheKey.length * 2);
+      const result = await readRetainedSnapshot(reference, (offset, limit, interest) =>
+        client.getChatContent(sessionId, messageId, reference, { offset, limit }, interest), signal);
+      if (result) snapshots.set(cacheKey, result, retainedValueBytes(result) + cacheKey.length * 2);
       return result;
     },
     find: async (query, cursor, sensitive, signal) => {
