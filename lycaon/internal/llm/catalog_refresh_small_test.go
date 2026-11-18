@@ -4,13 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/llm/compaction"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
-	"github.com/lycaon/lycaon/internal/llm/discovery"
-	"github.com/lycaon/lycaon/internal/llm/modelinfo"
-	"github.com/lycaon/lycaon/internal/llm/providerprofile"
-	"github.com/lycaon/lycaon/internal/modelfeed"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,6 +13,15 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/llm/compaction"
+	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
+	"github.com/lycaon/lycaon/internal/llm/discovery"
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/llm/providerprofile"
+	"github.com/lycaon/lycaon/internal/modelfeed"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestKnownModelMetadataDoesNotWaitForCatalogRefresh(t *testing.T) {
@@ -41,7 +43,7 @@ func TestKnownModelMetadataDoesNotWaitForCatalogRefresh(t *testing.T) {
 	t.Cleanup(server.Close)
 	yaml := "providers:\n  - id: local\n    kind: openai-compatible\n    base_url: " + server.URL + "/v1\n    api_key_env: \"\"\n    models:\n      - id: known\n        capabilities:\n          vision:\n            state: supported\n            sources: [local-config]\n" + MinimalShipHTTPRetryYAML
 	catalog := mustCatalogCloneShipToLocal(t, yaml)
-	reg, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
+	reg, err := NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
@@ -125,7 +127,9 @@ providers:
 	writeProvidersLocal(t, localPath, shipYAML)
 	cat, err := NewProviderCatalog()
 	testutil.FailErr(t, "catalog", err)
-	creds, err := providercredentials.New()
+	slot, err := providercredentials.DefaultSlot()
+	testutil.FailErr(t, "resolve credential slot", err)
+	creds, err := providercredentials.Open(slot)
 	testutil.FailErr(t, "creds", err)
 	testutil.FailErr(t, "set key", creds.Set("openai", "sk-test"))
 

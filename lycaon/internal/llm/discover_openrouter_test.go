@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/discovery"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
@@ -136,7 +136,7 @@ func TestRegistryListDiscoversConfiguredOpenRouterProvider(t *testing.T) {
 
 	catalog, err := NewProviderCatalogAt(user)
 	testutil.FailErr(t, "NewProviderCatalogAt failed", err)
-	creds := providercredentials.NewAt(tmp + "/credential-vault.age")
+	creds := credentialstest.Open(t, tmp+"/credential-vault.age")
 	if err := creds.Set("openrouter", wantAuth); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}

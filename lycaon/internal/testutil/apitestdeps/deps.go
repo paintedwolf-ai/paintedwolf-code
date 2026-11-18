@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/detectionpack"
@@ -36,8 +37,9 @@ import (
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectignore"
@@ -206,7 +208,7 @@ func fillLLM(t *testing.T, d *Deps) {
 	dir := t.TempDir()
 	catalog, err := llm.NewProviderCatalogAt(filepath.Join(dir, "providers.local.yaml"))
 	testutil.FailErr(t, "provider catalog", err)
-	credentials := providercredentials.NewAt(filepath.Join(dir, "credential-vault.age"))
+	credentials := credentialstest.Open(t, filepath.Join(dir, "credential-vault.age"))
 	policy, err := llm.NewPolicyStoreAt(filepath.Join(dir, "model-policy.yaml"))
 	testutil.FailErr(t, "model policy", err)
 	registry, err := llm.NewRegistry(t.Context(), catalog, credentials, nil)
@@ -411,7 +413,7 @@ func fillSettings(t *testing.T, d *Deps) {
 func fillSources(t *testing.T, d *Deps) {
 	t.Helper()
 	if d.ManagedSecrets == nil {
-		values := credentialstore.NewEmpty(credentialstore.Slot{
+		values := credentialstoretest.Open(t, credentialstore.Slot{
 			Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 			Namespace: credentialstore.NamespaceManagedSecrets,
 			Context:   "test managed secret",
@@ -506,7 +508,7 @@ func fillExtensions(t *testing.T, d *Deps) {
 		registry, err := mcp.NewRuntime(mcp.RuntimeOptions{
 			StatePath:          t.TempDir(),
 			GlobalOverridePath: filepath.Join(t.TempDir(), "mcp.yaml"),
-			OAuthStore:         mcp.NewOAuthTokenStoreAt(filepath.Join(t.TempDir(), "mcp-oauth.vault")),
+			OAuthStore:         mcptest.OpenOAuthStore(t, filepath.Join(t.TempDir(), "mcp-oauth.vault")),
 		})
 		testutil.FailErr(t, "mcp registry", err)
 		t.Cleanup(func() { _ = registry.Close(t.Context()) })

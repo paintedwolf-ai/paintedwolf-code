@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"net"
 	"net/http"
@@ -20,6 +18,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/httpcookies"
 	"github.com/lycaon/lycaon/internal/presence"
@@ -29,6 +28,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -37,7 +38,7 @@ func managedRequestService(t *testing.T) (*secretcap.Service, string) {
 	t.Helper()
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
-	values := credentialstore.NewEmpty(credentialstore.Slot{
+	values := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets, Context: "request test",
 	}, func(string) bool { return true })

@@ -1,0 +1,15 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/testutil/apitestdeps/deps.go",
+  "kind": "test_suite",
+  "workstream": "credential-fixture-boundaries",
+  "disposition": "retain",
+  "reason": "Retain the 491-line API fixture assembly. It supplies explicit domain collaborators to endpoint tests and reports construction failures through testing.TB. Credential and OAuth stores now open real isolated encrypted vaults; this assembly contains no runtime policy. Consumer API secret tests and socket authority contracts exercise the affected construction paths. Further fixture growth requires review.",
+  "reviewed_commit": "d771f280c226a3a8412f7aca8a5a2b7d9647b9fb",
+  "ceiling": 491,
+  "boundaries": {
+    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "0b40184c72e3cd1d04111955280fe65abe0230957421238f6bbbe264e8bc30b1",
+    "lycaon/internal/api/capabilityadmin/socket_cookie_owner_test.go": "877a56886d02092f72dc6bea2df67812983fe3a64041338867ce4a9b4c0d5b83",
+    "lycaon/internal/api/hostcontracts/project_managed_secrets_test.go": "78c65894b9f008c874a2d372f107bb002750f5d7662e14dc564099f6a3004447"
+  }
+}

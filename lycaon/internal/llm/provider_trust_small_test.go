@@ -3,15 +3,16 @@ package llm
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/curationctx"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
-	"path/filepath"
-	"testing"
 )
 
 // Trust installed by an approval is withdrawn only by that approval's
@@ -101,7 +102,7 @@ const trustTestShipYAML = `providers:
 func trustTestRegistry(t *testing.T) (*ProviderCatalog, *Registry, *destinationCapturingScreen) {
 	t.Helper()
 	catalog := mustCatalogCloneShipToLocal(t, trustTestShipYAML)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
+	registry, err := NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}

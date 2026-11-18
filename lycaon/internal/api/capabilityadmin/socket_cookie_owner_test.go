@@ -5,7 +5,6 @@ package capabilityadmin
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/pkg/api"
 	"io"
 	"maps"
 	"net"
@@ -24,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
@@ -40,6 +40,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestUnixSocketCookieIssuerReplacementNeedsFreshDisclosureAuthority(t *testing.T) {
@@ -60,7 +61,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	database := testdbfixture.Open(t, "cookie-owner.db")
 	testdbseed.InsertSessionWithRoot(t, database, "chat", testdbseed.DefaultProjectID, workspace)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), database)
-	values := credentialstore.NewEmpty(credentialstore.Slot{Path: filepath.Join(root, credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "cookie owner fixture"}, func(string) bool { return true })
+	values := credentialstoretest.Open(t, credentialstore.Slot{Path: filepath.Join(root, credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "cookie owner fixture"}, func(string) bool { return true })
 	service := secretcap.NewWithStore(database, values, nil)
 	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 	testutil.FailErr(t, "cookie matcher", err)
@@ -188,7 +189,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	testOrdinaryCookieTransport(t, ctx, executor, review, &tc, args, invoke, decoyServer.Handler, observed, &reissue, value)
 }
 
-// startCookieIssuer owns the original endpoint and counts cookies returned to it.
+// startCookieIssuer counts cookies returned to the original endpoint.
 func startCookieIssuer(t *testing.T, path, value string) (*http.Server, *atomic.Int64) {
 	t.Helper()
 	listener, err := net.Listen("unix", path)
@@ -206,8 +207,7 @@ func startCookieIssuer(t *testing.T, path, value string) (*http.Server, *atomic.
 	return server, requests
 }
 
-// The journal records the authenticated human disclosure, not a socket lease
-// standing in for secret authority.
+// The journal records authenticated human disclosure.
 func assertCookieDecisionLedger(t *testing.T, ctx context.Context, store *authzcontext.SQLStore, call string, outcome authzcontext.EventOutcome) {
 	t.Helper()
 	rows, err := store.ListEvents(ctx, "chat")

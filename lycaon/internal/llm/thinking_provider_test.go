@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/discovery"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
@@ -148,7 +148,7 @@ func TestOfflineRenderUsesServingThinkingPolicy(t *testing.T) {
       - id: e4b
         thinking: {state: supported, efforts: [low]}
 `+MinimalShipHTTPRetryYAML)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credentials.age")), nil)
+	registry, err := NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(t.TempDir(), "credentials.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}

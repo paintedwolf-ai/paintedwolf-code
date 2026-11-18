@@ -163,7 +163,8 @@ func TestDescribeNamesEncryptedVault(t *testing.T) {
 func TestVaultRefusesGrowthBeyondReadableLimit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "credential-vault.age")
 	slot := Slot{Path: path, Namespace: NamespaceCredentialFiles, Context: "evidence"}
-	store := NewEmpty(slot, nil)
+	store, err := Open(slot, nil)
+	testutil.FailErr(t, "open credential fixture", err)
 	testutil.FailErr(t, "seed vault", store.Set("project", "retained"))
 	before, err := os.ReadFile(path)
 	testutil.FailErr(t, "capture vault", err)
@@ -208,4 +209,8 @@ func TestSharedVaultWithoutProviderIsNeverCached(t *testing.T) {
 	if first.path != filepath.Clean(path) || first.provider != nil || second.provider != nil {
 		t.Fatalf("providerless vault = %+v / %+v", first, second)
 	}
+}
+
+func newDevelopmentBackend(path, namespace string) Backend {
+	return newNamespaceBackend(path, namespace, newDevelopmentIdentityProvider(path))
 }

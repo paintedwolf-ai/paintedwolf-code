@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -43,7 +43,7 @@ func TestBundledOpenAICompatibleRegistry(t *testing.T) {
 			}
 
 			catalog := liveCatalogForShipIDs(t, tc.id)
-			registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
+			registry, err := llm.NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 			if err == nil {
 				registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 			}

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -132,7 +132,7 @@ func TestNewProviderForEntryAttachesItsPromptCachePolicy(t *testing.T) {
 			}
 			reg, err := NewRegistry(t.Context(),
 				mustTestProviderCatalog(t, entry),
-				providercredentials.NewAt(t.TempDir()+"/credential-vault.age"), nil,
+				credentialstest.Open(t, t.TempDir()+"/credential-vault.age"), nil,
 			)
 			if err == nil {
 				reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))

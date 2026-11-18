@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configdir"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -92,7 +92,7 @@ func TestCanceledAllocationDrainsInitialProviderDiscovery(t *testing.T) {
 					done <- result{service != nil, err}
 					return
 				}
-				registry, err := NewRegistry(ctx, catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
+				registry, err := NewRegistry(ctx, catalog, credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 				if err == nil {
 					registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 				}

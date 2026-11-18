@@ -12,6 +12,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -27,7 +28,7 @@ func TestProjectManagedSecretsAPIListsMetadataAndRevokesWithoutRevealing(t *test
 
 	rootTaskID := uuid.NewString()
 	testdbseed.InsertSession(t, database, rootTaskID, testdbseed.DefaultProjectID)
-	values := credentialstore.NewEmpty(credentialstore.Slot{
+	values := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets,
 		Context:   "test managed secret",

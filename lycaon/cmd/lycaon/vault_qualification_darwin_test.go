@@ -90,9 +90,9 @@ func TestMacOSUnsignedReleaseCustodyRefusalPreservesLegacyFilesAndRefusesTokenPr
 		"mcp.Catalog.Load":          res.MCPLoad,
 		"api.WriteAPIToken":         res.WriteToken,
 	} {
-		if !got.Failed || !got.HasKeychainOSStatus || got.KeychainOSStatus != credentialstore.KeychainMissingEntitlementStatus ||
+		if !got.Failed || !got.HasKeychainOSStatus || got.KeychainOSStatus != int32(-34018) ||
 			got.IsIdentityMissing || got.IsNotExist {
-			t.Fatalf("%s classification = %+v, want KeychainOSStatus %d", label, got, credentialstore.KeychainMissingEntitlementStatus)
+			t.Fatalf("%s classification = %+v, want KeychainOSStatus %d", label, got, int32(-34018))
 		}
 	}
 	if !res.ReadToken.Failed || !res.ReadToken.IsNotExist || res.ReadToken.HasKeychainOSStatus || res.ReadToken.IsIdentityMissing {

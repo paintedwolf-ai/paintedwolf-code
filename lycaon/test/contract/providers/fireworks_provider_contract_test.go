@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
@@ -44,7 +44,7 @@ func TestFireworksRegistryUnconfiguredWithoutKey(t *testing.T) {
 	t.Setenv("FIREWORKS_API_KEY", "fw-env-ignored")
 	catalog, err := llm.NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
 	contractcheck.FailErr(t, "llm.NewProviderCatalogAt failed", err)
-	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
+	registry, err := llm.NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}
