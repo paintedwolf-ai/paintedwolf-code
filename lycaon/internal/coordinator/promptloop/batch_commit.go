@@ -78,6 +78,9 @@ type parallelBatchCommit struct {
 	st                   *promptLoopTurnState
 	sess                 *api.Session
 	sessionID            string
+	// stored holds results in the order they were stored, which is the order a
+	// reload reads them.
+	stored []*toolCallOutcome
 }
 
 func reserveCommitTimestamps(n int, last *time.Time) []time.Time {
@@ -155,6 +158,7 @@ func (l *toolBatch) appendParallelOutcomeLocked(
 	}
 	l.Projection.touchProgress(ctx, commit.st)
 	out.committed = true
+	commit.stored = append(commit.stored, out)
 	out.persistedStored = rows
 	out.persistedTransient = transients
 	commit.turnTools = l.settleToolRow(ctx, commit.sess, commit.sessionID, out.toolName, commit.turnTools, commit.st)
@@ -185,8 +189,13 @@ func (l *toolBatch) finishParallelToolOutcomes(
 				return err
 			}
 		}
+	}
+	// Live history takes the stored order, so the next request sees what a
+	// reload would.
+	for _, out := range commit.stored {
 		commit.history = foldStorageSafeMessages(commit.history, out.persistedStored, out.persistedTransient, commit.st)
 	}
+	commit.stored = nil
 	return nil
 }
 
