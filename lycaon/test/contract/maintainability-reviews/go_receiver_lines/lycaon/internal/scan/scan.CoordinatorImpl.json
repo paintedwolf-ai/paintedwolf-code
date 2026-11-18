@@ -5,11 +5,11 @@
   "workstream": "scan-persistence-components",
   "disposition": "retain",
   "reason": "Retain one coordinator for enqueue deduplication, source publication, and the scan queries routed through its public interface. Named stores keep transaction mechanics out of callers.",
-  "reviewed_commit": "3437d9cc94c52e9be89f24a2832b7d363834ba30",
+  "reviewed_commit": "c68c755753a54ee9d959483b09ceeaf320b03a73",
   "ceiling": 605,
   "boundaries": {
     "lycaon/internal/scan/source_generation_test.go": "1cda7c109e6fed0b23d08b518db77f6eda32df77322112be7100162ceaf77c39",
-    "lycaon/internal/scan/assessment_authority_test.go": "f32100e67daffb9de9a39c390a011483a96e8868e2a009ee0d4ae7ca44a798a8"
+    "lycaon/internal/scan/assessment_authority_test.go": "131b737193ae9511452dadf601d7cb5ff1931f3b14a1bdb0e17dbee95bccf6e3"
   },
   "reviewed_shape": "96e2ca97f400a33c3b8f5266fb911fea5d83f5bcc9aea0b29e036d9880ac9913"
 }

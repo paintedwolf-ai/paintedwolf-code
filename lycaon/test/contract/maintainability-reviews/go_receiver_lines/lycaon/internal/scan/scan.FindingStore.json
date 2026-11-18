@@ -5,11 +5,11 @@
   "workstream": "scan-persistence-components",
   "disposition": "retain",
   "reason": "Finding reads and writes share finding-set identity and history. Scan lifecycle and ignore projection use separate repositories.",
-  "reviewed_commit": "3437d9cc94c52e9be89f24a2832b7d363834ba30",
+  "reviewed_commit": "c68c755753a54ee9d959483b09ceeaf320b03a73",
   "ceiling": 575,
   "boundaries": {
-    "lycaon/internal/scan/finding_history_test.go": "e31154c72714197d55a260adbd49b5d3651cac86fbd20a3685f8da1a863efb65",
-    "lycaon/internal/scan/query_entries_test.go": "bc0a098a9355bbe98b8a74743a147f141e24c012426b981a04ca8f3be2946708"
+    "lycaon/internal/scan/finding_history_test.go": "9ce6e21d7b6450a2b13e0fba1a49671c76c1930b6f2c2850fd0f82d43aaf8ddd",
+    "lycaon/internal/scan/query_entries_test.go": "7e3b0ca4d70a486e6958a31852a597b059310c283e865149eff11155d37f042d"
   },
   "reviewed_shape": "ab9d4659b3c30f7930876b7660306c7813eab9f4833dd85efaa3b9d4a2bedf1c"
 }

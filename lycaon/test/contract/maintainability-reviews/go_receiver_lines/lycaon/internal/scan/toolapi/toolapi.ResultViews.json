@@ -5,11 +5,11 @@
   "workstream": "scan-persistence-components",
   "disposition": "retain",
   "reason": "Retain scan and full-pass receipt presentation with explicit read dependencies. Tool output keeps the requested scan context and waiting members.",
-  "reviewed_commit": "3437d9cc94c52e9be89f24a2832b7d363834ba30",
+  "reviewed_commit": "c68c755753a54ee9d959483b09ceeaf320b03a73",
   "ceiling": 473,
   "boundaries": {
-    "lycaon/internal/scan/toolapi/scan_pack_tool_test.go": "144b65abc54d805b65e3b389453e74703aa2d32a7480369d8f52285a127c417b",
-    "lycaon/internal/scan/cadence/full_pass_bindings_test.go": "58fd893dec580b2b701484270ab56e2858c8c875898685e2a2678dcf845c08ad"
+    "lycaon/internal/scan/toolapi/scan_pack_tool_test.go": "c2b73d31c120e213dbe239f083eb1309cca4cc84e1c3367371a8130b5a4c08af",
+    "lycaon/internal/scan/cadence/full_pass_bindings_test.go": "21312b9e5aaff83f28df9e8cafa30f6e5e812c4293aac0a9460eee12994b1079"
   },
   "reviewed_shape": "e4c01336b315bf42a31f144d87d41d798821790379fd8e6187f31e4a98e72913"
 }
