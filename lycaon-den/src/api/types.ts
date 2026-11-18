@@ -13353,6 +13353,8 @@ export interface components {
             label: string;
             /** @description Hidden from the chat's Files section. Hiding revokes and deletes nothing. */
             hidden: boolean;
+            /** @description Whether the host can still address the observed location. */
+            available: boolean;
         };
         OpenedOutsideFile: {
             /**

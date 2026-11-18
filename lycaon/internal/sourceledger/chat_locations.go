@@ -28,9 +28,9 @@ const (
 // ChatLocation is a place outside the project where a root chat has worked.
 // Anchor is an outside-namespace path.
 type ChatLocation struct {
-	ID, SessionID, Anchor string
-	Kind                  ChatLocationKind
-	Hidden                bool
+	ID, SessionID, Anchor, AnchorIdentity string
+	Kind                                  ChatLocationKind
+	Hidden                                bool
 }
 
 // Covers reports whether the outside path rel lies at or under the location.
@@ -68,8 +68,24 @@ func locationAnchor(rel string) (string, ChatLocationKind) {
 	return anchor, ChatLocationFolder
 }
 
+func (l ChatLocation) Directory() string {
+	host := projectroot.OutsideAbs(l.Anchor)
+	if l.Kind == ChatLocationFile {
+		return filepath.Dir(host)
+	}
+	return host
+}
+
+func (l ChatLocation) Available() bool {
+	if l.AnchorIdentity == "" {
+		return false
+	}
+	identity, err := projectroot.OutsideDirectoryIdentity(l.Directory())
+	return err == nil && identity == l.AnchorIdentity
+}
+
 func chatLocationFromRow(row db.SourceChatLocations) ChatLocation {
-	return ChatLocation{ID: row.ID, SessionID: row.SessionID, Anchor: row.Anchor, Kind: ChatLocationKind(row.Kind), Hidden: row.Hidden != 0}
+	return ChatLocation{ID: row.ID, SessionID: row.SessionID, Anchor: row.Anchor, AnchorIdentity: row.AnchorIdentity, Kind: ChatLocationKind(row.Kind), Hidden: row.Hidden != 0}
 }
 
 // placeChatLocation makes the location covering rel visible for the chat,
@@ -84,14 +100,19 @@ func placeChatLocation(ctx context.Context, q *db.Queries, chat, rel string, ts 
 		if !location.Covers(rel) {
 			continue
 		}
+		if !location.Available() {
+			continue
+		}
 		if location.Hidden {
 			return q.SetSourceChatLocationHidden(ctx, db.SetSourceChatLocationHiddenParams{Hidden: 0, ID: location.ID})
 		}
 		return nil
 	}
 	anchor, kind := locationAnchor(rel)
+	location := ChatLocation{Anchor: anchor, Kind: kind}
+	identity, _ := projectroot.OutsideDirectoryIdentity(location.Directory())
 	return q.InsertSourceChatLocation(ctx, db.InsertSourceChatLocationParams{
-		ID: uuid.NewString(), SessionID: chat, Anchor: anchor, Kind: string(kind), CreatedTs: ts.UTC().Format(time.RFC3339Nano),
+		ID: uuid.NewString(), SessionID: chat, Anchor: anchor, AnchorIdentity: identity, Kind: string(kind), CreatedTs: ts.UTC().Format(time.RFC3339Nano),
 	})
 }
 
@@ -183,7 +204,8 @@ func (s *Store) OutsidePathAdmitted(ctx context.Context, projectID, rel string) 
 		return false, err
 	}
 	for _, row := range rows {
-		if chatLocationFromRow(row).Covers(rel) {
+		location := chatLocationFromRow(row)
+		if location.Covers(rel) && location.Available() {
 			return true, nil
 		}
 	}

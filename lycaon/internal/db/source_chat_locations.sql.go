@@ -10,7 +10,7 @@ import (
 )
 
 const getSourceChatLocation = `-- name: GetSourceChatLocation :one
-SELECT l.id, l.session_id, l.anchor, l.kind, l.hidden, l.created_ts
+SELECT l.id, l.session_id, l.anchor, l.anchor_identity, l.kind, l.hidden, l.created_ts
 FROM source_chat_locations l
 JOIN sessions s ON s.id = l.session_id
 WHERE l.id = ?1 AND s.project_id = ?2
@@ -28,6 +28,7 @@ func (q *Queries) GetSourceChatLocation(ctx context.Context, arg GetSourceChatLo
 		&i.ID,
 		&i.SessionID,
 		&i.Anchor,
+		&i.AnchorIdentity,
 		&i.Kind,
 		&i.Hidden,
 		&i.CreatedTs,
@@ -36,17 +37,20 @@ func (q *Queries) GetSourceChatLocation(ctx context.Context, arg GetSourceChatLo
 }
 
 const insertSourceChatLocation = `-- name: InsertSourceChatLocation :exec
-INSERT INTO source_chat_locations (id, session_id, anchor, kind, hidden, created_ts)
-VALUES (?1, ?2, ?3, ?4, 0, ?5)
-ON CONFLICT(session_id, anchor) DO UPDATE SET hidden = 0
+INSERT INTO source_chat_locations (id, session_id, anchor, anchor_identity, kind, hidden, created_ts)
+VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)
+ON CONFLICT(session_id, anchor) DO UPDATE
+SET id = excluded.id, anchor_identity = excluded.anchor_identity, kind = excluded.kind, hidden = 0, created_ts = excluded.created_ts
+WHERE excluded.anchor_identity != '' AND source_chat_locations.anchor_identity != excluded.anchor_identity
 `
 
 type InsertSourceChatLocationParams struct {
-	ID        string `json:"id"`
-	SessionID string `json:"session_id"`
-	Anchor    string `json:"anchor"`
-	Kind      string `json:"kind"`
-	CreatedTs string `json:"created_ts"`
+	ID             string `json:"id"`
+	SessionID      string `json:"session_id"`
+	Anchor         string `json:"anchor"`
+	AnchorIdentity string `json:"anchor_identity"`
+	Kind           string `json:"kind"`
+	CreatedTs      string `json:"created_ts"`
 }
 
 func (q *Queries) InsertSourceChatLocation(ctx context.Context, arg InsertSourceChatLocationParams) error {
@@ -54,6 +58,7 @@ func (q *Queries) InsertSourceChatLocation(ctx context.Context, arg InsertSource
 		arg.ID,
 		arg.SessionID,
 		arg.Anchor,
+		arg.AnchorIdentity,
 		arg.Kind,
 		arg.CreatedTs,
 	)
@@ -61,7 +66,7 @@ func (q *Queries) InsertSourceChatLocation(ctx context.Context, arg InsertSource
 }
 
 const listProjectChatLocations = `-- name: ListProjectChatLocations :many
-SELECT l.id, l.session_id, l.anchor, l.kind, l.hidden, l.created_ts
+SELECT l.id, l.session_id, l.anchor, l.anchor_identity, l.kind, l.hidden, l.created_ts
 FROM source_chat_locations l
 JOIN sessions s ON s.id = l.session_id
 WHERE s.project_id = ?1
@@ -81,6 +86,7 @@ func (q *Queries) ListProjectChatLocations(ctx context.Context, projectID string
 			&i.ID,
 			&i.SessionID,
 			&i.Anchor,
+			&i.AnchorIdentity,
 			&i.Kind,
 			&i.Hidden,
 			&i.CreatedTs,
@@ -99,7 +105,7 @@ func (q *Queries) ListProjectChatLocations(ctx context.Context, projectID string
 }
 
 const listSourceChatLocations = `-- name: ListSourceChatLocations :many
-SELECT l.id, l.session_id, l.anchor, l.kind, l.hidden, l.created_ts
+SELECT l.id, l.session_id, l.anchor, l.anchor_identity, l.kind, l.hidden, l.created_ts
 FROM source_chat_locations l
 WHERE l.session_id = ?1
 ORDER BY l.anchor
@@ -118,6 +124,7 @@ func (q *Queries) ListSourceChatLocations(ctx context.Context, sessionID string)
 			&i.ID,
 			&i.SessionID,
 			&i.Anchor,
+			&i.AnchorIdentity,
 			&i.Kind,
 			&i.Hidden,
 			&i.CreatedTs,

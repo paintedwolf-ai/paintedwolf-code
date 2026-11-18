@@ -39,6 +39,8 @@ type Root struct {
 	OnDemand bool
 	// Only, when set, is the one entry name the root lists.
 	Only string
+	// DirectoryIdentity binds an on-demand root to the observed directory.
+	DirectoryIdentity string
 }
 
 // Scoped reports a subtree generation.
@@ -372,7 +374,7 @@ func cleanRoots(roots []Root) ([]Root, error) {
 			continue
 		}
 		seen[key] = struct{}{}
-		cleaned = append(cleaned, Root{ID: id, Path: rootPath, Within: cleanAbs(root.Within), OnDemand: root.OnDemand, Only: root.Only})
+		cleaned = append(cleaned, Root{ID: id, Path: rootPath, Within: cleanAbs(root.Within), OnDemand: root.OnDemand, Only: root.Only, DirectoryIdentity: root.DirectoryIdentity})
 	}
 	return cleaned, nil
 }
@@ -386,7 +388,7 @@ func (r Root) discoveryIdentity() string {
 	if !r.OnDemand && r.Only == "" {
 		return ""
 	}
-	return fmt.Sprintf("on-demand=%t only=%q", r.OnDemand, r.Only)
+	return fmt.Sprintf("on-demand=%t only=%q identity=%q", r.OnDemand, r.Only, r.DirectoryIdentity)
 }
 
 func combineSnapshots(roots []Root, parts []Snapshot) Snapshot {

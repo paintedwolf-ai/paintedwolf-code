@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/repochange"
 )
 
@@ -129,9 +130,28 @@ func acquireObservationRoot(ctx context.Context, store *indexStore) (*os.Root, f
 			err = errObservationChanged
 		}
 	}
+	if err == nil && store.root.DirectoryIdentity != "" {
+		err = checkAnchoredDirectory(store.root, root)
+	}
 	if err != nil {
 		release()
 		return nil, nil, err
 	}
 	return root, release, nil
+}
+
+func checkAnchoredDirectory(expected Root, root *os.Root) error {
+	if fspath.CanonicalPath(expected.Path) != expected.Path {
+		return os.ErrNotExist
+	}
+	file, err := root.Open(".")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = file.Close() }()
+	identity, err := fspath.FileIdentity(file)
+	if err == nil && identity != expected.DirectoryIdentity {
+		return os.ErrNotExist
+	}
+	return err
 }

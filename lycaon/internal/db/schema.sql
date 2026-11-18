@@ -3146,6 +3146,7 @@ CREATE TABLE IF NOT EXISTS source_chat_locations (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     anchor TEXT NOT NULL CHECK (anchor != '' AND substr(anchor, 1, 1) != '/'),
+    anchor_identity TEXT NOT NULL,
     kind TEXT NOT NULL CHECK (kind IN ('repository', 'folder', 'file')),
     hidden INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1)),
     created_ts TEXT NOT NULL,

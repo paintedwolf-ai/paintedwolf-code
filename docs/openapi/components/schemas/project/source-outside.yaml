@@ -4,7 +4,7 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      required: [id, session_id, root_id, anchor, path, kind, label, hidden]
+      required: [id, session_id, root_id, anchor, path, kind, label, hidden, available]
       description: >
         A place outside the project where a root chat has worked. A Files tree
         view for the chat lists each visible location as a root whose id is the
@@ -43,6 +43,9 @@ components:
         hidden:
           type: boolean
           description: Hidden from the chat's Files section. Hiding revokes and deletes nothing.
+        available:
+          type: boolean
+          description: Whether the host can still address the observed location.
     UpdateSourceChatLocationRequest:
       x-go-generate: true
       type: object

@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { SourceChatLocation } from "../../api/types.ts";
 import { ledgerAddress, locationLedgerPath, locationRowPath, recordChatLocations, resetChatLocationsForTests, treeAddress } from "./chat-locations.ts";
 
-const folder: SourceChatLocation = { id: "loc-folder", session_id: "chat", root_id: "outside", anchor: "Users/me/site", path: "/Users/me/site", kind: "repository", label: "site", hidden: false };
-const file: SourceChatLocation = { id: "loc-file", session_id: "chat", root_id: "outside", anchor: "Users/me/.ssh/config", path: "/Users/me/.ssh/config", kind: "file", label: ".ssh", hidden: false };
+const folder: SourceChatLocation = { id: "loc-folder", session_id: "chat", root_id: "outside", anchor: "Users/me/site", path: "/Users/me/site", kind: "repository", label: "site", hidden: false, available: true };
+const file: SourceChatLocation = { id: "loc-file", session_id: "chat", root_id: "outside", anchor: "Users/me/.ssh/config", path: "/Users/me/.ssh/config", kind: "file", label: ".ssh", hidden: false, available: true };
 
 describe("chat locations", () => {
   afterEach(resetChatLocationsForTests);

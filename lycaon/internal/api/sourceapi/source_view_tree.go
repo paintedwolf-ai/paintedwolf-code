@@ -13,7 +13,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Trees) newTreeView(scope pagedview.Scope, p *project.Project, request wire.SourceTreeViewCreate, locations []wire.SourceChatLocation) *sourceView {
+func (s *Trees) newTreeView(scope pagedview.Scope, p *project.Project, request wire.SourceTreeViewCreate, locations chatLocationProjection) *sourceView {
 	ctx, cancel := context.WithCancel(s.background.Context())
 	view := &sourceView{scope: scope, clientID: request.ClientID, sessionID: request.SessionID, workspaceID: p.WorkspaceID(),
 		ctx: ctx, cancel: cancel, state: "preparing", commands: pagedview.NewCommands[string](&s.sourceViews.receipts), expires: time.Now().Add(sourceViewLifetime), projectionRevision: uuid.NewString(), navigation: sourceViewNavigation{
@@ -29,10 +29,8 @@ func (s *Trees) newTreeView(scope pagedview.Scope, p *project.Project, request w
 			slog.Warn("Source inventory could not start", "root", root.ID, "error", err)
 		}
 	}
-	view.navigation.outside = locations
-	for _, location := range view.navigation.outside {
-		roots = append(roots, chatLocationRoot(location))
-	}
+	view.navigation.outside = locations.details
+	roots = append(roots, locations.roots...)
 	view.navigation.treeIntent.Disclosures = disclosuresWithin(view.navigation.treeIntent.Disclosures, roots)
 	view.navigation.tree = sourcetree.New(ctx, scope, roots, sourcecatalog.Process(), func() { s.treeViewChanged(view) })
 	s.watchTreeView(view, p)

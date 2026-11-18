@@ -127,3 +127,34 @@ func TestTrackChatFileRecordsAReadWithoutAnEffect(t *testing.T) {
 		t.Fatalf("a read recorded %d effects", effects)
 	}
 }
+
+func TestLocationRetainsItsObservedDirectory(t *testing.T) {
+	store, ctx := openLedger(t)
+	outside := outsideRoot(t, store, ctx)
+	insertChat(t, store, ctx, "chat", "")
+	dir, rel := outsideFixture(t)
+	anchor := filepath.Join(dir, "notes")
+	testutil.FailErr(t, "make observed directory", os.Mkdir(anchor, 0o700))
+	recordOutside(t, store, ctx, outside, "chat", rel+"/notes/readme.txt", "first")
+	location, found, err := store.ChatLocationCovering(ctx, "chat", rel+"/notes/readme.txt")
+	testutil.FailErr(t, "find observed directory", err)
+	if !found || !location.Available() {
+		t.Fatalf("expected an available location: %+v", location)
+	}
+	testutil.FailErr(t, "move the original directory", os.Rename(anchor, anchor+"-old"))
+	testutil.FailErr(t, "make replacement at the same path", os.Mkdir(anchor, 0o700))
+	if location.Available() {
+		t.Fatal("the replacement inherited the recorded directory identity")
+	}
+	admitted, err := store.OutsidePathAdmitted(ctx, "p1", rel+"/notes/new.txt")
+	testutil.FailErr(t, "check the replacement directory", err)
+	if admitted {
+		t.Fatal("the replacement granted access to unobserved files")
+	}
+	recordOutside(t, store, ctx, outside, "chat", rel+"/notes/new.txt", "second")
+	replacement, found, err := store.ChatLocationCovering(ctx, "chat", rel+"/notes/new.txt")
+	testutil.FailErr(t, "find the newly observed directory", err)
+	if !found || replacement.ID == location.ID || !replacement.Available() {
+		t.Fatalf("a new reference did not admit the replacement: %+v", replacement)
+	}
+}

@@ -3,6 +3,7 @@ package sourcetree
 import (
 	"context"
 	"maps"
+	"path"
 	"slices"
 
 	"github.com/google/uuid"
@@ -61,6 +62,30 @@ func (v *View) holdDemandRoot(ctx context.Context, root Root) {
 		unsubscribe()
 		if err == nil {
 			release()
+		}
+	}
+}
+
+// RefreshOnDemandDirectories reconciles only directories the person has opened.
+func (v *View) RefreshOnDemandDirectories(rootID string, dirs []string) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	root, ok := v.roots[rootID]
+	if v.closed || !ok || !root.OnDemand {
+		return
+	}
+	for _, dir := range dirs {
+		if !validAddress(Address{Root: rootID, Path: dir}) {
+			continue
+		}
+		for current := dir; ; current = path.Dir(current) {
+			if !v.rules.At(Address{Root: rootID, Path: current}).Open {
+				break
+			}
+			if current == "." {
+				v.loadLocked(root, dir)
+				break
+			}
 		}
 	}
 }

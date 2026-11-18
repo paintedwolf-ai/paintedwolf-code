@@ -7156,6 +7156,8 @@ type SourceChatLocation struct {
 	Label string `json:"label"`
 	// Hidden from the chat's Files section. Hiding revokes and deletes nothing.
 	Hidden bool `json:"hidden"`
+	// Whether the host can still address the observed location.
+	Available bool `json:"available"`
 }
 
 // SourceCommandWindow One host-run command's observation window: the span of a command or

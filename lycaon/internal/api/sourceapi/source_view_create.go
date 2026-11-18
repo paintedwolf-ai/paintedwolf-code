@@ -60,7 +60,7 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 	}
 	p = scoped.Project
 	scope := pagedview.Scope{Person: requestscope.Caller(r).ID, Project: p.ID}
-	var locations []wire.SourceChatLocation
+	var locations chatLocationProjection
 	if request.Tree != nil {
 		locations, err = s.Trees.chatLocations(r.Context(), scope, p, request.Tree.Intent.ChatID)
 		if err != nil {

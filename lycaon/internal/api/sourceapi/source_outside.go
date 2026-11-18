@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 	"path"
@@ -17,7 +16,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
-	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/project"
@@ -40,45 +38,55 @@ func chatLocationDTO(p *project.Project, location sourceledger.ChatLocation) wir
 	}
 	return wire.SourceChatLocation{
 		ID: location.ID, SessionID: location.SessionID, RootID: p.Outside.ID, Anchor: location.Anchor,
-		Path: host, Kind: string(location.Kind), Label: label, Hidden: location.Hidden,
+		Path: host, Kind: string(location.Kind), Label: label, Hidden: location.Hidden, Available: location.Available(),
 	}
 }
 
 // chatLocationRoot is the tree root a location lists on demand. A file
 // location is its folder listing only that file.
-func chatLocationRoot(dto wire.SourceChatLocation) sourcetree.Root {
-	root := sourcecatalog.Root{ID: dto.ID, Path: dto.Path, OnDemand: true}
+func chatLocationRoot(dto wire.SourceChatLocation, identity string) sourcetree.Root {
+	if identity == "" {
+		identity = "-"
+	}
+	root := sourcecatalog.Root{ID: dto.ID, Path: dto.Path, OnDemand: true, DirectoryIdentity: identity}
 	if dto.Kind == string(sourceledger.ChatLocationFile) {
 		root.Path, root.Only = filepath.Dir(dto.Path), filepath.Base(dto.Path)
 	}
 	return sourcetree.Root{Root: root, Label: dto.Label}
 }
 
-func (s *Trees) chatLocations(ctx context.Context, scope pagedview.Scope, p *project.Project, chatID string) ([]wire.SourceChatLocation, error) {
+type chatLocationProjection struct {
+	details []wire.SourceChatLocation
+	roots   []sourcetree.Root
+}
+
+func (s *Trees) chatLocations(ctx context.Context, scope pagedview.Scope, p *project.Project, chatID string) (chatLocationProjection, error) {
 	if chatID == "" {
-		return nil, nil
+		return chatLocationProjection{}, nil
 	}
 	if _, err := uuid.Parse(chatID); err != nil {
-		return nil, rejectedSourceIntent("chat_id must be a UUID.")
+		return chatLocationProjection{}, rejectedSourceIntent("chat_id must be a UUID.")
 	}
 	chat, err := s.Views.SessionStore.Get(ctx, chatID)
 	if err != nil {
-		return nil, err
+		return chatLocationProjection{}, err
 	}
 	if chat.ProjectID != scope.Project || chat.OwnerPersonID != scope.Person || chat.ParentSessionID != "" {
-		return nil, store.ErrSessionNotFound
+		return chatLocationProjection{}, store.ErrSessionNotFound
 	}
 	if s.SourceLedger == nil || p.Outside.ID == "" {
-		return nil, nil
+		return chatLocationProjection{}, nil
 	}
 	locations, err := s.SourceLedger.ChatLocations(ctx, chatID)
 	if err != nil {
-		return nil, err
+		return chatLocationProjection{}, err
 	}
-	out := make([]wire.SourceChatLocation, 0, len(locations))
+	var out chatLocationProjection
 	for _, location := range locations {
 		if !location.Hidden {
-			out = append(out, chatLocationDTO(p, location))
+			dto := chatLocationDTO(p, location)
+			out.details = append(out.details, dto)
+			out.roots = append(out.roots, chatLocationRoot(dto, location.AnchorIdentity))
 		}
 	}
 	return out, nil
@@ -93,9 +101,8 @@ func (n sourceReadNavigation) outsideLocations() []wire.SourceChatLocation {
 
 // refreshChatLocations re-reads the folders of the view's locations that
 // changes landed in, since no watcher covers them.
-func (s *Trees) refreshChatLocations(ctx context.Context, view *sourceView, outsideRootID string, changed []sourcefeed.Address) {
+func (s *Trees) refreshChatLocations(view *sourceView, outsideRootID string, changed []sourcefeed.Address) {
 	for _, location := range view.outsideLocations() {
-		root := chatLocationRoot(location)
 		var dirs []string
 		for _, address := range changed {
 			if address.RootID != outsideRootID {
@@ -111,12 +118,7 @@ func (s *Trees) refreshChatLocations(ctx context.Context, view *sourceView, outs
 			}
 			dirs = append(dirs, dir)
 		}
-		if len(dirs) == 0 {
-			continue
-		}
-		if err := sourcecatalog.Process().Directories.ObserveDirectories(ctx, view.scope.Project, root.Root, dirs, backgroundwork.PriorityInteractive); err != nil {
-			slog.Debug("Chat location refresh failed", "location", location.ID, "error", err)
-		}
+		view.navigation.tree.RefreshOnDemandDirectories(location.ID, dirs)
 	}
 }
 

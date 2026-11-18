@@ -33780,6 +33780,7 @@ components:
         - kind
         - label
         - hidden
+        - available
       description: |
         A place outside the project where a root chat has worked. A Files tree view for the chat lists each visible location as a root whose id is the location id; its rows address files by the location and their path under the anchor.
       properties:
@@ -33817,6 +33818,9 @@ components:
         hidden:
           type: boolean
           description: Hidden from the chat's Files section. Hiding revokes and deletes nothing.
+        available:
+          type: boolean
+          description: Whether the host can still address the observed location.
     OpenedOutsideFile:
       x-go-generate: true
       type: object

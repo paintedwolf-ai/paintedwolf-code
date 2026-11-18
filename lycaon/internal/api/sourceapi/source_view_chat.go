@@ -26,19 +26,15 @@ func (s *Trees) selectTreeChat(ctx context.Context, view *sourceView, chatID str
 	}
 	view.mu.Lock()
 	defer view.mu.Unlock()
-	if slices.Equal(view.navigation.outside, locations) {
+	if slices.Equal(view.navigation.outside, locations.details) {
 		view.navigation.treeIntent.ChatID = chatID
 		return nil, nil
 	}
-	roots := make([]sourcetree.Root, 0, len(locations))
-	for _, location := range locations {
-		roots = append(roots, chatLocationRoot(location))
-	}
-	if _, err := view.navigation.tree.ReplaceOnDemandRoots(ctx, roots); err != nil {
+	if _, err := view.navigation.tree.ReplaceOnDemandRoots(ctx, locations.roots); err != nil {
 		return nil, err
 	}
 	view.navigation.treeIntent.ChatID = chatID
-	view.navigation.outside = locations
+	view.navigation.outside = locations.details
 	if view.navigation.treeIntent.Review != nil {
 		return view.changeTreeReview(view.navigation.treeIntent.Review), nil
 	}
