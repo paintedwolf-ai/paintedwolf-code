@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -147,21 +149,52 @@ type crashRun struct {
 
 var settledEntry = regexp.MustCompile(`msg="startup recovery settled" entry=(\S+)`)
 
-func bootTwice(t *testing.T, dir string) crashRun {
+// readCrashRun reads what the boot child wrote for the store on dir.
+func readCrashRun(t *testing.T, dir string, boot crashChild) crashRun {
 	t.Helper()
-	run := crashRun{crashed: dumpStore(t, filepath.Join(dir, crashStore))}
-	code, output := startCrashChild(t, "boot", dir, "")
-	if code != 0 {
-		t.Fatalf("boot child exited %d\n%s", code, output)
+	if boot.code != 0 {
+		t.Fatalf("boot child exited %d\n%s", boot.code, boot.output)
 	}
+	var run crashRun
+	readCrashJSON(t, filepath.Join(dir, crashKilled), &run.crashed)
 	readCrashJSON(t, filepath.Join(dir, crashBoot1), &run.boot1)
 	readCrashJSON(t, filepath.Join(dir, crashBoot2), &run.boot2)
 	readCrashJSON(t, filepath.Join(dir, crashPrompt), &run.prompt)
-	for _, match := range settledEntry.FindAllStringSubmatch(output, -1) {
+	for _, match := range settledEntry.FindAllStringSubmatch(boot.output, -1) {
 		run.recovered = append(run.recovered, match[1])
 	}
 	requireStoreIntegrity(t, filepath.Join(dir, crashStore))
 	return run
+}
+
+// crashPoint is one commit point's kill and the two boots after it.
+type crashPoint struct {
+	dir        string
+	kill, boot crashChild
+	err        error
+}
+
+// killAndBoot runs every point's child processes, a bounded number at once;
+// each point's checks run afterwards in its own subtest.
+func killAndBoot(t *testing.T, points []string) []crashPoint {
+	t.Helper()
+	runs := make([]crashPoint, len(points))
+	slots := make(chan struct{}, runtime.GOMAXPROCS(0))
+	var wg sync.WaitGroup
+	for i, point := range points {
+		runs[i].dir = t.TempDir()
+		wg.Go(func() {
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			run := &runs[i]
+			if run.kill, run.err = runCrashChild("turn", run.dir, point); run.err != nil || run.kill.code != crashExit {
+				return
+			}
+			run.boot, run.err = runCrashChild("boot", run.dir, "")
+		})
+	}
+	wg.Wait()
+	return runs
 }
 
 func requireStoreIntegrity(t *testing.T, path string) {
@@ -319,28 +352,31 @@ func TestTurnSurvivesKillAtEveryCommitPoint(t *testing.T) {
 		runBootChild(t, os.Getenv(crashDirEnv))
 		return
 	}
-	// Hosts run in child processes, so the parent shares nothing with other tests.
-	t.Parallel()
 	dir := t.TempDir()
-	if code, output := startCrashChild(t, "turn", dir, ""); code != finishedExit {
-		t.Fatalf("uninterrupted turn exited %d\n%s", code, output)
+	clean, err := runCrashChild("turn", dir, "")
+	testutil.FailErr(t, "uninterrupted turn", err)
+	if clean.code != finishedExit {
+		t.Fatalf("uninterrupted turn exited %d\n%s", clean.code, clean.output)
 	}
 	points := readCommitPoints(t, dir)
-	reference := bootTwice(t, dir)
+	boot, err := runCrashChild("boot", dir, "")
+	testutil.FailErr(t, "boot uninterrupted store", err)
+	reference := readCrashRun(t, dir, boot)
 	checkCrashRun(t, reference, reference)
 	slices.Sort(reference.recovered)
 	t.Logf("%d commit points:\n%s", len(points), strings.Join(points, "\n"))
 	t.Logf("%d recovery entries settled over two boots:\n%s", len(reference.recovered), strings.Join(slices.Compact(reference.recovered), "\n"))
 	requirePinnedCommitPoints(t, points)
 
-	for _, point := range points {
+	runs := killAndBoot(t, points)
+	for i, point := range points {
 		t.Run(point, func(t *testing.T) {
-			t.Parallel()
-			dir := t.TempDir()
-			if code, output := startCrashChild(t, "turn", dir, point); code != crashExit {
-				t.Fatalf("turn child exited %d, not at the commit point\n%s", code, output)
+			run := runs[i]
+			testutil.FailErr(t, "run children", run.err)
+			if run.kill.code != crashExit {
+				t.Fatalf("turn child exited %d, not at the commit point\n%s", run.kill.code, run.kill.output)
 			}
-			checkCrashRun(t, bootTwice(t, dir), reference)
+			checkCrashRun(t, readCrashRun(t, run.dir, run.boot), reference)
 		})
 	}
 }

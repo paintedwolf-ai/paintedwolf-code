@@ -34,6 +34,7 @@ const (
 	crashStore   = "wiring-test.db"
 	crashLog     = "commits.log"
 	crashSession = "session-id"
+	crashKilled  = "killed.json"
 	crashBoot1   = "boot1.json"
 	crashBoot2   = "boot2.json"
 	crashPrompt  = "prompt.json"
@@ -142,6 +143,7 @@ func runTurnChild(t *testing.T, dir, killAt string) {
 // runBootChild boots the host left on dir twice, as the engine's next two
 // starts would, and writes the store after each and the prompt after the second.
 func runBootChild(t *testing.T, dir string) {
+	writeCrashJSON(t, filepath.Join(dir, crashKilled), dumpStore(t, filepath.Join(dir, crashStore)))
 	// Settled recovery entries are logged at debug.
 	t.Setenv("LYCAON_LOG_LEVEL", "debug")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
@@ -208,21 +210,26 @@ func readCrashJSON(t *testing.T, path string, value any) {
 	testutil.FailErr(t, "decode "+filepath.Base(path), json.Unmarshal(raw, value))
 }
 
-// startCrashChild runs this binary in mode on dir and returns its exit code and output.
-func startCrashChild(t *testing.T, mode, dir, killAt string) (int, string) {
-	t.Helper()
+// crashChild is one finished child process.
+type crashChild struct {
+	code   int
+	output string
+}
+
+// runCrashChild runs this binary in mode on dir; it is safe to call from any
+// goroutine.
+func runCrashChild(mode, dir, killAt string) (crashChild, error) {
 	child := exec.Command(os.Args[0], "-test.run=^TestTurnSurvivesKillAtEveryCommitPoint$", "-test.count=1", "-test.v")
 	child.Env = append(os.Environ(), crashModeEnv+"="+mode, crashDirEnv+"="+dir, crashAtEnv+"="+killAt)
 	output, err := child.CombinedOutput()
 	var exited *exec.ExitError
 	switch {
 	case err == nil:
-		return 0, string(output)
+		return crashChild{output: string(output)}, nil
 	case errors.As(err, &exited):
-		return exited.ExitCode(), string(output)
+		return crashChild{code: exited.ExitCode(), output: string(output)}, nil
 	}
-	t.Fatalf("%s child at %q: %v\n%s", mode, killAt, err, output)
-	return 0, ""
+	return crashChild{}, fmt.Errorf("%s child at %q: %w\n%s", mode, killAt, err, output)
 }
 
 func readCommitPoints(t *testing.T, dir string) []string {
