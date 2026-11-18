@@ -215,6 +215,15 @@ jobs:
           ./internal/workspace
           ./test/smoke
 
+      # Source-transport outages against the kernel's own NFS client, over a
+      # loopback volume the tests mount and cut themselves.
+      - name: Source transport outages
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        run: >
+          ./task test:digest -- ./internal/layeredfs/checkpoint ./internal/worker -tags=fieldfixture
+          -run '^(TestSourceTransportOutagePreservesCheckpointAndRetry|TestHardSourceTransportResumesWithoutLosingCheckpoint|TestMaterializedWorkerRetriesPromotionAfterSourceOutage|TestMountedWorkerRetriesPromotionAfterSourceOutage)$'
+
       - name: Git engine parity matrix
         if: ${{ !cancelled() }}
         timeout-minutes: 30
