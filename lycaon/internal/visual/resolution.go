@@ -18,11 +18,6 @@ const (
 	AbsenceDeleted AbsenceReason = "deleted"
 )
 
-// AbsenceReasons returns every reason.
-func AbsenceReasons() []AbsenceReason {
-	return []AbsenceReason{AbsenceUnknown, AbsenceForeign, AbsenceUnavailable, AbsenceDeleted}
-}
-
 // Note returns display copy.
 func (r AbsenceReason) Note() string {
 	switch r {

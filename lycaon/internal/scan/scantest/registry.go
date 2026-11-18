@@ -1,19 +1,21 @@
-package scan
+package scantest
 
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/scan"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// MockScanner is a configurable CodeScanner for tests.
+// MockScanner is a configurable scan.CodeScanner for tests.
 type MockScanner struct {
 	IDVal        string
 	CategoryList []api.ScanCategory
@@ -37,7 +39,7 @@ func (m *MockScanner) Categories() []api.ScanCategory {
 	return []api.ScanCategory{api.ScanCategorySecurity}
 }
 
-func (m *MockScanner) Run(ctx context.Context, req ScanRequest) (*scanoutput.Result, error) {
+func (m *MockScanner) Run(ctx context.Context, req scan.ScanRequest) (*scanoutput.Result, error) {
 	m.mu.Lock()
 	m.RunCalls++
 	m.mu.Unlock()
@@ -51,7 +53,7 @@ func (m *MockScanner) Run(ctx context.Context, req ScanRequest) (*scanoutput.Res
 		FindingsCount: 1,
 		Categories:    req.Categories,
 		Findings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("mock:test", api.FindingLevelHigh, "mock finding", "", 0),
+			findingstest.Finding("mock:test", api.FindingLevelHigh, "mock finding", "", 0),
 		},
 	}, nil
 }
@@ -75,7 +77,7 @@ func (m *SlowMockScanner) Categories() []api.ScanCategory {
 	return []api.ScanCategory{api.ScanCategorySecurity}
 }
 
-func (m *SlowMockScanner) Run(ctx context.Context, req ScanRequest) (*scanoutput.Result, error) {
+func (m *SlowMockScanner) Run(ctx context.Context, req scan.ScanRequest) (*scanoutput.Result, error) {
 	if m.Running != nil {
 		n := atomic.AddInt32(m.Running, 1)
 		defer atomic.AddInt32(m.Running, -1)
@@ -94,17 +96,17 @@ func (m *SlowMockScanner) Run(ctx context.Context, req ScanRequest) (*scanoutput
 
 // MockRegistry wraps a scanner for runner tests.
 type MockRegistry struct {
-	Scanner   CodeScanner
-	Scanners  []CodeScanner
+	Scanner   scan.CodeScanner
+	Scanners  []scan.CodeScanner
 	Runtime   scancatalog.RuntimePolicy
 	Driver    string
 	Command   []string
 	Contracts map[string]scancatalog.ScannerContract
 }
 
-func (r *MockRegistry) Register(_ CodeScanner) error { return nil }
+func (r *MockRegistry) Register(_ scan.CodeScanner) error { return nil }
 
-func (r *MockRegistry) Get(id string) (CodeScanner, error) {
+func (r *MockRegistry) Get(id string) (scan.CodeScanner, error) {
 	for _, scanner := range r.allScanners() {
 		if scanner.ID() == id {
 			return scanner, nil
@@ -113,8 +115,8 @@ func (r *MockRegistry) Get(id string) (CodeScanner, error) {
 	return nil, fmt.Errorf("scanner %q not found", id)
 }
 
-func (r *MockRegistry) List(categories ...api.ScanCategory) []ScannerMeta {
-	var out []ScannerMeta
+func (r *MockRegistry) List(categories ...api.ScanCategory) []scan.ScannerMeta {
+	var out []scan.ScannerMeta
 	for _, scanner := range r.allScanners() {
 		if len(categories) > 0 && !mockCategoryOverlap(scanner.Categories(), categories) {
 			continue
@@ -134,12 +136,12 @@ func (r *MockRegistry) List(categories ...api.ScanCategory) []ScannerMeta {
 				contract = override
 			}
 		}
-		out = append(out, ScannerMeta{ID: scanner.ID(), Categories: scanner.Categories(), Contract: contract})
+		out = append(out, scan.ScannerMeta{ID: scanner.ID(), Categories: scanner.Categories(), Contract: contract})
 	}
 	return out
 }
 
-func (r *MockRegistry) RunBest(ctx context.Context, categories []api.ScanCategory, req ScanRequest) (*scanoutput.Result, error) {
+func (r *MockRegistry) RunBest(ctx context.Context, categories []api.ScanCategory, req scan.ScanRequest) (*scanoutput.Result, error) {
 	scanners := r.allScanners()
 	if len(scanners) == 0 {
 		return &scanoutput.Result{}, nil
@@ -147,12 +149,12 @@ func (r *MockRegistry) RunBest(ctx context.Context, categories []api.ScanCategor
 	return scanners[0].Run(ctx, req)
 }
 
-func (r *MockRegistry) allScanners() []CodeScanner {
+func (r *MockRegistry) allScanners() []scan.CodeScanner {
 	if len(r.Scanners) > 0 {
 		return r.Scanners
 	}
 	if r.Scanner != nil {
-		return []CodeScanner{r.Scanner}
+		return []scan.CodeScanner{r.Scanner}
 	}
 	return nil
 }

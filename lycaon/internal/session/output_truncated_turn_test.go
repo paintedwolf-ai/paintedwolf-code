@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -65,7 +66,7 @@ func (f *outputTruncatedFixtureLLM) Stream(ctx context.Context, req modelcall.Co
 func newOutputTruncatedTestHost(t *testing.T, client modelcall.LLMClient) (*Host, *store.SQL) {
 	t.Helper()
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	_ = registry.Register("write", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return "written", nil
 	})

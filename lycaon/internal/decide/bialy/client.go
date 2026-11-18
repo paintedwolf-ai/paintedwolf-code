@@ -93,13 +93,6 @@ func (c *Client) clock() time.Time {
 	return time.Now()
 }
 
-// SetClockForTest replaces the clock the relaunch hold is measured on.
-func (c *Client) SetClockForTest(now func() time.Time) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.now = now
-}
-
 // Reason says why the engine cannot answer; empty when it can.
 type Reason string
 

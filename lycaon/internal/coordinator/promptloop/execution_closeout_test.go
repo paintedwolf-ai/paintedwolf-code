@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -38,7 +39,7 @@ func TestPromptLoopResponseAdmissionStopsBeforeAnotherRequest(t *testing.T) {
 	deps := StoreDeps(messages)
 	deps.Model.LLM = client
 	deps.Context.Policy = softStopToolPolicy{}
-	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Tools = toolstest.NewRegistry()
 	deps.Projection.AdmitModelResponse = messages.AdmitModelResponse
 	deps.Projection.SettleModelOutput = messages.SettleModelOutput
 	_, err = NewPromptLoopForTest(deps).Run(ctx, PromptRunInput{
@@ -64,7 +65,7 @@ func TestForcedCloseoutRepairPreservesPersistedIterationIdentity(t *testing.T) {
 	execution, err := messages.BeginTurn(ctx, store.TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
 	testutil.FailErr(t, "begin turn", err)
 	gateOpen := true
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command", registry.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		gateOpen = false
 		return "required evidence", nil
@@ -296,7 +297,7 @@ func newAttemptHarness(t *testing.T, workerChild bool, maxIter int, steps []scri
 	})
 	testutil.FailErr(t, "begin turn", err)
 
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command", registry.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "file contents", nil
 	}))

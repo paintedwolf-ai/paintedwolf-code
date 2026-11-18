@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 )
 
 // WireBlueprintDepsForTest links BlueprintCreate/BlueprintGet on a test RunManager.
@@ -9,7 +10,7 @@ func WireBlueprintDepsForTest(mgr *RunManager, projectDir string) *blueprint.Man
 	if mgr == nil {
 		return nil
 	}
-	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
+	blueprintStore := blueprinttest.NewFileStore(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	blueprintMgr.AfterRetarget = mgr.Blueprints.RebindBlueprintPath
 	mgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}

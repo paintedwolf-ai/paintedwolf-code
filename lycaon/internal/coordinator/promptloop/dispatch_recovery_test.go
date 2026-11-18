@@ -2,6 +2,7 @@ package promptloop_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -41,7 +42,7 @@ func workersLoaded(string) map[string]bool {
 // TestLoopSummarizeParallelCappedInOneTurn verifies bounded parallel execution.
 func TestLoopSummarizeParallelCappedInOneTurn(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		reg := tools.NewStubRegistry()
+		reg := toolstest.NewRegistry()
 		var concurrent int32
 		var peak int32
 		_ = reg.Register("summarize", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {

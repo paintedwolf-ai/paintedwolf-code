@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -33,7 +34,7 @@ func TestBatchRejectionsEscalateOnlyAcrossResponses(t *testing.T) {
 			testutil.FailErr(t, "create session", err)
 			client := &varyingArgsToolClient{batchSize: 5, stopAfter: 3}
 			deps := promptloop.StoreDeps(messages)
-			deps.Model.LLM, deps.Context.Tools, deps.Context.Policy, deps.Nudges.DoomLoop = client, tools.NewStubRegistry(), &recordingToolPolicy{}, guard
+			deps.Model.LLM, deps.Context.Tools, deps.Context.Policy, deps.Nudges.DoomLoop = client, toolstest.NewRegistry(), &recordingToolPolicy{}, guard
 			refusal := func() error {
 				return guidance.NewRefusal("TOOL_NOT_OFFERED", "schema not loaded").WithCause(&toolrejection.ToolReject{Code: "TOOL_NOT_OFFERED", FailureClass: api.FailureClassPolicyRejection})
 			}
@@ -78,7 +79,7 @@ func TestOfferedSchemaResolvesEarlierLoadingRejections(t *testing.T) {
 		testutil.FailErr(t, "seed missing schema", guard.RecordAttempt(ctx, sess.ID, fmt.Sprint(response), "edit", args, &api.InvocationFailure{Code: "TOOL_NOT_OFFERED"}, false))
 	}
 	deps := promptloop.StoreDeps(messages)
-	deps.Context.Tools, deps.Context.Policy, deps.Nudges.DoomLoop = tools.NewStubRegistry(), &recordingToolPolicy{}, guard
+	deps.Context.Tools, deps.Context.Policy, deps.Nudges.DoomLoop = toolstest.NewRegistry(), &recordingToolPolicy{}, guard
 	deps.Context.LoadedTools = workersLoaded
 	invoked := 0
 	testutil.FailErr(t, "register loaded tool", deps.Context.Tools.Register("edit", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
@@ -116,7 +117,7 @@ func TestToolPreflightResolvesOnlyItsFrozenReadPrerequisite(t *testing.T) {
 				testutil.FailErr(t, "record prerequisite", guard.RecordAttempt(ctx, sess.ID, fmt.Sprint(response), "edit", args, failure, false))
 			}
 			deps := promptloop.StoreDeps(messages)
-			deps.Context.Tools, deps.Context.Policy, deps.Nudges.DoomLoop = tools.NewStubRegistry(), &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "edit", ArgsSchema: map[string]any{"type": "object"}}}}, guard
+			deps.Context.Tools, deps.Context.Policy, deps.Nudges.DoomLoop = toolstest.NewRegistry(), &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "edit", ArgsSchema: map[string]any{"type": "object"}}}}, guard
 			deps.Context.LoadedTools = func(string) map[string]bool { return map[string]bool{"edit": true} }
 			invoked := 0
 			testutil.FailErr(t, "register edit", deps.Context.Tools.Register("edit", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {

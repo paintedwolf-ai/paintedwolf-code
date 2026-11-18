@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 )
 
 type directAuditFixture struct {
@@ -34,7 +35,7 @@ func (a *directAuditFixture) AppendDirectIPLifecycle(ctx context.Context, record
 }
 
 func TestExceptionalCapabilitiesReleasePermitsAtRunEndAndGrantsAtChatDisposal(t *testing.T) {
-	host := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	host := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	control := &toolexecution.Capabilities{}
 	var runtime Runtime
 	audit := &directAuditFixture{}

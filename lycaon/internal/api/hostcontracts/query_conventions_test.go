@@ -19,7 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/worker/workertest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -112,7 +112,7 @@ func TestCostSummaryRequiresSessionID(t *testing.T) {
 	store := sessionFixture
 	mock := llm.NewMockProvider(nil)
 	tracker := costtest.NewTracker(t, cost.NoopPricer{})
-	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, toolstest.NewRegistry())
 	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if err := tracker.RecordUsage(t.Context(), cost.UsageEvent{

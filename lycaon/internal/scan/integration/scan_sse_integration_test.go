@@ -5,11 +5,13 @@ package integration
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/scan"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/scan"
+
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
@@ -37,8 +39,8 @@ func TestScanSSEIntegrationPublishesTransitions(t *testing.T) {
 	store := scan.NewSQLStore(sqlDB)
 	store.SetEventOutbox(outbox)
 	coord := newTestCoordinator(t, store, nil)
-	mock := &scan.MockScanner{Result: &scanoutput.Result{FindingsCount: 1}}
-	reg := &scan.MockRegistry{Scanner: mock}
+	mock := &scantest.MockScanner{Result: &scanoutput.Result{FindingsCount: 1}}
+	reg := &scantest.MockRegistry{Scanner: mock}
 	cfg := scancfg.DefaultRunnerConfig()
 	runner := scanexecution.NewRunner(store, reg, scan.NoopIngester{}, cfg, pub)
 	runner.Snapshots = coord.SnapshotStore()

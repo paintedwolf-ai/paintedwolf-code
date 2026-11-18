@@ -22,7 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -234,7 +234,7 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 	sessionStore := sessionFixture
 	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create session", err)
-	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(registry)
 	ref := api.NavigationReference{ID: "ref-0", Syntax: "code", Mention: "same.go", ProjectID: p.ID, Path: "same.go", Status: api.NavigationAmbiguous, Line: 12, EndLine: 20,
 		Candidates: []api.NavigationTarget{
@@ -294,7 +294,7 @@ func TestAssistantCommitAndNotePersistNavigationReferences(t *testing.T) {
 	sessionStore := sessionFixture
 	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create session", err)
-	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(registry)
 
 	testutil.FailErr(t, "append agent note", mgr.Runner.Transcript.Append(ctx, sess.ID, api.Message{
@@ -331,7 +331,7 @@ func TestNavigationParsesWorktreeAbsolutePathsWithoutFilesystemValidation(t *tes
 	testutil.FailErr(t, "session", err)
 	branch := filepath.Join(t.TempDir(), "not-materialized")
 	testutil.FailErr(t, "worktree binding", sessionStore.PutWorktreeBinding(t.Context(), sessionstore.WorktreeBinding{SessionID: sess.ID, ProjectID: p.ID, Toplevel: p.Roots[0].Path, WorktreePath: branch, Branch: "work", BaseBranch: "main"}))
-	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(registry)
 	rows := []api.Message{{Role: api.MessageRoleAssistant, Content: "[file](" + filepath.ToSlash(filepath.Join(branch, "src/a.go")) + ")", Visibility: api.MessageVisibilityTranscript}}
 	mgr.Runner.Transcript.NavigationRefs(t.Context(), sess.ID, rows)

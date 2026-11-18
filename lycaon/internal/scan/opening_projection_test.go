@@ -2,11 +2,11 @@ package scan
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"strings"
 	"testing"
 	"time"
 
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -20,7 +20,7 @@ func TestBoardProjectionRetainsAuthorityBeyondFailedHistory(t *testing.T) {
 		s := authorityScan(fmt.Sprintf("complete-%d", i), fmt.Sprintf("assessment-%d", i), root,
 			fmt.Sprintf("snapshot-%d", i), "sast", api.ScanTargetFull, nil)
 		testutil.FailErr(t, "insert complete", store.Insert(t.Context(), s, nil, ""))
-		completeNextScan(t, store, scanfindings.FixtureFinding("rule", api.FindingLevelHigh, "stable", "src/main.go", 4))
+		completeNextScan(t, store, findingstest.Finding("rule", api.FindingLevelHigh, "stable", "src/main.go", 4))
 	}
 	for i := range 40 {
 		s := authorityScan(fmt.Sprintf("failed-%d", i), fmt.Sprintf("failed-assessment-%d", i), root,
@@ -52,10 +52,10 @@ func TestAssessmentHotspotsAggregateBeforeCapping(t *testing.T) {
 	for scanner := range 2 {
 		var findings []api.SecurityFinding
 		for i := range 6 {
-			findings = append(findings, scanfindings.FixtureFinding("rule", api.FindingLevelHigh,
+			findings = append(findings, findingstest.Finding("rule", api.FindingLevelHigh,
 				fmt.Sprintf("%d-%d", scanner, i), fmt.Sprintf("%d-%d.go", scanner, i), 1))
 		}
-		findings = append(findings, scanfindings.FixtureFinding("shared", api.FindingLevelHigh, "shared", "z-shared.go", 2))
+		findings = append(findings, findingstest.Finding("shared", api.FindingLevelHigh, "shared", "z-shared.go", 2))
 		parts = append(parts, rollupFindings(findings))
 	}
 	merged := mergeFindingRollups(parts)
@@ -77,7 +77,7 @@ func benchmarkAssessmentView(b *testing.B, history int) {
 	root := b.TempDir()
 	findings := make([]api.SecurityFinding, 20000)
 	for i := range findings {
-		findings[i] = scanfindings.FixtureFinding("rule", api.FindingLevelHigh, fmt.Sprintf("finding-%d", i), fmt.Sprintf("src/file-%d.go", i), 1)
+		findings[i] = findingstest.Finding("rule", api.FindingLevelHigh, fmt.Sprintf("finding-%d", i), fmt.Sprintf("src/file-%d.go", i), 1)
 	}
 	for i := range history {
 		s := authorityScan(fmt.Sprintf("scan-%d", i), fmt.Sprintf("assessment-%d", i), root,
@@ -124,7 +124,7 @@ func TestOpeningProjectionsKeepEvidenceAndWarningCounts(t *testing.T) {
 		testutil.FailErr(t, "insert scan", store.Insert(t.Context(), s, nil, ""))
 		claimed, err := store.ClaimNext(t.Context())
 		testutil.FailErr(t, "claim scan", err)
-		finding := scanfindings.FixtureFinding("rule", api.FindingLevelHigh, engine, "src/main.go", 4)
+		finding := findingstest.Finding("rule", api.FindingLevelHigh, engine, "src/main.go", 4)
 		_, err = store.MarkComplete(t.Context(), claimed, &scanoutput.Result{FindingsCount: 1,
 			Findings: []api.SecurityFinding{finding}, Warnings: []api.ScanWarning{warning}})
 		testutil.FailErr(t, "complete scan", err)

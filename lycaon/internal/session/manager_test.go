@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 
@@ -35,9 +36,9 @@ func testMockConfig(t *testing.T) *llm.MockConfig {
 }
 
 // newStubCommandRegistry adds a command stub to the read and write stubs.
-func newStubCommandRegistry(t *testing.T) *tools.StubRegistry {
+func newStubCommandRegistry(t *testing.T) *toolstest.Registry {
 	t.Helper()
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command stub", registry.Register("command", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 		program, _ := args["command"].(string)
 		return "ran " + program, nil

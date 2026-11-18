@@ -628,7 +628,7 @@ func TestSessionArtifactAbsenceCodes(t *testing.T) {
 	}, projectID)
 	testutil.FailErr(t, "create session", err)
 
-	for _, reason := range visual.AbsenceReasons() {
+	for _, reason := range []visual.AbsenceReason{visual.AbsenceUnknown, visual.AbsenceForeign, visual.AbsenceUnavailable, visual.AbsenceDeleted} {
 		t.Run(string(reason), func(t *testing.T) {
 			srv := hostapi.NewServer(apitest.Dependencies(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Projects: projects, Store: sessStore}, Source: hostapi.SourceDependencies{VisualStore: contractfixture.ResolutionStore{Res: visual.Absent(reason)}}}), nil, hostapi.TestAPIToken)
 			r := chi.NewRouter()

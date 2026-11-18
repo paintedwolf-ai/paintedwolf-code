@@ -24,7 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -86,7 +86,7 @@ func TestProviderPromptAgainstStubBackend(t *testing.T) {
 	tracker := costtest.NewTracker(t, cost.NoopPricer{})
 	store := sessionFixture
 	mock := llm.NewMockProvider(contractfixture.TestMockConfig(t))
-	mgr := session.NewHost(store, session.Models{Client: mock, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: tracker}, toolstest.NewRegistry())
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: mgr}, Providers: hostapi.ProvidersDependencies{LLM: svc}}), nil, hostapi.TestAPIToken)
 	baseURL := contractfixture.StartTestHTTPServer(t, srv)
 
@@ -162,7 +162,7 @@ agent_pool:
 	}
 
 	store := sessionFixture
-	mgr := session.NewHost(store, session.Models{Client: nil, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: mgr}, Providers: hostapi.ProvidersDependencies{LLM: svc}}), nil, hostapi.TestAPIToken)
 	baseURL := contractfixture.StartTestHTTPServer(t, srv)
 

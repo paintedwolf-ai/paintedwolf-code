@@ -1,6 +1,7 @@
 package hostcontracts
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -8,7 +9,7 @@ import (
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	"github.com/lycaon/lycaon/internal/scan"
+
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -29,7 +30,7 @@ func TestExportCodeScanSARIFRejectsEveryNonCompleteStatus(t *testing.T) {
 			}}
 			srv := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) {
 				d.Scans.ScanCoordinator = coordinator
-				d.Scans.ScannerRegistry = &scan.MockRegistry{Scanner: &scan.MockScanner{}}
+				d.Scans.ScannerRegistry = &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}
 			})
 			p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
 			coordinator.Scan.CanonicalPath = p.Roots[0].Path

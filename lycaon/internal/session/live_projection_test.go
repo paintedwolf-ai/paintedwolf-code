@@ -26,6 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -41,7 +42,7 @@ func TestLiveProjectionCoalescesAndSkipsOutbox(t *testing.T) {
 	st := store.NewSQL(sqlDB)
 	st.SetEventOutbox(outbox)
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()
@@ -121,7 +122,7 @@ func TestLiveProjectionPersistsLongRunningToolCallsWithoutWiping(t *testing.T) {
 	st := store.NewSQL(sqlDB)
 	st.SetEventOutbox(outbox)
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()
@@ -290,7 +291,7 @@ const messageStorageSecret = "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
 func TestUpdateMessageReappliesStorageRedaction(t *testing.T) {
 	ctx := context.Background()
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.Runner.Transcript.SetRedactor(redactMessageStorageFixture)
 	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -345,7 +346,7 @@ func redactMessageStorageFixture(_ context.Context, msg api.Message) (api.Messag
 // model call, even while another kick waits for the next turn start.
 func TestPhaseGuidanceIsDeliveredOnTheNextModelCall(t *testing.T) {
 	st := storetest.New(t, "project-1")
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	const phaseGuidance = "claims phase fixture"
 	testutil.FailErr(t, "register phase fixture", engine.Register("kicks/coordinator-security-claims.md", phaseGuidance))

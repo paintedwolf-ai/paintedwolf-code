@@ -2,6 +2,7 @@ package promptloop_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -78,7 +79,7 @@ func runTaskArgumentCall(t *testing.T, call api.ToolCall) (invocation.Settlement
 	if !ok {
 		t.Fatal("task schema missing")
 	}
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register task", reg.Register("task", func(_ context.Context, _ map[string]any, tc tools.ToolContext) (string, error) {
 		ran = true
 		tc.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: "engine"}

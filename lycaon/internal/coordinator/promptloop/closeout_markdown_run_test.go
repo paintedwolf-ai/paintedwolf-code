@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 	"time"
@@ -63,7 +64,7 @@ func newMarkdownRun(t *testing.T, completions ...*modelcall.Completion) *markdow
 		return r.store.AppendMessages(ctx, sessionID, messages...)
 	}
 	deps.Model.LLM = &sequentialLLMClient{completions: completions}
-	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Tools = toolstest.NewRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Context.PromptTurnSurface = func(string) string { return "implement_synthesis" }
 	deps.Context.CoordinatorFrame = staticCoordinatorContext{run: api.CoordinatorRunContext{RunID: "run-1", WorkflowID: "reporttest", CurrentPhase: "report"}}

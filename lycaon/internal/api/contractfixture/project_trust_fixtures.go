@@ -1,6 +1,7 @@
 package contractfixture
 
 import (
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func NewProjectOverlayTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, *project.SQLRegistry) {
@@ -40,7 +40,7 @@ func NewProjectOverlayTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Serve
 			FollowUpText: "written",
 		}},
 	})
-	toolRegistry := tools.NewStubRegistry()
+	toolRegistry := toolstest.NewRegistry()
 	mgr := session.NewHost(sessionStore, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolRegistry)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: toolRegistry})
 

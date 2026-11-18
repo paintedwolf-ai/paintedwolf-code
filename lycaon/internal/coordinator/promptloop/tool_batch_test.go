@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -53,7 +54,7 @@ func TestLoopRunsConcurrentTools(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var concurrent int32
 		var peak int32
-		reg := tools.NewStubRegistry()
+		reg := toolstest.NewRegistry()
 		_ = reg.Register("read", func(ctx context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 			cur := atomic.AddInt32(&concurrent, 1)
 			for {
@@ -104,7 +105,7 @@ func TestLoopRunsConcurrentTools(t *testing.T) {
 func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
 	for _, surface := range []string{toolcontract.SurfaceImplementInvestigate, "orchestrate_plan", "implement_overlay_promote"} {
 		t.Run(surface, func(t *testing.T) {
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			_ = reg.Register("command", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 				path, _ := args["path"].(string)
 				return "contents of " + path, nil
@@ -163,7 +164,7 @@ func TestLoopParallelWorkerReadsCommitInCallOrder(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		// Reverse completion order exercises timestamp and handle ordering.
 		sleeps := map[string]time.Duration{"a.go": 30 * time.Millisecond, "b.go": 15 * time.Millisecond, "c.go": 0}
-		reg := tools.NewStubRegistry()
+		reg := toolstest.NewRegistry()
 		_ = reg.Register("read", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 			path, _ := args["path"].(string)
 			time.Sleep(sleeps[path])
@@ -236,7 +237,7 @@ func TestLoopMixedBatchSerializesWriteAfterParallelReads(t *testing.T) {
 		var peak int32
 		var order []string
 		var orderMu sync.Mutex
-		reg := tools.NewStubRegistry()
+		reg := toolstest.NewRegistry()
 		_ = reg.Register("read", func(ctx context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 			cur := atomic.AddInt32(&concurrent, 1)
 			for {
@@ -302,7 +303,7 @@ func TestLoopMixedBatchSerializesWriteAfterParallelReads(t *testing.T) {
 
 func TestLoopDropsEmptyArgPhantomTaskBeforeExecution(t *testing.T) {
 	var taskInvocations int32
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("task", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 		atomic.AddInt32(&taskInvocations, 1)
 		if args["agent_type"] != "implementer" {
@@ -363,7 +364,7 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 		order = append(order, step)
 		orderMu.Unlock()
 	}
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("command", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 		path, _ := args["path"].(string)
 		return "contents of " + path, nil
@@ -416,7 +417,7 @@ func TestLoopPublishesParallelResultAsEachFinishes(t *testing.T) {
 	var once sync.Once
 	slowStarted := make(chan struct{})
 	releaseSlow := make(chan struct{})
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("read", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 		path, _ := args["path"].(string)
 		if path == "slow.go" {

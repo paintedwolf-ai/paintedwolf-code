@@ -1,10 +1,11 @@
 package execution
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 
 	scanbase "github.com/lycaon/lycaon/internal/scan"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -12,12 +13,12 @@ import (
 )
 
 func TestDiffFindingsMatchesByIdentityThenByShape(t *testing.T) {
-	keep := scanfindings.FixtureFinding("rule-keep", api.FindingLevelHigh, "keep", "a.go", 3)
-	movedBefore := scanfindings.FixtureFinding("rule-moved", api.FindingLevelHigh, "moved", "a.go", 10)
-	movedAfter := scanfindings.FixtureFinding("rule-moved", api.FindingLevelHigh, "moved", "a.go", 14)
+	keep := findingstest.Finding("rule-keep", api.FindingLevelHigh, "keep", "a.go", 3)
+	movedBefore := findingstest.Finding("rule-moved", api.FindingLevelHigh, "moved", "a.go", 10)
+	movedAfter := findingstest.Finding("rule-moved", api.FindingLevelHigh, "moved", "a.go", 14)
 	movedAfter.Message = movedBefore.Message
-	gone := scanfindings.FixtureFinding("rule-gone", api.FindingLevelMedium, "gone", "a.go", 20)
-	fresh := scanfindings.FixtureFinding("rule-fresh", api.FindingLevelCritical, "fresh", "a.go", 30)
+	gone := findingstest.Finding("rule-gone", api.FindingLevelMedium, "gone", "a.go", 20)
+	fresh := findingstest.Finding("rule-fresh", api.FindingLevelCritical, "fresh", "a.go", 30)
 
 	delta := diffFindings(
 		[]api.SecurityFinding{keep, movedBefore, gone},
@@ -35,7 +36,7 @@ func TestDiffFindingsMatchesByIdentityThenByShape(t *testing.T) {
 }
 
 func TestDiffFindingsTreatsAnAbsentBaseAsAllIntroduced(t *testing.T) {
-	fresh := scanfindings.FixtureFinding("rule-fresh", api.FindingLevelCritical, "fresh", "a.go", 1)
+	fresh := findingstest.Finding("rule-fresh", api.FindingLevelCritical, "fresh", "a.go", 1)
 	delta := diffFindings(nil, []api.SecurityFinding{fresh})
 	if len(delta.Introduced) != 1 || len(delta.Fixed) != 0 || delta.Persisted != 0 {
 		t.Fatalf("delta = %+v", delta)
@@ -68,7 +69,7 @@ func TestBaseTargetsNamesChangedAndDeletedFilesOnly(t *testing.T) {
 }
 
 func TestSingleFileRejectsSpanningFindings(t *testing.T) {
-	finding := scanfindings.FixtureFinding("rule", api.FindingLevelHigh, "x", "pkg/deep/file.go", 7)
+	finding := findingstest.Finding("rule", api.FindingLevelHigh, "x", "pkg/deep/file.go", 7)
 	file, single := singleFile(finding)
 	if !single || file != "pkg/deep/file.go" {
 		t.Fatalf("singleFile = %q %v", file, single)

@@ -2,6 +2,7 @@ package scan
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -60,13 +61,13 @@ func TestIncrementalFindingSetCarriesUntouchedAndAppliesDeletion(t *testing.T) {
 	root := t.TempDir()
 	baseline := authorityScan("scan-base", "assessment-base", root, "snapshot-1", "sast", api.ScanTargetFull, nil)
 	testutil.FailErr(t, "insert baseline", store.Insert(t.Context(), baseline, nil, ""))
-	a1 := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
-	b1 := scanfindings.FixtureFinding("rule-b", api.FindingLevelMedium, "b", "b.go", 1)
+	a1 := findingstest.Finding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
+	b1 := findingstest.Finding("rule-b", api.FindingLevelMedium, "b", "b.go", 1)
 	completeNextScan(t, store, a1, b1)
 
 	changed := authorityScan("scan-change", "assessment-change", root, "snapshot-2", "sast", api.ScanTargetPaths, nil)
 	testutil.FailErr(t, "insert incremental", store.Insert(t.Context(), changed, []string{"a.go"}, "snapshot-1"))
-	a2 := scanfindings.FixtureFinding("rule-a-new", api.FindingLevelCritical, "a2", "a.go", 2)
+	a2 := findingstest.Finding("rule-a-new", api.FindingLevelCritical, "a2", "a.go", 2)
 	afterChange := completeNextScan(t, store, a2)
 	if afterChange.CoverageStatus != api.ScanCoverageComplete || len(afterChange.Findings) != 2 {
 		t.Fatalf("incremental finding set = coverage %q findings %#v", afterChange.CoverageStatus, afterChange.Findings)
@@ -99,8 +100,8 @@ func TestBoundedAdmissionReportsBoundedCoverageAndStillBasesIncrements(t *testin
 	scan := authorityScan("scan-bounded", "assessment-bounded", root, "snapshot-1", "sast", api.ScanTargetFull, nil)
 	scan.SourceAdmissionMode = string(sourcesnapshot.AdmissionScopeBounded)
 	testutil.FailErr(t, "insert bounded scan", store.Insert(t.Context(), scan, nil, ""))
-	a1 := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a1", "a.go", 1)
-	b1 := scanfindings.FixtureFinding("rule-b", api.FindingLevelHigh, "b1", "b.go", 1)
+	a1 := findingstest.Finding("rule-a", api.FindingLevelHigh, "a1", "a.go", 1)
+	b1 := findingstest.Finding("rule-b", api.FindingLevelHigh, "b1", "b.go", 1)
 	completed := completeNextScan(t, store, a1, b1)
 	if completed.CoverageStatus != api.ScanCoverageBounded {
 		t.Fatalf("bounded admission coverage = %q, want bounded: the engine read every admitted file", completed.CoverageStatus)
@@ -109,7 +110,7 @@ func TestBoundedAdmissionReportsBoundedCoverageAndStillBasesIncrements(t *testin
 	changed := authorityScan("scan-bounded-delta", "assessment-bounded-delta", root, "snapshot-2", "sast", api.ScanTargetPaths, nil)
 	changed.SourceAdmissionMode = string(sourcesnapshot.AdmissionScopeBounded)
 	testutil.FailErr(t, "insert bounded delta", store.Insert(t.Context(), changed, []string{"a.go"}, "snapshot-1"))
-	a2 := scanfindings.FixtureFinding("rule-a-new", api.FindingLevelCritical, "a2", "a.go", 2)
+	a2 := findingstest.Finding("rule-a-new", api.FindingLevelCritical, "a2", "a.go", 2)
 	afterChange := completeNextScan(t, store, a2)
 	if afterChange.CoverageStatus != api.ScanCoverageBounded || len(afterChange.Findings) != 2 {
 		t.Fatalf("bounded delta = coverage %q findings %#v; the bounded run must serve as its base", afterChange.CoverageStatus, afterChange.Findings)

@@ -17,14 +17,15 @@ import (
 	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -35,7 +36,7 @@ func TestScanSummaryHTTPIntegration(t *testing.T) {
 
 	findings := make([]wire.SecurityFinding, 0, 12)
 	for i := 0; i < 8; i++ {
-		findings = append(findings, scanfindings.FixtureFinding(
+		findings = append(findings, findingstest.Finding(
 			"vendor.noise.rule",
 			wire.FindingLevelInfo,
 			"noise",
@@ -44,7 +45,7 @@ func TestScanSummaryHTTPIntegration(t *testing.T) {
 		))
 	}
 	for i := 0; i < 4; i++ {
-		findings = append(findings, scanfindings.FixtureFinding(
+		findings = append(findings, findingstest.Finding(
 			"lycaon.ruby.sql-string-concat",
 			wire.FindingLevelHigh,
 			"sql",
@@ -55,11 +56,11 @@ func TestScanSummaryHTTPIntegration(t *testing.T) {
 
 	scanStore := scan.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, scanStore, nil)
-	mock := &scan.MockScanner{Result: &scanoutput.Result{
+	mock := &scantest.MockScanner{Result: &scanoutput.Result{
 		FindingsCount: len(findings),
 		Findings:      findings,
 	}}
-	reg := &scan.MockRegistry{Scanner: mock}
+	reg := &scantest.MockRegistry{Scanner: mock}
 	ing := &scan.IngesterImpl{
 		Module: scancfg.DefaultModuleConfig(),
 		Budget: scancfg.NewFindingBudget(scancfg.AgentBudgetConfig{
@@ -80,7 +81,7 @@ func TestScanSummaryHTTPIntegration(t *testing.T) {
 	go func() { _ = runner.Run(ctx) }()
 
 	sessStore := sessionFixture
-	mgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	projects := project.NewSQLRegistry(sessionFixture.DB())
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
 		Store: sessStore, Projects: projects, Sessions: mgr}, Scans: api.ScansDependencies{

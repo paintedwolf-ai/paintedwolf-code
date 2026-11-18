@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -59,7 +60,7 @@ func TestLoopRefusesOllamaUnofferedToolRejection(t *testing.T) {
 			defer srv.Close()
 
 			editCalls := 0
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			_ = reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "ok", nil })
 			_ = reg.Register("edit", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				editCalls++

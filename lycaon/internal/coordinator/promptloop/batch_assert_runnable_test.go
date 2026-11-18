@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -15,7 +16,7 @@ import (
 func TestExecuteToolCallsInTurnRunsFullSerialTaskBatch(t *testing.T) {
 	var assertCalls int32
 	var taskCalls int32
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("task", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 		atomic.AddInt32(&taskCalls, 1)
 		n := atomic.LoadInt32(&taskCalls)
