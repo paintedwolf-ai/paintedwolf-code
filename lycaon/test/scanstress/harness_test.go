@@ -5,7 +5,9 @@ package scanstress
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -278,15 +280,21 @@ func loadAverage(t *testing.T) float64 {
 func dirBytes(t *testing.T, root string) int64 {
 	t.Helper()
 	var total int64
-	_ = filepath.Walk(root, func(_ string, info os.FileInfo, err error) error {
-		if err != nil || info == nil {
-			return nil //nolint:nilerr // a vanishing temp tree is the measured condition
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		// A scanner may remove its own temporary files while the tree is
+		// measured; anything else is a measurement that cannot be trusted.
+		if path != root && errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
 		}
 		if info.Mode().IsRegular() {
 			total += info.Size()
 		}
 		return nil
 	})
+	testutil.FailErr(t, "measure "+root, err)
 	return total
 }
 
