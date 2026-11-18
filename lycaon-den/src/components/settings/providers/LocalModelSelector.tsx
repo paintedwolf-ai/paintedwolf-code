@@ -20,7 +20,7 @@ export function LocalModelSelector(props: Props) {
   const [choice, setChoice] = createSignal<string>();
   const [working, setWorking] = createSignal(false);
   const [error, setError] = createSignal("");
-  const [continueAfter, setContinueAfter] = createSignal<string>();
+  const [pendingModel, setPendingModel] = createSignal<string>();
   const status = () => snapshot() ?? props.provider.local_runtime;
   const tiers = () => status()?.available_models ?? [];
   const selected = () => choice() ?? status()?.selected_model
@@ -28,6 +28,17 @@ export function LocalModelSelector(props: Props) {
   const tier = () => tiers().find(t => t.id === selected());
   const downloading = () => status()?.state === "downloading";
   const current = () => !!selected() && selected() === status()?.selected_model;
+  const canApply = () => {
+    if (working()) return false;
+    if (current() || (!selected() && status()?.state === "opted_out")) return !!props.onContinue;
+    return !selected() || (tier()?.eligible && tier()?.download_available);
+  };
+  const applyLabel = () => {
+    if (current()) return props.onContinue ? "Continue with installed model" : "Installed";
+    if (selected()) return props.onContinue ? "Download and continue" : "Download model";
+    if (status()?.selected_model) return "Remove local model";
+    return props.onContinue ? "Continue without a local model" : "Use no local model";
+  };
   let alive = true;
   let version = 0;
   onCleanup(() => { alive = false; version++; });
@@ -36,8 +47,8 @@ export function LocalModelSelector(props: Props) {
     if (!alive) return;
     setSnapshot(next);
     if (next.state === "downloading") return;
-    const target = continueAfter();
-    setContinueAfter(undefined);
+    const target = pendingModel();
+    setPendingModel(undefined);
     await props.onRefresh();
     if (!alive) return;
     setSnapshot(undefined);
@@ -56,7 +67,7 @@ export function LocalModelSelector(props: Props) {
       const ticket = version;
       try {
         const next = await props.client.getLocalModelStatus(props.provider.id);
-        if (!stopped && ticket === version) {
+        if (!stopped && ticket === version && !working()) {
           setError("");
           await accept(next);
         }
@@ -77,12 +88,11 @@ export function LocalModelSelector(props: Props) {
     setError("");
     try {
       if (action === "cancel") {
-        setContinueAfter(undefined);
+        setPendingModel(undefined);
         await accept(await props.client.cancelLocalModelTransfer(props.provider.id));
         return;
       }
-      if (action === "apply" && current()) { props.onContinue?.(); return; }
-      if (action === "apply" && !model && !status()?.selected_model && status()?.state === "opted_out") {
+      if (action === "apply" && (current() || (!model && status()?.state === "opted_out"))) {
         props.onContinue?.();
         return;
       }
@@ -95,13 +105,13 @@ export function LocalModelSelector(props: Props) {
         path = picked.path;
       }
       if (action === "seed") path = ":seed:";
-      setContinueAfter(model);
+      setPendingModel(model);
       const next = model
         ? await props.client.selectLocalModel(props.provider.id, { model, bundle_path: path })
         : await props.client.removeLocalModel(props.provider.id);
       await accept(next);
     } catch (err) {
-      if (alive) { setContinueAfter(undefined); setError(err instanceof Error ? err.message : String(err)); }
+      if (alive) { setPendingModel(undefined); setError(err instanceof Error ? err.message : String(err)); }
     } finally {
       if (alive) setWorking(false);
     }
@@ -144,11 +154,8 @@ export function LocalModelSelector(props: Props) {
                 <DenButton variant="secondary" disabled={working()} onClick={() => void run("seed")}>Use packaged bundle</DenButton>
               </Show>
             </Show>
-            <DenButton variant="primary" disabled={working() || (selected() ? !current() && !(tier()?.eligible && tier()?.download_available) : !props.onContinue && status()?.state === "opted_out") || (current() && !props.onContinue)}
-              onClick={() => void run("apply")}>
-              {current() ? (props.onContinue ? "Continue with installed model" : "Installed") : !selected()
-                ? (status()?.selected_model ? "Remove local model" : "Continue without a local model")
-                : (props.onContinue ? "Download and continue" : "Download model")}
+            <DenButton variant="primary" disabled={!canApply()} onClick={() => void run("apply")}>
+              {applyLabel()}
             </DenButton>
           </div>
         </>

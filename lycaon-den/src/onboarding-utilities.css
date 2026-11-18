@@ -31,13 +31,6 @@
   padding: 22px 24px;
   box-shadow: var(--den-shadow-sm);
 
-  & .den-settings-editor {
-    gap: 16px;
-  }
-  /* The card supplies bottom padding. */
-  & .den-settings-providers {
-    margin: 0;
-  }
   & .den-settings-default-model {
     padding-bottom: 4px;
     border-bottom: none;
@@ -52,32 +45,6 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-@utility onboarding-gate__add-provider {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding-bottom: 4px;
-  text-align: center;
-
-  /* Outranks the button recipe's box rather than racing it for order. */
-  & .onboarding-gate__add-provider-btn {
-    min-width: 220px;
-    justify-content: center;
-  }
-}
-
-@utility onboarding-gate__add-provider-hint {
-  margin: 8px 0 0;
-  max-width: 28rem;
-}
-
-@utility onboarding-gate__action-error {
-  flex: 1 1 100%;
-  margin: 0;
-  order: -1;
 }
 
 @utility onboarding-gate__actions--split {

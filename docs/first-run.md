@@ -2,7 +2,7 @@
 
 The hard gate a new install shows before the home stage, and how a missing provider is reported once that gate is done.
 
-**Implementation:** [`components/onboarding/`](../lycaon-den/src/components/onboarding) — `OnboardingGate.tsx`, `onboarding-gate-model.ts` (page order and the show / page / continue / layout predicates), `OnboardingStepPage.tsx`, `OnboardingLayoutChoices.tsx` and `OnboardingLayoutPreview.tsx` (the starting layout page). Styles: [`onboarding-domain.css`](../lycaon-den/src/onboarding-domain.css). Post-latch recovery: [`notices/no-provider-card.ts`](../lycaon-den/src/notices/no-provider-card.ts). Latch: Den `AppState.onboarding.firstRunSetupCompleted`.
+**Implementation:** [`components/onboarding/`](../lycaon-den/src/components/onboarding) — `OnboardingGate.tsx`, `onboarding-gate-model.ts` (page order and the show / page / continue / layout predicates), `OnboardingStepPage.tsx`, `OnboardingLayoutChoices.tsx` and `OnboardingLayoutPreview.tsx` (the starting layout page). Styles: [`onboarding-domain.css`](../lycaon-den/src/onboarding-domain.css). Post-latch recovery: [`notices/no-provider-card.ts`](../lycaon-den/src/notices/no-provider-card.ts). Den persists `firstRunSetupCompleted` and `localModelOnboardingCompleted` in `AppState.onboarding`.
 
 **See also:** [Providers](providers.md) · [Den](den.md#notifications) · [Naming](naming.md)
 

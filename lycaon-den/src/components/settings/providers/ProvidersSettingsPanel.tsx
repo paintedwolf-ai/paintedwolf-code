@@ -32,7 +32,7 @@ type Props = {
 export function ProvidersSettingsPanel(props: Props) {
   const providers = () => props.settingsStore.state.providers;
   const [addOpen, setAddOpen] = createSignal(false);
- const [savingPolicy, setSavingPolicy] = createSignal(false);
+  const [savingPolicy, setSavingPolicy] = createSignal(false);
 
   const removeProvider = async (id: string) => {
     const current = policy();
@@ -58,7 +58,7 @@ export function ProvidersSettingsPanel(props: Props) {
   };
 
   const applyModelPolicy = async (next: ModelPolicyPatch, propagateError = false) => {
- setSavingPolicy(true);
+    setSavingPolicy(true);
     props.settingsStore.actions.setError(undefined);
     try {
       const updated = await props.client.updateModelPolicySettings(next);
@@ -102,7 +102,7 @@ export function ProvidersSettingsPanel(props: Props) {
               {settingLabel("default-model")}
             </label>
             <ModelSlotPicker
- disabled={savingPolicy()}
+              disabled={savingPolicy()}
               compact
               id="default-model-select"
               label={settingLabel("default-model")}
@@ -122,7 +122,7 @@ export function ProvidersSettingsPanel(props: Props) {
               {settingLabel("summarizer-model")}
             </label>
             <ModelSlotPicker
- disabled={savingPolicy()}
+              disabled={savingPolicy()}
               compact
               id="default-summarizer-model-select"
               label={settingLabel("summarizer-model")}
@@ -145,27 +145,27 @@ export function ProvidersSettingsPanel(props: Props) {
       data-testid="providers-settings"
     >
       <SettingsEditorTitle icon={<ProvidersIcon />}>
-          {AI_PROVIDERS_SECTION_LABEL}
+        {AI_PROVIDERS_SECTION_LABEL}
       </SettingsEditorTitle>
 
-        <SettingsScopeLede
-          scope="device"
-          counterpartLabel={props.counterpartLabel}
-          onOpenCounterpart={props.onOpenCounterpart}
-        >
-          <p class="den-settings-hint">{MODELS_SETTINGS_COPY.providersIntro}</p>
-        </SettingsScopeLede>
+      <SettingsScopeLede
+        scope="device"
+        counterpartLabel={props.counterpartLabel}
+        onOpenCounterpart={props.onOpenCounterpart}
+      >
+        <p class="den-settings-hint">{MODELS_SETTINGS_COPY.providersIntro}</p>
+      </SettingsScopeLede>
 
-        {settingsPrefsBand()}
-        <ShowLatest when={policy()}>{(current) => <ThinkingOverridesPanel
-          policy={current()}
-          saving={savingPolicy()}
-          providers={providers()}
-          onChange={(thinking_overrides) => applyModelPolicy({ thinking_overrides }, true)}
-        />}</ShowLatest>
-        <Show when={providers().length === 0}>
-          <p class="den-settings-hint">{MODELS_SETTINGS_COPY.noProvidersLoaded}</p>
-        </Show>
+      {settingsPrefsBand()}
+      <ShowLatest when={policy()}>{(current) => <ThinkingOverridesPanel
+        policy={current()}
+        saving={savingPolicy()}
+        providers={providers()}
+        onChange={(thinking_overrides) => applyModelPolicy({ thinking_overrides }, true)}
+      />}</ShowLatest>
+      <Show when={providers().length === 0}>
+        <p class="den-settings-hint">{MODELS_SETTINGS_COPY.noProvidersLoaded}</p>
+      </Show>
 
       <ProvidersPanel
         client={props.client}
