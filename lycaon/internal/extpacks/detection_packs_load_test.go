@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/detectionpack"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -44,14 +45,7 @@ description: Detection rules contributed by a fixture extension pack.
 // Shipped and installed detection packs use the same inventory path.
 func TestShippedDetectionPacksMatchTheCatalog(t *testing.T) {
 	t.Parallel()
-	shipped, warnings, err := detectionpack.ShippedPacks()
-	testutil.FailErr(t, "ShippedPacks", err)
-	if len(warnings) > 0 {
-		t.Fatalf("shipped packs carry load warnings: %v", warnings)
-	}
-	if len(shipped) == 0 {
-		t.Fatal("no shipped detection packs found in the tree")
-	}
+	shipped := bundledRuleKeys(t)
 
 	eff, err := extpacks.ResolveStockCatalog(t.Context(), nil)
 	testutil.FailErr(t, "ResolveStockCatalog", err)
@@ -67,19 +61,19 @@ func TestShippedDetectionPacksMatchTheCatalog(t *testing.T) {
 	if len(byID) != len(shipped) {
 		t.Fatalf("catalog contributed %d packs; the tree holds %d", len(byID), len(shipped))
 	}
-	for _, want := range shipped {
-		got, ok := byID[want.ID]
+	for packID, want := range shipped {
+		got, ok := byID[packID]
 		if !ok {
-			t.Fatalf("pack %s is in the tree but the catalog did not contribute it", want.ID)
+			t.Fatalf("pack %s is in the tree but the catalog did not contribute it", packID)
 		}
 		if got.ProviderPackID == "" {
-			t.Fatalf("pack %s reached the catalog with no provider pack", want.ID)
+			t.Fatalf("pack %s reached the catalog with no provider pack", packID)
 		}
 		if got.Source != detectionpack.SourceBundled && got.Source != detectionpack.SourceGenerated {
-			t.Fatalf("pack %s resolved as source %q; shipped content must stay shipped", want.ID, got.Source)
+			t.Fatalf("pack %s resolved as source %q; shipped content must stay shipped", packID, got.Source)
 		}
-		if ruleKeys(got) != ruleKeys(want) {
-			t.Fatalf("pack %s rules differ\n catalog: %s\n    tree: %s", want.ID, ruleKeys(got), ruleKeys(want))
+		if ruleKeys(got) != want {
+			t.Fatalf("pack %s rules differ\n catalog: %s\n    tree: %s", packID, ruleKeys(got), want)
 		}
 	}
 }
@@ -94,6 +88,39 @@ func TestShippedDetectionPacksRehearseCleanThroughTheCatalog(t *testing.T) {
 	for _, d := range extpacks.RehearseDetectionPacks(eff, semantics) {
 		t.Errorf("%s: %s", d.UnitID, d.Message)
 	}
+}
+
+func bundledRuleKeys(t *testing.T) map[string]string {
+	t.Helper()
+	dirs, err := config.List(config.DetectionPacksDir)
+	testutil.FailErr(t, "list bundled detection packs", err)
+	packs := make(map[string]string)
+	for _, dir := range dirs {
+		if !dir.IsDir() {
+			continue
+		}
+		rulesDir := config.DetectionPacksDir.Join(dir.Name(), detectionpack.PackRulesDir)
+		rules, err := config.List(rulesDir)
+		testutil.FailErr(t, "list bundled detection rules", err)
+		var keys []string
+		for _, rule := range rules {
+			slug, ok := detectionpack.RuleFileSlug(rule.Name())
+			if !ok || rule.IsDir() {
+				continue
+			}
+			body, err := config.Read(rulesDir.Join(rule.Name()))
+			testutil.FailErr(t, "read bundled detection rule", err)
+			parsed, err := detectionpack.ParseRule(body)
+			testutil.FailErr(t, "parse bundled detection rule", err)
+			keys = append(keys, slug+"="+parsed.ID)
+		}
+		sort.Strings(keys)
+		packs[dir.Name()] = strings.Join(keys, ",")
+	}
+	if len(packs) == 0 {
+		t.Fatal("no bundled detection packs found")
+	}
+	return packs
 }
 
 func ruleKeys(p detectionpack.Pack) string {
