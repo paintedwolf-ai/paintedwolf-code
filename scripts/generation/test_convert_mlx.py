@@ -16,11 +16,8 @@ from safetensors.numpy import save_file
 
 from convert_mlx import convert, source_identity
 
-try:
-    from mlx.utils import tree_flatten
-    from mlx_lm.utils import _get_classes, load_model
-except ImportError:
-    load_model = None
+from mlx.utils import tree_flatten
+from mlx_lm.utils import _get_classes, load_model
 
 ROPE = {"full_attention": {"partial_rotary_factor": 0.25, "rope_theta": 1000000.0, "rope_type": "proportional"},
         "sliding_attention": {"rope_theta": 10000.0, "rope_type": "default"}}
@@ -86,7 +83,6 @@ def write_checkpoint(directory, model_type, text, tensors):
     (directory / "chat_template.jinja").write_text("{{ messages }}")
 
 
-@unittest.skipIf(load_model is None, "mlx-lm is installed with the Apple silicon reference")
 class StudentTierLoadTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
