@@ -9,7 +9,7 @@ import zipfile
 
 from ci_policy.github import pages
 
-CHECKS = {"source", "static", "credentials", "selection", "verification", "preparation"}
+CHECKS = {"source", "static", "credentials", "selection", "verification", "preparation", "custody"}
 MAX_BYTES = 64 * 1024
 IDENTITY = {"version", "repository", "event", "run_id", "run_attempt", "source_sha", "source_tree", "controller_sha"}
 

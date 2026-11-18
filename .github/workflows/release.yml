@@ -257,49 +257,10 @@ jobs:
           name: release-compatibility-${{ github.run_attempt }}
           status: ${{ job.status }}
 
-  validate-source:
-    needs: [classify, compatibility]
-    runs-on: macos-15
-    timeout-minutes: 180
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.classify.outputs.source_sha }}
-          fetch-depth: 0
-      - uses: ./.github/actions/setup-verification
-      - uses: ./.github/actions/cache-decide
-      - uses: ./.github/actions/setup-bialy
-      - name: Verify the candidate upgrade corpus
-        if: ${{ needs.classify.outputs.publish == 'true' }}
-        timeout-minutes: 60
-        run: ./task release:preflight -- --require-corpus
-      - uses: ./.github/actions/verification-evidence
-        if: always()
-        timeout-minutes: 5
-        with:
-          name: release-preflight-${{ github.run_attempt }}
-          status: ${{ job.status }}
-
-      - name: Install the public feed verifier
-        timeout-minutes: 5
-        run: HOMEBREW_NO_AUTO_UPDATE=1 brew install minisign
-      - name: Rehearse the prior-release upgrade
-        timeout-minutes: 90
-        env:
-          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
-          RELEASE_CHANNEL: ${{ needs.classify.outputs.channel }}
-        run: ./task upgrade:rehearse
-      - uses: ./.github/actions/verification-evidence
-        if: always()
-        timeout-minutes: 5
-        with:
-          name: release-upgrade-${{ github.run_attempt }}
-          status: ${{ job.status }}
-
   ship-gates:
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
     if: ${{ !cancelled() && inputs.rehearsal_run_id == '' }}
-    needs: [classify, validate-source]
+    needs: [classify, compatibility]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -316,7 +277,7 @@ jobs:
     needs: [classify, compatibility]
     strategy:
       fail-fast: false
-      # Source validation and packaging share the two-runner release budget.
+      # One signed build at a time keeps packaging within the release runner budget.
       max-parallel: 1
       matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}

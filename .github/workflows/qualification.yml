@@ -127,9 +127,51 @@ jobs:
     with:
       source_sha: ${{ needs.source.outputs.source-sha }}
 
+  # Release custody refusal runs against the sidecar the candidate ships, not a rebuild.
+  custody:
+    needs: [source, preparation]
+    runs-on: macos-15
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.source-sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b2a9ab24f04885adb52faf6bdccb0bb7dfb3c187 # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - uses: ./.github/actions/cache-go
+      - uses: ./.github/actions/setup-opengrep
+      - uses: ./.github/actions/setup-bialy
+      - uses: ./.github/actions/cache-decide
+      - uses: ./.github/actions/cache-generation
+      - uses: ./.github/actions/cache-document-core
+      - name: Fetch pinned git engine
+        run: ./task gitengine:fetch
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: prepared-darwin-aarch64
+          run-id: ${{ needs.preparation.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/prepared
+      - name: Refuse custody in the prepared unsigned sidecar
+        run: |
+          set -euo pipefail
+          release="$RUNNER_TEMP/unsigned-release"
+          mkdir -p "$release/compiled"
+          tar -xf "$RUNNER_TEMP/prepared/compiled.tar" -C "$release/compiled"
+          cp "$release/compiled/lycaon-den/src-tauri/binaries/pw-aarch64-apple-darwin" "$release/pw"
+          (cd lycaon && go build -tags=paintedwolf_release -o "$release/macosreleaseprobe" ./cmd/lycaon/testdata/macosreleaseprobe)
+          PW_UNSIGNED_RELEASE_DIR="$release" ./task test:digest -- ./cmd/lycaon \
+            -run '^TestMacOSUnsignedReleaseCustodyRefusalPreservesLegacyFilesAndRefusesTokenPrint$' -count=1
+
   qualification:
     if: ${{ !cancelled() }}
-    needs: [source, static, credentials, selection, verification, preparation]
+    needs: [source, static, credentials, selection, verification, preparation, custody]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

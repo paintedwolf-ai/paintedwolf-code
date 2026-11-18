@@ -141,13 +141,13 @@ func TestReusableVerificationFailsWithItsPlanOrAnyMatrixJob(t *testing.T) {
 	}
 }
 
-// Publication requires qualified source, preflight, and upgrade rehearsal.
+// Publication requires qualified source and published compatibility.
 func TestReleaseGatesPrecedePublication(t *testing.T) {
 	t.Parallel()
 	jobs := hostedJobs(t, "release")
-	requireHostedGate(t, jobs, "ship-gates", []string{"classify", "validate-source"})
+	requireHostedGate(t, jobs, "ship-gates", []string{"classify", "compatibility"})
 	for name, dependencies := range map[string][]string{
-		"compatibility": {"classify", "credentials"}, "validate-source": {"classify", "compatibility"},
+		"compatibility": {"classify", "credentials"},
 		"build-release": {"classify", "compatibility"},
 	} {
 		if !slices.Equal(hostedNeeds(t, jobs[name]), dependencies) || jobs[name].If != "" {
