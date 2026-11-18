@@ -12,13 +12,11 @@ import (
 
 func TestChunkProjectionSurvivesUnrelatedViewInvalidation(t *testing.T) {
 
-	var transcript compactionMutationStore
-	var projections messageview.ChunkProjectionStore
-
 	database := testdbfixture.Open(t, "chunks.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st := NewSQL(database)
-	transcript, projections = st, st
+	var projections messageview.ChunkProjectionStore = st
+	transcript := st
 
 	sess, err := transcript.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)

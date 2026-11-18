@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -12,24 +11,11 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type compactionMutationStore interface {
-	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-	AppendMessages(context.Context, string, ...api.Message) error
-	GetMessages(context.Context, string) ([]api.Message, error)
-	PutCompactionView(context.Context, string, CompactionView) error
-	GetCompactionView(context.Context, string) (*CompactionView, bool, error)
-	CompactionViewCurrent(context.Context, string, int64, string, int64) (bool, error)
-	UpdateMessage(context.Context, string, string, api.Message) (api.Message, error)
-	PatchLiveProjection(context.Context, string, string, string, []api.ToolCall) error
-}
-
 func TestCompactionRevisionLagRebuildsWithoutChangingHistory(t *testing.T) {
-
-	var st compactionMutationStore
 
 	database := testdbfixture.Open(t, "revision-gap.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
-	st = NewSQL(database)
+	st := NewSQL(database)
 
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -83,16 +69,14 @@ func TestContinuationCopiesSlices(t *testing.T) {
 func TestCompactionViewInvalidatesOnlyCoveredMessageMutations(t *testing.T) {
 
 	for _, streaming := range []bool{false, true} {
-		name := "sql" + "/committed"
+		name := "committed"
 		if streaming {
-			name = "sql" + "/streaming"
+			name = "streaming"
 		}
 		t.Run(name, func(t *testing.T) {
-			var st compactionMutationStore
-
 			database := testdbfixture.Open(t, "compaction.db")
 			testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
-			st = NewSQL(database)
+			st := NewSQL(database)
 
 			checkCompactionMutationBoundary(t, st, streaming)
 		})
@@ -100,7 +84,7 @@ func TestCompactionViewInvalidatesOnlyCoveredMessageMutations(t *testing.T) {
 
 }
 
-func checkCompactionMutationBoundary(t *testing.T, st compactionMutationStore, streaming bool) {
+func checkCompactionMutationBoundary(t *testing.T, st *SQL, streaming bool) {
 	t.Helper()
 	ctx := t.Context()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
