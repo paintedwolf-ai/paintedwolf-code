@@ -47,6 +47,7 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 	capBackgroundOutput(&out, 0)
 	payload := observeBackgroundOutput(tctx, out, snapshot.Confinement, snapshot.TerminationReason)
 	payload.ExecFailure = snapshot.Failure
+	payload.ProgramStopCode = snapshot.ProgramStopCode
 	t.Registry.Output.NoteRefusalsShown(tctx.Identity.SessionID, handle, len(payload.SandboxRefusals))
 	encoded, err := surveyjson.Marshal(payload)
 	if err != nil {
@@ -87,8 +88,9 @@ func commandOutputOf(raw bgprocess.RawOutput, reason bgprocess.TerminationReason
 type commandOutputResult struct {
 	commandOutput
 	// ExecFailure is the run error the exit status does not carry.
-	ExecFailure *hostcmd.ExecFailure `json:"exec_failure,omitempty"`
-	Network     []confine.EgressHost `json:"network,omitempty"`
+	ExecFailure     *hostcmd.ExecFailure `json:"exec_failure,omitempty"`
+	ProgramStopCode string               `json:"program_stop_code,omitempty"`
+	Network         []confine.EgressHost `json:"network,omitempty"`
 	confine.Report
 }
 

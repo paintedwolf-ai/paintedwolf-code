@@ -136,6 +136,12 @@ func CommandCompletionDigest(completion bgprocess.Completion) string {
 	if len(completion.Stages) > 0 {
 		digest += "\ncommand=" + truncateUTF8Head(hostcmd.CommandLine(completion.Stages), maxCommandBytes)
 	}
+	if stop := completion.ProgramStop; stop.Code != "" {
+		digest += "\nprogram_stop_code=" + stop.Code
+		if stop.Feedback != "" {
+			digest += "\n" + truncateUTF8Head(stop.Feedback, maxTailBytes)
+		}
+	}
 	if completion.Failure != nil {
 		digest += "\nexec_failure=" + string(completion.Failure.Kind) + ": " + truncateUTF8Head(completion.Failure.Detail, maxCommandBytes)
 	}

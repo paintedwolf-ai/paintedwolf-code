@@ -39,17 +39,15 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 			<-ending.done
 			r.recordParkedRun(context.WithoutCancel(ctx), run)
 			r.recordDetachedEffects(context.WithoutCancel(ctx), run)
-			status := ending.outcome.Status
-			if ending.err != nil && status == 0 {
-				status = 1
-			}
-			return bgprocess.ProgramJobResult{
-				ExitCode: status, FinishedAt: ending.finishedAt, PersonWait: &ending.personWait,
-			}, errors.Join(ending.err, attachErr)
+			return ending.jobResult(), errors.Join(ending.err, attachErr)
 		},
 	})
 	if err != nil {
 		r.interruptProgram(ctx, run, ending)
+		go func() {
+			<-ending.done
+			ending.releaseNotices()
+		}()
 		return "", err
 	}
 	if err := <-attached; err != nil {
@@ -66,6 +64,26 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 	}
 	result, err := surveyjson.Marshal(RunningProgramResult{ProgramID: run.root.Identity.ProgramID, State: "running", Handle: handle})
 	return string(result), err
+}
+
+func (e *programEnding) jobResult() bgprocess.ProgramJobResult {
+	outcome := e.settlement.outcome
+	status := outcome.Status
+	if e.err != nil && status == 0 {
+		status = 1
+	}
+	settled := bgprocess.ProgramJobResult{
+		ExitCode: status, FinishedAt: e.finishedAt, PersonWait: &e.personWait,
+		UnsavedDocumentPaths: e.settlement.drafts.paths(),
+	}
+	if e.settlement.drafts.release != nil || e.settlement.releaseFeedback != nil {
+		settled.ReleaseNotices = e.releaseNotices
+	}
+	settled.ProgramStop.Code = outcome.StopCode
+	if refusal := outcome.Refusal; refusal != nil {
+		settled.ProgramStop.Code, settled.ProgramStop.Feedback = refusal.Code, refusal.Feedback
+	}
+	return settled
 }
 
 // follow replays retained bytes and subscribes under the write lock, so output

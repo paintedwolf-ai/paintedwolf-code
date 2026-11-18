@@ -170,6 +170,7 @@ type RawOutput struct {
 // OutputSnapshot combines process output with its confinement.
 type OutputSnapshot struct {
 	ExitObservation   *ExitObservation
+	ProgramStopCode   string
 	TerminationReason TerminationReason
 	Output            RawOutput
 	Confinement       JobConfinement
@@ -188,7 +189,7 @@ func (r *Output) ReadRawOutput(sessionID, handle string, cursor int64) (OutputSn
 	running, hasExit, exitCode, failure := proc.running, proc.hasExit, proc.exitCode, proc.failure
 	confinement := proc.confinementLocked()
 	awaiting := running && proc.personWaits > 0
-	observation := proc.exitObservationLocked()
+	observation, stopCode := proc.exitObservationLocked(), proc.programStopCode
 	var terminationReason TerminationReason
 	if hasExit {
 		terminationReason = proc.reason
@@ -206,7 +207,7 @@ func (r *Output) ReadRawOutput(sessionID, handle string, cursor int64) (OutputSn
 	if hasExit {
 		out.ExitCode = &exitCode
 	}
-	return OutputSnapshot{Output: out, Confinement: confinement, Failure: failure, TerminationReason: terminationReason, ExitObservation: observation}, nil
+	return OutputSnapshot{Output: out, Confinement: confinement, Failure: failure, TerminationReason: terminationReason, ExitObservation: observation, ProgramStopCode: stopCode}, nil
 }
 
 // ReadOutput returns the safe Den-facing projection of the whole retained window.

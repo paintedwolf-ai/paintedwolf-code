@@ -61,6 +61,7 @@ type processRuntimeState struct {
 	personWaited        time.Duration
 	completedPersonWait *time.Duration
 	exitObservation     *ExitObservation
+	programStopCode     string
 }
 
 type processIOState struct {
@@ -107,6 +108,7 @@ type cursorRange struct{ start, end int64 }
 // completionResources stay owned by the process until transfer or discard.
 // Process-held resources move under the process table lock.
 type completionResources struct {
+	programStop          ProgramStop
 	indexWatch           indexwatch.Snapshot
 	unsavedDocumentPaths []string
 	releaseNotices       func()

@@ -30,11 +30,18 @@ type ProgramJobSpec struct {
 	Run           func(ctx context.Context, stdout, stderr io.Writer) (ProgramJobResult, error)
 }
 
+// ProgramStop carries the evaluator's terminal decision and its rendered feedback.
+type ProgramStop struct {
+	Code     string
+	Feedback string
+}
+
 // ProgramJobResult carries host notice facts separately from command bytes.
 // The producing program collects them before releasing its lifetime hold.
 type ProgramJobResult struct {
-	ExitCode   int
-	FinishedAt time.Time
+	ExitCode    int
+	ProgramStop ProgramStop
+	FinishedAt  time.Time
 	// PersonWait includes any waits before the registry took over the job.
 	PersonWait           *time.Duration
 	UnsavedDocumentPaths []string
@@ -105,6 +112,8 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 		cancel()
 		r.jobs.mu.Lock()
 		proc.running, proc.hasExit, proc.exitCode = false, true, exitCode
+		proc.programStopCode = settled.ProgramStop.Code
+		proc.resources.programStop = settled.ProgramStop
 		proc.resources.unsavedDocumentPaths = settled.UnsavedDocumentPaths
 		proc.resources.releaseNotices = settled.ReleaseNotices
 		proc.Stages[0].ExitCode, proc.Stages[0].Failed = &exitCode, exitCode != 0

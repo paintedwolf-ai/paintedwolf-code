@@ -68,24 +68,49 @@ type programEvaluation struct {
 	callTC tools.ToolContext
 }
 
-// programEnding is a program's result once evaluation and settlement end.
+type programSettlement struct {
+	outcome         ProgramOutcome
+	drafts          documentNotices
+	releaseFeedback func()
+}
+
+// programEnding holds the terminal outcome and timing for its delivery route.
 type programEnding struct {
 	done       chan struct{}
-	outcome    ProgramOutcome
+	settlement programSettlement
 	err        error
 	finishedAt time.Time
 	personWait time.Duration
+	encodeOnce sync.Once
+	encoded    string
+	encodeErr  error
 }
 
 func (e *programEnding) content() (string, error) {
 	if e.err != nil {
 		return "", e.err
 	}
-	out, err := surveyjson.Marshal(e.outcome)
-	if err != nil {
-		return "", fmt.Errorf("command program encode: %w", err)
+	e.encodeOnce.Do(func() {
+		defer e.releaseNotices()
+		outcome := e.settlement.outcome
+		outcome.Stderr = e.settlement.drafts.appendTo(outcome.Stderr)
+		out, err := surveyjson.Marshal(outcome)
+		if err != nil {
+			e.encodeErr = fmt.Errorf("command program encode: %w", err)
+			return
+		}
+		e.encoded = string(out)
+	})
+	return e.encoded, e.encodeErr
+}
+
+func (e *programEnding) releaseNotices() {
+	if release := e.settlement.releaseFeedback; release != nil {
+		release()
 	}
-	return string(out), nil
+	if release := e.settlement.drafts.release; release != nil {
+		release()
+	}
 }
 
 // attend returns completion, parks an explicit wait, or exposes a running
@@ -103,7 +128,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	e.ctx = hitl.WithHumanWaitObserver(e.ctx, e.waits)
 	//nolint:contextcheck // Detached evaluation outlives a parked call.
 	go func() {
-		ending.outcome, ending.err = r.finish(e)
+		ending.settlement, ending.err = r.finish(e)
 		ending.finishedAt = e.ports.Clock.Now()
 		ending.personWait = e.waits.personWait(ending.finishedAt)
 		close(ending.done)
@@ -282,9 +307,8 @@ func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID
 	return string(content), err
 }
 
-// finish evaluates the program under supervision, settles it and returns its
-// bounded result, whether the call still holds it or it parked.
-func (r *ProgramRuntime) finish(e *programEvaluation) (ProgramOutcome, error) {
+// finish evaluates, settles and projects the program's terminal facts.
+func (r *ProgramRuntime) finish(e *programEvaluation) (programSettlement, error) {
 	run, ctx := e.run, e.ctx
 	defer e.call.end()
 	var evaluated commandprogram.ProgramOutcome
@@ -318,17 +342,17 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (ProgramOutcome, error) {
 		feedbackCtx = context.WithoutCancel(ctx)
 	}
 	refusal, releaseFeedback, feedbackErr := r.feedback(feedbackCtx, run, e.dispatcher, e.stderr, evalErr)
-	defer releaseFeedback()
 	if feedbackErr != nil || settleErr != nil {
-		return ProgramOutcome{}, errors.Join(feedbackErr, settleErr)
+		releaseFeedback()
+		return programSettlement{}, errors.Join(feedbackErr, settleErr)
 	}
 	// Settlement and bounded result projection survive cancellation; they cannot
 	// start another program operation.
 	outcome, err := r.outcome(context.WithoutCancel(ctx), run, e.outputs, result, e.stdout, e.stderr, e.scope)
 	if err != nil {
-		return ProgramOutcome{}, err
+		releaseFeedback()
+		return programSettlement{}, err
 	}
-	outcome.Stderr = e.documents.appendNotes(outcome.Stderr)
 	outcome.Refusal = refusal
 	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
 	outcome.SourceWindow = run.window.fact()
@@ -343,7 +367,13 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (ProgramOutcome, error) {
 	if run.tool == "verify" {
 		outcome.ResultVersion = 2
 	}
-	return outcome, nil
+	settlement := programSettlement{outcome: outcome, drafts: e.documents.takeNotices()}
+	if refusal != nil {
+		settlement.releaseFeedback = sync.OnceFunc(releaseFeedback)
+	} else {
+		releaseFeedback()
+	}
+	return settlement, nil
 }
 
 // programLifetime releases a program's plan and frame once both the tool call

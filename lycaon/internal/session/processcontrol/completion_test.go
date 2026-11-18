@@ -55,10 +55,12 @@ func TestCommandSettlementRetainsReportAndWakesOnlySubscribedWait(t *testing.T) 
 	service := New(f, f, f, f)
 	service.SetLoop(f, f)
 	now := time.Now()
-	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: "session", Handle: "handle", OriginTool: "verify", RunID: "run", ToolCallID: "call", ExitCode: 1, FinishedAt: now, Tail: "failed check", UnsavedDocumentPaths: []string{"source.txt"}})
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: "session", Handle: "handle", OriginTool: "verify", RunID: "run", ToolCallID: "call", ExitCode: 1, FinishedAt: now, Tail: "failed check", UnsavedDocumentPaths: []string{"source.txt"},
+		ProgramStop: bgprocess.ProgramStop{Code: "COMMAND_OPTION_UNSUPPORTED", Feedback: "refusal details"}})
 	report, ok := service.Report("session", "handle")
 	t.Logf("completion report for manual render inspection:\n%s", report)
-	if !ok || !strings.Contains(report, "failed check") || !strings.Contains(report, "policy guidance") {
+	if !ok || !strings.Contains(report, "failed check") || !strings.Contains(report, "policy guidance") ||
+		!strings.Contains(report, "program_stop_code=COMMAND_OPTION_UNSUPPORTED") || !strings.Contains(report, "source.txt") {
 		t.Fatalf("retained report=%q found=%v", report, ok)
 	}
 	if len(f.wakes) != 1 || len(f.emitted) != 0 {

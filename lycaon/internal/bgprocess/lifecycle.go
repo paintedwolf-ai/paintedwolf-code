@@ -358,6 +358,7 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		Stages: append([]hostcmd.StageResult(nil), proc.Stages...),
 	}
 	owned := proc.resources.take()
+	completion.ProgramStop = owned.programStop
 	completion.UnsavedDocumentPaths, completion.ReleaseNotices = owned.unsavedDocumentPaths, owned.releaseNotices
 	completion.IndexWatch = owned.indexWatch
 	exitCode := proc.exitCode
