@@ -286,6 +286,12 @@ func TestPromptSizingLimitsFollowTheCappedBudget(t *testing.T) {
 			}
 		})
 	}
+	// With no model to resolve, the summary limit follows the fallback window.
+	out, limits, err := ApplyLiveBudget(compaction.DefaultCompactionConfig(), ModelPolicy{}, nil, testWindows(t))
+	testutil.FailErr(t, "ApplyLiveBudget without a model", err)
+	if limits.MaxWorkerSummaryChars != 16384 || out.MaxWorkerSummaryChars != 16384 {
+		t.Fatalf("no model: limits %+v summary %d, want 16384", limits, out.MaxWorkerSummaryChars)
+	}
 }
 
 func TestLiveBudgetIsCappedAbsolutely(t *testing.T) {

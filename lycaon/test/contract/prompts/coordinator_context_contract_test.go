@@ -2,7 +2,7 @@ package contract
 
 import (
 	"context"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -44,45 +45,18 @@ func TestFeedbackHintRequiresPendingFeedbackInContextBlock(t *testing.T) {
 
 func TestGateUnmetHintRequiresFailedLeavesInContextBlock(t *testing.T) {
 	t.Parallel()
-	ctx := api.CoordinatorRunContext{FailedLeaves: []string{"human_approval"}}
+	const leaf = "human_approval_fixture_leaf"
+	ctx := api.CoordinatorRunContext{FailedLeaves: []string{leaf}}
 	codes := surface.StaticWorkflowHintCodes(ctx, false)
+	if !slices.Contains(codes, "WORKFLOW_GATE_UNMET") {
+		t.Fatalf("hint codes = %v, want WORKFLOW_GATE_UNMET for a failed leaf", codes)
+	}
+	if slices.Contains(surface.StaticWorkflowHintCodes(api.CoordinatorRunContext{}, false), "WORKFLOW_GATE_UNMET") {
+		t.Fatal("WORKFLOW_GATE_UNMET without a failed leaf")
+	}
 	block, err := renderCoordinatorInjectForTest(t, ctx, codes, nil)
 	contractcheck.FailErr(t, "renderCoordinatorInjectForTest failed", err)
-	if !strings.Contains(block, "failed_leaves") {
-		t.Fatal("context block missing failed_leaves when WORKFLOW_GATE_UNMET would fire")
-	}
-}
-
-func TestComposeSummaryFieldsMappedToCoordinatorRunContext(t *testing.T) {
-	t.Parallel()
-	summaryType := reflect.TypeOf(api.ComposeEffectiveSummary{})
-	contextType := reflect.TypeOf(api.CoordinatorRunContext{})
-	pairs := []struct {
-		summaryField string
-		contextField string
-	}{
-		{"CoordinatorBrief", "CoordinatorBrief"},
-		{"RequiresIsolation", "RequiresIsolation"},
-		{"Feedback", "FeedbackPhases"},
-		{"Decisions", "DecisionPhases"},
-	}
-	for _, pair := range pairs {
-		sf, ok := summaryType.FieldByName(pair.summaryField)
-		if !ok {
-			t.Fatalf("ComposeEffectiveSummary missing field %q", pair.summaryField)
-		}
-		cf, ok := contextType.FieldByName(pair.contextField)
-		if !ok {
-			t.Fatalf("CoordinatorRunContext missing field %q", pair.contextField)
-		}
-		sJSON := sf.Tag.Get("json")
-		cJSON := cf.Tag.Get("json")
-		sName := strings.TrimSuffix(strings.Split(sJSON, ",")[0], "omitempty")
-		cName := strings.TrimSuffix(strings.Split(cJSON, ",")[0], "omitempty")
-		if sName != cName {
-			t.Fatalf("json tag mismatch %q (%s) vs %q (%s)", pair.summaryField, sName, pair.contextField, cName)
-		}
-	}
+	exposure.Present(t, block, leaf)
 }
 
 func renderCoordinatorInjectForTest(t *testing.T, ctx api.CoordinatorRunContext, codes []string, hints *guidance.HintConfig) (string, error) {

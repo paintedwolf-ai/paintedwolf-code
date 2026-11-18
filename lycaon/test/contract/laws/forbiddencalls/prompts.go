@@ -111,7 +111,6 @@ var prompts = []laws.Rule{{
 func surfaceLiteralFiles() []laws.Exemption {
 	files := []string{
 		"internal/coordinator/surface/profile.go",
-		"internal/coordinator/surface/flow_parity.go",
 		"internal/coordinator/surface/envelope.go",
 		"internal/coordinator/surface/execution_mode_state.go",
 		"internal/coordinator/assembly/prompt_dump.go",

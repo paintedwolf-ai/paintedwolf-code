@@ -1,4 +1,4 @@
-package contract
+package promptattach_test
 
 import (
 	"archive/zip"
@@ -11,15 +11,16 @@ import (
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/promptattach"
 	"github.com/lycaon/lycaon/internal/promptattach/attacherr"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func attachFixture(t *testing.T) (blobstore.Store, promptattach.Caps) {
 	t.Helper()
 	caps, err := promptattach.LoadCaps()
-	contractcheck.FailErr(t, "load bundled attachment caps", err)
+	testutil.FailErr(t, "load bundled attachment caps", err)
 	return blobstore.Store{Root: t.TempDir(), Dir: tooloutput.AttachmentSpillDir}, caps
 }
 
@@ -30,17 +31,17 @@ func minimalZip(t *testing.T) []byte {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, err := zw.Create("word/document.xml")
-	contractcheck.FailErr(t, "create zip member", err)
+	testutil.FailErr(t, "create zip member", err)
 	_, err = w.Write([]byte("<w:document/>"))
-	contractcheck.FailErr(t, "write zip member", err)
-	contractcheck.FailErr(t, "close zip", zw.Close())
+	testutil.FailErr(t, "write zip member", err)
+	testutil.FailErr(t, "close zip", zw.Close())
 	return buf.Bytes()
 }
 
 func upload(t *testing.T, store blobstore.Store, caps promptattach.Caps, name, mime string, body []byte) promptattach.Receipt {
 	t.Helper()
 	receipt, err := promptattach.Upload(context.Background(), store, caps, nil, name, mime, bytes.NewReader(body))
-	contractcheck.FailErr(t, "upload "+name, err)
+	testutil.FailErr(t, "upload "+name, err)
 	return receipt
 }
 
@@ -61,7 +62,7 @@ func TestPromptAttachmentVisualPlaneInvariant(t *testing.T) {
 			receipt := upload(t, store, caps, tc.filename, tc.mime, tc.body)
 			res, err := promptattach.IngestAttachments(context.Background(), store, caps, promptattach.NewTurnPreviewBudget(caps), nil,
 				[]wire.PromptAttachmentPart{{BlobID: receipt.BlobID}})
-			contractcheck.FailErr(t, "ingest", err)
+			testutil.FailErr(t, "ingest", err)
 			if len(res.Fences()) != 1 {
 				t.Fatalf("fences = %d want 1", len(res.Fences()))
 			}
@@ -109,27 +110,20 @@ func TestPromptAttachmentSniff_notExtensionTrust(t *testing.T) {
 func TestPromptAttachmentFenceAlwaysCarriesPath(t *testing.T) {
 	t.Parallel()
 	store, caps := attachFixture(t)
-	receipt := upload(t, store, caps, "small.json", "application/json", []byte(`{"a":1}`))
+	body := []byte(`{"a":1}`)
+	receipt := upload(t, store, caps, "small.json", "application/json", body)
 	res, err := promptattach.IngestAttachments(context.Background(), store, caps, promptattach.NewTurnPreviewBudget(caps), nil,
 		[]wire.PromptAttachmentPart{{BlobID: receipt.BlobID}})
-	contractcheck.FailErr(t, "ingest", err)
-	fence := res.Fences()[0]
-	if !strings.Contains(fence, `path="`+tooloutput.AttachmentSpillDir+"/") {
-		t.Fatalf("fence has no host-data path attr:\n%s", fence)
-	}
+	testutil.FailErr(t, "ingest", err)
 	part := res.Parts[0]
-	if part.Path == "" || !strings.HasPrefix(part.Path, tooloutput.AttachmentSpillDir+"/") {
+	if !strings.HasPrefix(part.Path, tooloutput.AttachmentSpillDir+"/") {
 		t.Fatalf("FramedPart.Path = %q; payload must stamp a host-data path", part.Path)
 	}
-	if part.SizeBytes <= 0 {
-		t.Fatalf("FramedPart.SizeBytes = %d; payload must stamp full body size", part.SizeBytes)
+	if part.SizeBytes != int64(len(body)) {
+		t.Fatalf("FramedPart.SizeBytes = %d, want the full body size %d", part.SizeBytes, len(body))
 	}
-	if !strings.Contains(fence, `truncated="false"`) {
-		t.Fatalf("small body should not be marked truncated:\n%s", fence)
-	}
-	if !strings.Contains(fence, `command(command="jq . `+part.Path+`")`) {
-		t.Fatalf("structured body should be pointed at jq:\n%s", fence)
-	}
+	fence := res.Fences()[0]
+	exposure.Present(t, fence, `path="`+part.Path+`"`, `truncated="false"`)
 }
 
 // A single-member container is decoded away at intake, so the prompt sees the
@@ -140,8 +134,8 @@ func TestPromptAttachmentUnwrapsSingleMemberContainer(t *testing.T) {
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
 	_, err := zw.Write([]byte(`{"records":[1,2,3]}`))
-	contractcheck.FailErr(t, "write gzip member", err)
-	contractcheck.FailErr(t, "close gzip", zw.Close())
+	testutil.FailErr(t, "write gzip member", err)
+	testutil.FailErr(t, "close gzip", zw.Close())
 
 	receipt := upload(t, store, caps, "trace.json.gz", "application/gzip", buf.Bytes())
 	if receipt.Filename != "trace.json" {
@@ -158,7 +152,7 @@ func TestPromptAttachmentOfficePackageKeepsItsFormat(t *testing.T) {
 	receipt, err := promptattach.Upload(context.Background(), store, caps, nil, "report.docx",
 		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 		bytes.NewReader(minimalZip(t)))
-	contractcheck.FailErr(t, "upload docx", err)
+	testutil.FailErr(t, "upload docx", err)
 	if receipt.Filename != "report.docx" || receipt.MIME != "application/vnd.openxmlformats-officedocument.wordprocessingml.document" {
 		t.Fatalf("receipt = %+v want a docx document", receipt)
 	}

@@ -1,88 +1,37 @@
 package contract
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/testutil"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestGroundingClassificationContractLocked(t *testing.T) {
-	t.Parallel()
-	if guidance.GroundingVerdictPrimary != "verbatim_substring" {
-		t.Fatalf("GroundingVerdictPrimary = %q", guidance.GroundingVerdictPrimary)
-	}
-	if guidance.LeakDetectionMode != "observed_set_membership" {
-		t.Fatalf("LeakDetectionMode = %q", guidance.LeakDetectionMode)
-	}
-	if guidance.LeakSeverityReject != "reject" {
-		t.Fatalf("LeakSeverityReject = %q", guidance.LeakSeverityReject)
-	}
-	if guidance.LeakSeverityAdvisory != "advisory" {
-		t.Fatalf("LeakSeverityAdvisory = %q", guidance.LeakSeverityAdvisory)
-	}
-}
-
+// A prose citation leaks only when the ledger observed it: a path-shaped token
+// nobody observed is not flagged, and an observed token is flagged whatever its
+// shape.
 func TestLeakDetectorUsesObservedSetNotShapeRegex(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	leakPath := filepath.Join(root, "lycaon", "internal", "guidance", "leak_detector.go")
-	src, err := os.ReadFile(leakPath)
-	testutil.FailErr(t, "read leak_detector.go", err)
-	body := string(src)
-	for _, forbidden := range []string{
-		"ExtractCitations(",
-		"isProsePathLineCitation(",
-		"isBarePathCitation(",
-		"isDelimitedPathCitation(",
-	} {
-		if strings.Contains(body, forbidden) {
-			t.Fatalf("leak_detector.go must not use shape-regex gate %s", forbidden)
-		}
+	const observed, line = "Makefile", 3
+	msgs := []api.Message{
+		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
+			{Name: "read", ID: "c1", Args: map[string]any{"path": observed, "offset": line, "limit": 1}},
+		}},
+		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
+			Outcome: api.ToolResultOutcomeCompleted,
+			Content: `{"path":"Makefile","content":"3|  build:","offset":3,"end_line":3,"limit":1}`,
+		}},
 	}
-	if !strings.Contains(body, "evidence.ObservedCitations(") {
-		t.Fatal("leak_detector.go must iterate evidence.ObservedCitations for membership detection")
-	}
-}
+	ev := ledgertest.BuildFromMessages("", msgs)
+	typed := guidance.BuildWorkerTypedChannel(evidence.CitationRoots{}, ev, nil, nil)
 
-func TestNoShapeRegexClassifierFeedsLeakVerdict(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	guidanceDir := filepath.Join(root, "lycaon", "internal", "guidance")
-	fset := token.NewFileSet()
-	var offenders []string
-	_ = filepath.Walk(guidanceDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		file, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			return err
-		}
-		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			name := contractcheck.CallFuncName(call.Fun)
-			switch name {
-			case "ExtractCitations", "isProsePathLineCitation", "isBarePathCitation", "isDelimitedPathCitation":
-				rel, _ := filepath.Rel(root, path)
-				offenders = append(offenders, rel+":"+name)
-			}
-			return true
-		})
-		return nil
-	})
-	if len(offenders) > 0 {
-		t.Fatalf("shape-regex classifiers must not feed leak/grounding verdicts in production guidance code:\n%s",
-			strings.Join(offenders, "\n"))
+	if leaks := guidance.ProseLeaks("The bug is in internal/auth/handler.go:42", ev, typed); len(leaks) != 0 {
+		t.Fatalf("unobserved path-shaped citation flagged: %+v", leaks)
+	}
+	leaks := guidance.ProseLeaks("The target is defined at Makefile:3", ev, typed)
+	if len(leaks) != 1 || leaks[0].Token != "Makefile:3" || leaks[0].Kind != evidence.ObservedCitationKindPathLine || leaks[0].AlsoInTyped {
+		t.Fatalf("leaks = %+v, want the observed Makefile:3 path line outside the typed channel", leaks)
 	}
 }

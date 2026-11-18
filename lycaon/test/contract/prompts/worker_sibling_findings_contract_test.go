@@ -7,11 +7,16 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/findings/findingstest"
+	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
+	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -70,36 +75,42 @@ func toolContext(dir, sessionID, workerJobID string) tools.ToolContext {
 	}
 }
 
+// A worker's child session delegates in the parent's project directory, never in
+// the overlay its write task stages into.
 func TestWorkerChildDelegationProjectDirInvariantContract(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	overlay := filepath.Join(dir, settingsoverlay.DirName(), "overlays", "job-write")
-
-	store := store.NewMemory()
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sqlDB := testdbfixture.Open(t, "child-delegation.db")
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
+	sessions := store.NewSQL(sqlDB)
+	parent, err := sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create parent", err)
+	if parent.WorkspacePath != dir {
+		t.Fatalf("parent workspace = %q, want the project root %q", parent.WorkspacePath, dir)
+	}
 
-	q := worker.NewInMemoryQueue(4)
 	task := api.WorkerTask{
 		Prompt: "fixture", Brief: "fixture",
 		ID: "job-write", ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir,
-		AgentType: "implementer", Status: api.WorkerStatusRunning,
+		AgentType: orchestration.ProfileImplementer, Status: api.WorkerStatusPending,
 		WorkspaceRoot: overlay, Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"**"}},
 	}
-	projScope := project.ProjectScope{
-		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir, HasRoots: true,
-	}
+	projScope := project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir, HasRoots: true}
 	contractcheck.FailErr(t, "enqueue defaults", worker.ApplyEnqueueDefaults(&task, projScope, worker.DefaultWorkersConfig()))
-	_, err = q.Enqueue(ctx, task)
+	_, err = worker.NewSQLQueue(sqlDB, 4).Enqueue(ctx, task)
 	contractcheck.FailErr(t, "enqueue", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer", Prompt: "write"})
-	contractcheck.FailErr(t, "create child", err)
 
-	if child.WorkspacePath != parent.WorkspacePath {
-		t.Fatalf("child delegation dir = %q parent = %q", child.WorkspacePath, parent.WorkspacePath)
+	mgr := session.NewHost(sessions, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+		AgentType: orchestration.ProfileImplementer, Prompt: "write", WorkerJobID: task.ID,
+	})
+	contractcheck.FailErr(t, "spawn child", err)
+	if child.WorkspacePath != dir {
+		t.Fatalf("child delegation dir = %q, want the project root %q", child.WorkspacePath, dir)
 	}
 	if child.WorkspacePath == overlay {
-		t.Fatal("child ProjectDir must not equal overlay WorkspaceRoot")
+		t.Fatal("child delegation dir is the overlay workspace root")
 	}
 }
