@@ -410,20 +410,24 @@ func TestRequestReachFailsOnSeededRequests(t *testing.T) {
 	system := func(text string) api.Message {
 		return api.Message{Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, Content: text}
 	}
-	offered := []tools.ToolMeta{tool("update_progress", "content", "expected_revision"), tool("ask_user", "questions")}
+	// command's schema here is the one without timeout_ms, as after the
+	// parameter is dropped.
+	offered := []tools.ToolMeta{tool("update_progress", "content", "expected_revision"), tool("ask_user", "questions"), tool("command", "command")}
 	for name, tc := range map[string]struct {
 		message api.Message
 		want    int
 	}{
-		"guide names an unoffered tool":       {message: system("Store the checklist, then call `promote_overlay`."), want: 1},
-		"guide reworded":                      {message: system("Keep the checklist current with `update_progress`."), want: 0},
-		"recovery names an unoffered tool":    {message: refused("Rejected: stale revision.\nFix: call `edit` on the board."), want: 1},
-		"recovery names an unknown argument":  {message: refused("Rejected: stale revision.\nFix: pass `path` to `update_progress`."), want: 1},
-		"recovery reworded":                   {message: refused("Rejected: stale revision.\nFix: resend `update_progress` with the current `expected_revision`."), want: 0},
-		"user text is not host text":          {message: api.Message{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "call `promote_overlay`"}, want: 0},
-		"guide gives a call a stale argument": {message: system("Retry with `update_progress(content=…, timeout_ms=500)`."), want: 1},
-		"guide names a stale dotted argument": {message: system("Set `update_progress.timeout_ms` for slow boards."), want: 1},
-		"guide call reworded":                 {message: system("Retry with `update_progress(content=…, expected_revision=…)`."), want: 0},
+		"guide names an unoffered tool":                  {message: system("Store the checklist, then call `promote_overlay`."), want: 1},
+		"guide reworded":                                 {message: system("Keep the checklist current with `update_progress`."), want: 0},
+		"recovery names an unoffered tool":               {message: refused("Rejected: stale revision.\nFix: call `edit` on the board."), want: 1},
+		"recovery names an unknown argument":             {message: refused("Rejected: stale revision.\nFix: pass `path` to `update_progress`."), want: 1},
+		"recovery reworded":                              {message: refused("Rejected: stale revision.\nFix: resend `update_progress` with the current `expected_revision`."), want: 0},
+		"user text is not host text":                     {message: api.Message{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "call `promote_overlay`"}, want: 0},
+		"guide gives command a dropped argument":         {message: system("Run it with `command(command=…, timeout_ms=60000)`."), want: 1},
+		"guide names a dropped dotted argument":          {message: system("Raise `command.timeout_ms` for slow builds."), want: 1},
+		"guide gives command an argument never schemaed": {message: system("Run it with `command(command=…, wait_ms=5)`."), want: 1},
+		"guide gives command its own argument":           {message: system("Run it with `command(command=…)`."), want: 0},
+		"guide call reworded":                            {message: system("Retry with `update_progress(content=…, expected_revision=…)`."), want: 0},
 	} {
 		t.Run(name, func(t *testing.T) {
 			req := modelcall.CompletionRequest{Tools: offered, Messages: []api.Message{tc.message}, Debug: modelcall.RequestDebug{ProfileID: prompts.CoordinatorProfileID, Surface: surface.SurfaceImplementPark}}
