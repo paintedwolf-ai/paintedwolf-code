@@ -78,7 +78,7 @@ func TestCappedToolResultLeavesNoSecretFragmentAnywhere(t *testing.T) {
 	rawArgs := map[string]any{"path": ".env"}
 	projection := loop.Projection.projectToolResultForStorage(context.Background(), rawContent, rawArgs)
 	projected := loop.Tools.truncateToolResultForSession(
-		context.Background(), "read", "", projection, rawContent, maxBytes, 0, sess,
+		context.Background(), "read", projection, rawContent, maxBytes, 0, sess,
 	)
 	if !strings.Contains(projected.content, "Code: TOOL_OUTPUT_TRUNCATED") {
 		t.Fatalf("test does not exercise the inline cap: %q", projected.content[:min(len(projected.content), 200)])

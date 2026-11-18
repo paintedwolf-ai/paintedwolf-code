@@ -95,6 +95,21 @@ func WireSpillToolOutput(ctx context.Context, hostDataDir string, content Screen
 	return out
 }
 
+// WireSpillOverlayPromote keeps the compact preview and retains the screened result at a content address.
+func WireSpillOverlayPromote(ctx context.Context, hostDataDir string, full, inline ScreenedOutput, maxBytes, maxSpillBytes int) WireSpillOutcome {
+	body := full.String()
+	if maxBytes <= 0 || len(body) <= maxBytes {
+		return WireSpillOutcome{Preview: body, OriginalBytes: len(body)}
+	}
+	out := SpillWholeToolOutput(ctx, hostDataDir, full, maxSpillBytes)
+	preview := inline.String()
+	if len(preview) > maxBytes {
+		preview = truncateInline(preview, maxBytes)
+	}
+	out.Preview = preview
+	return out
+}
+
 // SpillWholeToolOutput persists a tool wire body in full, line-addressable.
 func SpillWholeToolOutput(ctx context.Context, hostDataDir string, content ScreenedOutput, maxSpillBytes int) WireSpillOutcome {
 	body := content.String()

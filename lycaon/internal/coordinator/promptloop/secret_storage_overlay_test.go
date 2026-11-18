@@ -95,7 +95,7 @@ func TestToolResultSpillUsesStorageProjection(t *testing.T) {
 	projection := loop.Projection.projectToolResultForStorage(context.Background(), rawContent, rawArgs)
 	preview := loop.Tools.truncateToolResultForSession(
 		t.Context(),
-		"read", "",
+		"read",
 		projection,
 		rawContent,
 		512,
