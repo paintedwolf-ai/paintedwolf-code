@@ -134,15 +134,37 @@ class MeasuredTimingsTests(unittest.TestCase):
                 path = root / "receipts" / name / ("ci" if index else "") / "timings.json"
                 path.parent.mkdir(parents=True)
                 path.write_text(json.dumps({"basis": "setup-and-execution", "finished": True, **row}))
+            browser = {"receipt-playwright-web-1-1": {"boot.spec.ts": 30, "prompt.spec.ts": 7},
+                       "receipt-playwright-web-1-2": {"boot.spec.ts": 12.5, "broken.spec.ts": "9"},
+                       "receipt-playwright-web-2-1": {"files.spec.ts": 40}}
+            for name, measured in browser.items():
+                path = root / "receipts" / name / "e2e-specs-1.json"
+                path.parent.mkdir(parents=True)
+                path.write_text(json.dumps(measured))
             environment = {"GITHUB_RUN_ID": "77", "SOURCE_SHA": "a" * 40, "SOURCE_TREE": "b" * 40}
             with patch.dict(timings.os.environ, environment), patch("builtins.print") as said:
                 self.assertEqual(timings.main([str(root / "receipts"), str(root / "timings.json")]), 0)
             published = json.loads((root / "timings.json").read_text())
         self.assertEqual(published, {"run": 77, "source_sha": "a" * 40, "source_tree": "b" * 40,
                                      "lanes": {LINT: 600, f"{BEHAVIOR} 1/2": 900}, "packages": {"a": 3},
+                                     "specs": {"boot.spec.ts": 12.5, "files.spec.ts": 40, "prompt.spec.ts": 7},
                                      "tests": [{"package": "q", "test": "TestSlower", "seconds": 12},
                                                {"package": "p", "test": "TestSlow", "seconds": 9}]})
-        self.assertIn("2 lane, 1 package and 2 test durations", said.call_args.args[0])
+        self.assertIn("2 lane, 1 package, 2 test and 3 browser spec durations", said.call_args.args[0])
+
+    def test_browser_shard_records_each_spec_file_with_its_retries(self):
+        report = {"suites": [
+            {"file": "boot.spec.ts", "specs": [{"tests": [{"results": [{"duration": 1500}, {"duration": 2500}]}]}],
+             "suites": [{"specs": [{"tests": [{"results": [{"duration": 1000}]}]}]}]},
+            {"file": "journey.spec.ts", "suites": [{"suites": [{"specs": [{"tests": [{"results": [{"duration": 250}]}]}]}]}]},
+            {"file": "skipped.spec.ts", "specs": [{"tests": [{"results": []}]}]},
+            {"file": "odd.spec.ts", "specs": [{"tests": [{"results": [{"duration": True}, {"duration": -5}]}]}]}]}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "report.json").write_text(json.dumps(report))
+            self.assertEqual(timings.main(["specs", str(root / "report.json"), str(root / "ci/e2e-specs-2.json")]), 0)
+            self.assertEqual(json.loads((root / "ci/e2e-specs-2.json").read_text()),
+                             {"boot.spec.ts": 5.0, "journey.spec.ts": 0.25})
 
     def archive(self, members):
         raw = io.BytesIO()

@@ -13,6 +13,7 @@ from ci_policy import github
 
 ARTIFACT = "nightly-timings"
 FILE = "timings.json"
+SPEC_FILES = "e2e-specs-*.json"
 MAX_BYTES = 4 * 1024 * 1024
 SLOWEST_TESTS = 50
 
@@ -80,6 +81,37 @@ def record(root, run):
     (root / "ci" / "timings.json").write_text(json.dumps(measured, indent=2) + "\n")
 
 
+def spec_durations(report):
+    """Seconds each Playwright spec file ran, retries included, from the JSON reporter's output."""
+    def milliseconds(suite):
+        own = sum(result["duration"] for spec in suite.get("specs", []) for test in spec.get("tests", [])
+                  for result in test.get("results", []) if valid_seconds(result.get("duration"), allow_zero=True))
+        return own + sum(milliseconds(child) for child in suite.get("suites", []))
+    durations = {}
+    for suite in report.get("suites", []):
+        elapsed = milliseconds(suite)
+        if isinstance(suite.get("file"), str) and elapsed > 0:
+            durations[suite["file"]] = round(durations.get(suite["file"], 0) + elapsed / 1000, 3)
+    return durations
+
+
+def record_specs(report, output):
+    """Write one browser shard's spec durations beside the job's receipts."""
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(spec_durations(json.loads(Path(report).read_text())), indent=2, sort_keys=True) + "\n")
+
+
+def merge_specs(paths):
+    """Browser spec durations by file; a later attempt replaces the run it reran."""
+    specs = {}
+    for path in paths:
+        measured = json.loads(path.read_text())
+        if isinstance(measured, dict):
+            specs.update({name: seconds for name, seconds in measured.items() if valid_seconds(seconds)})
+    return specs
+
+
 def merge(paths):
     """Durations of lanes that finished, whatever their verdict, by matrix row; every package duration the
     uninstrumented lane measured; and the slowest tests across lanes."""
@@ -105,6 +137,7 @@ def publish(receipts, output, environment):
     """One file for the whole run, bound to the source it measured."""
     # One directory per receipt; the archive may root it at `ci/`. A later attempt sorts after the one it reran.
     measured = merge(sorted(Path(receipts).glob("*/**/timings.json")))
+    measured["specs"] = merge_specs(sorted(Path(receipts).glob(f"*/**/{SPEC_FILES}")))
     measured.update(run=int(environment["GITHUB_RUN_ID"]),
                     source_sha=environment["SOURCE_SHA"], source_tree=environment["SOURCE_TREE"])
     Path(output).write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n")
@@ -150,10 +183,13 @@ def resolve(repository):
 
 
 def main(arguments):
+    if arguments[0] == "specs":
+        record_specs(*arguments[1:])
+        return 0
     receipts, output = arguments
     measured = publish(receipts, output, os.environ)
-    print(f"Merged {len(measured['lanes'])} lane, {len(measured['packages'])} package and "
-          f"{len(measured['tests'])} test durations from {measured['source_sha']}")
+    print(f"Merged {len(measured['lanes'])} lane, {len(measured['packages'])} package, "
+          f"{len(measured['tests'])} test and {len(measured['specs'])} browser spec durations from {measured['source_sha']}")
     return 0
 
 
