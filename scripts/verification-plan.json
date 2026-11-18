@@ -1615,9 +1615,7 @@
       ],
       "minutes": 60,
       "profiles": [
-        "integration",
-        "nightly",
-        "release"
+        "integration"
       ],
       "suite": "behavior",
       "setup": "verification",
@@ -1647,6 +1645,10 @@
     }
   },
   "capacity": {
+    "hosted": {
+      "jobs": 20,
+      "macos": 5
+    },
     "max_parallel": {
       "fast": 6,
       "integration": 12,
