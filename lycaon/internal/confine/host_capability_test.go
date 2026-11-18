@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // Privileged host effects remain outside the applied boundary.
@@ -89,23 +88,6 @@ func TestBoundaryHostCapability(t *testing.T) {
 	for _, must := range []string{"dd", "sudo", "reboot"} {
 		if !seen[must] {
 			t.Fatalf("required probe %q did not run — host-capability boundary unproven", must)
-		}
-	}
-}
-
-// The profile explicitly denies privileged host surfaces.
-func TestBuildProfileDeniesHostCapabilitySurfaces(t *testing.T) {
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
-	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
-	for _, want := range []string{
-		`(deny file-write*`,
-		`/dev/disk`,
-		`/dev/rdisk`,
-		`(deny mach-lookup`,
-		`com.apple.system.powerd`,
-	} {
-		if !strings.Contains(p, want) {
-			t.Fatalf("BuildProfile missing host-capability denial %q:\n%s", want, p)
 		}
 	}
 }

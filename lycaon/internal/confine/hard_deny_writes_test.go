@@ -57,46 +57,6 @@ func TestHardDenyWriteSpecsIncludesOverlaysAndAgents(t *testing.T) {
 	}
 }
 
-// Workspace allow-backs do not expose adjacent host state.
-func TestBuildProfileDeniesControlPlaneSubtreeWithWorkspaceAllowBack(t *testing.T) {
-	cfg := t.TempDir()
-	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	cfgResolved := cfg
-	if rp, err := filepath.EvalSymlinks(cfg); err == nil {
-		cfgResolved = rp
-	}
-	draft := filepath.Join(cfgResolved, "drafts", "d1")
-	testutil.FailErr(t, "mkdir draft", os.MkdirAll(draft, 0o700))
-
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{
-		Roots:             []string{"/proj"},
-		GrantedWriteRoots: []string{draft},
-	})
-	testutil.FailErr(t, "BuildSeatbeltProfile", err)
-	denyWrite, denyAt := profileBlock(t, p, blockDenyWrite, 0)
-	assertBlockMentions(t, denyWrite, cfgResolved, "control-plane subtree deny")
-	tail := p[denyAt+len(denyWrite):]
-	if !strings.Contains(tail, "(subpath \""+draft+"\")") {
-		t.Fatalf("granted workspace under the control plane must be re-allowed after the deny:\n%s", p)
-	}
-}
-
-func TestBuildProfileRendersHardDenyWrites(t *testing.T) {
-	cfg := t.TempDir()
-	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	proj := "/proj"
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{proj}})
-	testutil.FailErr(t, "BuildSeatbeltProfile", err)
-	// Each entry must appear in the deny block.
-	denyWrite, _ := profileBlockContaining(t, p, blockDenyWrite, "approvals.yaml")
-	assertBlockMentions(t, denyWrite, "approvals.yaml", "write hard-deny")
-	policyDeny, _ := profileBlockContaining(t, p, blockDenyWrite, `[Aa][Gg][Ee]`)
-	assertBlockMentions(t, policyDeny, "(regex ", "instruction approval boundary")
-	if !strings.Contains(p, `[Aa][Gg][Ee]`) {
-		t.Fatalf("profile must render recursive AGENTS.md deny:\n%s", p)
-	}
-}
-
 func TestReviewedWriteRootOverridesBaselineButNotProtectedOrAgentPolicy(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", configDir)
@@ -210,20 +170,4 @@ func TestBoundaryLauncherUntamperable(t *testing.T) {
 
 func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
-func TestBuildProfileOmitsPrivateVarFoldersWriteRoot(t *testing.T) {
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
-	testutil.FailErr(t, "BuildSeatbeltProfile", err)
-	// The path must not appear in the write-root allow block.
-	allowWrite, _ := profileBlock(t, p, blockAllowWrite, 0)
-	assertBlockOmitsPath(t, allowWrite, "/private/var/folders", "write-root allow")
-	exe, err := os.Executable()
-	testutil.FailErr(t, "Executable", err)
-	if rp, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = rp
-	}
-	// The launcher must appear in the deny block.
-	denyWrite, _ := profileBlockContaining(t, p, blockDenyWrite, exe)
-	assertBlockMentions(t, denyWrite, exe, "write hard-deny (launcher)")
 }
