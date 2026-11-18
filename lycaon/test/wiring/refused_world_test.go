@@ -325,6 +325,7 @@ func newRefusalTemplate(t *testing.T) refusalProject {
 	testutil.FailErr(t, "write outside code", os.WriteFile(filepath.Join(p.outside, "a.go"), []byte("package a\n\nfunc Old() {}\n"), 0o644))
 	gittest.InitCommit(t, p.outside, "outside")
 	gittest.Run(t, p.outside, "branch", "side-"+canaryToken)
+	gittest.Run(t, p.outside, "branch", "merge-me")
 	testutil.FailErr(t, "dirty outside file", os.WriteFile(filepath.Join(p.outside, "target.json"), []byte(outsideCanary+"\n"), 0o644))
 	return p
 }
@@ -653,7 +654,7 @@ func pathTemplates() []pathTemplate {
 		command("git_branches", "git -C '{d}' branch"),
 		command("git_compare", "git -C '{d}' rev-list HEAD"),
 		command("git_checkout", "git -C '{d}' checkout -b made"),
-		command("git_merge", "git -C '{d}' merge --no-edit side-"+canaryToken),
+		command("git_merge", "git -C '{d}' merge --no-edit merge-me"),
 		command("git_stash", "git -C '{d}' stash"),
 		command("git_stash_list", "git -C '{d}' stash list"),
 		command("find", "find '{d}'"),
