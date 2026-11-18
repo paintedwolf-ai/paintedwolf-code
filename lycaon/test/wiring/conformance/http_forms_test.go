@@ -24,7 +24,7 @@ var httpFormContracts = []contractCase{{
 	},
 	Prepare: prepareCurlTransportForms,
 	Stdout:  "234\nuploaded\nfailure-body\nstatus:22\n",
-}}
+}, managedHTTPContract}
 
 func prepareCurlTransportForms(t *testing.T, c commandconformance.Case) commandconformance.Case {
 	t.Helper()
