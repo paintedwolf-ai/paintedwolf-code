@@ -1,7 +1,6 @@
 package security
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -22,8 +21,7 @@ func TestAPIScanBundledScannerFindingsE2E(t *testing.T) {
 	}
 
 	h := wiring.BuildForTest(t, wiring.WithBundledScanners())
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 	srv := h.Server
 
 	cases := []struct {

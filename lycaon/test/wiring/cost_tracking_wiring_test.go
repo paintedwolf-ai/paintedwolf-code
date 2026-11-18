@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -49,8 +48,7 @@ func TestCostTrackingOnPricedSummaryAndSSE(t *testing.T) {
 		Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}},
 	})}
 	h := BuildForTest(t, WithLLMClient(mock))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 	hub := h.MemoryHub()
 	if hub == nil {
 		t.Fatal("expected MemoryHub")
@@ -95,7 +93,7 @@ func TestCostTrackingOnPricedSummaryAndSSE(t *testing.T) {
 	})
 
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/projects/"+sess.ProjectID+"/board?session_id="+sess.ID, nil)
-	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	req.Header.Set("Authorization", "Bearer "+h.APIToken)
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -120,7 +118,7 @@ func TestCostTrackingOffUnpricedNoFetch(t *testing.T) {
 	// Tracking off suppresses pricing with a source still selected.
 	patchBody := `{"cost_tracking_enabled":false,"sources":[{"id":"models-dev","enabled":true},{"id":"litellm","enabled":false},{"id":"ai-pricing-fyi","enabled":false}]}`
 	patchReq := httptest.NewRequestWithContext(ctx, http.MethodPatch, "/v1/settings/pricing", strings.NewReader(patchBody))
-	patchReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	patchReq.Header.Set("Authorization", "Bearer "+h.APIToken)
 	patchReq.Header.Set("Content-Type", "application/json")
 	patchW := httptest.NewRecorder()
 	h.Server.ServeHTTP(patchW, patchReq)
@@ -145,7 +143,7 @@ func TestCostTrackingOffUnpricedNoFetch(t *testing.T) {
 	}
 
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/cost/summary?session_id="+sess.ID, nil)
-	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	req.Header.Set("Authorization", "Bearer "+h.APIToken)
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

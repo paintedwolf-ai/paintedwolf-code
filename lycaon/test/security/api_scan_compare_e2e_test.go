@@ -29,8 +29,7 @@ func TestAPIScanCompareVerifyFixE2E(t *testing.T) {
 	gittest.InitCommit(t, projectDir, "fixture baseline")
 
 	h := wiring.BuildForTest(t, wiring.WithBundledScanners())
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	baseline := waitScanPackComplete(t, h, projectDir, []any{string(wire.ScanCategorySecret)}, 90*time.Second)
 	if baseline.Status != wire.CodeScanStatusComplete {

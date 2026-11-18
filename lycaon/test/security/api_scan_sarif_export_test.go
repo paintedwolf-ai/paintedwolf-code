@@ -1,7 +1,6 @@
 package security
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,8 +13,7 @@ import (
 func TestAPIScanSARIFExportHappyPath(t *testing.T) {
 	projectDir := scanFixtureDir(t)
 	h := wiring.BuildForTest(t, wiring.WithBundledScanners())
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 	created := enqueueCodeScan(t, h.Server, projectDir, []wire.ScanCategory{wire.ScanCategorySecret})
 	got := waitScanComplete(t, h.Server, created.ProjectID, created.ID)
 	if got.Status != wire.CodeScanStatusComplete {

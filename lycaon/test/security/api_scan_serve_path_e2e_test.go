@@ -1,7 +1,6 @@
 package security
 
 import (
-	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -18,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func TestAPIScanServePathSASTE2E(t *testing.T) {
@@ -40,10 +40,14 @@ func TestAPIScanServePathSASTE2E(t *testing.T) {
 	t.Chdir(moduleRoot)
 
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	t.Setenv("LYCAON_API_TOKEN", api.TestAPIToken)
+	token, err := api.GenerateAPIToken()
+	testutil.FailErr(t, "generate scanner host bearer", err)
+	t.Setenv("LYCAON_API_TOKEN", token)
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	t.Setenv("LYCAON_TEST", "")
 
-	cfg := configuration.Config{}
+	startup := wiring.NewServeStartup()
+	cfg := configuration.Config{Startup: startup}
 	cfg.DBPath = filepath.Join(t.TempDir(), "serve-path-scan.db")
 	cfg.ListenAddr = "127.0.0.1:0"
 	cfg.TestMCPConnector = &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{
@@ -53,14 +57,12 @@ func TestAPIScanServePathSASTE2E(t *testing.T) {
 
 	serveApp, err := app.Build(t.Context(), cfg)
 	testutil.FailErr(t, "app.Build serve path", err)
-	t.Cleanup(func() { _ = serveApp.Close() })
+	t.Cleanup(func() { testutil.FailErr(t, "close scanner host", serveApp.Close()) })
 	if !filepath.IsAbs(serveApp.ConfigRoot) {
 		t.Fatalf("ConfigRoot = %q, want absolute path after ResolveModuleRoot", serveApp.ConfigRoot)
 	}
 
-	cancel, err := serveApp.StartBackgroundWorkers(context.Background())
-	testutil.FailErr(t, "start background workers", err)
-	t.Cleanup(cancel)
+	startup.Start(t, serveApp)
 
 	created := enqueueCodeScan(t, serveApp.Server, projectDir, []wire.ScanCategory{wire.ScanCategorySAST})
 	got := waitScanComplete(t, serveApp.Server, created.ProjectID, created.ID)

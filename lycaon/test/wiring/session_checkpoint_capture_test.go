@@ -41,8 +41,7 @@ func TestPromptSealsARewindAnchorInAProductionBuild(t *testing.T) {
 		{Pattern: "second ask", FollowUpText: MockCoordinatorCloseoutMarkdown("Done with the second ask.", "")},
 	}})
 	h := BuildForTest(t, WithLLMClient(mock))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	ctx := context.Background()
 	projectDir := t.TempDir()
