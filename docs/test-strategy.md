@@ -1475,13 +1475,8 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 |---|---|---|---|
 | Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
-<<<<<<< HEAD
-| Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then the two platform jobs, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
-| Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
-=======
 | Nightly | `nightly.yml` | `nightly` | 12 (4): the `nightly` profile capped at six, beside the two platform jobs, two browser shards with the desktop journey, and the upgrade rehearsal |
-| Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
->>>>>>> e4985d4fee
+| Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
 | Queue batching | `queue-batching.yml` | `queue-batching` | 1 |

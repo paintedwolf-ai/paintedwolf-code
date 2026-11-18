@@ -13,6 +13,10 @@ fi
 python3 scripts/rewrite-fail-messages.py --check || status=1
 (cd scripts/testsleep && go test -timeout 0 ./... && go run . --root ../../lycaon) || status=1
 (cd scripts/commentlint && go run . --root ../.. --config .commentlint.json) || status=1
+if git grep -nE '^(<<<<<<<|>>>>>>>)( |$)' -- . >&2; then
+  echo 'unresolved merge conflict markers' >&2
+  status=1
+fi
 bash scripts/doc-link-check.sh || status=1
 bash scripts/release-preflight.sh --static || status=1
 exit "${status}"
