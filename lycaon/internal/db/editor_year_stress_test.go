@@ -70,7 +70,7 @@ func TestStressEditorWorkingYearWithRecovery(t *testing.T) {
 			_, err = database.ExecContext(t.Context(), `UPDATE editor_mutations SET updated_at=? WHERE id=?`, time.Now().UTC().Add(-time.Duration(249-day)*24*time.Hour).Format(time.RFC3339Nano), operation)
 			testutil.FailErr(t, "date publication receipt", err)
 		}
-		_, err := db.RunRetention(t.Context(), database, db.DefaultRetention())
+		_, err := db.RunMaintenancePass(t.Context(), database, db.DefaultRetention(), true)
 		testutil.FailErr(t, "maintain completed history", err)
 		if (day+1)%50 == 0 {
 			t.Logf("completed %d working days / %d real saves", day+1, (day+1)*100)

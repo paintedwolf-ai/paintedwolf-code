@@ -53,7 +53,7 @@ func TestRecoverySnapshotPrecedesRetention(t *testing.T) {
 	database, err = builder.openUpgradeableStore(t.Context(), dbPath)
 	testutil.FailErr(t, "open application update", err)
 	defer database.Close()
-	_, err = db.RunRetention(ctx, database, db.RetentionConfig{Enabled: true, OperationJournals: time.Nanosecond})
+	_, err = db.RunMaintenancePass(ctx, database, db.RetentionConfig{Enabled: true, OperationJournals: time.Nanosecond}, true)
 	testutil.FailErr(t, "run retention", err)
 	testutil.FailErr(t, "remove live body", os.Remove(bodyPath))
 	var live int
