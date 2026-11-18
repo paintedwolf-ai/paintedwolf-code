@@ -8,11 +8,25 @@ import (
 	"io/fs"
 
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // All concurrent searches share the same file-read budget.
 var grepReadSlots = make(chan struct{}, grepReadCap)
+
+func readGrepInput(ctx context.Context, reads *projectpaths.ReadSession, drafts sourceview.DraftOverlay, abs string, info fs.FileInfo) (content []byte, binary bool, truncated bool, err error) {
+	if draft, ok := drafts.Lookup(abs); ok {
+		if _, err := reads.Resolve(ctx, abs); err != nil {
+			return nil, false, false, err
+		}
+		if len(draft) > hostGrepMaxFileBytes {
+			return textfile.TrimIncompleteTail(draft[:hostGrepMaxFileBytes]), false, true, nil
+		}
+		return draft, false, false, nil
+	}
+	return readGrepFile(ctx, reads, abs, info)
+}
 
 // readGrepFile rejects binary prefixes before allocating the full read cap.
 // BOM-marked text uses the same decoder as read.

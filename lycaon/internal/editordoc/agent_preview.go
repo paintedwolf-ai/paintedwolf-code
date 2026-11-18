@@ -40,11 +40,11 @@ func (a *AgentService) PreviewAgentEdits(ctx context.Context, inputs []AgentEdit
 			return nil, err
 		}
 		limits := textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes)
-		before, err := textfile.EncodeBounded(serializeEOL(d.Draft, d.EOL), d.Encoding, limits)
+		before, err := textfile.EncodeBounded(textfile.SerializeEOL(d.Draft, d.EOL), d.Encoding, limits)
 		if err != nil {
 			return nil, err
 		}
-		after, err := textfile.EncodeBounded(serializeEOL(plan.content, d.EOL), d.Encoding, limits)
+		after, err := textfile.EncodeBounded(textfile.SerializeEOL(plan.content, d.EOL), d.Encoding, limits)
 		if err != nil {
 			return nil, err
 		}

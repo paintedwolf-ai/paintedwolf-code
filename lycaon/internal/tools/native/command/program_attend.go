@@ -58,7 +58,6 @@ type programEvaluation struct {
 	stderr         *programStream
 	outputs        *invocation.ProgramOutputRetention
 	scope          captureprojection.Scope
-	documents      *programDocuments
 	paths          *projectpaths.ProgramPaths
 	verification   func() commandSourceIdentity
 	failureAttempt *commandFailureAttempt
@@ -311,7 +310,6 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	outcome.Stderr = e.documents.appendNotes(outcome.Stderr)
 	outcome.Refusal = refusal
 	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
 	outcome.SourceWindow = run.window.fact()

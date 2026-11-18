@@ -134,52 +134,50 @@ func TestProgramPublishesOwnAgentDraftBeforeNativeAndExternalReads(t *testing.T)
 	}
 }
 
-func TestProgramHumanDraftKeepsOneSavedFileViewAndReadNote(t *testing.T) {
+func typeHumanDraft(t *testing.T, service *editordoc.Service, p *project.Project, path, content string) *editordoc.Document {
+	t.Helper()
+	doc, err := service.Open(t.Context(), p, path, "r1", "", "window", nil)
+	testutil.FailErr(t, "open "+path, err)
+	typed, err := service.ReplaceSnapshot(t.Context(), doc.ID, p.ID, editordoc.SnapshotReplacement{DocumentCommand: editordoc.DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: doc.Revision}, Content: content, EOL: "lf"})
+	testutil.FailErr(t, "type "+path, err)
+	return typed
+}
+
+// Native reads serve the person's text; an installed program sees disk until
+// an agent operation saves it.
+func TestProgramReadsThePersonsUnsavedText(t *testing.T) {
 	f, service, p := documentProgram(t)
 	testutil.FailErr(t, "saved file", os.WriteFile(filepath.Join(f.Dir, "a.txt"), []byte("saved\n"), 0o644))
-	noDraft := callDocumentProgram(t, f, "cat a.txt")
-	if noDraft.Status != 0 || noDraft.Stdout != "saved\n" || noDraft.Stderr != "" {
-		t.Fatalf("no draft=%+v", noDraft)
+	doc := typeHumanDraft(t, service, p, "a.txt", "human unsaved\n")
+	result := callDocumentProgram(t, f, `cat a.txt; python3 -c 'from pathlib import Path; print(Path("a.txt").read_text(),end="")'; cat < a.txt`)
+	if result.Status != 0 || result.Stdout != "human unsaved\nsaved\nhuman unsaved\n" || result.Stderr != "" {
+		t.Fatalf("reads=%+v", result)
 	}
-	doc, err := service.Open(t.Context(), p, "a.txt", "r1", "", "window", nil)
-	testutil.FailErr(t, "open", err)
-	base, err := service.AgentReadBase(t.Context(), p.ID, f.Session, doc.ID, nil)
-	testutil.FailErr(t, "real command delivery establishes editor read", err)
-	if !base.ReadWhole || base.Revision != doc.Revision {
-		t.Fatalf("command read basis=%+v", base)
+	live, err := service.CurrentSnapshot(t.Context(), p.ID, doc.ID)
+	testutil.FailErr(t, "draft after reads", err)
+	if !live.Dirty || live.Draft != "human unsaved\n" {
+		t.Fatalf("a read changed the draft: %+v", live)
 	}
-	typed, err := service.ReplaceSnapshot(t.Context(), doc.ID, p.ID, editordoc.SnapshotReplacement{DocumentCommand: editordoc.DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: doc.Revision}, Content: "human unsaved\n", EOL: "lf"})
-	testutil.FailErr(t, "human types", err)
-	result := callDocumentProgram(t, f, `cat a.txt; python3 -c 'from pathlib import Path; print(Path("a.txt").read_text(),end="")'; cat a.txt`)
-	expected := fmt.Sprintf("command: %s has unsaved changes in the editor; commands read the saved file.\n", filepath.Join(f.Dir, "a.txt"))
-	if result.Status != 0 || result.Stdout != "saved\nsaved\nsaved\n" || result.Stderr != expected {
-		t.Fatalf("human draft=%+v", result)
-	}
+}
 
-	nativeWrite := callDocumentProgram(t, f, "cat a.txt > a.txt")
-	if nativeWrite.StopCode != "COMMAND_REVISION_CONFLICT" || nativeWrite.CompletedEffects != 0 {
-		t.Fatalf("native draft write=%+v", nativeWrite)
+// A native write over the person's draft lands with it and saves both.
+func TestProgramWriteSavesThePersonsDraftWithIt(t *testing.T) {
+	f, service, p := documentProgram(t)
+	testutil.FailErr(t, "saved file", os.WriteFile(filepath.Join(f.Dir, "a.txt"), []byte("saved\n"), 0o644))
+	doc := typeHumanDraft(t, service, p, "a.txt", "human unsaved\n")
+	appended := callDocumentProgram(t, f, "printf 'agent line\\n' >> a.txt")
+	if appended.Status != 0 || appended.StopCode != "" {
+		t.Fatalf("append=%+v", appended)
 	}
-	page, err := f.Recorder.ReadProgramPage(t.Context(), f.Session, nativeWrite.ProgramID, "", 100)
-	testutil.FailErr(t, "refused redirect receipt", err)
-	refusedWrite := 0
-	for _, execution := range page.Executions {
-		if execution.StopCode == "COMMAND_REVISION_CONFLICT" && !execution.OwnerStarted && !execution.OwnerInvoked && execution.EffectCertainty == "none" {
-			refusedWrite++
-		}
+	disk, err := os.ReadFile(filepath.Join(f.Dir, "a.txt"))
+	testutil.FailErr(t, "disk after append", err)
+	if string(disk) != "human unsaved\nagent line\n" {
+		t.Fatalf("disk=%q", disk)
 	}
-	if refusedWrite != 1 {
-		t.Fatalf("refused writes=%d executions=%+v", refusedWrite, page.Executions)
-	}
-	saved, err := os.ReadFile(filepath.Join(f.Dir, "a.txt"))
-	testutil.FailErr(t, "saved file after refused native write", err)
-	if string(saved) != "saved\n" {
-		t.Fatalf("draft path overwritten: %q", saved)
-	}
-	live, err := service.CurrentSnapshot(t.Context(), p.ID, typed.ID)
-	testutil.FailErr(t, "live draft", err)
-	if live.Draft != "human unsaved\n" || !live.Dirty {
-		t.Fatalf("draft=%+v", live)
+	live, err := service.CurrentSnapshot(t.Context(), p.ID, doc.ID)
+	testutil.FailErr(t, "document after append", err)
+	if live.Dirty || live.Draft != "human unsaved\nagent line\n" {
+		t.Fatalf("document=%+v", live)
 	}
 }
 
@@ -223,28 +221,22 @@ func TestProgramAppendStopsOnUnsavedAcceptanceWithoutReplaying(t *testing.T) {
 	}
 }
 
-func TestProgramRepoMapReadsSavedContentAndReportsHumanDraft(t *testing.T) {
+// repo-map reads what the person sees, as every other native read does.
+func TestProgramRepoMapReadsThePersonsDraft(t *testing.T) {
 	f, service, p := documentProgram(t)
 	testutil.FailErr(t, "saved probe content", os.WriteFile(filepath.Join(f.Dir, "a.txt"), []byte("marker saved\n"), 0o644))
 	clean := callDocumentProgram(t, f, "repo-map --path a.txt")
 	if clean.Status != 0 || !strings.Contains(clean.Stdout, "marker saved") || clean.Stderr != "" {
 		t.Fatalf("clean map=%+v", clean)
 	}
-	doc, err := service.Open(t.Context(), p, "a.txt", "r1", "", "window", nil)
-	testutil.FailErr(t, "open probe source", err)
-	typed, err := service.ReplaceSnapshot(t.Context(), doc.ID, p.ID, editordoc.SnapshotReplacement{DocumentCommand: editordoc.DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: doc.Revision}, Content: "marker human\n", EOL: "lf"})
-	testutil.FailErr(t, "human probe draft", err)
+	typed := typeHumanDraft(t, service, p, "a.txt", "marker human\n")
 	dirty := callDocumentProgram(t, f, "repo-map --path a.txt")
-	wantNote := fmt.Sprintf("command: %s has unsaved changes in the editor; commands read the saved file.\n", filepath.Join(f.Dir, "a.txt"))
-	if dirty.Status != 0 || !strings.Contains(dirty.Stdout, "marker saved") || strings.Contains(dirty.Stdout, "marker human") || dirty.Stderr != wantNote {
+	if dirty.Status != 0 || !strings.Contains(dirty.Stdout, "marker human") || strings.Contains(dirty.Stdout, "marker saved") || dirty.Stderr != "" {
 		t.Fatalf("dirty map=%+v", dirty)
 	}
 	live, err := service.CurrentSnapshot(t.Context(), p.ID, typed.ID)
-	testutil.FailErr(t, "preserved probe draft", err)
+	testutil.FailErr(t, "probe draft", err)
 	if !live.Dirty || live.Draft != "marker human\n" {
-		t.Fatalf("probe draft=%+v", live)
-	}
-	if reads := service.FreezeAgentReads(p.ID, f.Session); len(reads) != 0 {
-		t.Fatalf("unmapped probe output granted editor reads=%+v", reads)
+		t.Fatalf("a read changed the draft: %+v", live)
 	}
 }
