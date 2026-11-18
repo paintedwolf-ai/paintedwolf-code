@@ -211,7 +211,7 @@ func TestDispatchRejectionsPreserveIndependentPeersAndHistory(t *testing.T) {
 					Tools: reg,
 				},
 				Tools: ToolsDeps{
-					BeforeToolRun: func(_ context.Context, _ *api.Session, _ []api.Message, _ string, _ string, args map[string]any) (string, bool, error) {
+					BeforeToolRun: func(_ context.Context, _ *api.Session, _ []api.Message, _ string, args map[string]any) (string, bool, error) {
 						index := args["index"].(int)
 						inspected = append(inspected, index)
 						if rejects[index] {

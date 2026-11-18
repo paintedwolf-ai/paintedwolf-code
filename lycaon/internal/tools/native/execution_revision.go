@@ -90,7 +90,7 @@ func (e ExecutionRevisions) CaptureSource(ctx context.Context, tctx tools.ToolCo
 		return ExecutionSource{}, err
 	}
 	maximum := sourceview.AccessCommand.MaxBytes()
-	raw, revision, release, err := e.captureBytes(ctx, tctx, resolved, maximum)
+	raw, revision, release, err := e.captureBytes(ctx, resolved, maximum)
 	if errors.Is(err, fs.ErrNotExist) {
 		return ExecutionSource{}, sourceview.PathNotFound("read", resolved.DisplayPath, resolved.Abs)
 	}

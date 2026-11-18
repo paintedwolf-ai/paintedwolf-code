@@ -36,7 +36,7 @@ func resolvePickerTurnProfile(
 }
 
 func enrichPickerRunContext(runCtx api.CoordinatorRunContext) api.CoordinatorRunContext {
-	return EnrichRunContextForWorkflow(runCtx, "")
+	return EnrichRunContextForWorkflow(runCtx)
 }
 
 func TestSelectSurfaceInvestigateDefaultAmbient(t *testing.T) {

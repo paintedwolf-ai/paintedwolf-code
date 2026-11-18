@@ -73,7 +73,7 @@ func TestWaitVisibilityAtBatchBoundary(t *testing.T) {
 			loop := NewPromptLoopForTest(PromptLoopDeps{
 				Context:    ContextDeps{Tools: reg},
 				Projection: ProjectionDeps{AppendMessages: func(context.Context, string, ...api.Message) error { return nil }},
-				Tools: ToolsDeps{BeforeToolRun: func(_ context.Context, sess *api.Session, history []api.Message, _, tool string, _ map[string]any) (string, bool, error) {
+				Tools: ToolsDeps{BeforeToolRun: func(_ context.Context, sess *api.Session, history []api.Message, tool string, _ map[string]any) (string, bool, error) {
 					gc := oar.NewGuardContext()
 					guard.ObserveWaitVisibility(sess, history, tool, true, gc)
 					if guard.EvaluateObserveHasCode(gc, oar.AnchorCoordinatorPreInvoke, guard.WaitHiddenTextCode) {
@@ -216,7 +216,7 @@ func newMidTurnHarness(t *testing.T, surfaceID string) *midTurnHarness {
 				}},
 		},
 		Tools: ToolsDeps{
-			BeforeToolRun: func(_ context.Context, sess *api.Session, history []api.Message, _, tool string, _ map[string]any) (string, bool, error) {
+			BeforeToolRun: func(_ context.Context, sess *api.Session, history []api.Message, tool string, _ map[string]any) (string, bool, error) {
 				gc := oar.NewGuardContext()
 				guard.ObserveWaitVisibility(sess, history, tool, surfaceID == publishingSurface, gc)
 				if gc.Session.UnpublishedToolTextPending {

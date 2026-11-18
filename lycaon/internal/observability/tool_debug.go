@@ -35,7 +35,7 @@ func initToolDebugLog() {
 	if !ToolDebugEnabled() {
 		return
 	}
-	log, err := openJSONLDebugLog(true, debugpaths.KindTool)
+	log, err := openJSONLDebugLog(debugpaths.KindTool)
 	if err != nil {
 		slog.Warn("tool debug logging disabled", "err", err)
 		return

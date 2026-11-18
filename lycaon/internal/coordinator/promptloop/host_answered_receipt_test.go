@@ -130,7 +130,7 @@ func runReadCall(t *testing.T, deps promptloop.PromptLoopDeps, sessionStore *sto
 func TestHostAnsweredToolCallSettlesOnTheLedger(t *testing.T) {
 	rec := newRecordingRecorder()
 	deps, sessionStore := readCallDeps(t, rec)
-	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, map[string]any) (string, bool, error) {
 		return "answered by the host", true, nil
 	}
 	runReadCall(t, deps, sessionStore)
@@ -155,7 +155,7 @@ func TestHostAnsweredToolCallSettlesOnTheLedger(t *testing.T) {
 func TestPreInvokeRefusalSettlesOnTheLedger(t *testing.T) {
 	rec := newRecordingRecorder()
 	deps, sessionStore := readCallDeps(t, rec)
-	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, map[string]any) (string, bool, error) {
 		return "", false, errors.New("refused before the subsystem owner")
 	}
 	runReadCall(t, deps, sessionStore)
@@ -253,7 +253,7 @@ func TestOwnerWithoutSourceRunSettlesNoVerdict(t *testing.T) {
 func TestGuidanceRejectedCallCarriesItsReceiptToTheCard(t *testing.T) {
 	rec := newRecordingRecorder()
 	deps, sessionStore := readCallDeps(t, rec)
-	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, map[string]any) (string, bool, error) {
 		return "", false, guidance.NewRefusal("TOOL_TEST_REFUSED", "Rejected: no.\nCode: TOOL_TEST_REFUSED")
 	}
 

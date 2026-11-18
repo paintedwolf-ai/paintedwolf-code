@@ -58,7 +58,7 @@ func resolvePhaseSurface(t *testing.T, m workflowdef.Manifest, phase workflowdef
 		WorkflowID:     m.ID,
 		CurrentPhase:   phase.ID,
 		SurfaceProfile: m.SurfaceProfile,
-	}, contractcheck.RepoRoot(t)+"/lycaon")
+	})
 	return strings.TrimSpace(runCtx.PhaseCoordinatorSurface)
 }
 

@@ -57,7 +57,6 @@ func linesNaming(corpus string, names []string) string {
 // A rendered prompt names a tool only when the surface it renders for can reach
 // it. Retired names count: a prompt must not teach what no longer exists.
 func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
 	catalog, _ := promptNameCatalog(t)
 	states := map[string]surface.ImplementSessionState{
 		"idle":              {},
@@ -78,7 +77,7 @@ func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 			// With no folder attached, only the surfaces that reach no worktree open.
 			if rootCount > 0 || slices.Contains(noFolderSurfaces, id) {
 				t.Run(fmt.Sprintf("%s/%d-roots", id, rootCount), func(t *testing.T) {
-					check(t, renderCoordinatorTripartiteAtRootCount(t, root, rootCount, id))
+					check(t, renderCoordinatorTripartiteAtRootCount(t, rootCount, id))
 				})
 			}
 			if rootCount != 1 {
@@ -86,7 +85,7 @@ func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 			}
 			for name, state := range states {
 				t.Run(id+"/"+name, func(t *testing.T) {
-					check(t, renderCoordinatorTripartiteForRunContext(t, root, api.CoordinatorRunContext{},
+					check(t, renderCoordinatorTripartiteForRunContext(t, api.CoordinatorRunContext{},
 						&api.Session{Posture: api.SessionPostureBuild}, surface.HostLoopWakeSentinel,
 						WorkerCompletionHistory("implementer"), id, state))
 				})

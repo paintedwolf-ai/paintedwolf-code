@@ -5,8 +5,7 @@
 // checked against the manifest captured at startup and refused with a restart
 // outcome once the installation has changed.
 //
-// The protected launch (#1118) runs the engine from an immutable generation; it
-// installs a binding whose installation can no longer change underneath it.
+// Protected launch binds the engine to an immutable installation generation.
 package installbinding
 
 import "errors"

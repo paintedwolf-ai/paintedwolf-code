@@ -32,7 +32,7 @@ func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, 
 	if len(page.source) == 0 {
 		return sessionReduction{reason: "page_budget"}, nil
 	}
-	possible, err := c.usefulCompaction(info, page.source, compactionReplacement(info, page.source, nil, compactionSummary{}, ""), c.cfg.SessionMinSavingsTokens)
+	possible, err := c.usefulCompaction(info, page.source, compactionReplacement(page.source, nil, compactionSummary{}, ""), c.cfg.SessionMinSavingsTokens)
 	if err != nil || !possible {
 		return sessionReduction{reason: "insufficient_reclaimable_space"}, err
 	}
@@ -60,7 +60,7 @@ func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, 
 	if err != nil {
 		return sessionReduction{reason: "failed"}, err
 	}
-	page.replacement = compactionReplacement(info, page.source, nil, summary, text)
+	page.replacement = compactionReplacement(page.source, nil, summary, text)
 	candidate := append(append([]ContextMessage(nil), page.replacement...), page.retained...)
 	useful, err := c.usefulReduction(info, page, messages, candidate)
 	reportReductionPage(ctx, info, page, useful && err == nil)

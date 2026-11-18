@@ -37,7 +37,7 @@ func ObservedCitations(ev Ledger) []ObservedCitation {
 		if !ok {
 			continue
 		}
-		tier := RecordFidelity(rec, ev, handle)
+		tier := RecordFidelity(rec, ev)
 		for _, u := range ObservedURLsForRecord(rec) {
 			add(ObservedCitation{Token: u, URL: u, Kind: ObservedCitationKindURL, Fidelity: tier})
 		}

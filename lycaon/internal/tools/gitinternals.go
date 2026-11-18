@@ -10,7 +10,7 @@ import (
 )
 
 // CheckNativeGitMetadataPath enforces native file-tool restrictions on direct .git
-// mutations at any root or submodule depth while allowing read-only inspection (#1671).
+// mutations at any root or submodule depth while allowing read-only inspection.
 func CheckNativeGitMetadataPath(relPath string, writeIntent bool) (class string, denied bool, err error) {
 	if !writeIntent {
 		return "", false, nil

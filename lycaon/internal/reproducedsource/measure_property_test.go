@@ -92,7 +92,7 @@ func TestMeasureProseInvarianceProperty(t *testing.T) {
 	fenceB := "```go\ntype Config struct {\n\tAddr string\n}\n```"
 
 	baselineDoc := parseDoc(fenceA + "\n\n" + fenceB + "\n")
-	want := reproducedsource.Measure(baselineDoc, nil, candidates)
+	want := reproducedsource.Measure(baselineDoc, candidates)
 	if want.Lines != 6 || want.Path != "internal/server/handler.go" || want.StartLine != 3 || want.EndLine != 8 || want.FileLines != 7 {
 		t.Fatalf("baseline = %+v", want)
 	}
@@ -103,7 +103,7 @@ func TestMeasureProseInvarianceProperty(t *testing.T) {
 		middle := randomProseChunk(rng)
 		after := randomProseChunk(rng)
 		markdown := before + "\n\n" + fenceA + "\n\n" + middle + "\n\n" + fenceB + "\n\n" + after + "\n"
-		got := reproducedsource.Measure(parseDoc(markdown), nil, candidates)
+		got := reproducedsource.Measure(parseDoc(markdown), candidates)
 		if got != want {
 			t.Fatalf("trial %d: Measure() = %+v, want %+v\nmarkdown:\n%s", trial, got, want, markdown)
 		}
@@ -161,7 +161,7 @@ func TestMeasureAbsentCodeYieldsZeroProperty(t *testing.T) {
 		} else {
 			md = fmt.Sprintf("Here is the new script:\n\n```%s\n%s\n```\n", lang, strings.Join(body, "\n"))
 		}
-		got := reproducedsource.Measure(parseDoc(md), nil, candidates)
+		got := reproducedsource.Measure(parseDoc(md), candidates)
 		if got != (reproducedsource.Result{}) {
 			t.Fatalf("trial %d: Measure() = %+v, want zero Result", trial, got)
 		}

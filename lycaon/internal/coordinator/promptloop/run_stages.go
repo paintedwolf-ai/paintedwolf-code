@@ -258,7 +258,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		var blocked bool
 		var refusal *guidance.Refusal
 		st.history, refusal, blocked, err = l.Tools.tryRejectNoToolTurn(
-			ctx, sess, st.history, userPrompt, st.lastAssistantContent, read.Draft, surfaceID, st.turnTools, sessionID, st.lastAssistantID, st, invokeAllowed, st.output.rejection,
+			ctx, sess, st.history, st.lastAssistantContent, read.Draft, surfaceID, st.turnTools, sessionID, st.lastAssistantID, st, invokeAllowed, st.output.rejection,
 		)
 		if err != nil {
 			return out, err
@@ -269,9 +269,9 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			if lastTurn {
 				// Text the output gate blocked is never the answer.
 				if st.output.rejection != nil && refusal == st.output.rejection {
-					return l.Closeout.endWithClosing(ctx, sess, sessionID, userPrompt, surfaceID, st)
+					return l.Closeout.endWithClosing(ctx, sess, sessionID, surfaceID, st)
 				}
-				return l.Closeout.applyAssembledFinalTurn(ctx, sess, sessionID, userPrompt, surfaceID, st, read.Draft, assistantMsg.Content, refusal)
+				return l.Closeout.applyAssembledFinalTurn(ctx, sess, sessionID, surfaceID, st, read.Draft, assistantMsg.Content, refusal)
 			}
 			if refusal != nil && !sess.IsWorkerChild() && st.noteBlockedBatch(refusal.Code(), "") {
 				out.breakLoop = true
@@ -283,7 +283,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		}
 		if read.Draft.HasAnswer() {
 			st.closeoutRetry.noFurtherTurn = lastTurn
-			return l.Closeout.applyAcceptedCloseoutReport(ctx, sess, sessionID, userPrompt, surfaceID, st, assistantMsg, read)
+			return l.Closeout.applyAcceptedCloseoutReport(ctx, sess, sessionID, surfaceID, st, assistantMsg, read)
 		}
 	} else {
 		if st != nil {
@@ -344,7 +344,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 	if st != nil && !tools.CallReach(ctx).Known() {
 		ctx = tools.WithCallReach(ctx, st.requestReach())
 	}
-	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, st.history, userPrompt, surfaceID, assistantMsg)
+	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, st.history, surfaceID, assistantMsg)
 	if err != nil {
 		return out, err
 	}
@@ -367,14 +367,14 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 func (l *turnCloseout) applyAcceptedCloseoutReport(
 	ctx context.Context,
 	sess *api.Session,
-	sessionID, userPrompt, surfaceID string,
+	sessionID, surfaceID string,
 	st *promptLoopTurnState,
 	assistantMsg api.Message,
 	read guidance.CloseoutRead,
 ) (promptLoopAssistantTurnResult, error) {
 	var out promptLoopAssistantTurnResult
 	commitOut, cerr := l.handleAcceptedCloseoutReport(
-		ctx, sess, sessionID, userPrompt, surfaceID, st, st.history, assistantMsg, read,
+		ctx, sess, sessionID, surfaceID, st, st.history, assistantMsg, read,
 	)
 	if cerr != nil {
 		return out, cerr
@@ -395,7 +395,7 @@ func (l *turnCloseout) applyAcceptedCloseoutReport(
 	if commitOut.exhausted {
 		// Exhaustion preserves the pinned report and latest proposed citations.
 		emitOut, eerr := l.emitAssembledCloseout(
-			ctx, sess, sessionID, userPrompt, surfaceID, commitOut.drafted, st.closeoutRetry.codes, st, st.history,
+			ctx, sess, sessionID, surfaceID, commitOut.drafted, st.closeoutRetry.codes, st, st.history,
 		)
 		if eerr != nil {
 			return out, eerr
@@ -408,7 +408,7 @@ func (l *turnCloseout) applyAcceptedCloseoutReport(
 			out.exit = loopExitCompleted
 			return out, nil
 		}
-		return l.endWithClosing(ctx, sess, sessionID, userPrompt, surfaceID, st)
+		return l.endWithClosing(ctx, sess, sessionID, surfaceID, st)
 	}
 	if !commitOut.committed {
 		st.turnEndedGuidanceReject = true
@@ -443,7 +443,7 @@ func (l *turnCloseout) maybeNotifyGroundedSynthesisAccepted(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, surfaceID string,
-	history []api.Message,
+
 	workersIdle bool,
 ) {
 	if l == nil || l.Deps.OnGroundedSynthesisAccepted == nil || !workersIdle {
@@ -514,7 +514,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		return nil, err
 	}
 	if st.lastAssistantID == "" && !st.turnEndedGuidanceReject && loopExit != loopExitSecretWithheld && loopExit != loopExitOutputTruncated && l.Closeout.canCloseWithoutAnswer(sess) {
-		if _, err := l.Closeout.endWithClosing(ctx, sess, sessionID, userPrompt, l.Context.promptTurnSurface(sessionID), st); err != nil {
+		if _, err := l.Closeout.endWithClosing(ctx, sess, sessionID, l.Context.promptTurnSurface(sessionID), st); err != nil {
 			return nil, err
 		}
 	}

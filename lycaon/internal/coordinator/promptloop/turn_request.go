@@ -32,7 +32,7 @@ func (l *modelTurn) buildTurnRequest(
 	sessionID string,
 	history []api.Message,
 	profileID string,
-	userPrompt string,
+
 	iterIndex, maxIter int,
 	hostTurn bool,
 	st *promptLoopTurnState,
@@ -57,7 +57,7 @@ func (l *modelTurn) buildTurnRequest(
 		st.proseFinish = true
 	}
 	turnTools, toolPlan, surfaceID, err := l.Context.coordinatorToolsForTurn(
-		ctx, sess, profileID, history, userPrompt, iterIndex, maxIter, frameValue, st,
+		ctx, sess, profileID, history, iterIndex, maxIter, frameValue, st,
 	)
 	if err != nil {
 		return coordinatorTurnRequest{}, err

@@ -309,7 +309,7 @@ func TestBeforeToolResolvesTaskIdentityAndRendersRejects(t *testing.T) {
 	mgr.Coordinator.Guards.SetTaskIdentityResolver(resolver)
 
 	// 1. Valid planned leg resolution through BeforeTool.
-	if _, skip, err := mgr.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "task", map[string]any{"workflow_work_id": "work-planned"}); err != nil || skip {
+	if _, skip, err := mgr.Coordinator.Guards.BeforeTool(ctx, sess, nil, "task", map[string]any{"workflow_work_id": "work-planned"}); err != nil || skip {
 		t.Fatalf("planned leg BeforeTool: skip=%v err=%v", skip, err)
 	}
 	// 2. Non-ToolReject error from resolver (WorkflowWork error, bad scope).
@@ -317,7 +317,7 @@ func TestBeforeToolResolvesTaskIdentityAndRendersRejects(t *testing.T) {
 		{"workflow_work_id": "work-err", "agent_type": "path-explorer"},
 		{"agent_type": "path-explorer", "scope": "not-an-object"},
 	} {
-		if _, _, err := mgr.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "task", badArgs); err == nil {
+		if _, _, err := mgr.Coordinator.Guards.BeforeTool(ctx, sess, nil, "task", badArgs); err == nil {
 			t.Fatalf("expected error for args %#v", badArgs)
 		}
 	}
@@ -326,7 +326,7 @@ func TestBeforeToolResolvesTaskIdentityAndRendersRejects(t *testing.T) {
 		{},
 		{"agent_type": "unknown-agent-profile"},
 	} {
-		if _, _, err := mgr.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "task", rejectArgs); err == nil {
+		if _, _, err := mgr.Coordinator.Guards.BeforeTool(ctx, sess, nil, "task", rejectArgs); err == nil {
 			t.Fatalf("expected structured reject for args %#v", rejectArgs)
 		}
 	}

@@ -146,7 +146,7 @@ func Compile(ctx context.Context, spec Spec, limits Limits) (*Matcher, error) {
 	if err != nil {
 		return nil, err
 	}
-	m.require = requirement(m.engine, patterns, spec)
+	m.require = requirement(m.engine, patterns)
 	return m, nil
 }
 
@@ -154,7 +154,7 @@ func Compile(ctx context.Context, spec Spec, limits Limits) (*Matcher, error) {
 // pruning; empty when the compiled engine cannot prove a required literal.
 func (m *Matcher) Requirement() litprefilter.Requirement { return m.require }
 
-func requirement(e engine, patterns []string, spec Spec) litprefilter.Requirement {
+func requirement(e engine, patterns []string) litprefilter.Requirement {
 	switch e := e.(type) {
 	case literalEngine:
 		for _, p := range patterns {

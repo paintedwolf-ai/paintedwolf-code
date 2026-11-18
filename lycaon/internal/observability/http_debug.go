@@ -63,7 +63,7 @@ func initHTTPDebugLog() {
 	if !HTTPDebugEnabled() {
 		return
 	}
-	log, err := openJSONLDebugLog(true, debugpaths.KindHTTP)
+	log, err := openJSONLDebugLog(debugpaths.KindHTTP)
 	if err != nil {
 		slog.Warn("http debug logging disabled", "err", err)
 		return

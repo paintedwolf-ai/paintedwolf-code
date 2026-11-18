@@ -16,10 +16,7 @@ type jsonlDebugLog struct {
 	f    *debugretention.File
 }
 
-func openJSONLDebugLog(enabled bool, kind debugpaths.Kind) (*jsonlDebugLog, error) {
-	if !enabled {
-		return nil, nil
-	}
+func openJSONLDebugLog(kind debugpaths.Kind) (*jsonlDebugLog, error) {
 	return openJSONLDebugLogAt(debugpaths.FilePath(kind))
 }
 

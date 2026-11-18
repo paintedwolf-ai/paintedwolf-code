@@ -139,7 +139,7 @@ func (c *SimpleCompactor) Compact(ctx context.Context, info SessionInfo, message
 	return
 }
 
-func compactionReplacement(info SessionInfo, out, tail []ContextMessage, structured compactionSummary, summary string) []ContextMessage {
+func compactionReplacement(out, tail []ContextMessage, structured compactionSummary, summary string) []ContextMessage {
 	checkpoint := ContextMessage{
 		ID:           uuid.NewString(),
 		Role:         string(api.MessageRoleUser),

@@ -12,9 +12,9 @@ type RecordAux struct {
 	ExternalCustody  bool
 	CustodyTree      bool
 	CustodySeq       int
-	// PathRoots maps a stored path key to its owning root ID for keys whose
+	// PathRoots maps a stored path key to its root ID for keys whose
 	// root differs from the record's primary RootID; empty values mark
-	// legacy tokens.
+	// unrooted tokens.
 	PathRoots map[string]string
 }
 

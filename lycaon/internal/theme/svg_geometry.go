@@ -38,7 +38,7 @@ func iconAttrSet(specific ...string) map[string]bool {
 	return out
 }
 
-func validateGeometryAttr(element, key, raw string) error {
+func validateGeometryAttr(key, raw string) error {
 	switch key {
 	case "d":
 		return validateSVGPath(raw)

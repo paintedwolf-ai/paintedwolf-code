@@ -26,7 +26,7 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 	ctx context.Context,
 	sess *api.Session,
 	history []api.Message,
-	userPrompt string,
+
 	lastAssistantContent string,
 	draft guidance.CloseoutDraft,
 	surfaceID string,
@@ -54,7 +54,7 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 
 	block := reject != nil
 	if !block && l.Closeout.Deps.BeforeFinishNoToolTurn != nil {
-		reject, block = l.Closeout.Deps.BeforeFinishNoToolTurn(ctx, sess, history, userPrompt, lastAssistantContent, draft, surfaceID, workersIdle, turnTools, invokeAllowed)
+		reject, block = l.Closeout.Deps.BeforeFinishNoToolTurn(ctx, sess, history, lastAssistantContent, draft, surfaceID, workersIdle, turnTools, invokeAllowed)
 	}
 	if !block {
 		return history, nil, false, nil

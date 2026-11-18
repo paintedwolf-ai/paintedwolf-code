@@ -167,8 +167,8 @@ func TestWorkerCopyLifetimesAndSkillHistory(t *testing.T) {
 
 	renderer := prompts.NewInjectRenderer(contractcheck.BundledPromptEngineForRoot(t))
 	sessBuild := &api.Session{Posture: api.SessionPostureBuild}
-	prefixBefore := renderCoordinatorTripartiteForRunContext(t, root, api.CoordinatorRunContext{}, sessBuild, surface.HostLoopWakeSentinel, nil, surface.SurfaceImplementDispatch)
-	prefixAfter := renderCoordinatorTripartiteForRunContext(t, root, api.CoordinatorRunContext{}, sessBuild, surface.HostLoopWakeSentinel, WorkerCompletionHistory("implementer"), surface.SurfaceImplementDispatch)
+	prefixBefore := renderCoordinatorTripartiteForRunContext(t, api.CoordinatorRunContext{}, sessBuild, surface.HostLoopWakeSentinel, nil, surface.SurfaceImplementDispatch)
+	prefixAfter := renderCoordinatorTripartiteForRunContext(t, api.CoordinatorRunContext{}, sessBuild, surface.HostLoopWakeSentinel, WorkerCompletionHistory("implementer"), surface.SurfaceImplementDispatch)
 	if prefixBefore != prefixAfter {
 		t.Fatal("standing coordinator prefix changed across volatile worker completion")
 	}
@@ -185,7 +185,7 @@ func TestWorkerCopyLifetimesAndSkillHistory(t *testing.T) {
 		t.Fatal("turn-state frame did not reflect volatile worker transition")
 	}
 
-	prefixSynthesis := renderCoordinatorTripartiteForRunContext(t, root, api.CoordinatorRunContext{}, sessBuild, surface.HostLoopWakeSentinel, nil, surfaceImplementSynthesis)
+	prefixSynthesis := renderCoordinatorTripartiteForRunContext(t, api.CoordinatorRunContext{}, sessBuild, surface.HostLoopWakeSentinel, nil, surfaceImplementSynthesis)
 	if prefixBefore == prefixSynthesis {
 		t.Fatal("standing coordinator prefix did not re-render when slow surface changed")
 	}
@@ -245,7 +245,7 @@ func TestWorkerCopyAbsentStates(t *testing.T) {
 		t.Fatalf("expected empty round block when no brief or instructions exist, got %+v", emptyRound)
 	}
 
-	noCeiling := renderCoordinatorTripartiteForRunContext(t, root, api.CoordinatorRunContext{}, &api.Session{Posture: api.SessionPostureBuild}, "Inspect repo", nil, surface.SurfaceImplementDispatch)
+	noCeiling := renderCoordinatorTripartiteForRunContext(t, api.CoordinatorRunContext{}, &api.Session{Posture: api.SessionPostureBuild}, "Inspect repo", nil, surface.SurfaceImplementDispatch)
 	if strings.Contains(noCeiling, "[host:coordinator-spend-soft-stop]") {
 		t.Fatal("unarmed spend ceiling rendered soft-stop banner")
 	}

@@ -33,7 +33,7 @@ func TestLoopBeforeToolRunSkipsRegistryRun(t *testing.T) {
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
 	deps.Context.Tools = reg
-	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, tool string, _ map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, tool string, _ map[string]any) (string, bool, error) {
 		if tool == "state_update" {
 			return "host answered", true, nil
 		}
@@ -119,7 +119,7 @@ func TestLoopBeforeToolRunRejectDoesNotInvokeTool(t *testing.T) {
 	deps.Model.LLM = client
 	deps.Context.Tools = reg
 	deps.Context.LoadedTools = func(string) map[string]bool { return map[string]bool{"write": true} }
-	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, _ string, _ map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, _ map[string]any) (string, bool, error) {
 		return "", true, fmt.Errorf("Rejected: COORDINATOR_ORCHESTRATE_WRITE_DENIED\nWhy: no\nInstead: task\nCode: COORDINATOR_ORCHESTRATE_WRITE_DENIED")
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)

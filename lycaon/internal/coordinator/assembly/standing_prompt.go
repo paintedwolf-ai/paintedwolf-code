@@ -64,7 +64,7 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 
 	if err := prompts.MergeCoordinatorPromptVars(
 		in.Profile.SurfaceID,
-		prompts.ExecutionModePromptTransition{ExecutionMode: in.ExecutionMode},
+		prompts.ExecutionModePromptTransition{},
 		in.VerifyCommand,
 		occ,
 	); err != nil {
@@ -86,9 +86,6 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 	surfaceVars, err := prompts.Vars(in.reader, occ)
 	if err != nil {
 		return "", fmt.Errorf("standing prompt vars: %w", err)
-	}
-	if readable, _ := surfaceVars["profile_has_skills_read"].(bool); !readable {
-		delete(surfaceVars, "agent_skills")
 	}
 
 	catalog, err := prompts.UnitCatalogForEngine(pe)

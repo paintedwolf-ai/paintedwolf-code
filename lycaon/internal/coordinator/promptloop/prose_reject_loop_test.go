@@ -48,7 +48,7 @@ func TestRepeatedProseRejectionEndsWithBoundedHandoff(t *testing.T) {
 	deps.Model.LLM = client
 	deps.Context.Tools = toolstest.NewRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
-	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
+	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 		return guidance.NewRefusal("SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT", "Required check is unresolved."), true
 	}
 	deps.Closeout.TurnCloseoutNudge = func(context.Context, *api.Session, string, promptloop.TurnCloseoutCause) promptloop.HostNudge {
@@ -117,7 +117,7 @@ func TestGatedCloseoutGetsOneActingRepairRound(t *testing.T) {
 						return nil
 					}
 				} else {
-					deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, invoke bool) (*guidance.Refusal, bool) {
+					deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, invoke bool) (*guidance.Refusal, bool) {
 						if !gateOpen {
 							return nil, false
 						}
@@ -214,7 +214,7 @@ func TestGatedCloseoutPathsSettleAsCloseoutBlocked(t *testing.T) {
 					return stoppedRefusal(rejections == 1)
 				}
 			} else {
-				deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, invoke bool) (*guidance.Refusal, bool) {
+				deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, invoke bool) (*guidance.Refusal, bool) {
 					rejections++
 					if invoke && rejections <= 2 {
 						return guidance.NewRefusal("WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT", "Required workflow gate remains open").

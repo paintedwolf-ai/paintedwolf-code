@@ -122,7 +122,7 @@ func TestPartialDispatchRepairsFailedPeerWhileAcceptedWorkerRuns(t *testing.T) {
 	deps.Context.ImplementSessionState = func(context.Context, *api.Session) surface.ImplementSessionState {
 		return surface.ImplementSessionState{WorkersInFlight: len(accepted)}
 	}
-	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, args map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, args map[string]any) (string, bool, error) {
 		if args["invalid"] == true {
 			return "", false, guidance.NewRefusal("TOOL_ARGS_INVALID", "brief.constraints must be an array")
 		}

@@ -86,12 +86,12 @@ func (l *turnNudges) maybeWithdrawCoordinatorDraft(
 	if st != nil {
 		content = st.lastAssistantContent
 	}
-	return l.withdrawCoordinatorDraft(ctx, sess, sessionID, st, content)
+	return l.withdrawCoordinatorDraft(ctx, sessionID, st, content)
 }
 
 func (l *turnNudges) withdrawCoordinatorDraft(
 	ctx context.Context,
-	sess *api.Session,
+
 	sessionID string,
 	st *promptLoopTurnState,
 	content string,

@@ -82,7 +82,7 @@ type ToolsDeps struct {
 	AgentPresence               *agentpresence.Tracker
 	DesignateProjectCover       func(ctx context.Context, projectID, rootSessionID, artifactID string) error
 	BlockPlane                  *toolfeedback.BlockPlane
-	BeforeToolRun               func(ctx context.Context, sess *api.Session, history []api.Message, userPrompt, tool string, args map[string]any) (output string, skipRun bool, err error)
+	BeforeToolRun               func(ctx context.Context, sess *api.Session, history []api.Message, tool string, args map[string]any) (output string, skipRun bool, err error)
 	AfterToolRun                func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, succeeded bool, out *tools.ToolInvocationOut) string
 	EnrichToolOutput            func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, raised guidance.ToolResultFacts, completion *api.ToolCompletion, doomCompletionCountAfter int) (string, guidance.ToolResultFacts)
 	DataDir                     string
@@ -114,7 +114,7 @@ type CloseoutDeps struct {
 type CloseoutTrackingDeps struct {
 	TurnCloseoutNudge                   TurnCloseoutNudge
 	IterationRunwayNudge                IterationRunwayNudge
-	BeforeFinishNoToolTurn              func(ctx context.Context, sess *api.Session, history []api.Message, userPrompt, lastAssistant string, draft guidance.CloseoutDraft, surfaceID string, workersIdle bool, turnTools []string, invokeAllowed bool) (reject *guidance.Refusal, block bool)
+	BeforeFinishNoToolTurn              func(ctx context.Context, sess *api.Session, history []api.Message, lastAssistant string, draft guidance.CloseoutDraft, surfaceID string, workersIdle bool, turnTools []string, invokeAllowed bool) (reject *guidance.Refusal, block bool)
 	CitationRoots                       func(ctx context.Context, sess *api.Session) evidence.CitationRoots
 	OnGroundedSynthesisAccepted         func(ctx context.Context, sess *api.Session, sessionID string)
 	MaxCloseoutCitationGroundingRetries int

@@ -29,7 +29,7 @@ func TestScannerReadinessUsesTheContractSource(t *testing.T) {
 		testutil.FailErr(t, "poison unrelated checkout rule", os.WriteFile(path, []byte("invalid: checkout bytes must not be executed\n"), 0o600))
 	}
 	entry := ScannerEntry{ID: "sast", Driver: DriverBundled, Impl: bundled.ImplOpengrep, Engine: "opengrep", ScopeKind: string(ScopeSourceHostFloor)}
-	report := checkEntry(entry, module, t.TempDir())
+	report := checkEntry(entry, t.TempDir())
 	if !report.CheckOK {
 		t.Fatalf("readiness used checkout bytes instead of the contract source: %+v", report)
 	}

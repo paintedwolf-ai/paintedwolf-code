@@ -11,7 +11,7 @@ import (
 // applyCitationRange checks a grounded ranged citation against what its record
 // actually observed. It adds a check to the single-line result and never reduces
 // a range to its first line.
-func applyCitationRange(roots evidence.CitationRoots, finding WorkerFindingInput, ev evidence.Ledger, res evidence.Resolution) evidence.Resolution {
+func applyCitationRange(finding WorkerFindingInput, ev evidence.Ledger, res evidence.Resolution) evidence.Resolution {
 	res.EndLine = finding.EndLine
 	if !res.Verdict.Grounded() {
 		res.Line = finding.Line
