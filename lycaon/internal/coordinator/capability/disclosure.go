@@ -2,13 +2,10 @@ package capability
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/toolscope"
 )
 
 // DisclosurePolicy controls whether an unavailable entry is named.
@@ -129,18 +126,6 @@ func AgentDisclosurePolicy(registry DisclosureRegistry, agentID string) Disclosu
 	return registry.DefaultAgents
 }
 
-// ToolDisclosurePolicy resolves the policy for a gateable coordinator tool.
-func ToolDisclosurePolicy(registry DisclosureRegistry, toolName string) DisclosurePolicy {
-	toolName = strings.TrimSpace(toolName)
-	if _, ok := registry.ToolExempt[toolName]; ok {
-		return ""
-	}
-	if p, ok := registry.ToolOverrides[toolName]; ok {
-		return p
-	}
-	return registry.DefaultTools
-}
-
 // FilterAgentsForDisclosure keeps disallowed agents marked for disclosure.
 func FilterAgentsForDisclosure(agents []prompts.SpawnAgentView, registry DisclosureRegistry) []prompts.SpawnAgentView {
 	if len(agents) == 0 {
@@ -154,38 +139,4 @@ func FilterAgentsForDisclosure(agents []prompts.SpawnAgentView, registry Disclos
 		out = append(out, a)
 	}
 	return out
-}
-
-// GateableCoordinatorTools returns every tool name that can appear on a coordinator surface.
-func GateableCoordinatorTools() ([]string, error) {
-	plans, err := surface.CompileToolPlans(1)
-	if err != nil {
-		return nil, err
-	}
-	seen := map[string]struct{}{}
-	for _, plan := range plans {
-		for _, name := range plan.AddressableNames() {
-			name = strings.TrimSpace(name)
-			if name == "" {
-				continue
-			}
-			seen[name] = struct{}{}
-		}
-	}
-	allow, err := toolscope.NoFolderAllowlist()
-	if err != nil {
-		return nil, err
-	}
-	for _, name := range allow {
-		name = strings.TrimSpace(name)
-		if name != "" {
-			seen[name] = struct{}{}
-		}
-	}
-	out := make([]string, 0, len(seen))
-	for name := range seen {
-		out = append(out, name)
-	}
-	sort.Strings(out)
-	return out, nil
 }

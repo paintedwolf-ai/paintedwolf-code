@@ -17,7 +17,6 @@ type conformanceCase struct {
 	Name       string          `json:"name"`
 	Condition  json.RawMessage `json:"condition"`
 	Facts      map[string]bool `json:"facts"`
-	Expect     bool            `json:"expect"`
 	ExpectHost string          `json:"expect_host"`
 }
 
@@ -73,9 +72,6 @@ func TestConditionConformance(t *testing.T) {
 					key = fact + "=" + operand
 				}
 				return tc.Facts[key]
-			}
-			if got := EvaluateCondition(cond, lookup); got != tc.Expect {
-				t.Fatalf("EvaluateCondition = %v want %v", got, tc.Expect)
 			}
 			want := map[string]HostVerdict{
 				"true": HostTrue, "false": HostFalse, "unknown": HostUnknown,

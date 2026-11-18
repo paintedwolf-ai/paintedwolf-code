@@ -27,7 +27,6 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
-	"github.com/lycaon/lycaon/internal/platformfloor"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -199,9 +198,13 @@ func stageFixtureGeneration(dir, version string, binaries []string, extra []byte
 		digest, length := sum, size
 		payload = append(payload, pkgmanifest.PayloadEntry{Path: "bin/" + role.name, Kind: "file", Mode: 0o755, SHA256: &digest, Size: &length})
 	}
+	arch, err := releaseFixtureArchitecture()
+	if err != nil {
+		return err
+	}
 	manifest := pkgmanifest.Manifest{
 		FormatVersion: pkgmanifest.FormatVersion, Package: "painted-wolf-code", Version: version,
-		Architecture: fixtureArchitecture(), InstallRoot: install, Executables: executables, Payload: payload,
+		Architecture: arch, InstallRoot: install, Executables: executables, Payload: payload,
 	}
 	raw, err := json.Marshal(manifest)
 	if err != nil {
@@ -306,11 +309,6 @@ func runVaultServer(dir, vaultBin, uidStr, gidStr string) error {
 		"--locks", filepath.Join(dir, "locks"),
 	}
 	return syscall.Exec(vaultBin, args, []string{"PATH=/usr/bin:/bin"})
-}
-
-func fixtureArchitecture() string {
-	arch, _ := platformfloor.ELFArchForGoArch(runtime.GOARCH)
-	return arch
 }
 
 // sudoFixture runs this test binary's fixture mode as root.

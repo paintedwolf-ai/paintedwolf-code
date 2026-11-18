@@ -44,7 +44,7 @@ func TestCatalogWorkflowsHonorDisabledUnit(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	desired := extpacks.DesiredState{
 		Format:   extpacks.DesiredFormat,
-		Disabled: []string{extpacks.WorkflowUnitID("options")},
+		Disabled: []string{"workflows/options"},
 	}
 	eff, err := extpackstest.Resolve(t.Context(), desired, nil)
 	testutil.FailErr(t, "extpacks.effective catalog resolve failed", err)

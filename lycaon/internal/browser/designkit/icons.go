@@ -14,11 +14,6 @@ var iconByName = func() map[string]Icon {
 	return m
 }()
 
-// Icons returns a copy of the bundled icon catalog.
-func Icons() []Icon {
-	return append([]Icon(nil), icons...)
-}
-
 // IconNames returns sorted canonical pack entry names.
 func IconNames() []string {
 	out := make([]string, 0, len(icons))

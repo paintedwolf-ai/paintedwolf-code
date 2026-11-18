@@ -6,8 +6,6 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -210,18 +208,17 @@ func TestEvidenceKindRolesFromConfig(t *testing.T) {
 	t.Parallel()
 	binding, err := evidence.LoadBinding()
 	testutil.FailErr(t, "LoadBinding", err)
-	if !reflect.DeepEqual(binding.SurveyKinds(), sortedCopy(evidenceSurveyKinds)) {
-		t.Fatalf("SurveyKinds = %v want %v", binding.SurveyKinds(), evidenceSurveyKinds)
+	var survey, mutation []string
+	for kind := range binding.KindShapeMap() {
+		if binding.IsSurveyKind(kind) {
+			survey = append(survey, kind)
+		}
+		if binding.IsMutationKind(kind) {
+			mutation = append(mutation, kind)
+		}
 	}
-	if !reflect.DeepEqual(binding.MutationKinds(), sortedCopy(evidenceMutationKinds)) {
-		t.Fatalf("MutationKinds = %v want %v", binding.MutationKinds(), evidenceMutationKinds)
-	}
-}
-
-func sortedCopy(in []string) []string {
-	out := append([]string(nil), in...)
-	sort.Strings(out)
-	return out
+	contractcheck.FailSetEqual(t, "survey evidence", survey, evidenceSurveyKinds)
+	contractcheck.FailSetEqual(t, "mutation evidence", mutation, evidenceMutationKinds)
 }
 
 func TestBindingToolKindsFromConfig(t *testing.T) {

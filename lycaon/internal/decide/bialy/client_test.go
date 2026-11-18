@@ -73,7 +73,7 @@ func TestClientDecidesAndRanksOverTheLineProtocol(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	res, err := client.Decide(ctx, decide.HeadTurnLoad, map[string]any{"user": "fix the typo"}, map[string]decide.Question{
-		"edit": decide.Noul("needs edits?"),
+		"edit": {Kind: decide.KindNoul, Instructions: "needs edits?"},
 		"kind": decide.Choice("kind?", map[string]string{"change": "", "answer_only": ""}),
 	})
 	testutil.FailErr(t, "Decide", err)
@@ -97,7 +97,7 @@ func TestClientReportsMissingAnswers(t *testing.T) {
 	t.Parallel()
 	client := bialy.New(fakeConfig(t))
 	t.Cleanup(func() { _ = client.Close() })
-	_, err := client.Decide(context.Background(), decide.HeadTurnLoad, "s", map[string]decide.Question{"absent": decide.Noul("?")})
+	_, err := client.Decide(context.Background(), decide.HeadTurnLoad, "s", map[string]decide.Question{"absent": {Kind: decide.KindNoul, Instructions: "?"}})
 	if !errors.Is(err, decide.ErrEngine) {
 		t.Fatalf("error = %v want ErrEngine", err)
 	}
@@ -109,7 +109,7 @@ func TestClientDisabledAndUnresolvedAbstain(t *testing.T) {
 	if disabled.Available() {
 		t.Fatal("disabled client must not be available")
 	}
-	if _, err := disabled.Decide(context.Background(), decide.HeadTurnLoad, "s", map[string]decide.Question{"q": decide.Noul("?")}); !errors.Is(err, decide.ErrDisabled) {
+	if _, err := disabled.Decide(context.Background(), decide.HeadTurnLoad, "s", map[string]decide.Question{"q": {Kind: decide.KindNoul, Instructions: "?"}}); !errors.Is(err, decide.ErrDisabled) {
 		t.Fatalf("disabled error = %v", err)
 	}
 	missing := bialy.New(bialy.Config{Binary: filepath.Join(t.TempDir(), "absent"), ModelDir: writeFakeModel(t)})
@@ -352,7 +352,7 @@ func TestClientAdmissionRetainsTimedOutNativeWork(t *testing.T) {
 	t.Run("encoding failure", func(t *testing.T) {
 		client := bialy.New(fakeConfig(t))
 		t.Cleanup(func() { _ = client.Close() })
-		_, err := client.Decide(t.Context(), decide.HeadTurnLoad, func() {}, map[string]decide.Question{"edit": decide.Noul("edit?")})
+		_, err := client.Decide(t.Context(), decide.HeadTurnLoad, func() {}, map[string]decide.Question{"edit": {Kind: decide.KindNoul, Instructions: "edit?"}})
 		if err == nil {
 			t.Fatal("unsupported state encoded successfully")
 		}

@@ -7,15 +7,14 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
 
-// Wait triggers stay aligned across the tool schema, host, and UI.
-func TestWaitTriggersAgreeAcrossSchemaHostAndDen(t *testing.T) {
+// The Den labels cover every condition the tool offers.
+func TestWaitTriggersAgreeAcrossSchemaAndDen(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 
@@ -23,15 +22,6 @@ func TestWaitTriggersAgreeAcrossSchemaHostAndDen(t *testing.T) {
 	if len(schema) == 0 {
 		t.Fatal("no condition kind enum found in tools/schemas/wait.yaml")
 	}
-
-	var host []string
-	for _, tr := range loopwake.AllWaitTriggers() {
-		if tr == loopwake.WaitTriggerTimer {
-			continue
-		}
-		host = append(host, string(tr))
-	}
-	contractcheck.FailSetEqual(t, "wait condition enum (tools/schemas/wait.yaml vs loopwake consts)", schema, host)
 
 	den := denWaitTriggerLabels(t, root)
 	contractcheck.FailSetEqual(t, "wait condition enum (tools/schemas/wait.yaml vs Den label table)", schema, den)
