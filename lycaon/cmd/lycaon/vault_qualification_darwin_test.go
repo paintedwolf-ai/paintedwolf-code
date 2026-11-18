@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/hostidentity"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -251,7 +252,7 @@ func executeMacOSDevelopmentWorkflowPhase(phase, dir string) (string, error) {
 		reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 			StatePath:          dir,
 			GlobalOverridePath: globalMCPPath,
-			Connector:          &mcp.MockConnector{},
+			Connector:          &mcptest.Connector{},
 		})
 		if err != nil {
 			return "", fmt.Errorf("mcp.NewRuntime: %w", err)
@@ -297,7 +298,7 @@ func executeMacOSDevelopmentWorkflowPhase(phase, dir string) (string, error) {
 		reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 			StatePath:          dir,
 			GlobalOverridePath: globalMCPPath,
-			Connector:          &mcp.MockConnector{},
+			Connector:          &mcptest.Connector{},
 		})
 		if err != nil {
 			return "", fmt.Errorf("reopen mcp.NewRuntime: %w", err)

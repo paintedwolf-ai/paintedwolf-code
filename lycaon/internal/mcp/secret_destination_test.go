@@ -2,18 +2,19 @@ package mcp_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/mcp/mcptest"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // mcpDestinationID returns a screened destination identity.

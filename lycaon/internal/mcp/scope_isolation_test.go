@@ -2,11 +2,7 @@ package mcp_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/mcp/mcptest"
-
 	"errors"
-	"github.com/lycaon/lycaon/internal/mcp"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -15,13 +11,16 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
+	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// rootRecordingConnector records the roots each connect was handed, per scope.
 const scopeBreakerThreshold = 3
 
+// rootRecordingConnector records the roots passed to each connection.
 type rootRecordingConnector struct {
 	mu       sync.Mutex
 	inner    *mcptest.Connector

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lycaon/lycaon/internal/mcp"
-
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/lycaon/lycaon/internal/mcp"
 )
 
 // Connector returns predefined tools without spawning subprocesses.

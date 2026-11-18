@@ -2,19 +2,20 @@ package mcp_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/mcp/mcptest"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Tests stage a synthetic distro manifest with stageFakeDistro, so adding or

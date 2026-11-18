@@ -5,12 +5,12 @@ package mcp_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"testing"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 )
 
 func TestSyncToolsContinuesWhenOneProviderFails(t *testing.T) {

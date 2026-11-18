@@ -2,10 +2,6 @@ package security
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/config/configtest"
-	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,12 +9,17 @@ import (
 	"strings"
 	"testing"
 
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/app/configuration"
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const mockLLMCatchphrase = "I understand. How can I help you further?"

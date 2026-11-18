@@ -4,12 +4,13 @@ package mcp_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/mcp"
-	"github.com/lycaon/lycaon/internal/testutil"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestMCPSpawnAndListTools(t *testing.T) {

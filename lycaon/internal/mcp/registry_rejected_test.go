@@ -2,8 +2,6 @@ package mcp_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/mcp/mcptest"
-	"github.com/lycaon/lycaon/pkg/api"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,9 +9,11 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestCheckSurfacesRejectedRows(t *testing.T) {
