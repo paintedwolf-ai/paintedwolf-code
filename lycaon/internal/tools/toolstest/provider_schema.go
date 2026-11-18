@@ -55,7 +55,7 @@ func ValidateCatalogSchemaParity(reg *tools.DefaultRegistry, cfg *toolschema.Con
 	}
 	var violations []string
 	for name := range cfg.Tools {
-		yamlMeta, ok := cfg.tools.ToolMeta(name)
+		yamlMeta, ok := cfg.ToolMeta(name)
 		if !ok || yamlMeta.ArgsSchema == nil {
 			continue
 		}
