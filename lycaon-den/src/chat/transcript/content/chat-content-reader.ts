@@ -8,6 +8,8 @@ import { ByteCache, retainedValueBytes } from "../../../utils/byte-cache.ts";
 /** One display row. Rows partition the document text, so each keeps its line break. */
 export type ChatContentDocumentRow = {
   readonly index: number;
+  /** Absolute rune offset for retained rows. Receipt rows use their row index. */
+  readonly offset?: number;
   readonly text: string;
   readonly spans: readonly RedactedSpan[];
 };

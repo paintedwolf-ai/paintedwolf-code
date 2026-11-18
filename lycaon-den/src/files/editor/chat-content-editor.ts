@@ -1,8 +1,11 @@
 import { Decoration } from "@codemirror/view";
-import { EditorSelection } from "@codemirror/state";
+import { EditorSelection, EditorState } from "@codemirror/state";
 import type { SourceReaderRow } from "../../api/types.ts";
 import type { ChatContentAccess, ChatContentDocumentRow, ChatContentMatch } from "../../chat/transcript/content/chat-content-reader.ts";
 import { redactionMarkModifier, redactionMarkTitle } from "../../chat/transcript/content/redaction-spans.ts";
+import { RuneOffsets } from "../../chat/transcript/content/rune-offsets.ts";
+import { restoreScrollAnchor } from "../../components/source/editor/editor-settled-scroll.ts";
+import { topTextAnchor, type ChatReadingPlace } from "./chat-content-viewport.ts";
 import { ReaderEditor } from "../../components/source/reader/source-reader-editor.ts";
 import { MAIN_SECTION, readerGap, type ReaderSlot } from "../../components/source/reader/source-reader-document.ts";
 import type { EditorDisplayPrefs } from "../../components/source/editor/codemirror-theme.ts";
@@ -23,8 +26,9 @@ export class ChatContentEditor {
   private readonly error: (cause: unknown) => void;
   private current = 0;
   private revealGeneration = 0;
+  private stopRestore?: () => void;
 
-  constructor(parent: HTMLElement, access: ChatContentAccess, prefs: EditorDisplayPrefs, error: (cause: unknown) => void) {
+  constructor(parent: HTMLElement, access: ChatContentAccess, prefs: EditorDisplayPrefs, error: (cause: unknown) => void, place?: ChatReadingPlace) {
     this.access = access; this.error = error; this.total = access.rows();
     for (const row of access.previewRows()) this.rows.set(row.index, row);
     const textAccess: ReaderTextAccess = {
@@ -46,6 +50,8 @@ export class ChatContentEditor {
       content: () => access.copyAll(this.abort.signal),
     };
     this.reader = new ReaderEditor({ parent, surface: "diff-viewer", label: "Chat content", prefs, access: () => textAccess, fullSide: () => "after", changes: () => false,
+      extensions: EditorState.lineSeparator.of("\n"),
+      viewportInput: () => this.cancelNavigation(),
       scrollPastEnd: false, commandBridge: true, facts: () => {}, hideFacts: () => {}, error,
       scroll: editor => {
         const top = editor.view.scrollDOM.getBoundingClientRect().top - editor.view.documentTop;
@@ -72,7 +78,8 @@ export class ChatContentEditor {
       }),
     });
     this.publish(true);
-    if (access.position()>0) void this.revealRow(access.position());
+    if (place) void this.restorePlace(place);
+    else if (access.position()>0) void this.revealRow(access.position());
   }
 
   private async read(index: number, signal: AbortSignal): Promise<ChatContentDocumentRow[]> {
@@ -147,14 +154,63 @@ export class ChatContentEditor {
     return request;
   }
 
+  /** Gaps identify a logical row by rank until its absolute offset is available. */
+  async capturePlace(signal: AbortSignal): Promise<ChatReadingPlace | undefined> {
+    let loaded: ChatContentDocumentRow | undefined;
+    while (!signal.aborted && !this.abort.signal.aborted) {
+      const { view, document } = this.reader;
+      const rank = this.reader.viewportAnchor()?.rank;
+      if (rank === undefined || view.scrollDOM.clientHeight === 0) return undefined;
+      const gap = !document.rowAt(MAIN_SECTION, rank);
+      const anchor = gap ? undefined : topTextAnchor(view);
+      const entry = anchor && document.at(anchor.pos);
+      const index = entry?.row?.index ?? rank;
+      const row = this.rows.get(index) ?? this.access.peek(index) ?? (loaded?.index === index ? loaded : undefined);
+      if (row) {
+        const column = anchor && entry?.row ? RuneOffsets.of(row.text).toRune(anchor.pos - entry.from) : 0;
+        const target = row.offset === undefined ? { row: index, column, length: 0 } : { offset: row.offset + column, length: 0 };
+        return { offset: anchor?.offset ?? 0, left: anchor?.left ?? 0, target };
+      }
+      const values = await this.access.read(index, signal);
+      loaded = values.find(value => value.index === index);
+      if (!loaded) return undefined;
+    }
+    return undefined;
+  }
+
+  private cancelNavigation(): void {
+    this.revealGeneration++;
+    this.stopRestore?.();
+    this.stopRestore = undefined;
+  }
+
+  private async restorePlace(place: ChatReadingPlace): Promise<void> {
+    const generation = this.revealGeneration;
+    try {
+      const target = await this.access.revealTarget(place.target, this.abort.signal);
+      if (!target || this.abort.signal.aborted || generation !== this.revealGeneration) return;
+      this.current = target.row;
+      for (const row of target.rows) this.rows.set(row.index, row);
+      this.publish();
+      const entry = this.reader.document.rowAt(MAIN_SECTION, target.row);
+      if (entry) this.stopRestore = restoreScrollAnchor(this.reader.view, {
+        pos: Math.min(entry.to, entry.from + target.from), offset: place.offset, left: place.left,
+      });
+    } catch (cause) {
+      if (!this.abort.signal.aborted && generation === this.revealGeneration) this.error(cause);
+    }
+  }
+
   async revealRow(index: number, column = 1): Promise<void> {
-    const generation=++this.revealGeneration;
+    this.cancelNavigation();
+    const generation = this.revealGeneration;
     await this.load(index);
     if (!this.abort.signal.aborted && generation===this.revealGeneration) this.reader.reveal(MAIN_SECTION,index,{row:index,from:column-1,to:column-1});
   }
 
   async revealMatch(match: ChatContentMatch): Promise<void> {
-    const generation=++this.revealGeneration;
+    this.cancelNavigation();
+    const generation = this.revealGeneration;
     try {
       const target=await this.access.revealTarget(match,this.abort.signal);
       if (this.abort.signal.aborted || generation!==this.revealGeneration || !target) return;
@@ -165,6 +221,6 @@ export class ChatContentEditor {
     } catch (cause) { if (!this.abort.signal.aborted && generation===this.revealGeneration) this.error(cause); }
   }
 
-  clearMatch(): void { this.revealGeneration++;this.reader.clearMatch(); }
-  destroy(): void { this.abort.abort(); this.reader.destroy(); }
+  clearMatch(): void { this.cancelNavigation(); this.reader.clearMatch(); }
+  destroy(): void { this.abort.abort(); this.cancelNavigation(); this.reader.destroy(); }
 }

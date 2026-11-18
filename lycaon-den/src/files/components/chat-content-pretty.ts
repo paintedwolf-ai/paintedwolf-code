@@ -1,3 +1,4 @@
+import { RuneOffsets } from "../../chat/transcript/content/rune-offsets.ts";
 import { Decoration, EditorView } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
@@ -80,47 +81,6 @@ export function extractInlineRedactionSpans(
   return redaction.spans.filter(
     (span) => span.field === "tool_result.content" || span.field === "content",
   );
-}
-
-/** UTF-16 offsets of each Unicode scalar in a text, built once per text. */
-class RuneOffsets {
-  private static last: RuneOffsets | null = null;
-
-  static of(text: string): RuneOffsets {
-    if (RuneOffsets.last?.text !== text) RuneOffsets.last = new RuneOffsets(text);
-    return RuneOffsets.last;
-  }
-
-  private readonly offsets: Int32Array;
-
-  private constructor(readonly text: string) {
-    const offsets: number[] = [];
-    for (let i = 0; i < text.length; i++) {
-      offsets.push(i);
-      const code = text.charCodeAt(i);
-      if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
-        const low = text.charCodeAt(i + 1);
-        if (low >= 0xdc00 && low <= 0xdfff) i += 1;
-      }
-    }
-    offsets.push(text.length);
-    this.offsets = Int32Array.from(offsets);
-  }
-
-  get runes(): number {
-    return this.offsets.length - 1;
-  }
-
-  toUtf16(rune: number): number {
-    if (rune <= 0) return 0;
-    if (rune >= this.runes) return this.text.length;
-    return this.offsets[rune]!;
-  }
-}
-
-/** The UTF-16 offset of a rune offset in `text`. */
-export function runeOffsetToUtf16(text: string, rune: number): number {
-  return RuneOffsets.of(text).toUtf16(rune);
 }
 
 /** Whether redaction spans, in runes, all lie inside `text`. */

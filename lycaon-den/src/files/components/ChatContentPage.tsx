@@ -1,10 +1,11 @@
 import { Show, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js";
 import { EditorView } from "@codemirror/view";
-import { Compartment, StateEffect } from "@codemirror/state";
+import { Compartment, EditorState, StateEffect } from "@codemirror/state";
 import type { LycaonClient } from "../../api/client.ts";
 import { chatContentDocumentKey, type ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
 import type { ChatContentMatch } from "../../chat/transcript/content/chat-content-reader.ts";
-import { CommandReceiptLimitError } from "../../chat/transcript/content/command-receipt-access.ts";
+import { useChatPrettyReader } from "./chat-pretty-reader.ts";
+import { inlineRange } from "../editor/chat-content-viewport.ts";
 import { useChatContentAccess } from "../../chat/transcript/content/use-chat-content-access.ts";
 import { bindChatContentFind } from "../../chat/transcript/content/chat-content-find.ts";
 import { useChatProcessText } from "./chat-process-text.ts";
@@ -32,9 +33,7 @@ import {
   buildRawRedactionExtension,
   type ChatRetainedText,
   extractInlineRedactionSpans,
-  redactionSpansFit,
   resolveChatContentLanguage,
-  runeOffsetToUtf16,
   useChatContentLineWidth,
 } from "./chat-content-pretty.ts";
 
@@ -59,7 +58,6 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
   const [host, setHost] = createSignal<HTMLElement | null>(null);
   const [editorHost, setEditorHost] = createSignal<HTMLDivElement>();
   const [found, setFound] = createSignal<ChatContentMatch>();
-  const [retainedText, setRetainedText] = createSignal<ChatRetainedText | null>(null);
   const copyAbort = new AbortController();
   onCleanup(() => copyAbort.abort());
   const reportError = (cause: unknown) => reportSurfaceFailure(contentFailure, cause, props.projectId);
@@ -68,30 +66,10 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
   const prettyEnabled = editorPrettyPref;
   const process = useChatProcessText(() => props.document, () => props.client, prettyEnabled, reportError);
   const access = useChatContentAccess(() => props.document, () => props.client, reportError);
-  let retainedGen = 0;
-  createEffect(() => {
-    const contentAccess = access();
-    const enabled = prettyEnabled();
-    contentAccess?.revision();
-    const gen = ++retainedGen;
-    setRetainedText(null);
-    if (!contentAccess || !enabled) return;
-    const abort = new AbortController();
-    onCleanup(() => abort.abort());
-    void contentAccess
-      .prettySnapshot(abort.signal)
-      .then((snap) => {
-        if (abort.signal.aborted || gen !== retainedGen || !snap || "limit" in snap) return;
-        if (!redactionSpansFit(snap.text, snap.spans)) return;
-        setRetainedText({ text: snap.text, spans: snap.spans });
-      })
-      .catch((cause) => {
-        // Other failures keep the protected paged view.
-        if (cause instanceof CommandReceiptLimitError) reportChanging(cause);
-      });
-  });
   const [reader, setReader] = createSignal<ChatContentEditor>();
   const [inlineEditor, setInlineEditor] = createSignal<EditorView>();
+  const pretty = useChatPrettyReader(() => props.document, access, prettyEnabled, reader, inlineEditor, reportChanging);
+  const retainedText = pretty.snapshot;
   const [cursor, setCursor] = createSignal({ line: 1, col: 1 });
   const usePagedReader = () => Boolean(access() && !retainedText());
   const activeEditor = () => (usePagedReader() ? reader()?.reader.view : inlineEditor());
@@ -114,28 +92,26 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
     if (!parent || !content || retainedText()) return;
     // A new revision replaces every row, so it gets a new editor.
     content.revision();
-    const editor = new ChatContentEditor(parent, content, untrack(editorDisplayPrefs), reportError);
+    const editor = untrack(() => new ChatContentEditor(parent, content, editorDisplayPrefs(), reportError, pretty.takePlace(content)));
     setReader(editor);
     onCleanup(() => { editor.destroy(); setReader(undefined); });
   });
   const revealInInlinePretty = (match: ChatContentMatch) => {
     const view = inlineEditor();
     if (!view) return;
-    const raw = view.state.doc.toString();
-    let base = 0;
-    if ("row" in match) for (let row = 0; row < match.row && base >= 0; row++) base = raw.indexOf("\n", base) + 1;
-    const start = "row" in match ? runeOffsetToUtf16(raw.slice(base), match.column) + base : runeOffsetToUtf16(raw, match.offset);
-    const end = match.length > 0 ? start + runeOffsetToUtf16(raw.slice(start), match.length) : start;
-    view.dispatch({ selection: { anchor: start, head: end }, scrollIntoView: true });
+    view.dispatch({ selection: inlineRange(view.state.doc, match), scrollIntoView: true });
   };
   const reveal = (match: ChatContentMatch) => {
     const editor = reader();
     if (editor && usePagedReader()) void editor.revealMatch(match);
     else revealInInlinePretty(match);
   };
+  let revealed: ChatContentDocument | undefined;
   createEffect(() => {
-    const target = props.document.revealOffset;
-    if (target !== undefined && (reader() || inlineEditor())) reveal({ offset: target, length: 0 });
+    const request = props.document;
+    if (request.revealOffset === undefined || request === revealed || !activeEditor()) return;
+    revealed = request;
+    untrack(() => reveal({ offset: request.revealOffset!, length: 0 }));
   });
   createEffect(() => { const prefs = editorDisplayPrefs(); reader()?.reader.prefs(prefs); });
   createEffect(on(
@@ -159,7 +135,7 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
       if (!active || !findController.isOpen() || !activateFindableViewForEditor(view)) return;
       setFindCaseSensitive(request.caseSensitive);
       openFind();
-      const targetOffset = request.offset !== undefined ? runeOffsetToUtf16(view.state.doc.toString(), request.offset) : 0;
+      const targetOffset = request.offset !== undefined ? inlineRange(view.state.doc, { offset: request.offset, length: 0 }).anchor : 0;
       view.dispatch({ selection: { anchor: Math.max(0, Math.min(view.state.doc.length, targetOffset)) } });
       setFindQuery(request.query);
     });
@@ -202,7 +178,7 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
         cursor: cursor(), language: resolvedLanguage().label, indent: { label: indentChipLabel(editorDisplayPrefs().indent) },
         details: <><Show when={isSnapshot()}><span class="den-files-editor__status-detail" data-testid="chat-process-pretty-snapshot">Snapshot</span></Show><span class="den-files-editor__status-detail" data-testid="files-editor-encoding-chip">UTF-8</span></>,
       }}>
-    <Show when={usePagedReader()} fallback={<InlineChatContent document={props.document} prettyEnabled={prettyEnabled()} languageExtension={resolvedLanguage().extension} lineWidth={resolvedLineWidth()} processText={process.text()} retainedText={retainedText()} onEditor={setInlineEditor} />}>
+    <Show when={usePagedReader()} fallback={<InlineChatContent document={props.document} prettyEnabled={prettyEnabled()} languageExtension={resolvedLanguage().extension} lineWidth={resolvedLineWidth()} processText={process.text()} retainedText={retainedText()} onEditor={setInlineEditor} restorePlace={pretty.restoreInline} />}>
       <div class="den-source-reader__editors"><div class="den-source-reader__editor" ref={setEditorHost} /></div>
     </Show>
     </ReadonlyFilesDocument>
@@ -215,7 +191,8 @@ function InlineChatContent(props: {
   languageExtension: ReturnType<typeof resolveChatContentLanguage>["extension"];
   lineWidth: number | undefined;
   processText: string;
-  retainedText: ChatRetainedText | null;
+  retainedText?: ChatRetainedText;
+  restorePlace: (editor: EditorView) => (() => void) | undefined;
   onEditor: (editor: EditorView | undefined) => void;
 }) {
   const [parent, setParent] = createSignal<HTMLDivElement>();
@@ -245,13 +222,15 @@ function InlineChatContent(props: {
     const language = untrack(() => props.languageExtension) ?? undefined;
     const view = new EditorView({ parent: host, state: createSourceEditorState({ surface: "diff-viewer", doc: value, language, ...untrack(editorDisplayPrefs), editable: false, scrollPastEnd: false, commandBridge: true,
       extensions: [
+        EditorState.lineSeparator.of("\n"),
         redactions.of(buildRawRedactionExtension(value, untrack(redactionSpans))),
         createPrettyExtension(untrack(prettyConfig)),
       ],
     }) });
     editor = view;
     props.onEditor(view);
-    onCleanup(() => { view.destroy(); if (editor === view) editor = undefined; props.onEditor(undefined); });
+    const stop = untrack(() => props.restorePlace(view));
+    onCleanup(() => { stop?.(); view.destroy(); if (editor === view) editor = undefined; props.onEditor(undefined); });
   });
   createEffect(() => {
     const value = rawText(), view = editor; if (!view) return;
