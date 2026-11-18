@@ -94,7 +94,7 @@ jobs:
       - name: Verify the native runner and its catalog row
         env:
           PLATFORM: ${{ matrix.updater_key }}
-          RUNNER_LABEL: ${{ matrix.runner }}
+          CANDIDATE_RUNNER_LABEL: ${{ matrix.runner }}
           EXPECTED_GOARCH: ${{ matrix.goarch }}
         run: |
           set -euo pipefail
@@ -103,7 +103,7 @@ jobs:
             amd64) [[ "$(rustc --print host-tuple)" == x86_64-unknown-linux-gnu ]] ;;
             arm64) [[ "$(rustc --print host-tuple)" == aarch64-unknown-linux-gnu ]] ;;
           esac
-          ./task release:candidate:select -- --platform "${PLATFORM}" --runner-label "${RUNNER_LABEL}" \
+          ./task release:candidate:select -- --platform "${PLATFORM}" --runner-label "${CANDIDATE_RUNNER_LABEL}" \
             --architecture "${EXPECTED_GOARCH}"
       - name: Install Linux bundle and audit dependencies
         uses: ./.github/actions/setup-apt
