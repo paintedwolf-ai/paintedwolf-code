@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"io"
 	"os"
 	"path/filepath"
@@ -76,7 +77,7 @@ func TestConfigYAMLParsesStrictlyAgainstSchema(t *testing.T) {
 			label: "lycaon-tools",
 			glob:  "packs/painted-wolf/platform/tools/lycaon-tools.yaml",
 			decode: func(raw []byte) error {
-				var v tools.ToolsConfig
+				var v toolstest.ToolsConfig
 				return config.DecodeYAML(raw, &v)
 			},
 		},

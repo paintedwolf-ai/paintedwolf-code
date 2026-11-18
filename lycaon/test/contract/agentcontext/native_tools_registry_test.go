@@ -28,7 +28,7 @@ func loadNativeToolsManifestFlat(t *testing.T) []string {
 func TestNativeToolsManifestMatchesServeRegistry(t *testing.T) {
 	manifest := loadNativeToolsManifestFlat(t)
 	reg := toolfixture.ContractServeBootRegistry(t)
-	registered := toolfixture.BootRegisteredToolSet(t, reg)
+	registered := tools.RegisteredToolSet(reg)
 	for _, tool := range manifest {
 		if !registered[tool] {
 			t.Fatalf("native-tools.yaml lists %q but serve registry has no handler", tool)
