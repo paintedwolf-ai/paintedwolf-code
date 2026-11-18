@@ -59,10 +59,6 @@ func managedJarCookieDelivery(
 				foreign = append(foreign, cookie)
 			}
 			if len(foreign) == 0 {
-				admitted := admittedHTTP(selected, current)
-				if hop.FreezeCookies(admitted) {
-					_ = jar.Store.Cookies(target)
-				}
 				return nil
 			}
 			if deps.SecretAsk == nil || deps.SecretMatcher == nil {
@@ -107,10 +103,6 @@ func managedJarCookieDelivery(
 				return cookieJarOpenReject(jar.Name, err)
 			}
 			if !reloaded {
-				admitted := admittedHTTP(selected, current)
-				if hop.FreezeCookies(admitted) {
-					_ = jar.Store.Cookies(target)
-				}
 				return nil
 			}
 		}

@@ -427,11 +427,7 @@ func send(
 		// Cookie review comes first: approving the disclosure is consent to
 		// the connection that carries it.
 		if outbound.beforeCookieHop != nil {
-			reviewHop := hop
-			if jar != nil {
-				reviewHop = outboundhttp.HopRequest{URL: hop.URL, Method: hop.Method, HostHeader: hop.HostHeader}
-			}
-			if err := outbound.beforeCookieHop(hopCtx, reviewHop); err != nil {
+			if err := outbound.beforeCookieHop(hopCtx, hop); err != nil {
 				return err
 			}
 		}

@@ -172,7 +172,7 @@ Agents may propose agent-policy changes; the `agent_policy_change` gate reviews 
 
 - Locations: `internal/protectedpath/agent_policy.go`; host predicate and floor specs: `internal/confine/agent_policy.go`.
 - Approval gate facts, lease, and predicate: `internal/settings/gate_facts.go`, `internal/settings/agent_policy_grants.go`, `internal/gate/evaluate.go`.
-- Prepared file effects and invocation-local review: `internal/tools/file_change_review.go`, native write helpers, editor documents, and `internal/tools/inboundwrite`.
+- Prepared file effects and invocation-local review: `internal/tools/file_change_review.go`, native write helpers, editor documents, and `internal/tools/native/mutation`.
 - Process enforcement: `internal/confine/filesystem_rules.go` and exact `PolicyWriteGrants` (`internal/confine/policy_write_grants.go`).
 
 ## Related
