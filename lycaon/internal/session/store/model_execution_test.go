@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -64,11 +63,8 @@ func TestModelAllowanceUsesSettledOutputsAcrossTurns(t *testing.T) {
 	if err := st.SealTurnCloseout(ctx, TurnCloseoutCommit{TurnID: second.Turn.ID, AttemptID: second.Attempt.ID, OutputID: last.ID, Message: &api.Message{ID: last.MessageID, Content: "Changed"}, CheckpointJSON: "{}"}); err == nil {
 		t.Fatal("sealed closeout changed")
 	}
-	if sqlStore, ok := st.(*SQL); ok {
-		reopened := NewSQL(sqlStore.db)
-		if err := reopened.AdmitModelResponse(ctx, sess.ID, second.Attempt.ID); !errors.Is(err, ErrModelResponseLimit) {
-			t.Fatalf("reopened allowance = %v", err)
-		}
+	if err := NewSQL(st.db).AdmitModelResponse(ctx, sess.ID, second.Attempt.ID); !errors.Is(err, ErrModelResponseLimit) {
+		t.Fatalf("reopened allowance = %v", err)
 	}
 
 }

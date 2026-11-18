@@ -126,7 +126,7 @@ func TestSettledModelOutputRepairsProjection(t *testing.T) {
 	if len(pending) != 0 {
 		t.Fatalf("pending after ack = %+v", pending)
 	}
-	removed := rewindFrom(t, st.(rewindStore), sess.ID, outputID)
+	removed := rewindFrom(t, st, sess.ID, outputID)
 	if removed != 1 {
 		t.Fatalf("removed = %d want 1", removed)
 	}

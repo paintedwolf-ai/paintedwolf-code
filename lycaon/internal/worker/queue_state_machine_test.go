@@ -39,7 +39,7 @@ type queueMachine struct {
 	store  *db.Store
 	queue  *worker.SQLQueue
 	jobs   []*modelJob
-	held   map[string][]api.WorkerTask
+	held   []api.WorkerTask
 	nextAt time.Time
 }
 
@@ -47,7 +47,6 @@ func newQueueMachine(t *testing.T, path string) *queueMachine {
 	m := &queueMachine{
 		t:      t,
 		path:   path,
-		held:   map[string][]api.WorkerTask{},
 		nextAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 	m.store = testdbfixture.OpenPath(t, path)
@@ -121,17 +120,15 @@ func (m *queueMachine) claim(rt *rapid.T) {
 	}
 	want.status, want.token = api.WorkerStatusRunning, claimed.ClaimToken
 	want.attempt++
-	m.held[claimant] = append(m.held[claimant], *claimed)
+	m.held = append(m.held, *claimed)
 }
 
-// pickHeld draws one claim a claimant still holds, current or stale.
+// pickHeld draws a claim some claimant was handed, current or stale.
 func (m *queueMachine) pickHeld(rt *rapid.T) (*api.WorkerTask, *modelJob) {
-	claimant := rapid.SampledFrom(queueMachineClaimants).Draw(rt, "claimant")
-	held := m.held[claimant]
-	if len(held) == 0 {
-		rt.Skip("claimant holds no claim")
+	if len(m.held) == 0 {
+		rt.Skip("no claim handed out")
 	}
-	task := held[rapid.IntRange(0, len(held)-1).Draw(rt, "claim")]
+	task := m.held[rapid.IntRange(0, len(m.held)-1).Draw(rt, "claim")]
 	return &task, m.job(task.ID)
 }
 
@@ -139,8 +136,7 @@ func (job *modelJob) claimCurrent(token string) bool {
 	return job.status == api.WorkerStatusRunning && job.token == token && !job.cancelRequested
 }
 
-func (m *queueMachine) settle(rt *rapid.T, name string, to api.WorkerStatus, call func(*api.WorkerTask) (bool, error)) {
-	task, job := m.pickHeld(rt)
+func settleClaim(rt *rapid.T, task *api.WorkerTask, job *modelJob, name string, to api.WorkerStatus, call func(*api.WorkerTask) (bool, error)) {
 	want := job.claimCurrent(task.ClaimToken)
 	won, err := call(task)
 	if err != nil {
@@ -154,41 +150,37 @@ func (m *queueMachine) settle(rt *rapid.T, name string, to api.WorkerStatus, cal
 	}
 }
 
-func (m *queueMachine) complete(rt *rapid.T) {
-	m.settle(rt, "complete", api.WorkerStatusComplete, func(task *api.WorkerTask) (bool, error) {
-		return m.queue.Complete(context.Background(), task, api.WorkerResult{Status: "complete", Summary: "done"})
-	})
-}
-
-func (m *queueMachine) fail(rt *rapid.T) {
-	m.settle(rt, "fail", api.WorkerStatusFailed, func(task *api.WorkerTask) (bool, error) {
-		return m.queue.Fail(context.Background(), task, errors.New("fixture failure"))
-	})
-}
-
-func (m *queueMachine) retry(rt *rapid.T) {
-	m.settle(rt, "retry", api.WorkerStatusPending, func(task *api.WorkerTask) (bool, error) {
-		return m.queue.Retry(context.Background(), task, errors.New("fixture retry"))
-	})
-}
-
-func (m *queueMachine) renew(rt *rapid.T) {
+// settle has a claim holder report an outcome, renew its lease, or fence its own claim.
+func (m *queueMachine) settle(rt *rapid.T) {
 	task, job := m.pickHeld(rt)
-	won, err := m.queue.RenewClaim(context.Background(), task.ID, task.ClaimToken)
-	if err != nil || won != job.claimCurrent(task.ClaimToken) {
-		rt.Fatalf("renew %s won=%v err=%v; model %+v", task.ID, won, err, *job)
-	}
-}
-
-func (m *queueMachine) fenceClaim(rt *rapid.T) {
-	task, job := m.pickHeld(rt)
-	want := job.claimCurrent(task.ClaimToken)
-	won, err := m.queue.RequestClaimCancellation(context.Background(), task)
-	if err != nil || won != want {
-		rt.Fatalf("claim fence %s won=%v err=%v; want %v (model %+v)", task.ID, won, err, want, *job)
-	}
-	if won {
-		job.cancelRequested = true
+	ctx := context.Background()
+	switch rapid.SampledFrom([]string{"complete", "fail", "retry", "renew", "fenceClaim"}).Draw(rt, "outcome") {
+	case "complete":
+		settleClaim(rt, task, job, "complete", api.WorkerStatusComplete, func(task *api.WorkerTask) (bool, error) {
+			return m.queue.Complete(ctx, task, api.WorkerResult{Status: "complete", Summary: "done"})
+		})
+	case "fail":
+		settleClaim(rt, task, job, "fail", api.WorkerStatusFailed, func(task *api.WorkerTask) (bool, error) {
+			return m.queue.Fail(ctx, task, errors.New("fixture failure"))
+		})
+	case "retry":
+		settleClaim(rt, task, job, "retry", api.WorkerStatusPending, func(task *api.WorkerTask) (bool, error) {
+			return m.queue.Retry(ctx, task, errors.New("fixture retry"))
+		})
+	case "renew":
+		won, err := m.queue.RenewClaim(ctx, task.ID, task.ClaimToken)
+		if err != nil || won != job.claimCurrent(task.ClaimToken) {
+			rt.Fatalf("renew %s won=%v err=%v; model %+v", task.ID, won, err, *job)
+		}
+	case "fenceClaim":
+		want := job.claimCurrent(task.ClaimToken)
+		won, err := m.queue.RequestClaimCancellation(ctx, task)
+		if err != nil || won != want {
+			rt.Fatalf("claim fence %s won=%v err=%v; want %v (model %+v)", task.ID, won, err, want, *job)
+		}
+		if won {
+			job.cancelRequested = true
+		}
 	}
 }
 
@@ -276,20 +268,24 @@ func (m *queueMachine) check(rt *rapid.T) {
 
 // Two claimants drive the SQL queue through claim, settle, fence, cancel,
 // lease recovery and restart; every durable job row must match the model.
+// Each run starts from a drawn backlog so short runs still reach contention.
 func TestSQLWorkerQueueStateMachine(t *testing.T) {
 	dir := t.TempDir()
 	run := 0
 	rapid.Check(t, func(rt *rapid.T) {
 		run++
 		m := newQueueMachine(t, filepath.Join(dir, fmt.Sprintf("queue-%d.db", run)))
+		for range rapid.IntRange(1, 4).Draw(rt, "backlog") {
+			m.enqueue(rt)
+		}
+		for range rapid.IntRange(0, queueMachineMaxRunning).Draw(rt, "claimed") {
+			m.claim(rt)
+		}
+		m.check(rt)
 		rt.Repeat(map[string]func(*rapid.T){
 			"enqueue":          m.enqueue,
 			"claim":            m.claim,
-			"complete":         m.complete,
-			"fail":             m.fail,
-			"retry":            m.retry,
-			"renew":            m.renew,
-			"fenceClaim":       m.fenceClaim,
+			"settle":           m.settle,
 			"fence":            m.fence,
 			"cancel":           m.cancel,
 			"expireAndRecover": m.expireAndRecover,

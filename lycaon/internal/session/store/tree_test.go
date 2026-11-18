@@ -12,20 +12,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type treeTestStore interface {
-	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-	CreateChild(context.Context, *api.Session, api.SpawnChildRequest) (*api.Session, error)
-	SessionTreeMembers(context.Context, string) ([]SessionTreeMember, error)
-}
-
 func TestSessionTreeMembers(t *testing.T) {
-
-	var s treeTestStore
 
 	dir := t.TempDir()
 	database := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, dir)
-	s = NewSQL(database)
+	s := NewSQL(database)
 
 	ctx := t.Context()
 	root, err := s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)

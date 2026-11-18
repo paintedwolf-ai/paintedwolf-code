@@ -1,11 +1,9 @@
 package store
 
 import (
-	"context"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -53,35 +51,27 @@ func TestUserContinuationKeepsCurrentTurn(t *testing.T) {
 func TestTurnNumbersAreNotReusedAfterTranscriptTruncation(t *testing.T) {
 	database := testdbfixture.Open(t, "turns.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
-	for name, st := range map[string]interface {
-		Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-		AppendMessages(context.Context, string, ...api.Message) error
-		ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
-		Get(context.Context, string) (*api.Session, error)
-	}{"sql": NewSQL(database)} {
-		t.Run(name, func(t *testing.T) {
-			ctx := t.Context()
-			sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
-			testutil.FailErr(t, "create session", err)
-			first := api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "first"}
-			second := first
-			second.ID = uuid.NewString()
-			testutil.FailErr(t, "append turns", st.AppendMessages(ctx, sess.ID, first, second))
-			rewindFrom(t, st.(rewindStore), sess.ID, first.ID)
-			empty, err := st.Get(ctx, sess.ID)
-			testutil.FailErr(t, "read rewound session", err)
-			if empty.CurrentTurn != 0 {
-				t.Fatalf("empty current turn=%d", empty.CurrentTurn)
-			}
-			next := first
-			next.ID = uuid.NewString()
-			testutil.FailErr(t, "append next turn", st.AppendMessages(ctx, sess.ID, next))
-			currentSource, err := st.ReadSourceTurn(ctx, sess.ID, 0)
-			current := currentSource.Number
-			testutil.FailErr(t, "read permanent turn", err)
-			if current != 3 {
-				t.Fatalf("next turn=%d, want 3", current)
-			}
-		})
+	st := NewSQL(database)
+	ctx := t.Context()
+	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	first := api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "first"}
+	second := first
+	second.ID = uuid.NewString()
+	testutil.FailErr(t, "append turns", st.AppendMessages(ctx, sess.ID, first, second))
+	rewindFrom(t, st, sess.ID, first.ID)
+	empty, err := st.Get(ctx, sess.ID)
+	testutil.FailErr(t, "read rewound session", err)
+	if empty.CurrentTurn != 0 {
+		t.Fatalf("empty current turn=%d", empty.CurrentTurn)
+	}
+	next := first
+	next.ID = uuid.NewString()
+	testutil.FailErr(t, "append next turn", st.AppendMessages(ctx, sess.ID, next))
+	currentSource, err := st.ReadSourceTurn(ctx, sess.ID, 0)
+	current := currentSource.Number
+	testutil.FailErr(t, "read permanent turn", err)
+	if current != 3 {
+		t.Fatalf("next turn=%d, want 3", current)
 	}
 }
