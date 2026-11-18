@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn retained_prefix_is_unchanged_by_active_cache_extension() {
-    let mut active = Cache::new(1024).unwrap();
+    let mut active = Cache::new(1024, crate::profile::E4B).unwrap();
     let keys = Array::ones::<f32>(&[1, 2, 3, 512])
         .unwrap()
         .as_dtype(Dtype::Float16)
@@ -45,7 +45,7 @@ fn retained_prefix_is_unchanged_by_active_cache_extension() {
 
 #[test]
 fn rejects_precision_drift_and_malformed_cache_shapes() {
-    let mut cache = Cache::new(1024).unwrap();
+    let mut cache = Cache::new(1024, crate::profile::E4B).unwrap();
     for shape in [&[1, 2, 1, 256][..], &[1][..]] {
         let keys = Array::zeros::<f32>(shape).unwrap();
         assert!(cache.update(0, keys.clone(), keys).is_err());
@@ -56,7 +56,7 @@ fn rejects_precision_drift_and_malformed_cache_shapes() {
 
 #[test]
 fn unrelated_requests_do_not_overwrite_a_retained_global_bank() {
-    let mut active = Cache::new(1024).unwrap();
+    let mut active = Cache::new(1024, crate::profile::E4B).unwrap();
     let first = Array::ones::<half::f16>(&[1, 2, 3, 512]).unwrap();
     active.update(5, first.clone(), first).unwrap();
     active.offset = 3;
@@ -84,7 +84,7 @@ fn unrelated_requests_do_not_overwrite_a_retained_global_bank() {
 
 #[test]
 fn global_capacity_is_reserved_once_and_bounds_updates() {
-    let mut cache = Cache::new(1024).unwrap();
+    let mut cache = Cache::new(1024, crate::profile::E4B).unwrap();
     for count in [1, 256] {
         let keys = Array::ones::<f32>(&[1, 2, count, 512])
             .unwrap()
@@ -105,9 +105,9 @@ fn global_capacity_is_reserved_once_and_bounds_updates() {
 #[test]
 fn clear_preserves_the_admitted_capacity() {
     for capacity in [0, 1, 65537, usize::MAX] {
-        assert!(Cache::new(capacity).is_err());
+        assert!(Cache::new(capacity, crate::profile::E4B).is_err());
     }
-    let mut cache = Cache::new(2).unwrap();
+    let mut cache = Cache::new(2, crate::profile::E4B).unwrap();
     let keys = Array::ones::<half::f16>(&[1, 2, 2, 512]).unwrap();
     cache.update(5, keys.clone(), keys).unwrap();
     cache.offset = 2;
@@ -125,7 +125,7 @@ fn clear_preserves_the_admitted_capacity() {
 
 #[test]
 fn sliding_state_retains_only_the_window_and_current_chunk() {
-    let mut cache = Cache::new(1024).unwrap();
+    let mut cache = Cache::new(1024, crate::profile::E4B).unwrap();
     for _ in 0..4 {
         let keys = Array::ones::<f32>(&[1, 2, 256, 256])
             .unwrap()

@@ -1,5 +1,5 @@
 {
   "schema": "pw-native-tiers/1",
-  "mlx": ["e4b"],
-  "vulkan": ["e4b"]
+  "mlx": ["e4b", "12b", "26b-a4b"],
+  "vulkan": ["e4b", "12b", "26b-a4b"]
 }

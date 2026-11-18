@@ -74,12 +74,13 @@ void warm(pw_generation * engine) {
 }
 }
 
-extern "C" int pw_generation_inspect(const char * model, uint64_t * resident, uint64_t * mapped,
+extern "C" int pw_generation_inspect(const char * model, uint64_t * resident, uint64_t * mapped, uint32_t * layers,
                                       char * error, size_t capacity) {
     return guarded(error, capacity, [&] {
-        const auto inventory = inspect_e4b(model);
+        const auto inventory = inspect_gemma4(model);
         *resident = inventory.resident;
         *mapped = inventory.mapped;
+        *layers = inventory.layers;
     });
 }
 
@@ -100,7 +101,7 @@ extern "C" int pw_generation_load(const char * path, const char * pci, uint32_t 
     return guarded(error, capacity, [&] {
         if (context < 2 || context > 65536 || !chunk || chunk > 256 || prefix >= context)
             throw std::runtime_error("invalid execution limits");
-        inspect_e4b(path);
+        const auto inventory = inspect_gemma4(path);
         auto engine = std::make_unique<pw_generation>();
         ggml_backend_dev_t devices[] = {device(pci), nullptr};
         auto mp = llama_model_default_params();
@@ -108,10 +109,9 @@ extern "C" int pw_generation_load(const char * path, const char * pci, uint32_t 
         mp.n_gpu_layers = -1;
         mp.lazy_mode = LLAMA_LAZY_MODE_ON;
         engine->model.reset(llama_model_load_from_file(path, mp));
-        if (!engine->model || llama_model_n_layer(engine->model.get()) != 42 ||
-            llama_model_n_embd(engine->model.get()) != 2560 ||
+        if (!engine->model || llama_model_n_layer(engine->model.get()) != static_cast<int32_t>(inventory.layers) ||
             llama_vocab_n_tokens(llama_model_get_vocab(engine->model.get())) != 262144)
-            throw std::runtime_error("artifact is not an E4B model");
+            throw std::runtime_error("invalid Gemma 4 model");
         engine->sampler.reset(llama_sampler_chain_init(llama_sampler_chain_default_params()));
         llama_sampler_chain_add(engine->sampler.get(), llama_sampler_init_greedy());
         llama_sampler_seq_config sampler_config{0, engine->sampler.get()};

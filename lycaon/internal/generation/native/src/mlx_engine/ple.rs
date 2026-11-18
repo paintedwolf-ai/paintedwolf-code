@@ -4,7 +4,7 @@ use std::path::Path;
 
 use half::f16;
 use memmap2::{Mmap, MmapOptions};
-use mlx_rs::{ops, Array};
+use mlx_rs::{Array, ops};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -51,8 +51,12 @@ impl MappedPLE {
             ("biases", "F16", 168, 2),
         ] {
             let name = format!("language_model.model.embed_tokens_per_layer.{suffix}");
-            let tensor: Tensor =
-                serde_json::from_value(values.remove(&name).ok_or("Missing PLE tensor")?)?;
+            let tensor: Tensor = serde_json::from_value(
+                values
+                    .remove(&name)
+                    .or_else(|| values.remove(&format!("model.embed_tokens_per_layer.{suffix}")))
+                    .ok_or("Missing PLE tensor")?,
+            )?;
             let [begin, end] = tensor.data_offsets;
             if tensor.dtype != dtype
                 || tensor.shape != [262144, width]

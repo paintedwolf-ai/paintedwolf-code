@@ -33,9 +33,10 @@ impl Mlx {
         memory::set_wired_limit(budget).map_err(device_error)?;
         memory::set_cache_limit(128 << 20).map_err(device_error)?;
         memory::reset_peak_memory().map_err(device_error)?;
+        let model = Model::load(directory).map_err(device_error)?;
         let engine = Self {
-            model: Model::load(directory).map_err(device_error)?,
-            cache: Cache::new(context).map_err(device_error)?,
+            cache: Cache::new(context, model.profile).map_err(device_error)?,
+            model,
             prefix: None,
             budget,
             idle_budget,
@@ -150,21 +151,25 @@ impl Backend for Mlx {
     fn plan(directory: &Path, context: usize, chunk: usize) -> Result<crate::resources::Plan> {
         let config =
             super::config::read(directory).map_err(|e| Error::Checkpoint(e.to_string()))?;
+        let profile = super::config::profile(&config).map_err(device_error)?;
         super::layout::validate(
             &directory.join("model.safetensors"),
             &config["quantization"],
+            profile,
         )
         .map_err(|e| Error::Checkpoint(e.to_string()))?;
-        let bits = super::weights::quantization_bits(
-            &config["quantization"],
-            "model.embed_tokens_per_layer",
-        )
-        .map_err(|e| Error::Checkpoint(e.to_string()))?;
-        super::ple::MappedPLE::open(&directory.join("model.safetensors"), bits)
+        if profile.has_ple() {
+            let bits = super::weights::quantization_bits(
+                &config["quantization"],
+                "model.embed_tokens_per_layer",
+            )
             .map_err(|e| Error::Checkpoint(e.to_string()))?;
+            super::ple::MappedPLE::open(&directory.join("model.safetensors"), bits)
+                .map_err(|e| Error::Checkpoint(e.to_string()))?;
+        }
         let (weights, mapped) =
             crate::tensor_inventory::safetensors(&directory.join("model.safetensors"))?;
-        crate::resources::Plan::e4b(weights, mapped, context, chunk, true)
+        crate::resources::Plan::for_model(profile, weights, mapped, context, chunk, true)
     }
     fn forward(&mut self, tokens: &[u32], sampling: Option<&mut Sampling>) -> Result<Option<u32>> {
         memory::reset_peak_memory().map_err(device_error)?;

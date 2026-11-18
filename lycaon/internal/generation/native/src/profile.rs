@@ -14,16 +14,40 @@ pub struct Profile {
 }
 
 pub const E4B: Profile = Profile {
-    layers: 42, hidden: 2560, attention_heads: 8, sliding_heads: 2, global_heads: 2,
-    shared_layers: 18, window: 512, intermediate: 10240, experts: 0, weight_limit: 8 << 30,
+    layers: 42,
+    hidden: 2560,
+    attention_heads: 8,
+    sliding_heads: 2,
+    global_heads: 2,
+    shared_layers: 18,
+    window: 512,
+    intermediate: 10240,
+    experts: 0,
+    weight_limit: 8 << 30,
 };
 pub const DENSE: Profile = Profile {
-    layers: 48, hidden: 3840, attention_heads: 16, sliding_heads: 8, global_heads: 1,
-    shared_layers: 0, window: 1024, intermediate: 15360, experts: 0, weight_limit: 10 << 30,
+    layers: 48,
+    hidden: 3840,
+    attention_heads: 16,
+    sliding_heads: 8,
+    global_heads: 1,
+    shared_layers: 0,
+    window: 1024,
+    intermediate: 15360,
+    experts: 0,
+    weight_limit: 10 << 30,
 };
 pub const MOE: Profile = Profile {
-    layers: 30, hidden: 2816, attention_heads: 16, sliding_heads: 8, global_heads: 2,
-    shared_layers: 0, window: 1024, intermediate: 2112, experts: 128, weight_limit: 18 << 30,
+    layers: 30,
+    hidden: 2816,
+    attention_heads: 16,
+    sliding_heads: 8,
+    global_heads: 2,
+    shared_layers: 0,
+    window: 1024,
+    intermediate: 2112,
+    experts: 128,
+    weight_limit: 18 << 30,
 };
 
 impl Profile {
@@ -40,6 +64,10 @@ impl Profile {
     }
 
     pub fn kv_heads(self, sliding: bool) -> usize {
-        if sliding { self.sliding_heads } else { self.global_heads }
+        if sliding {
+            self.sliding_heads
+        } else {
+            self.global_heads
+        }
     }
 }

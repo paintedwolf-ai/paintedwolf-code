@@ -122,7 +122,10 @@ class LoadProbe(unittest.TestCase):
         self.export["student"] = "12b"
         (self.root / "export_receipt.json").write_text(json.dumps(self.export))
         Runtime.script = {"rejects": ("hello",)}
-        status, receipt = self.probe(student="12b")
+        limited = self.root / "runtime-tiers.json"
+        limited.write_text(json.dumps({"mlx": ["e4b"]}))
+        with patch.object(load_probe, "TIERS", limited):
+            status, receipt = self.probe(student="12b")
         self.assertEqual((status, receipt["failure"]["code"]), (2, "native_runtime_unsupported"))
         self.assertIsNone(receipt["device"])
         declared = json.loads(load_probe.TIERS.read_text())

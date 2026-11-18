@@ -297,10 +297,8 @@ commit, both binaries and the device the runtime reported. A bundle the runtime
 cannot load yields a failed receipt naming the step (`render_failed`,
 `rendering_mismatch`, `load_failed`, `generation_failed`, `behavior_mismatch`).
 `scripts/generation/native_tiers.json` states which tiers each backend of the
-native runtime loads: today only E4B. `test_native_tiers.py` reads the
-dimensions the MLX engine and the Vulkan adapter require and fails when the
-file names any other set of tiers. A probe of another tier fails as
-`native_runtime_unsupported` without starting the runtime.
+native runtime loads. MLX and Vulkan support E4B, 12B and 26B-A4B.
+Each signed model and device pair requires its own load-probe receipt.
 
 `scripts/generation/publish_bundle.py` verifies a signed bundle against the
 authority, then uploads its payloads under `models/<model>/<device>/<revision>/`

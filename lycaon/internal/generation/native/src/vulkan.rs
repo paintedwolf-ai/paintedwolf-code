@@ -21,6 +21,7 @@ unsafe extern "C" {
         model: *const c_char,
         resident: *mut u64,
         mapped: *mut u64,
+        layers: *mut u32,
         error: *mut c_char,
         capacity: usize,
     ) -> c_int;
@@ -139,11 +140,20 @@ impl Backend for Vulkan {
     fn plan(directory: &Path, context: usize, chunk: usize) -> Result<crate::resources::Plan> {
         use std::os::unix::ffi::OsStrExt;
         let path = string(directory.join("model.gguf").as_os_str().as_bytes())?;
-        let (mut weights, mut mapped) = (0, 0);
+        let (mut weights, mut mapped, mut layers) = (0, 0, 0);
         checked(|error, capacity| unsafe {
-            pw_generation_inspect(path.as_ptr(), &mut weights, &mut mapped, error, capacity)
+            pw_generation_inspect(
+                path.as_ptr(),
+                &mut weights,
+                &mut mapped,
+                &mut layers,
+                error,
+                capacity,
+            )
         })?;
-        crate::resources::Plan::e4b(weights, mapped, context, chunk, false)
+        let profile = crate::profile::Profile::from_layers(layers as usize)
+            .ok_or_else(|| Error::Checkpoint("unsupported model architecture".into()))?;
+        crate::resources::Plan::for_model(profile, weights, mapped, context, chunk, false)
     }
     fn forward(&mut self, tokens: &[u32], sampling: Option<&mut Sampling>) -> Result<Option<u32>> {
         let mut sampled = u32::MAX;

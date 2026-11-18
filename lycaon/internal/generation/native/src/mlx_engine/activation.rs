@@ -66,13 +66,13 @@ impl Activation {
         let shape = gate.shape();
         if shape.len() != 3
             || shape[0] != 1
-            || !(1..=256).contains(&shape[1])
-            || ![256, 10240].contains(&shape[2])
+            || !(1..=2048).contains(&shape[1])
+            || !(1..=15360).contains(&shape[2])
             || up.shape() != shape
             || gate.dtype() != Dtype::Float16
             || up.dtype() != Dtype::Float16
         {
-            return Err("E4B activation inputs exceed their bounds".into());
+            return Err("Gemma 4 activation inputs exceed their bounds".into());
         }
         let mut call = ProductDispatch::new(gate, up)?;
         unsafe {

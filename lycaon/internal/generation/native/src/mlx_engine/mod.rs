@@ -1,11 +1,13 @@
-use mlx_rs::{fast, ops, ops::indexing::*, Array};
+use mlx_rs::{Array, fast, ops, ops::indexing::*};
 use std::path::Path;
 
 mod activation;
 pub mod backend;
 mod cache;
 mod config;
+mod experts;
 mod layout;
+use crate::profile::Profile;
 mod ple;
 mod weights;
 
@@ -57,6 +59,7 @@ fn rotary(x: &Array, sliding: bool, offset: i32) -> Result<Array> {
 }
 
 struct Attention {
+    profile: Profile,
     q: Linear,
     k: Option<Linear>,
     v: Option<Linear>,
@@ -73,22 +76,23 @@ struct AttentionStep<'a> {
 }
 
 impl Attention {
-    fn load(w: &mut Weights, prefix: &str, layer: usize) -> Result<Self> {
+    fn load(w: &mut Weights, prefix: &str, layer: usize, profile: Profile) -> Result<Self> {
         Ok(Self {
+            profile,
             q: w.linear(&format!("{prefix}.q_proj"))?,
-            k: if layer < 24 {
+            k: if layer < profile.kv_layers() {
                 Some(w.linear(&format!("{prefix}.k_proj"))?)
             } else {
                 None
             },
-            v: if layer < 24 {
+            v: if layer < profile.kv_layers() && (layer % 6 != 5 || profile.has_ple()) {
                 Some(w.linear(&format!("{prefix}.v_proj"))?)
             } else {
                 None
             },
             output: w.linear(&format!("{prefix}.o_proj"))?,
             q_norm: w.take(&format!("{prefix}.q_norm.weight"))?,
-            k_norm: if layer < 24 {
+            k_norm: if layer < profile.kv_layers() {
                 Some(w.take(&format!("{prefix}.k_norm.weight"))?)
             } else {
                 None
@@ -101,8 +105,10 @@ impl Attention {
         let sliding = layer % 6 != 5;
         let dimension = if sliding { 256 } else { 512 };
         let count = x.shape()[1];
+        let heads = self.profile.attention_heads as i32;
+        let kv_heads = self.profile.kv_heads(sliding) as i32;
         let q = norm(
-            &self.q.forward(x)?.reshape(&[1, count, 8, dimension])?,
+            &self.q.forward(x)?.reshape(&[1, count, heads, dimension])?,
             &self.q_norm,
         )?;
         let q = rotary(
@@ -110,14 +116,18 @@ impl Attention {
             sliding,
             step.query_offset,
         )?;
-        let kv = if let (Some(k), Some(v), Some(kn)) = (&self.k, &self.v, &self.k_norm) {
-            let k = norm(&k.forward(x)?.reshape(&[1, count, 2, dimension])?, kn)?;
-            let k = rotary(&k.transpose_axes(&[0, 2, 1, 3])?, sliding, cache.offset)?;
-            let v = fast::rms_norm(
-                v.forward(x)?.reshape(&[1, count, 2, dimension])?,
-                None,
-                1e-6,
+        let kv = if let (Some(k), Some(kn)) = (&self.k, &self.k_norm) {
+            let keys = k.forward(x)?.reshape(&[1, count, kv_heads, dimension])?;
+            let values = match &self.v {
+                Some(v) => v.forward(x)?.reshape(&[1, count, kv_heads, dimension])?,
+                None => keys.clone(),
+            };
+            let k = rotary(
+                &norm(&keys, kn)?.transpose_axes(&[0, 2, 1, 3])?,
+                sliding,
+                cache.offset,
             )?;
+            let v = fast::rms_norm(values, None, 1e-6)?;
             cache.update(layer, k, v.transpose_axes(&[0, 2, 1, 3])?)?
         } else {
             cache.get(if sliding { 22 } else { 23 }, step.source_tokens)?
@@ -129,11 +139,11 @@ impl Attention {
         };
         let result = fast::scaled_dot_product_attention(q, kv.keys, kv.values, 1.0, masking, None)?;
         self.output
-            .forward(
-                &result
-                    .transpose_axes(&[0, 2, 1, 3])?
-                    .reshape(&[1, count, 8 * dimension])?,
-            )
+            .forward(&result.transpose_axes(&[0, 2, 1, 3])?.reshape(&[
+                1,
+                count,
+                heads * dimension,
+            ])?)
     }
 }
 
@@ -146,17 +156,16 @@ struct Layer {
     gate: Linear,
     up: Linear,
     down: Linear,
-    ple_gate: Linear,
-    ple_projection: Linear,
-    ple_norm: Array,
+    ple: Option<(Linear, Linear, Array)>,
+    experts: Option<experts::Experts>,
     scalar: Array,
 }
 
 impl Layer {
-    fn load(w: &mut Weights, i: usize) -> Result<Self> {
+    fn load(w: &mut Weights, i: usize, profile: Profile) -> Result<Self> {
         let prefix = format!("model.layers.{i}");
         Ok(Self {
-            attention: Attention::load(w, &format!("{prefix}.self_attn"), i)?,
+            attention: Attention::load(w, &format!("{prefix}.self_attn"), i, profile)?,
             input_norm: w.take(&format!("{prefix}.input_layernorm.weight"))?,
             attention_norm: w.take(&format!("{prefix}.post_attention_layernorm.weight"))?,
             feedforward_norm: w.take(&format!("{prefix}.pre_feedforward_layernorm.weight"))?,
@@ -164,9 +173,20 @@ impl Layer {
             gate: w.linear(&format!("{prefix}.mlp.gate_proj"))?,
             up: w.linear(&format!("{prefix}.mlp.up_proj"))?,
             down: w.linear(&format!("{prefix}.mlp.down_proj"))?,
-            ple_gate: w.linear(&format!("{prefix}.per_layer_input_gate"))?,
-            ple_projection: w.linear(&format!("{prefix}.per_layer_projection"))?,
-            ple_norm: w.take(&format!("{prefix}.post_per_layer_input_norm.weight"))?,
+            ple: if profile.has_ple() {
+                Some((
+                    w.linear(&format!("{prefix}.per_layer_input_gate"))?,
+                    w.linear(&format!("{prefix}.per_layer_projection"))?,
+                    w.take(&format!("{prefix}.post_per_layer_input_norm.weight"))?,
+                ))
+            } else {
+                None
+            },
+            experts: if profile.experts > 0 {
+                Some(experts::Experts::load(w, &prefix)?)
+            } else {
+                None
+            },
             scalar: w.take(&format!("{prefix}.layer_scalar"))?,
         })
     }
@@ -174,7 +194,7 @@ impl Layer {
     fn forward(
         &self,
         x: &Array,
-        ple: &Array,
+        ple: Option<&Array>,
         cache: &mut Cache,
         step: &AttentionStep<'_>,
         activation: &Activation,
@@ -186,20 +206,28 @@ impl Layer {
         )?)?;
         let h = norm(&x, &self.feedforward_norm)?;
         let h = activation.product(&self.gate.forward(&h)?, &self.up.forward(&h)?)?;
-        let x = x.add(norm(&self.down.forward(&h)?, &self.output_norm)?)?;
-        let h = activation.product(&self.ple_gate.forward(&x)?, ple)?;
-        Ok(
-            x.add(norm(&self.ple_projection.forward(&h)?, &self.ple_norm)?)?
-                .multiply(&self.scalar)?,
-        )
+        let dense = self.down.forward(&h)?;
+        let combined = match &self.experts {
+            Some(experts) => experts.forward(&x, &dense, activation)?,
+            None => dense,
+        };
+        let x = x.add(norm(&combined, &self.output_norm)?)?;
+        let x = match (&self.ple, ple) {
+            (Some((gate, projection, scale)), Some(input)) => {
+                let h = activation.product(&gate.forward(&x)?, input)?;
+                x.add(norm(&projection.forward(&h)?, scale)?)?
+            }
+            (None, None) => x,
+            _ => return Err("Missing per-layer input".into()),
+        };
+        Ok(x.multiply(&self.scalar)?)
     }
 }
 
 pub struct Model {
     embedding: Linear,
-    ple: MappedPLE,
-    projection: Linear,
-    projection_norm: Array,
+    ple: Option<(MappedPLE, Linear, Array)>,
+    pub profile: Profile,
     layers: Vec<Layer>,
     final_norm: Array,
     activation: Activation,
@@ -209,19 +237,27 @@ impl Model {
     pub fn load(directory: &Path) -> Result<Self> {
         let config = config::read(directory)?;
         let quantization = config["quantization"].clone();
-        let bits = weights::quantization_bits(&quantization, "model.embed_tokens_per_layer")?;
+        let profile = config::profile(&config)?;
         let path = directory.join("model.safetensors");
         crate::tensor_inventory::safetensors(&path)?;
-        layout::validate(&path, &quantization)?;
-        let ple = MappedPLE::open(&path, bits)?;
-        let mut weights = Weights::load(&path, quantization)?;
+        layout::validate(&path, &quantization, profile)?;
+        let mut weights = Weights::load(&path, quantization.clone())?;
+        let ple = if profile.has_ple() {
+            let bits = weights::quantization_bits(&quantization, "model.embed_tokens_per_layer")?;
+            Some((
+                MappedPLE::open(&path, bits)?,
+                weights.linear("model.per_layer_model_projection")?,
+                weights.take("model.per_layer_projection_norm.weight")?,
+            ))
+        } else {
+            None
+        };
         Ok(Self {
+            profile,
             embedding: weights.linear("model.embed_tokens")?,
             ple,
-            projection: weights.linear("model.per_layer_model_projection")?,
-            projection_norm: weights.take("model.per_layer_projection_norm.weight")?,
-            layers: (0..42)
-                .map(|i| Layer::load(&mut weights, i))
+            layers: (0..profile.layers)
+                .map(|i| Layer::load(&mut weights, i, profile))
                 .collect::<Result<_>>()?,
             final_norm: weights.take("model.norm.weight")?,
             activation: Activation::new()?,
@@ -234,50 +270,62 @@ impl Model {
             || ids.iter().any(|id| !(0..262144).contains(id))
             || cache.offset + ids.len() as i32 > 65536
         {
-            return Err("E4B input exceeds its bounds".into());
+            return Err("Model input exceeds its bounds".into());
         }
         let count = ids.len() as i32;
         let indices = Array::from_slice(ids, &[1, count]);
-        let mut h = scale(&self.embedding.embedding(&indices)?, 2560_f32.sqrt())?;
-        let layers = if matches!(output, Logits::None) {
-            24
-        } else {
-            42
-        };
-        let projected = scale(
-            &self.projection.forward_prefix(&h, layers * 256)?,
-            1.0 / 2560_f32.sqrt(),
-        )?
-        .reshape(&[1, count, layers, 256])?;
-        let ple = scale(
-            &norm(&projected, &self.projection_norm)?
-                .add(scale(&self.ple.gather(ids, layers as usize)?, 16.0)?)?,
-            std::f32::consts::FRAC_1_SQRT_2,
+        let mut h = scale(
+            &self.embedding.embedding(&indices)?,
+            (self.profile.hidden as f32).sqrt(),
         )?;
-        let old = cache.offset.min(511);
+        let layers = if matches!(output, Logits::None) {
+            self.profile.kv_layers() as i32
+        } else {
+            self.profile.layers as i32
+        };
+        let ple = if let Some((mapped, projection, projection_norm)) = &self.ple {
+            let projected = scale(
+                &projection.forward_prefix(&h, layers * 256)?,
+                1.0 / (self.profile.hidden as f32).sqrt(),
+            )?
+            .reshape(&[1, count, layers, 256])?;
+            Some(scale(
+                &norm(&projected, projection_norm)?
+                    .add(scale(&mapped.gather(ids, layers as usize)?, 16.0)?)?,
+                std::f32::consts::FRAC_1_SQRT_2,
+            )?)
+        } else {
+            None
+        };
+        let window = self.profile.window as i32;
+        let old = cache.offset.min(window - 1);
         let mask = (count > 1).then(|| {
             Array::from_slice(
                 &(0..count)
-                    .flat_map(|q| (0..old + count).map(move |k| k <= old + q && k > old + q - 512))
+                    .flat_map(|q| {
+                        (0..old + count).map(move |k| k <= old + q && k > old + q - window)
+                    })
                     .collect::<Vec<_>>(),
                 &[count, old + count],
             )
         });
         let last_mask = mask.as_ref().map(|mask| mask.index((count - 1..count, ..)));
         for (i, layer) in self.layers.iter().enumerate() {
-            if i == 24 && matches!(output, Logits::None) {
+            if i == self.profile.kv_layers() && matches!(output, Logits::None) {
                 break;
             }
-            let last_only = i >= 24 && matches!(output, Logits::Last);
-            if i == 24 && last_only {
+            let last_only = i >= self.profile.kv_layers() && matches!(output, Logits::Last);
+            if i == self.profile.kv_layers() && last_only {
                 // Shared-KV layers need only the query whose logits will be sampled.
                 h = h.index((.., count - 1..count, ..));
             }
-            let layer_ple = if last_only {
-                ple.index((.., count - 1..count, i as i32, ..))
-            } else {
-                ple.index((.., .., i as i32, ..))
-            };
+            let layer_ple = ple.as_ref().map(|ple| {
+                if last_only {
+                    ple.index((.., count - 1..count, i as i32, ..))
+                } else {
+                    ple.index((.., .., i as i32, ..))
+                }
+            });
             let step = AttentionStep {
                 layer: i,
                 query_offset: cache.offset + if last_only { count - 1 } else { 0 },
@@ -288,7 +336,7 @@ impl Model {
                     mask.as_ref()
                 },
             };
-            h = layer.forward(&h, &layer_ple, cache, &step, &self.activation)?;
+            h = layer.forward(&h, layer_ple.as_ref(), cache, &step, &self.activation)?;
         }
         cache.offset += count;
         if matches!(output, Logits::None) {
