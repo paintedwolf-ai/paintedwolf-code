@@ -271,7 +271,7 @@ rehearse() {
   restored_project="$(cd "${restored_project}" && pwd -P)"
   project_id="$(jq -r '.project_id' "${fixture}/MANIFEST.json")"
   sqlite3 "${restored_dir}/store.db" \
-    "UPDATE project_roots SET path = '${restored_project//\'/\'\'}' WHERE project_id = '${project_id//\'/\'\'}';"
+    "UPDATE project_roots SET path = '${restored_project//\'/\'\'}' WHERE project_id = '${project_id//\'/\'\'}' AND is_primary = 1;"
   boot_engine "${HEAD_SIDECAR}" "${restored_dir}" "${tmp}/restored.log" "${tmp}/restored-health.json" "${fixture}" || return 1
 
   echo "upgrade:rehearse — ${tag} (schema ${prior_schema}) → HEAD (schema ${head_schema}): ok" >&2
