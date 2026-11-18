@@ -122,8 +122,8 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 
 	ctx := context.Background()
 	dir := t.TempDir()
-	writeTestProjectApprovalsAllowWrite(t, dir)
-	_ = writeImplementFixture(t, dir)
+	WriteTestProjectApprovalsAllowWrite(t, dir)
+	_ = WriteImplementFixture(t, dir)
 	if err := os.WriteFile(filepath.Join(dir, "TODO.txt"), []byte("TODO: resolve later\n"), 0o600); err != nil {
 		testutil.FailErr(t, "seed TODO marker", err)
 	}

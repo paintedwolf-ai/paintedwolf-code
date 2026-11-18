@@ -222,10 +222,10 @@ func newAdvanceParityRig(t *testing.T) *advanceParityRig {
 	toolDir := t.TempDir()
 	installParityCoordWorkflow(t, httpDir)
 	installParityCoordWorkflow(t, toolDir)
-	httpProj := createProjectHTTP(t, h.Server, httpDir)
-	httpSession := createSessionForProjectHTTP(t, h.Server, httpProj.ID, wire.SessionPostureBuild)
-	toolProj := createProjectHTTP(t, h.Server, toolDir)
-	toolSession := createSessionForProjectHTTP(t, h.Server, toolProj.ID, wire.SessionPostureBuild)
+	httpProj := CreateProjectHTTP(t, h.Server, httpDir)
+	httpSession := CreateSessionForProjectHTTP(t, h.Server, httpProj.ID, wire.SessionPostureBuild)
+	toolProj := CreateProjectHTTP(t, h.Server, toolDir)
+	toolSession := CreateSessionForProjectHTTP(t, h.Server, toolProj.ID, wire.SessionPostureBuild)
 	return &advanceParityRig{
 		srv:          h.Server,
 		wfMgr:        h.Workflows.Manager,
@@ -252,7 +252,7 @@ func (p *advanceParityRig) startRunTool(t *testing.T, workflowID, version string
 func (p *advanceParityRig) startRun(t *testing.T, sessionID, workflowID, version string) wire.WorkflowRun {
 	t.Helper()
 	body := `{"workflow_id":"` + workflowID + `","workflow_version":"` + version + `","request":"Exercise the parity gate"}`
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sessionID+"/workflow-runs", strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sessionID+"/workflow-runs", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	p.srv.ServeHTTP(w, req)
@@ -278,7 +278,7 @@ func (p *advanceParityRig) advanceHTTP(t *testing.T, runID string) (int, *wire.W
 
 func (p *advanceParityRig) advanceHTTPBody(t *testing.T, runID string, body *strings.Reader) (int, *wire.WorkflowRun, wire.ErrorResponse) {
 	t.Helper()
-	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+runID+"/advance", body)
+	req := AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+runID+"/advance", body)
 	w := httptest.NewRecorder()
 	p.srv.ServeHTTP(w, req)
 	if w.Code == http.StatusOK {
@@ -288,12 +288,12 @@ func (p *advanceParityRig) advanceHTTPBody(t *testing.T, runID string, body *str
 		}
 		return w.Code, &run, wire.ErrorResponse{}
 	}
-	return w.Code, nil, decodeAPIError(t, w)
+	return w.Code, nil, DecodeAPIError(t, w)
 }
 
 func (p *advanceParityRig) advanceTool(t *testing.T, sessionID string) (advanceToolStatus, workflowphases.AdvanceToolResult, *wire.WorkflowRun) {
 	t.Helper()
-	out, err := p.registry.Run(context.Background(), "workflow_advance", map[string]any{}, securityToolContext(sessionID, p.toolProject, "coordinator"))
+	out, err := p.registry.Run(context.Background(), "workflow_advance", map[string]any{}, SecurityToolContext(sessionID, p.toolProject, "coordinator"))
 	if err != nil {
 		// Gate failures use the structured result error.
 		t.Fatalf("tool advance returned bare error: %v", err)
@@ -311,7 +311,7 @@ func (p *advanceParityRig) advanceTool(t *testing.T, sessionID string) (advanceT
 
 func (p *advanceParityRig) advanceToolRaw(t *testing.T, sessionID string) (advanceToolStatus, workflowphases.AdvanceToolResult, error) {
 	t.Helper()
-	out, err := p.registry.Run(context.Background(), "workflow_advance", map[string]any{}, securityToolContext(sessionID, p.toolProject, "coordinator"))
+	out, err := p.registry.Run(context.Background(), "workflow_advance", map[string]any{}, SecurityToolContext(sessionID, p.toolProject, "coordinator"))
 	if err != nil {
 		return advanceToolStatusErr, workflowphases.AdvanceToolResult{}, err
 	}

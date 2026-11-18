@@ -35,7 +35,7 @@ func TestStateToolsRespectProjectDir(t *testing.T) {
 	testutil.FailErr(t, "sessStore.Create failed", err)
 	testdbseed.BindSessionWorkspace(t, sessStore, sess.ID, dirA)
 
-	_, err = toolReg.Run(context.Background(), "state_query", nil, securityToolContext(sess.ID, dirB, ""))
+	_, err = toolReg.Run(context.Background(), "state_query", nil, SecurityToolContext(sess.ID, dirB, ""))
 	if err == nil {
 		t.Fatal("expected project_dir mismatch error")
 	}

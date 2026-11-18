@@ -23,7 +23,7 @@ phases:
     activity_label: Running
     complete_when: plan_stub_valid
 `
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose", strings.NewReader(manifest))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose", strings.NewReader(manifest))
 	req.Header.Set("Content-Type", "application/yaml")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -50,7 +50,7 @@ func TestWorkflowComposeFromTemplateE2E(t *testing.T) {
 	srv := h.Server
 	sess := createSessionHTTP(t, srv, t.TempDir())
 
-	req := authedRequest(t, http.MethodGet, "/v1/workflow-templates", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/workflow-templates", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -66,7 +66,7 @@ func TestWorkflowComposeFromTemplateE2E(t *testing.T) {
 	}
 
 	body := `{"template_id":"hotfix-template","params":{"workflow_id":"e2e-hotfix"}}`
-	req = authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose-from-template", strings.NewReader(body))
+	req = AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose-from-template", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -83,7 +83,7 @@ func TestWorkflowComposeFromTemplateE2E(t *testing.T) {
 	}
 
 	startBody := `{"workflow_id":"e2e-hotfix","workflow_version":"1.0.0"}`
-	req = authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req = AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -109,7 +109,7 @@ phases:
     activity_label: Building the change
     complete_when: plan_stub_valid
 `
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose", strings.NewReader(manifest))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose", strings.NewReader(manifest))
 	req.Header.Set("Content-Type", "application/yaml")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

@@ -34,8 +34,8 @@ func newRewindFixture(t *testing.T) rewindFixture {
 	httpSrv := httptest.NewServer(h.Server)
 	t.Cleanup(httpSrv.Close)
 	projectDir := t.TempDir()
-	project := createAPIProjectAtPath(t, httpSrv.URL, projectDir)
-	sess := openAPIPostJSON[wire.Session](t, httpSrv.URL, "/v1/sessions", nil,
+	project := CreateAPIProjectAtPath(t, httpSrv.URL, projectDir)
+	sess := OpenAPIPostJSON[wire.Session](t, httpSrv.URL, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"spec"}`, http.StatusAccepted)
 	return rewindFixture{
 		h:          h,
@@ -159,9 +159,9 @@ func TestRewindRestoresFilesAndTruncatesTranscript(t *testing.T) {
 	before := listMessagesOpenAPI(t, f.base, map[string]string{"id": f.sessionID}, http.StatusOK)
 
 	operationID := uuid.NewString()
-	preview := openAPIPostJSON[wire.RewindPreviewResponse](t, f.base, "/v1/sessions/{id}/rewind/preview", map[string]string{"id": f.sessionID}, `{"message_id":"`+anchorID+`"}`, http.StatusOK)
+	preview := OpenAPIPostJSON[wire.RewindPreviewResponse](t, f.base, "/v1/sessions/{id}/rewind/preview", map[string]string{"id": f.sessionID}, `{"message_id":"`+anchorID+`"}`, http.StatusOK)
 	bodyJSON := `{"operation_id":"` + operationID + `","message_id":"` + anchorID + `","plan_digest":"` + preview.PlanDigest + `"}`
-	got := openAPIPostJSON[wire.RewindSessionResponse](t, f.base, "/v1/sessions/{id}/rewind",
+	got := OpenAPIPostJSON[wire.RewindSessionResponse](t, f.base, "/v1/sessions/{id}/rewind",
 		map[string]string{"id": f.sessionID}, bodyJSON, http.StatusOK)
 
 	if got.RestoredPrompt != "change the note" {
@@ -187,7 +187,7 @@ func TestRewindRestoresFilesAndTruncatesTranscript(t *testing.T) {
 	}
 
 	// Operation replay returns the stored result after its anchor has been removed.
-	replayed := openAPIPostJSON[wire.RewindSessionResponse](t, f.base, "/v1/sessions/{id}/rewind",
+	replayed := OpenAPIPostJSON[wire.RewindSessionResponse](t, f.base, "/v1/sessions/{id}/rewind",
 		map[string]string{"id": f.sessionID}, bodyJSON, http.StatusOK)
 	if !reflect.DeepEqual(replayed, got) {
 		t.Fatalf("rewind replay = %+v, want exact %+v", replayed, got)
@@ -204,7 +204,7 @@ func TestRewindWillNotUseAnotherSessionsAnchor(t *testing.T) {
 	f := newRewindFixture(t)
 	ctx := context.Background()
 
-	other := openAPIPostJSON[wire.Session](t, f.base, "/v1/sessions", nil,
+	other := OpenAPIPostJSON[wire.Session](t, f.base, "/v1/sessions", nil,
 		`{"project_id":"`+f.projectID+`","posture":"spec"}`, http.StatusAccepted)
 	foreignAnchor := uuid.New().String()
 	testutil.FailErr(t, "append ask to the other session",
@@ -273,9 +273,9 @@ func assertRewindError(t *testing.T, base, sessionID string, row rewindErrorCase
 	encoded, err := json.Marshal(input)
 	testutil.FailErr(t, "encode refusal fixture", err)
 	row.body = string(encoded)
-	raw := openAPIDo(t, base, http.MethodPost, "/v1/sessions/{id}/rewind",
+	raw := OpenAPIDo(t, base, http.MethodPost, "/v1/sessions/{id}/rewind",
 		map[string]string{"id": sessionID}, row.body, row.wantStatus)
-	got := decodeOpenAPI[wire.ErrorResponse](t, http.MethodPost, "/v1/sessions/{id}/rewind", raw)
+	got := DecodeOpenAPI[wire.ErrorResponse](t, http.MethodPost, "/v1/sessions/{id}/rewind", raw)
 	if string(got.Code) != row.wantCode {
 		t.Fatalf("%s: code = %q, want %q (body=%s)", row.name, got.Code, row.wantCode, raw)
 	}

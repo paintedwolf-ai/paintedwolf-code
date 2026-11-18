@@ -25,7 +25,7 @@ func advancePlanRunToImplement(t *testing.T, h *wiring.Harness, srv *api.Server,
 	}
 
 	startBody := planStartBody
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

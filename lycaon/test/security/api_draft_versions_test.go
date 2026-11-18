@@ -25,7 +25,7 @@ func TestSessionDraftVersionsOpenAPI(t *testing.T) {
 	_, err := h.Store.AppendDraftVersion(ctx, sess.ID, slotID, "first draft", "")
 	testutil.FailErr(t, "append draft version", err)
 
-	req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/drafts/"+slotID+"/versions", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/drafts/"+slotID+"/versions", nil)
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

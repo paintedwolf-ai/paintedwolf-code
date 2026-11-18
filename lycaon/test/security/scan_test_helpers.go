@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
@@ -35,7 +37,7 @@ import (
 	"github.com/lycaon/lycaon/test/wiring"
 )
 
-const bundledScannerWaitBudget = 5 * time.Minute
+const BundledScannerWaitBudget = 5 * time.Minute
 
 type staticHeadSHA struct {
 	sha string
@@ -132,8 +134,8 @@ func securityScannerContract(id string) scancatalog.ScannerContract {
 	}
 }
 
-// scanFixtureDir returns the bundled scan fixture.
-func scanFixtureDir(t *testing.T) string {
+// ScanFixtureDir returns the bundled scan fixture.
+func ScanFixtureDir(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
@@ -142,7 +144,7 @@ func scanFixtureDir(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "testdata", "scan"))
 }
 
-func securityToolContext(sessionID, dir, agent string) tools.ToolContext {
+func SecurityToolContext(sessionID, dir, agent string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
 	return tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: sessionID,
@@ -158,24 +160,24 @@ type projectScan struct {
 	wire.CodeScan
 }
 
-func scanURL(projectID, scanID string) string {
+func ScanURL(projectID, scanID string) string {
 	return "/v1/projects/" + projectID + "/scans/" + scanID
 }
 
-func enqueueCodeScan(t *testing.T, srv *api.Server, projectDir string, categories []wire.ScanCategory) projectScan {
+func EnqueueCodeScan(t *testing.T, srv *api.Server, projectDir string, categories []wire.ScanCategory) projectScan {
 	t.Helper()
-	project := createProjectHTTP(t, srv, projectDir)
-	return projectScan{ProjectID: project.ID, CodeScan: enqueueSingleScanner(t, srv, project.ID, categories)}
+	project := CreateProjectHTTP(t, srv, projectDir)
+	return projectScan{ProjectID: project.ID, CodeScan: EnqueueSingleScanner(t, srv, project.ID, categories)}
 }
 
-func enqueueSingleScanner(t *testing.T, srv *api.Server, projectID string, categories []wire.ScanCategory) wire.CodeScan {
+func EnqueueSingleScanner(t *testing.T, srv *api.Server, projectID string, categories []wire.ScanCategory) wire.CodeScan {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	srv.WaitForBackground(ctx)
 	testutil.FailErr(t, "settle project attachment", ctx.Err())
 	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, authedRequest(t, http.MethodGet, "/v1/projects/"+projectID+"/security", nil))
+	srv.ServeHTTP(w, AuthedRequest(t, http.MethodGet, "/v1/projects/"+projectID+"/security", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET security status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -198,7 +200,7 @@ func enqueueSingleScanner(t *testing.T, srv *api.Server, projectID string, categ
 	}
 	body, err := json.Marshal(wire.FullScanRequest{ScannerIDs: scannerIDs})
 	testutil.FailErr(t, "marshal full scan request", err)
-	req := authedRequest(t, http.MethodPost, "/v1/projects/"+projectID+"/scans", bytes.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/projects/"+projectID+"/scans", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -235,7 +237,7 @@ func waitFullPassMemberScan(t *testing.T, srv *api.Server, projectID string, pas
 		case wire.FullPassMemberWaitingForScanner, wire.FullPassMemberWaitingForPass:
 		}
 		w := httptest.NewRecorder()
-		srv.ServeHTTP(w, authedRequest(t, http.MethodGet, "/v1/projects/"+projectID+"/security", nil))
+		srv.ServeHTTP(w, AuthedRequest(t, http.MethodGet, "/v1/projects/"+projectID+"/security", nil))
 		if w.Code != http.StatusOK {
 			t.Fatalf("GET security status = %d body=%s", w.Code, w.Body.String())
 		}
@@ -251,15 +253,15 @@ func waitFullPassMemberScan(t *testing.T, srv *api.Server, projectID string, pas
 	return *member.Scan
 }
 
-func waitScanComplete(t *testing.T, srv *api.Server, projectID, scanID string) wire.CodeScan {
+func WaitScanComplete(t *testing.T, srv *api.Server, projectID, scanID string) wire.CodeScan {
 	t.Helper()
 	var got wire.CodeScan
 	testutil.WaitFor(t, "the scan completes", func() bool {
-		getReq := authedRequest(t, http.MethodGet, scanURL(projectID, scanID)+"?view=full", nil)
+		getReq := AuthedRequest(t, http.MethodGet, ScanURL(projectID, scanID)+"?view=full", nil)
 		getW := httptest.NewRecorder()
 		srv.ServeHTTP(getW, getReq)
 		if getW.Code != http.StatusOK {
-			t.Fatalf("GET %s status = %d", scanURL(projectID, scanID), getW.Code)
+			t.Fatalf("GET %s status = %d", ScanURL(projectID, scanID), getW.Code)
 		}
 		if err := json.Unmarshal(getW.Body.Bytes(), &got); err != nil {
 			testutil.FailErr(t, "unmarshal scan get", err)
@@ -275,7 +277,7 @@ func waitScanComplete(t *testing.T, srv *api.Server, projectID, scanID string) w
 	return got
 }
 
-func waitScanPackComplete(t *testing.T, h *wiring.Harness, projectDir string, categories []any, timeout time.Duration) scantoolapi.ScanPackToolResult {
+func WaitScanPackComplete(t *testing.T, h *wiring.Harness, projectDir string, categories []any, timeout time.Duration) scantoolapi.ScanPackToolResult {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	defer cancel()
@@ -283,7 +285,7 @@ func waitScanPackComplete(t *testing.T, h *wiring.Harness, projectDir string, ca
 	if len(categories) > 0 {
 		args["categories"] = categories
 	}
-	raw, err := h.ToolRegistry.Run(ctx, "scan_pack", args, securityToolContext("", projectDir, "coordinator"))
+	raw, err := h.ToolRegistry.Run(ctx, "scan_pack", args, SecurityToolContext("", projectDir, "coordinator"))
 	testutil.FailErr(t, "wait for scan_pack completion", err)
 	var result scantoolapi.ScanPackToolResult
 	testutil.FailErr(t, "decode scan_pack summary", json.Unmarshal([]byte(raw), &result))
@@ -297,13 +299,13 @@ func waitScanPackComplete(t *testing.T, h *wiring.Harness, projectDir string, ca
 	}
 }
 
-func getCodeScan(t *testing.T, srv *api.Server, projectID, scanID string) wire.CodeScan {
+func GetCodeScan(t *testing.T, srv *api.Server, projectID, scanID string) wire.CodeScan {
 	t.Helper()
-	getReq := authedRequest(t, http.MethodGet, scanURL(projectID, scanID)+"?view=full", nil)
+	getReq := AuthedRequest(t, http.MethodGet, ScanURL(projectID, scanID)+"?view=full", nil)
 	getW := httptest.NewRecorder()
 	srv.ServeHTTP(getW, getReq)
 	if getW.Code != http.StatusOK {
-		t.Fatalf("GET %s status = %d body=%s", scanURL(projectID, scanID), getW.Code, getW.Body.String())
+		t.Fatalf("GET %s status = %d body=%s", ScanURL(projectID, scanID), getW.Code, getW.Body.String())
 	}
 	var got wire.CodeScan
 	if err := json.Unmarshal(getW.Body.Bytes(), &got); err != nil {
@@ -312,14 +314,14 @@ func getCodeScan(t *testing.T, srv *api.Server, projectID, scanID string) wire.C
 	return got
 }
 
-func assertScanPackPerEngine(t *testing.T, srv *api.Server, projectID string, payload scantoolapi.ScanPackToolResult, wantEngines map[string]engineScanExpect) {
+func AssertScanPackPerEngine(t *testing.T, srv *api.Server, projectID string, payload scantoolapi.ScanPackToolResult, wantEngines map[string]EngineScanExpect) {
 	t.Helper()
 	if len(payload.ScanIDs) != len(wantEngines) {
 		t.Fatalf("scan_ids count = %d, want %d (%v)", len(payload.ScanIDs), len(wantEngines), payload.ScanIDs)
 	}
 	seen := map[string]wire.CodeScan{}
 	for _, id := range payload.ScanIDs {
-		rec := getCodeScan(t, srv, projectID, id)
+		rec := GetCodeScan(t, srv, projectID, id)
 		if rec.ScannerID == "" {
 			t.Fatalf("scan %s missing scanner_id", id)
 		}
@@ -330,16 +332,16 @@ func assertScanPackPerEngine(t *testing.T, srv *api.Server, projectID string, pa
 		if !ok {
 			t.Fatalf("missing scan row for engine %q (scan_ids=%v)", scannerID, payload.ScanIDs)
 		}
-		assertScanFindings(t, rec, expect.wantFile, expect.minFindings)
+		AssertScanFindings(t, rec, expect.WantFile, expect.MinFindings)
 	}
 }
 
-type engineScanExpect struct {
-	minFindings int
-	wantFile    string
+type EngineScanExpect struct {
+	MinFindings int
+	WantFile    string
 }
 
-func assertScanFindings(t *testing.T, got wire.CodeScan, wantFile string, minCount int) {
+func AssertScanFindings(t *testing.T, got wire.CodeScan, wantFile string, minCount int) {
 	t.Helper()
 	if got.Status == wire.CodeScanStatusFailed {
 		t.Fatalf("scan failed: %s", got.Error)
@@ -365,4 +367,13 @@ func assertScanFindings(t *testing.T, got wire.CodeScan, wantFile string, minCou
 		return
 	}
 	t.Fatalf("no finding with file containing %q (findings_count=%d, audit_rows=%d)", wantFile, got.FindingsCount, len(got.Findings))
+}
+
+// Empty catalogs isolate finding counts from bundled hints and suppressions.
+func stageEmptyHintsAndSuppressions(t *testing.T) {
+	t.Helper()
+	configtest.Overlay(t, map[config.Rel]string{
+		config.ScanHints:   "hints: {}\n",
+		config.ScanIgnores: "version: 1\nfindings: []\n",
+	})
 }

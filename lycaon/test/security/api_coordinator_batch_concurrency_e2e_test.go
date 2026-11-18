@@ -126,7 +126,7 @@ func TestHTTPCoordinatorBatchWorkersOnPackBoardE2E(t *testing.T) {
 	_, err := h.Store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 
-	board, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"detail_level": "compact"}, securityToolContext(sess.ID, sess.WorkspacePath, "coordinator"))
+	board, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"detail_level": "compact"}, SecurityToolContext(sess.ID, sess.WorkspacePath, "coordinator"))
 	testutil.FailErr(t, "pack_board", err)
 	var view api.BoardView
 	testutil.FailErr(t, "decode pack_board", json.Unmarshal([]byte(board), &view))

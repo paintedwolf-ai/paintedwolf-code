@@ -25,7 +25,7 @@ func TestWorkflowManifestModeTransitionsE2E(t *testing.T) {
 	testutil.FailErr(t, "store.Get failed", err)
 
 	startBody := planStartBody
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -64,7 +64,7 @@ func TestWorkflowManifestGateBlockedE2E(t *testing.T) {
 	})
 	testutil.FailErr(t, "h.Workflows.Manager.Starts.StartHuman failed", err)
 
-	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
+	req := AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusConflict {

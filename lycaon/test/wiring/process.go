@@ -29,10 +29,7 @@ var stubMCPDistro = map[config.Rel]string{
 
 var hostProcessPrepared atomic.Bool
 
-// PrepareHostProcess sets the environment and bundled source every host in
-// this test process shares. Call it from TestMain before any test runs; the
-// bundled source then stays one generation, so the stock pack inventory is
-// read once per process.
+// PrepareHostProcess keeps the bundled catalog generation stable across host boots.
 func PrepareHostProcess() {
 	for key, value := range hostProcessEnvironment {
 		if err := os.Setenv(key, value); err != nil {
@@ -43,9 +40,8 @@ func PrepareHostProcess() {
 	hostProcessPrepared.Store(true)
 }
 
-// RunHostTests prepares the host process, runs the package's tests and then
-// fails the package when the hosts they closed stay reachable.
-func RunHostTests(m *testing.M) int {
+// runHostTests checks that closed hosts become unreachable.
+func runHostTests(m *testing.M) int {
 	PrepareHostProcess()
 	return runReleasingHosts(m)
 }
@@ -53,7 +49,7 @@ func RunHostTests(m *testing.M) int {
 func requirePreparedHostProcess(t *testing.T) {
 	t.Helper()
 	if !hostProcessPrepared.Load() {
-		t.Fatal("hosts need a prepared process: call wiring.RunHostTests or wiring.PrepareHostProcess from TestMain")
+		t.Fatal("hosts need a prepared process: call wiring.Main or wiring.PrepareHostProcess from TestMain")
 	}
 }
 

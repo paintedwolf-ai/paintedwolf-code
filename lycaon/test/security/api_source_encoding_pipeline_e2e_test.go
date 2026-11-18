@@ -54,35 +54,35 @@ func TestProjectSourceEncodingPipelineE2E(t *testing.T) {
 	testutil.FailErr(t, "encode conflict fixture", err)
 	testutil.FailErr(t, "seed conflict source", os.WriteFile(filepath.Join(root, "conflict.txt"), conflictBytes, 0o644))
 
-	project := createAPIProjectAtPath(t, httpSrv.URL, root)
+	project := CreateAPIProjectAtPath(t, httpSrv.URL, root)
 	params := map[string]string{"id": project.ID}
 	for _, journey := range journeys {
 		readPath := "/v1/projects/{id}/source?path=" + journey.path
 		if journey.encoding == "utf-16le" || journey.encoding == "utf-16be" {
-			automatic := openAPIGetJSON[wire.ProjectSourceReadResponse](t, httpSrv.URL, readPath, params, http.StatusOK)
+			automatic := OpenAPIGetJSON[wire.ProjectSourceReadResponse](t, httpSrv.URL, readPath, params, http.StatusOK)
 			if !automatic.Binary || automatic.Content != "" || automatic.Encoding != "" {
 				t.Fatalf("%s automatic read = %+v, want binary metadata", journey.encoding, automatic)
 			}
 			readPath += "&decode_as=" + journey.encoding
 		}
-		opened := openAPIGetJSON[wire.ProjectSourceReadResponse](t, httpSrv.URL, readPath, params, http.StatusOK)
+		opened := OpenAPIGetJSON[wire.ProjectSourceReadResponse](t, httpSrv.URL, readPath, params, http.StatusOK)
 		assertSourceJourneyRead(t, opened, journey.path, journey.originalText, journey.encoding, journey.originalBytes)
-		written := openAPIPutJSON[wire.ProjectSourceWriteResponse](t, httpSrv.URL,
+		written := OpenAPIPutJSON[wire.ProjectSourceWriteResponse](t, httpSrv.URL,
 			"/v1/projects/{id}/source", params,
 			sourcePipelinePutBody(t, journey.path, journey.editedText, journey.encoding, opened.SHA256), http.StatusOK)
 		if written.SHA256 != sourcePipelineSHA(journey.editedBytes) || written.SizeBytes != int64(len(journey.editedBytes)) {
 			t.Fatalf("%s write result = %+v", journey.encoding, written)
 		}
 		assertSourcePipelineDisk(t, root, journey.path, journey.editedBytes)
-		reopened := openAPIGetJSON[wire.ProjectSourceReadResponse](t, httpSrv.URL, readPath, params, http.StatusOK)
+		reopened := OpenAPIGetJSON[wire.ProjectSourceReadResponse](t, httpSrv.URL, readPath, params, http.StatusOK)
 		assertSourceJourneyRead(t, reopened, journey.path, journey.editedText, journey.encoding, journey.editedBytes)
 	}
 
-	walk := openAPIGetJSON[wire.SourceWalkResponse](t, httpSrv.URL,
+	walk := OpenAPIGetJSON[wire.SourceWalkResponse](t, httpSrv.URL,
 		"/v1/projects/{id}/source/walk?baseline=presentation&limit=100", params, http.StatusOK)
 	for _, journey := range journeys {
 		effect := sourcePipelineEffect(t, walk, journey.path)
-		comparison := openAPIGetJSON[wire.SourceComparison](t, httpSrv.URL,
+		comparison := OpenAPIGetJSON[wire.SourceComparison](t, httpSrv.URL,
 			"/v1/projects/{id}/source/comparison?effect_id="+effect.ID,
 			map[string]string{"id": project.ID}, http.StatusOK)
 		if journey.encoding == "utf-16le" || journey.encoding == "utf-16be" {
@@ -99,32 +99,32 @@ func TestProjectSourceEncodingPipelineE2E(t *testing.T) {
 			comparison.After.Sha256 != sourcePipelineSHA(journey.editedBytes) {
 			t.Fatalf("%s history comparison = %+v", journey.encoding, comparison)
 		}
-		openAPIPutJSON[wire.ProjectSourceWriteResponse](t, httpSrv.URL,
+		OpenAPIPutJSON[wire.ProjectSourceWriteResponse](t, httpSrv.URL,
 			"/v1/projects/{id}/source", params,
 			sourcePipelinePutBody(t, journey.path, journey.originalText, journey.encoding, sourcePipelineSHA(journey.editedBytes)), http.StatusOK)
 		assertSourcePipelineDisk(t, root, journey.path, journey.originalBytes)
 	}
 
 	first := journeys[0]
-	openAPIDo(t, httpSrv.URL, http.MethodPut, "/v1/projects/{id}/source", params,
+	OpenAPIDo(t, httpSrv.URL, http.MethodPut, "/v1/projects/{id}/source", params,
 		sourcePipelinePutBody(t, first.path, "wrong encoding", "utf-16be-bom", sourcePipelineSHA(first.originalBytes)),
 		http.StatusBadRequest)
-	openAPIDo(t, httpSrv.URL, http.MethodPut, "/v1/projects/{id}/source", params,
+	OpenAPIDo(t, httpSrv.URL, http.MethodPut, "/v1/projects/{id}/source", params,
 		sourcePipelinePutBody(t, first.path, "binary\x00text", first.encoding, sourcePipelineSHA(first.originalBytes)),
 		http.StatusUnsupportedMediaType)
 	assertSourcePipelineDisk(t, root, first.path, first.originalBytes)
 
-	conflictOpened := openAPIGetJSON[wire.ProjectSourceReadResponse](t, httpSrv.URL,
+	conflictOpened := OpenAPIGetJSON[wire.ProjectSourceReadResponse](t, httpSrv.URL,
 		"/v1/projects/{id}/source?path=conflict.txt", params, http.StatusOK)
 	newerBytes, err := testutil.ReferenceEncodeText("newer\n世界", "utf-16be-bom")
 	testutil.FailErr(t, "encode concurrent source", err)
 	testutil.FailErr(t, "write concurrent source", os.WriteFile(filepath.Join(root, "conflict.txt"), newerBytes, 0o644))
-	openAPIDo(t, httpSrv.URL, http.MethodPut, "/v1/projects/{id}/source", params,
+	OpenAPIDo(t, httpSrv.URL, http.MethodPut, "/v1/projects/{id}/source", params,
 		sourcePipelinePutBody(t, "conflict.txt", "stale", "utf-16be-bom", conflictOpened.SHA256),
 		http.StatusConflict)
 	assertSourcePipelineDisk(t, root, "conflict.txt", newerBytes)
 
-	finalWalk := openAPIGetJSON[wire.SourceWalkResponse](t, httpSrv.URL,
+	finalWalk := OpenAPIGetJSON[wire.SourceWalkResponse](t, httpSrv.URL,
 		"/v1/projects/{id}/source/walk?baseline=presentation&limit=100", params, http.StatusOK)
 	userRows := 0
 	for _, file := range finalWalk.Files {

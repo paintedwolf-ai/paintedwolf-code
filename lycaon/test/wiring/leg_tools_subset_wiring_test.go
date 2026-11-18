@@ -25,7 +25,7 @@ func TestExploreLegToolsMatchExploreProfile(t *testing.T) {
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
 	policy := h.Sessions.Manager.Coordinator.Guards.Policy()
-	builder := compositeWorkerWithPolicy(h.AgentRegistry, policy)
+	builder := CompositeWorkerWithPolicy(h.AgentRegistry, policy)
 
 	for _, agentType := range exploreAgents {
 		t.Run(agentType, func(t *testing.T) {
@@ -36,7 +36,7 @@ func TestExploreLegToolsMatchExploreProfile(t *testing.T) {
 			testutil.FailErr(t, "SpawnChild", err)
 			prof, err := h.AgentRegistry.Get(agentType)
 			testutil.FailErr(t, "agents.Get", err)
-			schema := sortedToolNamesFromMeta(policy.ListForPrompt(ctx, child, prof.ToolProfile))
+			schema := SortedToolNamesFromMeta(policy.ListForPrompt(ctx, child, prof.ToolProfile))
 			leg, err := builder.BuildWorkerPromptContext(t.Context(), child.ID, child)
 			testutil.FailErr(t, "BuildWorkerPromptContext", err)
 			got := append([]string(nil), leg.LegTools...)
@@ -45,12 +45,12 @@ func TestExploreLegToolsMatchExploreProfile(t *testing.T) {
 				t.Fatalf("LegTools %v != schema %v", got, schema)
 			}
 			for _, forbidden := range []string{"edit", "replace_lines", "code_rewrite", "restore_version", "chmod", "chown", "read", "find", "grep", "git_diff"} {
-				if legToolsContains(got, forbidden) {
+				if LegToolsContains(got, forbidden) {
 					t.Fatalf("%s LegTools must not include unavailable tool %q: %v", agentType, forbidden, got)
 				}
 			}
 			for _, want := range []string{"command", "complete_leg"} {
-				if !legToolsContains(got, want) {
+				if !LegToolsContains(got, want) {
 					t.Fatalf("%s LegTools missing %q: %v", agentType, want, got)
 				}
 			}

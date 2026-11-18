@@ -114,9 +114,18 @@ Use the narrow fixture at the boundary being exercised:
 | Temporary Git repository and commits | `internal/testutil/gittest` |
 | Go module or checkout root | `configlayout.FindModuleRoot` or `testutil.CheckoutRoot` |
 | Process-wide Anchor, guidance, Git, or browser setup | the corresponding `internal/testsetup/*` package, called explicitly from `TestMain` |
+| Production-wired host for an integration or HTTP journey | `lycaon/test/wiring`: `BuildForTest`, or `BuildForTestAt` to boot again on a directory a closed host left; the package's `TestMain` calls `wiring.Main` |
 | Partial Den API client | `lycaon-den/src/test/client-fixture.ts`; undeclared method access fails immediately |
 | E2E connection, workflow, project-file, or session synchronization | `lycaon-den/e2e/helpers.ts` |
 | Rust temporary directory lifecycle | `lycaon-den/src-tauri/src/test_support.rs` |
+
+Host tests are split by family so no one package bounds a behavior shard:
+`test/wiring` (the harness and the remaining wiring tests), `test/wiring/commands`,
+`test/wiring/workflows`, `test/wiring/workers`, `test/security` (journeys and
+their HTTP helpers), `test/security/scans` and `test/security/sweeps`. A host
+reads process-wide state, so tests in one package run one at a time; a test
+that asks the same host many questions builds it once and gives each question
+its own session.
 
 The shared fixtures centralize lifecycle and failure labeling without hiding the
 state relevant to a scenario. Tests of database recovery, backup, Git plumbing,

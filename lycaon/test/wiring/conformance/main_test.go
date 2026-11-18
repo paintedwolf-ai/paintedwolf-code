@@ -11,5 +11,5 @@ import (
 func TestMain(m *testing.M) {
 	setReferenceUmask()
 	gittestsetup.Enable()
-	os.Exit(wiring.RunHostTests(m))
+	os.Exit(wiring.Main(m))
 }

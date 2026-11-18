@@ -89,7 +89,7 @@ func TestPromptWithoutProviderLeavesNoAssistantMessage(t *testing.T) {
 	sess := createSessionHTTP(t, serveApp.Server, projectDir)
 	postPromptExpectNotConfigured(t, serveApp.Server, sess.ID)
 
-	req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/messages", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/messages", nil)
 	w := httptest.NewRecorder()
 	serveApp.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -127,22 +127,22 @@ func TestPromptAfterCredentialDeleteReturnsNotConfigured(t *testing.T) {
 	sess := createSessionHTTP(t, serveApp.Server, projectDir)
 
 	// Keyed so the credential PUT/DELETE below is what flips configured.
-	seedTestProvider(t, base, true)
+	SeedTestProvider(t, base, true)
 
-	openAPIPutJSON[wire.ProviderMeta](t, base, "/v1/providers/{provider_id}/credential",
+	OpenAPIPutJSON[wire.ProviderMeta](t, base, "/v1/providers/{provider_id}/credential",
 		map[string]string{"provider_id": testProviderID},
 		`{"api_key":"sk-test-delete-me"}`, http.StatusOK)
 
-	providers := openAPIGetJSON[wire.ProviderListResponse](t, base, "/v1/providers", nil, http.StatusOK).Providers
+	providers := OpenAPIGetJSON[wire.ProviderListResponse](t, base, "/v1/providers", nil, http.StatusOK).Providers
 	configured := findProvider(providers, testProviderID)
 	if configured == nil || !configured.Configured {
 		t.Fatalf("provider should be configured after credential PUT: %+v", configured)
 	}
 
-	openAPIDo(t, base, http.MethodDelete, "/v1/providers/{provider_id}/credential",
+	OpenAPIDo(t, base, http.MethodDelete, "/v1/providers/{provider_id}/credential",
 		map[string]string{"provider_id": testProviderID}, "", http.StatusNoContent)
 
-	providersAfter := openAPIGetJSON[wire.ProviderListResponse](t, base, "/v1/providers", nil, http.StatusOK).Providers
+	providersAfter := OpenAPIGetJSON[wire.ProviderListResponse](t, base, "/v1/providers", nil, http.StatusOK).Providers
 	after := findProvider(providersAfter, testProviderID)
 	if after == nil || after.Configured {
 		t.Fatalf("provider should be unconfigured after credential DELETE: %+v", after)
