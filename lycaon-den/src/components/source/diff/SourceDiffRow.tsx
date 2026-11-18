@@ -290,7 +290,7 @@ export function SourceDiffRow(props: Props) {
           </div>
 
           <footer class="den-file-edit-diff-footer">
-            <Show when={props.source.openable(activeIndex())}>
+            <Show when={props.source.openable(activeIndex()) !== false}>
               <SourcePathLink
                 label="Open in Files"
                 path={path()}
