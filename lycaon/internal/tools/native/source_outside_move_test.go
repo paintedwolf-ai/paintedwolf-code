@@ -29,7 +29,7 @@ func TestNativeMoveAndAttachKeepFileAndDocumentIdentity(t *testing.T) {
 	ctx := t.Context()
 	st, tctx, inside, outside := outsideNativeFixture(t)
 	database := st.LedgerDB()
-	now := db.FormatTime(time.Now().UTC())
+	now := time.Now().UTC().Format(time.RFC3339Nano)
 	start, moved := filepath.Join(inside, "start.txt"), filepath.Join(outside, "moved.txt")
 	testutil.FailErr(t, "seed source", os.WriteFile(start, []byte("original\n"), 0o640))
 	original, err := st.TrackFile(ctx, sourceledger.TrackInput{ProjectID: "p1", RootID: "r1", Path: "start.txt",
