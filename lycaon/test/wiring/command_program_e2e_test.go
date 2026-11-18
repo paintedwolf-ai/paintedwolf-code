@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
@@ -20,13 +21,22 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-// commandProgramSession runs one provider-emitted command program through the
-// production host and returns the delivered tool result.
+// programHost runs provider-emitted command programs for one test on one
+// production host. Each program gets its own session, project and model script.
+type programHost struct {
+	h       *Harness
+	models  *sessionModels
+	posture gate.Posture
+}
+
+// commandProgramSession is one program's session on a programHost.
 type commandProgramSession struct {
 	h       *Harness
 	dir     string
@@ -34,58 +44,68 @@ type commandProgramSession struct {
 	session string
 }
 
-// newCommandProgramSession starts a session with a progress checklist, so
-// project writes pass the progress rule.
-func newCommandProgramSession(t *testing.T, program, approvals string, posture ...gate.Posture) *commandProgramSession {
-	return newCommandProgramSessionWithArgs(t, map[string]any{"command": program}, wire.CreateSessionRequest{}, approvals, posture...)
+// newProgramHost builds the host; a posture is set as the global approval
+// posture for every session it starts.
+func newProgramHost(t *testing.T, posture ...gate.Posture) *programHost {
+	t.Helper()
+	models := newSessionModels()
+	p := &programHost{h: BuildForTest(t, WithLLMClient(models)), models: models}
+	if len(posture) > 0 {
+		p.posture = posture[0]
+		testutil.FailErr(t, "set approval posture", p.h.Server.Admin.Settings.Service.Approvals.PutGlobal(settings.ApprovalConfig{Posture: p.posture}))
+	}
+	return p
 }
 
-func newCommandProgramSessionWithArgs(t *testing.T, args map[string]any, request wire.CreateSessionRequest, approvals string, posture ...gate.Posture) *commandProgramSession {
+// program starts a session with a progress checklist, so project writes pass
+// the progress rule.
+func (p *programHost) program(t *testing.T, program, approvals string) *commandProgramSession {
 	t.Helper()
-	s := startCommandProgramSession(t, args, request, approvals, posture...)
+	return p.programWithArgs(t, map[string]any{"command": program}, wire.CreateSessionRequest{}, approvals)
+}
+
+func (p *programHost) programWithArgs(t *testing.T, args map[string]any, request wire.CreateSessionRequest, approvals string) *commandProgramSession {
+	t.Helper()
+	s := p.withClient(t, programModel(args), request, approvals)
 	s.h.SeedProgress(t, t.Context(), s.session)
 	return s
 }
 
-func newCommandProgramSessionWithoutProgress(t *testing.T, program, approvals string) *commandProgramSession {
+func (p *programHost) programWithoutProgress(t *testing.T, program, approvals string) *commandProgramSession {
 	t.Helper()
-	return startCommandProgramSession(t, map[string]any{"command": program}, wire.CreateSessionRequest{}, approvals)
+	return p.withClient(t, programModel(map[string]any{"command": program}), wire.CreateSessionRequest{}, approvals)
 }
 
-func startCommandProgramSession(t *testing.T, args map[string]any, request wire.CreateSessionRequest, approvals string, posture ...gate.Posture) *commandProgramSession {
-	t.Helper()
-	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
+// programModel answers "run the program" with one command call.
+func programModel(args map[string]any) modelcall.LLMClient {
+	return llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern:      "run the program",
 		ToolCalls:    []llm.MockToolCall{{ID: "program-1", Name: "command", Args: args}},
 		FollowUpText: "Program finished.",
 	}}})
-	return startSessionWithClient(t, mock, request, approvals, posture...)
 }
 
-func startCommandProgramSessionWithClient(t *testing.T, client modelcall.LLMClient) *commandProgramSession {
+// withClient starts an implementer session in a fresh project whose turns the
+// given model answers.
+func (p *programHost) withClient(t *testing.T, model modelcall.LLMClient, request wire.CreateSessionRequest, approvals string) *commandProgramSession {
 	t.Helper()
-	return startSessionWithClient(t, client, wire.CreateSessionRequest{}, "")
-}
-
-func startSessionWithClient(t *testing.T, mock modelcall.LLMClient, request wire.CreateSessionRequest, approvals string, posture ...gate.Posture) *commandProgramSession {
-	t.Helper()
-	options := []Option{WithLLMClient(mock)}
-	if len(posture) > 0 {
-		options = append(options, withGlobalApprovalPosture(posture[0]))
-	}
-	h := BuildForTest(t, options...)
+	h := p.h
 	dir := t.TempDir()
 	testutil.FailErr(t, "seed sub dir", os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
 	testutil.FailErr(t, "seed notes", os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("first note\nsecond note\n"), 0o644))
 	overlay := filepath.Join(dir, settingsoverlay.DirName())
 	testutil.FailErr(t, "create overlay", os.MkdirAll(overlay, 0o700))
 	rules := "rules:\n  - category: tool\n    pattern: command\n    effect: allow\n  - category: tool\n    pattern: write\n    effect: allow\n" + approvals
-	if len(posture) > 0 {
-		rules = "approval_posture: " + string(posture[0]) + "\n" + rules
+	if p.posture != "" {
+		rules = "approval_posture: " + string(p.posture) + "\n" + rules
 	}
 	testutil.FailErr(t, "write approvals", os.WriteFile(filepath.Join(overlay, "approvals.yaml"), []byte(rules), 0o600))
-	sess, err := h.CreateHarnessSession(t, request, dir)
+	projectID := uuid.NewString()
+	testdbseed.InsertProjectRoot(t, h.DB, projectID, dir)
+	request.ProjectID = projectID
+	sess, err := h.Store.Create(t.Context(), request, projectID)
 	testutil.FailErr(t, "create session", err)
+	p.models.use(sess.ID, model)
 	AttachDefaultAmbient(t, h, t.Context(), sess.ID)
 	run, err := h.Workflows.Manager.Store.Runs.ActiveBySession(t.Context(), sess.ID)
 	testutil.FailErr(t, "active run", err)
@@ -98,7 +118,7 @@ func startSessionWithClient(t *testing.T, mock modelcall.LLMClient, request wire
 		Key:           string(wire.GateUnobservedChannel) + ":unconfined",
 	}, 0)
 	testutil.FailErr(t, "set agent type", h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
-	return &commandProgramSession{h: h, dir: dir, project: sess.ProjectID, session: sess.ID}
+	return &commandProgramSession{h: h, dir: dir, project: projectID, session: sess.ID}
 }
 
 func (s *commandProgramSession) prompt(ctx context.Context) error {
@@ -194,7 +214,8 @@ func requireExecutions(t *testing.T, got []string, want ...string) {
 }
 
 func TestCommandProgramNativePipelineDeliversThroughProvider(t *testing.T) {
-	s := newCommandProgramSession(t, `cat notes.txt | head -n 1; grep -c note notes.txt | tr -d '\n'; printf ' %s\n' "${MISSING:-done}"`, "")
+	p := newProgramHost(t)
+	s := p.program(t, `cat notes.txt | head -n 1; grep -c note notes.txt | tr -d '\n'; printf ' %s\n' "${MISSING:-done}"`, "")
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 	if result := s.result(t); !strings.Contains(result, "first note") || strings.Contains(result, "second note") || !strings.Contains(result, `2 done`) {
 		t.Fatalf("delivered result = %q", result)
@@ -206,7 +227,8 @@ func TestCommandProgramNativePipelineDeliversThroughProvider(t *testing.T) {
 }
 
 func TestCommandProgramExternalLaunchDeliversThroughProvider(t *testing.T) {
-	s := newCommandProgramSession(t, "go version", "")
+	p := newProgramHost(t)
+	s := p.program(t, "go version", "")
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 	if result := s.result(t); !strings.Contains(result, "go version go") {
 		t.Fatalf("delivered result = %q", result)
@@ -217,7 +239,8 @@ func TestCommandProgramExternalLaunchDeliversThroughProvider(t *testing.T) {
 // A redirect binds its target from the statement's directory frame and
 // publishes through the native write owner.
 func TestCommandProgramRedirectWritesFromStatementDirectory(t *testing.T) {
-	s := newCommandProgramSession(t, "cd sub && head -n 1 ../notes.txt > copied.txt", "")
+	p := newProgramHost(t)
+	s := p.program(t, "cd sub && head -n 1 ../notes.txt > copied.txt", "")
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 	body, err := os.ReadFile(filepath.Join(s.dir, "sub", "copied.txt"))
 	testutil.FailErr(t, "read redirect target", err)
@@ -233,7 +256,8 @@ func TestCommandProgramRedirectWritesFromStatementDirectory(t *testing.T) {
 // An external launch that needs approval waits on a real checkpoint and runs
 // only after the person approves it.
 func TestCommandProgramApprovalRequiredExternalRunsAfterApproval(t *testing.T) {
-	s := newCommandProgramSession(t, "go env GOOS", "  - category: command\n    pattern: \"go env*\"\n    effect: ask\n")
+	p := newProgramHost(t)
+	s := p.program(t, "go env GOOS", "  - category: command\n    pattern: \"go env*\"\n    effect: ask\n")
 	ctx := t.Context()
 	checkpoint, done := s.promptUntilApproval(t)
 	_, err := s.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(s.h.OwnerCtx(t, ctx), s.session, checkpoint.ID, "approve_current_action")
@@ -248,13 +272,14 @@ func TestCommandProgramApprovalRequiredExternalRunsAfterApproval(t *testing.T) {
 // Program output redirected into a credential file reaches the protected
 // write review of the native write owner; declining leaves the file intact.
 func TestCommandProgramRedirectIntoCredentialFileAsksAsProtectedWrite(t *testing.T) {
+	p := newProgramHost(t)
 	for _, c := range []struct{ name, program, target string }{
 		{"stdout", "printf leaked > .env", ".env"},
 		{"append", "printf leaked >> .env", ".env"},
 		{"pipeline stage", "printf leaked | sort > .env.production", ".env.production"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			s := newCommandProgramSession(t, c.program, "")
+			s := p.program(t, c.program, "")
 			credential := filepath.Join(s.dir, c.target)
 			testutil.FailErr(t, "seed credential", os.WriteFile(credential, []byte("TOKEN=SECRET\n"), 0o600))
 			ctx := t.Context()
@@ -307,7 +332,8 @@ func TestCommandProgramRefusesUnknownCapabilityRequestKeys(t *testing.T) {
 // Child receipts carry the started job's handle, a stale destination's
 // revision conflict and screened previews of each child's output.
 func TestCommandProgramReceiptsCarryJobsConflictsAndPreviews(t *testing.T) {
-	s := newCommandProgramSession(t, `head -n 1 notes.txt; sleep 30 & kill %1; printf 'old\n' > target.txt; sh -c 'printf changed > target.txt; printf produced' > target.txt`, "")
+	p := newProgramHost(t)
+	s := p.program(t, `head -n 1 notes.txt; sleep 30 & kill %1; printf 'old\n' > target.txt; sh -c 'printf changed > target.txt; printf produced' > target.txt`, "")
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 	result := s.result(t)
 	if !strings.Contains(result, "COMMAND_REVISION_CONFLICT") || !strings.Contains(result, "first note") {
@@ -331,6 +357,7 @@ func TestCommandProgramReceiptsCarryJobsConflictsAndPreviews(t *testing.T) {
 }
 
 func TestCommandProgramRefusalsKeepEarlierEffects(t *testing.T) {
+	p := newProgramHost(t)
 	for _, c := range []struct {
 		name, program, code, cmd, word string
 	}{
@@ -340,7 +367,7 @@ func TestCommandProgramRefusalsKeepEarlierEffects(t *testing.T) {
 		{"redirect escape", "echo before > saved.txt; echo hi > /outside-root-escape.txt", "SURVEY_PATH_ESCAPE", "redirect >", "/outside-root-escape.txt"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			rs := newCommandProgramSession(t, c.program, "")
+			rs := p.program(t, c.program, "")
 			testutil.FailErr(t, "prompt", rs.prompt(t.Context()))
 			out := rs.result(t)
 			// The refusal keeps the earlier redirect's effect and locates the stopped statement.
@@ -352,7 +379,7 @@ func TestCommandProgramRefusalsKeepEarlierEffects(t *testing.T) {
 		})
 	}
 	t.Run("grep invalid regex utility error", func(t *testing.T) {
-		rs := newCommandProgramSession(t, "echo before > saved.txt; grep '[' notes.txt; echo after:$?", "")
+		rs := p.program(t, "echo before > saved.txt; grep '[' notes.txt; echo after:$?", "")
 		testutil.FailErr(t, "prompt", rs.prompt(t.Context()))
 		out := rs.result(t)
 		for _, want := range []string{`after:2`, `grep: Unmatched [`, `"state": "completed"`, `"completed_effects": 1`} {
@@ -364,6 +391,7 @@ func TestCommandProgramRefusalsKeepEarlierEffects(t *testing.T) {
 }
 
 func TestCommandProgramEnvMatchesExternalChildEnv(t *testing.T) {
+	p := newProgramHost(t)
 	envBin, err := exec.LookPath("env")
 	if err != nil {
 		t.Skip("env binary not found")
@@ -377,7 +405,7 @@ func TestCommandProgramEnvMatchesExternalChildEnv(t *testing.T) {
 	prog := `export EXPORTED_KEY=exported_val; ` +
 		`env | sort > native_env.txt; ` +
 		`external -- ` + envBin + ` | sort > external_env.txt`
-	s := newCommandProgramSession(t, prog, "")
+	s := p.program(t, prog, "")
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 
 	nativeBytes, err := os.ReadFile(filepath.Join(s.dir, "native_env.txt"))
@@ -426,12 +454,13 @@ func TestCommandProgramEnvMatchesExternalChildEnv(t *testing.T) {
 // progress gate before touching the project and both publish once a checklist
 // is recorded.
 func TestCommandProgramTeeAndRedirectShareTheProgressGate(t *testing.T) {
+	p := newProgramHost(t)
 	for _, c := range []struct{ name, program, target, want, stop string }{
 		{"redirect", "echo via_redirect > redirected.txt", "redirected.txt", "via_redirect\n", `"stderr": ">: redirected.txt: `},
 		{"tee", "printf 'via_tee\\n' | tee teed.txt", "teed.txt", "via_tee\n", `"stderr": "tee: `},
 	} {
 		t.Run(c.name+" without progress", func(t *testing.T) {
-			s := newCommandProgramSessionWithoutProgress(t, c.program, "")
+			s := p.programWithoutProgress(t, c.program, "")
 			state, err := s.h.Sessions.Manager.Coordinator.Guards.ProgramProgressState(t.Context(), s.session)
 			testutil.FailErr(t, "progress state", err)
 			if !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive) {
@@ -455,7 +484,7 @@ func TestCommandProgramTeeAndRedirectShareTheProgressGate(t *testing.T) {
 			}
 		})
 		t.Run(c.name+" with progress", func(t *testing.T) {
-			s := newCommandProgramSession(t, c.program, "")
+			s := p.program(t, c.program, "")
 			testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 			if result := s.result(t); strings.Contains(result, "PROGRESS_MISSING") || !strings.Contains(result, `"completed_effects": 1`) {
 				t.Fatalf("%s did not publish: %s", c.name, result)
@@ -473,7 +502,8 @@ func TestCommandProgramTeeAndRedirectShareTheProgressGate(t *testing.T) {
 }
 
 func TestCommandProgramHTTPMessagesEndpointReturnsContentAndReceipt(t *testing.T) {
-	s := newCommandProgramSession(t, `echo "http_messages_visible"`, "")
+	p := newProgramHost(t)
+	s := p.program(t, `echo "http_messages_visible"`, "")
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+s.session+"/messages", nil)
@@ -503,7 +533,8 @@ func TestCommandProgramHTTPMessagesEndpointReturnsContentAndReceipt(t *testing.T
 }
 
 func TestCommandProgramWcMultiFilePaddingMatchesGNU(t *testing.T) {
-	s := newCommandProgramSession(t, `wc -l one.txt ten.txt && wc one.txt ten.txt`, "")
+	p := newProgramHost(t)
+	s := p.program(t, `wc -l one.txt ten.txt && wc one.txt ten.txt`, "")
 	testutil.FailErr(t, "seed one.txt", os.WriteFile(filepath.Join(s.dir, "one.txt"), []byte("a\n"), 0o644))
 	testutil.FailErr(t, "seed ten.txt", os.WriteFile(filepath.Join(s.dir, "ten.txt"), []byte("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n"), 0o644))
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))

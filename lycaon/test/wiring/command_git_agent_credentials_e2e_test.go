@@ -84,6 +84,7 @@ func authenticatedUploadPack(t *testing.T, repo string) (*httptest.Server, func(
 // remembered for the chat covers the next command without a card or a
 // capability request.
 func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
+	p := newProgramHost(t)
 	gitengine.TestingEnableBundledBinary()
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_SANDBOX", "on")
@@ -105,7 +106,7 @@ func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
 	}
 	program := "git ls-remote " + server.URL + "/repo.git"
 
-	declined := newCommandProgramSession(t, program, "")
+	declined := p.program(t, program, "")
 	grantLoopback(declined)
 	runCommandWithApprovals(t, declined, "decline")
 	if got := declined.outcome(t, "program-1"); got.Status == 0 || authenticated() {
@@ -119,7 +120,7 @@ func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
 		{Pattern: "run the program", ToolCalls: []llm.MockToolCall{{ID: "program-1", Name: "command", Args: map[string]any{"command": program}}}, FollowUpText: "Program finished."},
 		{Pattern: "list it again", ToolCalls: []llm.MockToolCall{{ID: "program-2", Name: "command", Args: map[string]any{"command": program}}}, FollowUpText: "Listed again."},
 	}})
-	released := startSessionWithClient(t, mock, wire.CreateSessionRequest{}, "")
+	released := p.withClient(t, mock, wire.CreateSessionRequest{}, "")
 	released.h.SeedProgress(t, t.Context(), released.session)
 	grantLoopback(released)
 	runCommandWithApprovals(t, released, "recommended")
@@ -184,6 +185,7 @@ func fakeSSHAgent(t *testing.T) (string, func() int) {
 // when the call requests the session's socket capability for it, and not
 // otherwise.
 func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T) {
+	p := newProgramHost(t)
 	gitengine.TestingEnableBundledBinary()
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_SANDBOX", "on")
@@ -201,7 +203,7 @@ func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T)
 		t.Cleanup(func() { lycexec.SetResolvedPathSource(nil) })
 	}
 
-	ungranted := newCommandProgramSession(t, "git ls-remote "+remote, "")
+	ungranted := p.program(t, "git ls-remote "+remote, "")
 	shimFirst()
 	gittest.InitCommit(t, ungranted.dir, "work")
 	runCommandWithApprovals(t, ungranted)
@@ -212,7 +214,7 @@ func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T)
 		t.Fatalf("the result does not name the socket capability: %s", ungranted.result(t))
 	}
 
-	granted := newCommandProgramSessionWithArgs(t, map[string]any{
+	granted := p.programWithArgs(t, map[string]any{
 		"command":            "git ls-remote " + remote,
 		"capability_request": map[string]any{"socket_paths": []any{agent}},
 	}, wire.CreateSessionRequest{}, "")

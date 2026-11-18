@@ -86,10 +86,11 @@ func runCommandWithApprovals(t *testing.T, s *commandProgramSession, options ...
 }
 
 func TestNativeOutsideReadDeclineRetainsTypedRefusal(t *testing.T) {
+	p := newProgramHost(t)
 	outside := outsideCommandFolder(t)
 	file := filepath.Join(outside, "private.txt")
 	testutil.FailErr(t, "seed private file", os.WriteFile(file, []byte("not delivered"), 0o600))
-	s := newCommandProgramSession(t, "printf 'before\\n'; cat '"+file+"'", "")
+	s := p.program(t, "printf 'before\\n'; cat '"+file+"'", "")
 	runCommandWithApprovals(t, s, "decline")
 	outcome := s.outcome(t, "program-1")
 	if outcome.Refusal == nil || outcome.Refusal.Code == "" || outcome.Stdout != "before\n" || outcome.Status == 0 {
@@ -98,9 +99,10 @@ func TestNativeOutsideReadDeclineRetainsTypedRefusal(t *testing.T) {
 }
 
 func TestNativeOutsideWriteUsesAdmittedFolder(t *testing.T) {
+	p := newProgramHost(t)
 	outside := outsideCommandFolder(t)
 	destination := filepath.Join(outside, "copied.txt")
-	s := newCommandProgramSession(t, "cp notes.txt '"+destination+"'", "")
+	s := p.program(t, "cp notes.txt '"+destination+"'", "")
 	cards := runCommandWithApprovals(t, s, "recommended")
 	if !slices.Contains(cards[0].ToolApproval.Plan.Reasons, wire.GateOutsideRootsWrite) {
 		t.Fatalf("outside write did not reach approval: %+v", cards[0].ToolApproval.Plan)
@@ -116,6 +118,7 @@ func TestNativeOutsideWriteUsesAdmittedFolder(t *testing.T) {
 }
 
 func TestNativeChildrenReceiveCommandPathCapabilityRequests(t *testing.T) {
+	p := newProgramHost(t)
 	outside := outsideCommandFolder(t)
 	file := filepath.Join(outside, "id_ed25519")
 	testutil.FailErr(t, "seed capability input", os.WriteFile(file, []byte("capability bytes\n"), 0o600))
@@ -128,7 +131,7 @@ func TestNativeChildrenReceiveCommandPathCapabilityRequests(t *testing.T) {
 		{name: "write_root", command: "cp notes.txt '" + filepath.Join(outside, "output.txt") + "'", field: "write_root", grant: outside, subject: wire.ApprovalSubjectKindWriteRootSet},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := newCommandProgramSessionWithArgs(t, map[string]any{
+			s := p.programWithArgs(t, map[string]any{
 				"command":            tc.command,
 				"capability_request": map[string]any{tc.field: tc.grant},
 			}, wire.CreateSessionRequest{}, "")
@@ -155,13 +158,14 @@ func TestNativeChildrenReceiveCommandPathCapabilityRequests(t *testing.T) {
 func TestNativeCommandApprovalCardCounts(t *testing.T) {
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		t.Run(string(posture), func(t *testing.T) {
-			contained := newCommandProgramSession(t, "cat notes.txt", "", posture)
+			p := newProgramHost(t, posture)
+			contained := p.program(t, "cat notes.txt", "")
 			runCommandWithApprovals(t, contained)
 			if got := contained.outcome(t, "program-1"); got.Status != 0 || got.Stdout != "first note\nsecond note\n" {
 				t.Fatalf("contained read = %+v", got)
 			}
 
-			scratch := newCommandProgramSession(t, "cp notes.txt @scratch/copied.txt", "", posture)
+			scratch := p.program(t, "cp notes.txt @scratch/copied.txt", "")
 			if posture == gate.PostureStrict {
 				runCommandWithApprovals(t, scratch, "recommended")
 			} else {
@@ -178,7 +182,7 @@ func TestNativeCommandApprovalCardCounts(t *testing.T) {
 			port, err := strconv.ParseUint(parsed.Port(), 10, 16)
 			testutil.FailErr(t, "parse local port", err)
 
-			granted := newCommandProgramSession(t, "curl -s '"+server.URL+"'", "", posture)
+			granted := p.program(t, "curl -s '"+server.URL+"'", "")
 			if !granted.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(granted.session, []uint16{uint16(port)}, "granted-listener", "test-listener", nil) {
 				t.Fatal("listener grant failed")
 			}
@@ -187,7 +191,7 @@ func TestNativeCommandApprovalCardCounts(t *testing.T) {
 				t.Fatalf("granted service = %+v", got)
 			}
 
-			foreign := newCommandProgramSession(t, "curl -s '"+server.URL+"'; curl -s '"+server.URL+"'", "", posture)
+			foreign := p.program(t, "curl -s '"+server.URL+"'; curl -s '"+server.URL+"'", "")
 			switch posture {
 			case gate.PostureStrict:
 				runCommandWithApprovals(t, foreign, "recommended")
@@ -213,11 +217,12 @@ func TestNativeOutsideReadUsesFolderApprovalAndAdmittedPathFrame(t *testing.T) {
 			{name: "chat", options: []string{"recommended"}},
 		} {
 			t.Run(string(posture)+"/"+choice.name, func(t *testing.T) {
+				p := newProgramHost(t, posture)
 				outside := outsideCommandFolder(t)
 				first, second := filepath.Join(outside, "first.txt"), filepath.Join(outside, "second.txt")
 				testutil.FailErr(t, "seed first file", os.WriteFile(first, []byte("first outside\n"), 0o600))
 				testutil.FailErr(t, "seed second file", os.WriteFile(second, []byte("second outside\n"), 0o600))
-				s := newCommandProgramSession(t, "cat '"+first+"'; cat '"+second+"'", "", posture)
+				s := p.program(t, "cat '"+first+"'; cat '"+second+"'", "")
 				cards := runCommandWithApprovals(t, s, choice.options...)
 				plan := cards[0].ToolApproval.Plan
 				face := slices.IndexFunc(plan.Options, func(option wire.ApprovalOption) bool { return option.ID == plan.RecommendedOptionID })
@@ -237,6 +242,7 @@ func TestNativeOutsideReadUsesFolderApprovalAndAdmittedPathFrame(t *testing.T) {
 }
 
 func TestNativePathBuiltinsUseAdmittedFolder(t *testing.T) {
+	p := newProgramHost(t)
 	outside := outsideCommandFolder(t)
 	file := filepath.Join(outside, "input.txt")
 	testutil.FailErr(t, "seed path input", os.WriteFile(file, []byte("path input\n"), 0o600))
@@ -245,7 +251,7 @@ func TestNativePathBuiltinsUseAdmittedFolder(t *testing.T) {
 		{name: "cd", command: "cd '" + outside + "'; cat input.txt", want: "path input\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := newCommandProgramSession(t, tc.command, "")
+			s := p.program(t, tc.command, "")
 			cards := runCommandWithApprovals(t, s, "recommended")
 			plan := cards[0].ToolApproval.Plan
 			if !slices.Contains(plan.Reasons, wire.GateOutsideRootsRead) || len(plan.DirectoryScopes) == 0 || plan.DirectoryScopes[0] != outside {
@@ -261,10 +267,11 @@ func TestNativePathBuiltinsUseAdmittedFolder(t *testing.T) {
 func TestSedScriptFileProjectsOutsideEffects(t *testing.T) {
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		t.Run(string(posture), func(t *testing.T) {
+			p := newProgramHost(t, posture)
 			outside := outsideCommandFolder(t)
 			input := filepath.Join(outside, "input.txt")
 			testutil.FailErr(t, "seed sed input", os.WriteFile(input, []byte("outside sed\n"), 0o600))
-			s := newCommandProgramSession(t, "sed -f script.sed notes.txt", "", posture)
+			s := p.program(t, "sed -f script.sed notes.txt", "")
 			testutil.FailErr(t, "seed sed script", os.WriteFile(filepath.Join(s.dir, "script.sed"), []byte("1r "+input+"\n"), 0o600))
 			cards := runCommandWithApprovals(t, s, "recommended")
 			if !slices.Contains(cards[0].ToolApproval.Plan.Reasons, wire.GateOutsideRootsRead) {
@@ -274,7 +281,7 @@ func TestSedScriptFileProjectsOutsideEffects(t *testing.T) {
 				t.Fatalf("sed -f result = %+v", got)
 			}
 			written := filepath.Join(outside, "written.txt")
-			writer := newCommandProgramSession(t, "sed -f script.sed notes.txt", "", posture)
+			writer := p.program(t, "sed -f script.sed notes.txt", "")
 			testutil.FailErr(t, "seed sed write script", os.WriteFile(filepath.Join(writer.dir, "script.sed"), []byte("w "+written+"\n"), 0o600))
 			writeCards := runCommandWithApprovals(t, writer, "recommended")
 			if !slices.Contains(writeCards[0].ToolApproval.Plan.Reasons, wire.GateOutsideRootsWrite) {
@@ -295,10 +302,11 @@ func TestSedScriptFileProjectsOutsideEffects(t *testing.T) {
 func TestSedOutsideScriptFileRequiresReadApproval(t *testing.T) {
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		t.Run(string(posture), func(t *testing.T) {
+			p := newProgramHost(t, posture)
 			outside := outsideCommandFolder(t)
 			script := filepath.Join(outside, "replace.sed")
 			testutil.FailErr(t, "seed outside sed script", os.WriteFile(script, []byte("s/first/changed/\n"), 0o600))
-			s := newCommandProgramSession(t, "sed -f '"+script+"' notes.txt", "", posture)
+			s := p.program(t, "sed -f '"+script+"' notes.txt", "")
 			cards := runCommandWithApprovals(t, s, "recommended")
 			if len(cards) != 1 || !slices.Contains(cards[0].ToolApproval.Plan.Reasons, wire.GateOutsideRootsRead) {
 				t.Fatalf("outside sed script approval = %+v", cards)
@@ -313,13 +321,14 @@ func TestSedOutsideScriptFileRequiresReadApproval(t *testing.T) {
 func TestSedOutsideScriptDisclosesOutsideEffects(t *testing.T) {
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		t.Run(string(posture), func(t *testing.T) {
+			p := newProgramHost(t, posture)
 			sourceFolder := outsideCommandFolder(t)
 			effectFolder := outsideCommandFolder(t)
 			input := filepath.Join(effectFolder, "input.txt")
 			testutil.FailErr(t, "seed sed input", os.WriteFile(input, []byte("outside sed\n"), 0o600))
 			script := filepath.Join(sourceFolder, "read.sed")
 			testutil.FailErr(t, "seed outside sed script", os.WriteFile(script, []byte("1r "+input+"\n"), 0o600))
-			s := newCommandProgramSession(t, "sed -f '"+script+"' notes.txt", "", posture)
+			s := p.program(t, "sed -f '"+script+"' notes.txt", "")
 			cards := runCommandWithApprovals(t, s, "recommended", "recommended")
 			for i, card := range cards {
 				if !slices.Contains(card.ToolApproval.Plan.Reasons, wire.GateOutsideRootsRead) {
@@ -336,12 +345,13 @@ func TestSedOutsideScriptDisclosesOutsideEffects(t *testing.T) {
 func TestSedOutsideScriptWriteReceiptAfterStagedApproval(t *testing.T) {
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		t.Run(string(posture), func(t *testing.T) {
+			p := newProgramHost(t, posture)
 			sourceFolder := outsideCommandFolder(t)
 			writeFolder := outsideCommandFolder(t)
 			written := filepath.Join(writeFolder, "written.txt")
 			script := filepath.Join(sourceFolder, "write.sed")
 			testutil.FailErr(t, "seed outside sed script", os.WriteFile(script, []byte("w "+written+"\n"), 0o600))
-			s := newCommandProgramSession(t, "sed -f '"+script+"' notes.txt", "", posture)
+			s := p.program(t, "sed -f '"+script+"' notes.txt", "")
 			cards := runCommandWithApprovals(t, s, "recommended", "recommended")
 			if !slices.Contains(cards[0].ToolApproval.Plan.Reasons, wire.GateOutsideRootsRead) || !slices.Contains(cards[1].ToolApproval.Plan.Reasons, wire.GateOutsideRootsWrite) {
 				t.Fatalf("staged sed cards = %+v", cards)
@@ -364,7 +374,7 @@ func TestSedOutsideScriptWriteReceiptAfterStagedApproval(t *testing.T) {
 			if operation != "sed" || command != "sed" || mode != "w-command" || started != 1 || certainty != "completed" || pins != 1 {
 				t.Fatalf("staged sed receipt = %q %q %q started=%d certainty=%q pins=%d", operation, command, mode, started, certainty, pins)
 			}
-			declined := newCommandProgramSession(t, "sed -f '"+script+"' notes.txt", "", posture)
+			declined := p.program(t, "sed -f '"+script+"' notes.txt", "")
 			runCommandWithApprovals(t, declined, "recommended", "decline")
 			if got := declined.outcome(t, "program-1"); got.CompletedEffects != 0 || got.Status == 0 {
 				t.Fatalf("declined staged sed effect = %+v", got)
@@ -384,7 +394,8 @@ func TestSedOutsideScriptWriteReceiptAfterStagedApproval(t *testing.T) {
 func TestYqExpressionAndFileApprovalCounts(t *testing.T) {
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		t.Run(string(posture), func(t *testing.T) {
-			expression := newCommandProgramSession(t, "printf 'x: 1\\n' | yq .x", "", posture)
+			p := newProgramHost(t, posture)
+			expression := p.program(t, "printf 'x: 1\\n' | yq .x", "")
 			runCommandWithApprovals(t, expression)
 			if got := expression.outcome(t, "program-1"); got.Status != 0 || got.Stdout != "1\n" {
 				t.Fatalf("expression result = %+v", got)
@@ -392,12 +403,12 @@ func TestYqExpressionAndFileApprovalCounts(t *testing.T) {
 			outside := outsideCommandFolder(t)
 			file := filepath.Join(outside, "data.yaml")
 			testutil.FailErr(t, "seed yq input", os.WriteFile(file, []byte("x: 2\n"), 0o600))
-			ambiguous := newCommandProgramSession(t, "yq -n '"+file+"'", "", posture)
+			ambiguous := p.program(t, "yq -n '"+file+"'", "")
 			runCommandWithApprovals(t, ambiguous)
 			if got := ambiguous.outcome(t, "program-1"); got.Status == 0 {
 				t.Fatalf("path-shaped expression unexpectedly read a file: %+v", got)
 			}
-			input := newCommandProgramSession(t, "yq .x '"+file+"'", "", posture)
+			input := p.program(t, "yq .x '"+file+"'", "")
 			cards := runCommandWithApprovals(t, input, "recommended")
 			if !slices.Contains(cards[0].ToolApproval.Plan.Reasons, wire.GateOutsideRootsRead) {
 				t.Fatalf("yq file was not projected: %+v", cards[0].ToolApproval.Plan)
@@ -405,7 +416,7 @@ func TestYqExpressionAndFileApprovalCounts(t *testing.T) {
 			if got := input.outcome(t, "program-1"); got.Status != 0 || got.Stdout != "2\n" {
 				t.Fatalf("file result = %+v", got)
 			}
-			fileOnly := newCommandProgramSession(t, "yq '"+file+"'", "", posture)
+			fileOnly := p.program(t, "yq '"+file+"'", "")
 			fileCards := runCommandWithApprovals(t, fileOnly, "recommended")
 			plan := fileCards[0].ToolApproval.Plan
 			face := slices.IndexFunc(plan.Options, func(option wire.ApprovalOption) bool { return option.ID == plan.RecommendedOptionID })

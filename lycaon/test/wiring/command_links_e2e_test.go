@@ -37,8 +37,9 @@ func linkProgramOutcome(t *testing.T, session *commandProgramSession) linkProgra
 }
 
 func TestCommandProgramSymbolicLinksThroughProvider(t *testing.T) {
+	p := newProgramHost(t)
 	t.Run("create read and replace", func(t *testing.T) {
-		s := newCommandProgramSession(t, "ln -s notes.txt link.txt; cat link.txt; ln -sf sub/replacement.txt link.txt; cat link.txt", "")
+		s := p.program(t, "ln -s notes.txt link.txt; cat link.txt; ln -sf sub/replacement.txt link.txt; cat link.txt", "")
 		testutil.FailErr(t, "seed replacement", os.WriteFile(filepath.Join(s.dir, "sub", "replacement.txt"), []byte("replacement note\n"), 0o644))
 		testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 		outcome := linkProgramOutcome(t, s)
@@ -62,7 +63,7 @@ func TestCommandProgramSymbolicLinksThroughProvider(t *testing.T) {
 		{"outside target", "ln -s ../outside escaped.txt", "SURVEY_PATH_ESCAPE", "escaped.txt"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := newCommandProgramSession(t, tc.program, "")
+			s := p.program(t, tc.program, "")
 			testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 			outcome := linkProgramOutcome(t, s)
 			if outcome.state != "rejected" || outcome.status == 0 || outcome.completedEffects != 0 || outcome.uncertainEffects != 0 ||

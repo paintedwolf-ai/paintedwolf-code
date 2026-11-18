@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"context"
+	"errors"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io/fs"
@@ -12,14 +13,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/config/configtest"
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/cost"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/mcp"
@@ -41,14 +38,6 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Each test supplies its own server catalog.
-func stageFakeMCPDistro(t *testing.T) {
-	t.Helper()
-	configtest.Overlay(t, map[config.Rel]string{
-		config.DistroMCP: "providers:\n  - id: svca\n    command: \"true\"\n    args: []\n    enabled: false\n",
-	})
-}
-
 // Harness holds a production-wired ServeApp for E2E tests.
 type Harness struct {
 	*app.ServeApp
@@ -58,17 +47,24 @@ type Harness struct {
 	dbPath    string
 }
 
-// BuildForTest constructs a production-parity server via app.Build with test defaults.
+// BuildForTest constructs a production-parity server via app.Build with test
+// defaults, on a directory removed after the test.
 func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	t.Helper()
-	t.Setenv("LYCAON_LLM_MOCK", "1")
-	t.Setenv("LYCAON_API_TOKEN", api.TestAPIToken)
-	t.Setenv("LYCAON_TEST", "1")
-	t.Setenv("LYCAON_LOG_LEVEL", "error")
-	// Isolate device configuration for deterministic tests.
-	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
+	return BuildForTestAt(t, t.TempDir(), opts...)
+}
+
+// BuildForTestAt builds a host on dir, which holds its store, device
+// configuration and fixtures. A directory a closed host left behind is opened
+// as that host's next boot finds it; the caller keeps dir.
+func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
+	t.Helper()
+	requirePreparedHostProcess(t)
+	configDir := filepath.Join(dir, "config")
+	testutil.FailErr(t, "create device configuration", os.MkdirAll(configDir, 0o700))
+	t.Setenv("LYCAON_CONFIG_DIR", configDir)
 	// The process source catalog caches trees under <config>/cache; its builds
-	// outlive the app, so finish and retire them before TempDir removal.
+	// outlive the app, so finish and retire them before the directory goes.
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
@@ -79,19 +75,19 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	if o.globalApprovalPosture != "" {
-		testutil.FailErr(t, "write global approvals", os.WriteFile(filepath.Join(os.Getenv("LYCAON_CONFIG_DIR"), "approvals.yaml"), []byte("approval_posture: "+string(o.globalApprovalPosture)+"\n"), 0o600))
-	}
-
-	cfg := configuration.Config{}
+	cfg := configuration.Config{TestChangeDebounce: o.changeDebounce}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
 	// Install packs before the builder resolves the catalog.
 	installHarnessPacks(t, o.installedPackDirs)
-	testDir := t.TempDir()
-	// Restore read-only snapshots before TempDir cleanup.
+	testDir := dir
+	// Restore read-only snapshots before the directory is removed.
 	t.Cleanup(func() { restoreTreePermissions(filepath.Join(testDir, "source-snapshots")) })
 	dbPath := filepath.Join(testDir, "wiring-test.db")
-	cloneDatabaseBaseline(t, dbPath)
+	if _, err := os.Stat(dbPath); errors.Is(err, fs.ErrNotExist) {
+		cloneDatabaseBaseline(t, dbPath)
+	} else {
+		testutil.FailErr(t, "inspect store", err)
+	}
 	cfg.DBPath = dbPath
 	cfg.ListenAddr = "127.0.0.1:0"
 	cfg.MockLLMPath = mockLLMConfigPath(t)
@@ -103,7 +99,6 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 			"svca": {{Name: "do", Description: "do"}},
 		}}
 	}
-	stageFakeMCPDistro(t)
 	if o.secretMatcher != nil {
 		cfg.TestSecretMatcher = o.secretMatcher
 	}
@@ -145,10 +140,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 
 	sa, err := app.Build(t.Context(), cfg)
 	testutil.FailErr(t, "build app", err)
-	t.Cleanup(func() {
-		testutil.FailErr(t, "close test app", sa.Close())
-		_ = db.RemoveStore(dbPath)
-	})
+	t.Cleanup(func() { testutil.FailErr(t, "close test app", sa.Close()) })
 
 	if o.replaceManifests != nil {
 		sa.Workflows.Manager.Resolver.Overlay = workflowdef.NewRegistry(o.replaceManifests)
@@ -333,15 +325,6 @@ func (h *Harness) MemoryHub() *events.MemoryHub {
 func mockLLMConfigPath(t *testing.T) string {
 	t.Helper()
 	return filepath.Join(configlayout.FindModuleRoot(), "config", "fixtures", "mock_llm.yaml")
-}
-
-func loadMockConfig(t *testing.T) *llm.MockConfig {
-	t.Helper()
-	cfg, err := llm.LoadMockConfig()
-	if err != nil {
-		t.Fatalf("load mock config: %v", err)
-	}
-	return cfg
 }
 
 type testCostPricer struct{}
