@@ -1,0 +1,65 @@
+[
+  {
+    "admission": {
+      "estimate": 249.44,
+      "locks": [
+        "go"
+      ],
+      "shared_locks": [
+        "go"
+      ],
+      "workers": 4
+    },
+    "admissions": [
+      {
+        "estimate": 249.44,
+        "locks": [
+          "go"
+        ],
+        "shared_locks": [
+          "go"
+        ],
+        "workers": 4
+      }
+    ],
+    "arguments": [
+      "test:short",
+      "--",
+      "./internal/progress",
+      "./internal/worker"
+    ],
+    "binary": "/home/cdbeckman/.cache/paintedwolf/bin/task",
+    "compatibility": "4f1e43f372ea1068c7108111a9219171392c4efd85a4a65a655034943ad2ca72",
+    "environment_identity": "56c88bb525b9e5672085c4f61a0e1dd391092953455321c69e9a211992964cc8",
+    "kind": "request",
+    "name": "test:short",
+    "owner_identity": "Wed Nov 18 09:37:35 2026",
+    "pid": 220838,
+    "plan": {
+      "keep_going": false,
+      "names": [
+        "test:short"
+      ],
+      "stages": [
+        {
+          "bundled": false,
+          "exclude": "/test/(contract|integration|security|smoke|wiring)(/|$)",
+          "flags": [],
+          "kind": "go",
+          "name": "test:short",
+          "options": [],
+          "packages": [
+            "./internal/progress",
+            "./internal/worker"
+          ],
+          "report_all_failures": true
+        }
+      ]
+    },
+    "queued_at": 1795023458.2253938,
+    "source": "/home/cdbeckman/plan-transcript-transactions",
+    "state": "queued",
+    "ticket": "00000000000000000002-b4912c59435741a8940a4b60908f91fc",
+    "workers": 8
+  }
+]

@@ -1,0 +1,52 @@
+{
+  "batch_id": "591c8c732b924d0fadbb68c037b7581f",
+  "compatibility": "4f1e43f372ea1068c7108111a9219171392c4efd85a4a65a655034943ad2ca72",
+  "evidence": [
+    {
+      "excluded_tests": {
+        "github.com/lycaon/lycaon/internal/worker": {
+          "files": [
+            "firefox_sparse_lifecycle_stress_test.go"
+          ],
+          "tags": [
+            "stress"
+          ]
+        }
+      },
+      "packages": [
+        "github.com/lycaon/lycaon/internal/progress",
+        "github.com/lycaon/lycaon/internal/worker"
+      ],
+      "results": {
+        "github.com/lycaon/lycaon/internal/progress": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/591c8c732b924d0fadbb68c037b7581f/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/591c8c732b924d0fadbb68c037b7581f/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/worker": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/591c8c732b924d0fadbb68c037b7581f/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/591c8c732b924d0fadbb68c037b7581f/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        }
+      },
+      "stage": "test:short"
+    }
+  ],
+  "exit_code": 0,
+  "finished_at": 1795023641.552384,
+  "names": [
+    "test:short"
+  ],
+  "queued_at": 1795023458.2253938,
+  "request": "00000000000000000002-b4912c59435741a8940a4b60908f91fc",
+  "source_commit": "c828b500c1b279526e13ef26b34336ccce01a95f",
+  "source_root": "/home/cdbeckman/plan-transcript-transactions",
+  "source_tree": "983da10c7a6282392cf56ba0c8bbe8d236cebc60",
+  "started_at": 1795023487.355673,
+  "status": "passed",
+  "unverified_stages": []
+}

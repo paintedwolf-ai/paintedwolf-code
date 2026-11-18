@@ -1,0 +1,20 @@
+test execution: admitted batch 591c8c732b924d0fadbb68c037b7581f (1 requests, worker budget 8)
+test execution: stage-001: test:short (1 requests); log /home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/591c8c732b924d0fadbb68c037b7581f/stage-001.log
+   Compiling document-core v0.1.0 (/tmp/paintedwolf-source-snapshots-1000/08681b479e98-1/lycaon/internal/documentcore/native)
+    Finished `release` profile [optimized] target(s) in 6.71s
+
+  ✓ test:short — 2 packages, no failures
+    test and subtest results: 717 passed, 0 failed, 3 skipped
+    0 packages with no captured test results
+    slowest packages (elapsed, not additive):
+      106.50s  github.com/lycaon/lycaon/internal/worker
+      2.39s  github.com/lycaon/lycaon/internal/progress
+    slowest tests (elapsed, not additive):
+      17.34s  github.com/lycaon/lycaon/internal/worker TestCompletedMaterializedWorkerSurvivesRelocatedArchive
+      9.93s  github.com/lycaon/lycaon/internal/worker TestStackedWorkerClaimsAndPromotesThroughTheOneTransaction
+      7.39s  github.com/lycaon/lycaon/internal/worker TestSmallMountedLifecycleAcrossProcessRestart
+      6.20s  github.com/lycaon/lycaon/internal/worker TestNonPrimaryRootRefsReachPromotionAndRollBack
+      4.39s  github.com/lycaon/lycaon/internal/worker TestMaterializedStackedChainReachesAGrandchild
+test execution: test:short: passed; receipt /home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/591c8c732b924d0fadbb68c037b7581f/00000000000000000002-b4912c59435741a8940a4b60908f91fc.json
+test execution: test:short: 1 test files in 1 packages need build tags stress and did not run; test:stress run them
+go cache: 17.21 → 17.21 GiB; reclaimed 0.00 GiB (0 entries); budget 20 GiB; /home/cdbeckman/.cache/go-build

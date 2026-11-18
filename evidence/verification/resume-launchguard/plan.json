@@ -1,0 +1,87 @@
+{
+  "batch": {
+    "batch_id": "fb3869dc0ec6494c83cbd9de3cc37174",
+    "directory": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/fb3869dc0ec6494c83cbd9de3cc37174",
+    "kind": "batch",
+    "lease_fd": 200,
+    "members": [
+      "00000000000000000001-8a39033ad1c6455187a40af0fbe3b3de"
+    ],
+    "name": "verification batch",
+    "phase": "capture",
+    "pid": 246182,
+    "queued_at": 1795023660.3095007,
+    "source": "/home/cdbeckman/plan-transcript-transactions",
+    "started_at": 1795023660.310046,
+    "state": "running",
+    "ticket": "00000000000000000001-8a39033ad1c6455187a40af0fbe3b3de-batch",
+    "workers": 12
+  },
+  "requests": [
+    {
+      "admission": {
+        "estimate": 249.44,
+        "locks": [
+          "go"
+        ],
+        "shared_locks": [
+          "go"
+        ],
+        "workers": 6
+      },
+      "admissions": [
+        {
+          "estimate": 249.44,
+          "locks": [
+            "go"
+          ],
+          "shared_locks": [
+            "go"
+          ],
+          "workers": 6
+        }
+      ],
+      "arguments": [
+        "test:short",
+        "--",
+        "./internal/launchguard",
+        "-run",
+        "^TestGuardianFatalMountWorkerExitSettlesOnlyItsProtectedLineage$"
+      ],
+      "binary": "/home/cdbeckman/.cache/paintedwolf/bin/task",
+      "compatibility": "2bc73485a2471943117c4cd378caa1294fac1cfecc8152b97197ca7561f74ef3",
+      "environment_identity": "cb53f16e137850002591f7eb9201b05f3b585eaf8fb0b587b4e1ec21fd51cd28",
+      "kind": "request",
+      "name": "test:short",
+      "owner_identity": "Wed Nov 18 09:40:57 2026",
+      "pid": 246182,
+      "plan": {
+        "keep_going": false,
+        "names": [
+          "test:short"
+        ],
+        "stages": [
+          {
+            "bundled": false,
+            "exclude": "/test/(contract|integration|security|smoke|wiring)(/|$)",
+            "flags": [
+              "-run=^TestGuardianFatalMountWorkerExitSettlesOnlyItsProtectedLineage$"
+            ],
+            "kind": "go",
+            "name": "test:short",
+            "options": [],
+            "packages": [
+              "./internal/launchguard"
+            ],
+            "report_all_failures": true
+          }
+        ]
+      },
+      "queued_at": 1795023660.3095007,
+      "source": "/home/cdbeckman/plan-transcript-transactions",
+      "state": "queued",
+      "ticket": "00000000000000000001-8a39033ad1c6455187a40af0fbe3b3de",
+      "workers": 12
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "completed": true,
+  "digest_exit_code": 0,
+  "invocation": {
+    "created_at": "2026-11-18T17:41:09.795819+00:00",
+    "effective_go_argv": [
+      "-json",
+      "-p=1",
+      "-parallel=6",
+      "-timeout",
+      "0",
+      "-short",
+      "github.com/lycaon/lycaon/internal/launchguard",
+      "-run=^TestGuardianFatalMountWorkerExitSettlesOnlyItsProtectedLineage$"
+    ],
+    "environment": {
+      "CGO_ENABLED": null,
+      "CI": null,
+      "GOARCH": null,
+      "GODEBUG": null,
+      "GOEXPERIMENT": null,
+      "GOFLAGS": "-p=1",
+      "GOMAXPROCS": "6",
+      "GOOS": null,
+      "GO_TEST_P": "1",
+      "GO_TEST_PARALLEL": "6",
+      "LANG": "en_US.UTF-8",
+      "LC_ALL": "C.UTF-8",
+      "LYCAON_LLM_MOCK": "1",
+      "LYCAON_OPENGREP_CANDIDATE": null,
+      "LYCAON_SCANNER_SUITE_REQUIRED": null,
+      "OPENGREP_STAGE_DIR": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/bin/opengrep-bundle",
+      "PATH": "/home/cdbeckman/.cache/paintedwolf/bin:/home/cdbeckman/go/bin:/usr/local/go/bin:/home/cdbeckman/.local/bin:/home/cdbeckman/.bun/bin:/home/cdbeckman/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+      "PW_GO_TEST_TIMEOUT_SECONDS": "7200",
+      "TZ": null
+    },
+    "failed_packages": [],
+    "id": "20261118T094109-246616-7401",
+    "name": "test:short",
+    "runner_argv": [
+      "--name",
+      "test:short",
+      "--",
+      "github.com/lycaon/lycaon/internal/launchguard",
+      "-run=^TestGuardianFatalMountWorkerExitSettlesOnlyItsProtectedLineage$"
+    ],
+    "source_commit": "dc37cdc26d8f8e9313a26cbe1a0ee89959b95e56",
+    "source_ref": "refs/painted-wolf/test-failures/20261118T094109-246616-7401",
+    "source_root": "/tmp/paintedwolf-source-snapshots-1000/08681b479e98-0",
+    "version": 1
+  },
+  "packages": {
+    "github.com/lycaon/lycaon/internal/launchguard": "pass"
+  },
+  "process_exit_code": 0
+}

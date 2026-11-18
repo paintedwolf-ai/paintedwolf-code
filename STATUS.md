@@ -1,15 +1,15 @@
 # Status
 
-**State**: implemented in [PR #2467](https://github.com/paintedwolf-ai/paintedwolf-code/pull/2467), paused at the user’s request; PR is draft with one known CI compile failure. No merge or deployment performed.
+**State**: implemented in [PR #2467](https://github.com/paintedwolf-ai/paintedwolf-code/pull/2467), ready at `69e63f6bb254ed06c47b8314fd83b745562c4e7d`; final-head CI pending. No merge or deployment performed.
 
 | Id | Branch | Head | PR | State |
 |---|---|---|---|---|
-| `PU01` + `PU02` | `fix/plan-transcript-transactions` | `58e6f84e24e1f106caec9571331bcf44a828c458` | #2467 | implemented together; paused with CI failure |
+| `PU01` + `PU02` | `fix/plan-transcript-transactions` | `69e63f6bb254ed06c47b8314fd83b745562c4e7d` | #2467 | final CI pending |
 
 ## Worktrees
 
 - Local: `worktrees/implementation`, based on `main` at `1c29645396`.
-- Linux: `cdbeckman@10.0.20.5:/home/cdbeckman/plan-transcript-transactions`. Remote work is ephemeral; source is pushed, and scoped verification evidence is copied into `evidence/verification/` here.
+- Active Linux checkout: `cdbeckman@10.0.20.5:/home/cdbeckman/plan-transcript-transactions`. Retained verification evidence is in `evidence/verification/`.
 
 ## Resume log
 
@@ -34,12 +34,25 @@
 
 - API fixture verification at `58e6f84e24e`: all 30 API packages compiled. Twenty-eight passed initially; the two Git-dependent packages needed the pinned engine installed on the fresh remote worktree. After `gitengine:fetch`, both passed (518 tests/subtests, 1 skipped). Receipts are retained in `evidence/verification/api-fixture/` and `evidence/verification/api-git-pass/`.
 
+## Resumed and finished (2026-11-17 to 2026-11-18)
+
+- Merged `origin/main` `057f888ba8` into the branch; the merge was clean.
+- Fixed the failures from CI run 44120296624: the invocation progress test's database handle, a re-enter hook fixture returning a value, and Den's `messages-equal.ts`, which still compared the retired `seq`. The plan's claim that nothing in Den read `seq` was wrong.
+- Removed further `seq` literals from two Den end-to-end specs and the ordering fixture, and cleared one lint finding.
+- A plan write needs a workflow run, because the row is stamped with it in the transaction. The wiring harness's `SeedProgress` now binds the session's workflow with `EnsureSessionWorkflow` first, which fixed 37 wiring, conformance and security tests. Three wiring tests were changed to use the session's own run.
+- Verified on the two Linux test hosts added on 2026-11-17. On the final head: `lint:full`, `test:integration:changes` and `test:digest` for `test/wiring` passed. On earlier heads, before fixture-only changes: scoped `test:digest` for the other touched Go packages and `test/security`, and the Den typecheck, full suite, lint, knip and changed coverage.
+- A fresh checkout on a test host needs `./task gitengine:fetch` before Git-dependent packages can pass, and `./task setup-dev -- --frontend` before Den checks.
+
+## Reassessment and CI repair (2026-11-18)
+
+- Current main `0efb0f49c8` still uses the one-second coalescer and separate plan/transcript commits. Inspected all 166 open PRs and relevant diffs. #2472 fixes delivery of already committed outbox records, not atomic plan publication. #2567 removes memory progress fixtures; #2538 restructures session repositories. Both need composition with this PR, neither supersedes its behavior.
+- Preserved the intervening work through `973d626297`. CI run 44271458330 found an unreachable extracted `MemoryStore.update` helper and insufficient changed-statement coverage for decision-resolution errors. Kept the memory mutation cohesive in `Update`, preserving unlock-before-notification and cancellation behavior. Added durable rollback/retry tests for each worker decision persistence boundary and missing/foreign decisions.
+- Linux progress and worker suites at `2aec4fbdb83` passed 717 tests/subtests, with 3 skipped and one stress-tagged file excluded. Receipt and logs: `evidence/verification/resume-progress-worker/`.
+- Merged current main cleanly. Final head is `69e63f6bb254ed06c47b8314fd83b745562c4e7d`; CI run [44361006053](https://github.com/paintedwolf-ai/paintedwolf-code/actions/runs/44361006053).
+- The previous run also failed an unchanged Linux launch-guard test while starting its fixture (entry descriptor was an eventpoll descriptor rather than a sealed specification). The same focused Linux test passed at the current head (3 tests/subtests, no skips); no launch-guard source was changed. Receipt: `evidence/verification/resume-launchguard/`.
+
 ## Remaining work
 
-Work paused at the user’s request to spin down. All implementation commits are pushed at `58e6f84e24e1f106caec9571331bcf44a828c458`.
+Finish final-head CI and repair any remaining relevant failures. Preserve transactional mutation locking and ordinals when composing with #2538, and keep the atomic SQL implementation when #2567 removes memory fixtures. No unlanded PR is needed to land this implementation on current main.
 
-Resume with CI run [44120296624](https://github.com/paintedwolf-ai/paintedwolf-code/actions/runs/44120296624). Its `fast / ready-tests (3/4)` job reported that `lycaon/internal/invocation/program_progress_test.go:69` passes `f.database` (declared `db.Handle`) to `sessionstore.NewSQL`, which requires `db.ReadHandle`. Fix that fixture capability mismatch and inspect the completed run for any additional failures. The earlier shared API fixture mismatch and outbox contract issues are already fixed and verified.
-
-The PR was returned to draft because this repair is unfinished. After repairing and pushing, mark ready and follow all final-head checks through success. No merge, deployment, live-model run, or installed-app qualification has been performed. The local GitHub watcher was stopped; GitHub CI may finish independently. No remote managed test remains running.
-
-A complete planning-folder and retained-verification snapshot is stored on GitHub branch `handoff/plan-rows-at-the-write` in the same repository. The snapshot excludes implementation worktrees; their source is on `fix/plan-transcript-transactions`.
+The acceptance replay in `milestone-plan.md` remains separate dev-build qualification. No live-model or installed-app qualification has been performed.

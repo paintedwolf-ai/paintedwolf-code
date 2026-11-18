@@ -1,0 +1,40 @@
+{
+  "completed": [
+    0
+  ],
+  "evidence": [
+    {
+      "excluded_tests": {
+        "github.com/lycaon/lycaon/internal/worker": {
+          "files": [
+            "firefox_sparse_lifecycle_stress_test.go"
+          ],
+          "tags": [
+            "stress"
+          ]
+        }
+      },
+      "packages": [
+        "github.com/lycaon/lycaon/internal/progress",
+        "github.com/lycaon/lycaon/internal/worker"
+      ],
+      "results": {
+        "github.com/lycaon/lycaon/internal/progress": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/591c8c732b924d0fadbb68c037b7581f/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/591c8c732b924d0fadbb68c037b7581f/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/worker": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/591c8c732b924d0fadbb68c037b7581f/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/591c8c732b924d0fadbb68c037b7581f/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        }
+      },
+      "stage": "test:short"
+    }
+  ]
+}
