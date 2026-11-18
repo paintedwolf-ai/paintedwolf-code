@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/llm/policytest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -75,7 +76,7 @@ func TestStoppedPromptStreamPreservesCancellation(t *testing.T) {
 func TestSessionRoutingClientHonorsWorkerPool(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "0")
 	t.Setenv("LYCAON_LLM_MANUAL", "0")
-	policy := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
+	policy := policytest.New(t, llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "coordinator-provider", Model: "coordinator-model"},
 		AgentPool: llm.AgentPool{Selection: llm.PoolSelectionFirst,
 			Models: []llm.ModelRef{{ProviderID: "worker-provider", Model: "worker-model"}}},

@@ -21,8 +21,7 @@ func TestAltitudeInvariantCuratorSnapshotIsolation(t *testing.T) {
 			`{"selections":[{"path":"prior.go","line":1,"excerpt":"prior survey"}],"gloss":[]}`,
 		},
 	}
-	cur, err := llm.NewTestRegistrySummarizer(provider)
-	contractcheck.FailErr(t, "NewTestRegistrySummarizer", err)
+	cur := newCuratorFixture(t, provider)
 	got, err := cur.Curate(context.Background(), snapshot, llm.CurationFocus{Target: "focus"}, 3)
 	contractcheck.FailErr(t, "Curate", err)
 	if len(got.Selections) != 0 {
@@ -39,8 +38,7 @@ func TestAltitudeInvariantNoCommissionMatchedOnly(t *testing.T) {
 			`{"selections":[{"path":"pkg/a.go","line":10,"excerpt":"func entry"}],"gloss":[{"label":"entry"}]}`,
 		},
 	}
-	cur, err := llm.NewTestRegistrySummarizer(provider)
-	contractcheck.FailErr(t, "NewTestRegistrySummarizer", err)
+	cur := newCuratorFixture(t, provider)
 	got, err := cur.Curate(context.Background(), snapshot, llm.CurationFocus{Target: "entry"}, 3)
 	contractcheck.FailErr(t, "Curate", err)
 	for _, sel := range got.Selections {

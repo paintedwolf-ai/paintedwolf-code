@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/catalogruntime"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
@@ -68,16 +69,8 @@ func TestRegistryListCachedReusesSnapshot(t *testing.T) {
 
 // Empty provider lists remain JSON arrays.
 func TestRegistryListCachedEmptyStaysArray(t *testing.T) {
-	reg, err := NewRegistry(t.Context(),
-		mustTestProviderCatalog(t),
-		providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil,
-	)
-	if err == nil {
-		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
-	}
-	if err != nil {
-		t.Fatalf("NewRegistry: %v", err)
-	}
+	reg := newTestRegistry()
+	reg.listCache = catalogruntime.NewSnapshotCache(providerListCacheTTL, cloneProviderMetaList)
 	// Exercise cache fill and clone paths.
 	for attempt := range 2 {
 		list := reg.ListCached(t.Context())

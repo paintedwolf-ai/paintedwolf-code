@@ -23,7 +23,7 @@ var fakeModelPolicy = ModelPolicy{
 
 func testRouter(t *testing.T) *StaticModelRouter {
 	t.Helper()
-	return NewStaticModelRouter(NewInMemoryPolicyStore(fakeModelPolicy))
+	return NewStaticModelRouter(newPolicyFixture(t, fakeModelPolicy))
 }
 
 func TestResolveSessionUsesCoordinatorForParent(t *testing.T) {
@@ -81,7 +81,7 @@ func TestLiteUsesCompactModelPolicy(t *testing.T) {
 }
 
 func TestLiteFallsBackToCoordinatorWhenUnset(t *testing.T) {
-	policy := NewInMemoryPolicyStore(ModelPolicy{
+	policy := newPolicyFixture(t, ModelPolicy{
 		Coordinator: ModelRef{ProviderID: "prov-a", Model: "model-x"},
 		Lite:        ModelRef{},
 		AgentPool: AgentPool{

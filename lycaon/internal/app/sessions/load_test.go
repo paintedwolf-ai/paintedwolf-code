@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"github.com/lycaon/lycaon/internal/llm/policytest"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -16,7 +17,7 @@ func TestSessionCompactorDoesNotResolveAWindow(t *testing.T) {
 	for _, mock := range []string{"1", "0"} {
 		t.Run(mock, func(t *testing.T) {
 			t.Setenv("LYCAON_LLM_MOCK", mock)
-			svc := &llm.Service{Registry: &llm.Registry{}, Policy: llm.NewInMemoryPolicyStore(llm.ModelPolicy{Coordinator: llm.ModelRef{ProviderID: "unconfigured", Model: "fixture-window"}})}
+			svc := &llm.Service{Registry: &llm.Registry{}, Policy: policytest.New(t, llm.ModelPolicy{Coordinator: llm.ModelRef{ProviderID: "unconfigured", Model: "fixture-window"}})}
 			compactor, err := loadCompactor(svc, nil)
 			testutil.FailErr(t, "load session compactor", err)
 			if got, want := compactor.Config().ModelContextWindow, compaction.DefaultCompactionConfig().ModelContextWindow; got != want {

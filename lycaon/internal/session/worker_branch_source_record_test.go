@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
+	"github.com/lycaon/lycaon/internal/llm/policytest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -197,7 +198,7 @@ func (s *failingWorkerModelStore) UpdateSession(context.Context, string, func(*a
 
 func TestWorkerModelSaveFailureRemovesPartialChild(t *testing.T) {
 	st := &failingWorkerModelStore{Memory: store.NewMemory(), err: errors.New("model save failed")}
-	policy := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
+	policy := policytest.New(t, llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "fixture", Model: "fixture"},
 	})
 	manager := NewHost(st, Models{Client: nil, Provider: &llm.Service{Router: llm.NewStaticModelRouter(policy)}, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
@@ -218,7 +219,7 @@ func TestSpawnedWorkerKeepsPoolAssignmentAfterReload(t *testing.T) {
 	database := testdbfixture.Open(t, "worker-model.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st := store.NewSQL(database)
-	policy := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
+	policy := policytest.New(t, llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "coordinator", Model: "coordinator-model"},
 		AgentPool: llm.AgentPool{Selection: llm.PoolSelectionRoundRobin, Models: []llm.ModelRef{
 			{ProviderID: "first-provider", Model: "first-model"},

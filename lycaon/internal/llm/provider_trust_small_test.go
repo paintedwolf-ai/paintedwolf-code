@@ -157,8 +157,8 @@ func TestProviderSecretScreenTrustBindsToTheResolvedDestination(t *testing.T) {
 	if !trusted.Trusted || trusted.ID != entry.SecretDestinationID() {
 		t.Fatalf("trusted screen destination = %+v", trusted)
 	}
-	if list := registry.List(context.Background()); len(list) != 1 || !list[0].SecretScreenTrusted {
-		t.Fatalf("List projection = %+v, want secret_screen_trusted", list)
+	if meta := providerMetaByID(t, registry.List(context.Background()), "ollama"); !meta.SecretScreenTrusted {
+		t.Fatalf("List projection = %+v, want secret_screen_trusted", meta)
 	}
 
 	// Repointing keeps the stored string and withdraws the trust it named.
@@ -176,8 +176,8 @@ func TestProviderSecretScreenTrustBindsToTheResolvedDestination(t *testing.T) {
 	if repointed.Trusted || repointed.ID == trusted.ID {
 		t.Fatalf("repointed screen destination = %+v, want a new untrusted identity", repointed)
 	}
-	if list := registry.List(context.Background()); len(list) != 1 || list[0].SecretScreenTrusted {
-		t.Fatalf("List projection = %+v, want trust withdrawn", list)
+	if meta := providerMetaByID(t, registry.List(context.Background()), "ollama"); meta.SecretScreenTrusted {
+		t.Fatalf("List projection = %+v, want trust withdrawn", meta)
 	}
 }
 
