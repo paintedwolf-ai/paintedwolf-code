@@ -1,0 +1,17 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/repochange/repochange.worktreeWatcher",
+  "kind": "runtime_service",
+  "workstream": "repository-change-lifetime",
+  "disposition": "retain",
+  "reason": "The stream keeps its coverage, descriptor charges, startup barrier and platform handles under one lifecycle. Retain 22 fields: splitting this state would duplicate close and coverage synchronization. Generation-level admission and callback joining remain in the registry and stream lifetime.",
+  "reviewed_commit": "2be34334b2fa7bfea29ebceecc19fa6478bc8a1d",
+  "ceiling": 22,
+  "boundaries": {
+    "lycaon/internal/repochange/watcher_lifetime_test.go": "34f362920267f03c769254d493ca3443ee2c6c2dc2f507ae8a2262adb71f9459",
+    "lycaon/internal/repochange/watcher_start_test.go": "72e24b35e22cc7672c03b4b6a2d2b0c97c25ecae3ccc85153ce91ac657a70970",
+    "lycaon/internal/repochange/watch_budget_test.go": "2c35bde80d650f9940232d243c6bc8c739776e1b2010ce2cdcf7f7055502dbce",
+    "lycaon/internal/repochange/debounce_lifetime_test.go": "a4a239f85eccd5397afde501ca41b9e340f64d868f4112c9a08e57b0581bb231"
+  },
+  "reviewed_shape": "7c07e44266b093a8aaa104b836cad51d7973d6a49f774085489f173f0d342671"
+}

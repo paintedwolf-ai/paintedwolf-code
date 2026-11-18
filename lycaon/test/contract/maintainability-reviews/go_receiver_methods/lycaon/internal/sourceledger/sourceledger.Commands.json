@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/sourceledger/sourceledger.Commands",
+  "kind": "runtime_service",
+  "workstream": "repository-change-lifetime",
+  "disposition": "retain",
+  "reason": "Retain command-window coordination at 458 receiver lines, 22 methods and 17 fields. Window admission, active holds, settlement and recovery must agree on the same window state; inventory and object retention are explicit collaborators. The fixture-control methods are removed and timer configuration is supplied at construction.",
+  "reviewed_commit": "2be34334b2fa7bfea29ebceecc19fa6478bc8a1d",
+  "ceiling": 22,
+  "boundaries": {
+    "lycaon/internal/sourceledger/commandwindow_activity_test.go": "70c09cb1a8405f9c050f35f45967c2bcc1dca449a9e8ef8dd50bd5dab719c250",
+    "lycaon/internal/sourceledger/commandwindow_settlement_test.go": "26c65880c218fb5f008753d5c49770b1209348ff5308bbcf8cf46f678d16545b",
+    "lycaon/internal/sourceledger/commandwindow_test.go": "2be1cdbe354090a7daf485da4458700475e47605e9fae51016bde8d6ed45ddfc"
+  },
+  "reviewed_shape": "23dc8f70620f8dd57b09450bbe09951e5ed2ec1177a586f3a020aa7ab4dcd6a0"
+}
