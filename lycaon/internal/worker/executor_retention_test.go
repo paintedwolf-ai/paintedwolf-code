@@ -26,7 +26,7 @@ func (s *cycleDeliverySessions) Terminal(ctx context.Context, _, _ string) {
 }
 
 func TestWorkerBridgeReleasesParentAfterQueueAcknowledgement(t *testing.T) {
-	queue := NewInMemoryQueue(1)
+	queue := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent-1")
 	id, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ParentSessionID: "parent-1",
 		ProjectID: testdbseed.DefaultProjectID, ExecutionTarget: api.ExecutionTargetLocal,
