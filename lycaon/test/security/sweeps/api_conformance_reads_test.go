@@ -154,8 +154,9 @@ type hostEffects struct {
 	// quietGrace is how long the tree's changes must stay idle before the host
 	// counts as settled.
 	quietGrace time.Duration
-	// barrierStep makes every barrier write change the file's content.
+	// barrierStep numbers barrier files; barrierName is the one in place.
 	barrierStep int
+	barrierName string
 	// textColumns lists each table's text columns, read once.
 	textColumns map[string][]string
 	// silent is set once the watcher stops reporting; later reads fail at once.
@@ -236,12 +237,7 @@ func (e *hostEffects) awaitWatcherBarrier(ctx context.Context) error {
 const watcherBarrierRounds = 6
 
 func (e *hostEffects) watcherBarrierRound(ctx context.Context, patience time.Duration) (bool, error) {
-	path := filepath.Join(e.projectDir, watcherBarrierFile)
-	e.barrierStep++
-	write := func() error {
-		return os.WriteFile(path, fmt.Appendf(nil, "effects-barrier-%d\n", e.barrierStep), 0o644)
-	}
-	if err := write(); err != nil {
+	if err := e.placeBarrier(); err != nil {
 		return false, err
 	}
 	retry := time.NewTicker(patience)
@@ -257,13 +253,12 @@ func (e *hostEffects) watcherBarrierRound(ctx context.Context, patience time.Dur
 			if envelope.Topic != wire.EventTopicSourceChanged || json.Unmarshal(envelope.Data, &changed) != nil {
 				continue
 			}
-			if slices.ContainsFunc(changed.Changes, func(c wire.SourceChange) bool { return c.Path == watcherBarrierFile }) {
+			if slices.ContainsFunc(changed.Changes, func(c wire.SourceChange) bool { return c.Path == e.barrierName }) {
 				return rewrote, nil
 			}
 			if changed.Resync {
 				rewrote = true
-				e.barrierStep++
-				if err := write(); err != nil {
+				if err := e.placeBarrier(); err != nil {
 					return rewrote, err
 				}
 			}
@@ -273,6 +268,20 @@ func (e *hostEffects) watcherBarrierRound(ctx context.Context, patience time.Dur
 			return rewrote, ctx.Err()
 		}
 	}
+}
+
+// placeBarrier removes the previous barrier file and creates a new one. A new
+// file is a structural change every platform's watcher reports; an in-place
+// rewrite is not.
+func (e *hostEffects) placeBarrier() error {
+	if e.barrierName != "" {
+		if err := os.Remove(filepath.Join(e.projectDir, e.barrierName)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	e.barrierStep++
+	e.barrierName = fmt.Sprintf("conformance-barrier-%d.txt", e.barrierStep)
+	return os.WriteFile(filepath.Join(e.projectDir, e.barrierName), []byte("barrier\n"), 0o644)
 }
 
 func (e *hostEffects) since(ctx context.Context, mark int64) ([]string, error) {

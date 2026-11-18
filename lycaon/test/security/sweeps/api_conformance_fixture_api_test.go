@@ -72,6 +72,7 @@ paths:
       responses:
         '200': {description: renamed, content: {application/json: {schema: {$ref: '#/components/schemas/Widget'}}}}
         '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '413': {$ref: '#/components/responses/Error'}

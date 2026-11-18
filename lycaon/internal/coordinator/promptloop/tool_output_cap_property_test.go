@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/zstdcodec"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -133,7 +134,12 @@ func spillHolds(hostDir, content string) bool {
 			return nil
 		}
 		raw, readErr := os.ReadFile(path)
-		found = readErr == nil && (string(raw) == content || string(raw) == rendered)
+		if readErr != nil {
+			return nil
+		}
+		// Spills are stored compressed.
+		data, decodeErr := zstdcodec.Decompress(raw)
+		found = decodeErr == nil && (string(data) == content || string(data) == rendered)
 		return nil
 	})
 	return found
