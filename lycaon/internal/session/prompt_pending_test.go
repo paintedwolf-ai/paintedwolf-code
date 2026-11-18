@@ -242,7 +242,7 @@ func TestQueuedPromptDispatchesWhenRoundCompletesAfterTurnEndCheck(t *testing.T)
 	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	dir := t.TempDir()
-	testdbseed.BindSessionWorkspace(t, st, sess.ID, dir)
+	testdbseed.BindSessionWorkspace(t, st.DB(), sess.ID, dir)
 	workers := &queueRoundWorkerQueue{jobs: []api.WorkerTask{{
 		ID: "job-1", ParentSessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: dir, Status: api.WorkerStatusRunning,

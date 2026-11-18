@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -37,7 +38,7 @@ func Build() error {
 }
 `), 0o600))
 	projects := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), projects, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), projects, root)
 	testutil.FailErr(t, "create project", err)
 	hub := events.NewMemoryHub()
 	cfg, err := filebriefing.LoadConfig()
@@ -115,7 +116,7 @@ func TestFileBriefingReadsImmutableRetainedVersion(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	root := t.TempDir()
 	projects := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), projects, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), projects, root)
 	testutil.FailErr(t, "create project", err)
 	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
 	testdbseed.InsertProjectRootWithID(t, ledgerDB, p.ID, p.Roots[0].ID, p.Roots[0].Path)
@@ -189,7 +190,7 @@ func TestGetFileBriefingResumesOrphanedPendingWork(t *testing.T) {
 		filepath.Join(root, "main.go"), []byte("package main\n\nfunc Build() {}\n"), 0o600,
 	))
 	projects := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), projects, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), projects, root)
 	testutil.FailErr(t, "create project", err)
 	cfg, err := filebriefing.LoadConfig()
 	testutil.FailErr(t, "load file briefing config", err)

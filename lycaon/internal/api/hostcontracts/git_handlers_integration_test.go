@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/llmtest"
@@ -114,7 +115,7 @@ func TestGitCommitMessageDraftsFromUntrackedOnly(t *testing.T) {
 
 	sessions := storetest.New(t)
 	reg := project.NewSQLRegistry(sessions.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open", err)
 	srv := contractfixture.NewGitServer(t, sessions, reg, func(d *hostapi.Dependencies) {
 		d.Providers.CommitDrafter = llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "feat: add new file"}
@@ -193,7 +194,7 @@ func TestGitCheckoutRequiresBranch(t *testing.T) {
 func TestGitInitMakesRepoAvailable(t *testing.T) {
 	sessions := storetest.New(t)
 	reg := project.NewSQLRegistry(sessions.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open", err)
 	srv := contractfixture.NewGitServer(t, sessions, reg)
 
@@ -280,7 +281,7 @@ func TestGitReposTwoCheckouts(t *testing.T) {
 	b := contractfixture.InitDirtyRepo(t)
 	sessions := storetest.New(t)
 	reg := project.NewSQLRegistry(sessions.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, a)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, a)
 	testutil.FailErr(t, "create", err)
 	_, err = reg.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: b, Label: "beta"})
 	testutil.FailErr(t, "attach", err)
@@ -314,7 +315,7 @@ func TestGitReposTwoRootsOneCheckout(t *testing.T) {
 	testutil.FailErr(t, "mkdir", os.MkdirAll(web, 0o755))
 	sessions := storetest.New(t)
 	reg := project.NewSQLRegistry(sessions.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, repo)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, repo)
 	testutil.FailErr(t, "create", err)
 	_, err = reg.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: web, Label: "web"})
 	testutil.FailErr(t, "attach", err)
@@ -437,7 +438,7 @@ func TestGitScopedReadsActOnNamedRepo(t *testing.T) {
 
 	sessions := storetest.New(t)
 	reg := project.NewSQLRegistry(sessions.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, aDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, aDir)
 	testutil.FailErr(t, "create", err)
 	_, err = reg.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: bDir, Label: "beta"})
 	testutil.FailErr(t, "attach", err)
@@ -479,7 +480,7 @@ func TestGitScopedWriteLeavesSiblingUntouched(t *testing.T) {
 	bDir := contractfixture.InitDirtyRepo(t)
 	sessions := storetest.New(t)
 	reg := project.NewSQLRegistry(sessions.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, aDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, aDir)
 	testutil.FailErr(t, "create", err)
 	_, err = reg.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: bDir, Label: "beta"})
 	testutil.FailErr(t, "attach", err)
@@ -512,7 +513,7 @@ func TestGitInitSecondaryRoot(t *testing.T) {
 	secondary := t.TempDir()
 	sessions := storetest.New(t)
 	reg := project.NewSQLRegistry(sessions.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, primary)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, primary)
 	testutil.FailErr(t, "create", err)
 	attached, err := reg.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: secondary, Label: "secondary"})
 	testutil.FailErr(t, "attach", err)
@@ -563,7 +564,7 @@ func TestGitFileAttributionLongestNestedRoot(t *testing.T) {
 
 	sessions := storetest.New(t)
 	reg := project.NewSQLRegistry(sessions.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, repo)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, repo)
 	testutil.FailErr(t, "create", err)
 	_, err = reg.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: web, Label: "web"})
 	testutil.FailErr(t, "attach", err)
@@ -614,7 +615,7 @@ func TestGitFileAttributionLongestRootAndOutside(t *testing.T) {
 	sessions := storetest.New(t)
 	reg := project.NewSQLRegistry(sessions.DB())
 	// Roots at packages/web and packages/api only — other/pkg is outside every root.
-	p, err := project.CreateWithRoot(t.Context(), reg, web)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, web)
 	testutil.FailErr(t, "create web root", err)
 	_, err = reg.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: apiDir, Label: "api"})
 	testutil.FailErr(t, "attach api", err)

@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -29,7 +30,7 @@ import (
 func ApprovalsFixture(t *testing.T) (base, query string) {
 	t.Helper()
 	_, base, reg := NewSettingsTestServer(t)
-	proj, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
+	proj, err := projecttest.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "reg.Create failed", err)
 	PutApprovals(t, base, "", `{"approval_posture":"balanced","ai_rationale_enabled":false}`, http.StatusOK)
 	return base, "project_id=" + proj.ID

@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -47,7 +48,7 @@ func newRoutesFixture(t *testing.T, orchestrator orchestration.Orchestrator) *ro
 	sessions := store.NewSQL(sqlDB)
 	projects := project.NewSQLRegistry(sqlDB)
 	workDir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), projects, workDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), projects, workDir)
 	testutil.FailErr(t, "create project", err)
 
 	deps := apitest.Dependencies(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessions, Projects: projects}})

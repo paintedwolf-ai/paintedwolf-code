@@ -12,7 +12,8 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/filebriefing"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -27,7 +28,7 @@ func TestFileSummariesSettingsDisablePurgesAndRejectsBriefings(t *testing.T) {
 	})
 
 	root := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), projects, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), projects, root)
 	testutil.FailErr(t, "create project", err)
 	stored := filebriefing.Briefing{
 		ProjectID: p.ID, RootID: p.Roots[0].ID, Path: "main.go", TargetKey: "stored",

@@ -14,6 +14,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -25,7 +26,7 @@ func TestListWorkflowsFromCatalogOnly(t *testing.T) {
 	sessionFixture := storetest.New(t)
 
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	opened, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
+	opened, err := projecttest.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	store := sessionFixture
@@ -57,7 +58,7 @@ func TestListWorkflowsCatalogAndOverlay(t *testing.T) {
 	sessionFixture := storetest.New(t)
 
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	opened, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
+	opened, err := projecttest.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 	overlayDir := filepath.Join(project.PrimaryRootPath(opened), settingsoverlay.DirName(), "workflows", "plan")
 	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
@@ -109,7 +110,7 @@ func TestListWorkflowsExcludesInvalidOverlayAndReportsDiagnostics(t *testing.T) 
 	sessionFixture := storetest.New(t)
 
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	opened, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
+	opened, err := projecttest.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	workflowsDir := filepath.Join(project.PrimaryRootPath(opened), settingsoverlay.DirName(), "workflows")

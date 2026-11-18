@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/people/peoplestore"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
@@ -120,7 +121,7 @@ func newEditorFixture(t *testing.T, opts ...fixtureOption) *editorFixture {
 	root := t.TempDir()
 	testutil.FailErr(t, "write text fixture", os.WriteFile(filepath.Join(root, "a.txt"), []byte("alpha\n"), 0o644))
 	testutil.FailErr(t, "write secret fixture", os.WriteFile(filepath.Join(root, "staging.ts"), []byte(fileWithSecret), 0o644))
-	p, err := project.CreateWithRoot(t.Context(), deps.Projects, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), deps.Projects, root)
 	testutil.FailErr(t, "create project", err)
 	owner, err := peoplestore.New(deps.Database).HostOwner(t.Context())
 	testutil.FailErr(t, "read host owner", err)

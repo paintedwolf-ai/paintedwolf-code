@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
@@ -101,7 +102,7 @@ func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 	dir := t.TempDir()
 	testutil.FailErr(t, "write fixture",
 		os.WriteFile(filepath.Join(dir, "staging.ts"), []byte(FileWithSecret), 0o600))
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
 	eventCh, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: p.ID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe to editor events", err)

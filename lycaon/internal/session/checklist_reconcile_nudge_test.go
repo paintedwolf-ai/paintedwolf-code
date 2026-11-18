@@ -235,7 +235,7 @@ func TestProjectSkillFixtureGateMatrix(t *testing.T) {
 				testutil.FailErr(t, "PutEnabled", err)
 			}
 			reg := projecttest.NewRegistry(t)
-			p, err := project.CreateWithRoot(ctx, reg, root)
+			p, err := projecttest.CreateWithRoot(ctx, reg, root)
 			testutil.FailErr(t, "CreateWithRoot", err)
 			if !tc.projectOn {
 				if _, err := reg.SetTrustEnabled(ctx, p.ID, map[string]bool{projectcontrib.SurfaceSkills: false}); err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -303,7 +304,7 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 				[]byte("disabled:\n  - guidance/coordinator-gate-blocked\n"),
 				0o644,
 			))
-			p, err := project.CreateWithRoot(ctx, reg, projDir)
+			p, err := projecttest.CreateWithRoot(ctx, reg, projDir)
 			contractcheck.FailErr(t, "CreateWithRoot", err)
 			if !tc.projectOn {
 				if _, err := reg.SetTrustEnabled(ctx, p.ID, map[string]bool{projectcontrib.SurfaceExtensionConfig: false}); err != nil {

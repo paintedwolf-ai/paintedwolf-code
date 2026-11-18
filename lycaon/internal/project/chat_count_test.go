@@ -13,9 +13,9 @@ import (
 func TestProjectChatCountTracksRootLifecycleWithoutWorkers(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "chat-count.db")
 	reg := NewSQLRegistry(sqlDB)
-	p, err := CreateWithRoot(t.Context(), reg, t.TempDir())
+	p, err := createWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
-	other, err := CreateWithRoot(t.Context(), reg, t.TempDir())
+	other, err := createWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "create other project", err)
 	now := timelayout.Format(time.Now().UTC())
 	insert := func(id, projectID, parent string, archived bool) {

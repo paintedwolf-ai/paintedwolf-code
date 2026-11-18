@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/briefinghost"
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -75,7 +76,7 @@ func (textGenerator) Generate(context.Context, briefing.Invocation) (string, str
 func newEngineRoutes(t *testing.T, setting *switchable, policy briefing.Policy) engineRoutes {
 	t.Helper()
 	deps := apitest.Dependencies(t, api.Dependencies{})
-	p, err := project.CreateWithRoot(t.Context(), deps.Core.Projects, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), deps.Core.Projects, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	database := testdbfixture.Open(t, "briefing-routes.db")
 	testdbseed.InsertProjectRoot(t, database, p.ID, t.TempDir())

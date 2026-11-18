@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -127,7 +128,7 @@ func TestMCPSettingsSSEOnToggle(t *testing.T) {
 
 func TestHandlePatchMCPProviderProjectCannotEnableStdio(t *testing.T) {
 	srv, reg := contractfixture.NewMCPProviderWithDistro(t, contractfixture.StdioMCPDistroBody, true)
-	proj, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, t.TempDir())
+	proj, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, t.TempDir())
 	testutil.FailErr(t, "CreateWithRoot", err)
 
 	enabled := true
@@ -156,7 +157,7 @@ func TestHandleDeleteMCPProviderProjectOverlayInherits(t *testing.T) {
 	// the fixture opens the layer.
 	srv, _ := contractfixture.NewLoopbackMCPProvider(t)
 	dir := t.TempDir()
-	proj, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+	proj, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	q := "?project_id=" + proj.ID
 
@@ -414,7 +415,7 @@ func TestHandleMcpRecipesListAndAdd(t *testing.T) {
 		t.Fatalf("oauth code = %q body=%s", oauthErr.Code, oauthW.Body.String())
 	}
 
-	proj, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, t.TempDir())
+	proj, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, t.TempDir())
 	testutil.FailErr(t, "CreateWithRoot", err)
 	projectW := contractfixture.AddMcpRecipe(t, srv, "github", proj.ID)
 	if projectW.Code != http.StatusBadRequest {

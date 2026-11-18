@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -54,7 +55,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			}))
 			mgr := session.NewHost(sessionStore, session.Models{Client: recorder, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 			projects := project.NewSQLRegistry(sessionFixture.DB())
-			proj, err := project.CreateWithRoot(t.Context(), projects, root)
+			proj, err := projecttest.CreateWithRoot(t.Context(), projects, root)
 			testutil.FailErr(t, "create rooted project", err)
 			mgr.SetProjectRegistry(projects)
 			mgr.SetCoordinatorTurnFrameSource(&phaseStubCoordinator{phase: "expand", surface: "implement_investigate"})
@@ -219,7 +220,7 @@ func TestCoordinatorPromptIncludesPackBoardInject(t *testing.T) {
 
 	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
+	testdbseed.BindSessionWorkspace(t, store.DB(), sess.ID, dir)
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "plan"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}

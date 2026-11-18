@@ -9,6 +9,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -144,9 +145,9 @@ func TestProjectScopedApprovalsIsolated(t *testing.T) {
 	_, base, reg := contractfixture.NewSettingsTestServer(t)
 	dirA := t.TempDir()
 	dirB := t.TempDir()
-	projA, err := project.CreateWithRoot(t.Context(), reg, dirA)
+	projA, err := projecttest.CreateWithRoot(t.Context(), reg, dirA)
 	testutil.FailErr(t, "reg.Create failed", err)
-	projB, err := project.CreateWithRoot(t.Context(), reg, dirB)
+	projB, err := projecttest.CreateWithRoot(t.Context(), reg, dirB)
 	testutil.FailErr(t, "reg.Create failed", err)
 
 	const marker = "lycaon_security_isolated_marker"
@@ -262,7 +263,7 @@ func TestVerifyProposalSurfacedThenSuppressed(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // isolate the persisted detect-proposal cache
 	srv, base, reg := contractfixture.NewSettingsTestServer(t)
 	dir := t.TempDir()
-	proj, err := project.CreateWithRoot(t.Context(), reg, dir)
+	proj, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "CreateWithRoot failed", err)
 	primary := project.PrimaryRootPath(proj)
 
@@ -306,7 +307,7 @@ func TestVerifyDismissEndpoint(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	srv, base, reg := contractfixture.NewSettingsTestServer(t)
 	dir := t.TempDir()
-	proj, err := project.CreateWithRoot(t.Context(), reg, dir)
+	proj, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "CreateWithRoot failed", err)
 	primary := project.PrimaryRootPath(proj)
 	srv.Admin.Project.Trust.Settings.Verify.SetProposal(primary, settings.VerifyDetectCandidate{Command: "./task check", Source: "README.md"})

@@ -18,7 +18,7 @@ func TestSQLRegistryPersistence(t *testing.T) {
 
 	sqlDB := testdbfixture.OpenPath(t, dbPath)
 	reg := NewSQLRegistry(sqlDB)
-	p1, err := CreateWithRoot(context.Background(), reg, dir)
+	p1, err := createWithRoot(context.Background(), reg, dir)
 	testutil.FailErr(t, "reg.Create failed", err)
 	testutil.FailErr(t, "close database for reopen", sqlDB.Close())
 
@@ -54,7 +54,7 @@ func TestSQLRegistryTrustSeenPersists(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	sqlDB := testdbfixture.Open(t, "store.db")
 	reg := NewSQLRegistry(sqlDB)
-	p, err := CreateWithRoot(t.Context(), reg, t.TempDir())
+	p, err := createWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "CreateWithRoot", err)
 
 	_, err = reg.MarkTrustSeen(t.Context(), p.ID, p, map[string]SeenRecord{
@@ -74,7 +74,7 @@ func TestSQLRegistryTrustSeenSurvivesRootChange(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	sqlDB := testdbfixture.Open(t, "store.db")
 	reg := NewSQLRegistry(sqlDB)
-	p, err := CreateWithRoot(t.Context(), reg, t.TempDir())
+	p, err := createWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "CreateWithRoot", err)
 	_, err = reg.MarkTrustSeen(t.Context(), p.ID, p, map[string]SeenRecord{"skills": {Stamp: "s"}})
 	testutil.FailErr(t, "MarkTrustSeen", err)
@@ -93,7 +93,7 @@ func TestSQLRegistryTrustEnabledPersists(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	sqlDB := testdbfixture.Open(t, "store.db")
 	reg := NewSQLRegistry(sqlDB)
-	p, err := CreateWithRoot(t.Context(), reg, t.TempDir())
+	p, err := createWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "CreateWithRoot", err)
 
 	_, err = reg.SetTrustEnabled(t.Context(), p.ID, map[string]bool{"scan_config": false})
@@ -110,7 +110,7 @@ func TestSQLTrustBaselineBytesStayOutOfProjectRows(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	database := testdbfixture.Open(t, "store.db")
 	registry := NewSQLRegistry(database)
-	p, err := CreateWithRoot(t.Context(), registry, t.TempDir())
+	p, err := createWithRoot(t.Context(), registry, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	record := SeenRecord{Stamp: "first", ReadAt: "2026-09-15T12:00:00Z", Files: []TrustReadFile{{RootID: p.Roots[0].ID, RootLabel: "Root", Path: "AGENTS.md", Content: "retained text", SHA256: "hash"}}, BeforeFiles: []TrustReadFile{{RootID: p.Roots[0].ID, Path: "AGENTS.md", Content: "previous text", SHA256: "previous"}}}
 	updated, err := registry.MarkTrustSeen(t.Context(), p.ID, p, map[string]SeenRecord{"agents_md": record})
@@ -160,9 +160,9 @@ func TestRegistriesAllowAnyExistingDirectoryAndPreserveStructuralChecks(t *testi
 	ctx := t.Context()
 	reg := newProjectRegistry(t)
 
-	p, err := CreateWithRoot(ctx, reg, home)
+	p, err := createWithRoot(ctx, reg, home)
 	if err != nil {
-		t.Fatalf("CreateWithRoot($HOME): %v", err)
+		t.Fatalf("createWithRoot($HOME): %v", err)
 	}
 	for _, extra := range dirs[1:] {
 		if _, err := reg.AttachRoot(ctx, p.ID, AttachRootParams{Path: extra}); err != nil {
@@ -181,15 +181,15 @@ func TestRegistriesAllowAnyExistingDirectoryAndPreserveStructuralChecks(t *testi
 	}
 
 	// Empty, missing, and file paths are still rejected.
-	if _, err := CreateWithRoot(ctx, reg, ""); !errors.Is(err, ErrInvalidPath) {
+	if _, err := createWithRoot(ctx, reg, ""); !errors.Is(err, ErrInvalidPath) {
 		t.Fatalf("empty CreateWithRoot err = %v, want ErrInvalidPath", err)
 	}
-	if _, err := CreateWithRoot(ctx, reg, filepath.Join(home, "missing")); !errors.Is(err, ErrPathNotFound) {
+	if _, err := createWithRoot(ctx, reg, filepath.Join(home, "missing")); !errors.Is(err, ErrPathNotFound) {
 		t.Fatalf("missing CreateWithRoot err = %v, want ErrPathNotFound", err)
 	}
 	filePath := filepath.Join(home, "regular-file.txt")
 	testutil.FailErr(t, "write file", os.WriteFile(filePath, []byte("hello"), 0o600))
-	if _, err := CreateWithRoot(ctx, reg, filePath); !errors.Is(err, ErrNotDirectory) {
+	if _, err := createWithRoot(ctx, reg, filePath); !errors.Is(err, ErrNotDirectory) {
 		t.Fatalf("file CreateWithRoot err = %v, want ErrNotDirectory", err)
 	}
 }

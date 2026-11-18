@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/apitest"
 	"github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -47,7 +48,7 @@ func newAmbientAttachFixture(t *testing.T, startsAdmitted bool) ambientAttachFix
 
 	sessions := store.NewSQL(sqlDB)
 	projects := project.NewSQLRegistry(sqlDB)
-	p, err := project.CreateWithRoot(t.Context(), projects, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), projects, t.TempDir())
 	contractcheck.FailErr(t, "create project", err)
 
 	registry, err := workflowdef.RegistryFromDirs("")

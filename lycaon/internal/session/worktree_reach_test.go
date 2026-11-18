@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scratch"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
@@ -71,7 +72,7 @@ func newReachFixture(t *testing.T, rootPath string) *reachFixture {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
 	mgr := NewHost(sessionStore, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, rootPath)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, rootPath)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	mgr.SetProjectRegistry(reg)
 	// Command programs publish output beneath the host's per-session folders.
@@ -291,7 +292,7 @@ func TestWorktreeReach_rootBelowToplevel(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
 	mgr := NewHost(sessionStore, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, web)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, web)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	mgr.SetProjectRegistry(reg)
 	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{
@@ -390,7 +391,7 @@ func TestWorktreeReach_getFailureRefuses(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
 	mgr := NewHost(sessionStore, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, repoDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, repoDir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	mgr.SetProjectRegistry(reg)
 	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{

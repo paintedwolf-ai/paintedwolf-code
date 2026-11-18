@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session"
@@ -135,7 +136,7 @@ func newReproducedSourceFixture(t *testing.T, completions []*modelcall.Completio
 	mgr.SetDataDir(t.TempDir())
 
 	projects := project.NewSQLRegistry(sessionFixture.DB())
-	proj, err := project.CreateWithRoot(t.Context(), projects, rootDir)
+	proj, err := projecttest.CreateWithRoot(t.Context(), projects, rootDir)
 	testutil.FailErr(t, "create rooted project", err)
 	mgr.SetProjectRegistry(projects)
 

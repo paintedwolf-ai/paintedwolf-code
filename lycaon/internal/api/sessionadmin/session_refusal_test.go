@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/chats"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	"github.com/lycaon/lycaon/internal/session/naming"
@@ -159,7 +160,7 @@ func TestSessionReadsAndAbortRefuseMissingChatBeforeProjection(t *testing.T) {
 		tc.handle(rec, req)
 		assertSessionRefusal(t, rec, wire.ApiErrorCodeSessionNotFound)
 	}
-	p, err := project.CreateWithRoot(t.Context(), deps.Projects, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), deps.Projects, t.TempDir())
 	testutil.FailErr(t, "create session project", err)
 	sess, err := deps.Store.Sessions.CreateWithStatus(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID, wire.SessionStatusIdle)
 	testutil.FailErr(t, "create session for program receipt refusal", err)

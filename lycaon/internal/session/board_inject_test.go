@@ -85,7 +85,7 @@ func TestInjectOnImplementDefaultFirstTurn(t *testing.T) {
 
 	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
+	testdbseed.BindSessionWorkspace(t, store.DB(), sess.ID, dir)
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
@@ -104,7 +104,7 @@ func TestInjectSkipsWhenHashUnchanged(t *testing.T) {
 	materializeRepoBrief(t, repo, dir)
 	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
+	testdbseed.BindSessionWorkspace(t, store.DB(), sess.ID, dir)
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "one"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
@@ -126,7 +126,7 @@ func TestInjectForcesOnPhaseChange(t *testing.T) {
 	materializeRepoBrief(t, repo, dir)
 	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
+	testdbseed.BindSessionWorkspace(t, store.DB(), sess.ID, dir)
 	mgr.SetCoordinatorTurnFrameSource(&phaseStubCoordinator{phase: "plan"})
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "a"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
@@ -159,7 +159,7 @@ func TestInjectOmitsWorkflowWhenRunContext(t *testing.T) {
 
 	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
+	testdbseed.BindSessionWorkspace(t, store.DB(), sess.ID, dir)
 	if _, err := mgr2.Submissions.Prompt(ctx, sess.ID, "go"); err != nil {
 		testutil.FailErr(t, "mgr2.Prompt failed", err)
 	}

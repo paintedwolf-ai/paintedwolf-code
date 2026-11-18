@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
@@ -375,7 +376,7 @@ func RegisterProjectContextForTest(t *testing.T, m *Host, database db.Handle, pr
 	testutil.FailErr(t, "trust surfaces store", err)
 
 	reg := project.NewSQLRegistry(database)
-	p, err := project.CreateWithRoot(t.Context(), reg, projectDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, projectDir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	m.SetProjectRegistry(reg)
 	m.SetEffectiveCatalogDeps("", extpacks.Active(), surfaces)

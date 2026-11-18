@@ -32,7 +32,7 @@ func elevatedTestHandler(t *testing.T) (*Handler, *wire.Session, sessionstore.Se
 	testutil.FailErr(t, "create approvals", err)
 	sessions := sessionFixture
 	projects := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), projects, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), projects, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	chat, err := sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create chat", err)

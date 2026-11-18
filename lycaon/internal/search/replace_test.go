@@ -28,7 +28,7 @@ func replaceFixture(t *testing.T) (*project.Project, string) {
 		abs := filepath.Join(dir, rel)
 		testutil.FailErr(t, "write "+rel, os.WriteFile(abs, []byte(body), 0o644))
 	}
-	p, err := project.CreateWithRoot(context.Background(), projecttest.NewRegistry(t), dir)
+	p, err := projecttest.CreateWithRoot(context.Background(), projecttest.NewRegistry(t), dir)
 	testutil.FailErr(t, "create project", err)
 	return p, dir
 }
