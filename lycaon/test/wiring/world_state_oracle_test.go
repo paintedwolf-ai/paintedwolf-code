@@ -115,6 +115,9 @@ func treeDigest(t *testing.T, root string) string {
 // gitDigest records HEAD, every ref, the index bytes and porcelain status.
 func gitDigest(t *testing.T, dir string) string {
 	t.Helper()
+	if dir == "" {
+		return ""
+	}
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
 		return ""
 	}
