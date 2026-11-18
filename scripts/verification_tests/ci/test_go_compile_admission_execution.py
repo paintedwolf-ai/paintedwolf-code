@@ -13,7 +13,7 @@ class GoCompileAdmissionTests(unittest.TestCase):
             commands = native_admission.commands({'full': False, 'paths': paths})
             self.assertEqual(commands[0], ['./task', 'test:confine:linux', '--', 'supervisor'])
             self.assertEqual(commands[1:], [['./task', 'scripts:coverage:changes']] if paths[0].startswith('scripts/') else [])
-            self.assertEqual(ready_scope.check_phases(['build'], {'full': False, 'paths': paths}, []),
+            self.assertEqual(ready_scope.check_phases(['build'], {'full': False, 'paths': paths}),
                              [*commands, ['./task', 'build']])
         self.assertEqual(native_admission.commands({'full': False, 'paths': ['lycaon-den/src/ui.ts']}), [])
 

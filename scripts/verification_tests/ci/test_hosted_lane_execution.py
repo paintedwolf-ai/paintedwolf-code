@@ -342,7 +342,7 @@ class HostedExecutionTests(unittest.TestCase):
             self.assertEqual(record["status"], "running")
             self.assertNotIn("exit_code", record)
 
-    def test_lanes_other_than_ready_stop_at_their_first_failure(self):
+    def test_every_lane_reports_every_failure(self):
         scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
         with tempfile.TemporaryDirectory() as directory, \
                 patch('ci_policy.impact.change', return_value=scope), \
@@ -350,4 +350,4 @@ class HostedExecutionTests(unittest.TestCase):
                 patch.object(ci.subprocess, 'call', return_value=1) as run:
             self.assertEqual(ci.run_lane('build'), 1)
         self.assertEqual(run.call_count, 1)
-        self.assertNotIn('PW_TEST_KEEP_GOING', run.call_args.kwargs['env'])
+        self.assertEqual(run.call_args.kwargs['env']['PW_TEST_KEEP_GOING'], '1')

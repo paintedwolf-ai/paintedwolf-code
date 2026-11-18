@@ -19,15 +19,12 @@ def go_change(scope):
         path.endswith('.go') or path in {'lycaon/go.mod', 'lycaon/go.sum'} for path in scope.get('paths', []))
 
 
-def check_phases(targets, scope, early):
-    """Native admission, then the early targets, then the remaining checks; the cross-platform build only
-    when Go can compile differently."""
+def check_phases(targets, scope):
+    """Native admission, then the checks; the cross-platform build only when Go can compile differently."""
     from ci_policy.native_admission import commands as native_commands
     if not go_change(scope):
         targets = [target for target in targets if target != 'build:cross']
-    first = [target for target in early if target in targets]
-    rest = [target for target in targets if target not in first]
-    return [*native_commands(scope), *[['./task', *part] for part in (first, rest) if part]]
+    return [*native_commands(scope), ['./task', *targets]]
 
 
 def test_phases(scope):

@@ -7,6 +7,8 @@ from verification_state import read_state, write_json
 
 HISTORY_LIMIT = 32
 HISTORY_NAMES = 128
+DURATION_SAMPLES = 8
+DURATION_KEYS = 64
 MIN_SAMPLES = 3
 # Backfill and priority plan against a slow run, not a typical one.
 ESTIMATE_QUANTILE = 0.9
@@ -62,3 +64,37 @@ def estimate(history, name):
     if len(values) < MIN_SAMPLES:
         return None
     return values[min(len(values) - 1, math.ceil(ESTIMATE_QUANTILE * len(values)) - 1)]
+
+
+def durations_path(queue):
+    return queue.root / "package-durations.json"
+
+
+def record_package_durations(queue, stage_key, outcomes):
+    measured = {package: event["elapsed"] for package, event in outcomes.items()
+                if type(event.get("elapsed")) in (int, float) and event["elapsed"] >= 0}
+    if not measured:
+        return
+    with queue.locked():
+        state = read_state(durations_path(queue))
+        stage = state.get(stage_key) if isinstance(state.get(stage_key), dict) else {}
+        packages = stage.get("packages") if isinstance(stage.get("packages"), dict) else {}
+        for package, seconds in measured.items():
+            previous = [s for s in packages.get(package, []) if type(s) in (int, float)]
+            packages[package] = [*previous, round(seconds, 3)][-DURATION_SAMPLES:]
+        state[stage_key] = {"packages": packages, "updated_at": time.time()}
+        if len(state) > DURATION_KEYS:
+            ranked = sorted(state.items(), key=lambda item: item[1].get("updated_at", 0), reverse=True)
+            state = dict(ranked[:DURATION_KEYS])
+        write_json(durations_path(queue), state)
+
+
+def package_durations(queue, stage_key):
+    stage = read_state(durations_path(queue)).get(stage_key)
+    packages = stage.get("packages", {}) if isinstance(stage, dict) else {}
+    result = {}
+    for package, values in packages.items():
+        values = sorted(v for v in values if type(v) in (int, float)) if isinstance(values, list) else []
+        if values:
+            result[package] = values[len(values) // 2]
+    return result

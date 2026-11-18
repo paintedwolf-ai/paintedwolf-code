@@ -323,7 +323,7 @@ health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
             batch_dir.mkdir()
             plan = {"batch": {"ticket": "00000000000000000001-batch", "workers": 1, "source": str(root),
                               "members": ["00000000000000000001"], "state": "running", "kind": "batch"},
-                    "requests": [{"ticket": "00000000000000000001", "order": 1, "environment_identity": "env"}]}
+                    "requests": [{"ticket": "00000000000000000001", "order": 1}]}
             (batch_dir / "plan.json").write_text(json.dumps(plan))
             lease_path = queue.root / "00000000000000000001-batch.lease"
             lease_path.write_text(json.dumps(plan["batch"]))

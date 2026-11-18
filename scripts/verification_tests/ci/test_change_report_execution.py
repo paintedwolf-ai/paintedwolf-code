@@ -216,8 +216,11 @@ class ChangedCoverageTests(unittest.TestCase):
             command, env = call.call_args.args[0], call.call_args.kwargs["env"]
             self.assertIn("-count=1", command)
             self.assertIn("-covermode=atomic", command)
-            self.assertEqual(env["PW_GO_CHILD_COVERDIR"], str(root / "coverage" / "probe-children"))
-            self.assertIsNone(coverage_changes.children_profile(root / "coverage" / "probe-children", root / "out"))
+            children = Path(env["PW_GO_CHILD_COVERDIR"])
+            self.assertEqual(children.parent.parent, root / "coverage")
+            self.assertTrue(children.parent.name.startswith("probe-"))
+            # Each measurement removes its own directory, so a concurrent one cannot read it.
+            self.assertEqual(list((root / "coverage").iterdir()), [])
 
     def test_go_child_conversion_failure_remains_a_measurement_error(self):
         with tempfile.TemporaryDirectory() as directory:

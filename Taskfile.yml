@@ -79,14 +79,6 @@ tasks:
   build:cross:
     desc: Cross-compile smoke for GOOS=windows — guards platform-tagged files CI's linux runner never builds
     dir: '{{.GO_DIR}}'
-    sources:
-      - '**/*.go'
-      - 'internal/harnessfixture/contract.json'
-      - 'internal/db/*.sql'
-      - 'internal/db/released-baselines.json'
-      - 'internal/backup/archive-limits.json'
-      - go.mod
-      - go.sum
     env:
       GOOS: windows
       GOARCH: amd64
@@ -102,15 +94,6 @@ tasks:
 
   build:decide:
     desc: Build the decision engine sidecar (bialy) into the build directory
-    sources:
-      - 'lycaon/internal/decide/native/src/**/*.rs'
-      - 'lycaon/internal/decide/native/vendor/**/*'
-      - lycaon/internal/decide/native/Cargo.toml
-      - lycaon/internal/decide/native/Cargo.lock
-      - scripts/build-decide.sh
-      - scripts/toolchain/rust-path-remap.sh
-    generates:
-      - '{{.BUILD_DIR}}/bialy'
     preconditions:
       - sh: command -v cargo
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
@@ -148,34 +131,12 @@ tasks:
   lint:fast:
     desc: GitHub workflows + Go vet + fast golangci-lint
     dir: '{{.GO_DIR}}'
-    sources:
-      - '**/*.go'
-      - .golangci.yml
-      - '{{.ROOT_DIR}}/.github/workflows/*.yml'
-      - '{{.ROOT_DIR}}/.github/workflows/*.yaml'
-      - '{{.SCRIPTS_DIR}}/workflow_lint/**/*.py'
-      - '{{.SCRIPTS_DIR}}/workflow_lint/requirements.txt'
-      - '{{.SCRIPTS_DIR}}/toolchain/__init__.py'
-      - '{{.SCRIPTS_DIR}}/toolchain/python_tools.py'
-      - '{{.SCRIPTS_DIR}}/analysis_tools.py'
-      - '{{.SCRIPTS_DIR}}/lint-go.sh'
     cmds:
       - bash {{.SCRIPTS_DIR}}/lint-go.sh fast {{.CLI_ARGS}}
 
   lint:full:
     desc: GitHub workflows + full golangci-lint
     dir: '{{.GO_DIR}}'
-    sources:
-      - '**/*.go'
-      - .golangci.yml
-      - '{{.ROOT_DIR}}/.github/workflows/*.yml'
-      - '{{.ROOT_DIR}}/.github/workflows/*.yaml'
-      - '{{.SCRIPTS_DIR}}/workflow_lint/**/*.py'
-      - '{{.SCRIPTS_DIR}}/workflow_lint/requirements.txt'
-      - '{{.SCRIPTS_DIR}}/toolchain/__init__.py'
-      - '{{.SCRIPTS_DIR}}/toolchain/python_tools.py'
-      - '{{.SCRIPTS_DIR}}/analysis_tools.py'
-      - '{{.SCRIPTS_DIR}}/lint-go.sh'
     cmds:
       - bash {{.SCRIPTS_DIR}}/lint-go.sh full {{.CLI_ARGS}}
 
@@ -199,12 +160,6 @@ tasks:
 
   lint:vuln:vendor:check:
     desc: Offline — verify the complete vulnerability snapshot against its pin
-    sources:
-      - lycaon/vulndb/**/*
-      - lycaon/vulndb-provenance.json
-      - lycaon/go.mod
-      - lycaon/go.sum
-      - scripts/vendor-vulndb.py
     cmds:
       - python3 {{.SCRIPTS_DIR}}/vendor-vulndb.py --check
 
@@ -290,28 +245,11 @@ tasks:
 
   check:coverage:
     desc: Minimum statement coverage on internal/* (default 62%% floor)
-    sources:
-      - 'lycaon/**/*.go'
-      - '{{.SCRIPTS_DIR}}/coverage-check.sh'
-      - '{{.SCRIPTS_DIR}}/coverage-packages.sh'
-      - '{{.SCRIPTS_DIR}}/coverage_policy.py'
-      - '{{.SCRIPTS_DIR}}/go-test-digest.sh'
-      - '{{.SCRIPTS_DIR}}/test-digest.py'
-      - '{{.SCRIPTS_DIR}}/verification_timings.py'
-      - 'lycaon/coverage-exempt.txt'
     cmds:
       - bash {{.SCRIPTS_DIR}}/coverage-check.sh
 
   check:coverage:packages:
     desc: 'Per-package coverage report for internal/* (advisory; COVERAGE_PKG_ENFORCE=1 to gate)'
-    sources:
-      - 'lycaon/**/*.go'
-      - 'lycaon/coverage-exempt.txt'
-      - '{{.SCRIPTS_DIR}}/coverage-packages.sh'
-      - '{{.SCRIPTS_DIR}}/coverage_policy.py'
-      - '{{.SCRIPTS_DIR}}/go-test-digest.sh'
-      - '{{.SCRIPTS_DIR}}/test-digest.py'
-      - '{{.SCRIPTS_DIR}}/verification_timings.py'
     cmds:
       - bash {{.SCRIPTS_DIR}}/coverage-packages.sh
 
@@ -580,10 +518,6 @@ tasks:
   den:typecheck:
     desc: Frontend TypeScript check (lycaon-den)
     dir: lycaon-den
-    sources:
-      - 'src/**/*.{ts,tsx}'
-      - tsconfig.json
-      - package.json
     preconditions:
       - sh: command -v bun
         msg: bun required — install from https://bun.sh
@@ -593,13 +527,6 @@ tasks:
   den:lint:
     desc: 'Frontend ESLint (errors only) and its canary: typescript-eslint, eslint-plugin-solid, Den source laws'
     dir: lycaon-den
-    sources:
-      - 'src/**/*.{ts,tsx}'
-      - 'shared/**/*.ts'
-      - 'e2e/**/*.ts'
-      - 'eslint/**/*.js'
-      - eslint.config.js
-      - package.json
     env:
       # Type-aware linting outgrows Node's default heap on 7 GB hosted runners.
       NODE_OPTIONS: --max-old-space-size=4096
@@ -647,24 +574,6 @@ tasks:
   den:test:rust:
     desc: Den Rust workspace tests and operational examples (shell, wheel glide, WebKit harness)
     dir: lycaon-den/src-tauri
-    sources:
-      - 'src/**/*.rs'
-      - 'src/linux_install/source/**/*.py'
-      - 'examples/**/*.rs'
-      - 'crates/**/*.rs'
-      - 'crates/**/Cargo.toml'
-      - build.rs
-      - 'tauri*.conf.json'
-      - 'permissions/**/*.toml'
-      - 'capabilities/**/*.json'
-      - ../../VERSION
-      - ../../packaging/update-keys.json
-      - ../../packaging/update-limits.json
-      - 'src/update_service/fixtures/*.json'
-      - ../../lycaon/internal/backup/archive-limits.json
-      - ../shared/local-file-formats.json
-      - Cargo.toml
-      - Cargo.lock
     preconditions:
       - sh: command -v cargo
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
@@ -699,11 +608,6 @@ tasks:
   decide:test:
     desc: Decision engine (bialy) Rust tests
     dir: lycaon/internal/decide/native
-    sources:
-      - 'src/**/*.rs'
-      - 'vendor/**/*'
-      - Cargo.toml
-      - Cargo.lock
     env:
       CARGO_TARGET_DIR: '{{.COMPILER_CACHE_DIR}}/decide'
       MLX_RS_METAL_PATH: '{{.BIN_DIR}}/mlx-metal'
@@ -732,13 +636,6 @@ tasks:
 
   den:coverage-check:
     desc: Fail if lycaon-den coverage is below DEN_COVERAGE_MIN_* floors
-    sources:
-      - lycaon-den/src/**/*
-      - '{{.SCRIPTS_DIR}}/den-coverage-check.sh'
-      - '{{.SCRIPTS_DIR}}/coverage_policy.py'
-      - '{{.SCRIPTS_DIR}}/vitest-digest.sh'
-      - '{{.SCRIPTS_DIR}}/vitest-digest.py'
-      - '{{.SCRIPTS_DIR}}/verification_timings.py'
     cmds:
       - bash {{.SCRIPTS_DIR}}/den-coverage-check.sh
 
@@ -1133,13 +1030,6 @@ tasks:
 
   openapi:bundle:check:
     desc: Fail if docs/openapi.yaml is stale vs modular sources
-    sources:
-      - docs/openapi/**/*
-      - docs/openapi.yaml
-      - '{{.SCRIPTS_DIR}}/bundle-openapi.sh'
-      - '{{.SCRIPTS_DIR}}/repo-snapshot-lock.sh'
-      - '{{.SCRIPTS_DIR}}/snapshot-publish.sh'
-      - '{{.SCRIPTS_DIR}}/redocly-version.sh'
     preconditions:
       - sh: command -v npx
         msg: npx required (Node 26+)
@@ -1166,16 +1056,6 @@ tasks:
   codegen:tool-command-equivalence:check:
     desc: Fail if the generated command language catalog is stale
     dir: '{{.GO_DIR}}'
-    sources:
-      - cmd/codegen-tool-command-equivalence/**/*
-      - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
-      - config/packs/painted-wolf/platform/tools/native-tools.yaml
-      - config/packs/painted-wolf/platform/tools/native-operations.yaml
-      - internal/toolcontract/language_catalog.go
-      - internal/toolcontract/language_contract.go
-      - config/packs/painted-wolf/platform/tools/schemas/**/*
-      - config/packs/painted-wolf/platform/tools/operation-schemas/**/*
-      - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root . --check
 
@@ -1201,9 +1081,6 @@ tasks:
 
   oar:vendor:check:
     desc: Verify vendored OAR members and their pinned source manifest
-    sources:
-      - schemas/oar/**/*
-      - scripts/vendor-oar-spec.sh
     cmds:
       - ./scripts/vendor-oar-spec.sh --check
 
@@ -1219,10 +1096,6 @@ tasks:
 
   scan:rules:vendor:check:
     desc: Offline — verify vendored rule catalogs
-    sources:
-      - lycaon/config/runtime/scanners/rules/vendor/**/*
-      - lycaon/config/runtime/scanners/rules-provenance.yaml
-      - scripts/vendor-scan-rules.sh
     cmds:
       - ./scripts/vendor-scan-rules.sh --check
 
@@ -1238,10 +1111,6 @@ tasks:
 
   secret-mint:vendor:check:
     desc: Offline — fail if the vendored zxcvbn passwords list was hand-edited or drifted from its pin
-    sources:
-      - lycaon/config/packs/painted-wolf/security/host/secret-mint/vendor/**/*
-      - lycaon/config/packs/painted-wolf/security/host/secret-mint/zxcvbn-provenance.yaml
-      - scripts/vendor-zxcvbn-passwords.sh
     cmds:
       - ./scripts/vendor-zxcvbn-passwords.sh --check
 
@@ -1260,12 +1129,6 @@ tasks:
   codegen:approval-explanations:check:
     desc: Fail if approval explanation registry is stale or incomplete
     dir: '{{.GO_DIR}}'
-    sources:
-      - config/packs/**/approvals/**
-      - internal/approvals/**
-      - internal/settings/approval_tiers.generated.go
-      - internal/settings/reversibility.go
-      - cmd/codegen-approval-explanations/**/*
     cmds:
       - go run ./cmd/codegen-approval-explanations --check
 
@@ -1291,13 +1154,6 @@ tasks:
   codegen:native-tool-contracts:check:
     desc: Fail if native tool contract outputs are stale
     dir: '{{.GO_DIR}}'
-    sources:
-      - config/packs/painted-wolf/platform/tools/native-tools.yaml
-      - config/packs/painted-wolf/platform/tools/native-operations.yaml
-      - cmd/codegen-native-tool-contracts/**/*
-      - internal/nativemanifest/**/*
-      - internal/settings/approval_tiers.generated.go
-      - internal/toolcontract/contracts.generated.go
     cmds:
       - >-
         go run ./cmd/codegen-native-tool-contracts
@@ -1325,12 +1181,6 @@ tasks:
   codegen:worker-branch-tools:check:
     desc: Fail if worker-branch tools codegen output is stale
     dir: '{{.GO_DIR}}'
-    sources:
-      - config/packs/painted-wolf/platform/tools/native-tools.yaml
-      - config/packs/painted-wolf/platform/tools/native-operations.yaml
-      - cmd/codegen-worker-branch-tools/**/*
-      - internal/nativemanifest/**/*
-      - internal/tools/worker_branch_tools.generated.go
     cmds:
       - >-
         go run ./cmd/codegen-worker-branch-tools
@@ -1359,13 +1209,6 @@ tasks:
   codegen:tool-presentation:check:
     desc: Fail if tool presentation codegen output is stale or drifts from tools/schemas
     dir: '{{.GO_DIR}}'
-    sources:
-      - config/packs/painted-wolf/platform/tools/tool-presentation.yaml
-      - config/packs/painted-wolf/platform/tools/schemas/*.yaml
-      - config/packs/painted-wolf/platform/tools/operation-schemas/*.yaml
-      - cmd/codegen-tool-presentation/**/*
-      - ../lycaon-den/src/chat/tool/tool-presentation.generated.ts
-      - internal/toolpresentation/visibility.generated.go
     cmds:
       - >-
         go run ./cmd/codegen-tool-presentation --root .
@@ -1411,14 +1254,6 @@ tasks:
   codegen:client-notices:check:
     desc: Fail if Den client-notice codegen output is stale
     dir: '{{.GO_DIR}}'
-    sources:
-      - config/packs/painted-wolf/platform/host/client-notices/**
-      - cmd/codegen-client-notices/**/*
-      - internal/clientnotice/**/*
-      - config/packs/painted-wolf/platform/host/user-notices/**
-      - ../lycaon-den/src/notices/client-notices.generated.ts
-      - pkg/api/notice_codes.generated.go
-      - ../docs/openapi/components/schemas/notice-code.generated.yaml
     cmds:
       - >-
         go run ./cmd/codegen-client-notices --check
@@ -1444,11 +1279,6 @@ tasks:
   codegen:host-markers:check:
     desc: Fail if the Den host-marker bindings are stale
     dir: '{{.GO_DIR}}'
-    sources:
-      - cmd/codegen-host-markers/**/*
-      - internal/hostmarker/**/*
-      - internal/session/workercompletion/leg_status.go
-      - ../lycaon-den/src/chat/host-markers.generated.ts
     cmds:
       - >-
         go run ./cmd/codegen-host-markers --check
@@ -1477,13 +1307,6 @@ tasks:
   codegen:web-research-catalog:check:
     desc: Fail if web research catalog / wire-id codegen outputs are stale
     dir: '{{.GO_DIR}}'
-    sources:
-      - config/packs/**/web-research-providers.yaml
-      - cmd/codegen-web-research-catalog/**/*
-      - internal/webresearch/catalog.go
-      - ../lycaon-den/src/settings/web-research-catalog.generated.ts
-      - ../docs/openapi/components/schemas/web-search-provider.generated.yaml
-      - pkg/api/webresearch_provider_ids.generated.go
     cmds:
       - >-
         go run ./cmd/codegen-web-research-catalog
@@ -1510,11 +1333,6 @@ tasks:
   codegen:contribution-facts:check:
     desc: Fail if the contribution fact or reserved-chord codegen output is stale
     dir: '{{.GO_DIR}}'
-    sources:
-      - cmd/codegen-contribution-facts/**/*
-      - internal/contribution/vocabulary.go
-      - ../lycaon-den/src/contributions/contribution-facts.generated.ts
-      - ../lycaon-den/src/shortcuts/reserved-chords.generated.ts
     cmds:
       - >-
         go run ./cmd/codegen-contribution-facts
@@ -1564,15 +1382,6 @@ tasks:
   codegen:theme-tokens:check:
     desc: Fail if the theme codegen outputs are stale
     dir: '{{.GO_DIR}}'
-    sources:
-      - cmd/codegen-theme-tokens/**/*
-      - internal/theme/**/*
-      - config/packs/painted-wolf/platform/contributions/themes/**/*
-      - ../lycaon-den/src/tokens.generated.css
-      - ../lycaon-den/src/components/source/editor/codemirror-highlight.generated.ts
-      - ../lycaon-den/src/contributions/theme-vocabulary.generated.ts
-      - ../docs/schemas/theme-unit.schema.json
-      - ../docs/theme-tokens.md
     cmds:
       - go run ./cmd/codegen-theme-tokens --root . --check
 
@@ -1618,15 +1427,6 @@ tasks:
   codegen:den-fonts:check:
     desc: Fail if the shipped fonts or the generated catalog are stale
     dir: '{{.GO_DIR}}'
-    sources:
-      - cmd/codegen-den-fonts/**/*
-      - internal/browser/designkit/fonts/**/*
-      - internal/browser/designkit/licenses/**/*
-      - internal/browser/designkit/provenance.yaml
-      - ../lycaon-den/fonts.yaml
-      - ../lycaon-den/src/fonts/font-catalog.generated.ts
-      - ../lycaon-den/src/fonts/font-faces.generated.css
-      - ../lycaon-den/public/fonts/**/*
     cmds:
       - go run ./cmd/codegen-den-fonts --root . --check
 
@@ -1648,12 +1448,6 @@ tasks:
   codegen:contribution-inventory:check:
     desc: Fail if the contribution inventory codegen outputs are stale
     dir: '{{.GO_DIR}}'
-    sources:
-      - cmd/codegen-contribution-inventory/**/*
-      - config/packs/painted-wolf/platform/contributions/**/*
-      - internal/theme/**/*
-      - ../lycaon-den/src/contributions/native-ui-handlers.generated.ts
-      - ../lycaon-den/src/contributions/stock-frame.generated.ts
     cmds:
       - go run ./cmd/codegen-contribution-inventory --root . --check
 
@@ -1676,13 +1470,6 @@ tasks:
   codegen:detection-packs:check:
     desc: Fail if generated structured cloud packs are stale
     dir: '{{.GO_DIR}}'
-    sources:
-      - config/packs/painted-wolf/security/host/detection-pack-upstream/**/*
-      - config/packs/painted-wolf/security/host/detection-packs/gcloud-cli/**/*
-      - config/packs/painted-wolf/security/host/detection-packs/azure-cli/**/*
-      - cmd/codegen-detection-packs/**/*
-      - config/packs/painted-wolf/security/host/detection-packs/gcp-structured-actions/**/*
-      - config/packs/painted-wolf/security/host/detection-packs/azure-structured-actions/**/*
     cmds:
       - go run ./cmd/codegen-detection-packs --root . --check
 
@@ -1708,18 +1495,6 @@ tasks:
 
   codegen:den-types:check:
     desc: Fail if Go or Den wire generation is stale vs docs/openapi.yaml
-    sources:
-      - docs/openapi.yaml
-      - lycaon-den/package.json
-      - lycaon-den/src/api/types.ts
-      - '{{.SCRIPTS_DIR}}/codegen-den-types.sh'
-      - '{{.SCRIPTS_DIR}}/codegen-den-wire.sh'
-      - '{{.SCRIPTS_DIR}}/repo-snapshot-lock.sh'
-      - '{{.SCRIPTS_DIR}}/snapshot-publish.sh'
-      - lycaon/cmd/codegen-operations/**/*
-      - lycaon-den/src/api/operations.generated.ts
-      - lycaon/internal/api/operations.generated.go
-      - lycaon/pkg/api/types.generated.go
     cmds:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bash {{.SCRIPTS_DIR}}/codegen-den-wire.sh check
 
@@ -1761,17 +1536,6 @@ tasks:
 
   db:sqlc:check:
     desc: Fail if sqlc generated Go in internal/db is stale
-    sources:
-      - lycaon/internal/db/schema.sql
-      - lycaon/internal/db/sqlc.yaml
-      - lycaon/internal/db/queries/**
-      - lycaon/internal/db/db.go
-      - lycaon/internal/db/models.go
-      - lycaon/internal/db/*.sql.go
-      - '{{.SCRIPTS_DIR}}/db-sqlc.sh'
-      - '{{.SCRIPTS_DIR}}/repo-snapshot-lock.sh'
-      - '{{.SCRIPTS_DIR}}/snapshot-publish.sh'
-      - '{{.SCRIPTS_DIR}}/sqlc-version.sh'
     preconditions:
       - sh: command -v go
         msg: go required
@@ -1780,12 +1544,6 @@ tasks:
 
   db:sqlc:vet:
     desc: Lint sqlc queries in internal/db (no SELECT *, DELETE/UPDATE require WHERE)
-    sources:
-      - lycaon/internal/db/schema.sql
-      - lycaon/internal/db/sqlc.yaml
-      - lycaon/internal/db/queries/**
-      - '{{.SCRIPTS_DIR}}/db-sqlc.sh'
-      - '{{.SCRIPTS_DIR}}/sqlc-version.sh'
     preconditions:
       - sh: command -v go
         msg: go required
@@ -1950,12 +1708,6 @@ tasks:
 
   openapi:lint:
     desc: Validate modular OpenAPI sources with Redocly CLI
-    sources:
-      - docs/openapi/**/*
-      - docs/openapi.yaml
-      - docs/redocly.yaml
-      - '{{.SCRIPTS_DIR}}/validate-openapi.sh'
-      - '{{.SCRIPTS_DIR}}/redocly-version.sh'
     preconditions:
       - sh: command -v npx
         msg: npx required (Node 26+)
@@ -1965,15 +1717,6 @@ tasks:
   validate:workflows:
     desc: Validate bundled workflows (host-runnable catalog SSOT)
     dir: '{{.GO_DIR}}'
-    sources:
-      - config/packs/**/workflows/**/*
-      - config/packs/**/workflow-diagnostics/**/*
-      - config/runtime/coordinator-surfaces.yaml
-      - config/runtime/compose-policy.yaml
-      - config/runtime/kicks/**/*
-      - internal/workflowvalidate/**/*
-      - internal/workflowdiag/**/*
-      - cmd/lycaon/workflow.go
     cmds:
       - go run ./cmd/lycaon workflow validate --bundled
 

@@ -80,6 +80,7 @@ name=[a for a in (args[:args.index('--')] if '--' in args else args) if not a.st
 root=pathlib.Path.cwd()
 subprocess.run([sys.executable,str(root/'scripts/test-execution.py'),'holding'],pass_fds=(200,),check=True)
 record={'name':name, 'source':(root/'source.txt').read_text(), 'cwd':str(root), 'workers':os.environ['PW_TEST_WORKERS'], 'pid':os.getpid()}
+record.update(cargo_target=os.environ.get('CARGO_TARGET_DIR'), compiler_cache=os.environ.get('PW_COMPILER_CACHE_DIR'))
 record['git']={k:subprocess.run(['git','config','--get',k],capture_output=True,text=True).stdout.strip() for k in ('core.fsmonitor','gc.autoDetach','maintenance.autoDetach')}
 with open(os.environ['FIXTURE_CALLS'],'a') as f: f.write(json.dumps(record)+'\\n')
 if pathlib.Path(os.environ['FIXTURE_HOLD']).exists():
@@ -135,7 +136,8 @@ sys.exit(code)
                     "PATH": str(self.tools) + os.pathsep + os.environ["PATH"]}
         for key in list(self.env):
             if key.startswith("PW_SOURCE_") or key in {"PW_TEST_EXECUTION_TICKET", "PW_TEST_ARTIFACT_ROOT",
-                                                       "PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW"}:
+                                                       "PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW",
+                                                       "PW_COMPILER_CACHE_DIR", "CARGO_TARGET_DIR"}:
                 self.env.pop(key)
         env_patcher = unittest.mock.patch.dict(os.environ, {
             "PW_ARTIFACT_ROOT": str(self.artifacts),
