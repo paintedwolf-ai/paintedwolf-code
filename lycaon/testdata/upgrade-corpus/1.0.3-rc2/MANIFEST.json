@@ -1,56 +1,56 @@
 {
   "app_version": "1.0.3-rc2",
-  "artifact_id": "f6307f13-19be-4337-93fa-42d40b8b09fb",
-  "backup_sha256": "5c10bffab380e62a9470d0e2bbb97614a38a9e5cb01432bef9599dbd2b044950",
-  "created_at": "2026-11-18T23:12:32Z",
+  "artifact_id": "9e5e055a-c4cb-4b5e-a999-40c6b7f194e9",
+  "backup_sha256": "1c1d892748833a9731d146a69900ed41cb5c26ab1bb5f897986cbec4ba8967c0",
+  "created_at": "2026-11-18T23:13:56Z",
   "editor_history": {
-    "accepted_operation_id": "c123c5d6-9721-4892-b36e-5db338cc4752",
+    "accepted_operation_id": "0bfa2e2d-8f50-48c3-ab3a-baa372b3a2c4",
     "accepted_text": "editor base\nsaved window edit\nunsaved host edit\n",
     "client_id": "window:upgrade-fixture",
-    "document_id": "af2c6e1c-2804-4733-891b-4df283189a81",
+    "document_id": "b022c1c6-1557-4935-ac98-0cf32753ea4c",
     "epoch": 1,
     "history_sha256": "b855afd75def2a12331d76e85d7b8a42d1e324e72b9c9ab7c4d2dc655878c062",
     "local_text": "editor base\nsaved window edit\nunsaved host edit\noffline window edit\n",
-    "outbox_path": "document-outbox/1cab24cca163fdb10594dfcfca4fb07adee8ad8aaf017cff73c95228cf29ded8/records-1.log",
-    "outbox_sha256": "ac83a28f200a325a2b97b78f82f8fe7f85630504087c74fe3891ef2188c4b55d",
-    "pending_operation_id": "c84210c4-25a7-4591-b006-5960749b5271",
-    "pending_save_operation_id": "182beed4-bde1-43da-927e-0b1543d3e42f",
+    "outbox_path": "document-outbox/6fbdbad6c5fc54407516f76b381ea1f22a80492eaaeea820fe335d37ac5982d0/records-1.log",
+    "outbox_sha256": "a816e8be02633babacabb17f622db53898665fbbaf6c71c78b1195cbd22308c1",
+    "pending_operation_id": "0c1f39d5-2604-48f5-b87d-6cefba16b185",
+    "pending_save_operation_id": "acaffcdd-14f0-4741-a722-c4551fcfd286",
     "pending_save_revision": 4,
-    "save_operation_id": "4b0ebc8d-32ba-4d1d-a5c5-a293d5b2cc7c",
+    "save_operation_id": "18b6b8b1-feb3-40dd-a0f1-dd4f7292ef77",
     "save_revision": 2,
     "saved_text": "editor base\nsaved window edit\n"
   },
   "grant_id": "grant_vZryNRplPGGrAtV-Z93HbKuK3SxTPEYb3EnTg_rEkU0",
-  "project_id": "a1c2e317-4e2a-43f0-9bc4-96ffc430bed3",
+  "project_id": "ab88fd5c-0b0d-482b-839e-1eeb8cff060e",
   "recipe": "retained-history-v1",
   "schema_identity": {
     "revision": 5,
-    "shape": "f0cc2d043d6f66bd8ce7f8ee9c64753e4e34db7da5c1ecf63efe4e3ee641d576"
+    "shape": "eb860c4ffdb0efba880281f3cdbf6df0a803016c1d630c8f7a4aba7f0ba490f0"
   },
   "schema_version": 5,
   "seeded_secondary": "tool_result",
-  "semantics_sha256": "c9827f02d2cbf7c983a643d82d155f03863cb6cdd13e6e727a42efa71dbec06b",
-  "session_id": "216b75c1-24cc-4b33-8b64-7a5803147e05",
+  "semantics_sha256": "303a26ca8526549bb6576fecf2dc2c788650059613022be70d8aafe08c200471",
+  "session_id": "1f0e91c2-f205-4df7-ad99-ca1a58e9fe13",
   "source_history": {
     "body_sha256": "c0e260b9905a67a0316311638aca3fd31627a1140e5425345d12d3084775ced9",
-    "checkpoint_anchor_id": "80a67f52-402c-4995-9b3b-de546e6415f9",
-    "checkpoint_root_key": "ed39d22ac9f83955",
-    "current_version_id": "01a1f0ee-e6a1-7a44-9337-088e32f89fba",
-    "source_file_id": "01a1f0ee-e691-721b-b401-d9e1dba10251",
-    "source_version_id": "01a1f0ee-e691-73e8-b095-118ee55f6857"
+    "checkpoint_anchor_id": "26e230b6-e2bd-4ac9-a417-b349f66e3f43",
+    "checkpoint_root_key": "ef6703def7a56919",
+    "current_version_id": "01a1f0f0-2c32-7bea-9dcb-ec4054cb4c0a",
+    "source_file_id": "01a1f0f0-2c0b-70ee-99d7-034366452b41",
+    "source_version_id": "01a1f0f0-2c0b-736b-9123-4836d161b102"
   },
-  "store_sha256": "98c13b6378c91962a239a108da1f3cefde682f4e82804fc54df8ab0b9fab3f96",
-  "tool_result_message_id": "799610f6-2a30-4055-8a99-93ba6d4e287f",
+  "store_sha256": "4b96d5bda63d85ff5c4bad7b3f2ee5485d6af76f8a84637a87b4335c94b4f9be",
+  "tool_result_message_id": "81e830f2-a95d-4050-836e-c192a07abf69",
   "worker_history": {
     "baseline": {
       "README.md": "a3029032e8aa0af8caaa19eb98dec67afc16681ce76987b5b323b0c232dbcc13"
     },
-    "child_session_id": "742fed1f-8edf-4120-b54b-a0916c222342",
-    "job_id": "90dff8d5-6f1b-4594-a434-11dde61496a1",
+    "child_session_id": "762694a7-8fce-4bd3-a5b4-85d83d0996f8",
+    "job_id": "756cb036-e401-4ebd-8068-aa3a7afdb524",
     "overlay": {
       "README.md": "2a0126e186199bedb9257b7b497a02d47bd362a5d7eee5874f662bd0af6504a3",
       "worker-note.txt": "8496db272afc947125ca66b8c48d2c7151f1fba438a821ae3f77aad9b35f63ea"
     },
-    "parent_session_id": "c71f9129-d5ae-40ea-8f2c-2cef9f3ea77b"
+    "parent_session_id": "32509bb8-e2fa-4544-bdf4-6c582db95a23"
   }
 }
