@@ -92,8 +92,9 @@ func TestSomeNonIsolatedProfileKeepsEveryGitTool(t *testing.T) {
 		"history and revision recovery are unreachable", gitTools)
 }
 
-// source_history keeps change history available to every mutation-capable
-// profile that runs on an isolated branch copy.
+// source_history keeps change history available to every isolated profile that
+// may write anywhere in the source tree. A profile whose writes are confined by
+// write globs (a plan writer) edits no source and runs without it by design.
 func TestIsolatedImplementerKeepsSourceHistory(t *testing.T) {
 	t.Parallel()
 	profiles := toolProfilesByID(t)
@@ -101,7 +102,7 @@ func TestIsolatedImplementerKeepsSourceHistory(t *testing.T) {
 	checked := 0
 	for _, profileID := range sortedProfileIDs(isolated) {
 		profile, ok := profiles[profileID]
-		if !ok || !prompts.ToolProfileMutationCapable(profile) {
+		if !ok || !prompts.ToolProfileMutationCapable(profile) || len(profile.WriteGlobs) > 0 {
 			continue
 		}
 		checked++
@@ -110,7 +111,7 @@ func TestIsolatedImplementerKeepsSourceHistory(t *testing.T) {
 		}
 	}
 	if checked == 0 {
-		t.Fatal("no mutation-capable isolated profile")
+		t.Fatal("no isolated profile writes the source tree")
 	}
 }
 
