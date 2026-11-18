@@ -76,7 +76,6 @@ type toolCallOutcome struct {
 	deliveries         []tools.SourceDeliveryTag
 	taskMessageID      string
 	committed          bool
-	storedID           string
 	persistedStored    []api.Message
 	persistedTransient []*api.Message
 	// err is a failure that produced no durable result.
@@ -349,6 +348,9 @@ func (l *toolBatch) runConcurrentToolBatch(
 	proseTurn bool,
 ) []toolCallOutcome {
 	outcomes := make([]toolCallOutcome, len(run))
+	if commit != nil {
+		commit.outcomes, commit.done = outcomes, make([]bool, len(run))
+	}
 	sem := make(chan struct{}, concurrentRunLimit(l.Context.Deps.Tools, run))
 	var wg sync.WaitGroup
 	for idx, tc := range run {
