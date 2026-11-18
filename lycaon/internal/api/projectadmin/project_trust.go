@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/projectview"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/settings"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -41,7 +40,7 @@ func (s *Trust) HandleUpdateProjectTrust(w http.ResponseWriter, r *http.Request)
 	if len(req.Enabled) > 0 && !s.validTrustSwitches(w, req.Enabled) {
 		return
 	}
-	scan, err := projectcontrib.ProcessInventory().Scan(r.Context(), project.RootPaths(p))
+	scan, err := s.inventory.Scan(r.Context(), project.RootPaths(p))
 	if err != nil {
 		s.WriteProjectInventoryError(w, r, p.ID, err)
 		return
@@ -83,7 +82,7 @@ func (s *Trust) trustProject(w http.ResponseWriter, r *http.Request) (*project.P
 const trustStatusMaxAge = 5 * time.Second
 
 func (s *Trust) writeProjectTrust(w http.ResponseWriter, r *http.Request, p *project.Project) {
-	scan, err := projectcontrib.ProcessInventory().ScanRecent(r.Context(), project.RootPaths(p), trustStatusMaxAge)
+	scan, err := s.inventory.ScanRecent(r.Context(), project.RootPaths(p), trustStatusMaxAge)
 	if err != nil {
 		s.WriteProjectInventoryError(w, r, p.ID, err)
 		return
@@ -123,7 +122,7 @@ func (s *Trust) HandleOpenProjectTrustReview(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	scan, err := projectcontrib.ProcessInventory().Scan(r.Context(), project.RootPaths(p))
+	scan, err := s.inventory.Scan(r.Context(), project.RootPaths(p))
 	if err != nil {
 		s.WriteProjectInventoryError(w, r, p.ID, err)
 		return
