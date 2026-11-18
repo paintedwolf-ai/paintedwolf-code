@@ -11,6 +11,7 @@ import (
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
@@ -21,7 +22,14 @@ import (
 
 // InventoryAccounting answers scan_query's accounting views from a run's
 // accepted evidence and its latest candidate submission.
-type InventoryAccounting struct{ *RunManager }
+type InventoryAccounting struct {
+	Runs     runstate.RunsRepository
+	Vars     *runstate.Variables
+	Resolver *workflowcatalog.Resolver
+	Sessions reviewTranscript
+	Coverage *workflowreview.Coverage
+	Verdicts *workflowreview.Verdicts
+}
 
 type inventoryAccountRow struct {
 	ID             string `json:"id"`
@@ -34,7 +42,7 @@ type inventoryAccountRow struct {
 
 // QueryWorkflowInventory projects accounting from accepted run evidence. A
 // selector previews complete group locations without changing their disposition.
-func (m InventoryAccounting) QueryWorkflowInventory(ctx context.Context, sessionID string, args map[string]any) (string, error) {
+func (m *InventoryAccounting) QueryWorkflowInventory(ctx context.Context, sessionID string, args map[string]any) (string, error) {
 	for key := range args {
 		switch key {
 		case "scan_ids", "view", "inventory_revision", "selector", "offset", "limit", "project_dir":
@@ -42,7 +50,7 @@ func (m InventoryAccounting) QueryWorkflowInventory(ctx context.Context, session
 			return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "scan_query", "field": key, "reason": "accounting_requires_complete_inventory"}}
 		}
 	}
-	run, err := m.Store.Runs.ActiveBySession(ctx, sessionID)
+	run, err := m.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil {
 		return "", err
 	}
@@ -51,7 +59,7 @@ func (m InventoryAccounting) QueryWorkflowInventory(ctx context.Context, session
 	}
 	unlock := m.Vars.Lock(run.ID)
 	defer unlock()
-	run, err = m.Store.Runs.Get(ctx, run.ID)
+	run, err = m.Runs.Get(ctx, run.ID)
 	if err != nil {
 		return "", err
 	}
@@ -175,9 +183,9 @@ func inventoryInt(args map[string]any, key string, fallback int) int {
 
 // candidateInventory never contributes to accepted accounting. Only a decoded,
 // structurally valid candidate can supply the separately labeled draft view.
-func (m InventoryAccounting) candidateInventory(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, inventory workflowreview.RunInventory) (scanfindings.InventoryAccount, string, error) {
+func (m *InventoryAccounting) candidateInventory(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, inventory workflowreview.RunInventory) (scanfindings.InventoryAccount, string, error) {
 	empty := scanfindings.AccountInventory(inventory.Groups, nil, nil)
-	vars, err := m.Store.Runs.GetScaffoldVars(ctx, run.ID)
+	vars, err := m.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return empty, "", err
 	}
@@ -219,7 +227,7 @@ var errCandidateInvalid = errors.New("candidate verdict invalid")
 // candidateAccount accounts the inventory against a candidate's verdict
 // arguments. Defects in those arguments wrap errCandidateInvalid; any other
 // error is a host read failure.
-func (m InventoryAccounting) candidateAccount(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, args map[string]any, groups []scanfindings.InventoryGroup) (scanfindings.InventoryAccount, error) {
+func (m *InventoryAccounting) candidateAccount(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, args map[string]any, groups []scanfindings.InventoryGroup) (scanfindings.InventoryAccount, error) {
 	var none scanfindings.InventoryAccount
 	verdict, _, _, err := workflowreview.ParseSubmitVerdictArgs(def, args)
 	if err != nil {

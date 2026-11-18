@@ -33,6 +33,7 @@ type RunManager struct {
 	Assignments  *workflowreview.Assignments
 	Verdicts     *workflowreview.Verdicts
 	Repairs      *ReviewRepairs
+	Inventory    *InventoryAccounting
 	Children     *Children
 	Reports      *Reports
 	Blueprints   *workflowblueprints.Service
