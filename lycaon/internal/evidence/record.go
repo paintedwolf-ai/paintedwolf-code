@@ -20,8 +20,8 @@ type Record struct {
 	SupersededBy string `json:"-"`
 	Survey       bool   // true for survey-grade observations
 	Truncated    bool   // body capture exceeded EvidenceCaptureBodyCapBytes
-	Path         string // scope-relative when the tool touched a rooted path; legacy normalized token otherwise
-	RootID       string // owning root of Path; empty for legacy rows and unrooted tokens
+	Path         string // scope-relative when the tool touched a rooted path; normalized unrooted token otherwise
+	RootID       string // root ID of Path; empty for unrooted tokens
 	LineRanges   []LineRange
 	Body         []string // result lines for excerpt verification
 	URL          string   // primary observed URL
@@ -55,7 +55,7 @@ type Record struct {
 // recordPathRoots is the root identity of a record's indexed paths.
 type recordPathRoots struct {
 	// owners maps a stored key to its root when that differs from RootID;
-	// absent entries share RootID and empty values mark legacy tokens.
+	// absent entries share RootID and empty values mark unrooted tokens.
 	owners map[string]string
 	// display is each stored key's session-folder token, stamped at write
 	// and load time against the session's active root.

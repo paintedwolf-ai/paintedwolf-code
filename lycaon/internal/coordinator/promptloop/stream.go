@@ -83,7 +83,7 @@ func (l *modelTurn) runAssistantStreamTurn(
 		}
 		clearStream()
 		withdrawErr := l.Nudges.withdrawCoordinatorDraft(
-			context.WithoutCancel(ctx), sess, sessionID, st, "",
+			context.WithoutCancel(ctx), sessionID, st, "",
 		)
 		return errors.Join(cause, withdrawErr)
 	}

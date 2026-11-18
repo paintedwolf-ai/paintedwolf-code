@@ -443,7 +443,7 @@ func (l *turnCloseout) maybeNotifyGroundedSynthesisAccepted(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, surfaceID string,
-	history []api.Message,
+
 	workersIdle bool,
 ) {
 	if l == nil || l.Deps.OnGroundedSynthesisAccepted == nil || !workersIdle {

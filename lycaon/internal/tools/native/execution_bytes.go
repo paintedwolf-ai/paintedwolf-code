@@ -46,7 +46,7 @@ func (e ExecutionRevisions) CaptureBytes(ctx context.Context, tctx tools.ToolCon
 	if err != nil {
 		return ExecutionBytes{}, err
 	}
-	content, revision, release, err := e.captureBytes(ctx, tctx, resolved, maxBytes)
+	content, revision, release, err := e.captureBytes(ctx, resolved, maxBytes)
 	if errors.Is(err, fs.ErrNotExist) {
 		return ExecutionBytes{}, sourceview.PathNotFound("read", resolved.DisplayPath, resolved.Abs)
 	}
@@ -56,7 +56,7 @@ func (e ExecutionRevisions) CaptureBytes(ctx context.Context, tctx tools.ToolCon
 	return ExecutionBytes{Path: resolved.DisplayPath, Bytes: content, Revision: revision, release: release}, nil
 }
 
-func (e ExecutionRevisions) captureBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, maxBytes int64) ([]byte, toolcontract.ExecutionRevision, func(), error) {
+func (e ExecutionRevisions) captureBytes(ctx context.Context, resolved projectpaths.Resolved, maxBytes int64) ([]byte, toolcontract.ExecutionRevision, func(), error) {
 	root, rel := revisionLocation(resolved)
 	revision := toolcontract.ExecutionRevision{Role: toolcontract.SourceRevision, Mode: toolcontract.PublishedDiskRevision, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel, Representation: toolcontract.OriginalEncodedBytes}
 	if err := tools.ObserveCommandFileRead(ctx, resolved.Root.ID, resolved.ScopeRel); err != nil {
@@ -177,7 +177,7 @@ func (e ExecutionRevisions) captureStream(ctx context.Context, tctx tools.ToolCo
 	if maxBytes <= 0 {
 		maxBytes = sourceview.AccessCommand.MaxBytes()
 	}
-	content, revision, release, err := e.captureBytes(ctx, tctx, resolved, maxBytes)
+	content, revision, release, err := e.captureBytes(ctx, resolved, maxBytes)
 	if errors.Is(err, fs.ErrNotExist) {
 		return ExecutionStream{}, sourceview.PathNotFound("read", resolved.DisplayPath, resolved.Abs)
 	}

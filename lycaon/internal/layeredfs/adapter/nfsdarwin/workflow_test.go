@@ -186,7 +186,7 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	// ErrMountedWorktreeUnavailable.
 	assertReleaseClosesPrivateGit(t, adp, gitExec, viewID, trunkDir, workerID)
 
-	// 7. Import checkpoint refs and promote the checkpoint into TrunkRoot (#1671 + #1663).
+	// 7. Import checkpoint refs and promote the checkpoint into TrunkRoot.
 	promoteWorkflowCheckpoint(t, cpStore, trunkDir, workerID, checkpointID)
 
 	assertWorkflowPromoted(t, trunkDir, workerID, checkpointID, workerHeadOID)

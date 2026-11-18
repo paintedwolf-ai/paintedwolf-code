@@ -25,8 +25,7 @@ type sourceHandleError struct{ param string }
 
 func (e *sourceHandleError) Error() string { return e.param + " must be a UUID" }
 
-// errSourceViewEditGone is a chat file edit a retained view compares that the
-// chat no longer records.
+// errSourceViewEditGone marks a retained view whose referenced file edit is absent.
 var errSourceViewEditGone = errors.New("source view file edit not found")
 
 // sourceHandleParam reads a view, presentation, or interest handle from the path.

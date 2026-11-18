@@ -46,34 +46,34 @@ func (g *RuleApprovalGate) offersForCard(action hitl.ProposedAction, result *hit
 	}
 	if action.Execution.PackageExecution != nil && (slices.Contains(result.Decision.Gates(), api.GateRemotePackageExecution) || slices.Contains(result.Decision.Gates(), api.GateRemotePackageExecutionKnown)) {
 		offers := withinReuse(g.packageCoordinateOffers(action, reuse, ownsCard, group), reuse)
-		return append(offers, g.hostResourceGroupOffers(action, result, false)...)
+		return append(offers, g.hostResourceGroupOffers(action, false)...)
 	}
 	// Exact-action reuse takes precedence over family ladders.
 	if reuse.Shape == gate.ReuseExactAction {
 		offers := withinReuse(exactActionGrantOffers(action, reuse, ownsCard, group), reuse)
-		return append(offers, g.hostResourceGroupOffers(action, result, false)...)
+		return append(offers, g.hostResourceGroupOffers(action, false)...)
 	}
 	if slices.Contains(result.Decision.Gates(), api.GateAgentPolicyChange) {
 		predicate := agentPolicyPredicate(action, result.Decision.Posture)
 		offers := withinReuse(g.grantOffersForPredicate(action, predicate, ownsCard, reuse, group), reuse)
-		return append(offers, g.hostResourceGroupOffers(action, result, false)...)
+		return append(offers, g.hostResourceGroupOffers(action, false)...)
 	}
 	predicate := GrantPredicateForAction(action)
 	if action.Invocation.Tool == "network" && opaqueEgressAction(action.Invocation.Args) && predicate.Pattern != "" {
 		offers := withinReuse(g.opaqueEgressOffers(action, predicate, ownsCard, reuse, group), reuse)
-		return append(offers, g.hostResourceGroupOffers(action, result, false)...)
+		return append(offers, g.hostResourceGroupOffers(action, false)...)
 	}
 	if predicate.Category == ApprovalCategoryWriteRoot && predicate.Pattern != "" {
 		offers := withinReuse(g.grantOffersForPredicate(action, predicate, ownsCard, reuse, group), reuse)
-		return append(offers, g.hostResourceGroupOffers(action, result, false)...)
+		return append(offers, g.hostResourceGroupOffers(action, false)...)
 	}
 	if gate.IsFilesystem(result.Decision.Primary) {
 		target := g.declaredFileTarget(g.effectiveConfig(action), action)
 		if target == nil {
-			return g.hostResourceGroupOffers(action, result, false)
+			return g.hostResourceGroupOffers(action, false)
 		}
 		offers := GrantedPathOffers(action, *target, result.Decision, g.sources.Locations)
-		return append(offers, g.hostResourceGroupOffers(action, result, false)...)
+		return append(offers, g.hostResourceGroupOffers(action, false)...)
 	}
 	matchedHostResource := false
 	matchedOrdinaryRule := false
@@ -90,16 +90,16 @@ func (g *RuleApprovalGate) offersForCard(action hitl.ProposedAction, result *hit
 	}
 	if ownsCard && (predicate.Category == ApprovalCategoryCommand || predicate.Pattern == "") {
 		offers := withinReuse(exactActionGrantOffers(action, reuse, true, ""), reuse)
-		return append(offers, g.hostResourceGroupOffers(action, result, hostResourcePrimary)...)
+		return append(offers, g.hostResourceGroupOffers(action, hostResourcePrimary)...)
 	}
 	offers := withinReuse(g.grantOffersForPredicate(action, predicate, ownsCard, reuse, group), reuse)
-	return append(offers, g.hostResourceGroupOffers(action, result, hostResourcePrimary)...)
+	return append(offers, g.hostResourceGroupOffers(action, hostResourcePrimary)...)
 }
 
 // hostResourceGroupOffers is the Host resources ladder. Reuse is predicate ×
 // device, independent of the primary gate's ceiling.
 func (g *RuleApprovalGate) hostResourceGroupOffers(
-	action hitl.ProposedAction, result *hitl.ApprovalResult, hostResourcePrimary bool,
+	action hitl.ProposedAction, hostResourcePrimary bool,
 ) []hitl.ApprovalGrantOffer {
 	if hostResourcePrimary || len(action.Resources.HostResources) == 0 {
 		return nil

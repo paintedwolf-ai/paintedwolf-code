@@ -125,7 +125,7 @@ func (g *summarizeGatherer) Gather(ctx context.Context, req summarize.Request) (
 	stats.NestedReposPruned = nestedPruned
 	stats.FaninGrepPasses = faninPasses
 	res.Stats = stats
-	fit, fitErr := g.relations.gatherFitEdges(ctx, req, res.Structure, stats)
+	fit, fitErr := g.relations.gatherFitEdges(ctx, res.Structure, stats)
 	if fitErr != nil {
 		return summarize.GatherResult{}, fmt.Errorf("summarize reference leads: %w", fitErr)
 	}

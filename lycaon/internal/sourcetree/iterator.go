@@ -81,7 +81,7 @@ func (p *Projection) cursorRow(ctx context.Context, entry sourcecatalog.Entry, d
 			return row, 0, err
 		}
 		if row.Expanded {
-			nested, _, err := p.children(ctx, entry.Path)
+			nested, err := p.children(ctx, entry.Path)
 			if err != nil {
 				return row, 0, err
 			}

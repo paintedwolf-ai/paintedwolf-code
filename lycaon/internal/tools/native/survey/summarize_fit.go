@@ -32,7 +32,7 @@ var fitDocExts = map[string]bool{
 
 func (g *summaryRelations) gatherFitEdges(
 	ctx context.Context,
-	req summarize.Request,
+
 	structure []summarize.StructureCandidate,
 	stats summarize.GatherStats,
 ) (summarize.FitEdges, error) {

@@ -145,7 +145,7 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	}
 	l.completeCloseout(ctx, sessionID, st)
 	if committed.Grounding != nil && committed.Grounding.Traced {
-		l.maybeNotifyGroundedSynthesisAccepted(ctx, sess, sessionID, surfaceID, history, workersIdleForSynthesis(l.Context, ctx, sess))
+		l.maybeNotifyGroundedSynthesisAccepted(ctx, sess, sessionID, surfaceID, workersIdleForSynthesis(l.Context, ctx, sess))
 	}
 	out.committed = true
 	out.history = history

@@ -76,7 +76,7 @@ func (l *Admission) ShouldLoopWake(ctx context.Context, sessionID string, wake a
 	if l.Turns.hostTurnBlocked(ctx, sessionID) {
 		return false, "execution_failed", nil
 	}
-	allow, busy := l.evaluate(ctx, sessionID, wake)
+	allow, busy := l.evaluate(ctx, sessionID)
 	if busy {
 		return false, "session_busy", nil
 	}
@@ -106,7 +106,7 @@ func (l *Admission) ShouldLoopWake(ctx context.Context, sessionID string, wake a
 	}
 	return true, "", nil
 }
-func (l *Admission) evaluate(ctx context.Context, sessionID string, wake anchor.ID) (allow bool, busy bool) {
+func (l *Admission) evaluate(ctx context.Context, sessionID string) (allow bool, busy bool) {
 	if l.Turns.hostTurnBlocked(ctx, sessionID) {
 		return false, false
 	}

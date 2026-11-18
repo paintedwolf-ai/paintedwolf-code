@@ -218,7 +218,7 @@ loop:
 			return nil, sendErr
 		} else if sent {
 			if withdrawErr := l.Nudges.withdrawCoordinatorDraft(
-				context.WithoutCancel(turnCtx), sess, id, st, assistantMsg.Content,
+				context.WithoutCancel(turnCtx), id, st, assistantMsg.Content,
 			); withdrawErr != nil {
 				return nil, withdrawErr
 			}

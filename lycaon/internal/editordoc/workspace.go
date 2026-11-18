@@ -138,7 +138,7 @@ func (o documentOpener) openObservedDocument(ctx context.Context, p *project.Pro
 		if err := s.store.Insert(ctx, d); err != nil {
 			return nil, err
 		}
-	} else if err := s.reconcileObservedDocument(ctx, d, read, false, "", tracked.FileID); err != nil {
+	} else if err := s.reconcileObservedDocument(ctx, d, read, false, tracked.FileID); err != nil {
 		return nil, err
 	} else if err := s.store.MarkOpened(ctx, d.ID, time.Now()); err != nil {
 		return nil, err
