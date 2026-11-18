@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"context"
+	"errors"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -21,6 +22,8 @@ type fakeProvenanceStore struct {
 	custody        map[string][]string
 	commits        []evidence.ProgramHTTPProvenance
 	commitSessions []string
+	lookupErr      error
+	commitErr      error
 }
 
 func newFakeProvenanceStore() *fakeProvenanceStore {
@@ -36,6 +39,9 @@ func (f *fakeProvenanceStore) seed(sessionID, path string, urls ...string) {
 func (f *fakeProvenanceStore) CommitProgramHTTPProvenance(_ context.Context, target evidence.ProgramProvenanceTarget, prov evidence.ProgramHTTPProvenance) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.commitErr != nil {
+		return "", f.commitErr
+	}
 	f.commits = append(f.commits, prov)
 	f.commitSessions = append(f.commitSessions, target.SessionID)
 	if target.ChatSessionID != "" && target.ChatSessionID != target.SessionID && (len(prov.CustodyPaths)+len(prov.CustodyTrees)+len(prov.ClearedPaths) > 0) {
@@ -49,6 +55,9 @@ func (f *fakeProvenanceStore) CommitProgramHTTPProvenance(_ context.Context, tar
 func (f *fakeProvenanceStore) ExternalCustodyURLsForPaths(_ context.Context, sessionID, _ string, paths []string) ([]string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.lookupErr != nil {
+		return nil, f.lookupErr
+	}
 	var urls []string
 	for _, p := range paths {
 		for _, u := range f.custody[sessionID+"\x00"+p] {
@@ -387,7 +396,7 @@ func TestCustodyFileStateAndLookup(t *testing.T) {
 		t.Fatal("re-adding custody must clear the cleared flag")
 	}
 
-	if got := run.lookupCustodyURLs(context.Background(), []string{"f.txt", ""}); !slices.Equal(got, []string{"https://x.example/3"}) {
+	if got := mustLookupCustody(t, run, []string{"f.txt", ""}); !slices.Equal(got, []string{"https://x.example/3"}) {
 		t.Fatalf("in-process lookup = %v, want [https://x.example/3]", got)
 	}
 
@@ -398,21 +407,21 @@ func TestCustodyFileStateAndLookup(t *testing.T) {
 		tc:      tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1", RootSessionID: "chat-9"}},
 		custody: store,
 	}
-	got := storeRun.lookupCustodyURLs(context.Background(), []string{"alpha.txt", "beta.txt"})
+	got := mustLookupCustody(t, storeRun, []string{"alpha.txt", "beta.txt"})
 	if !slices.Equal(got, []string{"https://ext.example/a.txt", "https://ext.example/b.txt"}) {
 		t.Fatalf("store-backed lookup = %v, want both session and chat custody", got)
 	}
 
 	cleared := &programRun{custody: store}
 	cleared.clearCustodyFile("alpha.txt")
-	if got := cleared.lookupCustodyURLs(context.Background(), []string{"alpha.txt"}); len(got) != 0 {
+	if got := mustLookupCustody(t, cleared, []string{"alpha.txt"}); len(got) != 0 {
 		t.Fatalf("cleared path lookup = %v, want empty (cleared paths skip the store)", got)
 	}
 }
 
 func TestNoteNativeFileMutationCustody(t *testing.T) {
 	var nilRun *programRun
-	nilRun.noteNativeFileMutation(context.Background(), "rm", nil)
+	applyFixtureCustody(t, nilRun, "rm", nil)
 
 	store := newFakeProvenanceStore()
 	store.seed("sess-1", "src.txt", "https://ext.example/src.txt")
@@ -420,7 +429,7 @@ func TestNoteNativeFileMutationCustody(t *testing.T) {
 		tc:      tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1"}},
 		custody: store,
 	}
-	rmRun.noteNativeFileMutation(context.Background(), "rm", []commandprogram.PathTarget{{Path: "src.txt"}})
+	applyFixtureCustody(t, rmRun, "rm", []commandprogram.PathTarget{{Path: "src.txt"}})
 	if rmRun.provenance.clearedFiles["src.txt"] != true {
 		t.Fatal("rm must clear custody for the removed path")
 	}
@@ -429,14 +438,14 @@ func TestNoteNativeFileMutationCustody(t *testing.T) {
 		tc:      tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1"}},
 		custody: store,
 	}
-	cpRun.noteNativeFileMutation(context.Background(), "cp", []commandprogram.PathTarget{
+	applyFixtureCustody(t, cpRun, "cp", []commandprogram.PathTarget{
 		{Path: "src.txt"}, {Path: "copy.txt", Write: true},
 	})
 	if got := cpRun.provenance.custodyFiles["copy.txt"]; !slices.Equal(got, []string{"https://ext.example/src.txt"}) {
 		t.Fatalf("cp custody = %v, want source URLs carried to the destination", got)
 	}
 
-	cpRun.noteNativeFileMutation(context.Background(), "mv", []commandprogram.PathTarget{
+	applyFixtureCustody(t, cpRun, "mv", []commandprogram.PathTarget{
 		{Path: "copy.txt"}, {Path: "moved.txt", Write: true},
 	})
 	if got := cpRun.provenance.custodyFiles["moved.txt"]; !slices.Equal(got, []string{"https://ext.example/src.txt"}) {
@@ -446,14 +455,14 @@ func TestNoteNativeFileMutationCustody(t *testing.T) {
 		t.Fatal("mv must clear custody at the source path")
 	}
 
-	cpRun.noteNativeFileMutation(context.Background(), "cp", []commandprogram.PathTarget{
+	applyFixtureCustody(t, cpRun, "cp", []commandprogram.PathTarget{
 		{Path: "clean.txt"}, {Path: "fresh.txt", Write: true},
 	})
 	if cpRun.provenance.clearedFiles["fresh.txt"] != true {
 		t.Fatal("cp from a clean source must clear destination custody")
 	}
 
-	cpRun.noteNativeFileMutation(context.Background(), "cp", []commandprogram.PathTarget{
+	applyFixtureCustody(t, cpRun, "cp", []commandprogram.PathTarget{
 		{Path: "one.txt"}, {Path: "two.txt"}, {Path: "three.txt"},
 	})
 	if cpRun.provenance.clearedFiles["three.txt"] != true {
@@ -465,5 +474,39 @@ func TestAppendUniqueProvenanceStrings(t *testing.T) {
 	got := appendUniqueProvenanceStrings(nil, " a ", "a", "", "b", "a")
 	if !slices.Equal(got, []string{"a", "b"}) {
 		t.Fatalf("appendUniqueProvenanceStrings = %v, want [a b]", got)
+	}
+}
+
+func mustLookupCustody(t *testing.T, run *programRun, paths []string) []string {
+	t.Helper()
+	urls, err := run.lookupCustodyURLs(t.Context(), paths)
+	testutil.FailErr(t, "look up custody", err)
+	return urls
+}
+
+func applyFixtureCustody(t *testing.T, run *programRun, action string, targets []commandprogram.PathTarget) {
+	t.Helper()
+	plan, err := run.prepareNativeFileCustody(t.Context(), action, targets)
+	testutil.FailErr(t, "prepare file custody", err)
+	plan.apply(run)
+}
+
+func TestCopyAndMoveRequireSourceCustodyBeforeChangingDestination(t *testing.T) {
+	for _, action := range []string{"cp", "mv"} {
+		t.Run(action, func(t *testing.T) {
+			fault := errors.New("custody store unavailable")
+			store := newFakeProvenanceStore()
+			store.lookupErr = fault
+			run := &programRun{tc: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "worker"}}, custody: store}
+			run.addCustodyFile("destination", []string{"https://example.invalid/previous"})
+			targets := []commandprogram.PathTarget{{Path: "source"}, {Path: "destination", Write: true}}
+			result, err := run.invokeWithFileCustody(t.Context(), action, targets, func() (toolcontract.ProducerResult, error) {
+				t.Fatal("file operation started without source custody")
+				return toolcontract.ProducerResult{}, nil
+			})
+			if result.EffectCertainty != toolcontract.NoEffect || !errors.Is(err, fault) || run.provenance.clearedFiles["destination"] || len(run.provenance.custodyFiles["destination"]) != 1 {
+				t.Fatalf("failed custody lookup altered destination: %v", err)
+			}
+		})
 	}
 }

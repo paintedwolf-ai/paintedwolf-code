@@ -343,6 +343,9 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: invocation.MaximumProgramInputBytes, OutputBytes: invocation.MaximumProgramInputBytes, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
 	var retainSerial sync.Mutex
 	run.retainOutput = func(ctx context.Context, executionID, stream string, data []byte, complete bool) error {
+		if err := run.custodyError(); err != nil {
+			return err
+		}
 		// Retentions serialize per run: each pass leases the zstd stream
 		// reader's 32 MiB working window, and concurrent leases overflow the
 		// program's working account before either publication finishes.
