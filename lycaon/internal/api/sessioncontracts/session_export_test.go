@@ -9,7 +9,6 @@ import (
 
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -32,12 +31,14 @@ func TestExportSessionTranscriptFormats(t *testing.T) {
 		Role:    wire.MessageRoleUser,
 		Content: "please ship",
 	}))
-	testdbseed.InsertSessionWorkflowRun(t, srv.Sources.Workspace.SessionStore.(*store.SQL).DB(), "run-export-chrome", created.ID, "running")
+	var runID string
+	err := srv.Sources.Workspace.SessionStore.(*store.SQL).DB().QueryRowContext(t.Context(), `SELECT id FROM workflow_runs WHERE session_id = ? ORDER BY created_at DESC LIMIT 1`, created.ID).Scan(&runID)
+	testutil.FailErr(t, "read session workflow", err)
 	testutil.FailErr(t, "append chrome", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), created.ID, wire.Message{
 		Role:           wire.MessageRoleSystem,
 		Kind:           wire.MessageKindProgressUpdate,
 		Content:        "should not appear in md",
-		WorkflowRunID:  "run-export-chrome",
+		WorkflowRunID:  runID,
 		ProgressUpdate: &wire.ProgressUpdateMeta{},
 		Visibility:     wire.MessageVisibilityTranscript,
 	}))

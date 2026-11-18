@@ -173,7 +173,13 @@ agent_pool:
 	contractfixture.WaitForSessionIdle(t, baseURL, sess.ID)
 
 	msgs := contractfixture.GetSessionMessages(t, baseURL, sess.ID)
-	if len(msgs) != 1 || msgs[0].Role != wire.MessageRoleUser {
-		t.Fatalf("messages = %+v, want single user message only", msgs)
+	var visible []wire.Message
+	for _, msg := range msgs {
+		if !wire.IsInternalTranscriptMessage(msg) {
+			visible = append(visible, msg)
+		}
+	}
+	if len(visible) != 1 || visible[0].Role != wire.MessageRoleUser || visible[0].Content != "hello" {
+		t.Fatalf("visible messages = %+v, want submitted user message only", visible)
 	}
 }
