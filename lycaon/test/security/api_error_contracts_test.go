@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
