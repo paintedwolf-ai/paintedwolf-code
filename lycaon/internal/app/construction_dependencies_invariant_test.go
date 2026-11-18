@@ -5,7 +5,8 @@ package app
 import (
 	"archive/zip"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
+	"github.com/lycaon/lycaon/internal/scan"
+	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,8 +25,8 @@ func TestConstructionRunsSuppliedScannerRegistry(t *testing.T) {
 	t.Setenv("LYCAON_API_TOKEN", "test-token")
 	cfg := testBuildConfig(t, configlayout.FindModuleRoot())
 	finding := wire.SecurityFinding{RuleID: "construction:sentinel", Level: wire.FindingLevelHigh}
-	scanner := &scantest.MockScanner{IDVal: "construction-sentinel", CategoryList: []wire.ScanCategory{wire.ScanCategorySCA}, Result: &scanoutput.Result{FindingsCount: 1, Findings: []wire.SecurityFinding{finding}}}
-	registry := &scantest.MockRegistry{Scanner: scanner}
+	scanner := &scannerfixture.MockScanner{IDVal: "construction-sentinel", CategoryList: []wire.ScanCategory{wire.ScanCategorySCA}, Result: &scanoutput.Result{FindingsCount: 1, Findings: []wire.SecurityFinding{finding}}}
+	registry := &scannerfixture.MockRegistry{Scanner: scanner}
 	cfg.TestScanRegistry = registry
 	app, err := Build(t.Context(), cfg)
 	testutil.FailErr(t, "build with supplied registry", err)
