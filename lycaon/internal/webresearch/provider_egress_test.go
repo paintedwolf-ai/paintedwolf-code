@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -95,7 +94,7 @@ func TestValidateProviderConfigEndpointAcceptsLANSearx(t *testing.T) {
 func TestDoProviderHTTPBlocksDisallowedTarget(t *testing.T) {
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://169.254.169.254/", nil)
 	testutil.FailErr(t, "http.NewRequestWithContext failed", err)
-	_, _, err = doProviderHTTP(context.Background(), req, 2, false)
+	_, _, err = doProviderHTTP(context.Background(), req, 2, false, nil)
 	if err == nil {
 		t.Fatal("expected metadata block")
 	}
@@ -106,18 +105,14 @@ func TestDoProviderHTTPBlocksDisallowedTarget(t *testing.T) {
 }
 
 func TestDoProviderHTTPPinsValidatedPublicTarget(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`ok`))
-	}))
+	})
 	t.Cleanup(srv.Close)
-	allowLoopbackFetch(t)
-	prevRelax := providerEgressTestRelax
-	providerEgressTestRelax = true
-	t.Cleanup(func() { providerEgressTestRelax = prevRelax })
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
 	testutil.FailErr(t, "http.NewRequestWithContext failed", err)
-	body, status, err := doProviderHTTP(context.Background(), req, 5, false)
+	body, status, err := doProviderHTTP(context.Background(), req, 5, false, srv.exchange)
 	if err != nil {
 		t.Fatalf("doProviderHTTP: %v", err)
 	}
@@ -158,18 +153,14 @@ func TestProviderHopsMeetTheEndpointPolicy(t *testing.T) {
 
 // A provider body past the read bound is a prefix, as a bounded read was.
 func TestDoProviderHTTPReadsAPrefixOfALargeBody(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(bytes.Repeat([]byte("x"), providerBodyMax+64))
-	}))
+	})
 	t.Cleanup(srv.Close)
-	allowLoopbackFetch(t)
-	prevRelax := providerEgressTestRelax
-	providerEgressTestRelax = true
-	t.Cleanup(func() { providerEgressTestRelax = prevRelax })
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
 	testutil.FailErr(t, "build request", err)
-	body, status, err := doProviderHTTP(context.Background(), req, 5, false)
+	body, status, err := doProviderHTTP(context.Background(), req, 5, false, srv.exchange)
 	testutil.FailErr(t, "doProviderHTTP", err)
 	if status != 200 || len(body) != providerBodyMax {
 		t.Fatalf("status %d, %d body bytes, want %d", status, len(body), providerBodyMax)

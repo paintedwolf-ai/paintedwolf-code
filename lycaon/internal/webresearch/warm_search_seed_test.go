@@ -11,13 +11,15 @@ import (
 )
 
 func TestWarmQueryUnderfilledSearchSeedSkipsWithoutModel(t *testing.T) {
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+
+	discovery.slots = make(chan struct{}, 1)
 	index := testIndex(t)
 	query := "useEffect react hooks"
 	index.QueueSearchOutcome(t.Context(), query, "", "", 0, 10)
 	index.Flush()
 
-	w := NewWarmer(index, nil, nil, warmTestCfg(t))
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
 	_ = w.warmQuery(context.Background(), warmRequest{
 		trigger:            warmTriggerSearch,
 		query:              query,
@@ -51,13 +53,15 @@ func TestWarmQueryUnderfilledSearchSeedSkipsWithoutModel(t *testing.T) {
 }
 
 func TestWarmQueryFilledSearchDoesNotSeed(t *testing.T) {
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+
+	discovery.slots = make(chan struct{}, 1)
 	index := testIndex(t)
 	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
 	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, true
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
-	w := NewWarmer(index, nil, nil, cfg)
+	w := NewWarmer(discovery, index, nil, nil, cfg)
 
 	_ = w.warmQuery(context.Background(), warmRequest{
 		trigger:            warmTriggerSearch,
@@ -80,24 +84,25 @@ func TestWarmQueryFilledSearchDoesNotSeed(t *testing.T) {
 }
 
 func TestSearchSeedSuccessMarksQueryRewarmed(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 	srv := warmTestSite(t)
 	index := testIndex(t)
 	query := "widget frobnicator guide"
 	index.QueueSearchOutcome(t.Context(), query, "", "", 1, 10)
 	index.Flush()
 
-	w := NewWarmer(index, nil, nil, warmTestCfg(t))
-	d := &directDiscoverer{
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
+	d := &directDiscoverer{discovery: discovery,
 		summarizer: &scriptedSummarizer{responses: []string{fmt.Sprintf(`{"seeds":[%q]}`, srv.URL)}},
 		index:      index,
 		origin:     webindex.OriginWarmed,
 	}
-	if !tryAcquireDirectSlot() {
+	release, acquired := discovery.tryAcquire()
+	if !acquired {
 		t.Fatal("slot")
 	}
-	defer releaseDirectSlot()
+	defer release()
 	caps := defaultWarmCaps()
 	_, _, skip := w.warmSeed(context.Background(), d, query, "", "", caps, caps.SeedProbes)
 	if skip != "" {

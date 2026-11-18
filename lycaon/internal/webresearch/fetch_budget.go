@@ -53,28 +53,6 @@ func NewFetchBudget(limits FetchURLLimits) *FetchBudget {
 	}
 }
 
-var (
-	globalFetchBudgetMu sync.RWMutex
-	globalFetchBudget   = NewFetchBudget(DefaultFetchURLLimits())
-)
-
-// SetGlobalFetchBudget installs the process-wide fetch_url budget (serve wiring).
-func SetGlobalFetchBudget(b *FetchBudget) {
-	if b == nil {
-		b = NewFetchBudget(DefaultFetchURLLimits())
-	}
-	globalFetchBudgetMu.Lock()
-	defer globalFetchBudgetMu.Unlock()
-	globalFetchBudget = b
-}
-
-// GlobalFetchBudget returns the process-wide fetch_url budget.
-func GlobalFetchBudget() *FetchBudget {
-	globalFetchBudgetMu.RLock()
-	defer globalFetchBudgetMu.RUnlock()
-	return globalFetchBudget
-}
-
 // Acquire reserves a session slot and waits for a host in-flight slot.
 // Call release when the network fetch finishes (success or error).
 func (b *FetchBudget) Acquire(ctx context.Context, sessionID, pageURL string) (release func(), err error) {

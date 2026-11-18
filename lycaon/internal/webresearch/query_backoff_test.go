@@ -47,9 +47,9 @@ func TestBackoffQueryVariantsEmpty(t *testing.T) {
 }
 
 // backoffServer returns hits for one query and counts calls.
-func backoffServer(t *testing.T, hitQuery string, calls *int) string {
+func backoffServer(t *testing.T, hitQuery string, calls *int) *providerHTTPFixture {
 	t.Helper()
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		*calls++
 		if r.URL.Query().Get("s") == hitQuery {
 			_ = json.NewEncoder(w).Encode([]map[string]any{{
@@ -61,7 +61,7 @@ func backoffServer(t *testing.T, hitQuery string, calls *int) string {
 		}
 		_ = json.NewEncoder(w).Encode([]any{})
 	})
-	return srv.URL
+	return srv
 }
 
 // Catalog registration applies query backoff to provider adapters.
@@ -69,10 +69,10 @@ func TestCatalogQueryBackoffRetriesShorterQueries(t *testing.T) {
 	longQuery := "Steam Machine 2025 mini PC review quiet living room gaming"
 	shortQuery := "Steam Machine 2025 mini PC review quiet"
 	calls := 0
-	endpoint := backoffServer(t, shortQuery, &calls)
-	provider := testRegistry(t).Get("mwmbl")
+	srv := backoffServer(t, shortQuery, &calls)
+	provider := testRegistry(t, srv.exchange).Get("mwmbl")
 	out := provider.Search(context.Background(), Settings{
-		Config:                map[string]map[string]string{"mwmbl": {"endpoint": endpoint}},
+		Config:                map[string]map[string]string{"mwmbl": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, longQuery, 5)
 	if !out.ok || len(out.hits) != 1 || out.hits[0].URL != "https://example.com/steam-machine" {
@@ -87,7 +87,7 @@ func TestCatalogQueryBackoffMarginaliaLongQuery(t *testing.T) {
 	longQuery := "best web based chess libraries 2024 2025 JavaScript React Vue HTML5"
 	shortQuery := "best web based chess libraries 2024 2025 JavaScript React Vue"
 	calls := 0
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		if r.URL.Query().Get("query") == shortQuery {
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -110,7 +110,7 @@ func TestCatalogQueryBackoffMarginaliaLongQuery(t *testing.T) {
 		u.RawQuery = q.Encode()
 		return u.String(), nil
 	}
-	reg := NewRegistry(testCatalog(t))
+	reg := NewRegistry(testCatalog(t), srv.exchange)
 	reg.registerREST(spec, KindKeyed)
 	out := reg.Get("marginalia").Search(context.Background(), Settings{
 		Keys:                  map[string]string{"marginalia": "secret"},
@@ -126,10 +126,10 @@ func TestCatalogQueryBackoffMarginaliaLongQuery(t *testing.T) {
 
 func TestCatalogQueryBackoffShortQuerySearchesOnce(t *testing.T) {
 	calls := 0
-	endpoint := backoffServer(t, "Steam Machine", &calls)
-	provider := testRegistry(t).Get("mwmbl")
+	srv := backoffServer(t, "Steam Machine", &calls)
+	provider := testRegistry(t, srv.exchange).Get("mwmbl")
 	out := provider.Search(context.Background(), Settings{
-		Config:                map[string]map[string]string{"mwmbl": {"endpoint": endpoint}},
+		Config:                map[string]map[string]string{"mwmbl": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "Steam Machine", 5)
 	if !out.ok || len(out.hits) != 1 {
@@ -153,15 +153,14 @@ providers:
 `)
 	cat, err := LoadCatalog()
 	testutil.FailErr(t, "load catalog", err)
+	calls := 0
+	srv := backoffServer(t, "never matches", &calls)
 	quota := &memQuotaStore{}
-	reg := NewRegistry(cat)
+	reg := NewRegistry(cat, srv.exchange)
 	reg.AttachQuotaStore(quota)
 	testutil.FailErr(t, "RegisterCatalogProviders", RegisterCatalogProviders(t.Context(), reg))
-	calls := 0
-	endpoint := backoffServer(t, "never matches", &calls)
-
 	out := reg.Get("mwmbl").Search(context.Background(), Settings{
-		Config:                map[string]map[string]string{"mwmbl": {"endpoint": endpoint}},
+		Config:                map[string]map[string]string{"mwmbl": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "one two three four five", 5)
 	if out.reason != "paced" {

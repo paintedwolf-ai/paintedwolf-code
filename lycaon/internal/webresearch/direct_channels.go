@@ -84,10 +84,10 @@ func (c *providerSeedChannel) Probe(ctx context.Context, req seedRequest, emit f
 	}
 	budget := min(req.MaxResults, 5)
 	start := time.Now()
-	outcome, cached := cachedProviderSeed(c.providerID, req.Query, budget, c.d.settings)
+	outcome, cached := c.d.registry.cachedProviderSeed(c.providerID, req.Query, budget, c.d.settings)
 	if !cached {
 		outcome = p.Search(withProviderGateWait(ctx, seedGateMaxWait), c.d.settings, req.Query, budget)
-		storeProviderSeed(c.providerID, req.Query, budget, c.d.settings, outcome)
+		c.d.registry.storeProviderSeed(c.providerID, req.Query, budget, c.d.settings, outcome)
 	}
 	if !outcome.ok {
 		wrlog.Info("seed channel skip",

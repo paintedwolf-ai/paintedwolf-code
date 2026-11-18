@@ -1,0 +1,16 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/webresearch/search.go",
+  "kind": "algorithm",
+  "workstream": "web-research-runtime",
+  "disposition": "retain",
+  "reason": "Retain the 458-line provider fan-out and whole-search result flow. Provider and index-memory tasks share cancellation, result ordering and partial-result settlement; Registry caches and Discovery admission are explicit resources. Fan-out, direct protection, host-approval and concurrent-runtime tests verify the coordination.",
+  "reviewed_commit": "07ad83d4a386172877e6221d2ed1feffb7f6900f",
+  "ceiling": 458,
+  "boundaries": {
+    "lycaon/internal/webresearch/search_fanout_test.go": "d49df9e248d61d14293f81b230bb6099081a63b1d64963bbc0456f1a2a1489fb",
+    "lycaon/internal/webresearch/search_direct_protect_test.go": "d1c2d99dccab79899a7e625099ce680e14db9957a85bd9cbbe9783b32b98ab7f",
+    "lycaon/internal/webresearch/host_ask_test.go": "01d6352e4e3b0b79fc986b6839d25ff9b1b5378cdab94f00055227e879638ae6",
+    "lycaon/internal/webresearch/runtime_resources_test.go": "96e4a128bff2d6172940f6175fd0219f6ceaa62865254eefb6db430752e52e1e"
+  }
+}

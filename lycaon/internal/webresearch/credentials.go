@@ -137,9 +137,6 @@ type cachedSearchResult struct {
 	providersSkipped []SkippedProvider
 }
 
-// searchResultCache reuses identical whole-search outcomes.
-var searchResultCache = newTTLCache[cachedSearchResult](searchResultCacheTTL, searchResultCacheMax)
-
 // normalizeSearchResultCacheKey keys the whole-search cache. Period is in the
 // key: the same words under two windows are two different searches.
 func normalizeSearchResultCacheKey(query string, period Period, limit int, settings Settings, explicitProvider string) string {
@@ -230,15 +227,18 @@ func hashSearchFingerprint(value string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func cachedWholeSearch(query string, period Period, limit int, settings Settings, explicitProvider string) (cachedSearchResult, bool) {
-	return searchResultCache.get(normalizeSearchResultCacheKey(query, period, limit, settings, explicitProvider))
+func (r *Registry) cachedWholeSearch(query string, period Period, limit int, settings Settings, explicitProvider string) (cachedSearchResult, bool) {
+	if r == nil {
+		return cachedSearchResult{}, false
+	}
+	return r.resultCache.get(normalizeSearchResultCacheKey(query, period, limit, settings, explicitProvider))
 }
 
-func storeWholeSearch(query string, period Period, limit int, settings Settings, explicitProvider string, result WebSearchResult) {
-	if !result.OK || len(result.Results) == 0 {
+func (r *Registry) storeWholeSearch(query string, period Period, limit int, settings Settings, explicitProvider string, result WebSearchResult) {
+	if r == nil || !result.OK || len(result.Results) == 0 {
 		return
 	}
-	searchResultCache.put(normalizeSearchResultCacheKey(query, period, limit, settings, explicitProvider), cachedSearchResult{
+	r.resultCache.put(normalizeSearchResultCacheKey(query, period, limit, settings, explicitProvider), cachedSearchResult{
 		hits:             append([]WebHit(nil), result.Results...),
 		partial:          result.Partial,
 		providersSkipped: append([]SkippedProvider(nil), result.ProvidersSkipped...),

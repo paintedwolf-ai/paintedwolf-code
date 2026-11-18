@@ -22,7 +22,7 @@ import (
 type beforeGuardedGetHop func(context.Context, *url.URL) (func(), error)
 type recordGuardedGetHop func(*url.URL, *http.Response)
 
-func guardedGetWithHopPolicy(
+func (crawler *Crawler) guardedGetWithHopPolicy(
 	ctx context.Context,
 	u *url.URL,
 	accept string,
@@ -64,7 +64,7 @@ func guardedGetWithHopPolicy(
 		// Each hop is its own door exchange: the door validates, pins, and
 		// gates the dial, and RedirectNone hands the redirect decision back
 		// so every hop is revalidated here.
-		resp, err := outboundhttp.Do(ctx, outboundhttp.Request{
+		resp, err := crawler.exchange(ctx, outboundhttp.Request{
 			Class:      egressclass.WebResearchRequest,
 			Method:     http.MethodGet,
 			URL:        current.String(),
@@ -165,8 +165,8 @@ func isRedirectStatus(code int) bool {
 // maxFetchRedirects bounds the validated redirect loop.
 const maxFetchRedirects = 10
 
-// ipAllowed permits loopback only in package tests or the isolated development harness.
-var ipAllowed = func(addr netip.Addr) bool {
+// ipAllowed admits loopback only in the isolated development harness.
+func ipAllowed(addr netip.Addr) bool {
 	if addr.Unmap().IsLoopback() && configdir.IsHarnessChannel() {
 		return true
 	}

@@ -151,7 +151,7 @@ type seedWarmAdmission func(context.Context) (bool, error)
 
 // seedHedgeDelay is how long the primary seed call runs before a slim parallel
 // call hedges its tail latency.
-var seedHedgeDelay = 8 * time.Second
+const seedHedgeDelay = 8 * time.Second
 
 func pickSeedsSystemPrompt(ctx context.Context) (string, error) {
 	return guidance.RenderCatalog(ctx, guidance.UtilityPickSeedsSystemRef, nil)
@@ -170,7 +170,7 @@ func (d *directDiscoverer) pickSeedsCached(
 	admit seedWarmAdmission,
 ) (seedPlan, error) {
 	stats := statsFrom(ctx)
-	if plan, ok := cachedSeedPlan(query, period, d.taskHint); ok {
+	if plan, ok := d.discovery.cachedSeedPlan(query, period, d.taskHint); ok {
 		if stats != nil {
 			stats.seedCacheHit.Store(true)
 		}
@@ -189,7 +189,7 @@ func (d *directDiscoverer) pickSeedsCached(
 	if err != nil {
 		return seedPlan{}, err
 	}
-	storeSeedPlan(query, period, d.taskHint, plan)
+	d.discovery.storeSeedPlan(query, period, d.taskHint, plan)
 	return plan, nil
 }
 
@@ -282,10 +282,11 @@ func (d *directDiscoverer) seedCall(ctx context.Context, user string, timeoutSec
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if err := acquireSeedCallSlot(ctx, d.seedProviderID, d.seedSharedProvider); err != nil {
+	release, err := d.discovery.acquireSeed(ctx, d.seedProviderID, d.seedSharedProvider)
+	if err != nil {
 		return "", err
 	}
-	defer releaseSeedCallSlot(d.seedProviderID, d.seedSharedProvider)
+	defer release()
 	system, err := pickSeedsSystemPrompt(ctx)
 	if err != nil {
 		return "", err

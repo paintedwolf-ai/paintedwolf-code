@@ -7,10 +7,12 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/webresearch"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 type options struct {
+	webResearchExchange     webresearch.Exchange
 	llmClient               modelcall.LLMClient
 	decider                 decide.Decider
 	recording               bool
@@ -113,4 +115,9 @@ func WithoutCoordinatorLoop() Option {
 	return func(o *options) {
 		o.coordinatorLoopDisabled = true
 	}
+}
+
+// WithWebResearchExchange supplies the harness's bounded research exchange.
+func WithWebResearchExchange(exchange webresearch.Exchange) Option {
+	return func(o *options) { o.webResearchExchange = exchange }
 }

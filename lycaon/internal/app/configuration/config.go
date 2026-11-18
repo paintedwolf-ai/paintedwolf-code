@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
+	"github.com/lycaon/lycaon/internal/webresearch"
 )
 
 // Config holds serve-time options for app.Build.
@@ -24,6 +25,8 @@ type Config struct {
 	MockLLMPath string
 	// Startup reports bundled-engine boot progress to the desktop parent.
 	Startup startupprotocol.Sink
+	// WebResearchExchange supplies bounded research exchanges; nil uses the host transport.
+	WebResearchExchange webresearch.Exchange
 	// APIToken is the bearer the desktop delivered over the private startup
 	// pipe; empty resolves it from the environment or generates one.
 	APIToken string

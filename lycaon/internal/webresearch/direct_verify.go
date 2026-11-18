@@ -125,7 +125,7 @@ func probeText(c indexCandidate, p pageProbe) string {
 // answer 200 to anything); survivors re-rank by fetched content, then cap per
 // host. perHostCap <= 0 disables the cap; capped-out hits are dropped, not
 // deferred.
-func verifyHits(ctx context.Context, picks []indexCandidate, scorer *queryScorer, maxResults, perHostCap int) ([]WebHit, []indexCandidate, []string) {
+func (crawler *Crawler) verifyHits(ctx context.Context, picks []indexCandidate, scorer *queryScorer, maxResults, perHostCap int) ([]WebHit, []indexCandidate, []string) {
 	if maxResults <= 0 || len(picks) == 0 {
 		return nil, nil, nil
 	}
@@ -145,7 +145,7 @@ func verifyHits(ctx context.Context, picks []indexCandidate, scorer *queryScorer
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			probeStart := time.Now()
-			probes[idx] = fetchPageProbe(ctx, picks[idx].URL)
+			probes[idx] = crawler.fetchPageProbe(ctx, picks[idx].URL)
 			elapsed := time.Since(probeStart)
 			probeMs[idx] = elapsed.Milliseconds()
 			stats.addProbe(elapsed)

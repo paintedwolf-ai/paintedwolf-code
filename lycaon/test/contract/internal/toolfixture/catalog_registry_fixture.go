@@ -124,10 +124,13 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	if err := native.RegisterRequestDecisionTool(reg, workertools.RequestDecisionDeps{}); err != nil {
 		contractcheck.FailErr(t, "native.RegisterRequestDecisionTool failed", err)
 	}
-	webRT, err := webresearch.WireRuntime(t.Context())
+	webRT, err := webresearch.WireRuntime(t.Context(), nil)
 	contractcheck.FailErr(t, "webresearch.WireRuntime", err)
 	if err := webresearch.RegisterToolsWithFactory(reg, webresearch.ToolDeps{
-		Creds: webRT.Creds, Config: webRT.Config, Catalog: webRT.Catalog, Registry: webRT.Registry,
+		Crawler:     webRT.Crawler,
+		Discovery:   webRT.Discovery,
+		FetchBudget: webRT.FetchBudget,
+		Creds:       webRT.Creds, Config: webRT.Config, Catalog: webRT.Catalog, Registry: webRT.Registry,
 	}, nil); err != nil {
 		contractcheck.FailErr(t, "webresearch.RegisterToolsWithFactory failed", err)
 	}

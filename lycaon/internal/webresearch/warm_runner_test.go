@@ -26,12 +26,14 @@ func writeFile(t *testing.T, dir, name, content string) {
 
 // Missing model capacity leaves the stack fingerprint unstamped.
 func TestWarmRunnerStackWarmSkipLeavesStackUnstamped(t *testing.T) {
-	resetDirectState(2)
+	discovery := NewDiscovery(newTestCrawler())
+
+	discovery.slots = make(chan struct{}, 2)
 	index := testIndex(t)
 	dir := t.TempDir()
 	writeFile(t, dir, "package.json", `{"dependencies":{"widget-frobnicator":"^1.0"}}`)
 
-	w := NewWarmer(index, nil, nil, warmTestCfg(t))
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
 	runner := &WarmRunner{W: w, Roots: func(context.Context) ([]string, error) { return []string{dir}, nil }, Live: warmTestLive}
 	runner.cycle(context.Background())
 	index.Flush()
@@ -52,7 +54,9 @@ func TestWarmRunnerStackWarmSkipLeavesStackUnstamped(t *testing.T) {
 }
 
 func TestWarmRunnerStackWarmCrawlOnlyNoSeed(t *testing.T) {
-	resetDirectState(2)
+	discovery := NewDiscovery(newTestCrawler())
+
+	discovery.slots = make(chan struct{}, 2)
 	index := testIndex(t)
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "Docs at https://example.com/docs/start\n")
@@ -61,7 +65,7 @@ func TestWarmRunnerStackWarmCrawlOnlyNoSeed(t *testing.T) {
 	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
-	w := NewWarmer(index, nil, nil, cfg)
+	w := NewWarmer(discovery, index, nil, nil, cfg)
 	runner := &WarmRunner{W: w, Roots: func(context.Context) ([]string, error) { return []string{dir}, nil }, Live: warmTestLive}
 	runner.cycle(context.Background())
 	index.Flush()
@@ -91,8 +95,8 @@ func TestWarmRunnerStackWarmCrawlOnlyNoSeed(t *testing.T) {
 }
 
 func TestWarmRunnerStackBudgetCountsFailedProbes(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(2)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 2)
 	index := testIndex(t)
 	dir := t.TempDir()
 	srv := warmTestSite(t)
@@ -103,7 +107,7 @@ func TestWarmRunnerStackBudgetCountsFailedProbes(t *testing.T) {
 	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
-	w := NewWarmer(index, nil, nil, cfg)
+	w := NewWarmer(discovery, index, nil, nil, cfg)
 	runner := &WarmRunner{
 		W:     w,
 		Roots: func(context.Context) ([]string, error) { return []string{dir}, nil },
@@ -117,12 +121,14 @@ func TestWarmRunnerStackBudgetCountsFailedProbes(t *testing.T) {
 }
 
 func TestWarmRunnerUnwiredLiveIsSilent(t *testing.T) {
-	resetDirectState(2)
+	discovery := NewDiscovery(newTestCrawler())
+
+	discovery.slots = make(chan struct{}, 2)
 	index := testIndex(t)
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "Docs at https://example.com/docs/start\n")
 
-	w := NewWarmer(index, nil, nil, warmTestCfg(t))
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
 	runner := &WarmRunner{W: w, Roots: func(context.Context) ([]string, error) { return []string{dir}, nil }}
 	runner.cycle(context.Background())
 	index.Flush()
@@ -134,7 +140,9 @@ func TestWarmRunnerUnwiredLiveIsSilent(t *testing.T) {
 }
 
 func TestWarmRunnerIdleSkipsCycle(t *testing.T) {
-	resetDirectState(2)
+	discovery := NewDiscovery(newTestCrawler())
+
+	discovery.slots = make(chan struct{}, 2)
 	index := testIndex(t)
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "Docs at https://example.com/docs/start\n")
@@ -143,7 +151,7 @@ func TestWarmRunnerIdleSkipsCycle(t *testing.T) {
 	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
-	w := NewWarmer(index, nil, nil, cfg)
+	w := NewWarmer(discovery, index, nil, nil, cfg)
 	live := false
 	runner := &WarmRunner{
 		W:     w,
@@ -177,15 +185,15 @@ func TestWarmRunnerIdleSkipsCycle(t *testing.T) {
 }
 
 func TestWarmRunnerHistoryRewarmRespectsCooldown(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(2)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 2)
 	srv := warmTestSite(t)
 	index := testIndex(t)
 	// The loopback server uses HTTP, so its HTTPS re-crawl tests only the cooldown stamp.
 	index.QueuePage(t.Context(), webindex.Page{URL: srv.URL + "/guide.md", Title: "widget frobnicator guide", Verified: true})
 	index.Flush()
 
-	w := NewWarmer(index, nil, nil, warmTestCfg(t))
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
 	runner := &WarmRunner{W: w, Roots: nil, Live: warmTestLive}
 	runner.cycle(context.Background())
 	index.Flush()
@@ -213,9 +221,11 @@ func TestWarmRunnerHistoryRewarmRespectsCooldown(t *testing.T) {
 }
 
 func TestWarmRunnerBootstrapOnceWhenNearEmpty(t *testing.T) {
-	resetDirectState(2)
+	discovery := NewDiscovery(newTestCrawler())
+
+	discovery.slots = make(chan struct{}, 2)
 	index := testIndex(t)
-	w := NewWarmer(index, nil, nil, warmTestCfg(t))
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
 	runner := &WarmRunner{W: w, Live: warmTestLive}
 	runner.cycle(context.Background())
 	index.Flush()
@@ -240,13 +250,15 @@ func TestWarmRunnerBootstrapOnceWhenNearEmpty(t *testing.T) {
 }
 
 func TestWarmRunnerOffModeNoCycleWork(t *testing.T) {
-	resetDirectState(2)
+	discovery := NewDiscovery(newTestCrawler())
+
+	discovery.slots = make(chan struct{}, 2)
 	index := testIndex(t)
 	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
 	testutil.FailErr(t, "open web research store", openErr)
 	warming := false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, nil, nil, nil))
-	runner := &WarmRunner{W: NewWarmer(index, nil, nil, cfg), Live: warmTestLive}
+	runner := &WarmRunner{W: NewWarmer(discovery, index, nil, nil, cfg), Live: warmTestLive}
 	runner.cycle(context.Background())
 	index.Flush()
 	acts, err := index.RecentActivity(context.Background(), 5)
@@ -257,12 +269,14 @@ func TestWarmRunnerOffModeNoCycleWork(t *testing.T) {
 }
 
 func TestWarmRunnerStarvedRewarmNoModelKeepsQueue(t *testing.T) {
-	resetDirectState(2)
+	discovery := NewDiscovery(newTestCrawler())
+
+	discovery.slots = make(chan struct{}, 2)
 	index := testIndex(t)
 	index.QueueSearchOutcome(t.Context(), "rare widget firmware", "", "", 0, 10)
 	index.Flush()
 
-	w := NewWarmer(index, nil, nil, warmTestCfg(t))
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
 	runner := &WarmRunner{W: w, Live: warmTestLive}
 	runner.cycle(context.Background())
 	index.Flush()
@@ -290,15 +304,18 @@ func TestWarmRunnerStarvedRewarmNoModelKeepsQueue(t *testing.T) {
 
 // Transient seed failures leave the query eligible for retry.
 func TestWarmSeedTransientErrorSkip(t *testing.T) {
+	discovery := NewDiscovery(newTestCrawler())
+
 	testutil.SkipIfShort(t, "warm seed retry timing")
-	resetDirectState(2)
+	discovery.slots = make(chan struct{}, 2)
 	index := testIndex(t)
-	w := NewWarmer(index, nil, nil, warmTestCfg(t))
-	if !tryAcquireDirectSlot() {
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
+	release, acquired := discovery.tryAcquire()
+	if !acquired {
 		t.Fatal("slot")
 	}
-	defer releaseDirectSlot()
-	d := &directDiscoverer{
+	defer release()
+	d := &directDiscoverer{discovery: discovery,
 		index:      index,
 		origin:     webindex.OriginWarmed,
 		summarizer: &errSummarizer{err: fmt.Errorf("seed timeout")},
@@ -312,7 +329,9 @@ func TestWarmSeedTransientErrorSkip(t *testing.T) {
 
 // The invalid host isolates crawl-target derivation from network access.
 func TestWarmRunnerStackWarmCrawlsRegistryDocs(t *testing.T) {
-	resetDirectState(2)
+	discovery := NewDiscovery(newTestCrawler())
+
+	discovery.slots = make(chan struct{}, 2)
 	index := testIndex(t)
 	dir := t.TempDir()
 	writeFile(t, dir, "go.mod", "module example.com/app\n\nrequire github.com/foo/bar v1.0.0\n")
@@ -324,7 +343,7 @@ func TestWarmRunnerStackWarmCrawlsRegistryDocs(t *testing.T) {
 	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
-	w := NewWarmer(index, nil, nil, cfg)
+	w := NewWarmer(discovery, index, nil, nil, cfg)
 	runner := &WarmRunner{
 		W:     w,
 		Roots: func(context.Context) ([]string, error) { return []string{dir}, nil },
@@ -353,9 +372,11 @@ func TestWarmRunnerStackWarmCrawlsRegistryDocs(t *testing.T) {
 }
 
 func TestWarmRunnerRunsFirstCycleImmediately(t *testing.T) {
-	resetDirectState(2)
+	discovery := NewDiscovery(newTestCrawler())
+
+	discovery.slots = make(chan struct{}, 2)
 	index := testIndex(t)
-	w := NewWarmer(index, nil, nil, warmTestCfg(t))
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
 	runner := &WarmRunner{W: w, Interval: time.Hour, Live: warmTestLive}
 
 	ctx, cancel := context.WithCancel(context.Background())

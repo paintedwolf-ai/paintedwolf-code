@@ -1174,6 +1174,8 @@ Direct search uses a catalogued set of keyless sources with declared roles, paci
 
 Web research opens its preferences and credential namespace from explicit storage resources. Missing preferences use defaults; unreadable or malformed preferences fail opening without replacing the file. Credential opening loads existing encrypted values and reports vault errors. Runtime composition selects platform paths; isolated tests use temporary resources through the same constructors.
 
+Each web research runtime constructs a provider Registry, a Discovery scheduler, a Crawler, and a fetch budget. Interactive searches and warming share its discovery admission, crawl pacing, robots cache, and site indexes; independent runtimes have separate provider, search, and crawl caches and limits. Provider repair invalidates only that runtime’s affected state. Production exchanges use the bounded outbound HTTP door with per-operation egress and secret screening. Active host gates survive cache eviction, and canceled requests release their exact reservations. Tests construct isolated resources instead of replacing process transport or resetting shared state.
+
 Search results are untrusted inbound content. Provider text is normalized at one fan-in, provenance is retained, and fetched bodies are marked as data before entering model context. Outbound destination and secret policy still apply. Caching and pacing are explicit and bounded: a cached result states that it is a repeat, and provider cooldown does not turn one failure into a permanent absence. Privacy behavior and the outbound inventory are in [Privacy](privacy.md).
 
 ### Shared operation invocation contracts

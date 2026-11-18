@@ -10,7 +10,8 @@ import (
 )
 
 func TestFetchSitemapLinksRanksChildSitemapsByPhrase(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	var (
 		mu    sync.Mutex
 		order []string
@@ -39,7 +40,7 @@ func TestFetchSitemapLinksRanksChildSitemapsByPhrase(t *testing.T) {
 	mux.HandleFunc("/sitemap-news.xml", child("news", srv.URL+"/news/daily-roundup"))
 	mux.HandleFunc("/sitemap-reviews.xml", child("reviews", srv.URL+"/reviews/steam-machine-review"))
 
-	links := fetchSitemapLinks(context.Background(), srv.URL+"/sitemap.xml", maxSitemapIndexDepth, []string{"steam machine", "reviews"})
+	links := crawler.fetchSitemapLinks(context.Background(), srv.URL+"/sitemap.xml", maxSitemapIndexDepth, []string{"steam machine", "reviews"})
 	if len(links) != 2 {
 		t.Fatalf("links = %+v want both children crawled", links)
 	}
@@ -70,8 +71,8 @@ func TestRankSiteLinksKeepsDocumentOrderOnFullTies(t *testing.T) {
 }
 
 func TestHostCrawlerDrainsEveryHost(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(2)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 2)
 	sitemap := func(host string, n int) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`)
@@ -90,16 +91,16 @@ func TestHostCrawlerDrainsEveryHost(t *testing.T) {
 		return srv.URL
 	}
 	seeds := []string{newSite(), newSite(), newSite()}
-	crawler := newHostCrawler(context.Background())
-	defer crawler.releaseSlot()
+	hostCrawler := newHostCrawler(context.Background(), discovery)
+	defer hostCrawler.releaseSlot()
 	for _, seed := range seeds {
-		crawler.launch(seed, []string{"widget docs"})
+		hostCrawler.launch(seed, []string{"widget docs"})
 	}
 	var pool []indexCandidate
-	for crawler.pending() || crawler.undrained() {
-		pool = append(pool, crawler.drain()...)
-		if crawler.pending() {
-			<-crawler.updates
+	for hostCrawler.pending() || hostCrawler.undrained() {
+		pool = append(pool, hostCrawler.drain()...)
+		if hostCrawler.pending() {
+			<-hostCrawler.updates
 		}
 	}
 	counts := map[string]int{}
@@ -116,7 +117,8 @@ func TestHostCrawlerDrainsEveryHost(t *testing.T) {
 }
 
 func TestFetchSitemapLinksReadsNewsTitles(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	body := `<?xml version="1.0"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
@@ -134,7 +136,7 @@ func TestFetchSitemapLinksReadsNewsTitles(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	links := fetchSitemapLinks(context.Background(), srv.URL+"/news-sitemap.xml", 1, nil)
+	links := crawler.fetchSitemapLinks(context.Background(), srv.URL+"/news-sitemap.xml", 1, nil)
 	if len(links) != 1 {
 		t.Fatalf("links = %+v want 1", links)
 	}

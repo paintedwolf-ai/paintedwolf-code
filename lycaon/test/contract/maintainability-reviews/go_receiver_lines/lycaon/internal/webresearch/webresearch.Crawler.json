@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/webresearch/webresearch.Crawler",
+  "kind": "runtime_service",
+  "workstream": "web-research-runtime",
+  "disposition": "retain",
+  "reason": "Retain Crawler at 677 receiver lines and 21 methods. Its bounded exchange, robots policy, host pacing, site-index fetching and page verification share one request lifecycle. Active gates survive eviction; cancellation and cooldown checks settle the same reservation. Discovery schedules searches and Registry schedules providers separately, so moving crawl phases into forwarding objects would obscure the resource lifetime without separating authority.",
+  "reviewed_commit": "e3b0af1cb41a6ccdbc62251dff9666dcb4341a9c",
+  "ceiling": 677,
+  "boundaries": {
+    "lycaon/internal/webresearch/runtime_resources_test.go": "96e4a128bff2d6172940f6175fd0219f6ceaa62865254eefb6db430752e52e1e",
+    "lycaon/internal/webresearch/ssrf_test.go": "99a98d0edd009a7e2935c824e7d6ce6e719f8452523d2f456896632409dd2f63",
+    "lycaon/internal/webresearch/direct_polite_test.go": "6e025129d0accc918ac363d6598f4405ea45756fa9249f3662709c862c2b2bf3"
+  },
+  "reviewed_shape": "b00397521c2b384c9ef0dfc088e81dd8b3049b3c3ccd1b59ff92df4c26e3ada6"
+}

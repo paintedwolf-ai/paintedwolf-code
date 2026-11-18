@@ -11,9 +11,9 @@ import (
 
 func searchTestProvider(t *testing.T, ctx context.Context, provider SearchProvider, settings Settings, query string, limit int) WebSearchResult {
 	t.Helper()
-	reg := NewRegistry(testCatalog(t))
+	reg := NewRegistry(testCatalog(t), nil)
 	reg.Register(provider)
-	return Search(ctx, SearchOptions{Registry: reg, Settings: settings, Provider: provider.ID(), Query: query, Limit: limit, SkipResultCache: true})
+	return Search(ctx, SearchOptions{Discovery: NewDiscovery(newTestCrawler()), Registry: reg, Settings: settings, Provider: provider.ID(), Query: query, Limit: limit, SkipResultCache: true})
 }
 
 type queryRecorder struct {
@@ -35,8 +35,8 @@ func (p *queryRecorder) Search(_ context.Context, _ Settings, query string, _ in
 func TestEverySearchProviderReceivesScreenedQuery(t *testing.T) {
 	for _, decision := range []secretmatch.Decision{secretmatch.Withhold, secretmatch.SendRedacted, secretmatch.SendUnchanged} {
 		t.Run(string(decision), func(t *testing.T) {
-			registered := testRegistry(t)
-			reg := NewRegistry(registered.Catalog())
+			registered := testRegistry(t, nil)
+			reg := NewRegistry(registered.Catalog(), nil)
 			var providers []*queryRecorder
 			for _, id := range registered.IDs() {
 				p := &queryRecorder{id: id}
@@ -56,7 +56,7 @@ func TestEverySearchProviderReceivesScreenedQuery(t *testing.T) {
 				}
 				return secretmatch.Resolution{Decision: decision}, nil
 			}, "", destination)
-			result := Search(ctx, SearchOptions{Query: "docs " + plantedAWS, Settings: settings, Registry: reg, SkipResultCache: true})
+			result := Search(ctx, SearchOptions{Discovery: NewDiscovery(newTestCrawler()), Query: "docs " + plantedAWS, Settings: settings, Registry: reg, SkipResultCache: true})
 			if asks != 1 {
 				t.Fatalf("asks = %d", asks)
 			}

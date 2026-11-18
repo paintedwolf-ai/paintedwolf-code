@@ -18,7 +18,7 @@ func TestVerticalProvidersLive(t *testing.T) {
 	if os.Getenv("LYCAON_LIVE_KEYLESS_VERTICALS") == "" {
 		t.Skip("set LYCAON_LIVE_KEYLESS_VERTICALS=1 to run")
 	}
-	reg := testRegistry(t)
+	reg := testRegistry(t, nil)
 	s := DefaultSettings(nil, nil, reg.Catalog())
 	// Exercise every configured keyless provider.
 	// Shared pacing keys serialize parallel subtests.

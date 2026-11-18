@@ -4,19 +4,10 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
-	"time"
 )
 
 // Soft/bundled hits must not fanCancel Direct mid-flight.
 func TestFanOutDoesNotCancelDirectOnSoftHits(t *testing.T) {
-	prevGrace := fanOutGraceTimeout
-	prevZero := fanOutZeroHitTimeout
-	fanOutGraceTimeout = 50 * time.Millisecond
-	fanOutZeroHitTimeout = 50 * time.Millisecond
-	t.Cleanup(func() {
-		fanOutGraceTimeout = prevGrace
-		fanOutZeroHitTimeout = prevZero
-	})
 
 	var directCanceled atomic.Bool
 	releaseDirect := make(chan struct{})
