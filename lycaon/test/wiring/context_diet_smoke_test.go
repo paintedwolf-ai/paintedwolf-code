@@ -35,6 +35,7 @@ func TestContextDietRoutingToTaskDispatch(t *testing.T) {
 	testutil.FailErr(t, "Create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
+	testutil.FailErr(t, "board orient", h.Workflows.Manager.Fanout.RecordBoardOrientReady(ctx, sess.ID, "diet-board"))
 
 	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Map this codebase"); err != nil {
 		testutil.FailErr(t, "Prompt", err)

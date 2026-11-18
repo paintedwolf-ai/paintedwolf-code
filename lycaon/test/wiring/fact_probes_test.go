@@ -64,7 +64,8 @@ func TestProgramReachMatchesTheExecutor(t *testing.T) {
 					if !reach(program) && !refused {
 						t.Fatalf("reach denies %s but the executor recorded state %q, stop %q", program, state, stop)
 					}
-					if reach(program) && (refused || state != "completed") {
+					// A write-scoped profile may still stop an admitted program at its write scope.
+					if reach(program) && (refused || (state != "completed" && stop != "WRITE_SCOPE_DENIED")) {
 						t.Fatalf("reach admits %s but the executor recorded state %q, stop %q", program, state, stop)
 					}
 				})

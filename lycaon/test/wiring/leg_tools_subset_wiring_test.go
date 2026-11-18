@@ -69,7 +69,18 @@ func TestExploreLegToolsMatchExploreProfile(t *testing.T) {
 			got := append([]string(nil), leg.LegTools...)
 			sort.Strings(got)
 			if !reflect.DeepEqual(got, offered) {
-				t.Fatalf("LegTools %v != offered %v", got, offered)
+				var onlyLeg, onlyOffered []string
+				for _, name := range got {
+					if !legToolsContains(offered, name) {
+						onlyLeg = append(onlyLeg, name)
+					}
+				}
+				for _, name := range offered {
+					if !legToolsContains(got, name) {
+						onlyOffered = append(onlyOffered, name)
+					}
+				}
+				t.Fatalf("LegTools and offered tools differ: only in LegTools %v, only offered %v", onlyLeg, onlyOffered)
 			}
 			for _, want := range []string{"command", "complete_leg"} {
 				if !legToolsContains(got, want) {

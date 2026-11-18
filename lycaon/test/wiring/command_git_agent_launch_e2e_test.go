@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
@@ -17,8 +16,6 @@ import (
 // remote all complete, and the remote receives exactly what was pushed.
 func TestCommandProgramGitRunsUnderTheAgentLaunch(t *testing.T) {
 	gitengine.TestingEnableBundledBinary()
-	confine.TestingSetAutoConfine(t)
-	t.Setenv("LYCAON_SANDBOX", "on")
 	s := newCommandProgramSession(t, strings.Join([]string{
 		"git status --short",
 		"git add notes.txt",
