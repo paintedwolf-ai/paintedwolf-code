@@ -288,7 +288,7 @@ func TestProgressNamesTheActualReasonForNoReclamation_AC_DB_06(t *testing.T) {
 	if free == 0 || progress.FreeBytes != free*progress.PageSize {
 		t.Fatalf("free bytes = %+v", progress)
 	}
-	report, err := runMaintenancePass(ctx, store, disabled, true)
+	report, err := RunMaintenancePass(ctx, store, disabled, true)
 	testutil.FailErr(t, "disabled pass", err)
 	if report.IncrementalVacuumed || pragmaPages(t, store, "freelist_count") != free {
 		t.Fatal("disabled maintenance reclaimed pages")

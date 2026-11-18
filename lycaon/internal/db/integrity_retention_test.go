@@ -17,7 +17,7 @@ func TestPendingAuditDefersDeletionButKeepsSpaceReclamation(t *testing.T) {
 	if before < DefaultRetention().IncrementalVacuumMinFreelistPages {
 		t.Fatalf("fixture has insufficient reusable pages: %d", before)
 	}
-	report, err := RunRetention(t.Context(), store, DefaultRetention())
+	report, err := RunMaintenancePass(t.Context(), store, DefaultRetention(), true)
 	testutil.FailErr(t, "perform resource work during pending audit", err)
 	if report.TotalDeleted() != 0 || !report.IncrementalVacuumed || len(report.FTSOptimized) != 0 {
 		t.Fatalf("pending audit mixed deletion or index rewriting with resource work: %+v", report)
@@ -35,9 +35,9 @@ func TestPendingAuditDefersDeletionButKeepsSpaceReclamation(t *testing.T) {
 	testutil.FailErr(t, "checkpoint resource work before full audit", err)
 	assertAuditPending(t, store, true)
 	testutil.FailErr(t, "complete background audit", AuditIntegrity(t.Context(), store))
-	report, err = RunRetention(t.Context(), store, DefaultRetention())
+	report, err = RunMaintenancePass(t.Context(), store, DefaultRetention(), true)
 	testutil.FailErr(t, "resume audited retention", err)
-	if report.JournalDeleted("command_invocations") != 1 {
+	if report.OperationJournals["command_invocations"] != 1 {
 		t.Fatalf("audit completion did not release receipt cleanup: %+v", report)
 	}
 }

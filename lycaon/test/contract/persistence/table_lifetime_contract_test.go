@@ -13,20 +13,20 @@ func TestEverySchemaTableDeclaresItsLifetime(t *testing.T) {
 	store := testdbfixture.Open(t, "store.db")
 
 	cascadeParents := liveCascadeParents(t, store)
-	lifetimes := db.TableLifetimes()
+	lifetimes := tableLifetimes
 	var violations []string
 	for table, parents := range cascadeParents {
 		lifetime, ok := lifetimes[table]
 		if !ok {
-			violations = append(violations, table+": no entry in db.TableLifetimes")
+			violations = append(violations, table+": no entry in tableLifetimes")
 			continue
 		}
 		switch lifetime.Class {
-		case db.LifetimeCascadeOwned:
+		case lifetimeCascadeOwned:
 			if !parents[lifetime.Owner] {
 				violations = append(violations, table+": no ON DELETE CASCADE foreign key to owner "+lifetime.Owner)
 			}
-		case db.LifetimeForever, db.LifetimeReceiptWithRetention, db.LifetimeProjection, db.LifetimeCache:
+		case lifetimeForever, lifetimeReceiptWithRetention, lifetimeProjection, lifetimeCache:
 			if lifetime.Reason == "" || lifetime.Owner != "" {
 				violations = append(violations, table+": "+string(lifetime.Class)+" needs a reason and no owner")
 			}
@@ -36,7 +36,7 @@ func TestEverySchemaTableDeclaresItsLifetime(t *testing.T) {
 	}
 	for table := range lifetimes {
 		if _, ok := cascadeParents[table]; !ok {
-			violations = append(violations, table+": in db.TableLifetimes but not in the schema")
+			violations = append(violations, table+": in tableLifetimes but not in the schema")
 		}
 	}
 	contractcheck.FailViolations(t, "table lifetime violations", violations)
