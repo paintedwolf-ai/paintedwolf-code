@@ -103,7 +103,7 @@ func TestLazyMCPSchemaSkippedWithoutRefs(t *testing.T) {
 	gc.MCP.MCPCallOK = true
 	gc.MCP.MCPResultText = `{"id":"ISSUE-1","count":1,"state":{"type":"started","name":"x"}}`
 
-	_, err = pipeline.EvaluateBlock(context.Background(), AnchorToolPost, gc)
+	_, err := pipeline.EvaluateBlock(context.Background(), AnchorToolPost, gc)
 	testutil.FailErr(t, "EvaluateBlock", err)
 	if calls != 0 {
 		t.Fatalf("Apply should be skipped, calls=%d", calls)
@@ -137,7 +137,7 @@ func TestLazyMCPSchemaNeverOnPreInvoke(t *testing.T) {
 	gc.MCP.MCPToolName = "echo"
 	gc.MCP.MCPResultText = `{"id":"x"}`
 
-	_, err = pipeline.EvaluateBlock(context.Background(), AnchorToolPreInvoke, gc)
+	_, err := pipeline.EvaluateBlock(context.Background(), AnchorToolPreInvoke, gc)
 	testutil.FailErr(t, "EvaluateBlock", err)
 	if calls != 0 {
 		t.Fatalf("pre-invoke must not Apply, calls=%d", calls)
