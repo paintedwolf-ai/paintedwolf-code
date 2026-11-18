@@ -26,7 +26,7 @@ func TestRunnerRecordsFirstObservationEvenWhenBaseContainsFinding(t *testing.T) 
 	}
 	runner.recordFindingHistory(t.Context(), &job)
 	runner.recordFindingHistory(t.Context(), &job)
-	page, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
+	page, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
 	testutil.FailErr(t, "read ledger", err)
 	if len(page.Entries) != 1 || page.Entries[0].Observations != 1 {
 		t.Fatalf("first observation and replay = %#v, want one ledger observation", page.Entries)
@@ -34,7 +34,7 @@ func TestRunnerRecordsFirstObservationEvenWhenBaseContainsFinding(t *testing.T) 
 	if scanbase.FindingIdentity(page.Entries[0].Finding) != scanbase.FindingIdentity(job.Findings[0]) {
 		t.Fatal("ledger identity differs from the stored finding")
 	}
-	stored, err := store.Get(t.Context(), job.ID)
+	stored, err := store.Reads.Get(t.Context(), job.ID)
 	testutil.FailErr(t, "read scan history", err)
 	if len(stored.Findings) != 1 || stored.Findings[0].History == nil || stored.Findings[0].History.IntroducedScanID != job.ID {
 		t.Fatalf("stored finding has no matching introduction: %#v", stored.Findings)
@@ -53,7 +53,7 @@ func TestRunnerHistoryPreservesFindingsOutsideCompletedScope(t *testing.T) {
 			runner.recordFindingHistory(t.Context(), &first)
 			clean := ledgerScan(t, store, "clean", root, "sast", target, api.ScanCoverageComplete)
 			runner.recordFindingHistory(t.Context(), &clean)
-			open, err := store.OpenFindings(t.Context(), root, "sast")
+			open, err := store.Findings.OpenFindings(t.Context(), root, "sast")
 			testutil.FailErr(t, "read open findings", err)
 			wantOpen := 0
 			if target == api.ScanTargetPaths {

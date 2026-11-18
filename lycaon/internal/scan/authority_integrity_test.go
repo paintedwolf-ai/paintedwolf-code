@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -20,14 +20,14 @@ func TestScanReadRequiresPersistedAuthorityFacts(t *testing.T) {
 	record := authorityScan("scan", "assessment", t.TempDir(), "snapshot", "sast", api.ScanTargetFull, nil)
 	record.Status = api.CodeScanStatusComplete
 	record.CoverageStatus = api.ScanCoverageComplete
-	testutil.FailErr(t, "insert completed scan", store.Insert(t.Context(), record, nil, ""))
+	testutil.FailErr(t, "insert completed scan", store.Runs.Insert(t.Context(), record, nil, ""))
 	ingest, err := json.Marshal(IngestArtifacts{CoverageStatus: api.ScanCoverageComplete})
 	testutil.FailErr(t, "encode ingest result", err)
 	_, err = store.db.ExecContext(t.Context(), "UPDATE code_scans SET ingest_json = ? WHERE id = ?", string(ingest), record.ID)
 	testutil.FailErr(t, "store ingest result", err)
 	_, err = store.db.ExecContext(t.Context(), "DELETE FROM scan_run_facts WHERE scan_id = ?", record.ID)
 	testutil.FailErr(t, "remove required authority facts", err)
-	got, err := store.Get(t.Context(), record.ID)
+	got, err := store.Reads.Get(t.Context(), record.ID)
 	if got != nil || !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("read missing authority = %+v, %v; want missing-row error", got, err)
 	}
@@ -40,7 +40,7 @@ func TestIncrementalBaseBreaksTimestampTiesByAdmission(t *testing.T) {
 		record := authorityScan("scan-"+id, "assessment-"+id, root, "snapshot-base", "sast", api.ScanTargetFull, nil)
 		record.Status = api.CodeScanStatusComplete
 		record.CoverageStatus = api.ScanCoverageComplete
-		testutil.FailErr(t, "insert completed base scan", store.Insert(t.Context(), record, nil, ""))
+		testutil.FailErr(t, "insert completed base scan", store.Runs.Insert(t.Context(), record, nil, ""))
 		testutil.FailErr(t, "insert tied finding set", store.queries.InsertScanFindingSet(t.Context(), db.InsertScanFindingSetParams{
 			ID: id, ScanID: record.ID, CanonicalPath: root, ScannerID: record.ScannerID,
 			SourceSnapshotID: record.SourceSnapshotID, ExecutionFingerprint: record.ExecutionFingerprint,
@@ -65,7 +65,7 @@ func TestIncrementalBaseBreaksTimestampTiesByAdmission(t *testing.T) {
 		testutil.FailErr(t, "refresh base assessment", refreshAssessmentRollup(t.Context(), store.queries, record.AssessmentID))
 	}
 	increment := authorityScan("increment", "assessment-increment", root, "snapshot-next", "sast", api.ScanTargetPaths, nil)
-	testutil.FailErr(t, "insert incremental scan", store.Insert(t.Context(), increment, []string{"changed.go"}, "snapshot-base"))
+	testutil.FailErr(t, "insert incremental scan", store.Runs.Insert(t.Context(), increment, []string{"changed.go"}, "snapshot-base"))
 	completed := completeNextScan(t, store)
 	if len(completed.Findings) != 1 || completed.Findings[0].RuleID != "a-newer" {
 		t.Fatalf("increment carried %+v; want newest base finding", completed.Findings)
@@ -96,11 +96,11 @@ func TestCoverageRequiresDeclaredCaptureAndAdmission(t *testing.T) {
 func TestScanReadRequiresReferencedFindingSet(t *testing.T) {
 	store := authorityTestStore(t)
 	record := authorityScan("scan", "assessment", t.TempDir(), "snapshot", "sast", api.ScanTargetFull, nil)
-	testutil.FailErr(t, "insert scan", store.Insert(t.Context(), record, nil, ""))
+	testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), record, nil, ""))
 	completed := completeNextScan(t, store)
 	_, err := store.db.ExecContext(t.Context(), "DELETE FROM scan_finding_sets WHERE id = ?", completed.FindingSetID)
 	testutil.FailErr(t, "remove referenced finding set", err)
-	got, err := store.Get(t.Context(), record.ID)
+	got, err := store.Reads.Get(t.Context(), record.ID)
 	if got != nil || !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("read missing finding set = %+v, %v; want missing-row error", got, err)
 	}
@@ -109,10 +109,10 @@ func TestScanReadRequiresReferencedFindingSet(t *testing.T) {
 func TestClaimNextRollsBackMissingAuthorityFacts(t *testing.T) {
 	store := authorityTestStore(t)
 	record := authorityScan("scan", "assessment", t.TempDir(), "snapshot", "sast", api.ScanTargetFull, nil)
-	testutil.FailErr(t, "insert pending scan", store.Insert(t.Context(), record, nil, ""))
+	testutil.FailErr(t, "insert pending scan", store.Runs.Insert(t.Context(), record, nil, ""))
 	_, err := store.db.ExecContext(t.Context(), "DELETE FROM scan_run_facts WHERE scan_id = ?", record.ID)
 	testutil.FailErr(t, "remove required authority facts", err)
-	claimed, err := store.ClaimNext(t.Context())
+	claimed, err := store.Runs.ClaimNext(t.Context())
 	if claimed != nil || !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("claim missing authority = %+v, %v; want missing-row error", claimed, err)
 	}

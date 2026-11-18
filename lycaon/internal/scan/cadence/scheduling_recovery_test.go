@@ -25,17 +25,17 @@ func TestCadenceSettlesWholeBurstBeforeScanning(t *testing.T) {
 		testutil.FailErr(t, "write burst member", os.WriteFile(filepath.Join(root, name), []byte("package main\n"), 0o600))
 		testutil.FailErr(t, "note burst member", noteCadenceWrites(t.Context(), cadence, root, []string{name}))
 		time.Sleep(30 * time.Millisecond)
-		rows, err := store.ListByCanonicalPath(t.Context(), canonical)
+		rows, err := store.Reads.ListByCanonicalPath(t.Context(), canonical)
 		testutil.FailErr(t, "check unsettled burst", err)
 		if len(rows) != 0 {
 			t.Fatalf("unsettled burst already enqueued %d scans", len(rows))
 		}
 	}
 	testutil.WaitFor(t, "all three scans are recorded", func() bool {
-		rows, err := store.ListByCanonicalPath(t.Context(), canonical)
+		rows, err := store.Reads.ListByCanonicalPath(t.Context(), canonical)
 		return err == nil && len(rows) == 3
 	})
-	rows, err := store.ListByCanonicalPath(t.Context(), canonical)
+	rows, err := store.Reads.ListByCanonicalPath(t.Context(), canonical)
 	testutil.FailErr(t, "read settled burst", err)
 	for _, row := range rows {
 		if row.TargetKind != api.ScanTargetPaths || len(row.TargetPaths) != 3 {
@@ -58,7 +58,7 @@ func TestCadenceRecoversPersistedDeadlineWithoutNotification(t *testing.T) {
 	cadence.Store = scanbase.NewSQLStore(store.DB())
 	scantest.RunService(t, cadence.Run)
 	testutil.WaitFor(t, "all three scans are recorded", func() bool {
-		rows, err := store.ListByCanonicalPath(t.Context(), canonical)
+		rows, err := store.Reads.ListByCanonicalPath(t.Context(), canonical)
 		return err == nil && len(rows) == 3
 	})
 }
@@ -76,12 +76,12 @@ func TestCadenceUnchangedNotificationLeavesNoRecurringDemand(t *testing.T) {
 		clock.Advance(20 * time.Minute)
 		cadence.Tick(t.Context())
 	}
-	rows, err := store.ListByCanonicalPath(t.Context(), canonical)
+	rows, err := store.Reads.ListByCanonicalPath(t.Context(), canonical)
 	testutil.FailErr(t, "read scans after no-op", err)
 	if len(rows) != 0 {
 		t.Fatalf("unchanged notification created %d scans", len(rows))
 	}
-	series, err := store.ListSeriesForPath(t.Context(), canonical)
+	series, err := store.Series.ListSeriesForPath(t.Context(), canonical)
 	testutil.FailErr(t, "read settled series", err)
 	for _, row := range series {
 		if row.WantsDispatch() || !row.DueAt.IsZero() {

@@ -45,7 +45,7 @@ func seedCompareScan(t *testing.T, store *scan.SQLStore, opts compareSeedOpts) s
 		rawCount = len(opts.findings)
 	}
 	claimed := claimScan(t, store, created.ID)
-	if _, err := store.MarkComplete(context.Background(), claimed, &scanoutput.Result{
+	if _, err := store.Runs.MarkComplete(context.Background(), claimed, &scanoutput.Result{
 		FindingsCount: rawCount,
 		Findings:      opts.findings,
 	}); err != nil {
@@ -57,7 +57,7 @@ func seedCompareScan(t *testing.T, store *scan.SQLStore, opts compareSeedOpts) s
 		"findings_count":  rawCount,
 		"findings_stored": len(opts.findings),
 	}
-	if err := store.SaveIngest(context.Background(), created.ID, evidence.Record{
+	if err := store.Findings.SaveIngest(context.Background(), created.ID, evidence.Record{
 		GateVerdict: string(evidence.GateVerdictPassed),
 		Artifacts:   artifacts,
 	}); err != nil {
@@ -290,7 +290,7 @@ func TestPreviousCompleteDelegationPreferred(t *testing.T) {
 		categories:   categories,
 		delegationID: "dep-1",
 	})
-	latest, err := store.Get(context.Background(), second)
+	latest, err := store.Reads.Get(context.Background(), second)
 	testutil.FailErr(t, "store.Get failed", err)
 
 	got, err := coord.PreviousComplete(context.Background(), *latest)
@@ -317,7 +317,7 @@ func TestPreviousCompleteProjectFallbackSkipsOtherCategories(t *testing.T) {
 		categories: []api.ScanCategory{api.ScanCategorySecurity},
 	})
 
-	latest, err := store.Get(context.Background(), securityLatest)
+	latest, err := store.Reads.Get(context.Background(), securityLatest)
 	testutil.FailErr(t, "store.Get failed", err)
 
 	got, err := coord.PreviousComplete(context.Background(), *latest)
@@ -332,7 +332,7 @@ func TestPreviousCompleteNilWhenOnlyScan(t *testing.T) {
 	store := coord.Store
 
 	only := seedCompareScan(t, store, compareSeedOpts{projectDir: projectDir})
-	latest, err := store.Get(context.Background(), only)
+	latest, err := store.Reads.Get(context.Background(), only)
 	testutil.FailErr(t, "store.Get failed", err)
 
 	got, err := coord.PreviousComplete(context.Background(), *latest)

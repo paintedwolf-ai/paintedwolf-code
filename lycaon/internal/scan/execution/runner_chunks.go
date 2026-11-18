@@ -64,7 +64,7 @@ func (r *Runner) runInChunks(ctx context.Context, job *api.CodeScan, req scanbas
 			}
 		}
 		mergeScanResult(merged, result)
-		if err := r.Store.MarkProgress(ctx, job, api.ScanProgress{Chunks: len(chunks), Completed: i + 1, Files: len(req.Paths)}); err != nil {
+		if err := r.Store.Runs.MarkProgress(ctx, job, api.ScanProgress{Chunks: len(chunks), Completed: i + 1, Files: len(req.Paths)}); err != nil {
 			slog.WarnContext(ctx, "record scan progress", "scan_id", job.ID, "error", err)
 		}
 	}

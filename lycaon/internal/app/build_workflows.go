@@ -130,7 +130,7 @@ func (b *serveBuilder) seedHostPowerWork() error {
 	for i := range openWorkers {
 		b.settings.Power.SetActive("worker:"+openWorkers[i].ID, true)
 	}
-	openScans, err := b.scanning.Store.ListOpen(b.startup.ctx)
+	openScans, err := b.scanning.Store.Reads.ListOpen(b.startup.ctx)
 	if err != nil {
 		return fmt.Errorf("seed host power from scans: %w", err)
 	}

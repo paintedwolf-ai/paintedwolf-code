@@ -38,7 +38,7 @@ func TestFindingEntryQueryMatchesFindingFilters(t *testing.T) {
 		{Cursor: cur1, Limit: 2}, {Cursor: cur100}, {Dedupe: true, Cursor: curDedupe, Limit: 1},
 	} {
 		t.Run(fmt.Sprintf("%+v", req), func(t *testing.T) {
-			got, err := store.queryFindingEntries(t.Context(), scan, req)
+			got, err := store.Findings.queryFindingEntries(t.Context(), scan, req)
 			testutil.FailErr(t, "query entries", err)
 			want, err := QuerySecurityFindings(scan.ID, findings, nil, req)
 			testutil.FailErr(t, "query reference", err)
@@ -61,12 +61,12 @@ func TestFindingEntryQueryBoundsPageWithoutLosingFindings(t *testing.T) {
 		findings[i] = scanfindings.FixtureFinding("rule", api.FindingLevelHigh, fmt.Sprint(i), "src/main.go", i+1)
 	}
 	store, scan := seedFindingEntryQuery(t, findings)
-	first, err := store.queryFindingEntries(t.Context(), scan, QueryRequest{Limit: 100000})
+	first, err := store.Findings.queryFindingEntries(t.Context(), scan, QueryRequest{Limit: 100000})
 	testutil.FailErr(t, "read bounded page", err)
 	if len(first.Findings) != maxQueryPageSize || first.TotalMatch != len(findings) || first.NextCursor == "" {
 		t.Fatalf("first page = %+v", first)
 	}
-	last, err := store.queryFindingEntries(t.Context(), scan, QueryRequest{Cursor: first.NextCursor})
+	last, err := store.Findings.queryFindingEntries(t.Context(), scan, QueryRequest{Cursor: first.NextCursor})
 	testutil.FailErr(t, "read remaining page", err)
 	if len(last.Findings) != 5 || last.Truncated || last.NextCursor != "" {
 		t.Fatalf("last page = %+v", last)
@@ -77,7 +77,7 @@ func seedFindingEntryQuery(t *testing.T, findings []api.SecurityFinding) (*SQLSt
 	t.Helper()
 	store := authorityTestStore(t)
 	scan := authorityScan("query", "assessment", t.TempDir(), "snapshot", "sast", api.ScanTargetFull, nil)
-	testutil.FailErr(t, "insert scan", store.Insert(t.Context(), scan, nil, ""))
+	testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), scan, nil, ""))
 	completeNextScan(t, store)
 	stored, err := (&CoordinatorImpl{Store: store}).Summary(t.Context(), scan.ID)
 	testutil.FailErr(t, "read summary", err)

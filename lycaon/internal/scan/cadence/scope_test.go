@@ -34,7 +34,7 @@ func TestCadenceLargeBurstUpgradesToAuthorityRefresh(t *testing.T) {
 
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	var refresh int
 	for _, sc := range scans {
@@ -87,7 +87,7 @@ func TestCadenceOverlayObligationDropsLandedPathsFromDesire(t *testing.T) {
 	testutil.FailErr(t, "PrepareOverlayPromotion", err)
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	testutil.FailErr(t, "insert landing scan", store.Insert(context.Background(), api.CodeScan{
+	testutil.FailErr(t, "insert landing scan", store.Runs.Insert(context.Background(), api.CodeScan{
 		ID:               plan.ScanID,
 		CanonicalPath:    canonical,
 		Categories:       []api.ScanCategory{api.ScanCategorySAST},
@@ -100,12 +100,12 @@ func TestCadenceOverlayObligationDropsLandedPathsFromDesire(t *testing.T) {
 	}, nil, ""))
 	testutil.FailErr(t, "PublishObligation", cadence.PublishObligation(context.Background(), plan))
 
-	series, err := store.GetSeries(context.Background(), canonical, plan.ScannerID)
+	series, err := store.Series.GetSeries(context.Background(), canonical, plan.ScannerID)
 	testutil.FailErr(t, "GetSeries", err)
 	if series == nil || len(series.DesiredPaths) != 0 || !series.DueAt.IsZero() {
 		t.Fatalf("the obligation scans landed.go; the series must not scan it again: %+v", series)
 	}
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	if len(scans) != 1 {
 		t.Fatalf("obligation created %d scans, want only the landed-change scan", len(scans))
@@ -133,7 +133,7 @@ func TestCadenceFloorSizedBurstOnLargeRepoStaysPathScoped(t *testing.T) {
 
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	var bursts int
 	for _, sc := range scans {
@@ -187,7 +187,7 @@ func TestCadenceNoteTreeDriftArmsRefresh(t *testing.T) {
 
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	var refresh int
 	for _, sc := range scans {

@@ -90,14 +90,14 @@ func (r *Runner) Preempt(ctx context.Context, scanID, reason string) {
 	if execution != nil {
 		return
 	}
-	won, err := r.Store.FinalizePendingFailure(ctx, scanID, PreemptedCode, reason)
+	won, err := r.Store.Runs.FinalizePendingFailure(ctx, scanID, PreemptedCode, reason)
 	if err != nil || !won {
 		if err != nil {
 			slog.WarnContext(ctx, "preempt pending scan", "scan_id", scanID, "error", err)
 		}
 		return
 	}
-	if rec, err := r.Store.Get(ctx, scanID); err == nil && rec != nil {
+	if rec, err := r.Store.Reads.Get(ctx, scanID); err == nil && rec != nil {
 		r.notifyTerminal(ctx, rec)
 	}
 }
@@ -160,7 +160,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			slog.WarnContext(ctx, "service scan work", "error", err)
 			delay = r.retryDelay()
 		}
-		waitForWork(ctx, r.Store.QueueChanged.Wake(), changed, delay)
+		waitForWork(ctx, r.Store.Runs.Changed.Wake(), changed, delay)
 	}
 	return ctx.Err()
 }
@@ -168,7 +168,7 @@ func (r *Runner) Run(ctx context.Context) error {
 func (r *Runner) serviceWork(ctx context.Context) error {
 	// Renew live claims before the expiry sweep after scheduling pauses.
 	r.renewActiveClaims(ctx)
-	if recovered, err := r.Store.RecoverExpiredClaims(ctx); err == nil {
+	if recovered, err := r.Store.Runs.RecoverExpiredClaims(ctx); err == nil {
 		for i := range recovered {
 			r.notifyTerminal(ctx, &recovered[i])
 		}
@@ -177,7 +177,7 @@ func (r *Runner) serviceWork(ctx context.Context) error {
 	}
 	reconcileErr := r.reconcileTerminal(ctx)
 	if r.Settings != nil && !r.Settings.Effective().Enabled {
-		canceled, err := r.Store.CancelPendingScans(ctx, scannersDisabledReason)
+		canceled, err := r.Store.Runs.CancelPendingScans(ctx, scannersDisabledReason)
 		if err != nil {
 			return errors.Join(reconcileErr, err)
 		}
@@ -195,12 +195,12 @@ func (r *Runner) serviceWork(ctx context.Context) error {
 		default:
 			return reconcileErr
 		}
-		running, err := r.Store.CountRunning(ctx)
+		running, err := r.Store.Runs.CountRunning(ctx)
 		if err != nil || running >= r.MaxRunning {
 			<-r.sem
 			return errors.Join(reconcileErr, err)
 		}
-		scan, err := r.Store.ClaimNext(ctx)
+		scan, err := r.Store.Runs.ClaimNext(ctx)
 		if errors.Is(err, scanbase.ErrNoPendingScans) {
 			<-r.sem
 			return reconcileErr
@@ -215,7 +215,7 @@ func (r *Runner) serviceWork(ctx context.Context) error {
 			defer r.inflight.Done()
 			defer func() {
 				<-r.sem
-				r.Store.QueueChanged.Notify()
+				r.Store.Runs.Changed.Notify()
 			}()
 			defer observability.GuardPanic("scan.runner")
 			defer r.unregisterExecution(job.ID, registered)

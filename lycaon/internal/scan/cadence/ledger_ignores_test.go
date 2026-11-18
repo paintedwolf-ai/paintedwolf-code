@@ -37,7 +37,7 @@ func TestLedgerIgnoreDisplacesOpenAndIsWithdrawable(t *testing.T) {
 	scan := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)
 	scan.ExecutionFingerprint = "execution-1"
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
-	testutil.FailErr(t, "introduce", store.RecordFindingEvents(t.Context(), &scan, []api.SecurityFinding{finding}, nil, at))
+	testutil.FailErr(t, "introduce", store.Findings.RecordFindingEvents(t.Context(), &scan, []api.SecurityFinding{finding}, nil, at))
 
 	catalog, err := cadence.AddIgnore(t.Context(), root, api.FindingIgnoreEntry{
 		Path: "a.go", Reason: "fixture material",
@@ -83,7 +83,7 @@ func TestLedgerIgnoreExpiryReturnsTheFindingToOpen(t *testing.T) {
 	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 	scan := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)
 	scan.ExecutionFingerprint = "execution-1"
-	testutil.FailErr(t, "introduce", store.RecordFindingEvents(
+	testutil.FailErr(t, "introduce", store.Findings.RecordFindingEvents(
 		t.Context(), &scan, []api.SecurityFinding{finding}, nil, time.Now().UTC()))
 
 	yesterday := time.Now().UTC().AddDate(0, 0, -1).Format(time.DateOnly)
@@ -112,7 +112,7 @@ func TestLedgerAppliesAnIgnoreFileEditedOutsideTheHost(t *testing.T) {
 	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 	scan := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)
 	scan.ExecutionFingerprint = "execution-1"
-	testutil.FailErr(t, "introduce", store.RecordFindingEvents(
+	testutil.FailErr(t, "introduce", store.Findings.RecordFindingEvents(
 		t.Context(), &scan, []api.SecurityFinding{finding}, nil, time.Now().UTC()))
 	if _, err := cadence.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 1}); err != nil {
 		testutil.FailErr(t, "prime ledger", err)
@@ -139,7 +139,7 @@ func TestLedgerRefusesAnIgnoreForAnUntrustedProject(t *testing.T) {
 	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 	scan := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)
 	scan.ExecutionFingerprint = "execution-1"
-	testutil.FailErr(t, "introduce", store.RecordFindingEvents(
+	testutil.FailErr(t, "introduce", store.Findings.RecordFindingEvents(
 		t.Context(), &scan, []api.SecurityFinding{finding}, nil, time.Now().UTC()))
 
 	if _, err := closed.AddIgnore(t.Context(), root, api.FindingIgnoreEntry{

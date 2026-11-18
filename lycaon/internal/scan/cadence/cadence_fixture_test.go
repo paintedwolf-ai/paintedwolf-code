@@ -87,17 +87,17 @@ func completeCadenceScans(t *testing.T, cadence *Service, store *scanbase.SQLSto
 	t.Helper()
 	ctx := context.Background()
 	for {
-		claimed, err := store.ClaimNext(ctx)
+		claimed, err := store.Runs.ClaimNext(ctx)
 		if errors.Is(err, scanbase.ErrNoPendingScans) {
 			return
 		}
 		testutil.FailErr(t, "claim cadence scan", err)
-		won, err := store.MarkComplete(ctx, claimed, &scanoutput.Result{})
+		won, err := store.Runs.MarkComplete(ctx, claimed, &scanoutput.Result{})
 		testutil.FailErr(t, "complete cadence scan", err)
 		if !won {
 			t.Fatalf("scan %s completion lost", claimed.ID)
 		}
-		completed, err := store.Get(ctx, claimed.ID)
+		completed, err := store.Reads.Get(ctx, claimed.ID)
 		testutil.FailErr(t, "read completed cadence scan", err)
 		cadence.OnTerminal(ctx, *completed)
 		cadence.Tick(ctx)
@@ -114,14 +114,14 @@ func (c *immediateTerminalCoordinator) Enqueue(ctx context.Context, req scanbase
 	if err != nil {
 		return nil, err
 	}
-	claimed, err := c.store.ClaimNext(ctx)
+	claimed, err := c.store.Runs.ClaimNext(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if claimed.ID != record.ID {
 		return nil, fmt.Errorf("claimed scan %s, want %s", claimed.ID, record.ID)
 	}
-	won, err := c.store.MarkComplete(ctx, claimed, &scanoutput.Result{})
+	won, err := c.store.Runs.MarkComplete(ctx, claimed, &scanoutput.Result{})
 	if err != nil {
 		return nil, err
 	}

@@ -119,7 +119,7 @@ func waitForFullPass(ctx context.Context, coord scanbase.ScanCoordinator, passID
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		pass, err := store.FullPass(ctx, passID)
+		pass, err := store.FullPasses.FullPass(ctx, passID)
 		if err != nil {
 			return scanbase.FullPass{}, err
 		}
@@ -155,7 +155,7 @@ func scanPackResult(ctx context.Context, coord scanbase.ScanCoordinator, scanIDs
 		records       []*api.CodeScan
 	)
 	for _, id := range scanIDs {
-		rec, err := store.Get(ctx, id)
+		rec, err := store.Reads.Get(ctx, id)
 		if err != nil {
 			return ScanPackToolResult{}, err
 		}
@@ -298,7 +298,7 @@ func aggregateScanPack(ctx context.Context, store *scanbase.SQLStore, records []
 	}
 	canonicalPath := records[0].CanonicalPath
 	snapshotID := records[0].SourceSnapshotID
-	basePaths, err := store.LoadPaths(ctx, records[0].ID)
+	basePaths, err := store.Findings.LoadPaths(ctx, records[0].ID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -309,7 +309,7 @@ func aggregateScanPack(ctx context.Context, store *scanbase.SQLStore, records []
 		if record == nil || record.Status != api.CodeScanStatusComplete {
 			return nil, nil, fmt.Errorf("scan pack contains an incomplete scan")
 		}
-		paths, err := store.LoadPaths(ctx, record.ID)
+		paths, err := store.Findings.LoadPaths(ctx, record.ID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -362,7 +362,7 @@ func loadScanPackRecords(ctx context.Context, store *scanbase.SQLStore, scanIDs 
 	}
 	records := make([]*api.CodeScan, 0, len(scanIDs))
 	for _, id := range scanIDs {
-		record, err := store.Get(ctx, id)
+		record, err := store.Reads.Get(ctx, id)
 		if err != nil {
 			return nil, err
 		}

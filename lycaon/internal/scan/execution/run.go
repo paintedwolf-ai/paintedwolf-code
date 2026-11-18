@@ -32,7 +32,7 @@ func (r *Runner) execute(ctx context.Context, job *api.CodeScan) {
 		r.cancel(ctx, job, scannersDisabledReason)
 		return
 	}
-	livePaths, err := r.Store.LoadPaths(ctx, job.ID)
+	livePaths, err := r.Store.Findings.LoadPaths(ctx, job.ID)
 	if err != nil {
 		r.failWithCode(ctx, job, scanbase.FailurePathsUnavailable, err)
 		return
@@ -71,7 +71,7 @@ func (r *Runner) execute(ctx context.Context, job *api.CodeScan) {
 	}
 	defer release()
 	startedAt := time.Now().UTC()
-	started, err := r.Store.SetExecutionPolicy(ctx, job, policy, startedAt)
+	started, err := r.Store.Runs.SetExecutionPolicy(ctx, job, policy, startedAt)
 	if err != nil {
 		r.fail(ctx, job, err)
 		return
@@ -140,7 +140,7 @@ func (r *Runner) execute(ctx context.Context, job *api.CodeScan) {
 	if !r.ingestScanResult(ctx, job, result, contract) {
 		return
 	}
-	ingested, err := r.Store.Get(ctx, job.ID)
+	ingested, err := r.Store.Reads.Get(ctx, job.ID)
 	if err != nil || ingested == nil {
 		if err == nil {
 			err = fmt.Errorf("scan disappeared before terminal commit")
@@ -161,7 +161,7 @@ func (r *Runner) execute(ctx context.Context, job *api.CodeScan) {
 	// Finish history and notification with the bounded terminal lifetime.
 	ctx, stopTerminal := terminalCallbackContext(ctx)
 	defer stopTerminal()
-	updated, _ := r.Store.Get(ctx, job.ID)
+	updated, _ := r.Store.Reads.Get(ctx, job.ID)
 	if updated == nil {
 		job.Status = api.CodeScanStatusComplete
 		if result != nil {

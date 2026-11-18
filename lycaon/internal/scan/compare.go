@@ -89,7 +89,7 @@ func (c *CoordinatorImpl) Compare(ctx context.Context, oldScanID, newScanID stri
 		return nil, &CompareReject{Code: CompareRejectSameScan}
 	}
 
-	metadata, err := c.Store.metadata(ctx, []string{oldScanID, newScanID})
+	metadata, err := c.Store.Findings.metadata(ctx, []string{oldScanID, newScanID})
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +242,7 @@ func (c *CoordinatorImpl) PreviousComplete(ctx context.Context, latest api.CodeS
 	if c == nil || c.Store == nil {
 		return nil, fmt.Errorf("scan coordinator not configured")
 	}
-	return c.Store.PreviousComplete(ctx, latest)
+	return c.Store.Reads.PreviousComplete(ctx, latest)
 }
 
 type compareMatchIndex struct {

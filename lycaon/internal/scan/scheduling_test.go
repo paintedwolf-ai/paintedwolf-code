@@ -16,9 +16,9 @@ func TestFailedScanTransactionDoesNotWakeServices(t *testing.T) {
 		t.Fatal("failed transaction committed")
 	}
 	select {
-	case <-store.QueueChanged.Wake():
+	case <-store.Runs.Changed.Wake():
 		t.Fatal("rollback woke runner")
-	case <-store.SeriesChanged.Wake():
+	case <-store.Series.Changed.Wake():
 		t.Fatal("rollback woke cadence")
 	default:
 	}

@@ -26,7 +26,7 @@ func TestRunnerSleepsIdleAndWakesForCommittedScan(t *testing.T) {
 	scantest.RunService(t, runner.Run)
 	testutil.WaitFor(t, "the runner writes the scan", func() bool { return database.Writes.Load() > 0 })
 	scantest.AssertQuiet(t, database)
-	testutil.FailErr(t, "insert scan after idle", store.Insert(t.Context(), api.CodeScan{
+	testutil.FailErr(t, "insert scan after idle", store.Runs.Insert(t.Context(), api.CodeScan{
 		ID: "wake-scan", CanonicalPath: root, ScannerID: scanner.ID(),
 		Categories: []api.ScanCategory{api.ScanCategorySecurity}, Status: api.CodeScanStatusPending,
 		SourceSnapshotID: snapshot,

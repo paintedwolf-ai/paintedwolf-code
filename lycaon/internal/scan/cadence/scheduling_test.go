@@ -24,7 +24,7 @@ func TestCadenceDeadlineWakesWithoutAnotherWrite(t *testing.T) {
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o600))
 	testutil.FailErr(t, "note source", noteCadenceWrites(t.Context(), cadence, root, []string{"main.go"}))
 	testutil.WaitFor(t, "all three scans are recorded", func() bool {
-		rows, err := store.ListByCanonicalPath(t.Context(), canonical)
+		rows, err := store.Reads.ListByCanonicalPath(t.Context(), canonical)
 		return err == nil && len(rows) == 3
 	})
 }
@@ -44,22 +44,22 @@ func TestCadenceDeadlinesIgnoreWorkBlockedByActiveScan(t *testing.T) {
 	cadence, store := newTestCadence(t, newTestClock())
 	cadence.Now = nil
 	root := t.TempDir()
-	testutil.FailErr(t, "insert active scan", store.Insert(t.Context(), api.CodeScan{
+	testutil.FailErr(t, "insert active scan", store.Runs.Insert(t.Context(), api.CodeScan{
 		ID: "active", CanonicalPath: root, ScannerID: "mock", Status: api.CodeScanStatusRunning,
 		Categories: []api.ScanCategory{api.ScanCategorySecurity}, SourceSnapshotID: "snapshot",
 	}, nil, ""))
-	testutil.FailErr(t, "record pending successor", store.UpsertSeries(t.Context(), scanbase.SeriesRow{
+	testutil.FailErr(t, "record pending successor", store.Series.UpsertSeries(t.Context(), scanbase.SeriesRow{
 		CanonicalPath: root, ScannerID: "mock", DueAt: time.Now().Add(-time.Second),
 		DesiredTrigger: api.ScanTriggerWriteBurst, DesiredPaths: []string{"main.go"},
 	}))
 	if delay := (rootDispatcher{c: cadence}).nextWake(t.Context(), time.Minute); delay != time.Minute {
 		t.Fatalf("active scan kept dispatch hot: next wake %s", delay)
 	}
-	row, err := store.GetSeries(t.Context(), root, "mock")
+	row, err := store.Series.GetSeries(t.Context(), root, "mock")
 	testutil.FailErr(t, "read series", err)
 	row.DispatchToken = "abandoned"
 	row.ClaimHeartbeatAt = time.Now().Add(-scanbase.DispatchClaimTTL + 2*time.Second)
-	testutil.FailErr(t, "record dispatch lease", store.UpsertSeries(t.Context(), *row))
+	testutil.FailErr(t, "record dispatch lease", store.Series.UpsertSeries(t.Context(), *row))
 	if delay := (rootDispatcher{c: cadence}).nextWake(t.Context(), time.Minute); delay <= 0 || delay > 2*time.Second {
 		t.Fatalf("dispatch recovery deadline = %s", delay)
 	}

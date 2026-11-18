@@ -156,8 +156,8 @@ func TestScanQueryAggregatesPackAcrossEnginesByPackage(t *testing.T) {
 			ScannerID: []string{"scanner-a", "scanner-b"}[index], Status: api.CodeScanStatusComplete,
 			SourceSnapshotID: "snapshot-1", Trigger: api.ScanTriggerScanPack,
 		}
-		testutil.FailErr(t, "insert pack member", store.Insert(t.Context(), record, []string{"go.mod"}, ""))
-		testutil.FailErr(t, "save pack ingest", store.SaveIngest(t.Context(), id, evidence.Record{
+		testutil.FailErr(t, "insert pack member", store.Runs.Insert(t.Context(), record, []string{"go.mod"}, ""))
+		testutil.FailErr(t, "save pack ingest", store.Findings.SaveIngest(t.Context(), id, evidence.Record{
 			Artifacts: map[string]any{
 				"findings": []api.SecurityFinding{finding}, "findings_count": 1,
 				"findings_stored": 1, "guidance": []api.ScanGuidanceSummary{},
@@ -187,7 +187,7 @@ func TestWaitForScanIDTimesOutWhilePending(t *testing.T) {
 
 	store := scanbase.NewSQLStore(sqlDB)
 	projectDir := t.TempDir()
-	if err := store.Insert(context.Background(), api.CodeScan{
+	if err := store.Runs.Insert(context.Background(), api.CodeScan{
 		ID:            "pending-1",
 		CanonicalPath: projectDir,
 		Categories:    []api.ScanCategory{api.ScanCategorySCA},
@@ -214,9 +214,9 @@ func TestWaitForScanIDFollowsSnapshotReplacement(t *testing.T) {
 		{ID: "superseded-1", CanonicalPath: projectDir, Categories: []api.ScanCategory{api.ScanCategorySecurity}, Status: api.CodeScanStatusPending, CreatedAt: now},
 		{ID: "replacement-1", CanonicalPath: projectDir, Categories: []api.ScanCategory{api.ScanCategorySecurity}, Status: api.CodeScanStatusComplete, CreatedAt: now},
 	} {
-		testutil.FailErr(t, "insert scan "+rec.ID, store.Insert(t.Context(), rec, nil, ""))
+		testutil.FailErr(t, "insert scan "+rec.ID, store.Runs.Insert(t.Context(), rec, nil, ""))
 	}
-	won, err := store.MarkPendingSuperseded(t.Context(), "superseded-1", "replacement-1")
+	won, err := store.Runs.MarkPendingSuperseded(t.Context(), "superseded-1", "replacement-1")
 	testutil.FailErr(t, "supersede scan", err)
 	if !won {
 		t.Fatal("scan superseded-1 was not pending")

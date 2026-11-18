@@ -19,17 +19,17 @@ func TestBoardProjectionRetainsAuthorityBeyondFailedHistory(t *testing.T) {
 	for i := range 2 {
 		s := authorityScan(fmt.Sprintf("complete-%d", i), fmt.Sprintf("assessment-%d", i), root,
 			fmt.Sprintf("snapshot-%d", i), "sast", api.ScanTargetFull, nil)
-		testutil.FailErr(t, "insert complete", store.Insert(t.Context(), s, nil, ""))
+		testutil.FailErr(t, "insert complete", store.Runs.Insert(t.Context(), s, nil, ""))
 		completeNextScan(t, store, scanfindings.FixtureFinding("rule", api.FindingLevelHigh, "stable", "src/main.go", 4))
 	}
 	for i := range 40 {
 		s := authorityScan(fmt.Sprintf("failed-%d", i), fmt.Sprintf("failed-assessment-%d", i), root,
 			fmt.Sprintf("failed-snapshot-%d", i), "sast", api.ScanTargetFull, nil)
-		testutil.FailErr(t, "insert attempt", store.Insert(t.Context(), s, nil, ""))
-		_, err := store.FinalizePendingFailure(t.Context(), s.ID, "SCAN_ENGINE_FAILED", "failure")
+		testutil.FailErr(t, "insert attempt", store.Runs.Insert(t.Context(), s, nil, ""))
+		_, err := store.Runs.FinalizePendingFailure(t.Context(), s.ID, "SCAN_ENGINE_FAILED", "failure")
 		testutil.FailErr(t, "fail attempt", err)
 	}
-	view, err := store.AssessmentView(t.Context(), []string{root})
+	view, err := store.Findings.AssessmentView(t.Context(), []string{root})
 	testutil.FailErr(t, "read board view", err)
 	if view.CurrentID != "assessment-1" || view.PreviousID != "assessment-0" || view.LatestAttemptID != "failed-assessment-39" {
 		t.Fatalf("selected assessments = %+v", view)
@@ -83,19 +83,19 @@ func benchmarkAssessmentView(b *testing.B, history int) {
 		s := authorityScan(fmt.Sprintf("scan-%d", i), fmt.Sprintf("assessment-%d", i), root,
 			fmt.Sprintf("snapshot-%d", i), "sast", api.ScanTargetFull, nil)
 		s.CreatedAt = time.Now().Add(time.Duration(i) * time.Second)
-		if err := store.Insert(b.Context(), s, nil, ""); err != nil {
+		if err := store.Runs.Insert(b.Context(), s, nil, ""); err != nil {
 			b.Fatalf("insert: %v", err)
 		}
-		claimed, err := store.ClaimNext(b.Context())
+		claimed, err := store.Runs.ClaimNext(b.Context())
 		if err != nil {
 			b.Fatalf("claim: %v", err)
 		}
 		if i < 2 {
-			if _, err := store.MarkComplete(b.Context(), claimed, &scanoutput.Result{FindingsCount: len(findings), Findings: findings}); err != nil {
+			if _, err := store.Runs.MarkComplete(b.Context(), claimed, &scanoutput.Result{FindingsCount: len(findings), Findings: findings}); err != nil {
 				b.Fatalf("complete: %v", err)
 			}
 		} else {
-			if _, err := store.FinalizeFailure(b.Context(), claimed, api.CodeScanStatusFailed, "SCAN_ENGINE_FAILED", "failure"); err != nil {
+			if _, err := store.Runs.FinalizeFailure(b.Context(), claimed, api.CodeScanStatusFailed, "SCAN_ENGINE_FAILED", "failure"); err != nil {
 				b.Fatalf("fail: %v", err)
 			}
 		}
@@ -109,7 +109,7 @@ func benchmarkAssessmentView(b *testing.B, history int) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		if _, err := store.AssessmentView(b.Context(), []string{root}); err != nil {
+		if _, err := store.Findings.AssessmentView(b.Context(), []string{root}); err != nil {
 			b.Fatalf("board: %v", err)
 		}
 	}
@@ -121,11 +121,11 @@ func TestOpeningProjectionsKeepEvidenceAndWarningCounts(t *testing.T) {
 	warning := api.ScanWarning{Kind: api.ScanWarningFilePartialParse, File: "src/main.go", RuleID: "rule"}
 	for _, engine := range []string{"sast", "sca"} {
 		s := authorityScan(engine, "assessment", root, "snapshot", engine, api.ScanTargetFull, nil)
-		testutil.FailErr(t, "insert scan", store.Insert(t.Context(), s, nil, ""))
-		claimed, err := store.ClaimNext(t.Context())
+		testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), s, nil, ""))
+		claimed, err := store.Runs.ClaimNext(t.Context())
 		testutil.FailErr(t, "claim scan", err)
 		finding := scanfindings.FixtureFinding("rule", api.FindingLevelHigh, engine, "src/main.go", 4)
-		_, err = store.MarkComplete(t.Context(), claimed, &scanoutput.Result{FindingsCount: 1,
+		_, err = store.Runs.MarkComplete(t.Context(), claimed, &scanoutput.Result{FindingsCount: 1,
 			Findings: []api.SecurityFinding{finding}, Warnings: []api.ScanWarning{warning}})
 		testutil.FailErr(t, "complete scan", err)
 	}
@@ -134,12 +134,12 @@ func TestOpeningProjectionsKeepEvidenceAndWarningCounts(t *testing.T) {
 	testutil.FailErr(t, "isolate list projection", err)
 	_, err = store.db.ExecContext(t.Context(), `UPDATE scan_finding_sets SET warnings_json = '[1]'`)
 	testutil.FailErr(t, "isolate warning projection", err)
-	view, err := store.AssessmentView(t.Context(), []string{root})
+	view, err := store.Findings.AssessmentView(t.Context(), []string{root})
 	testutil.FailErr(t, "read assessment", err)
 	if view.LatestSummary.FindingsCount != 2 || len(view.LatestSummary.WarningSummary) != 1 || view.LatestSummary.WarningSummary[0].Count != 1 {
 		t.Fatalf("assessment lost aggregate facts: %+v", view.LatestSummary)
 	}
-	page, err := store.ListPageByCanonicalPaths(t.Context(), []string{root}, PageQuery{Limit: 1})
+	page, err := store.Findings.ListPageByCanonicalPaths(t.Context(), []string{root}, PageQuery{Limit: 1})
 	testutil.FailErr(t, "read scan list", err)
 	if len(page.Scans) != 1 || len(page.Scans[0].Guidance) != 0 || len(page.Scans[0].Findings) != 0 || len(page.Scans[0].Warnings) != 0 {
 		t.Fatalf("list hydrated detail: %+v", page)

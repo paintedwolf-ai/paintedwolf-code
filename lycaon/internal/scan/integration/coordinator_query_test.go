@@ -23,7 +23,7 @@ func seedScanWithGuidance(t *testing.T, store *scan.SQLStore, sessionID string, 
 	})
 	testutil.FailErr(t, "coord.Enqueue failed", err)
 	claimed := claimScan(t, store, created.ID)
-	if _, err := store.MarkComplete(context.Background(), claimed, &scanoutput.Result{FindingsCount: len(guidance)}); err != nil {
+	if _, err := store.Runs.MarkComplete(context.Background(), claimed, &scanoutput.Result{FindingsCount: len(guidance)}); err != nil {
 		testutil.FailErr(t, "store.MarkComplete failed", err)
 	}
 	rec := evidence.Record{
@@ -32,7 +32,7 @@ func seedScanWithGuidance(t *testing.T, store *scan.SQLStore, sessionID string, 
 			"guidance": guidance,
 		},
 	}
-	if err := store.SaveIngest(context.Background(), created.ID, rec); err != nil {
+	if err := store.Findings.SaveIngest(context.Background(), created.ID, rec); err != nil {
 		testutil.FailErr(t, "store.SaveIngest failed", err)
 	}
 	return created.ID
@@ -67,7 +67,7 @@ func seedScanWithFindings(t *testing.T, store *scan.SQLStore, findings []api.Sec
 	})
 	testutil.FailErr(t, "coord.Enqueue failed", err)
 	claimed := claimScan(t, store, created.ID)
-	if _, err := store.MarkComplete(context.Background(), claimed, &scanoutput.Result{
+	if _, err := store.Runs.MarkComplete(context.Background(), claimed, &scanoutput.Result{
 		FindingsCount: len(findings),
 		Findings:      findings,
 	}); err != nil {
@@ -80,7 +80,7 @@ func seedScanWithFindings(t *testing.T, store *scan.SQLStore, findings []api.Sec
 			"guidance": []api.ScanGuidanceSummary{},
 		},
 	}
-	if err := store.SaveIngest(context.Background(), created.ID, rec); err != nil {
+	if err := store.Findings.SaveIngest(context.Background(), created.ID, rec); err != nil {
 		testutil.FailErr(t, "store.SaveIngest failed", err)
 	}
 	return created.ID

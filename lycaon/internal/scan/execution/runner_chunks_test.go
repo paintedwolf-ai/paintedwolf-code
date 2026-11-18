@@ -50,7 +50,7 @@ func newChunkRunner(t *testing.T, engine *chunkRecorder, chunk int) (*Runner, *a
 	runner.ChunkFiles = chunk
 	runner.DataDir = t.TempDir()
 	job := &api.CodeScan{ID: "scan-1", CanonicalPath: t.TempDir(), ScannerID: engine.ID(), Categories: engine.Categories(), ClaimToken: "token", Status: api.CodeScanStatusRunning}
-	testutil.FailErr(t, "insert scan", store.Insert(t.Context(), *job, nil, ""))
+	testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), *job, nil, ""))
 	return runner, job
 }
 

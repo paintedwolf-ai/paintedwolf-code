@@ -23,12 +23,12 @@ func (p seriesPlanner) settleTerminal(ctx context.Context, scan api.CodeScan) er
 	behind := scan.Status == api.CodeScanStatusComplete && p.scanGenerationBehind(ctx, scan)
 	p.c.mu.Lock()
 	defer p.c.mu.Unlock()
-	row, err := p.c.Store.SeriesByActiveScan(ctx, scan.ID)
+	row, err := p.c.Store.Series.SeriesByActiveScan(ctx, scan.ID)
 	if err != nil || row == nil {
 		return err
 	}
 	if selected, known := p.seriesSelected(ctx, *row); known && !selected {
-		return p.c.Store.DeleteSeries(ctx, row.CanonicalPath, row.ScannerID)
+		return p.c.Store.Series.DeleteSeries(ctx, row.CanonicalPath, row.ScannerID)
 	} else if !known {
 		slog.WarnContext(ctx, "scanner selection unreadable; keeping cadence series rather than deleting it",
 			"component", "scan_cadence", "path", row.CanonicalPath, "scanner_id", row.ScannerID)
@@ -56,7 +56,7 @@ func (p seriesPlanner) settleTerminal(ctx context.Context, scan api.CodeScan) er
 			p.arm(row, now, 0)
 		}
 	}
-	return p.c.Store.UpsertSeries(ctx, *row)
+	return p.c.Store.Series.UpsertSeries(ctx, *row)
 }
 
 // An empty registry result can indicate a read failure; unknown selection preserves the series.
@@ -87,13 +87,13 @@ func (p seriesPlanner) scanGenerationBehind(ctx context.Context, scan api.CodeSc
 }
 
 func (p seriesPlanner) reconcileActive(ctx context.Context) {
-	rows, err := p.c.Store.ListActiveSeries(ctx)
+	rows, err := p.c.Store.Series.ListActiveSeries(ctx)
 	if err != nil {
 		slog.WarnContext(ctx, "list active scan series", "error", err)
 		return
 	}
 	for _, row := range rows {
-		scan, getErr := p.c.Store.Get(ctx, row.ActiveScanID)
+		scan, getErr := p.c.Store.Reads.Get(ctx, row.ActiveScanID)
 		if getErr != nil {
 			slog.WarnContext(ctx, "read active scan series member", "scan_id", row.ActiveScanID, "error", getErr)
 			continue

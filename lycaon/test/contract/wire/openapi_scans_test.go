@@ -124,7 +124,7 @@ func TestOpenAPIScansRealServer(t *testing.T) {
 	})
 
 	testutil.WaitFor(t, "no scan is running", func() bool {
-		running, err := scanStore.CountRunning(context.Background())
+		running, err := scanStore.Runs.CountRunning(context.Background())
 		return err == nil && running == 0
 	})
 	stopRunner()

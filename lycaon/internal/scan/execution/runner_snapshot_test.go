@@ -79,11 +79,11 @@ func TestScanFailsWhenTheBoundSnapshotIsNotResident(t *testing.T) {
 		Store: sqlStore, Snapshots: snapshots, Broker: backgroundwork.Process(),
 		Registry: recordingRegistry{onRun: func(scanbase.ScanRequest) { ran = true }},
 	}
-	claimed, err := sqlStore.ClaimNext(t.Context())
+	claimed, err := sqlStore.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "claim scan", err)
 	runner.execute(t.Context(), claimed)
 
-	final, err := sqlStore.Get(t.Context(), created.ID)
+	final, err := sqlStore.Reads.Get(t.Context(), created.ID)
 	testutil.FailErr(t, "load scan", err)
 	if final.Status != api.CodeScanStatusFailed {
 		t.Fatalf("status = %q, want failed", final.Status)
@@ -131,14 +131,14 @@ func TestScanUsesIsolatedSnapshotWhileLiveFilesMove(t *testing.T) {
 			}
 		}},
 	}
-	claimed, err := sqlStore.ClaimNext(t.Context())
+	claimed, err := sqlStore.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "claim scan", err)
 	runner.execute(t.Context(), claimed)
 
 	if len(scanned) != 2 {
 		t.Fatalf("engine received %v, want the generation's two files", scanned)
 	}
-	final, err := sqlStore.Get(t.Context(), created.ID)
+	final, err := sqlStore.Reads.Get(t.Context(), created.ID)
 	testutil.FailErr(t, "load scan", err)
 	if final.Status != api.CodeScanStatusComplete {
 		t.Fatalf("status = %q error = %q, want complete", final.Status, final.Error)
@@ -171,10 +171,10 @@ func TestScanAcceptsIdenticalContentWithNewMetadata(t *testing.T) {
 		Store: sqlStore, Snapshots: snapshots, Broker: backgroundwork.Process(),
 		Registry: recordingRegistry{},
 	}
-	claimed, err := sqlStore.ClaimNext(t.Context())
+	claimed, err := sqlStore.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "claim scan", err)
 	runner.execute(t.Context(), claimed)
-	final, err := sqlStore.Get(t.Context(), created.ID)
+	final, err := sqlStore.Reads.Get(t.Context(), created.ID)
 	testutil.FailErr(t, "load scan", err)
 	if final.Status != api.CodeScanStatusComplete || final.CoverageStatus != api.ScanCoverageComplete {
 		t.Fatalf("identical rewrite lost coverage: status=%s coverage=%s warnings=%+v", final.Status, final.CoverageStatus, final.Warnings)

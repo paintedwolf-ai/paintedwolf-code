@@ -52,7 +52,7 @@ func captureFullPassSubject(ctx context.Context, tctx tools.ToolContext, coord s
 	if store == nil {
 		return
 	}
-	pass, err := store.FullPass(ctx, id)
+	pass, err := store.FullPasses.FullPass(ctx, id)
 	canonical, pathErr := scanbase.CanonicalPath(tctx.ActiveRootPath())
 	if err != nil || pathErr != nil || pass == nil || pass.CanonicalPath != canonical {
 		return

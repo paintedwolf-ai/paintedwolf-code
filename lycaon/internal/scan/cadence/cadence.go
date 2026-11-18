@@ -164,7 +164,7 @@ func (c *Service) NoteTree(ctx context.Context, projectDir string, fileCount int
 		previous := row.LastFileCount
 		row.LastFileCount = fileCount
 		row.UpdatedAt = nowUTC(c)
-		if err := c.Store.UpsertSeries(ctx, *row); err != nil {
+		if err := c.Store.Series.UpsertSeries(ctx, *row); err != nil {
 			return err
 		}
 		if fileCount <= 0 {

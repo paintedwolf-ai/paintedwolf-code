@@ -88,7 +88,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	gatesCfg := scancfg.DefaultGatesConfig()
 	store := scan.NewSQLStore(deps.Database)
 	store.SetEventOutbox(deps.Events)
-	store.SecretIgnores = deps.ScanIgnores
+	store.Ignores.SecretIgnores = deps.ScanIgnores
 
 	coord := scan.NewCoordinator(store, deps.GitMgr, deps.Snapshots)
 	if deps.Settings != nil {

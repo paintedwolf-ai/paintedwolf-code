@@ -24,7 +24,7 @@ func TestAssessmentAuthorityRequiresDeclaredCoverage(t *testing.T) {
 			record.Status = api.CodeScanStatusComplete
 			record.CoverageStatus = coverage
 			record.ExecutionManifest.DefinitionFingerprint = ""
-			testutil.FailErr(t, "insert completed scan", store.Insert(t.Context(), record, nil, ""))
+			testutil.FailErr(t, "insert completed scan", store.Runs.Insert(t.Context(), record, nil, ""))
 			wantAuthority := coverage == api.ScanCoverageComplete || coverage == api.ScanCoverageBounded
 			if got := EstablishesAuthority(record); got != wantAuthority {
 				t.Fatalf("scan authority = %t, want %t", got, wantAuthority)
@@ -36,7 +36,7 @@ func TestAssessmentAuthorityRequiresDeclaredCoverage(t *testing.T) {
 			if complete != wantAuthority {
 				t.Fatalf("persisted authority = %t, want %t", complete, wantAuthority)
 			}
-			view, err := store.AssessmentView(t.Context(), []string{record.CanonicalPath})
+			view, err := store.Findings.AssessmentView(t.Context(), []string{record.CanonicalPath})
 			testutil.FailErr(t, "read assessment authority", err)
 			if (view.CurrentID != "") != wantAuthority {
 				t.Fatalf("current assessment = %q, want authority %t", view.CurrentID, wantAuthority)
@@ -78,10 +78,10 @@ func TestAssessmentRecencyBreaksTimestampTiesByAdmission(t *testing.T) {
 				}
 				record := authorityScan("scan-"+id, id, root, "snapshot-"+id, "sast", api.ScanTargetFull, nil)
 				record.CreatedAt = at
-				testutil.FailErr(t, "insert assessment "+id, store.Insert(t.Context(), record, nil, ""))
+				testutil.FailErr(t, "insert assessment "+id, store.Runs.Insert(t.Context(), record, nil, ""))
 				completeNextScan(t, store, scanfindings.FixtureFinding(id, api.FindingLevelHigh, id, "main.go", 1))
 			}
-			view, err := store.AssessmentView(t.Context(), paths)
+			view, err := store.Findings.AssessmentView(t.Context(), paths)
 			testutil.FailErr(t, "read tied assessments", err)
 			if view.LatestAttemptID != ids[2] || view.CurrentID != ids[2] || view.PreviousID != ids[1] {
 				t.Fatalf("assessment order = latest %s, current %s, previous %s", view.LatestAttemptID, view.CurrentID, view.PreviousID)

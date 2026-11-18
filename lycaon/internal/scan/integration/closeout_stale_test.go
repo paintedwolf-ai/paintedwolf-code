@@ -25,7 +25,7 @@ func TestSecurityCloseoutPendingObligationIsPure(t *testing.T) {
 	if !ok || pending.ScanID != obligation.ID {
 		t.Fatalf("pending = %#v err=%v", pending, err)
 	}
-	scans, err := store.ListByCanonicalPath(t.Context(), projectDir)
+	scans, err := store.Reads.ListByCanonicalPath(t.Context(), projectDir)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	if len(scans) != 1 {
 		t.Fatalf("closeout predicate created work: scans=%d", len(scans))

@@ -38,7 +38,7 @@ func (p seriesPlanner) dropDesiredPaths(ctx context.Context, canonical, scannerI
 	}
 	p.c.mu.Lock()
 	defer p.c.mu.Unlock()
-	row, err := p.c.Store.GetSeries(ctx, canonical, scannerID)
+	row, err := p.c.Store.Series.GetSeries(ctx, canonical, scannerID)
 	if err != nil || row == nil || row.DesiredPassID != "" {
 		return err
 	}
@@ -50,7 +50,7 @@ func (p seriesPlanner) dropDesiredPaths(ctx context.Context, canonical, scannerI
 		row.DesiredTrigger = ""
 	}
 	row.UpdatedAt = nowUTC(p.c)
-	return p.c.Store.UpsertSeries(ctx, *row)
+	return p.c.Store.Series.UpsertSeries(ctx, *row)
 }
 
 func formatDispatchFailures(failures []dispatchFailure) error {

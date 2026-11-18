@@ -43,14 +43,14 @@ func authorityScan(id, assessmentID, root, snapshot, scanner string, target api.
 
 func completeNextScan(t *testing.T, store *SQLStore, findings ...api.SecurityFinding) api.CodeScan {
 	t.Helper()
-	claimed, err := store.ClaimNext(t.Context())
+	claimed, err := store.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "ClaimNext", err)
-	won, err := store.MarkComplete(t.Context(), claimed, &scanoutput.Result{FindingsCount: len(findings), Findings: findings})
+	won, err := store.Runs.MarkComplete(t.Context(), claimed, &scanoutput.Result{FindingsCount: len(findings), Findings: findings})
 	testutil.FailErr(t, "MarkComplete", err)
 	if !won {
 		t.Fatalf("scan %s lost completion claim", claimed.ID)
 	}
-	completed, err := store.Get(t.Context(), claimed.ID)
+	completed, err := store.Reads.Get(t.Context(), claimed.ID)
 	testutil.FailErr(t, "Get completed", err)
 	return *completed
 }
@@ -59,13 +59,13 @@ func TestIncrementalFindingSetCarriesUntouchedAndAppliesDeletion(t *testing.T) {
 	store := authorityTestStore(t)
 	root := t.TempDir()
 	baseline := authorityScan("scan-base", "assessment-base", root, "snapshot-1", "sast", api.ScanTargetFull, nil)
-	testutil.FailErr(t, "insert baseline", store.Insert(t.Context(), baseline, nil, ""))
+	testutil.FailErr(t, "insert baseline", store.Runs.Insert(t.Context(), baseline, nil, ""))
 	a1 := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 	b1 := scanfindings.FixtureFinding("rule-b", api.FindingLevelMedium, "b", "b.go", 1)
 	completeNextScan(t, store, a1, b1)
 
 	changed := authorityScan("scan-change", "assessment-change", root, "snapshot-2", "sast", api.ScanTargetPaths, nil)
-	testutil.FailErr(t, "insert incremental", store.Insert(t.Context(), changed, []string{"a.go"}, "snapshot-1"))
+	testutil.FailErr(t, "insert incremental", store.Runs.Insert(t.Context(), changed, []string{"a.go"}, "snapshot-1"))
 	a2 := scanfindings.FixtureFinding("rule-a-new", api.FindingLevelCritical, "a2", "a.go", 2)
 	afterChange := completeNextScan(t, store, a2)
 	if afterChange.CoverageStatus != api.ScanCoverageComplete || len(afterChange.Findings) != 2 {
@@ -76,7 +76,7 @@ func TestIncrementalFindingSetCarriesUntouchedAndAppliesDeletion(t *testing.T) {
 	}
 
 	deleted := authorityScan("scan-delete", "assessment-delete", root, "snapshot-3", "sast", api.ScanTargetPaths, []string{"b.go"})
-	testutil.FailErr(t, "insert deletion", store.Insert(t.Context(), deleted, nil, "snapshot-2"))
+	testutil.FailErr(t, "insert deletion", store.Runs.Insert(t.Context(), deleted, nil, "snapshot-2"))
 	afterDelete := completeNextScan(t, store)
 	if afterDelete.CoverageStatus != api.ScanCoverageComplete || len(afterDelete.Findings) != 1 || scanfindings.PrimaryURI(afterDelete.Findings[0]) != "a.go" {
 		t.Fatalf("deletion reduction = coverage %q findings %#v", afterDelete.CoverageStatus, afterDelete.Findings)
@@ -86,7 +86,7 @@ func TestIncrementalFindingSetCarriesUntouchedAndAppliesDeletion(t *testing.T) {
 func TestIncrementalFindingSetWithoutCompatibleBaseIsPartial(t *testing.T) {
 	store := authorityTestStore(t)
 	scan := authorityScan("scan-partial", "assessment-partial", t.TempDir(), "snapshot-1", "sast", api.ScanTargetPaths, nil)
-	testutil.FailErr(t, "insert path scan", store.Insert(t.Context(), scan, []string{"a.go"}, ""))
+	testutil.FailErr(t, "insert path scan", store.Runs.Insert(t.Context(), scan, []string{"a.go"}, ""))
 	completed := completeNextScan(t, store)
 	if completed.CoverageStatus != api.ScanCoveragePartial || completed.FindingSetID == "" {
 		t.Fatalf("coverage = %q finding_set_id=%q", completed.CoverageStatus, completed.FindingSetID)
@@ -98,7 +98,7 @@ func TestBoundedAdmissionReportsBoundedCoverageAndStillBasesIncrements(t *testin
 	root := t.TempDir()
 	scan := authorityScan("scan-bounded", "assessment-bounded", root, "snapshot-1", "sast", api.ScanTargetFull, nil)
 	scan.SourceAdmissionMode = string(sourcesnapshot.AdmissionScopeBounded)
-	testutil.FailErr(t, "insert bounded scan", store.Insert(t.Context(), scan, nil, ""))
+	testutil.FailErr(t, "insert bounded scan", store.Runs.Insert(t.Context(), scan, nil, ""))
 	a1 := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a1", "a.go", 1)
 	b1 := scanfindings.FixtureFinding("rule-b", api.FindingLevelHigh, "b1", "b.go", 1)
 	completed := completeNextScan(t, store, a1, b1)
@@ -108,7 +108,7 @@ func TestBoundedAdmissionReportsBoundedCoverageAndStillBasesIncrements(t *testin
 
 	changed := authorityScan("scan-bounded-delta", "assessment-bounded-delta", root, "snapshot-2", "sast", api.ScanTargetPaths, nil)
 	changed.SourceAdmissionMode = string(sourcesnapshot.AdmissionScopeBounded)
-	testutil.FailErr(t, "insert bounded delta", store.Insert(t.Context(), changed, []string{"a.go"}, "snapshot-1"))
+	testutil.FailErr(t, "insert bounded delta", store.Runs.Insert(t.Context(), changed, []string{"a.go"}, "snapshot-1"))
 	a2 := scanfindings.FixtureFinding("rule-a-new", api.FindingLevelCritical, "a2", "a.go", 2)
 	afterChange := completeNextScan(t, store, a2)
 	if afterChange.CoverageStatus != api.ScanCoverageBounded || len(afterChange.Findings) != 2 {
@@ -122,7 +122,7 @@ func TestAssessmentViewKeepsCurrentWhenLatestAttemptFails(t *testing.T) {
 		root := t.TempDir()
 		insertAssessment := func(id, snapshot string) {
 			t.Helper()
-			_, err := store.EnsureAssessment(t.Context(), AssessmentDraft{
+			_, err := store.Runs.EnsureAssessment(t.Context(), AssessmentDraft{
 				ID: id, CanonicalPath: root, SourceSnapshotID: snapshot,
 				RequiredScanners: []string{"sast", "secrets"},
 				Target:           TargetSelection{Kind: api.ScanTargetFull}, Trigger: api.ScanTriggerManual,
@@ -130,7 +130,7 @@ func TestAssessmentViewKeepsCurrentWhenLatestAttemptFails(t *testing.T) {
 			testutil.FailErr(t, "ensureAssessment", err)
 			for _, scannerID := range []string{"sast", "secrets"} {
 				scan := authorityScan(id+"-"+scannerID, id, root, snapshot, scannerID, api.ScanTargetFull, nil)
-				testutil.FailErr(t, "insert assessment member", store.Insert(t.Context(), scan, nil, ""))
+				testutil.FailErr(t, "insert assessment member", store.Runs.Insert(t.Context(), scan, nil, ""))
 			}
 		}
 
@@ -140,16 +140,16 @@ func TestAssessmentViewKeepsCurrentWhenLatestAttemptFails(t *testing.T) {
 		time.Sleep(time.Millisecond)
 		synctest.Wait()
 		insertAssessment("assessment-bad", "snapshot-2")
-		failed, err := store.ClaimNext(t.Context())
+		failed, err := store.Runs.ClaimNext(t.Context())
 		testutil.FailErr(t, "claim failed member", err)
-		won, err := store.FinalizeFailure(t.Context(), failed, api.CodeScanStatusFailed, "SCAN_ENGINE_FAILED", "engine failed")
+		won, err := store.Runs.FinalizeFailure(t.Context(), failed, api.CodeScanStatusFailed, "SCAN_ENGINE_FAILED", "engine failed")
 		testutil.FailErr(t, "FinalizeFailure", err)
 		if !won {
 			t.Fatal("failed member lost claim")
 		}
 		completeNextScan(t, store)
 
-		view, err := store.AssessmentView(t.Context(), []string{root})
+		view, err := store.Findings.AssessmentView(t.Context(), []string{root})
 		testutil.FailErr(t, "AssessmentView", err)
 		if view.CurrentID != "assessment-good" || view.LatestAttemptID != "assessment-bad" {
 			t.Fatalf("assessment view = %+v", view)
@@ -207,9 +207,9 @@ func TestCompareRejectsIncompatibleAuthorities(t *testing.T) {
 			if tc.mutateNew != nil {
 				tc.mutateNew(&newScan)
 			}
-			testutil.FailErr(t, "insert old", store.Insert(t.Context(), oldScan, nil, ""))
+			testutil.FailErr(t, "insert old", store.Runs.Insert(t.Context(), oldScan, nil, ""))
 			completeNextScan(t, store)
-			testutil.FailErr(t, "insert new", store.Insert(t.Context(), newScan, nil, ""))
+			testutil.FailErr(t, "insert new", store.Runs.Insert(t.Context(), newScan, nil, ""))
 			completeNextScan(t, store)
 
 			_, err := (&CoordinatorImpl{Store: store}).Compare(t.Context(), oldScan.ID, newScan.ID)

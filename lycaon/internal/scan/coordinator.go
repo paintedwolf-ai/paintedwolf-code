@@ -117,7 +117,7 @@ func (c *CoordinatorImpl) PublishPending(ctx context.Context, scanID string) err
 	if c == nil || c.Store == nil {
 		return fmt.Errorf("scan coordinator not configured")
 	}
-	rec, err := c.Store.Get(ctx, strings.TrimSpace(scanID))
+	rec, err := c.Store.Reads.Get(ctx, strings.TrimSpace(scanID))
 	if err != nil {
 		return err
 	}
@@ -133,10 +133,10 @@ func (c *CoordinatorImpl) PublishPending(ctx context.Context, scanID string) err
 	}
 	if c.HeadSHA != nil {
 		if headSHA, headErr := c.HeadSHA.HeadSHA(ctx, rec.CanonicalPath); headErr == nil {
-			_ = c.Store.bindHeadSHA(ctx, rec.ID, headSHA)
+			_ = c.Store.Runs.bindHeadSHA(ctx, rec.ID, headSHA)
 		}
 	}
-	_, err = c.Store.BindPublishedSourceSnapshot(ctx, rec.ID, snapshot)
+	_, err = c.Store.Runs.BindPublishedSourceSnapshot(ctx, rec.ID, snapshot)
 	return err
 }
 
@@ -282,14 +282,14 @@ func (c *CoordinatorImpl) Enqueue(ctx context.Context, req EnqueueRequest) (*api
 		ExecutionFingerprint: req.ExecutionFingerprint,
 		FingerprintScheme:    api.ScanFingerprintScheme,
 	}
-	if err := c.Store.Insert(ctx, rec, req.Paths, req.BaseSnapshotID); err != nil {
+	if err := c.Store.Runs.Insert(ctx, rec, req.Paths, req.BaseSnapshotID); err != nil {
 		// The unique index resolves concurrent inserts to one scan.
 		if existing, dedupErr := c.reuseDedup(ctx, delegationID, canonicalPath, queueIdentity, scannerID, categories, req.Paths, reuseKey, strings.TrimSpace(req.SupersedesScanID), req.AssessmentID, workflowRunID, sessionID); dedupErr == nil && existing != nil {
 			return existing, nil
 		}
 		return nil, err
 	}
-	stored, err := c.Store.Get(ctx, rec.ID)
+	stored, err := c.Store.Reads.Get(ctx, rec.ID)
 	return projectScanContexts(stored, req.AssessmentID, workflowRunID, sessionID), err
 }
 
@@ -362,7 +362,7 @@ func (c *CoordinatorImpl) enqueueWithSnapshotPublish(ctx context.Context, draft 
 		ExecutionFingerprint: draft.executionFingerprint,
 		FingerprintScheme:    api.ScanFingerprintScheme,
 	}
-	if err := c.Store.Insert(ctx, rec, draft.paths, ""); err != nil {
+	if err := c.Store.Runs.Insert(ctx, rec, draft.paths, ""); err != nil {
 		// The unique index resolves concurrent inserts to one warming scan.
 		if existing, dedupErr := c.reuseDedup(ctx, draft.delegationID, draft.canonicalPath, api.SourceSnapshotWarming, draft.scannerID, draft.categories, draft.paths, draft.reuseKey, draft.supersedes, draft.assessmentID, draft.workflowRunID, draft.sessionID); dedupErr == nil && existing != nil {
 			return existing, nil
@@ -371,24 +371,24 @@ func (c *CoordinatorImpl) enqueueWithSnapshotPublish(ctx context.Context, draft 
 	}
 	snapshot, snapshotErr := c.snapshots.EnsurePath(ctx, draft.canonicalPath, c.sourceVerify())
 	if snapshotErr != nil {
-		_, _ = c.Store.FinalizePendingFailure(ctx, rec.ID, FailureSourceUnavailable, fmt.Sprintf("publish scan source snapshot: %v", snapshotErr))
+		_, _ = c.Store.Runs.FinalizePendingFailure(ctx, rec.ID, FailureSourceUnavailable, fmt.Sprintf("publish scan source snapshot: %v", snapshotErr))
 		return nil, fmt.Errorf("publish scan source snapshot: %w", snapshotErr)
 	}
 	if draft.targetKind == api.ScanTargetPaths {
 		if _, targetErr := ValidateSnapshotTargets(ctx, c.snapshots, snapshot, draft.paths); targetErr != nil {
-			_, _ = c.Store.FinalizePendingFailure(ctx, rec.ID, "SCAN_TARGET_SNAPSHOT_MISMATCH", targetErr.Error())
+			_, _ = c.Store.Runs.FinalizePendingFailure(ctx, rec.ID, "SCAN_TARGET_SNAPSHOT_MISMATCH", targetErr.Error())
 			return nil, targetErr
 		}
 	}
 	if existing, err := c.reuseDedup(ctx, draft.delegationID, draft.canonicalPath, snapshot.ID, draft.scannerID, draft.categories, draft.paths, draft.reuseKey, draft.supersedes, draft.assessmentID, draft.workflowRunID, draft.sessionID); err != nil {
-		_, _ = c.Store.FinalizePendingFailure(ctx, rec.ID, FailureCommit, err.Error())
+		_, _ = c.Store.Runs.FinalizePendingFailure(ctx, rec.ID, FailureCommit, err.Error())
 		return nil, err
 	} else if existing != nil && existing.ID != rec.ID {
-		if _, bindErr := c.Store.BindPublishedSourceSnapshot(ctx, existing.ID, snapshot); bindErr != nil {
-			_, _ = c.Store.FinalizePendingFailure(ctx, rec.ID, FailureCommit, bindErr.Error())
+		if _, bindErr := c.Store.Runs.BindPublishedSourceSnapshot(ctx, existing.ID, snapshot); bindErr != nil {
+			_, _ = c.Store.Runs.FinalizePendingFailure(ctx, rec.ID, FailureCommit, bindErr.Error())
 			return nil, bindErr
 		}
-		won, supersedeErr := c.Store.MarkPendingSuperseded(ctx, rec.ID, existing.ID)
+		won, supersedeErr := c.Store.Runs.MarkPendingSuperseded(ctx, rec.ID, existing.ID)
 		if supersedeErr != nil {
 			return nil, supersedeErr
 		}
@@ -397,16 +397,16 @@ func (c *CoordinatorImpl) enqueueWithSnapshotPublish(ctx context.Context, draft 
 		}
 		return projectScanContexts(existing, draft.assessmentID, draft.workflowRunID, draft.sessionID), nil
 	}
-	bound, err := c.Store.BindPublishedSourceSnapshot(ctx, rec.ID, snapshot)
+	bound, err := c.Store.Runs.BindPublishedSourceSnapshot(ctx, rec.ID, snapshot)
 	if err != nil {
-		_, _ = c.Store.FinalizePendingFailure(ctx, rec.ID, FailureCommit, err.Error())
+		_, _ = c.Store.Runs.FinalizePendingFailure(ctx, rec.ID, FailureCommit, err.Error())
 		return nil, err
 	}
 	return projectScanContexts(bound, draft.assessmentID, draft.workflowRunID, draft.sessionID), nil
 }
 
 func (c *CoordinatorImpl) ensureDraftAssessment(ctx context.Context, draft enqueueDraft, snapshotID string) error {
-	_, err := c.Store.EnsureAssessment(ctx, AssessmentDraft{
+	_, err := c.Store.Runs.EnsureAssessment(ctx, AssessmentDraft{
 		ID: draft.assessmentID, CanonicalPath: draft.canonicalPath, SourceSnapshotID: snapshotID,
 		RequiredScanners: draft.requiredScanners,
 		Target:           TargetSelection{Kind: draft.targetKind, Paths: draft.paths, DeletedPaths: draft.deletedPaths},
@@ -441,10 +441,10 @@ func (c *CoordinatorImpl) matchDedup(
 	reuseKey string,
 ) (*api.CodeScan, error) {
 	if delegationID == "" && scannerID != "" {
-		return c.Store.FindReusableByPathScanner(ctx, canonicalPath, queueIdentity, scannerID, reuseKey)
+		return c.Store.Reads.FindReusableByPathScanner(ctx, canonicalPath, queueIdentity, scannerID, reuseKey)
 	}
 	if delegationID != "" {
-		return c.Store.FindInFlightForDelegationSnapshot(ctx, delegationID, queueIdentity, categories, paths)
+		return c.Store.Reads.FindInFlightForDelegationSnapshot(ctx, delegationID, queueIdentity, categories, paths)
 	}
 	return nil, nil
 }
@@ -454,7 +454,7 @@ func (c *CoordinatorImpl) Get(ctx context.Context, id string) (*api.CodeScan, er
 	if c == nil || c.Store == nil {
 		return nil, fmt.Errorf("scan coordinator not configured")
 	}
-	return c.Store.Get(ctx, id)
+	return c.Store.Reads.Get(ctx, id)
 }
 
 // List returns recent scans visible for canonicalPaths, newest first. limit <= 0 defaults to 20.
@@ -462,7 +462,7 @@ func (c *CoordinatorImpl) List(ctx context.Context, canonicalPaths []string, lim
 	if c == nil || c.Store == nil {
 		return nil, fmt.Errorf("scan coordinator not configured")
 	}
-	page, err := c.Store.ListPageByCanonicalPaths(ctx, canonicalPaths, PageQuery{Limit: limit})
+	page, err := c.Store.Findings.ListPageByCanonicalPaths(ctx, canonicalPaths, PageQuery{Limit: limit})
 	return page.Scans, err
 }
 
@@ -471,7 +471,7 @@ func (c *CoordinatorImpl) ListPage(ctx context.Context, canonicalPaths []string,
 	if c == nil || c.Store == nil {
 		return api.CodeScanPage{}, fmt.Errorf("scan coordinator not configured")
 	}
-	return c.Store.ListPageByCanonicalPaths(ctx, canonicalPaths, query)
+	return c.Store.Findings.ListPageByCanonicalPaths(ctx, canonicalPaths, query)
 }
 
 // ListByWorkflowRunID returns scans bound to a workflow run (newest first).
@@ -479,7 +479,7 @@ func (c *CoordinatorImpl) ListByWorkflowRunID(ctx context.Context, workflowRunID
 	if c == nil || c.Store == nil {
 		return nil, fmt.Errorf("scan coordinator not configured")
 	}
-	return c.Store.ListByWorkflowRunID(ctx, workflowRunID)
+	return c.Store.Reads.ListByWorkflowRunID(ctx, workflowRunID)
 }
 
 // ListBySessionID returns scans the session asked for (newest first).
@@ -487,5 +487,5 @@ func (c *CoordinatorImpl) ListBySessionID(ctx context.Context, sessionID string)
 	if c == nil || c.Store == nil {
 		return nil, fmt.Errorf("scan coordinator not configured")
 	}
-	return c.Store.ListBySessionID(ctx, sessionID)
+	return c.Store.Reads.ListBySessionID(ctx, sessionID)
 }

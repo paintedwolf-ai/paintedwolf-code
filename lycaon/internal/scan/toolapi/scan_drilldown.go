@@ -125,7 +125,7 @@ func SummarizeFullPass(ctx context.Context, coord scanbase.ScanCoordinator, pass
 	if store == nil {
 		return "", fmt.Errorf("scan coordinator not configured")
 	}
-	pass, err := store.FullPass(ctx, passID)
+	pass, err := store.FullPasses.FullPass(ctx, passID)
 	if err != nil {
 		return "", err
 	}

@@ -25,7 +25,7 @@ func WaitForScanID(ctx context.Context, store *SQLStore, scanID string, poll tim
 	defer ticker.Stop()
 	seen := map[string]struct{}{scanID: {}}
 	for {
-		rec, err := store.Get(ctx, scanID)
+		rec, err := store.Reads.Get(ctx, scanID)
 		if err != nil {
 			return nil, err
 		}

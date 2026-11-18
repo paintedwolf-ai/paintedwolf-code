@@ -16,7 +16,7 @@ func TestAssessmentMemberAdmissionPreservesGroupBoundary(t *testing.T) {
 		RequiredScanners: []string{"sast", "sca"}, Trigger: api.ScanTriggerWriteBurst,
 		Target: TargetSelection{Kind: api.ScanTargetPaths, Paths: []string{"older.go", "newer.go"}, DeletedPaths: []string{"obsolete.go"}},
 	}
-	_, err := store.EnsureAssessment(t.Context(), group)
+	_, err := store.Runs.EnsureAssessment(t.Context(), group)
 	testutil.FailErr(t, "record group assessment", err)
 	for _, tc := range []struct {
 		name   string
@@ -45,7 +45,7 @@ func TestAssessmentMemberAdmissionPreservesGroupBoundary(t *testing.T) {
 			} else if !errors.Is(err, ErrAssessmentIdentityMismatch) {
 				t.Fatalf("member admission error=%v, want assessment identity refusal", err)
 			}
-			_, err = store.EnsureAssessment(t.Context(), group)
+			_, err = store.Runs.EnsureAssessment(t.Context(), group)
 			testutil.FailErr(t, "group identity remains intact", err)
 		})
 	}

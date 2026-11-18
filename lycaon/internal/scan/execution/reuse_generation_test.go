@@ -22,12 +22,12 @@ func TestReturningToEarlierSourceGetsAFreshLedgerObservation(t *testing.T) {
 		}
 		id := fmt.Sprintf("cycle-%d", index)
 		pending := authorityScan(id, "assessment-"+id, root, fmt.Sprintf("snapshot-%t", present), "sast", api.ScanTargetFull, nil)
-		testutil.FailErr(t, "insert repeated source scan", store.Insert(t.Context(), pending, []string{"a.go"}, ""))
+		testutil.FailErr(t, "insert repeated source scan", store.Runs.Insert(t.Context(), pending, []string{"a.go"}, ""))
 		job := completeNextScan(t, store, findings...)
 		job.CoverageStatus = api.ScanCoverageComplete
 		job.ExecutionFingerprint = "execution-1"
 		runner.recordFindingHistory(t.Context(), &job)
-		open, err := store.OpenFindings(t.Context(), root, "sast")
+		open, err := store.Findings.OpenFindings(t.Context(), root, "sast")
 		testutil.FailErr(t, "read current presence", err)
 		if _, found := open[scanbase.FindingIdentity(finding)]; found != present {
 			t.Fatalf("step %d presence = %t, want %t", index, found, present)

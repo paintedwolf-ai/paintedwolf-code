@@ -79,7 +79,7 @@ func TestSecurityOverviewIncludesIncrementalActivity(t *testing.T) {
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "canonical project", err)
 	run := authorityScan("incremental", "assessment", canonical, "snapshot", "lycaon-sast", api.ScanTargetPaths, nil)
-	testutil.FailErr(t, "insert incremental scan", store.Insert(t.Context(), run, []string{"a.go"}, ""))
+	testutil.FailErr(t, "insert incremental scan", store.Runs.Insert(t.Context(), run, []string{"a.go"}, ""))
 	for _, status := range []string{"pending", "running"} {
 		overview, err := cadence.SecurityOverview(t.Context(), dir, nil)
 		testutil.FailErr(t, "read incremental overview", err)
@@ -92,7 +92,7 @@ func TestSecurityOverviewIncludesIncrementalActivity(t *testing.T) {
 			}
 		}
 		if status == "pending" {
-			_, err := store.ClaimNext(t.Context())
+			_, err := store.Runs.ClaimNext(t.Context())
 			testutil.FailErr(t, "claim incremental scan", err)
 		}
 	}

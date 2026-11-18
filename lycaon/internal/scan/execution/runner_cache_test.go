@@ -44,7 +44,7 @@ func TestCurrentScanCacheSurvivesUnavailableBaseBytes(t *testing.T) {
 	if result.Findings[0].Locations[0].URI != "a.go" {
 		t.Fatal("cache mutated live findings")
 	}
-	if _, ok, err := store.BlobFindings(t.Context(), "execution", entries[0].ContentID(), "renamed.go"); err != nil || ok {
+	if _, ok, err := store.Findings.BlobFindings(t.Context(), "execution", entries[0].ContentID(), "renamed.go"); err != nil || ok {
 		t.Fatalf("path-dependent rules reused across rename: present=%v error=%v", ok, err)
 	}
 }
@@ -65,7 +65,7 @@ func TestFileCacheRequiresCompleteSingleFileCoverage(t *testing.T) {
 	}
 	runner.cacheFileFindings(t.Context(), "execution", entries, result)
 	for _, entry := range entries {
-		found, ok, err := store.BlobFindings(t.Context(), "execution", entry.ContentID(), entry.Path)
+		found, ok, err := store.Findings.BlobFindings(t.Context(), "execution", entry.ContentID(), entry.Path)
 		testutil.FailErr(t, "read eligible cache", err)
 		if ok != (entry.Path == "clean.go") || len(found) != 0 {
 			t.Fatalf("%s present=%v findings=%v", entry.Path, ok, found)

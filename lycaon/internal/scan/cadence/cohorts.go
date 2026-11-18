@@ -83,7 +83,7 @@ func (d rootDispatcher) enqueueCohort(ctx context.Context, generation dispatchGe
 		return nil, []dispatchFailure{newDispatchFailure("", err)}
 	}
 	if cohort.passID != "" {
-		if err := d.c.Store.MarkFullPassStarted(ctx, cohort.passID, nowUTC(d.c)); err != nil {
+		if err := d.c.Store.FullPasses.MarkFullPassStarted(ctx, cohort.passID, nowUTC(d.c)); err != nil {
 			slog.WarnContext(ctx, "mark full pass started", "component", "scan_cadence", "pass_id", cohort.passID, "error", err)
 		}
 	}
@@ -120,7 +120,7 @@ func (d rootDispatcher) enqueueCohort(ctx context.Context, generation dispatchGe
 			continue
 		}
 		if cohort.passID != "" {
-			if err := d.c.Store.BindFullPassScan(ctx, cohort.passID, record.ID); err != nil {
+			if err := d.c.Store.FullPasses.BindFullPassScan(ctx, cohort.passID, record.ID); err != nil {
 				slog.WarnContext(ctx, "bind full pass requesters", "component", "scan_cadence",
 					"pass_id", cohort.passID, "scan_id", record.ID, "error", err)
 			}
@@ -135,7 +135,7 @@ func (d rootDispatcher) ensureCohortAssessment(ctx context.Context, generation d
 	concrete, recorded := d.c.Coordinator.(*scanbase.CoordinatorImpl)
 	recorded = recorded && concrete != nil
 	if cohort.passID != "" {
-		request, err := d.c.Store.ReadFullPassRequest(ctx, cohort.passID)
+		request, err := d.c.Store.FullPasses.ReadFullPassRequest(ctx, cohort.passID)
 		if err != nil {
 			return cohortAssessment{}, err
 		}
@@ -148,7 +148,7 @@ func (d rootDispatcher) ensureCohortAssessment(ctx context.Context, generation d
 			RequiredScanners: assessment.required, Target: scanbase.FullTargetSelection(generation.snapshot),
 			Trigger: request.Trigger,
 		}
-		_, err = concrete.Store.EnsureAssessment(ctx, *assessment.draft)
+		_, err = concrete.Store.Runs.EnsureAssessment(ctx, *assessment.draft)
 		return assessment, err
 	}
 	if !recorded {
@@ -164,6 +164,6 @@ func (d rootDispatcher) ensureCohortAssessment(ctx context.Context, generation d
 		RequiredScanners: required, Target: assessmentTarget(generation.snapshot, cohort.rows, generation.selections),
 		Trigger: assessment.trigger,
 	}
-	_, err := concrete.Store.EnsureAssessment(ctx, *assessment.draft)
+	_, err := concrete.Store.Runs.EnsureAssessment(ctx, *assessment.draft)
 	return assessment, err
 }

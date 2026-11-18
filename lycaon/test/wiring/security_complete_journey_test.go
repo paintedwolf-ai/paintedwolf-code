@@ -77,15 +77,15 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.1", Request: "Review each trust boundary."})
 	testutil.FailErr(t, "start survey", err)
 	scans := scan.NewSQLStore(h.DB)
-	inventory, err := scans.ListByWorkflowRunID(ctx, run.ID)
+	inventory, err := scans.Reads.ListByWorkflowRunID(ctx, run.ID)
 	testutil.FailErr(t, "read scan obligations", err)
 	if len(inventory) == 0 {
 		t.Fatal("scan inventory missing")
 	}
 	for range inventory {
-		claimed, err := scans.ClaimNext(ctx)
+		claimed, err := scans.Runs.ClaimNext(ctx)
 		testutil.FailErr(t, "claim scan", err)
-		won, err := scans.MarkComplete(ctx, claimed, &scanoutput.Result{ScannedPaths: []string{"audit.go"}, Categories: claimed.Categories})
+		won, err := scans.Runs.MarkComplete(ctx, claimed, &scanoutput.Result{ScannedPaths: []string{"audit.go"}, Categories: claimed.Categories})
 		testutil.FailErr(t, "complete scan", err)
 		if !won {
 			t.Fatal("scan claim lost")

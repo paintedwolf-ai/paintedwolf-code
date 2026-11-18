@@ -324,14 +324,14 @@ func TestSecurityCloseoutCheckerAndSessionGuidance(t *testing.T) {
 	}
 
 	sc := authorityScan("scan-sess-1", "assess-1", projectDir, "snap-1", "sast", api.ScanTargetPaths, nil)
-	testutil.FailErr(t, "insert scan", store.Insert(t.Context(), sc, []string{"a.go"}, ""))
+	testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), sc, []string{"a.go"}, ""))
 	_, err = store.DB().ExecContext(t.Context(), `
 		INSERT INTO landed_changes (id, worker_job_id, canonical_path, delegation_id, workflow_run_id, changed_paths_json, deleted_paths_json, scan_required, scan_id, created_at)
 		VALUES ('lc-1', 'job-scan-1', ?, 'sess-scan', '', '["a.go"]', '[]', 1, 'scan-sess-1', ?)
 	`, projectDir, now)
 	testutil.FailErr(t, "insert landed change", err)
 
-	landed, err := store.LatestRequiredLandedChangeForSession(t.Context(), "sess-scan")
+	landed, err := store.Runs.LatestRequiredLandedChangeForSession(t.Context(), "sess-scan")
 	testutil.FailErr(t, "latest landed change", err)
 	if landed == nil || landed.ID != "lc-1" || landed.ScanID != "scan-sess-1" {
 		t.Fatalf("landed = %+v", landed)

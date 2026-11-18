@@ -22,7 +22,7 @@ func newScanStore(t *testing.T) (*SQLStore, context.Context) {
 
 func insertScan(t *testing.T, store *SQLStore, ctx context.Context, rec api.CodeScan) {
 	t.Helper()
-	testutil.FailErr(t, "Insert "+rec.ID, store.Insert(ctx, rec, nil, ""))
+	testutil.FailErr(t, "Insert "+rec.ID, store.Runs.Insert(ctx, rec, nil, ""))
 }
 
 func TestSQLStoreListByCanonicalPathTieBreaksByRowidDesc(t *testing.T) {
@@ -42,7 +42,7 @@ func TestSQLStoreListByCanonicalPathTieBreaksByRowidDesc(t *testing.T) {
 		})
 	}
 
-	list, err := store.ListByCanonicalPath(ctx, "/tmp/p")
+	list, err := store.Reads.ListByCanonicalPath(ctx, "/tmp/p")
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	if len(list) != 3 {
 		t.Fatalf("len=%d want 3", len(list))
@@ -70,7 +70,7 @@ func TestSQLStoreLatestCompleteForDelegationSnapshotTieBreaks(t *testing.T) {
 			Trigger:          api.ScanTriggerManual,
 		})
 	}
-	got, err := store.LatestCompleteForDelegationSnapshot(ctx, "dep-1", "snapshot-1", cats)
+	got, err := store.Reads.LatestCompleteForDelegationSnapshot(ctx, "dep-1", "snapshot-1", cats)
 	testutil.FailErr(t, "LatestCompleteForDelegationSnapshot", err)
 	if got == nil || got.ID != "scan-second" {
 		got := "<nil>"
@@ -96,7 +96,7 @@ func TestSQLStoreLatestCompleteForSessionSnapshotSurvivesMultiTie(t *testing.T) 
 			Trigger:          api.ScanTriggerManual,
 		})
 	}
-	got, err := store.LatestCompleteForSessionSnapshot(ctx, "sess-1", "snapshot-1", cats)
+	got, err := store.Reads.LatestCompleteForSessionSnapshot(ctx, "sess-1", "snapshot-1", cats)
 	testutil.FailErr(t, "LatestCompleteForSessionSnapshot", err)
 	if got == nil || got.ID != "scan-d" {
 		t.Fatalf("LatestCompleteForSessionSnapshot got=%v want scan-d (last insert wins)", got)
@@ -135,7 +135,7 @@ func TestSQLStoreListByCanonicalPathMixesCreatedAtAndTieBreak(t *testing.T) {
 		Trigger:       api.ScanTriggerManual,
 	})
 
-	list, err := store.ListByCanonicalPath(ctx, "/tmp/p")
+	list, err := store.Reads.ListByCanonicalPath(ctx, "/tmp/p")
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	if len(list) != 3 {
 		t.Fatalf("len=%d want 3", len(list))
@@ -164,7 +164,7 @@ func TestSQLStoreOpenScansForPathOrdersByCreatedAtAscending(t *testing.T) {
 		CreatedAt:     earlier,
 		Trigger:       api.ScanTriggerWriteBurst,
 	})
-	list, err := store.OpenScansForPath(ctx, "/tmp/p")
+	list, err := store.Reads.OpenScansForPath(ctx, "/tmp/p")
 	testutil.FailErr(t, "OpenScansForPath", err)
 	if len(list) != 2 || list[0].ID != "scan-earlier" || list[1].ID != "scan-later" {
 		t.Fatalf("order=%v want scan-earlier, scan-later (ASC)", []string{list[0].ID, list[1].ID})

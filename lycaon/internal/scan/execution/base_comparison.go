@@ -35,7 +35,7 @@ func (r *Runner) baseFindings(ctx context.Context, job *api.CodeScan, targets []
 			misses = append(misses, entry)
 			continue
 		}
-		cached, ok, err := r.Store.BlobFindings(ctx, fingerprint, entry.ContentID(), entry.Path)
+		cached, ok, err := r.Store.Findings.BlobFindings(ctx, fingerprint, entry.ContentID(), entry.Path)
 		if err != nil {
 			return nil, err
 		}

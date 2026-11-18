@@ -51,12 +51,12 @@ func TestBaseComparisonAvailabilityPreservesCurrentFindings(t *testing.T) {
 			if scenario == "missing snapshot" {
 				baseID = "missing"
 			}
-			testutil.FailErr(t, "insert scan", store.Insert(ctx, api.CodeScan{
+			testutil.FailErr(t, "insert scan", store.Runs.Insert(ctx, api.CodeScan{
 				ID: "comparison", CanonicalPath: root, Status: api.CodeScanStatusPending,
 				ScannerID: scanner.ID(), SourceSnapshotID: base.ID, ExecutionFingerprint: "execution",
 				TargetKind: api.ScanTargetPaths,
 			}, []string{"a.go", "b.go"}, baseID))
-			job, err := store.ClaimNext(ctx)
+			job, err := store.Runs.ClaimNext(ctx)
 			testutil.FailErr(t, "claim scan", err)
 			finding := scanfindings.FixtureFinding("rule", api.FindingLevelHigh, "current finding", "a.go", 1)
 			current := &scanoutput.Result{ScannedPaths: []string{"a.go", "b.go"}, Findings: []api.SecurityFinding{finding}}
@@ -66,7 +66,7 @@ func TestBaseComparisonAvailabilityPreservesCurrentFindings(t *testing.T) {
 			before, err := json.Marshal(current)
 			testutil.FailErr(t, "encode current result", err)
 			delta := runner.compareWithBase(ctx, job, scancatalog.ScannerContract{}, current)
-			stored, err := store.Get(ctx, job.ID)
+			stored, err := store.Reads.Get(ctx, job.ID)
 			testutil.FailErr(t, "read comparison", err)
 			if stored.Delta == nil {
 				t.Fatal("comparison was not recorded")

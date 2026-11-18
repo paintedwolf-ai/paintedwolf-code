@@ -26,12 +26,12 @@ func seedCompletedScanWithFindings(t *testing.T, store *scan.SQLStore, findings 
 		Categories: []api.ScanCategory{api.ScanCategorySecurity},
 	})
 	testutil.FailErr(t, "coord.Enqueue failed", err)
-	claimed, err := store.ClaimNext(t.Context())
+	claimed, err := store.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "claim scan", err)
 	if claimed.ID != created.ID {
 		t.Fatalf("claimed scan %q want %q", claimed.ID, created.ID)
 	}
-	if _, err := store.MarkComplete(context.Background(), claimed, &scanoutput.Result{
+	if _, err := store.Runs.MarkComplete(context.Background(), claimed, &scanoutput.Result{
 		FindingsCount: len(findings),
 		Findings:      findings,
 	}); err != nil {
@@ -44,7 +44,7 @@ func seedCompletedScanWithFindings(t *testing.T, store *scan.SQLStore, findings 
 			"guidance": []api.ScanGuidanceSummary{},
 		},
 	}
-	if err := store.SaveIngest(context.Background(), created.ID, rec); err != nil {
+	if err := store.Findings.SaveIngest(context.Background(), created.ID, rec); err != nil {
 		testutil.FailErr(t, "store.SaveIngest failed", err)
 	}
 	return created.ID

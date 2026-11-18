@@ -36,7 +36,7 @@ func (c *SecurityCloseoutChecker) CheckSession(ctx context.Context, sessionID, p
 	if c.Store == nil {
 		return fmt.Errorf("security gate failed: scan obligation ledger is unavailable")
 	}
-	landed, err := c.Store.LatestRequiredLandedChangeForSession(ctx, sessionID)
+	landed, err := c.Store.Runs.LatestRequiredLandedChangeForSession(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func closeoutError(result closeoutEval) error {
 }
 
 func (c *SecurityCloseoutChecker) evaluateLanded(ctx context.Context, landed *LandedChange, evidenceRunID, projectDir string) (closeoutEval, error) {
-	scan, err := c.Store.Get(ctx, landed.ScanID)
+	scan, err := c.Store.Reads.Get(ctx, landed.ScanID)
 	if err != nil {
 		return closeoutEval{}, err
 	}

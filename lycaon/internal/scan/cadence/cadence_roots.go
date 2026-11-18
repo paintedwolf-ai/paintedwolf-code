@@ -84,12 +84,12 @@ func (c *Service) RetireRoot(ctx context.Context, root string, attached func(con
 		}
 	}
 	c.roots.retire(canonical)
-	rows, err := c.Store.ListSeriesForPath(ctx, canonical)
+	rows, err := c.Store.Series.ListSeriesForPath(ctx, canonical)
 	if err != nil {
 		return err
 	}
 	for _, row := range rows {
-		if err := c.Store.DeleteSeries(ctx, canonical, row.ScannerID); err != nil {
+		if err := c.Store.Series.DeleteSeries(ctx, canonical, row.ScannerID); err != nil {
 			return err
 		}
 	}

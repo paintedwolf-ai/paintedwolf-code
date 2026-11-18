@@ -262,12 +262,12 @@ func (h *ReportTestHarness) SeedVerdict(t *testing.T, run *wire.WorkflowRun) {
 func (h *ReportTestHarness) SeedFindings(t *testing.T, run *wire.WorkflowRun) {
 	t.Helper()
 	at := time.Date(2026, 7, 8, 15, 4, 5, 0, time.UTC)
-	testutil.FailErr(t, "insert scan", h.ScanStore.Insert(t.Context(), wire.CodeScan{
+	testutil.FailErr(t, "insert scan", h.ScanStore.Runs.Insert(t.Context(), wire.CodeScan{
 		ID: "scan_report_1", CanonicalPath: h.WorkDir, ScannerID: "semgrep",
 		Status: wire.CodeScanStatusComplete, Categories: []wire.ScanCategory{wire.ScanCategorySecurity},
 		WorkflowRunID: run.ID, HeadSHA: "a1b2c3d", CompletedAt: &at,
 	}, nil, ""))
-	testutil.FailErr(t, "save ingest", h.ScanStore.SaveIngest(t.Context(), "scan_report_1", evidence.Record{
+	testutil.FailErr(t, "save ingest", h.ScanStore.Findings.SaveIngest(t.Context(), "scan_report_1", evidence.Record{
 		Artifacts: map[string]any{
 			"findings": []wire.SecurityFinding{{
 				RuleID: "go.sql.injection", Level: wire.FindingLevelHigh,

@@ -34,7 +34,7 @@ func registerNativeScanTools(t *testing.T) (*tools.DefaultRegistry, scanbase.Sca
 
 func TestNativeScanListReturnsProjectScans(t *testing.T) {
 	reg, _, store, projectDir := registerNativeScanTools(t)
-	if err := store.Insert(context.Background(), wire.CodeScan{
+	if err := store.Runs.Insert(context.Background(), wire.CodeScan{
 		ID:            "scan-sca-1",
 		CanonicalPath: projectDir,
 		ScannerID:     "lycaon-sca",
@@ -60,7 +60,7 @@ func TestNativeScanListReturnsProjectScans(t *testing.T) {
 
 func TestNativeScanListOmitsGuidance(t *testing.T) {
 	reg, _, store, projectDir := registerNativeScanTools(t)
-	if err := store.Insert(context.Background(), wire.CodeScan{
+	if err := store.Runs.Insert(context.Background(), wire.CodeScan{
 		ID:            "scan-sca-guide",
 		CanonicalPath: projectDir,
 		ScannerID:     "lycaon-sca",
@@ -71,7 +71,7 @@ func TestNativeScanListOmitsGuidance(t *testing.T) {
 	}, nil, ""); err != nil {
 		testutil.FailErr(t, "store.Insert failed", err)
 	}
-	if err := store.SaveIngest(context.Background(), "scan-sca-guide", evidence.Record{
+	if err := store.Findings.SaveIngest(context.Background(), "scan-sca-guide", evidence.Record{
 		GateVerdict: string(evidence.GateVerdictPassed),
 		Artifacts: map[string]any{
 			"findings": []wire.SecurityFinding{},
@@ -114,7 +114,7 @@ func TestNativeScanListEmptyHint(t *testing.T) {
 
 func TestNativeScanSummaryAndErrors(t *testing.T) {
 	reg, _, store, projectDir := registerNativeScanTools(t)
-	if err := store.Insert(context.Background(), wire.CodeScan{
+	if err := store.Runs.Insert(context.Background(), wire.CodeScan{
 		ID:            "scan-sca-1",
 		CanonicalPath: projectDir,
 		ScannerID:     "lycaon-sca",
@@ -203,7 +203,7 @@ func TestNativeScanQueryRequiresScanIDs(t *testing.T) {
 
 func TestNativeScanQueryOnCompleteScan(t *testing.T) {
 	reg, _, store, projectDir := registerNativeScanTools(t)
-	if err := store.Insert(context.Background(), wire.CodeScan{
+	if err := store.Runs.Insert(context.Background(), wire.CodeScan{
 		ID:            "scan-sca-1",
 		CanonicalPath: projectDir,
 		ScannerID:     "lycaon-sca",

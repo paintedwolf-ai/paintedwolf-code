@@ -20,7 +20,7 @@ func ledgerRoot(t *testing.T) string {
 func ledgerFixture(t *testing.T, root, scanner, execution string) *scanbase.SQLStore {
 	t.Helper()
 	store := authorityTestStore(t)
-	testutil.FailErr(t, "upsert series", store.UpsertSeries(t.Context(), scanbase.SeriesRow{
+	testutil.FailErr(t, "upsert series", store.Series.UpsertSeries(t.Context(), scanbase.SeriesRow{
 		CanonicalPath:                   root,
 		ScannerID:                       scanner,
 		Categories:                      []api.ScanCategory{api.ScanCategorySAST},
@@ -34,7 +34,7 @@ func ledgerFixture(t *testing.T, root, scanner, execution string) *scanbase.SQLS
 func ledgerScan(t *testing.T, store *scanbase.SQLStore, id, root, scanner string, target api.ScanTargetKind, coverage api.ScanCoverageStatus, findings ...api.SecurityFinding) api.CodeScan {
 	t.Helper()
 	job := authorityScan(id, "assessment-"+id, root, "snapshot-"+id, scanner, target, nil)
-	testutil.FailErr(t, "insert scan", store.Insert(t.Context(), job, []string{"a.go"}, ""))
+	testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), job, []string{"a.go"}, ""))
 	completed := completeNextScan(t, store, findings...)
 	completed.CoverageStatus = coverage
 	return completed
@@ -42,7 +42,7 @@ func ledgerScan(t *testing.T, store *scanbase.SQLStore, id, root, scanner string
 
 func ledgerStates(t *testing.T, store *scanbase.SQLStore, root string) map[string]api.FindingLedgerState {
 	t.Helper()
-	page, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
+	page, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
 	testutil.FailErr(t, "read ledger", err)
 	out := make(map[string]api.FindingLedgerState, len(page.Entries))
 	for _, entry := range page.Entries {
@@ -61,7 +61,7 @@ func TestLedgerRecordsOpenFixedAndReopened(t *testing.T) {
 	first := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, kept, gone)
 	first.ExecutionFingerprint = execution
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
-	testutil.FailErr(t, "introduce", store.RecordFindingEvents(t.Context(), &first, []api.SecurityFinding{kept, gone}, nil, at))
+	testutil.FailErr(t, "introduce", store.Findings.RecordFindingEvents(t.Context(), &first, []api.SecurityFinding{kept, gone}, nil, at))
 
 	states := ledgerStates(t, store, root)
 	if states["rule-kept"] != api.FindingLedgerOpen || states["rule-gone"] != api.FindingLedgerOpen {
@@ -70,7 +70,7 @@ func TestLedgerRecordsOpenFixedAndReopened(t *testing.T) {
 
 	second := ledgerScan(t, store, "scan-2", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, kept)
 	second.ExecutionFingerprint = execution
-	testutil.FailErr(t, "fix", store.RecordFindingEvents(t.Context(), &second, nil, []api.SecurityFinding{gone}, at.Add(time.Minute)))
+	testutil.FailErr(t, "fix", store.Findings.RecordFindingEvents(t.Context(), &second, nil, []api.SecurityFinding{gone}, at.Add(time.Minute)))
 
 	states = ledgerStates(t, store, root)
 	if states["rule-gone"] != api.FindingLedgerFixed {
@@ -79,14 +79,14 @@ func TestLedgerRecordsOpenFixedAndReopened(t *testing.T) {
 
 	third := ledgerScan(t, store, "scan-3", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, kept, gone)
 	third.ExecutionFingerprint = execution
-	testutil.FailErr(t, "reintroduce", store.RecordFindingEvents(t.Context(), &third, []api.SecurityFinding{gone}, nil, at.Add(2*time.Minute)))
+	testutil.FailErr(t, "reintroduce", store.Findings.RecordFindingEvents(t.Context(), &third, []api.SecurityFinding{gone}, nil, at.Add(2*time.Minute)))
 
 	states = ledgerStates(t, store, root)
 	if states["rule-gone"] != api.FindingLedgerReopened {
 		t.Fatalf("state after the finding came back = %q, want reopened", states["rule-gone"])
 	}
 
-	page, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
+	page, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
 	testutil.FailErr(t, "read ledger", err)
 	for _, entry := range page.Entries {
 		if entry.Finding.RuleID != "rule-gone" {
@@ -110,11 +110,11 @@ func TestLedgerBoundedFullPassLeavesNotObserved(t *testing.T) {
 	first := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetFull, api.ScanCoverageComplete, finding)
 	first.ExecutionFingerprint = execution
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
-	testutil.FailErr(t, "introduce", store.RecordFindingEvents(t.Context(), &first, []api.SecurityFinding{finding}, nil, at))
+	testutil.FailErr(t, "introduce", store.Findings.RecordFindingEvents(t.Context(), &first, []api.SecurityFinding{finding}, nil, at))
 
 	bounded := ledgerScan(t, store, "scan-2", root, "sast", api.ScanTargetFull, api.ScanCoverageBounded)
 	bounded.ExecutionFingerprint = execution
-	testutil.FailErr(t, "bounded pass", store.RecordFindingEvents(t.Context(), &bounded, nil, []api.SecurityFinding{finding}, at.Add(time.Minute)))
+	testutil.FailErr(t, "bounded pass", store.Findings.RecordFindingEvents(t.Context(), &bounded, nil, []api.SecurityFinding{finding}, at.Add(time.Minute)))
 
 	states := ledgerStates(t, store, root)
 	if states["rule-a"] != api.FindingLedgerNotObserved {
@@ -131,11 +131,11 @@ func TestLedgerPartialPathScanLeavesNotObserved(t *testing.T) {
 	first := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)
 	first.ExecutionFingerprint = execution
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
-	testutil.FailErr(t, "introduce", store.RecordFindingEvents(t.Context(), &first, []api.SecurityFinding{finding}, nil, at))
+	testutil.FailErr(t, "introduce", store.Findings.RecordFindingEvents(t.Context(), &first, []api.SecurityFinding{finding}, nil, at))
 
 	moved := ledgerScan(t, store, "scan-2", root, "sast", api.ScanTargetPaths, api.ScanCoveragePartial)
 	moved.ExecutionFingerprint = execution
-	testutil.FailErr(t, "partial delta", store.RecordFindingEvents(t.Context(), &moved, nil, []api.SecurityFinding{finding}, at.Add(time.Minute)))
+	testutil.FailErr(t, "partial delta", store.Findings.RecordFindingEvents(t.Context(), &moved, nil, []api.SecurityFinding{finding}, at.Add(time.Minute)))
 
 	states := ledgerStates(t, store, root)
 	if states["rule-a"] != api.FindingLedgerNotObserved {
@@ -151,18 +151,18 @@ func TestLedgerMovedExecutionLeavesUnverified(t *testing.T) {
 	first := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)
 	first.ExecutionFingerprint = "execution-1"
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
-	testutil.FailErr(t, "introduce", store.RecordFindingEvents(t.Context(), &first, []api.SecurityFinding{finding}, nil, at))
+	testutil.FailErr(t, "introduce", store.Findings.RecordFindingEvents(t.Context(), &first, []api.SecurityFinding{finding}, nil, at))
 
 	second := ledgerScan(t, store, "scan-2", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete)
 	second.ExecutionFingerprint = "execution-1"
-	testutil.FailErr(t, "fix under the old identity", store.RecordFindingEvents(t.Context(), &second, nil, []api.SecurityFinding{finding}, at.Add(time.Minute)))
+	testutil.FailErr(t, "fix under the old identity", store.Findings.RecordFindingEvents(t.Context(), &second, nil, []api.SecurityFinding{finding}, at.Add(time.Minute)))
 
 	states := ledgerStates(t, store, root)
 	if states["rule-a"] != api.FindingLedgerUnverified {
 		t.Fatalf("state after the engine identity moved = %q, want unverified", states["rule-a"])
 	}
 
-	page, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
+	page, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
 	testutil.FailErr(t, "read ledger", err)
 	if len(page.Entries) != 1 || page.Entries[0].Absence == nil || !page.Entries[0].Absence.ExecutionMoved {
 		t.Fatalf("absence facts = %+v, want execution_moved", page.Entries[0].Absence)
@@ -180,13 +180,13 @@ func TestLedgerFiltersPagesAndCounts(t *testing.T) {
 	first := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, high, low, gone)
 	first.ExecutionFingerprint = execution
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
-	testutil.FailErr(t, "introduce", store.RecordFindingEvents(t.Context(), &first, []api.SecurityFinding{high, low, gone}, nil, at))
+	testutil.FailErr(t, "introduce", store.Findings.RecordFindingEvents(t.Context(), &first, []api.SecurityFinding{high, low, gone}, nil, at))
 
 	second := ledgerScan(t, store, "scan-2", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, high, low)
 	second.ExecutionFingerprint = execution
-	testutil.FailErr(t, "fix", store.RecordFindingEvents(t.Context(), &second, nil, []api.SecurityFinding{gone}, at.Add(time.Minute)))
+	testutil.FailErr(t, "fix", store.Findings.RecordFindingEvents(t.Context(), &second, nil, []api.SecurityFinding{gone}, at.Add(time.Minute)))
 
-	all, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
+	all, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
 	testutil.FailErr(t, "read ledger", err)
 	if all.TotalMatch != 3 {
 		t.Fatalf("total = %d, want 3", all.TotalMatch)
@@ -198,7 +198,7 @@ func TestLedgerFiltersPagesAndCounts(t *testing.T) {
 		t.Fatalf("by_level = %+v, want every level present with high at 1", all.ByLevel)
 	}
 
-	open, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{
+	open, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{
 		States: []api.FindingLedgerState{api.FindingLedgerOpen}, Limit: 100,
 	})
 	testutil.FailErr(t, "read open", err)
@@ -209,19 +209,19 @@ func TestLedgerFiltersPagesAndCounts(t *testing.T) {
 		t.Fatalf("counts under a filter = %+v, want the project's totals", open.Counts)
 	}
 
-	text, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Text: "CREDENTIAL", Limit: 100})
+	text, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Text: "CREDENTIAL", Limit: 100})
 	testutil.FailErr(t, "read text filter", err)
 	if text.TotalMatch != 1 || text.Entries[0].Finding.RuleID != "rule-high" {
 		t.Fatalf("text filter matched %d rows", text.TotalMatch)
 	}
 
-	path, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Path: "scan", Limit: 100})
+	path, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Path: "scan", Limit: 100})
 	testutil.FailErr(t, "read path filter", err)
 	if path.TotalMatch != 2 {
 		t.Fatalf("path prefix matched %d rows, want 2", path.TotalMatch)
 	}
 
-	firstPage, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 2})
+	firstPage, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 2})
 	testutil.FailErr(t, "read first page", err)
 	if len(firstPage.Entries) != 2 || firstPage.NextCursor == "" {
 		t.Fatalf("first page = %d entries, next %q", len(firstPage.Entries), firstPage.NextCursor)
@@ -229,7 +229,7 @@ func TestLedgerFiltersPagesAndCounts(t *testing.T) {
 	if firstPage.Entries[0].Finding.Level != api.FindingLevelHigh {
 		t.Fatalf("first row = %q, want the most severe", firstPage.Entries[0].Finding.Level)
 	}
-	lastPage, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 2, Cursor: firstPage.NextCursor})
+	lastPage, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 2, Cursor: firstPage.NextCursor})
 	testutil.FailErr(t, "read last page", err)
 	if len(lastPage.Entries) != 1 || lastPage.NextCursor != "" {
 		t.Fatalf("last page = %d entries, next %q", len(lastPage.Entries), lastPage.NextCursor)
@@ -244,22 +244,22 @@ func TestLedgerScopesToSelectedScanners(t *testing.T) {
 	scan := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)
 	scan.ExecutionFingerprint = "execution-1"
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
-	testutil.FailErr(t, "introduce", store.RecordFindingEvents(t.Context(), &scan, []api.SecurityFinding{finding}, nil, at))
+	testutil.FailErr(t, "introduce", store.Findings.RecordFindingEvents(t.Context(), &scan, []api.SecurityFinding{finding}, nil, at))
 
-	testutil.FailErr(t, "deselect scanner", store.DeleteSeries(t.Context(), root, "sast"))
-	page, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
+	testutil.FailErr(t, "deselect scanner", store.Series.DeleteSeries(t.Context(), root, "sast"))
+	page, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
 	testutil.FailErr(t, "read ledger", err)
 	if page.TotalMatch != 0 {
 		t.Fatalf("a deselected scanner still reported %d rows", page.TotalMatch)
 	}
 
-	testutil.FailErr(t, "reselect scanner", store.UpsertSeries(t.Context(), scanbase.SeriesRow{
+	testutil.FailErr(t, "reselect scanner", store.Series.UpsertSeries(t.Context(), scanbase.SeriesRow{
 		CanonicalPath: root, ScannerID: "sast",
 		Categories:                      []api.ScanCategory{api.ScanCategorySAST},
 		LastCoveredExecutionFingerprint: "execution-1",
 		UpdatedAt:                       time.Now().UTC(),
 	}))
-	page, err = store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
+	page, err = store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
 	testutil.FailErr(t, "read ledger after reselect", err)
 	if page.TotalMatch != 1 {
 		t.Fatalf("reselecting the scanner restored %d rows, want 1", page.TotalMatch)
@@ -273,10 +273,10 @@ func TestLedgerSortOrdersPersistedFindings(t *testing.T) {
 	secondFinding := scanfindings.FixtureFinding("second", api.FindingLevelHigh, "alpha", "A.go", 10)
 	first := ledgerScan(t, store, "sort-first", root, "sast", api.ScanTargetFull, api.ScanCoverageComplete, firstFinding)
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
-	testutil.FailErr(t, "introduce first finding", store.RecordFindingEvents(t.Context(), &first, []api.SecurityFinding{firstFinding}, nil, at))
+	testutil.FailErr(t, "introduce first finding", store.Findings.RecordFindingEvents(t.Context(), &first, []api.SecurityFinding{firstFinding}, nil, at))
 	second := ledgerScan(t, store, "sort-second", root, "sast", api.ScanTargetFull, api.ScanCoverageComplete, secondFinding)
-	testutil.FailErr(t, "introduce second finding", store.RecordFindingEvents(t.Context(), &second, []api.SecurityFinding{secondFinding}, nil, at.Add(time.Minute)))
-	testutil.FailErr(t, "fix first finding", store.RecordFindingEvents(t.Context(), &second, nil, []api.SecurityFinding{firstFinding}, at.Add(2*time.Minute)))
+	testutil.FailErr(t, "introduce second finding", store.Findings.RecordFindingEvents(t.Context(), &second, []api.SecurityFinding{secondFinding}, nil, at.Add(time.Minute)))
+	testutil.FailErr(t, "fix first finding", store.Findings.RecordFindingEvents(t.Context(), &second, nil, []api.SecurityFinding{firstFinding}, at.Add(2*time.Minute)))
 	for _, tc := range []struct {
 		sort  api.FindingLedgerSort
 		order string
@@ -296,7 +296,7 @@ func TestLedgerSortOrdersPersistedFindings(t *testing.T) {
 		{api.FindingLedgerSortLastSeen, "asc", "second"},
 	} {
 		t.Run(string(tc.sort)+"/"+tc.order, func(t *testing.T) {
-			page, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Sort: tc.sort, Order: tc.order})
+			page, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Sort: tc.sort, Order: tc.order})
 			testutil.FailErr(t, "read sorted ledger", err)
 			if len(page.Entries) != 2 || page.Entries[0].Finding.RuleID != tc.first {
 				t.Fatalf("sorted ledger = %+v, want %s first", page.Entries, tc.first)

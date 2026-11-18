@@ -230,7 +230,7 @@ func (c *CoordinatorImpl) LatestAssessmentForPaths(ctx context.Context, canonica
 	if c == nil || c.Store == nil {
 		return AssessmentView{}, fmt.Errorf("scan coordinator not configured")
 	}
-	return c.Store.AssessmentView(ctx, canonicalPaths)
+	return c.Store.Findings.AssessmentView(ctx, canonicalPaths)
 }
 
 // coverageRank orders coverage from what proves least to what proves most;

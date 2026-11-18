@@ -135,7 +135,7 @@ func (r *Runner) runScanner(ctx context.Context, job *api.CodeScan, req scanbase
 }
 
 func (r *Runner) ingestScanResult(ctx context.Context, job *api.CodeScan, result *scanoutput.Result, contract scancatalog.ScannerContract) bool {
-	if err := r.Store.SaveSecretIdentities(ctx, job.ID, result); err != nil {
+	if err := r.Store.Ignores.SaveSecretIdentities(ctx, job.ID, result); err != nil {
 		r.failWithCode(ctx, job, scanbase.FailureIngest, err)
 		return false
 	}
@@ -143,7 +143,7 @@ func (r *Runner) ingestScanResult(ctx context.Context, job *api.CodeScan, result
 		return true
 	}
 	var touchedPaths []string
-	landed, err := r.Store.LandedChangeForScan(ctx, job.ID)
+	landed, err := r.Store.Runs.LandedChangeForScan(ctx, job.ID)
 	if err != nil {
 		r.failWithCode(ctx, job, scanbase.FailureIngest, err)
 		return false
@@ -175,7 +175,7 @@ func (r *Runner) ingestScanResult(ctx context.Context, job *api.CodeScan, result
 		r.fail(ctx, job, err)
 		return false
 	}
-	if err := r.Store.SaveIngest(ctx, job.ID, rec); err != nil {
+	if err := r.Store.Findings.SaveIngest(ctx, job.ID, rec); err != nil {
 		r.failWithCode(ctx, job, scanbase.FailureIngest, err)
 		return false
 	}
