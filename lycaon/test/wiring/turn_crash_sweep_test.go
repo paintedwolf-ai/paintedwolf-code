@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"os/exec"
@@ -169,15 +170,16 @@ func waitForOutboxDrained(t *testing.T, h *Harness) {
 	}
 }
 
-// storeDump is every row of every table, read without production code.
-type storeDump map[string][]string
+// storeDump is every row of every table keyed by its primary key, read
+// without production code.
+type storeDump map[string]map[string]string
 
 func dumpStore(t *testing.T, path string) storeDump {
 	t.Helper()
 	database, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?mode=ro")
 	testutil.FailErr(t, "open store dump", err)
 	defer func() { _ = database.Close() }()
-	rows, err := database.QueryContext(t.Context(), `SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
+	rows, err := database.QueryContext(t.Context(), `SELECT name FROM sqlite_schema WHERE type = 'table' AND sql NOT LIKE 'CREATE VIRTUAL%' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
 	testutil.FailErr(t, "list tables", err)
 	var tables []string
 	for rows.Next() {
@@ -194,17 +196,30 @@ func dumpStore(t *testing.T, path string) storeDump {
 	return dump
 }
 
-func tableRows(t *testing.T, database *sql.DB, table string) []string {
+func primaryKey(t *testing.T, database *sql.DB, table string) []string {
 	t.Helper()
-	rows, err := database.QueryContext(t.Context(), `SELECT * FROM "`+table+`"`)
-	if err != nil {
-		// Virtual tables whose module this connection lacks are not store rows.
-		return nil
+	rows, err := database.QueryContext(t.Context(), `SELECT name FROM pragma_table_info(?) WHERE pk > 0 ORDER BY pk`, table)
+	testutil.FailErr(t, "primary key "+table, err)
+	defer func() { _ = rows.Close() }()
+	var key []string
+	for rows.Next() {
+		var name string
+		testutil.FailErr(t, "scan key "+table, rows.Scan(&name))
+		key = append(key, name)
 	}
+	testutil.FailErr(t, "finish key "+table, rows.Err())
+	return key
+}
+
+func tableRows(t *testing.T, database *sql.DB, table string) map[string]string {
+	t.Helper()
+	key := primaryKey(t, database, table)
+	rows, err := database.QueryContext(t.Context(), `SELECT * FROM "`+table+`"`)
+	testutil.FailErr(t, "read "+table, err)
 	defer func() { _ = rows.Close() }()
 	columns, err := rows.Columns()
 	testutil.FailErr(t, "columns "+table, err)
-	var out []string
+	out := map[string]string{}
 	for rows.Next() {
 		values := make([]any, len(columns))
 		targets := make([]any, len(columns))
@@ -221,30 +236,35 @@ func tableRows(t *testing.T, database *sql.DB, table string) []string {
 		}
 		encoded, err := json.Marshal(row)
 		testutil.FailErr(t, "encode "+table, err)
-		out = append(out, string(encoded))
+		id := string(encoded)
+		if len(key) > 0 {
+			keyed := make([]any, len(key))
+			for i, column := range key {
+				keyed[i] = row[column]
+			}
+			raw, err := json.Marshal(keyed)
+			testutil.FailErr(t, "encode key "+table, err)
+			id = string(raw)
+		}
+		out[id] = string(encoded)
 	}
 	testutil.FailErr(t, "finish "+table, rows.Err())
-	slices.Sort(out)
 	return out
 }
 
 func diffDumps(before, after storeDump) []string {
 	var out []string
-	for _, table := range slices.Sorted(func(yield func(string) bool) {
-		for name := range before {
-			if !yield(name) {
-				return
+	for _, table := range slices.Sorted(maps.Keys(before)) {
+		for _, key := range slices.Sorted(maps.Keys(before[table])) {
+			if row, ok := after[table][key]; !ok {
+				out = append(out, "- "+table+" "+before[table][key])
+			} else if row != before[table][key] {
+				out = append(out, "~ "+table+" "+before[table][key]+" -> "+row)
 			}
 		}
-	}) {
-		for _, row := range before[table] {
-			if !slices.Contains(after[table], row) {
-				out = append(out, "- "+table+" "+row)
-			}
-		}
-		for _, row := range after[table] {
-			if !slices.Contains(before[table], row) {
-				out = append(out, "+ "+table+" "+row)
+		for _, key := range slices.Sorted(maps.Keys(after[table])) {
+			if _, ok := before[table][key]; !ok {
+				out = append(out, "+ "+table+" "+after[table][key])
 			}
 		}
 	}
