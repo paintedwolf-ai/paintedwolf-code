@@ -43,13 +43,14 @@ VALUES(?,?,'/root',?,?,'index',1,420,1)`, id, i, path, fmt.Sprintf("%040d", i))
 JOIN source_manifest_entries e ON e.chunk_id = l.chunk_id
 WHERE l.manifest_id = ? ORDER BY l.first_path, e.path`, manifest)
 	testutil.FailErr(t, "read converted manifest", err)
+	defer func() { _ = rows.Close() }()
 	var got []string
 	for rows.Next() {
 		var path string
 		testutil.FailErr(t, "scan path", rows.Scan(&path))
 		got = append(got, path)
 	}
-	testutil.FailErr(t, "close rows", rows.Close())
+	testutil.FailErr(t, "read converted paths", rows.Err())
 	if !slices.Equal(got, want) {
 		t.Fatalf("converted %d paths, want the %d legacy paths in order", len(got), len(want))
 	}

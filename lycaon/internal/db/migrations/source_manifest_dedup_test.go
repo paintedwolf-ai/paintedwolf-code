@@ -87,7 +87,7 @@ func (s *manifestMigrationTraceStmt) Query(args []driver.Value) (driver.Rows, er
 }
 
 func (s *manifestMigrationTraceStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
-	if strings.Contains(s.query, "FROM legacy_source_manifest_entries WHERE chunk_id = ? AND root_path = ? AND path > ?") && len(args) == 3 {
+	if strings.Contains(s.query, "FROM legacy_source_manifest_entries WHERE chunk_id = ? AND root_path = ? AND path > ?") && len(args) == 4 {
 		chunkID, _ := args[0].Value.(string)
 		rootPath, _ := args[1].Value.(string)
 		s.trace.chunkReads = append(s.trace.chunkReads, rootPath+" "+chunkID)

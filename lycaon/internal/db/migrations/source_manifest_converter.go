@@ -27,16 +27,20 @@ type legacyManifestConverter struct {
 	writtenChunks *migrationMemo[struct{}]
 }
 
-func newLegacyManifestConverter(ctx context.Context, tx *sql.Tx, insert *sql.Stmt) (*legacyManifestConverter, error) {
+func newLegacyManifestConverter(ctx context.Context, tx *sql.Tx, insert *sql.Stmt) (_ *legacyManifestConverter, err error) {
 	// Both reads search the legacy table's unique (chunk_id, root_path, path) index.
 	holdsRoot, err := tx.PrepareContext(ctx, `SELECT EXISTS (SELECT 1 FROM legacy_source_manifest_entries WHERE chunk_id = ? AND root_path = ?)`)
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if err != nil {
+			_ = holdsRoot.Close()
+		}
+	}()
 	readPage, err := tx.PrepareContext(ctx, `SELECT path, sha256, git_oid, identity, size, mode, modified_ns
-FROM legacy_source_manifest_entries WHERE chunk_id = ? AND root_path = ? AND path > ? ORDER BY path LIMIT `+strconv.Itoa(legacyPageEntries))
+FROM legacy_source_manifest_entries WHERE chunk_id = ? AND root_path = ? AND path > ? ORDER BY path LIMIT ?`)
 	if err != nil {
-		_ = holdsRoot.Close()
 		return nil, err
 	}
 	return &legacyManifestConverter{
@@ -187,7 +191,7 @@ func (m *legacyRootMerge) advance(ctx context.Context, cursor *legacyCursor) err
 	if len(cursor.page) > 0 {
 		after = cursor.page[len(cursor.page)-1].path
 	}
-	rows, err := m.read.QueryContext(ctx, cursor.chunk, m.root, after)
+	rows, err := m.read.QueryContext(ctx, cursor.chunk, m.root, after, legacyPageEntries)
 	if err != nil {
 		return err
 	}
