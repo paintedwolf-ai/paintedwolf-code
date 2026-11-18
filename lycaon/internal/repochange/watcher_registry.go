@@ -187,10 +187,15 @@ func (r *watcherRegistry) Ensure(ctx context.Context, projectDir string) {
 	coverage := w.coverage()
 	slog.InfoContext(ctx, "worktree watch bound",
 		"root", key, "recursive", coverage.Recursive, "complete", coverage.Complete)
+	// Reopening coverage must account for changes from the unwatched interval.
+	initial := w.debounce.NotifyWorktreeChanges(loopCtx, key, []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, SourceWatcher)
 	go func() {
 		defer finish()
-		// Reopening coverage cannot certify changes from the unwatched interval.
-		Notify(loopCtx, Event{ProjectDir: key, Kind: WorktreeChanged, Changes: []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, Source: SourceWatcher})
+		select {
+		case <-initial:
+		case <-w.done:
+			return
+		}
 		w.mu.Lock()
 		w.starting = false
 		w.mu.Unlock()

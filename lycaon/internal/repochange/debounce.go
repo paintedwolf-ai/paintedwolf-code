@@ -116,14 +116,14 @@ func NotifyWorktreeChangesDebounced(ctx context.Context, dir string, changes []W
 }
 
 // NotifyWorktreeChanges schedules a coalesced WorktreeChanged with structured path facts.
-func (d *debouncer) NotifyWorktreeChanges(ctx context.Context, dir string, changes []WorktreeChange, source Source) {
+func (d *debouncer) NotifyWorktreeChanges(ctx context.Context, dir string, changes []WorktreeChange, source Source) <-chan struct{} {
 	if d == nil {
 		Notify(ctx, Event{ProjectDir: dir, Kind: WorktreeChanged, Changes: changes, Source: source})
-		return
+		return nil
 	}
 	key, err := filepath.Abs(dir)
 	if err != nil || key == "" {
-		return
+		return nil
 	}
 	if source == "" {
 		source = SourceMutation
@@ -131,7 +131,7 @@ func (d *debouncer) NotifyWorktreeChanges(ctx context.Context, dir string, chang
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.closed {
-		return
+		return nil
 	}
 	ent := d.pending[key]
 	if ent == nil {
@@ -161,10 +161,10 @@ func (d *debouncer) NotifyWorktreeChanges(ctx context.Context, dir string, chang
 			// whole tree; naming the root says so in one entry.
 			clear(ent.changes)
 			ent.changes["."] = WorktreeChangeResync
-			return
+			return ent.done
 		}
 		if ent.changes["."] == WorktreeChangeResync {
-			return
+			return ent.done
 		}
 		if previous, found := ent.changes[path]; found {
 			ent.changes[path] = mergeWorktreeChangeKind(previous, change.Kind)
@@ -172,6 +172,7 @@ func (d *debouncer) NotifyWorktreeChanges(ctx context.Context, dir string, chang
 			ent.changes[path] = change.Kind
 		}
 	}
+	return ent.done
 }
 
 // maxDebouncePaths bounds one flush. Past it the flush names the root, which
