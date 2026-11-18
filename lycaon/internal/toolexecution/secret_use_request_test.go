@@ -15,23 +15,27 @@ func TestSecretUseRequiresExplicitHTTPOriginsAndManagedReference(t *testing.T) {
 		return map[string]any{"command": "setup --password " + reference, "secret_use": map[string]any{"services": []any{service}}}
 	}
 	for _, service := range []string{"http://localhost:8080", "https://example.test/", "http://[::1]:9090"} {
-		recipients, err := parseSecretUse(catalogContract(t, "command"), args(service))
+		recipients, err := parseSecretUse("command", catalogContract(t, "command"), args(service))
 		testutil.FailErr(t, "parse service permission", err)
 		if len(recipients.recipients) != 1 {
 			t.Fatal("missing recipient")
 		}
 	}
 	for _, service := range []any{"http://user:pass@example.test", "http://example.test/login", "http://example.test?", "http://example.test#fragment", "ftp://example.test", "http://localhost:0", "http://localhost:65536", reference, 42} {
-		if _, err := parseSecretUse(catalogContract(t, "command"), args(service)); err == nil {
-			t.Fatalf("accepted invalid service %v", service)
+		if _, err := parseSecretUse("command", catalogContract(t, "command"), args(service)); invalidArguments(err) != "command" {
+			t.Fatalf("service %v: %v", service, err)
 		}
 	}
-	if _, err := parseSecretUse(catalogContract(t, "write"), args("https://example.test")); err == nil {
-		t.Fatal("internal tool declared an outbound permission")
+	// Tools that launch no process refuse the declaration, typed, including
+	// the outbound HTTP request a command's curl becomes.
+	for _, tool := range []string{"write", "http_request"} {
+		if _, err := parseSecretUse(tool, catalogContract(t, tool), args("https://example.test")); invalidArguments(err) != tool {
+			t.Fatalf("%s accepted secret_use or refused untyped: %v", tool, err)
+		}
 	}
 	noReference := args("https://example.test")
 	noReference["command"] = "setup"
-	if _, err := parseSecretUse(catalogContract(t, "command"), noReference); err == nil {
+	if _, err := parseSecretUse("command", catalogContract(t, "command"), noReference); err == nil {
 		t.Fatal("service permission without a managed value")
 	} else {
 		var reject *toolrejection.ToolReject
@@ -42,7 +46,7 @@ func TestSecretUseRequiresExplicitHTTPOriginsAndManagedReference(t *testing.T) {
 }
 
 func TestServiceConnectionAuthorityDoesNotDependOnDisplayLabels(t *testing.T) {
-	declaration, err := parseSecretUse(catalogContract(t, "command"), map[string]any{
+	declaration, err := parseSecretUse("command", catalogContract(t, "command"), map[string]any{
 		"command": "setup {{paintedwolf-secret:9451ac87-2ef0-4647-b55d-92fda6921ec9}}",
 		"secret_use": map[string]any{"services": []any{
 			"https://localhost", "http://[::1]:8080", "http://127.0.0.1:8080", "https://service.test:9090",
@@ -66,7 +70,7 @@ func TestArgvSecretRecipientsLocalFollowsDeclaredServices(t *testing.T) {
 	if !argvSecretRecipientsLocal(t.Context()) {
 		t.Fatal("a process handoff without declared services is not local")
 	}
-	declaration, err := parseSecretUse(catalogContract(t, "command"), map[string]any{
+	declaration, err := parseSecretUse("command", catalogContract(t, "command"), map[string]any{
 		"command":    "setup {{paintedwolf-secret:9451ac87-2ef0-4647-b55d-92fda6921ec9}}",
 		"secret_use": map[string]any{"services": []any{"http://localhost:8080", "http://127.0.0.1:8081", "http://[::1]:9090"}},
 	})
@@ -74,4 +78,15 @@ func TestArgvSecretRecipientsLocalFollowsDeclaredServices(t *testing.T) {
 	if !argvSecretRecipientsLocal(withSecretUse(t.Context(), declaration)) {
 		t.Fatal("loopback-only services are not local")
 	}
+}
+
+// invalidArguments returns the tool a TOOL_ARGS_INVALID rejection names, or
+// "" for any other error.
+func invalidArguments(err error) string {
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" {
+		return ""
+	}
+	tool, _ := reject.Data["tool"].(string)
+	return tool
 }

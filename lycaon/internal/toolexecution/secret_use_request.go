@@ -2,7 +2,6 @@ package toolexecution
 
 import (
 	"context"
-	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/url"
 	"slices"
@@ -16,21 +15,25 @@ import (
 )
 
 // secret_use declares reviewed recipients for setup and later HTTP requests.
-func parseSecretUse(contract toolcontract.Contract, args map[string]any) (*secretUseDeclaration, error) {
+// Every refusal is a typed invalid-argument rejection naming the tool.
+func parseSecretUse(tool string, contract toolcontract.Contract, args map[string]any) (*secretUseDeclaration, error) {
 	raw, present := args["secret_use"]
 	if !present {
 		return nil, nil
 	}
-	if !contract.SecretReferenceSurface.ProcessArguments() {
-		return nil, fmt.Errorf("secret_use is only available on command and terminal tools")
+	invalid := func(reason string) error {
+		return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"tool": tool, "reason": reason})
+	}
+	if !contract.AcceptsSecretUse() {
+		return nil, invalid("secret_use is only available on command and terminal tools")
 	}
 	request, ok := raw.(map[string]any)
 	if !ok || len(request) != 1 {
-		return nil, fmt.Errorf("secret_use requires a services array")
+		return nil, invalid("secret_use requires a services array")
 	}
 	services, ok := request["services"].([]any)
 	if !ok || len(services) == 0 || len(services) > 8 {
-		return nil, fmt.Errorf("secret_use.services requires 1 to 8 HTTP origins")
+		return nil, invalid("secret_use.services requires 1 to 8 HTTP origins")
 	}
 	if !secretcap.ReferenceUseInSlots(args, nil).Complete {
 		return nil, toolrejection.RejectInvalidArguments("SECRET_USE_WITHOUT_REFERENCE", map[string]any{"field": "secret_use"})
@@ -41,21 +44,21 @@ func parseSecretUse(contract toolcontract.Contract, args map[string]any) (*secre
 	for _, service := range services {
 		address, ok := service.(string)
 		if !ok || len(address) > 1024 || secretmatch.ContainsReferenceToken(address) {
-			return nil, fmt.Errorf("secret_use service must be an HTTP origin without credentials")
+			return nil, invalid("secret_use service must be an HTTP origin without credentials")
 		}
 		declared, parseErr := url.Parse(address)
 		if parseErr != nil || declared.Fragment != "" || declared.ForceQuery {
-			return nil, fmt.Errorf("secret_use service must contain only scheme, host, and port")
+			return nil, invalid("secret_use service must contain only scheme, host, and port")
 		}
 		target, err := outboundhttp.NormalizeURL(address)
 		if err != nil || target.User != nil || target.RawQuery != "" || target.Fragment != "" ||
 			(target.Path != "" && target.Path != "/") {
-			return nil, fmt.Errorf("secret_use service must contain only scheme, host, and port")
+			return nil, invalid("secret_use service must contain only scheme, host, and port")
 		}
 		if port := target.Port(); port != "" {
 			parsed, err := strconv.ParseUint(port, 10, 16)
 			if err != nil || parsed == 0 {
-				return nil, fmt.Errorf("secret_use service port must be between 1 and 65535")
+				return nil, invalid("secret_use service port must be between 1 and 65535")
 			}
 		}
 		id, label := secretmatch.HTTPDestination(target)
@@ -75,7 +78,7 @@ func parseSecretUse(contract toolcontract.Contract, args map[string]any) (*secre
 	}
 	canonical, err := secretmatch.CanonicalRecipients(recipients)
 	if err != nil {
-		return nil, err
+		return nil, invalid(err.Error())
 	}
 	slices.Sort(connectPorts)
 	return &secretUseDeclaration{recipients: canonical, connectPorts: slices.Compact(connectPorts), loopback: loopback}, nil

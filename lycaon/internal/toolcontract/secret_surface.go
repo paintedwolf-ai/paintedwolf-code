@@ -28,3 +28,9 @@ func (s SecretSurface) IsFile() bool {
 func (c Contract) AcceptsSecretReferences() bool {
 	return c.SecretReferenceSurface != SecretSurfaceNone
 }
+
+// AcceptsSecretUse reports whether a call may declare secret_use: the
+// reviewed services a launched process may pass its resolved values to.
+func (c Contract) AcceptsSecretUse() bool {
+	return c.SecretReferenceSurface.ProcessArguments()
+}
