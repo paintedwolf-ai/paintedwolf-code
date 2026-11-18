@@ -25,6 +25,10 @@ func (s *Store) downloadArtifact(ctx context.Context, client *http.Client, url s
 	name := filepath.Join("partials", a.Digest)
 	f, err := openPartial(root, name)
 	if errors.Is(err, os.ErrPermission) {
+		info, statErr := root.Lstat(name)
+		if statErr != nil || !privatePartial(info) || info.Mode().Perm() != 0400 {
+			return errors.Join(err, statErr)
+		}
 		// A crash can leave a sealed partial awaiting its final rename.
 		if err := s.publishPartial(ctx, root, name, a); err != nil {
 			return err
