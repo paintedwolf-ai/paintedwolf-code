@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -231,4 +232,93 @@ func settingsGetJSON[T any](t *testing.T, base, path string) T {
 		t.Fatalf("decode GET %s: %v body=%s", path, err, body)
 	}
 	return v
+}
+
+func settingsControlsBase(t *testing.T) string {
+	t.Helper()
+	h := wiring.BuildForTest(t)
+	httpSrv := httptest.NewServer(h.Server)
+	t.Cleanup(httpSrv.Close)
+	return httpSrv.URL
+}
+
+func mustJSON(t *testing.T, v any) string {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	testutil.FailErr(t, "encode request body", err)
+	return string(raw)
+}
+
+func TestProviderSettingsSurvivePartialUpdatesE2E(t *testing.T) {
+	// Bedrock's ambient chain must not read machine AWS files or reach EC2 metadata.
+	awsDir := t.TempDir()
+	t.Setenv("AWS_CONFIG_FILE", awsDir+"/config")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", awsDir+"/credentials")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
+	t.Setenv("AWS_PROFILE", "")
+	base := settingsControlsBase(t)
+	const providerPath = "/v1/providers/{provider_id}"
+	update := func(id string, req wire.UpdateProviderRequest) wire.ProviderMeta {
+		t.Helper()
+		return openAPIPatchJSON[wire.ProviderMeta](t, base, providerPath, map[string]string{"provider_id": id},
+			mustJSON(t, req), http.StatusOK)
+	}
+
+	const azureID, bedrockID = "settings-azure-fixture", "settings-bedrock-fixture"
+	models := []wire.ProviderModelConfig{{ID: "fixture-deployment", PricedAs: "fixture-model"}}
+	openAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil, mustJSON(t, wire.CreateProviderRequest{
+		ID: azureID, Kind: "azure", Label: "Deployment fixture", BaseURL: "https://fixture.openai.azure.com", Models: models,
+	}), http.StatusCreated)
+	azure := update(azureID, wire.UpdateProviderRequest{Label: new("Renamed deployment fixture")})
+	if len(azure.ConfiguredModels) != len(models) ||
+		azure.ConfiguredModels[0].ID != models[0].ID || azure.ConfiguredModels[0].PricedAs != models[0].PricedAs {
+		t.Fatalf("label update lost deployment rows: configured_models = %+v, want %+v", azure.ConfiguredModels, models)
+	}
+
+	openAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil, mustJSON(t, wire.CreateProviderRequest{
+		ID: bedrockID, Kind: "bedrock", Label: "Credential mode fixture", BaseURL: "us-east-1", RequiresAPIKey: new(true),
+	}), http.StatusCreated)
+	for _, required := range []bool{false, true} {
+		update(bedrockID, wire.UpdateProviderRequest{RequiresAPIKey: new(required)})
+		provider := update(bedrockID, wire.UpdateProviderRequest{Label: new("Retained credential mode")})
+		if provider.RequiresAPIKey != required {
+			t.Fatalf("label update changed requires_api_key: got %t, want %t", provider.RequiresAPIKey, required)
+		}
+		if provider.AmbientAuth != "aws-sdk-chain" {
+			t.Fatalf("ambient_auth = %q, want aws-sdk-chain", provider.AmbientAuth)
+		}
+	}
+
+	for _, id := range []string{azureID, bedrockID} {
+		openAPIDo(t, base, http.MethodDelete, providerPath, map[string]string{"provider_id": id}, "", http.StatusNoContent)
+	}
+}
+
+func TestDetectionPackEnableSettingRetainedE2E(t *testing.T) {
+	base := settingsControlsBase(t)
+	read := func() wire.DetectionPackList {
+		t.Helper()
+		return openAPIGetJSON[wire.DetectionPackList](t, base, "/v1/detection-packs", nil, http.StatusOK)
+	}
+	original := read()
+	if len(original.Packs) == 0 {
+		t.Fatal("detection catalog lists no packs")
+	}
+	for _, pack := range original.Packs {
+		path := map[string]string{"pack_id": pack.ID}
+		for _, enabled := range []bool{false, true, pack.Enabled} {
+			openAPIDo(t, base, http.MethodPatch, "/v1/detection-packs/{pack_id}", path,
+				mustJSON(t, wire.UpdateDetectionPackRequest{Enabled: new(enabled)}), http.StatusOK)
+			packs := read().Packs
+			i := slices.IndexFunc(packs, func(p wire.DetectionPack) bool { return p.ID == pack.ID })
+			if i < 0 {
+				t.Fatalf("%s: pack missing after PATCH enabled=%t", pack.ID, enabled)
+			}
+			if got := packs[i].Enabled; got != enabled {
+				t.Fatalf("%s: enabled = %t after PATCH enabled=%t", pack.ID, got, enabled)
+			}
+		}
+	}
 }
