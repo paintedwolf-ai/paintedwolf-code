@@ -99,9 +99,9 @@ func stagedPin(t *testing.T) (string, *Pin, PlatformPin) {
 }
 
 func TestVerifyRootAcceptsPinnedPayload(t *testing.T) {
-	resetForTest()
 	root, pin, plat := stagedPin(t)
-	engine, err := verifyRoot(root, pin, plat)
+	verify := newVerifier()
+	engine, err := verify.verifyRoot(root, pin, plat)
 	if err != nil {
 		testutil.FailErr(t, "verify", err)
 	}
@@ -112,19 +112,19 @@ func TestVerifyRootAcceptsPinnedPayload(t *testing.T) {
 	if err := os.WriteFile(engine.Binary, []byte("changed"), 0o755); err != nil {
 		testutil.FailErr(t, "rewrite", err)
 	}
-	if _, err := verifyRoot(root, pin, plat); err != nil {
+	if _, err := verify.verifyRoot(root, pin, plat); err != nil {
 		t.Fatalf("remembered root re-verified: %v", err)
 	}
 }
 
 func TestVerifyRootRefusesMismatchedAndMissingPayload(t *testing.T) {
-	resetForTest()
 	root, pin, plat := stagedPin(t)
+	verify := newVerifier()
 	osd := filepath.Join(root, "tessdata", "osd.traineddata")
 	if err := os.WriteFile(osd, []byte("OSD"), 0o644); err != nil {
 		testutil.FailErr(t, "tamper", err)
 	}
-	_, err := verifyRoot(root, pin, plat)
+	_, err := verify.verifyRoot(root, pin, plat)
 	var ue *UnavailableError
 	if !errors.As(err, &ue) || ue.Reason != ReasonDigestMismatch || ue.Path != osd {
 		t.Fatalf("tampered payload err = %v", err)
@@ -132,27 +132,29 @@ func TestVerifyRootRefusesMismatchedAndMissingPayload(t *testing.T) {
 	if err := os.WriteFile(osd, []byte("osd!"), 0o644); err != nil {
 		testutil.FailErr(t, "resize", err)
 	}
-	if _, err := verifyRoot(root, pin, plat); !errors.As(err, &ue) || ue.Reason != ReasonDigestMismatch {
+	if _, err := verify.verifyRoot(root, pin, plat); !errors.As(err, &ue) || ue.Reason != ReasonDigestMismatch {
 		t.Fatalf("resized payload err = %v", err)
 	}
 	if err := os.Remove(osd); err != nil {
 		testutil.FailErr(t, "remove", err)
 	}
-	if _, err := verifyRoot(root, pin, plat); !errors.As(err, &ue) || ue.Reason != ReasonMissing {
+	if _, err := verify.verifyRoot(root, pin, plat); !errors.As(err, &ue) || ue.Reason != ReasonMissing {
 		t.Fatalf("missing payload err = %v", err)
 	}
+	testutil.FailErr(t, "restore payload", os.WriteFile(osd, []byte("osd"), 0o644))
+	_, err = verify.verifyRoot(root, pin, plat)
+	testutil.FailErr(t, "verify repaired root", err)
 }
 
 func TestVerifyRootRequiresExecutableBinary(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("mode bits are not meaningful on Windows")
 	}
-	resetForTest()
 	root, pin, plat := stagedPin(t)
 	if err := os.Chmod(filepath.Join(root, "bin", "tesseract"), 0o644); err != nil {
 		testutil.FailErr(t, "chmod", err)
 	}
-	_, err := verifyRoot(root, pin, plat)
+	_, err := newVerifier().verifyRoot(root, pin, plat)
 	var ue *UnavailableError
 	if !errors.As(err, &ue) || ue.Reason != ReasonMissing {
 		t.Fatalf("non-executable binary err = %v", err)
@@ -160,7 +162,6 @@ func TestVerifyRootRequiresExecutableBinary(t *testing.T) {
 }
 
 func TestResolveWithoutEngineReportsPlatformOrMissing(t *testing.T) {
-	resetForTest()
 	t.Setenv(EnvRoot, t.TempDir())
 	t.Setenv("LYCAON_ENGINE_ROOT", t.TempDir())
 	_, err := Resolve()
@@ -189,9 +190,8 @@ func platformPin(pin *Pin, plat PlatformPin) *Pin {
 }
 
 func TestResolveRefusesAPlatformWithoutAnEngine(t *testing.T) {
-	resetForTest()
 	root, pin, plat := stagedPin(t)
-	_, err := resolve(platformPin(pin, plat), "darwin", "arm64", []string{root})
+	_, err := newVerifier().resolve(platformPin(pin, plat), "darwin", "arm64", []string{root})
 	var ue *UnavailableError
 	if !errors.As(err, &ue) || ue.Reason != ReasonUnsupportedPlatform || !strings.Contains(err.Error(), "no bundled text recognizer") {
 		t.Fatalf("unsupported platform err = %v", err)
@@ -199,9 +199,8 @@ func TestResolveRefusesAPlatformWithoutAnEngine(t *testing.T) {
 }
 
 func TestResolveSkipsMissingRootsAndUsesTheFirstVerifiedOne(t *testing.T) {
-	resetForTest()
 	root, pin, plat := stagedPin(t)
-	engine, err := resolve(platformPin(pin, plat), "linux", "amd64", []string{t.TempDir(), root})
+	engine, err := newVerifier().resolve(platformPin(pin, plat), "linux", "amd64", []string{t.TempDir(), root})
 	if err != nil {
 		testutil.FailErr(t, "resolve", err)
 	}
@@ -213,14 +212,13 @@ func TestResolveSkipsMissingRootsAndUsesTheFirstVerifiedOne(t *testing.T) {
 // An altered payload in an earlier root is refused even when a later root
 // would verify, so a tampered install never falls back to another copy.
 func TestResolveStopsAtAnAlteredRoot(t *testing.T) {
-	resetForTest()
 	good, pin, plat := stagedPin(t)
 	altered, _, _ := stagedPin(t)
 	osd := filepath.Join(altered, "tessdata", "osd.traineddata")
 	if err := os.WriteFile(osd, []byte("OSD"), 0o644); err != nil {
 		testutil.FailErr(t, "tamper", err)
 	}
-	_, err := resolve(platformPin(pin, plat), "linux", "amd64", []string{altered, good})
+	_, err := newVerifier().resolve(platformPin(pin, plat), "linux", "amd64", []string{altered, good})
 	var ue *UnavailableError
 	if !errors.As(err, &ue) || ue.Reason != ReasonDigestMismatch || ue.Path != osd {
 		t.Fatalf("altered root err = %v", err)
@@ -231,9 +229,8 @@ func TestResolveStopsAtAnAlteredRoot(t *testing.T) {
 }
 
 func TestResolveWithNoRootIsMissing(t *testing.T) {
-	resetForTest()
 	_, pin, plat := stagedPin(t)
-	_, err := resolve(platformPin(pin, plat), "linux", "amd64", nil)
+	_, err := newVerifier().resolve(platformPin(pin, plat), "linux", "amd64", nil)
 	var ue *UnavailableError
 	if !errors.As(err, &ue) || ue.Reason != ReasonMissing || err.Error() != "ocrengine: bundled text recognizer unavailable" {
 		t.Fatalf("no root err = %v", err)
@@ -246,25 +243,5 @@ func TestParsePinRejectsMalformedAndIncompletePins(t *testing.T) {
 	}
 	if _, err := parsePin([]byte("engine_version: \"5.5.3+paintedwolf.1\"\n")); err == nil || !strings.Contains(err.Error(), "producer") {
 		t.Fatalf("incomplete pin err = %v", err)
-	}
-}
-
-func TestTestingEnableBundledRootFindsStagedTree(t *testing.T) {
-	resetForTest()
-	t.Setenv(EnvRoot, "")
-	checkout := t.TempDir()
-	if err := os.WriteFile(filepath.Join(checkout, "Taskfile.yml"), nil, 0o644); err != nil {
-		testutil.FailErr(t, "taskfile", err)
-	}
-	staged := filepath.Join(checkout, "lycaon-den", "src-tauri", "engine-root", DirName)
-	writePayload(t, staged, binaryRel, []byte("bin"), 0o755)
-	nested := filepath.Join(checkout, "lycaon", "internal", "visualscreen")
-	if err := os.MkdirAll(nested, 0o755); err != nil {
-		testutil.FailErr(t, "mkdir", err)
-	}
-	t.Chdir(nested)
-	TestingEnableBundledRoot()
-	if got := os.Getenv(EnvRoot); got != staged {
-		t.Fatalf("%s = %q, want %q", EnvRoot, got, staged)
 	}
 }

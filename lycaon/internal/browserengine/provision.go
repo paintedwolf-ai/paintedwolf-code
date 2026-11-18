@@ -72,17 +72,17 @@ func managedRoot(cacheDir string) string {
 	return filepath.Join(cacheDir, "managed", PinnedChromeHeadlessShell, plat)
 }
 
-func managedBinaryPath(cacheDir string) string {
+// ManagedBinary returns a runnable browser in the pinned cache directory.
+func ManagedBinary(cacheDir string) string {
 	root := managedRoot(cacheDir)
 	if root == "" {
 		return ""
 	}
-	return filepath.Join(root, headlessShellName())
-}
-
-func managedInstallReady(cacheDir string) bool {
-	bin := managedBinaryPath(cacheDir)
-	return bin != "" && installReady(bin)
+	bin := filepath.Join(root, headlessShellName())
+	if installReady(bin) {
+		return bin
+	}
+	return ""
 }
 
 // EnsureBinary resolves env → bundle → managed, provisioning the managed cache
@@ -123,8 +123,8 @@ func ensureManaged(ctx context.Context, cacheDir string) (string, error) {
 	ensureMu.Lock()
 	defer ensureMu.Unlock()
 
-	if managedInstallReady(cacheDir) {
-		return managedBinaryPath(cacheDir), nil
+	if bin := ManagedBinary(cacheDir); bin != "" {
+		return bin, nil
 	}
 	plat, err := cftPlatform()
 	if err != nil {
