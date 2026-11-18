@@ -157,20 +157,29 @@ class TaskAdmissionTests(unittest.TestCase):
         explicit = execution.bounded_environment({"GOMAXPROCS": "2"}, 6)
         self.assertEqual((explicit["GO_TEST_P"], explicit["GOMAXPROCS"]), ("3", "2"))
 
-    def test_default_budget_reserves_host_capacity_and_caps_large_hosts(self):
-        for cpus, workers in ((None, 1), (1, 1), (2, 1), (4, 3), (8, 6), (16, 8)):
+    def test_default_budget_reserves_host_capacity(self):
+        for cpus, workers in ((None, 1), (1, 1), (2, 1), (4, 3), (8, 6), (16, 12), (32, 24)):
             with self.subTest(cpus=cpus), patch.object(os, "cpu_count", return_value=cpus), \
+                    patch.object(resources, "memory_workers", return_value=64), \
                     patch.dict(os.environ, {"PW_TEST_HOST": "shared"}):
                 self.assertEqual(execution.worker_budget({}), workers)
-                self.assertEqual(resources.demand({"workers": "shared"}, 8), max(1, workers // 2))
+                self.assertEqual(resources.demand({"workers": "shared"}, 64), max(1, workers // 2))
 
     def test_dedicated_host_uses_every_cpu_for_shared_operations(self):
-        for cpus, workers in ((1, 1), (3, 3), (4, 4), (16, 8)):
+        for cpus, workers in ((1, 1), (3, 3), (4, 4), (16, 16)):
             with self.subTest(cpus=cpus), patch.object(os, "cpu_count", return_value=cpus), \
+                    patch.object(resources, "memory_workers", return_value=64), \
                     patch.dict(os.environ, {"PW_TEST_HOST": "dedicated"}):
                 self.assertEqual(execution.worker_budget({}), workers)
-                self.assertEqual(resources.demand({"workers": "shared"}, 8), workers)
-                self.assertEqual(resources.demand({"workers": 1}, 8), 1)
+                self.assertEqual(resources.demand({"workers": "shared"}, 64), workers)
+                self.assertEqual(resources.demand({"workers": 1}, 64), 1)
+
+    def test_memory_bounds_the_budget(self):
+        for memory, workers in ((1, 1), (7, 7), (15, 12)):
+            with self.subTest(memory=memory), patch.object(os, "cpu_count", return_value=16), \
+                    patch.object(resources, "memory_workers", return_value=memory), \
+                    patch.dict(os.environ, {"PW_TEST_HOST": "shared"}):
+                self.assertEqual(execution.worker_budget({}), workers)
 
     def test_worker_limits_bound_oversized_requests_across_runners(self):
         names = ("GO_TEST_P", "GO_TEST_PARALLEL", "GOMAXPROCS", "PW_VITEST_MAX_WORKERS",

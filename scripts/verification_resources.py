@@ -23,9 +23,18 @@ def capacity():
     return worker_budget({})
 
 
+def memory_workers():
+    # Two GiB per worker keeps parallel race and integration builds out of swap.
+    try:
+        total = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+    except (AttributeError, ValueError, OSError):
+        return os.cpu_count() or 1
+    return max(1, total // (2 << 30))
+
+
 def worker_budget(environment):
     cpus = os.cpu_count() or 1
-    limit = min(8, max(1, cpus if dedicated_host() else cpus * 3 // 4))
+    limit = max(1, min(cpus if dedicated_host() else cpus * 3 // 4, memory_workers()))
     requested = int(environment.get("PW_TEST_WORKERS", limit))
     if not 1 <= requested <= limit:
         raise ValueError(f"PW_TEST_WORKERS must be between 1 and {limit} (the shared worker capacity)")

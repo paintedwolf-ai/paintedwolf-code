@@ -740,8 +740,8 @@ engine staging acquire a separate exclusive reservation through
 `den:harness -- --prepare`, which ends before interactive startup. Automated
 harness tests and canaries remain queued for their whole execution.
 
-The default worker budget is three quarters of the available CPUs, rounded down
-and bounded between one and eight. `PW_TEST_WORKERS` selects a per-invocation
+The default worker budget is three quarters of the available CPUs, rounded down,
+at least one, and at most one worker per 2 GiB of memory. `PW_TEST_WORKERS` selects a per-invocation
 ceiling between one and that budget; shared execution also obeys the global
 capacity. The catalog's `resources` declarations reserve half that capacity for
 a parallel Go, Rust, or Vitest operation, and one slot for frontend lint or
@@ -754,7 +754,7 @@ package obey the same per-process share; Vitest uses at most four workers.
 Fuzzing and Rust builds share the same budget. Runners use the worker limits
 assigned at admission. Hosted CI sets
 `PW_TEST_HOST=dedicated`: one lane owns the runner, so the budget is every CPU
-(still at most eight) and a shared operation reserves all of it.
+(still bounded by memory) and a shared operation reserves all of it.
 
 Resource names are global locks: Go digests share `go`, Go lint holds `lint`,
 frontend checks hold `frontend`, Cargo tests hold `rust`, and the isolated
