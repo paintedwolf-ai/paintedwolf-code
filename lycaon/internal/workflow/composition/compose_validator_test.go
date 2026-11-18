@@ -12,17 +12,18 @@ import (
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	"github.com/lycaon/lycaon/internal/workflow/drafts/draftstest"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 )
 
-func testComposer(t *testing.T) *workflowcomposition.Composer {
+func testComposer(t *testing.T, sessionIDs ...string) *workflowcomposition.Composer {
 	t.Helper()
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
 	return &workflowcomposition.Composer{
-		SessionStore: workflowdrafts.NewMemory(),
+		SessionStore: draftstest.NewStore(t, sessionIDs...),
 		Registry:     reg,
 		Agents:       agents,
 		Policy:       testComposePolicy(t),
@@ -30,7 +31,7 @@ func testComposer(t *testing.T) *workflowcomposition.Composer {
 }
 
 func TestComposeValidatorAllowsPlanChildShortcut(t *testing.T) {
-	c := testComposer(t)
+	c := testComposer(t, "sess-1")
 	manifest := `id: hotfix-session
 version: 1.0.0
 extends: plan@1.0.0
@@ -200,7 +201,7 @@ phases:
 }
 
 func TestComposeDryRunDoesNotPersist(t *testing.T) {
-	c := testComposer(t)
+	c := testComposer(t, "sess-dry")
 	store := c.SessionStore.(*workflowdrafts.Memory)
 	manifest := `id: dry
 version: 1.0.0
