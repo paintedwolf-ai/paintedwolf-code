@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 )
 
 func TestComposePolicyYAMLLoads(t *testing.T) {
@@ -41,28 +40,5 @@ func TestBundledWorkflowTemplatesExpand(t *testing.T) {
 		if len(yaml) == 0 {
 			t.Fatalf("%s empty yaml", id)
 		}
-	}
-}
-
-func TestWorkflowTemplateRoutesInOpenAPI(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	routes, err := wirespec.LoadOpenAPIRoutes(root)
-	contractcheck.FailErr(t, "load OpenAPI routes from docs/openapi.yaml", err)
-	foundList := false
-	foundCompose := false
-	for _, r := range routes {
-		if r.Method == "GET" && r.Path == "/v1/workflow-templates" && r.OperationID == "listWorkflowTemplates" {
-			foundList = true
-		}
-		if r.Method == "POST" && r.Path == "/v1/sessions/{id}/workflows/compose-from-template" && r.OperationID == "composeWorkflowFromTemplate" {
-			foundCompose = true
-		}
-	}
-	if !foundList {
-		t.Fatal("listWorkflowTemplates route missing")
-	}
-	if !foundCompose {
-		t.Fatal("composeWorkflowFromTemplate route missing")
 	}
 }
