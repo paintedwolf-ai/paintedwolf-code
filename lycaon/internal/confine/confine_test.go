@@ -20,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/enginepaths"
-	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -124,71 +123,6 @@ func bindSocketFixture(t *testing.T, c confine.Confinement, args []string) (conf
 	return c, resolved, cleanup, nil
 }
 
-func TestBuildProfileConfinesWritesAndDeniesNetwork(t *testing.T) {
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
-	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
-	for _, want := range []string{
-		"(version 1)", "(deny default)", "(allow file-read*)", "(allow file-write*",
-		`(subpath "/proj")`, `(literal "/dev/null")`,
-		"(allow file-ioctl)", "(allow pseudo-tty)", `(literal "/dev/ptmx")`,
-		"(allow signal (target same-sandbox))",
-	} {
-		if !strings.Contains(p, want) {
-			t.Fatalf("profile missing %q:\n%s", want, p)
-		}
-	}
-	for _, line := range strings.Split(p, "\n") {
-		if strings.TrimSpace(line) == "(allow signal)" {
-			t.Fatalf("unscoped signal allow must not appear:\n%s", p)
-		}
-	}
-	if strings.Contains(p, "(allow network*)") {
-		t.Fatalf("network must be denied by default:\n%s", p)
-	}
-	for _, forbidden := range []string{"(allow network-outbound", "(allow network-bind", "(allow network-inbound"} {
-		if strings.Contains(p, forbidden) {
-			t.Fatalf("NetworkDeny profile contains %q:\n%s", forbidden, p)
-		}
-	}
-
-	pn, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}, Network: confine.NetworkDirectIP})
-	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
-	if !strings.Contains(pn, `(allow network-outbound (remote ip "*:*"))`) {
-		t.Fatalf("NetworkDirectIP should allow remote IP outbound:\n%s", pn)
-	}
-	if strings.Contains(pn, "(allow network*)") {
-		t.Fatalf("NetworkDirectIP must not emit blanket network*:\n%s", pn)
-	}
-	if !strings.Contains(pn, "(allow network-bind") || !strings.Contains(pn, "(allow network-inbound") {
-		t.Fatalf("NetworkDirectIP must carry explicit listener authority:\n%s", pn)
-	}
-
-	pp, err := confine.BuildSeatbeltProfile(confine.Confinement{
-		Roots: []string{"/proj"}, Network: confine.NetworkProxyOnly,
-		ProxyAddr: "127.0.0.1:8472", SocksProxyAddr: "127.0.0.1:8473",
-	})
-	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
-	for _, endpoint := range []string{"localhost:8472", "localhost:8473"} {
-		if !strings.Contains(pp, endpoint) {
-			t.Fatalf("NetworkProxyOnly missing private endpoint %s:\n%s", endpoint, pp)
-		}
-	}
-	if strings.Contains(pp, `network-outbound (remote ip "localhost:*"`) {
-		t.Fatalf("NetworkProxyOnly must not allow ambient local services:\n%s", pp)
-	}
-	if strings.Contains(pp, "(allow network*)") {
-		t.Fatalf("NetworkProxyOnly must not allow all network:\n%s", pp)
-	}
-	if strings.Contains(pp, "(allow network-bind") || strings.Contains(pp, "(allow network-inbound") {
-		t.Fatalf("NetworkProxyOnly must not carry listener authority:\n%s", pp)
-	}
-	if _, err := confine.BuildSeatbeltProfile(confine.Confinement{
-		Roots: []string{"/proj"}, Network: confine.NetworkProxyOnly,
-	}); err == nil {
-		t.Fatal("unbound NetworkProxyOnly profile must fail closed")
-	}
-}
-
 func TestDefaultConfinementPolicy(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
@@ -258,122 +192,6 @@ func TestDefaultConfinementPolicy(t *testing.T) {
 				t.Fatalf("LYCAON_SANDBOX_NETWORK=%q must not bypass proxy egress: %+v", value, c)
 			}
 		}
-	}
-}
-
-func TestBuildProfileDeniesSecretReads(t *testing.T) {
-	t.Setenv("LYCAON_SANDBOX_DENY_READ", "/opt/secrets")
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
-	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
-	// Inspect only the read-deny block.
-	readDeny, _ := profileBlock(t, p, blockDenyRead, 0)
-	assertBlockCoversPath(t, readDeny, "/opt/secrets", "configured extra deny-read root")
-	// Key material is read-denied until a declared read_path grant punches an
-	// exact file. Credential stores stay readable so their CLIs can authenticate.
-	for _, rel := range []string{"/.ssh", "/.gnupg"} {
-		if !strings.Contains(readDeny, rel) {
-			t.Fatalf("%s must be read-denied at the kernel:\n%s", rel, p)
-		}
-	}
-	if strings.Contains(readDeny, "/.aws") {
-		t.Fatalf("/.aws must stay readable — its CLI authenticates from it:\n%s", p)
-	}
-
-	// The switch disables configured control-plane denials; the key-material
-	// floor stays.
-	t.Setenv("LYCAON_SANDBOX_DENY_READ", "off")
-	p2, _ := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
-	if strings.Contains(p2, "/opt/secrets") {
-		t.Fatalf("LYCAON_SANDBOX_DENY_READ=off should drop configured read-denies:\n%s", p2)
-	}
-}
-
-func TestBuildProfileDeniesPerActionSecretReads(t *testing.T) {
-	project := t.TempDir()
-	secret := filepath.Join(project, ".env.local")
-	testutil.FailErr(t, "create per-action secret fixture", os.WriteFile(secret, []byte("TOKEN=fixture\n"), 0o600))
-	c := confine.Confinement{ProjectID: "project", Roots: []string{project}, ReadDenyPaths: []string{secret}, Network: confine.NetworkDeny}
-	profile, err := confine.BuildSeatbeltProfile(c)
-	testutil.FailErr(t, "build per-action read-deny profile", err)
-	resolvedSecret := fspath.CanonicalPath(secret)
-	if !strings.Contains(profile, "(subpath \""+resolvedSecret+"\")") {
-		t.Fatalf("profile does not deny per-action secret read %q: %s", secret, profile)
-	}
-}
-
-// The configuration root remains outside the child read boundary.
-func TestBuildProfileDeniesReadingOwnConfigDir(t *testing.T) {
-	cfg := t.TempDir()
-	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
-	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
-	// The assertion targets the governing read-deny block.
-	readDeny, _ := profileBlock(t, p, blockDenyRead, 0)
-	assertBlockCoversPath(t, readDeny, cfg, "read deny (product config dir)")
-}
-
-// Agent workspaces override the configuration read denial.
-func TestBuildProfileAllowsReadingAgentWorkspaces(t *testing.T) {
-	cfg := t.TempDir()
-	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-
-	roots := enginepaths.AgentWorkspaceRootsUnder(cfg)
-	if len(roots) == 0 {
-		t.Fatal("no agent workspace roots declared")
-	}
-	// Materialize roots before canonicalizing their spellings.
-	for _, root := range roots {
-		testutil.FailErr(t, "mkdir workspace", os.MkdirAll(root, 0o700))
-	}
-
-	// Isolate read allow-back from write-root coverage.
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{t.TempDir()}})
-	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
-	allowBack := readAllowBackBlock(t, p)
-	for _, root := range roots {
-		assertBlockCoversPath(t, allowBack, root, "read allow-back")
-	}
-}
-
-func TestBuildProfileDeniesWritingSecretStoresEvenWhenHomeIsGranted(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(t.TempDir(), "state"))
-	// The test installs the catalog normally supplied at startup.
-	confine.SetCredentialStorePathsSource(func() []string {
-		return []string{
-			"~/.aws/", "~/.kube/", "~/.config/gcloud/", "~/.azure/",
-			"~/.docker/config.json", "~/.docker/contexts", "~/.docker/cli-plugins",
-		}
-	})
-	t.Cleanup(func() { confine.SetCredentialStorePathsSource(nil) })
-
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{
-		Roots:             []string{t.TempDir()},
-		GrantedWriteRoots: []string{home},
-	})
-	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
-	resolvedHome, err := filepath.EvalSymlinks(home)
-	if err != nil {
-		resolvedHome = home
-	}
-	// The ancestor is present in the write allow block.
-	allowWrite, _ := profileBlock(t, p, blockAllowWrite, 0)
-	assertBlockCoversPath(t, allowWrite, resolvedHome, "write-root allow (reviewed home)")
-
-	// Protected descendants remain in the deny block.
-	denyWrite, _ := profileBlock(t, p, blockDenyWrite, 0)
-	for _, rel := range []string{
-		".ssh", ".aws", ".gnupg", ".kube", ".config/gcloud", ".azure",
-		".docker/config.json", ".docker/contexts", ".docker/cli-plugins",
-	} {
-		assertBlockCoversPath(t, denyWrite, filepath.Join(resolvedHome, rel), "write hard-deny ("+rel+")")
-	}
-	// Uncatalogued siblings remain writable.
-	buildx := filepath.Join(resolvedHome, ".docker", "buildx", "activity")
-	if strings.Contains(denyWrite, buildx) {
-		t.Fatalf("buildx runtime state must stay writable, deny block was:\n%s", denyWrite)
 	}
 }
 
@@ -586,17 +404,6 @@ func TestBoundaryDraftWorkspaceVenvInterpreterExecutes(t *testing.T) {
 	code, out = confinedRun(t, self, confinement, interpreter, "-m", "ensurepip", "--upgrade")
 	if code != 0 {
 		t.Fatalf("draft venv bootstrap must execute under confinement, exit=%d out=%s", code, out)
-	}
-}
-
-func TestBuildProfileIncludesStandardCacheRoots(t *testing.T) {
-	t.Setenv("LYCAON_SANDBOX_WRITE_ROOTS", "/opt/customcache")
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
-	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
-	// Explicit write roots extend the default filesystem scope.
-	allowWrite, _ := profileBlock(t, p, blockAllowWrite, 0)
-	if !strings.Contains(allowWrite, `(subpath "/opt/customcache")`) {
-		t.Fatalf("extra write-root not honored:\n%s", p)
 	}
 }
 

@@ -17,24 +17,24 @@ RUNNER = live(area="scripts")
 
 class HostedScheduleTests(unittest.TestCase):
     def test_incomplete_nightly_uses_one_basis_for_the_whole_matrix(self):
-        measured = {"lanes": {f"{BEHAVIOR} 1/2": 1287.2, BUILD: 226.1, LINT: 822.5}}
+        measured = {"lanes": {f"{BEHAVIOR} 1/3": 1287.2, BUILD: 226.1, LINT: 822.5}}
         original = copy.deepcopy(measured)
         rows = hosted_plan.matrix("integration", timings=measured)["include"]
         self.assertEqual(measured, original)
-        self.assertEqual({row["lane"] for row in rows[:3]}, {BUILD, LINT, RUNNER})
+        self.assertEqual({row["lane"] for row in rows[:2]}, {BUILD, RUNNER})
         self.assertEqual({row["timing_basis"] for row in rows}, {"catalog-budget"})
         self.assertTrue(all(row["expected_seconds"] == row["minutes"] * 60 for row in rows))
         self.assertEqual(rows, hosted_plan.matrix("integration")["include"])
-        self.assertEqual(hosted_plan.max_parallel("integration"), 6)
+        self.assertEqual(hosted_plan.max_parallel("integration"), 12)
 
     def test_balanced_shards_share_the_longest_measurement(self):
         baseline = hosted_plan.matrix("integration")["include"]
         seconds = {row["timing_row"]: 600 for row in baseline}
-        seconds.update({f"{BEHAVIOR} 1/2": 60, f"{BEHAVIOR} 2/2": 1500})
+        seconds.update({f"{BEHAVIOR} 1/3": 60, f"{BEHAVIOR} 2/3": 1500, f"{BEHAVIOR} 3/3": 700})
         rows = hosted_plan.matrix("integration", timings={"lanes": seconds})["include"]
-        self.assertEqual([row["lane"] for row in rows[:3]], [BUILD, LINT, RUNNER])
-        self.assertEqual([row["lane"] for row in rows[3:5]], [BEHAVIOR, BEHAVIOR])
-        self.assertEqual([row["expected_seconds"] for row in rows[3:5]], [1500, 1500])
+        self.assertEqual([row["lane"] for row in rows[:2]], [BUILD, RUNNER])
+        self.assertEqual([row["lane"] for row in rows[2:5]], [BEHAVIOR] * 3)
+        self.assertEqual([row["expected_seconds"] for row in rows[2:5]], [1500] * 3)
         self.assertEqual({row["timing_basis"] for row in rows}, {"measured"})
         self.assertEqual(rows, hosted_plan.matrix("integration", timings={"lanes": seconds})["include"])
 
@@ -56,11 +56,11 @@ class HostedScheduleTests(unittest.TestCase):
         self.assertIn("No lanes", hosted_schedule.summarize({"include": []}))
 
     def test_summary_explains_fallback_and_sources(self):
-        measured = {"run": 30, "lanes": {f"{BEHAVIOR} 1/2": 1287.2}}
+        measured = {"run": 30, "lanes": {f"{BEHAVIOR} 1/3": 1287.2}}
         matrix = hosted_plan.matrix("integration", timings=measured)
         summary = hosted_schedule.summarize(matrix, measured)
         self.assertIn("Estimate basis: `catalog-budget`", summary)
-        self.assertIn(f"`{BEHAVIOR} 2/2`", summary)
+        self.assertIn(f"`{BEHAVIOR} 2/3`", summary)
         self.assertIn("Nightly timing source: run 30.", summary)
-        self.assertIn(f"| 3 | {RUNNER} |  | reject | 3600 |", summary)
-        self.assertIn(f"| 4 | {BEHAVIOR} | 1/2 | critical | 9000 |", summary)
+        self.assertIn(f"| 2 | {RUNNER} |  | reject | 3600 |", summary)
+        self.assertIn(f"| 3 | {BEHAVIOR} | 1/3 | critical | 9000 |", summary)

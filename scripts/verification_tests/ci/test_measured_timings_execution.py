@@ -13,12 +13,12 @@ import verification_plan as planning
 from verification_tests.ci.fixture_plan import live
 
 BEHAVIOR = live(phase="affected-packages")
-BENCHMARKS = live(runs="perf:bench")
+BENCHMARKS = live(runs="perf:bench", profiles=["nightly"])
 BUILD = live(runs="check:drift")
 DEN = live(runs="den:typecheck")
 LINT = live(runs="test:fail-messages:check")
 NATIVE = live(runs="den:test:rust")
-RACE = live(runs="test:race")
+RACE = live(runs="test:race", profiles=["nightly"])
 RUNNER = live(area="scripts")
 WEBKIT_GTK = live(runs="den:webkit:atspi")
 
@@ -219,7 +219,7 @@ class MeasuredTimingsTests(unittest.TestCase):
         rows = hosted_plan.matrix("integration", timings={"lanes": measured, "packages": {}})["include"]
         selection = lambda rows: sorted((row["lane"], row["shard"], row["minutes"]) for row in rows)
         self.assertEqual(selection(rows), selection(unmeasured))
-        self.assertEqual({row["lane"] for row in rows[:3]}, {BUILD, LINT, RUNNER})
+        self.assertEqual({row["lane"] for row in rows[:2]}, {BUILD, RUNNER})
         rest = [row["lane"] for row in rows if lanes[row["lane"]].get("priority", "normal") == "normal"]
         self.assertEqual(rest[:3], [WEBKIT_GTK, DEN, NATIVE])
         self.assertLess([row["lane"] for row in rows].index(RUNNER),

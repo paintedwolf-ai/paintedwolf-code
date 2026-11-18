@@ -13,7 +13,7 @@ from verification_tests.ci.fixture_plan import live
 
 BEHAVIOR = live(phase="affected-packages")
 ADMISSION, ADMISSION_TESTS = live(phase="admission"), live(phase="admission-tests")
-DEN, RACE, CONFINE = live(runs="den:typecheck"), live(runs="test:race"), live(runs="test:confine:linux")
+DEN, RACE, CONFINE = live(runs="den:typecheck"), live(runs="test:race", profiles=["nightly"]), live(runs="test:confine:linux")
 NIX, BUILD = live(runs="nix:check"), live(runs="check:drift")
 STRESS = next(name for name, lane in hosted_plan.lanes().items()
               if lane["targets"] == ["test:stress"] and lane["profiles"] == ["nightly"])
@@ -39,11 +39,11 @@ class HostedExecutionTests(unittest.TestCase):
         lane = hosted_plan.lanes()[BEHAVIOR]
         for profile in ["check", "nightly", "release"]:
             rows = [row for row in hosted_plan.matrix(profile)["include"] if row["lane"] == BEHAVIOR]
-            self.assertEqual([row["shard"] for row in rows], ["1/2", "2/2"])
+            self.assertEqual([row["shard"] for row in rows], ["1/3", "2/3", "3/3"])
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
                 patch.object(ci.subprocess, "call", return_value=0) as run:
-            for shard in ["1/2", "2/2"]:
+            for shard in ["1/3", "2/3", "3/3"]:
                 ci.run_lane(BEHAVIOR, shard)
                 self.assertEqual(run.call_args.args[0], ["./task", "test:full"])
                 environment = run.call_args.kwargs["env"]
@@ -112,11 +112,34 @@ class HostedExecutionTests(unittest.TestCase):
             ci.run_lane(NIX)
             self.assertEqual(run.call_args.args[0], ["./task", "nix:check"])
 
+    def test_the_changed_package_lane_runs_only_the_edited_packages_in_and_out_of_merge_groups(self):
+        lane = live(phase="changed-packages")
+        scope = {"base": "b" * 40, "head": "h" * 40, "full": False, "reasons": [],
+                 "paths": ["lycaon/internal/confine/seatbelt_darwin.go", "lycaon/internal/db/store.go"]}
+        target = hosted_plan.lanes()[lane]["targets"]
+        for merge_group in (False, True):
+            with self.subTest(merge_group=merge_group), tempfile.TemporaryDirectory() as directory, \
+                    patch.dict(ci.os.environ, {"PW_CI_AFFECTED": "1"}), \
+                    patch("ci_policy.impact.change", return_value=scope), \
+                    patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                    patch.object(ci.subprocess, "call", return_value=0) as run:
+                self.assertEqual(ci.run_lane(lane, merge_group=merge_group), 0)
+                self.assertEqual([call.args[0] for call in run.call_args_list],
+                                 [["./task", *target, "--", "./internal/confine"]])
+        # A change with no Go source left to run leaves the lane unverified, never an empty pass.
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.dict(ci.os.environ, {"PW_CI_AFFECTED": "1"}), \
+                patch("ci_policy.impact.change", return_value={**scope, "paths": ["lycaon/internal/db/store.go"]}), \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.subprocess, "call", return_value=0) as run:
+            self.assertEqual(ci.run_lane(lane), 2)
+            run.assert_not_called()
+
     def test_lane_worker_cap_reaches_admission(self):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
                 patch.object(ci.subprocess, "call", return_value=0) as run:
-            ci.run_lane(BEHAVIOR, "1/2")
+            ci.run_lane(BEHAVIOR, "1/3")
             self.assertEqual(run.call_args.kwargs["env"]["PW_TEST_WORKERS"], str(hosted_plan.lanes()[BEHAVIOR]["workers"]))
             ci.run_lane(DEN)
             self.assertEqual(run.call_args.kwargs["env"].get("PW_TEST_WORKERS"), ci.os.environ.get("PW_TEST_WORKERS"))
@@ -190,7 +213,7 @@ class HostedExecutionTests(unittest.TestCase):
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
                 patch.dict(ci.os.environ, {"PW_CI_PACKAGE_TIMINGS": measured}), \
                 patch.object(ci.subprocess, "call", return_value=0) as run:
-            ci.run_lane(BEHAVIOR, "2/2")
+            ci.run_lane(BEHAVIOR, "2/3")
             environment = run.call_args.kwargs["env"]
             self.assertNotIn("PW_CI_PACKAGE_TIMINGS", environment)
             self.assertEqual(Path(environment["PW_GO_TIMINGS"]).read_text(), measured)
@@ -207,9 +230,9 @@ class HostedExecutionTests(unittest.TestCase):
                 patch("ci_policy.impact.go_scope", return_value=["./internal/a", "./test/contract"]), \
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
                 patch.object(ci.subprocess, "call", return_value=0) as run:
-            ci.run_lane(BEHAVIOR, "1/2")
+            ci.run_lane(BEHAVIOR, "1/3")
         self.assertEqual(run.call_args.args[0], ["./task", "test:full", "--", "./internal/a", "./test/contract"])
-        self.assertEqual(run.call_args.kwargs["env"]["PW_GO_SHARD"], "1/2")
+        self.assertEqual(run.call_args.kwargs["env"]["PW_GO_SHARD"], "1/3")
 
     def test_lane_budget_bounds_the_go_watchdog_unless_the_caller_sets_one(self):
         minutes = hosted_plan.lanes()[BEHAVIOR]["minutes"]
@@ -220,7 +243,7 @@ class HostedExecutionTests(unittest.TestCase):
                         patch.object(ci.subprocess, "call", return_value=0) as run:
                     if not inherited:
                         ci.os.environ.pop("PW_GO_TEST_TIMEOUT_SECONDS", None)
-                    ci.run_lane(BEHAVIOR, "1/2", clock=lambda: 0)
+                    ci.run_lane(BEHAVIOR, "1/3", clock=lambda: 0)
                     self.assertEqual(run.call_args.kwargs["env"]["PW_GO_TEST_TIMEOUT_SECONDS"], expected)
 
     def test_each_phase_watchdog_gets_what_is_left_of_the_lane_budget(self):

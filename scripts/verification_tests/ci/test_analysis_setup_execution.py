@@ -41,7 +41,7 @@ class AnalysisSetupTests(unittest.TestCase):
             self.assertEqual(calls.read_text().splitlines(), ["mod download", "mod download", "workflow --provision"])
 
     def test_catalog_selects_analysis_without_changing_checks_or_capacity(self):
-        analysis = [row for row in hosted_plan.matrix("check")["include"] if row["setup"] == "analysis"]
+        analysis = [row for row in hosted_plan.matrix("fast")["include"] if row["setup"] == "analysis"]
         self.assertTrue(analysis)
         self.assertNotIn("none", {row["analysis"] for row in analysis})
 
