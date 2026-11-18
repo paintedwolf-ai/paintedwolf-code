@@ -6,11 +6,12 @@ import (
 )
 
 func TestConcurrentExecutionsKeepTheirHostResources(t *testing.T) {
-	useBundledGit(t)
+	bin := bundledGitBinary(t)
 	for _, command := range []string{"ssh -i first-key", "ssh -i second-key"} {
 		t.Run(command, func(t *testing.T) {
 			t.Parallel()
 			e := productionExecution()
+			e.binaryPath = func() (string, error) { return bin, nil }
 			e.hostConfig = stubHostConfig{ssh: command, helper: "fixture-helper"}
 			hooks := t.TempDir()
 			e.emptyHooksDir = func() (string, error) { return hooks, nil }
