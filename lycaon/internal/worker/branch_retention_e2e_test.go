@@ -99,7 +99,8 @@ func testCompletedOverlaySurvivesTreeEviction(t *testing.T, relocate bool) {
 	testutil.FailErr(t, "changes before eviction", err)
 
 	if relocate {
-		q, mgr = relocateWorkerInstallation(t, sqlDB, id)
+		qServices, mgr = relocateWorkerInstallation(t, sqlDB, id)
+		q = qServices.Queue
 		task, ok = q.Get(id)
 		if !ok {
 			t.Fatal("restored worker missing")
@@ -166,7 +167,7 @@ func testCompletedOverlaySurvivesTreeEviction(t *testing.T, relocate bool) {
 	}
 }
 
-func relocateWorkerInstallation(t *testing.T, original db.Handle, jobID string) (*SQLQueue, *workspace.Manager) {
+func relocateWorkerInstallation(t *testing.T, original db.Handle, jobID string) (SQLServices, *workspace.Manager) {
 	t.Helper()
 	ctx := t.Context()
 	oldRoot := testbaseline.DataDir(t, original)
@@ -187,11 +188,12 @@ func relocateWorkerInstallation(t *testing.T, original db.Handle, jobID string) 
 	if filepath.IsAbs(baselineID.String) || filepath.IsAbs(overlayID.String) || !filepath.IsLocal(branchRel) {
 		t.Fatal("worker persisted installation paths")
 	}
-	queue := NewSQLServices(restored, 4).Queue
+	services := NewSQLServices(restored, 4)
+	queue := services.Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(restored, filepath.Join(newRoot, "source-content")).Baselines)
 	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"), platform.NewSelector(platform.Config{}), nil)
 	queue.Branches.SetWorkerWorkspaceManager(earlierFormatBranches{manager})
-	return queue, manager
+	return services, manager
 }
 
 func TestUnsealedWorkerEditsSurviveRelocatedArchive(t *testing.T) {
@@ -211,7 +213,8 @@ func TestUnsealedWorkerEditsSurviveRelocatedArchive(t *testing.T) {
 	task, err := queue.Branches.ClaimWorkerBranch(ctx, id)
 	testutil.FailErr(t, "materialize unsealed worker", err)
 	testutil.FailErr(t, "write unsettled branch edit", os.WriteFile(filepath.Join(task.WorkspaceRoot, "main.go"), []byte("package unfinished\n"), 0o600))
-	restored, _ := relocateWorkerInstallation(t, database, id)
+	restoredServices, _ := relocateWorkerInstallation(t, database, id)
+	restored := restoredServices.Queue
 	task, ok := restored.Get(id)
 	if !ok || task.WorkspaceOverlayPath != "" {
 		t.Fatal("unsealed worker state changed")

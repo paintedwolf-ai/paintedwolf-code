@@ -398,3 +398,14 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 
 	return publishedCheckpointWorker{overlay: overlay, db: sqlDB, queue: q, promotions: qServices.Promotions, primary: primary, jobID: jobID, workerContent: workerContent, featureOID: featureOID, store: cpStore, core: core, path: lp, publisher: pub, manifest: manifest}
 }
+
+func TestPromotionMutationsRequirePersistence(t *testing.T) {
+	for _, store := range []*PromotionStore{nil, {}} {
+		if err := store.SetMergeStatus(t.Context(), "job", api.WorkerMergeStatusRejected); err == nil {
+			t.Fatal("promotion state mutation accepted absent persistence")
+		}
+		if err := store.ClearWorkerWorkspace(t.Context(), "job"); err == nil {
+			t.Fatal("workspace metadata mutation accepted absent persistence")
+		}
+	}
+}

@@ -309,7 +309,7 @@ func fillHarness(t *testing.T, d *Deps) {
 		return
 	}
 	if d.HarnessWorkers == nil {
-		scripted, err := harnessfixture.NewWorkers(t.TempDir(), d.Store, d.Workers, d.Sessions.Workers.Harness.Verify,
+		scripted, err := harnessfixture.NewWorkers(t.TempDir(), d.Store, d.Workers, d.Branches, d.Sessions.Workers.Harness.Verify,
 			d.Sessions.Workers.Harness.Read, sessiondecisions.NewSQL(d.Database), refusingExecutor{})
 		testutil.FailErr(t, "scripted workers", err)
 		d.HarnessWorkers = scripted
