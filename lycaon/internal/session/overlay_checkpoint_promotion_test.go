@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -94,12 +95,12 @@ func TestCheckpointRefImportValidatesReachableObjectsConflictsAndWorktreeGitdir(
 	}
 
 	objsDir := checkpoint.CheckpointGitObjectsDir(storeDir, "chk-1", "")
-	blobOID, err := checkpoint.WriteLooseGitObject(objsDir, "blob", []byte("hello world\n"))
+	blobOID, err := gittest.WriteLooseObject(objsDir, "blob", []byte("hello world\n"))
 	testutil.FailErr(t, "write blob", err)
 	blobRaw, _ := hex.DecodeString(blobOID)
-	treeOID, err := checkpoint.WriteLooseGitObject(objsDir, "tree", append([]byte("100644 file.txt\x00"), blobRaw...))
+	treeOID, err := gittest.WriteLooseObject(objsDir, "tree", append([]byte("100644 file.txt\x00"), blobRaw...))
 	testutil.FailErr(t, "write tree", err)
-	commitOID, err := checkpoint.WriteLooseGitObject(objsDir, "commit", []byte(fmt.Sprintf("tree %s\nauthor A <a@b.c> 1 +0000\ncommitter A <a@b.c> 1 +0000\n\nmsg\n", treeOID)))
+	commitOID, err := gittest.WriteLooseObject(objsDir, "commit", []byte(fmt.Sprintf("tree %s\nauthor A <a@b.c> 1 +0000\ncommitter A <a@b.c> 1 +0000\n\nmsg\n", treeOID)))
 	testutil.FailErr(t, "write commit", err)
 
 	imported, err := importer(t.Context(), "tx-1", "w-1", checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": commitOID}})
@@ -110,7 +111,7 @@ func TestCheckpointRefImportValidatesReachableObjectsConflictsAndWorktreeGitdir(
 	if _, err := importer(t.Context(), "tx-1", "w-1", checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": commitOID}}); err != nil {
 		t.Fatalf("same-OID retry failed: %v", err)
 	}
-	otherOID, err := checkpoint.WriteLooseGitObject(objsDir, "blob", []byte("other\n"))
+	otherOID, err := gittest.WriteLooseObject(objsDir, "blob", []byte("other\n"))
 	testutil.FailErr(t, "write other blob", err)
 	if _, err := importer(t.Context(), "tx-1", "w-1", checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": otherOID}}); !errors.Is(err, checkpoint.ErrCheckpointRefConflict) {
 		t.Fatalf("conflicting OID err = %v, want ErrCheckpointRefConflict", err)
@@ -432,8 +433,7 @@ func TestOverlayPromoteConsultsLayeredConsumerDivergenceWithoutFullBaseline(t *t
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
-	consumer.RegisterBranchEngine(mountDir, eng)
-	t.Cleanup(func() { consumer.UnregisterBranchEngine(mountDir) })
+	t.Cleanup(func() { consumer.UnregisterEngine(eng) })
 
 	task := &api.WorkerTask{
 		ID:            "job-layered-promote",
