@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configdir"
@@ -114,4 +115,91 @@ func TestWebResearchCredentialRoundtrip(t *testing.T) {
 	if credentialStored(getStatus(), "brave-search") {
 		t.Fatal("expected brave cleared")
 	}
+}
+
+func TestWebResearchProviderMembershipFollowsCatalogE2E(t *testing.T) {
+	base := settingsControlsBase(t)
+	const providersPath = "/v1/web-research/providers"
+	const settingsPath = "/v1/settings/web-research"
+	readProviders := func() wire.WebResearchProvidersResponse {
+		t.Helper()
+		return openAPIGetJSON[wire.WebResearchProvidersResponse](t, base, providersPath, nil, http.StatusOK)
+	}
+	readEnabled := func() []string {
+		t.Helper()
+		return openAPIGetJSON[wire.WebResearchSettings](t, base, settingsPath, nil, http.StatusOK).EnabledProviders
+	}
+	setEnabled := func(enabled []string) {
+		t.Helper()
+		openAPIPatchJSON[wire.WebResearchSettings](t, base, settingsPath, nil,
+			mustJSON(t, map[string][]string{"enabled_providers": enabled}), http.StatusOK)
+	}
+
+	original := readProviders()
+	originalEnabled := readEnabled()
+	ids := []string{"direct"}
+	bundled := map[string]bool{}
+	for _, p := range original.Providers {
+		ids = append(ids, string(p.ID))
+		if p.Kind == wire.WebResearchProviderKindKeyless && p.DefaultEnabled {
+			bundled[string(p.ID)] = true
+		}
+	}
+	if len(ids) <= 1 {
+		t.Fatalf("catalog lists no web research providers: %v", ids)
+	}
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if seen[id] {
+			t.Fatalf("provider id %q listed twice: %v", id, ids)
+		}
+		seen[id] = true
+	}
+
+	for _, id := range ids {
+		for _, enabled := range [][]string{{id}, {}} {
+			setEnabled(enabled)
+			// Bundled keyless providers are always on, so they never appear in the set.
+			want := enabled
+			if bundled[id] {
+				want = []string{}
+			}
+			// A nil slice means the host answered null, not an empty set.
+			if got := readEnabled(); got == nil || !slices.Equal(got, want) {
+				t.Fatalf("%s: enabled_providers = %#v after PATCH %#v, want %#v", id, got, enabled, want)
+			}
+		}
+	}
+
+	for _, tc := range []struct {
+		id     string
+		config map[string]string
+	}{
+		{"google_cse", map[string]string{"search_engine_id": "disposable-search-engine-id"}},
+		{"searxng", map[string]string{"endpoint": "http://192.168.240.2:18080"}},
+	} {
+		baseline := map[string]string{}
+		for _, p := range original.Providers {
+			if string(p.ID) == tc.id && p.Config != nil {
+				baseline = p.Config
+			}
+		}
+		path := map[string]string{"provider_id": tc.id}
+		openAPIPatchJSON[wire.WebResearchProviderMeta](t, base, "/v1/web-research/providers/{provider_id}", path,
+			mustJSON(t, map[string]any{"config": tc.config}), http.StatusOK)
+		var stored map[string]string
+		for _, p := range readProviders().Providers {
+			if string(p.ID) == tc.id {
+				stored = p.Config
+			}
+		}
+		for k, v := range tc.config {
+			if stored[k] != v {
+				t.Fatalf("%s: config[%s] = %q, want %q (config %v)", tc.id, k, stored[k], v, stored)
+			}
+		}
+		openAPIPatchJSON[wire.WebResearchProviderMeta](t, base, "/v1/web-research/providers/{provider_id}", path,
+			mustJSON(t, map[string]any{"config": baseline}), http.StatusOK)
+	}
+	setEnabled(originalEnabled)
 }
