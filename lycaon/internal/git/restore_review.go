@@ -88,7 +88,7 @@ func prepareRestoreReview(ctx context.Context, dir, source string, staged, workt
 	if err != nil {
 		return nil, err
 	}
-	scratch, err := os.MkdirTemp("", "restore-review-*")
+	scratch, err := gitexec.MkdirTemp(ctx, "restore-review-*")
 	if err != nil {
 		return nil, err
 	}

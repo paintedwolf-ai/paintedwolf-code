@@ -94,7 +94,7 @@ func bindTargetLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, wri
 	if err != nil {
 		return ctx, nil, err
 	}
-	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan}), func(failed bool) {
+	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Scratch: tc.Host.SessionScratchDir}), func(failed bool) {
 		release(context.WithoutCancel(ctx), tools.AgentLaunchOutcome{Failed: failed})
 	}, nil
 }
@@ -294,7 +294,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		defer func() {
 			release(context.WithoutCancel(ctx), tools.AgentLaunchOutcome{Failed: err != nil || result.Status != 0})
 		}()
-		ctx = gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan})
+		ctx = gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Scratch: tc.Host.SessionScratchDir})
 	}
 	ctx = reportRepositoryRead(ctx, p.commandDir())
 	if _, ok := mutateForms[p.command.spec.Name]; ok {

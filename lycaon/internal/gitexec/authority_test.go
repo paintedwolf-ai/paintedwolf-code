@@ -2,6 +2,8 @@ package gitexec
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/exec"
@@ -41,5 +43,21 @@ func TestAgentEntryRequiresAnExplicitLaunchAuthority(t *testing.T) {
 	}
 	if got, err := launchPlan(t.Context(), "git"); err != nil || got.Kind != exec.LaunchHostInternal {
 		t.Fatalf("host caller plan = %+v, %v", got, err)
+	}
+}
+
+// Git's working files go where the agent's launch can write them: its scratch,
+// not the host's temporary directory.
+func TestMkdirTempFollowsTheAgentLaunchScratch(t *testing.T) {
+	scratch := t.TempDir()
+	launched := WithAgentLaunch(AgentEntry(t.Context()), AgentLaunch{Plan: exec.AgentLaunch(exec.LaunchAgentCommand, "git", nil), Scratch: scratch})
+	dir, err := MkdirTemp(launched, "work-*")
+	if err != nil || filepath.Dir(dir) != scratch {
+		t.Fatalf("agent launch working dir = %q (%v), want one inside %q", dir, err, scratch)
+	}
+	host, err := MkdirTemp(t.Context(), "work-*")
+	t.Cleanup(func() { _ = os.RemoveAll(host) })
+	if err != nil || filepath.Dir(host) != filepath.Clean(os.TempDir()) {
+		t.Fatalf("host working dir = %q (%v), want one inside %q", host, err, os.TempDir())
 	}
 }

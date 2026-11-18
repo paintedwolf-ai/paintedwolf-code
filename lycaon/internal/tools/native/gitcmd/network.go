@@ -301,7 +301,7 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 		releaseService()
 		_ = credentials.Close()
 	}
-	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Credentials: credentials}), networkLaunch{done: done, credentials: credentials}, nil
+	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Credentials: credentials, Scratch: tc.Host.SessionScratchDir}), networkLaunch{done: done, credentials: credentials}, nil
 }
 
 // withheldAgent reads a failed SSH network command without the user's SSH
