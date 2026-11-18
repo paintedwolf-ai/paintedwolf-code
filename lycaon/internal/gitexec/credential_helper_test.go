@@ -3,7 +3,6 @@ package gitexec
 import (
 	"context"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 
@@ -11,8 +10,8 @@ import (
 )
 
 func TestCredentialHelperResolutionPerPlatform(t *testing.T) {
-	executablePath = func() (string, error) { return "/opt/painted-wolf-code/pw", nil }
-	t.Cleanup(func() { executablePath = os.Executable })
+	e := productionExecution()
+	e.executablePath = func() (string, error) { return "/opt/painted-wolf-code/pw", nil }
 	vault := "!'/opt/painted-wolf-code/pw' git-credential-vault"
 	keychain := "!'/opt/painted-wolf-code/pw' git-credential-osxkeychain"
 	for _, tc := range []struct {
@@ -31,34 +30,34 @@ func TestCredentialHelperResolutionPerPlatform(t *testing.T) {
 		{"windows", "", "", hostHelperNone},
 		{"windows", "manager", "manager", hostHelperNone},
 	} {
-		got, served, err := resolveCredentialHelperFor(tc.helper, tc.goos)
+		got, served, err := e.resolveCredentialHelperFor(tc.helper, tc.goos)
 		testutil.FailErr(t, tc.goos+" "+tc.helper, err)
 		if got != tc.want || served != tc.served {
 			t.Fatalf("%s helper %q = %q (%q), want %q (%q)", tc.goos, tc.helper, got, served, tc.want, tc.served)
 		}
 	}
-	executablePath = func() (string, error) { return "", errors.New("unknown executable") }
-	if _, _, err := resolveCredentialHelperFor("", "linux"); err == nil {
+	e.executablePath = func() (string, error) { return "", errors.New("unknown executable") }
+	if _, _, err := e.resolveCredentialHelperFor("", "linux"); err == nil {
 		t.Fatal("host helper resolved without an executable path")
 	}
-	if got, _, err := resolveCredentialHelperFor("manager", "linux"); err != nil || got != "manager" {
+	if got, _, err := e.resolveCredentialHelperFor("manager", "linux"); err != nil || got != "manager" {
 		t.Fatalf("user helper = %q, %v", got, err)
 	}
 }
 
 func TestNetworkInvocationServesTheVaultHelperOnLinux(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
-	SetHostConfig(stubHostConfig{helper: ""})
-	executablePath = func() (string, error) { return "/opt/painted-wolf-code/pw", nil }
-	argv, network, err := buildArgv(t.Context(), t.TempDir(), Opts{Profile: ProfileNetwork, RemoteURL: "https://example.com/r.git"}, []string{"fetch"})
+	e.hostConfig = stubHostConfig{helper: ""}
+	e.executablePath = func() (string, error) { return "/opt/painted-wolf-code/pw", nil }
+	argv, network, err := e.buildArgv(t.Context(), t.TempDir(), Opts{Profile: ProfileNetwork, RemoteURL: "https://example.com/r.git"}, []string{"fetch"})
 	testutil.FailErr(t, "buildArgv", err)
 	wantVault := strings.Contains(strings.Join(argv, "\x00"), "credential.helper=!'/opt/painted-wolf-code/pw' git-credential-vault")
 	if (network.helper == hostHelperVault) != wantVault || network.remote != "https://example.com/r.git" {
 		t.Fatalf("network facts %+v with argv %q", network, argv)
 	}
 	started, stopped, bound := 0, 0, 0
-	previous := credentialServiceFn
-	credentialServiceFn = func(context.Context, string) (credentialService, error) {
+	e.credentialService = func(context.Context, string) (credentialService, error) {
 		started++
 		return credentialService{
 			socket: "/run/user/1000/pw-git-x/credential",
@@ -71,10 +70,9 @@ func TestNetworkInvocationServesTheVaultHelperOnLinux(t *testing.T) {
 			stop: func() error { stopped++; return nil },
 		}, nil
 	}
-	t.Cleanup(func() { credentialServiceFn = previous })
 	dir := t.TempDir()
 	initRepo(t, dir)
-	out, code, err := Run(t.Context(), dir, []string{"config", "--get-all", "credential.helper"}, Opts{Profile: ProfileNetwork, RemoteURL: "https://example.com/r.git"})
+	out, code, err := e.run(t.Context(), dir, []string{"config", "--get-all", "credential.helper"}, Opts{Profile: ProfileNetwork, RemoteURL: "https://example.com/r.git"}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("network invocation: err=%v code=%d out=%s", err, code, out)
 	}
@@ -87,10 +85,10 @@ func TestNetworkInvocationServesTheVaultHelperOnLinux(t *testing.T) {
 	if !wantVault {
 		return
 	}
-	credentialServiceFn = func(context.Context, string) (credentialService, error) {
+	e.credentialService = func(context.Context, string) (credentialService, error) {
 		return credentialService{}, errors.New("socket directory unavailable")
 	}
-	if _, _, err := Run(t.Context(), dir, []string{"config", "--get-all", "credential.helper"}, Opts{Profile: ProfileNetwork, RemoteURL: "https://example.com/r.git"}); err == nil || !strings.Contains(err.Error(), "socket directory unavailable") {
+	if _, _, err := e.run(t.Context(), dir, []string{"config", "--get-all", "credential.helper"}, Opts{Profile: ProfileNetwork, RemoteURL: "https://example.com/r.git"}, nil); err == nil || !strings.Contains(err.Error(), "socket directory unavailable") {
 		t.Fatalf("service failure = %v", err)
 	}
 }

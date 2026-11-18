@@ -17,10 +17,10 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/exec"
-	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -156,7 +156,7 @@ func TestWithheldAgentRefusesTheUngrantedAgent(t *testing.T) {
 // against a remote that requires the saved credential while no review releases
 // it: Git fails unauthenticated and every command settles with the outbound
 // secret refusal naming the remote, and the credential never reaches it.
-// Serial: mutates process-wide egress posture, the credential store, and env.
+// Serial: mutates process-wide egress posture, the user environment.
 func TestDeclinedCredentialSettlesTheOutboundSecretRefusal(t *testing.T) {
 	h := newHarness(t)
 	h.git("reset", "--hard", "HEAD")
@@ -168,9 +168,7 @@ func TestDeclinedCredentialSettlesTheOutboundSecretRefusal(t *testing.T) {
 	t.Cleanup(server.Close)
 	remoteURL := server.URL + "/remote.git"
 
-	t.Cleanup(gitexec.TestingUseAgentCredentialStore(fixedCredentialStore{
-		username: fixtureCredentialUser, password: fixtureCredentialPassword,
-	}))
+	gittest.UserCredentials(t, fixtureCredentialUser, fixtureCredentialPassword)
 
 	confine.SetEgressPosture(confine.PostureAsk)
 	t.Cleanup(func() {
@@ -259,22 +257,6 @@ func deniedHost(err error) (string, bool) {
 	host, _ := reject.Data["host"].(string)
 	return host, true
 }
-
-// fixedCredentialStore answers every lookup with one saved credential, the
-// way the person's store would for a host Git was sent to before.
-type fixedCredentialStore struct {
-	username string
-	password string
-}
-
-func (s fixedCredentialStore) Get(c gitcredential.Credential) (gitcredential.Credential, bool, error) {
-	c.Username, c.Password = s.username, s.password
-	return c, true, nil
-}
-
-func (fixedCredentialStore) Store(gitcredential.Credential) error { return nil }
-
-func (fixedCredentialStore) Erase(gitcredential.Credential) error { return nil }
 
 // serveAuthenticatedUploadPack serves the fixture repository only to the
 // fixture user and records whether any request carried those credentials.

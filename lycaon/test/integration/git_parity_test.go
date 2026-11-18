@@ -22,7 +22,9 @@ const envGitReference = "LYCAON_GIT_REFERENCE"
 const envParityRequired = "LYCAON_GIT_PARITY_REQUIRED"
 
 func TestMain(m *testing.M) {
-	gittestsetup.Enable()
+	if os.Getenv(stagedGitFixture) == "" {
+		gittestsetup.Enable()
+	}
 	os.Exit(m.Run())
 }
 
@@ -603,20 +605,9 @@ func TestLFSSmudgeWithoutInstall(t *testing.T) {
 // Git filter values require quoting when the bundled engine path contains spaces.
 func TestLFSFromEnginePathWithSpaces(t *testing.T) {
 	skipIfShort(t)
-	requireBundledEngine(t)
-	realLFS, err := gitengine.LFSPath()
-	if err != nil {
-		t.Skip("bundled git-lfs missing")
+	if stagedInstallation(t, true) {
+		return
 	}
-	if st, statErr := os.Stat(realLFS); statErr != nil || st.IsDir() || st.Mode()&0o111 == 0 {
-		t.Skip("bundled git-lfs missing")
-	}
-
-	spaced := filepath.Join(t.TempDir(), "Painted Wolf Code.app", "bin")
-	testutil.FailErr(t, "mkdir spaced engine dir", os.MkdirAll(spaced, 0o755))
-	stagedLFS := filepath.Join(spaced, "git-lfs")
-	testutil.FailErr(t, "stage git-lfs", os.WriteFile(stagedLFS, readFileBytes(t, realLFS), 0o755))
-	t.Cleanup(gitexec.TestingUseLFSPath(stagedLFS))
 
 	dir := t.TempDir()
 	out, code, err := gitexec.Run(t.Context(), dir, []string{"init"}, gitexec.Opts{})
@@ -735,12 +726,12 @@ func TestLargeFileWithinCaps(t *testing.T) {
 
 func TestLFSAbsentDegradesGracefully(t *testing.T) {
 	skipIfShort(t)
-	ref := requireReferenceGit(t)
-	requireBundledEngine(t)
-
+	if stagedInstallation(t, false) {
+		return
+	}
+	ref, err := gitengine.BinaryPath()
+	testutil.FailErr(t, "resolve staged Git", err)
 	f := buildFixture(t, ref, fixPlain)
-	t.Setenv(gitengine.EnvTest, "1")
-	t.Setenv(gitexec.EnvLFSForceAbsent, "1")
 
 	ops := [][]string{
 		{"status", "--porcelain=v2"},

@@ -13,31 +13,20 @@ import (
 // credentialFillTimeout bounds one host-side lookup in the person's helpers.
 const credentialFillTimeout = 30 * time.Second
 
-// agentCredentialStore is what an agent's credential service reads.
-var agentCredentialStore = func() gitcredential.Backend { return userHelpers{} }
-
-// TestingUseAgentCredentialStore makes agent credential services read store
-// until the returned restore runs.
-func TestingUseAgentCredentialStore(store gitcredential.Backend) (restore func()) {
-	previous := agentCredentialStore
-	agentCredentialStore = func() gitcredential.Backend { return store }
-	return func() { agentCredentialStore = previous }
-}
-
 // userHelpers answers from the person's own configured credential helpers,
 // run by the host as their own Git would run them: the Keychain or vault the
 // host translates, gh, a credential manager or a keyring helper. A helper may
 // not prompt; nothing found is an empty answer.
-type userHelpers struct{}
+type userHelpers struct{ execution execution }
 
-func (userHelpers) Get(c gitcredential.Credential) (gitcredential.Credential, bool, error) {
+func (u userHelpers) Get(c gitcredential.Credential) (gitcredential.Credential, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), credentialFillTimeout)
 	defer cancel()
 	remote := (&url.URL{Scheme: c.Protocol, Host: c.Host, Path: "/" + c.Path}).String()
-	out, code, err := Run(ctx, os.TempDir(), []string{"credential", "fill"}, Opts{
+	out, code, err := u.execution.run(ctx, os.TempDir(), []string{"credential", "fill"}, Opts{
 		Profile: ProfileNetwork, RemoteURL: remote, Input: gitcredential.Request(c),
 		Timeout: credentialFillTimeout, ExtraConfig: []string{"credential.interactive=never"},
-	})
+	}, nil)
 	if err != nil || code != 0 {
 		return gitcredential.Credential{}, false, nil
 	}
@@ -73,12 +62,16 @@ type (
 // recipient once its contact is authorized, and release reviews each found
 // credential before Git receives it.
 func StartAgentCredentials(ctx context.Context, release gitcredential.ReleaseFunc) (*AgentCredentials, error) {
-	bin, err := binaryPathFn()
+	return productionExecution().startAgentCredentials(ctx, release, userHelpers{execution: productionExecution()})
+}
+
+func (e execution) startAgentCredentials(ctx context.Context, release gitcredential.ReleaseFunc, backend gitcredential.Backend) (*AgentCredentials, error) {
+	bin, err := e.binaryPath()
 	if err != nil {
 		return nil, err
 	}
 	scope := &gitcredential.Scope{Release: release}
-	service, err := gitcredential.Serve(ctx, gitcredential.ServeOptions{GitBinary: bin, Store: agentCredentialStore(), Scope: scope})
+	service, err := gitcredential.Serve(ctx, gitcredential.ServeOptions{GitBinary: bin, Store: backend, Scope: scope})
 	if err != nil {
 		return nil, err
 	}
@@ -119,4 +112,4 @@ func (c *AgentCredentials) Close() error { return c.service.Close() }
 
 // HostSSHAgentSocket is the user's SSH agent, which an agent network command
 // may reach only through an explicit socket grant on its confined launch.
-func HostSSHAgentSocket(ctx context.Context) string { return agentSocketResolver(ctx) }
+func HostSSHAgentSocket(ctx context.Context) string { return defaultAgentSocket(ctx) }

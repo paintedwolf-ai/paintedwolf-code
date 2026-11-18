@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/gitexec/gitexec_test.go",
+  "kind": "test_suite",
+  "workstream": "shim-audit",
+  "disposition": "retain",
+  "reason": "Retain the shared real-Git fixtures and hardened invocation contracts: environment, hook neutralization, metadata, tool paths and host configuration. Each configured resource now belongs to its test invocation; helper fixtures retain common filesystem setup without process-wide callback mutation.",
+  "reviewed_commit": "e774bb7cfd2a9f5d9633a7e65e2def02d647d0d5",
+  "ceiling": 489,
+  "boundaries": {
+    "lycaon/internal/gitexec/gitexec_test.go": "5f511fcb241a3b18b9e4608230814e3e3da50a1b1c8f5a93ac12c4fa1fefcf47"
+  }
+}

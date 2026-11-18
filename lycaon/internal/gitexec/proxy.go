@@ -10,9 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/systemproxy"
 )
 
-// proxyConfigurationFn is the host's proxy policy; tests replace it.
-var proxyConfigurationFn = hostproxy.Current
-
 // ProxyPlanMode is how a Git network invocation receives the host's proxy policy.
 type ProxyPlanMode string
 
@@ -64,7 +61,7 @@ var loopbackExceptions = []string{"localhost", "127.0.0.0/8", "::1"}
 
 // NetworkProxyPlan returns the proxy plan for a network invocation against remote.
 func NetworkProxyPlan(remote string) (ProxyPlan, error) {
-	return planFor(proxyConfigurationFn(), remote)
+	return planFor(hostproxy.Current(), remote)
 }
 
 func planFor(config hostproxy.Configuration, remote string) (ProxyPlan, error) {

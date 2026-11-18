@@ -317,8 +317,6 @@ func TestOperationDropDuplicateStashRequiresExactSelector(t *testing.T) {
 }
 
 func TestOperationRefusesLFSChangesBeforeBranchMoves(t *testing.T) {
-	// Serial: uses t.Setenv for LYCAON_GIT_LFS_FORCE_ABSENT.
-	t.Setenv("LYCAON_GIT_LFS_FORCE_ABSENT", "1")
 	dir := operationFixture(t)
 	gittest.Run(t, dir, "checkout", "-b", "feature")
 	operationWrite(t, dir, "shared.txt", "feature\n")

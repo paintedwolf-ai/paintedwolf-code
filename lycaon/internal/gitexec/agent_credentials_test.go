@@ -76,15 +76,14 @@ func authenticatedRemote(t *testing.T, bin, repo string) (*httptest.Server, *[]s
 // released, a declined one is recorded, an unadmitted one receives nothing,
 // and the user's store is never written.
 func TestAgentCredentialsReachOnlyAdmittedRecipients(t *testing.T) {
+	e := productionExecution()
 	bin := useBundledGit(t)
 	self, err := os.Executable()
 	testutil.FailErr(t, "resolve test binary", err)
 	helper := filepath.Join(t.TempDir(), "helper")
 	script := fmt.Sprintf("#!/bin/sh\nPW_GITEXEC_HELPER=1 exec %q -test.run='^TestCredentialHelperProcess$' -- \"$@\"\n", self)
 	testutil.FailErr(t, "write helper", os.WriteFile(helper, []byte(script), 0o755))
-	previousExecutable, previousStore := executablePath, agentCredentialStore
-	executablePath = func() (string, error) { return helper, nil }
-	t.Cleanup(func() { executablePath, agentCredentialStore = previousExecutable, previousStore })
+	e.executablePath = func() (string, error) { return helper, nil }
 
 	repo := t.TempDir()
 	initRepo(t, repo)
@@ -93,11 +92,10 @@ func TestAgentCredentialsReachOnlyAdmittedRecipients(t *testing.T) {
 	store := &memoryStore{saved: map[string]gitcredential.Credential{
 		"http://" + host: {Protocol: "http", Host: host, Username: "alice", Password: "remote-secret"},
 	}}
-	agentCredentialStore = func() gitcredential.Backend { return store }
 
 	var declined []string
 	run := func(admit, released bool) (string, int) {
-		credentials, err := StartAgentCredentials(t.Context(), func(gitcredential.Recipient, gitcredential.Credential) bool { return released })
+		credentials, err := e.startAgentCredentials(t.Context(), func(gitcredential.Recipient, gitcredential.Credential) bool { return released }, store)
 		testutil.FailErr(t, "start credentials", err)
 		defer func() { declined = credentials.Declined(); _ = credentials.Close() }()
 		if admit {
@@ -106,7 +104,7 @@ func TestAgentCredentialsReachOnlyAdmittedRecipients(t *testing.T) {
 		ctx := WithAgentLaunch(AgentEntry(t.Context()), AgentLaunch{Plan: execpkg.HostLaunch("git"), Credentials: credentials})
 		work := t.TempDir()
 		initRepo(t, work)
-		out, code, err := Run(ctx, work, []string{"ls-remote", server.URL + "/repo.git"}, Opts{Profile: ProfileNetwork})
+		out, code, err := e.run(ctx, work, []string{"ls-remote", server.URL + "/repo.git"}, Opts{Profile: ProfileNetwork}, nil)
 		testutil.FailErr(t, "ls-remote", err)
 		return string(out), code
 	}
@@ -142,12 +140,13 @@ func writeCredentialHelperScript(t *testing.T, body string) string {
 }
 
 func TestUserHelpersGetRunsConfiguredHelper(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	helper := writeCredentialHelperScript(t, "cat > /dev/null\necho username=alice\necho password=helper-secret\n")
-	executablePath = func() (string, error) { return helper, nil }
-	SetHostConfig(stubHostConfig{helper: "osxkeychain"})
+	e.executablePath = func() (string, error) { return helper, nil }
+	e.hostConfig = stubHostConfig{helper: "osxkeychain"}
 
-	got, ok, err := (userHelpers{}).Get(gitcredential.Credential{Protocol: "https", Host: "example.com", Path: "repo.git"})
+	got, ok, err := (userHelpers{execution: e}).Get(gitcredential.Credential{Protocol: "https", Host: "example.com", Path: "repo.git"})
 	if err != nil || !ok {
 		t.Fatalf("Get = (%+v, %v, %v)", got, ok, err)
 	}
@@ -157,10 +156,11 @@ func TestUserHelpersGetRunsConfiguredHelper(t *testing.T) {
 }
 
 func TestUserHelpersGetFailsClosedWithoutHelper(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
-	SetHostConfig(nil)
+	e.hostConfig = nil
 
-	got, ok, err := (userHelpers{}).Get(gitcredential.Credential{Protocol: "https", Host: "example.com"})
+	got, ok, err := (userHelpers{execution: e}).Get(gitcredential.Credential{Protocol: "https", Host: "example.com"})
 	if err != nil || ok {
 		t.Fatalf("Get without a helper = (%+v, %v, %v)", got, ok, err)
 	}

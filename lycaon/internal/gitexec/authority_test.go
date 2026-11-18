@@ -10,15 +10,16 @@ import (
 // Inside an agent's tool call Git runs only under the agent's admitted launch
 // or a named host purpose; nothing falls back to host authority by omission.
 func TestAgentEntryRequiresAnExplicitLaunchAuthority(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
 	agent := AgentEntry(t.Context())
 
-	if _, _, err := Run(agent, dir, []string{"status", "--porcelain"}, Opts{}); !errors.Is(err, ErrLaunchAuthorityRequired) {
+	if _, _, err := e.run(agent, dir, []string{"status", "--porcelain"}, Opts{}, nil); !errors.Is(err, ErrLaunchAuthorityRequired) {
 		t.Fatalf("agent entry without a launch: err = %v, want ErrLaunchAuthorityRequired", err)
 	}
-	if out, code, err := Run(WithHostPurpose(agent, "source_snapshot"), dir, []string{"status", "--porcelain"}, Opts{}); err != nil || code != 0 {
+	if out, code, err := e.run(WithHostPurpose(agent, "source_snapshot"), dir, []string{"status", "--porcelain"}, Opts{}, nil); err != nil || code != 0 {
 		t.Fatalf("named host purpose: code=%d err=%v out=%s", code, err, out)
 	}
 	if _, ok := AgentLaunchFrom(WithHostPurpose(agent, "source_snapshot")); ok {
