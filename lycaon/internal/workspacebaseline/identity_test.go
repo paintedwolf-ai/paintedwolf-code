@@ -93,7 +93,7 @@ func TestReaderReadsLegacyDisplayManifest(t *testing.T) {
 	defer func() { _ = current.Close() }()
 
 	// Rebuild the same manifest in the legacy display-keyed shape.
-	legacyPath := filepath.Join(root, "legacy.db")
+	legacyPath := filepath.Join(root, "manifests", "legacy.db")
 	database, err := sql.Open("sqlite", legacyPath)
 	testutil.FailErr(t, "open legacy fixture", err)
 	_, err = database.ExecContext(t.Context(), `CREATE TABLE manifest(version INTEGER PRIMARY KEY CHECK(version=1)) STRICT;

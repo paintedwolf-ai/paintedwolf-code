@@ -94,7 +94,7 @@ func TestInspectOverlayChangesReadsLegacyManifests(t *testing.T) {
 	current, err := workspacebaseline.Open(t.Context(), ref, workspacebaseline.ContentStore(ref))
 	testutil.FailErr(t, "open baseline", err)
 
-	legacyPath := filepath.Join(root, "legacy.db")
+	legacyPath := filepath.Join(root, "manifests", "legacy.db")
 	database, err := sql.Open("sqlite", legacyPath)
 	testutil.FailErr(t, "open legacy fixture", err)
 	_, err = database.ExecContext(t.Context(), `CREATE TABLE manifest(version INTEGER PRIMARY KEY CHECK(version=1)) STRICT;

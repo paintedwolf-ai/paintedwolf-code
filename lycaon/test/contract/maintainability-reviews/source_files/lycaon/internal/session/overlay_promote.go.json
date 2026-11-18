@@ -5,10 +5,10 @@
   "workstream": "baseline-capture-identity",
   "disposition": "retain",
   "reason": "Retain session overlay inspection and promotion eligibility with checkpoint selection. Nil-root callers reload the recorded branch topology before baseline comparison; the same inspection result controls whether pending edits remain recoverable.",
-  "reviewed_commit": "a501fd13148126bf153a78e52d18ec520422d0df",
+  "reviewed_commit": "5efc064e761f6cba96fb2cc19136562402ccaafb",
   "ceiling": 315,
   "boundaries": {
     "lycaon/internal/session/merge_reconcile_paths_test.go": "4f83c00f75d0e3f554e6debe286ffc0b3bb3af1eb069dbc17270efdcb09bdc36",
-    "lycaon/internal/session/workspace_baseline_roots_test.go": "33f1e1201184d692d89edc51a0fe546e0816bcf05465c56d4eab3399d1adbf22"
+    "lycaon/internal/session/workspace_baseline_roots_test.go": "d82ddb3e0f8e10859f3e082f14c95c15bce4a14bd903e7d9b16ef14a0e2c8c3c"
   }
 }

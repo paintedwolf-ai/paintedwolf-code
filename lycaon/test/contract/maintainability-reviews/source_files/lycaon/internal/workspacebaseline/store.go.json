@@ -5,7 +5,7 @@
   "workstream": "baseline-capture-identity",
   "disposition": "retain",
   "reason": "Retain baseline and overlay capture with the shared sealing transaction and blob pinning sequence. The capture tests exercise interrupted publication, missing topology, and complete overlay reconstruction.",
-  "reviewed_commit": "a501fd13148126bf153a78e52d18ec520422d0df",
+  "reviewed_commit": "5efc064e761f6cba96fb2cc19136562402ccaafb",
   "ceiling": 470,
   "boundaries": {
     "lycaon/internal/workspacebaseline/capture_identity_test.go": "0b90485b4c5e220e675cbc045884d828cb219563da7ad5e10eb8d131b2783ccd",

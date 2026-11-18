@@ -603,8 +603,13 @@ func TestPromoteOverlayInvalidResolutionLeavesCleanPathsUntouched(t *testing.T) 
 			}},
 		}},
 	})
-	if err == nil || !strings.Contains(err.Error(), "hunk range 1000000-1000000") {
-		t.Fatalf("expected invalid hunk range, got %v", err)
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != worker.OverlayPromoteResolutionsRequiredCode {
+		t.Fatalf("expected resolution rejection, got %v", err)
+	}
+	reason, _ := reject.Data["reason"].(string)
+	if !strings.Contains(reason, "hunk range 1000000-1000000") {
+		t.Fatalf("expected invalid hunk range, got %+v", reject.Data)
 	}
 	if _, statErr := os.Stat(filepath.Join(dir, "safe.go")); !os.IsNotExist(statErr) {
 		t.Fatalf("clean path changed before conflict resolution: %v", statErr)
