@@ -59,6 +59,11 @@ func registerStubSourceHistoryRoutes(mux *http.ServeMux, writeJSON stubJSONWrite
 	mux.HandleFunc("GET /v1/projects/{id}/source/walk-summary", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.SourceWalkSummary{Turns: []api.SourceWalkTurnSummary{}})
 	})
+	mux.HandleFunc("GET /v1/projects/{id}/source/command-windows/{window_id}", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.CommandObservationStatus{
+			Coverage: []api.CommandFolderCoverage{{Folder: "/outside", Coverage: api.SourceWindowCoverageNotObserved, Reason: api.SourceWindowGapIoError}},
+		})
+	})
 	mux.HandleFunc("GET /v1/projects/{id}/source/walk", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.SourceWalkResponse{
 			Turns:           []api.SourceWalkTurn{},
