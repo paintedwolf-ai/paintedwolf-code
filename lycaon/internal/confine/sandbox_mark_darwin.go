@@ -39,11 +39,6 @@ import (
 // renders lets its processes write one marker file and not its sibling; no
 // other profile does both, because both live in the control-plane tree that
 // profiles deny unless they name it.
-const (
-	markOwnName     = "own"
-	markForeignName = "foreign"
-)
-
 var engineMark struct {
 	mu  sync.Mutex
 	dir string
@@ -132,16 +127,4 @@ func MarkedProcesses(dir string) []osprocess.Incarnation {
 		}
 	}
 	return out
-}
-
-// RemoveSandboxMark deletes the markers once nothing can run under them.
-func RemoveSandboxMark(dir string) {
-	if !filepath.IsAbs(dir) {
-		return
-	}
-	_ = os.Remove(filepath.Join(dir, markOwnName))
-	_ = os.Remove(filepath.Join(dir, markForeignName))
-	_ = os.Remove(dir)
-	// The parent goes only once no other engine's mark remains in it.
-	_ = os.Remove(filepath.Dir(dir))
 }

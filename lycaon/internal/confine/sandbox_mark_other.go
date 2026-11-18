@@ -10,6 +10,3 @@ func EnableSandboxMark() (string, error) { return "", nil }
 
 // MarkedProcesses finds nothing without a sandbox mark.
 func MarkedProcesses(string) []osprocess.Incarnation { return nil }
-
-// RemoveSandboxMark has nothing to remove.
-func RemoveSandboxMark(string) {}
