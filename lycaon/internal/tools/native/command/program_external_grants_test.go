@@ -8,13 +8,13 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestExternalSpawnUsesOnlyAdmittedWriteRoots(t *testing.T) {
 	requireAppliedBoundary(t)
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
 	testutil.FailErr(t, "find home", err)

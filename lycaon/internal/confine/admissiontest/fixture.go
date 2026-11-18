@@ -1,5 +1,5 @@
-// Package admissionfixture activates the host's confinement policy for a test.
-package admissionfixture
+// Package admissiontest activates the host's confinement policy for a test.
+package admissiontest
 
 import (
 	"testing"

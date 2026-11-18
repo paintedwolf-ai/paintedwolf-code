@@ -16,7 +16,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/confine/confinetest"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -126,7 +126,7 @@ func requireAppliedBoundary(t *testing.T) {
 
 func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
 	requireAppliedBoundary(t)
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 
 	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
@@ -197,7 +197,7 @@ func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
 
 func TestProgramExternalSystemToolsRunWithoutStderr(t *testing.T) {
 	requireAppliedBoundary(t)
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 	t.Setenv("TMPDIR", t.TempDir())
 

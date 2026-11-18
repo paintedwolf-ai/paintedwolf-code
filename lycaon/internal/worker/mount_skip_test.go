@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
 
@@ -13,7 +13,7 @@ import (
 // way to mount a view. Any other failure to mount is left for the test to report.
 func skipWithoutMount(t *testing.T, selector *adapter.Selector) {
 	t.Helper()
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	if !confine.Available() {
 		t.Skip("this host applies no confinement")
 	}

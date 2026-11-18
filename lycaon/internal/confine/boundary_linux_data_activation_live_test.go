@@ -21,7 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/linuxbus"
 	"github.com/lycaon/lycaon/internal/testutil"
 
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 )
 
 const dataActivationMode = "PW_CONFINE_DATA_ACTIVATION"
@@ -31,7 +31,7 @@ const dataActivationFlag = "-test.run=^TestLinuxDataActivationProbeProcess$"
 func defaultDataBoundary(t *testing.T, custom bool) (string, *confine.Confinement) {
 	t.Helper()
 	self := requireLinuxSandbox(t)
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_WRITE_ROOTS", "")
