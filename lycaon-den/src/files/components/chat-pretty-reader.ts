@@ -1,5 +1,5 @@
 import { Text } from "@codemirror/state";
-import type { EditorView } from "@codemirror/view";
+import { EditorView } from "@codemirror/view";
 import { createEffect, createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js";
 import type { ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
 import type { ChatContentAccess, ChatContentBoundedSnapshot } from "../../chat/transcript/content/chat-content-reader.ts";
@@ -64,6 +64,7 @@ export function useChatPrettyReader(
     const place = source && takePlace(source);
     if (!place) return;
     const { anchor } = inlineRange(view.state.doc, place.target);
+    view.dispatch({ effects: EditorView.scrollIntoView(anchor, { y: "start", yMargin: Math.max(0, place.offset) }) });
     return restoreScrollAnchor(view, { pos: anchor, offset: place.offset, left: place.left });
   };
   return { snapshot, takePlace, restoreInline };

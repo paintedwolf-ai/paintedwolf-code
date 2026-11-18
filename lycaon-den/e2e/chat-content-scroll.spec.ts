@@ -194,10 +194,18 @@ for (const source of ["retained", "receipts"]) {
       expect(before).not.toBeNull();
       await reader.getByTestId(`files-editor-layout-${layout}`).click();
       await expect(reader.locator(".cm-den-reader")).toHaveCount(layout === "pretty" ? 0 : 1);
-      await expect.poll(async () => {
-        const distance = await page.evaluate(target => window.prettyReader.distance(target), anchor);
-        return distance !== null && Math.abs(distance - before!) <= 1;
-      }).toBe(true);
+      await expect.poll(() => page.evaluate(async ({ target, expected }) => {
+        let largest = 0;
+        for (let frame = 0; frame < 5; frame++) {
+          await new Promise(requestAnimationFrame);
+          const distance = window.prettyReader.distance(target);
+          if (distance === null) return Number.POSITIVE_INFINITY;
+          largest = Math.max(largest, Math.abs(distance - expected));
+        }
+        return largest;
+      }, { target: anchor, expected: before! }), {
+        message: `${layout} keeps row ${anchor.row} column ${anchor.column} at the viewport edge`,
+      }).toBeLessThanOrEqual(1);
       await expect.poll(() => page.evaluate(() => window.prettyReader.caretVisible())).toBe(false);
     }
   });

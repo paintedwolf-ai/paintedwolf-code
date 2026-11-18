@@ -3,7 +3,7 @@ import { EditorView } from "@codemirror/view";
 import { Compartment, EditorState, StateEffect } from "@codemirror/state";
 import type { LycaonClient } from "../../api/client.ts";
 import { chatContentDocumentKey, type ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
-import type { ChatContentMatch } from "../../chat/transcript/content/chat-content-reader.ts";
+import type { ChatContentAccess, ChatContentMatch } from "../../chat/transcript/content/chat-content-reader.ts";
 import { useChatPrettyReader } from "./chat-pretty-reader.ts";
 import { inlineRange } from "../editor/chat-content-viewport.ts";
 import { useChatContentAccess } from "../../chat/transcript/content/use-chat-content-access.ts";
@@ -56,7 +56,6 @@ const copyFailure = {
 export function ChatContentPage(props: { projectId: string; document: ChatContentDocument; client: LycaonClient | null; onHandle?: (handle: {gotoLine: () => void} | undefined) => void }) {
   const interactive = useResidentInteractive();
   const [host, setHost] = createSignal<HTMLElement | null>(null);
-  const [editorHost, setEditorHost] = createSignal<HTMLDivElement>();
   const [found, setFound] = createSignal<ChatContentMatch>();
   const copyAbort = new AbortController();
   onCleanup(() => copyAbort.abort());
@@ -86,15 +85,6 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
     view.dispatch({ effects: StateEffect.appendConfig.of(EditorView.updateListener.of(update => {
       if (update.selectionSet || update.docChanged) updateStatus();
     })) });
-  });
-  createEffect(() => {
-    const parent = editorHost(), content = access();
-    if (!parent || !content || retainedText()) return;
-    // A new revision replaces every row, so it gets a new editor.
-    content.revision();
-    const editor = untrack(() => new ChatContentEditor(parent, content, editorDisplayPrefs(), reportError, pretty.takePlace(content)));
-    setReader(editor);
-    onCleanup(() => { editor.destroy(); setReader(undefined); });
   });
   const revealInInlinePretty = (match: ChatContentMatch) => {
     const view = inlineEditor();
@@ -179,10 +169,26 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
         details: <><Show when={isSnapshot()}><span class="den-files-editor__status-detail" data-testid="chat-process-pretty-snapshot">Snapshot</span></Show><span class="den-files-editor__status-detail" data-testid="files-editor-encoding-chip">UTF-8</span></>,
       }}>
     <Show when={usePagedReader()} fallback={<InlineChatContent document={props.document} prettyEnabled={prettyEnabled()} languageExtension={resolvedLanguage().extension} lineWidth={resolvedLineWidth()} processText={process.text()} retainedText={retainedText()} onEditor={setInlineEditor} restorePlace={pretty.restoreInline} />}>
-      <div class="den-source-reader__editors"><div class="den-source-reader__editor" ref={setEditorHost} /></div>
+      <PagedChatContent access={access()!} createEditor={(host, content) => new ChatContentEditor(host, content, editorDisplayPrefs(), reportError, pretty.takePlace(content))} onEditor={setReader} />
     </Show>
     </ReadonlyFilesDocument>
   </section>;
+}
+
+function PagedChatContent(props: {
+  access: ChatContentAccess;
+  createEditor: (host: HTMLElement, access: ChatContentAccess) => ChatContentEditor;
+  onEditor: (editor: ChatContentEditor | undefined) => void;
+}) {
+  let host!: HTMLDivElement;
+  createEffect(() => {
+    const content = props.access;
+    content.revision();
+    const editor = untrack(() => props.createEditor(host, content));
+    props.onEditor(editor);
+    onCleanup(() => { editor.destroy(); props.onEditor(undefined); });
+  });
+  return <div class="den-source-reader__editors"><div class="den-source-reader__editor" ref={host} /></div>;
 }
 
 function InlineChatContent(props: {

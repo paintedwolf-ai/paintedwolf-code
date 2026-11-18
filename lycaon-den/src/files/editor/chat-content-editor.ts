@@ -1,4 +1,4 @@
-import { Decoration } from "@codemirror/view";
+import { Decoration, EditorView } from "@codemirror/view";
 import { EditorSelection, EditorState } from "@codemirror/state";
 import type { SourceReaderRow } from "../../api/types.ts";
 import type { ChatContentAccess, ChatContentDocumentRow, ChatContentMatch } from "../../chat/transcript/content/chat-content-reader.ts";
@@ -205,6 +205,7 @@ export class ChatContentEditor {
     return this.withTarget(place.target, (row, from) => {
       const entry = reader.document.rowAt(MAIN_SECTION, row);
       if (!entry) return;
+      reader.view.dispatch({ effects: EditorView.scrollIntoView(entry.from + from, { y: "start", yMargin: Math.max(0, place.offset) }) });
       this.stopRestore = restoreScrollAnchor(reader.view, {
         // Materializing neighboring rows shifts the target within the paged editor.
         get pos() { return (reader.document.rowAt(MAIN_SECTION, row) ?? entry).from + from; },
