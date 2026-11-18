@@ -16,7 +16,7 @@ import (
 // pipe of its own.
 func supervisedRefusalReports() bool { return true }
 
-func newRefusalSource(string) refusalSource { return nil }
+func newRefusalSource(string, ProcessTracker) refusalSource { return nil }
 
 // refusalReport opens the pipe a launch's supervising helper reports on and
 // reads it into the action's feed until the helper exits. The returned
