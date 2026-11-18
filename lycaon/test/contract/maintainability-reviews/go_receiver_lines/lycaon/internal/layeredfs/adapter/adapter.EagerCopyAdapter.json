@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/layeredfs/adapter/adapter.EagerCopyAdapter",
+  "kind": "runtime_service",
+  "workstream": "materialized-view-release",
+  "disposition": "retain",
+  "reason": "One adapter implements the materialized view contract: prepare/reopen, capture, command access and settled release. Per-view state now serializes retirement; Core keeps durability authority and workspace keeps branch-deletion authority. Splitting this interface would add cross-component coordination around the same view. Real cancellation, journal publication, partial lease and cross-adapter retry tests pass, with Linux workspace/worker recovery and macOS adapter contracts.",
+  "reviewed_commit": "2991f99b3eb08babf54d6b497fdc67634b360fc4",
+  "ceiling": 313,
+  "boundaries": {
+    "lycaon/internal/layeredfs/adapter/eagercopy_release_test.go": "ebdf27edc6fc384abdb859f0b41f4083b6e39c98138e25b81d328130f9c5383b",
+    "lycaon/internal/layeredfs/adapter/adapter_test.go": "6d8873fd758de705c60c4629484e5feb3569847d666935381d48efd0ede9628d"
+  },
+  "reviewed_shape": "ecf42a15492e21d426c93ed05f04fb372164403b7b9fc205289e8c3853d76b84"
+}
