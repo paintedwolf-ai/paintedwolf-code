@@ -246,3 +246,17 @@ func checkpointFromColumns(
 		Turn: int(turn), CreatedOrdinal: createdOrdinal, CreatedTS: ts,
 	}
 }
+
+// FindOutsideFileEffect resolves the committed identity of a native file operation.
+func FindOutsideFileEffect(ctx context.Context, database db.DBTX, projectID, outsideID, operationID string) (Effect, error) {
+	var effect Effect
+	err := database.QueryRowContext(ctx, `
+		SELECT e.file_id, e.root_id, e.path, e.from_root_id, e.from_path
+		FROM source_operations o JOIN source_effects e ON e.operation_id = o.id
+		WHERE o.project_id = ? AND o.operation_key = ? AND o.operation_key != '' AND e.entry_kind = 'file'
+		  AND (e.root_id = ? OR e.from_root_id = ?)
+		ORDER BY e.ordinal
+		LIMIT 1
+	`, projectID, operationID, outsideID, outsideID).Scan(&effect.FileID, &effect.RootID, &effect.Path, &effect.FromRootID, &effect.FromPath)
+	return effect, err
+}

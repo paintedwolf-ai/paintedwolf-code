@@ -85,7 +85,7 @@ Binary or unsupported representations open a metadata/preview card with explicit
 
 ### Deleted paths
 
-Ordinary chat links follow their exact root/workspace/path, not a saved file identity or version. A recreated file at the same path opens as the current file; only explicit version and change selections remain historical.
+Path-bound chat links open the current occupant of their root, workspace, and path. Context from a recorded outside mutation also carries the file ID. Those references follow the file to its current address after a rename or attachment. Version and change links open retained states.
 
 On click, Den revalidates the bound reference, including references established from the generating request's source context. An ambiguity selection sends the stored candidate index for the same validation; it cannot supply an arbitrary replacement destination. The host checks the current filesystem first. If the exact path is absent, it consults the latest recorded occupant at that address in source history; a later working-file state supersedes an older deletion. Unsaved editor states do not establish path occupancy. A known deletion resolves with `deleted: true`; an unknown path stays missing. Detached roots, unavailable worker workspaces, directories, and escaping or dangling symlinks do not become deletion links. Deletion lookup uses the indexed project, branch, root, and path; it neither scans the repository nor enumerates history for new candidates.
 

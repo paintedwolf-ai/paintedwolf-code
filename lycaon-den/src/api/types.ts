@@ -11741,6 +11741,11 @@ export interface components {
             /** Format: uuid */
             root_id: string;
             path: string;
+            /**
+             * Format: uuid
+             * @description Host-recorded logical identity for a file outside the project folders.
+             */
+            file_id?: string;
             entry_kind: components["schemas"]["NavigationEntryKind"];
             /** Format: uuid */
             worker_id?: string;
@@ -11765,11 +11770,16 @@ export interface components {
             /** Format: uuid */
             root_id?: string;
             path: string;
+            /**
+             * Format: uuid
+             * @description Host-recorded logical identity for a file outside the project folders.
+             */
+            file_id?: string;
             entry_kind?: components["schemas"]["NavigationEntryKind"];
             status: components["schemas"]["NavigationStatus"];
             /** @description True only for an authored Markdown destination, rather than an inferred prose path. */
             explicit: boolean;
-            /** @description The exact path is absent and has retained deletion history. Availability is rechecked when opening; this never pins the link to a file or version. */
+            /** @description The current address is absent and has retained deletion history. Availability is rechecked when opening. */
             deleted?: boolean;
             /** Format: uuid */
             worker_id?: string;

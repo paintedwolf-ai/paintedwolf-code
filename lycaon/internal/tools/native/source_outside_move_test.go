@@ -155,6 +155,7 @@ func TestNativeOutsideMutationsRetainExactEffects(t *testing.T) {
 			return removeAgentPath(ctx, tc, next, memory)
 		}},
 	} {
+		tc.Effects.Out = &tools.ToolInvocationOut{}
 		testutil.FailErr(t, "apply native outside operation", step.run())
 		walk, err := st.Walk.QueryWalk(ctx, "p1", sourceledger.Baseline{
 			Kind: sourceledger.BaselineTurn, SessionID: "s1", Turn: tc.Identity.UserTurn,
@@ -166,6 +167,15 @@ func TestNativeOutsideMutationsRetainExactEffects(t *testing.T) {
 		effect := walk.Files[0].Effects[0]
 		if effect.Op != step.op || effect.RootID != tc.Source.OutsideRoot.ID || effect.ToolCallID != "outside-edit" || effect.CaptureQuality != "exact" {
 			t.Fatalf("turn %d effect = %+v", tc.Identity.UserTurn, effect)
+		}
+		locations := tc.Effects.Out.SourceContext
+		if locations == nil || len(locations.Locations) == 0 {
+			t.Fatalf("turn %d did not publish navigation", tc.Identity.UserTurn)
+		}
+		for _, location := range locations.Locations {
+			if location.FileID != effect.FileID {
+				t.Fatalf("turn %d location = %+v", tc.Identity.UserTurn, location)
+			}
 		}
 		comparison, err := st.Comparisons.CompareEffect(ctx, "p1", effect.ID)
 		testutil.FailErr(t, "compare exact outside operation", err)

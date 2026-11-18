@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 )
 
 // ChatFileRelation is how a chat came to hold an outside file.
@@ -80,12 +81,17 @@ func (s *Store) OutsideFileHeld(ctx context.Context, projectID, rel string) (boo
 		return false, err
 	}
 	head, err := s.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{ProjectID: projectID, BranchID: "", RootID: outside, Path: rel})
+	fileID := head.FileID
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+		deleted, deleteErr := s.History.ResolveDeletedPath(ctx, projectID, sourcebranch.Trunk, outside, rel)
+		if errors.Is(deleteErr, ErrHistoryNotFound) {
+			return false, nil
+		}
+		fileID, err = deleted.FileID, deleteErr
 	}
 	if err != nil {
 		return false, err
 	}
-	referenced, err := s.queries.SourceFileReferencedInProject(ctx, db.SourceFileReferencedInProjectParams{FileID: head.FileID, ProjectID: projectID})
+	referenced, err := s.queries.SourceFileReferencedInProject(ctx, db.SourceFileReferencedInProjectParams{FileID: fileID, ProjectID: projectID})
 	return referenced != 0, err
 }
