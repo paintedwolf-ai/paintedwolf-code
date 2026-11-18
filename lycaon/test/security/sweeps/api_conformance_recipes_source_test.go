@@ -64,7 +64,7 @@ var sourceRecipes = map[string]successRecipe{
 	"searchProjectSource":       {seed: sourceSeedSearchFiles},
 
 	// Recorded history.
-	"listProjectSourceVersions":         {seed: sourceSeedVersions},
+	"listProjectSourceVersions":         {prepare: sourceVersionsInputs},
 	"restoreProjectSourceVersion":       {prepare: sourceRestoreVersionInputs},
 	"getProjectSourceComparison":        {prepare: sourceComparisonInputs},
 	"digestSourceComparisons":           {prepare: sourceDigestInputs},
@@ -892,17 +892,13 @@ func sourceVersionedFile(ctx context.Context, s *conformanceSweep) (*sourceVersi
 	return state.versions, nil
 }
 
-// sourceSeedVersions makes the listed file one with three recorded states.
-func sourceSeedVersions(ctx context.Context, s *conformanceSweep) error {
+// sourceVersionsInputs lists a file with three recorded states.
+func sourceVersionsInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 	versioned, err := sourceVersionedFile(ctx, s)
 	if err != nil {
-		return err
+		return successInputs{}, err
 	}
-	s.values.bind("", "file_id", versioned.fileID)
-	if bound := s.values.byName["file_id"]; bound != versioned.fileID {
-		return fmt.Errorf("file_id is already bound to %s, which the seed cannot version", bound)
-	}
-	return nil
+	return successInputs{query: map[string]string{"file_id": versioned.fileID}}, nil
 }
 
 func sourceRestoreVersionInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {

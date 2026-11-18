@@ -497,13 +497,15 @@ type conformanceFixture struct {
 const conformanceMCPProvider = "conformance-tracker"
 
 func conformanceMCP() *mcp.MockConnector {
+	// Choice steps and search sources call only read-only tools.
+	readOnly := &sdkmcp.ToolAnnotations{ReadOnlyHint: true}
 	return &mcp.MockConnector{
 		Tools: map[string][]*sdkmcp.Tool{
 			"svca": {{Name: "do", Description: "do"}},
 			conformanceMCPProvider: {
-				{Name: "list_items", Description: "List items"},
-				{Name: "search_items", Description: "Search items"},
-				{Name: "get_item", Description: "Read an item"},
+				{Name: "list_items", Description: "List items", Annotations: readOnly},
+				{Name: "search_items", Description: "Search items", Annotations: readOnly},
+				{Name: "get_item", Description: "Read an item", Annotations: readOnly},
 			},
 		},
 		Results: map[string]map[string]string{conformanceMCPProvider: {
@@ -524,5 +526,12 @@ func createConformanceMCPProvider(t *testing.T, srv http.Handler) {
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create MCP provider fixture status = %d body = %s", w.Code, w.Body.String())
+	}
+	// Listing connects the provider, so the contribution frame the recipes
+	// capture already holds its tools.
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, security.AuthedRequest(t, http.MethodGet, "/v1/mcp/providers/"+conformanceMCPProvider+"/tools", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("list MCP provider fixture tools status = %d body = %s", w.Code, w.Body.String())
 	}
 }

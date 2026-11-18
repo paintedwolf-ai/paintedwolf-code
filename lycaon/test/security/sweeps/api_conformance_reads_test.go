@@ -196,7 +196,35 @@ func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryH
 		_ = conn.Close()
 		_ = database.Close()
 	})
-	return &hostEffects{conn: conn, hub: hub, events: ch, settle: hostSettle(h), projectDir: projectDir, quietGrace: 2 * debounce}
+	return &hostEffects{conn: conn, hub: hub, events: unboundedEvents(ch), settle: hostSettle(h), projectDir: projectDir, quietGrace: 2 * debounce}
+}
+
+// unboundedEvents keeps reading in so a burst between two reads never fills
+// the hub's buffer, which would drop the subscription.
+func unboundedEvents(in <-chan wire.EventEnvelope) <-chan wire.EventEnvelope {
+	out := make(chan wire.EventEnvelope)
+	go func() {
+		defer close(out)
+		var queue []wire.EventEnvelope
+		for in != nil || len(queue) > 0 {
+			var send chan wire.EventEnvelope
+			var next wire.EventEnvelope
+			if len(queue) > 0 {
+				send, next = out, queue[0]
+			}
+			select {
+			case env, ok := <-in:
+				if !ok {
+					in = nil
+					continue
+				}
+				queue = append(queue, env)
+			case send <- next:
+				queue = queue[1:]
+			}
+		}
+	}()
+	return out
 }
 
 func (e *hostEffects) mark(ctx context.Context) (int64, error) {

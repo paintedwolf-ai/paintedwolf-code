@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -785,7 +786,7 @@ func sessionFixtureProgram(ctx context.Context, s *conformanceSweep) (sessionPro
 		if err := s.host.DB.QueryRowContext(ctx, `SELECT p.id FROM invocation_programs p
 			JOIN invocation_receipts r ON r.id = p.parent_receipt_id
 			WHERE r.session_id = ? ORDER BY p.started_at DESC LIMIT 1`, chat).Scan(&program.id); err != nil {
-			return sessionProgram{}, fmt.Errorf("find the readme command program: %w", err)
+			return sessionProgram{}, fmt.Errorf("find the readme command program: %w; the chat holds receipts %s and last said %s", err, sessionReceipts(ctx, s, chat), sessionLastMessage(ctx, s, chat))
 		}
 		document, err := s.prerequisite(ctx, "getCommandReceiptDocument", successInputs{
 			params: map[string]string{"id": chat}, query: map[string]string{"scopes": program.id},
@@ -1055,9 +1056,70 @@ func sessionRepoFile(parts ...string) string {
 // roster.
 func sessionPrepareWorkerHistory(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 	chat := s.fixture.session.ID
-	id, err := sessionOnce(s, "history-worker", func() (string, error) { return sessionSettledWorker(ctx, s, chat) })
+	name, err := sessionOnce(s, "history-worker", func() (string, error) { return sessionRosterWorker(ctx, s, chat) })
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{query: map[string]string{"project_id": s.fixture.project.ID, "session_id": chat, "worker": id}}, nil
+	return successInputs{query: map[string]string{"project_id": s.fixture.project.ID, "session_id": chat, "worker": name}}, nil
+}
+
+// sessionRosterWorker puts a worker with one admitted round on the chat's
+// roster, as a coordinator's spawn does, and returns its name.
+func sessionRosterWorker(ctx context.Context, s *conformanceSweep, chat string) (string, error) {
+	parent, err := s.host.Store.Get(ctx, chat)
+	if err != nil {
+		return "", err
+	}
+	child, err := s.host.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer"})
+	if err != nil {
+		return "", err
+	}
+	coordinator := workerrecords.Actor{SessionID: chat, Role: workerrecords.RoleCoordinator, PrincipalID: chat}
+	const name = "conformance-scout"
+	created, err := s.host.Workers.Records.CreateWorker(ctx, coordinator, workerrecords.Op{ID: uuid.NewString()}, workerrecords.WorkerSpec{
+		Name: name, AgentType: "implementer", ScopeMode: "read", Brief: "conformance", ChildSessionID: child.ID,
+	})
+	if err != nil {
+		return "", err
+	}
+	job, err := s.host.Workers.Queue.Enqueue(ctx, wire.WorkerTask{
+		ProjectID: s.fixture.project.ID, ParentSessionID: chat, ChildSessionID: child.ID, AgentType: "implementer",
+		Status: wire.WorkerStatusComplete, ExecutionTarget: wire.ExecutionTargetLocal, Prompt: "conformance", Brief: "conformance",
+		Result: &wire.WorkerResult{Status: "complete", CompletionReport: &wire.WorkerCompletionReport{LegStatus: "complete"}},
+	})
+	if err != nil {
+		return "", err
+	}
+	_, err = s.host.Workers.Records.AdmitRound(ctx, coordinator, workerrecords.Op{ID: uuid.NewString()}, created.WorkerID, workerrecords.RoundSpec{
+		JobID: job, ExecutionTarget: "local",
+	})
+	return name, err
+}
+
+// sessionReceipts names a chat's tool receipts by tool and status.
+func sessionReceipts(ctx context.Context, s *conformanceSweep, chat string) string {
+	rows, err := s.host.DB.QueryContext(ctx, `SELECT tool_name, status FROM invocation_receipts WHERE session_id = ? ORDER BY started_at`, chat)
+	if err != nil {
+		return err.Error()
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var tool, status string
+		if rows.Scan(&tool, &status) == nil {
+			out = append(out, tool+"="+status)
+		}
+	}
+	return fmt.Sprint(out)
+}
+
+// sessionLastMessage is a chat's newest message, by role.
+func sessionLastMessage(ctx context.Context, s *conformanceSweep, chat string) string {
+	var role, content string
+	err := s.host.DB.QueryRowContext(ctx, `SELECT m.role, m.content FROM messages m JOIN session_entries e ON e.id = m.entry_id
+		WHERE m.session_id = ? ORDER BY e.ord DESC LIMIT 1`, chat).Scan(&role, &content)
+	if err != nil {
+		return err.Error()
+	}
+	return fmt.Sprintf("%s %q", role, content)
 }
