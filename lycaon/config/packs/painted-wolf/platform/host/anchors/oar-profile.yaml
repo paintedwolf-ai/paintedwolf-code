@@ -1314,6 +1314,8 @@ host_facts:
    type: int
  - name: paintedwolf.children_started_known
    type: bool
+ - name: paintedwolf.jobs_stopped
+   type: int
  - name: paintedwolf.waiting_statement
    type: string
  - name: paintedwolf.step_timeout_ms

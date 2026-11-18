@@ -27,7 +27,7 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 		ProjectID: run.tc.Identity.ProjectID, Cwd: e.paths.Cwd().DisplayPath,
 		CommandLine: run.source, OriginTool: run.tool, ToolCallID: run.tc.Identity.ToolCallID,
 		Run: func(jobCtx context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
-			stop := context.AfterFunc(jobCtx, func() { r.Supervisor.Interrupt(run.root.Identity.ProgramID) })
+			stop := context.AfterFunc(jobCtx, func() { r.Supervisor.StopProgram(run.root.Identity.ProgramID) })
 			defer stop()
 			attachErr := errors.Join(e.stdout.follow(stdout), e.stderr.follow(stderr))
 			attached <- attachErr

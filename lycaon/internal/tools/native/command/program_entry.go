@@ -287,6 +287,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	run.tc.Effects.GitNoRepository = &atomic.Bool{}
 	park := call.park
 	ports.Waits = park
+	call.bindJobs(func(cause error) int { return r.Supervisor.EndJobs(run.root.Identity.ProgramID, cause) })
 	handedOff = true
 	return r.attend(callCtx, &programEvaluation{
 		ctx: ctx, run: run, call: call, park: park, plan: snapshot.Plan, ports: ports, dispatcher: dispatcher,

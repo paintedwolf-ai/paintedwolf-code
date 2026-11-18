@@ -1,7 +1,0 @@
-steps:
-  - when: "paintedwolf.deadline_expired || paintedwolf.wait_refused"
-    tool: "command_output"
-    say: "An `&` job outlives the program that started it; {{ call }} reads it by its handle."
-  - when: "paintedwolf.deadline_expired || paintedwolf.wait_refused"
-    tool: "command_stop"
-    say: "Stop a job that is clearly stuck with {{ call }}."

@@ -269,7 +269,18 @@ func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID
 // bounded result, whether the call still holds it or it parked.
 func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	run, ctx := e.run, e.ctx
-	defer e.call.end()
+	// The bound covers the program's & jobs, so the call ends once both its
+	// foreground result is delivered and its jobs have ended.
+	var endMu sync.Mutex
+	pending := 2
+	endCall := func() {
+		endMu.Lock()
+		defer endMu.Unlock()
+		if pending--; pending == 0 {
+			e.call.end()
+		}
+	}
+	defer endCall()
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, run.root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
 		var err error
@@ -295,6 +306,7 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	defer lifetime.callerDone()
 	r.Supervisor.AfterJobs(run.root.Identity.ProgramID, func(stopped bool) {
 		settled <- r.settleProgram(ctx, run, result, evaluated, stopped)
+		endCall()
 		lifetime.settled()
 	})
 	var settleErr error

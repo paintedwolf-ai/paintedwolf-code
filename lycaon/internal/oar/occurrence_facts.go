@@ -464,6 +464,7 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"wait_refused", oarcore.TypeBool, FactTierHost, ""},
 	{"children_started", oarcore.TypeInt, FactTierHost, ""},
 	{"children_started_known", oarcore.TypeBool, FactTierHost, ""},
+	{"jobs_stopped", oarcore.TypeInt, FactTierHost, ""},
 	{"waiting_statement", oarcore.TypeString, FactTierHost, ""},
 	{"step_timeout_ms", oarcore.TypeInt, FactTierHost, ""},
 	{"step_deadline_expired", oarcore.TypeBool, FactTierHost, ""},

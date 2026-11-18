@@ -36,8 +36,12 @@ func (b programBound) refusal(observed time.Duration) *toolrejection.ToolReject 
 }
 
 // callDeadline is the cause that ends a program whose bound expired; waiting
-// is the statement the program was waiting in then.
-type callDeadline struct{ waiting string }
+// is the statement the program was waiting in then, and jobsStopped how many
+// of its & jobs the expiry ended.
+type callDeadline struct {
+	waiting     string
+	jobsStopped int
+}
 
 func (*callDeadline) Error() string { return "command program lifetime expired" }
 
@@ -48,6 +52,7 @@ func (b programBound) deadlineStop(expired *callDeadline, elapsed time.Duration)
 	if expired.waiting != "" {
 		reject.Data["waiting_statement"] = expired.waiting
 	}
+	reject.Data["jobs_stopped"] = expired.jobsStopped
 	return reject
 }
 
@@ -63,6 +68,29 @@ type programCall struct {
 	park     *programPark
 	end      func()
 	detach   func() bool
+
+	mu sync.Mutex
+	// endJobs ends the program's & jobs when its bound expires.
+	endJobs func(cause error) int
+}
+
+// bindJobs names how the call's expiry ends its program's & jobs.
+func (c *programCall) bindJobs(end func(cause error) int) {
+	c.mu.Lock()
+	c.endJobs = end
+	c.mu.Unlock()
+}
+
+// expire ends the program and its & jobs at its bound.
+func (c *programCall) expire(cancel context.CancelCauseFunc) {
+	expired := &callDeadline{waiting: c.park.waiting()}
+	c.mu.Lock()
+	end := c.endJobs
+	c.mu.Unlock()
+	if end != nil {
+		expired.jobsStopped = end(expired)
+	}
+	cancel(expired)
 }
 
 func (r *ProgramRuntime) newProgramCall(ctx context.Context, catalog toolcontract.LanguageCatalog) (context.Context, *programCall) {
@@ -77,7 +105,7 @@ func (r *ProgramRuntime) newProgramCall(ctx context.Context, catalog toolcontrac
 		// so its cause tells the result which deadline ended the program.
 		call.deadline = time.Now().Add(call.bound.maximum)
 		programCtx = commandprogram.WithBound(programCtx, clock, call.bound.maximum)
-		stop := clock.AfterFunc(call.bound.maximum, func() { cancel(&callDeadline{waiting: call.park.waiting()}) })
+		stop := clock.AfterFunc(call.bound.maximum, func() { call.expire(cancel) })
 		call.end = func() { stop(); cancel(nil) }
 	}
 	call.ctx = programCtx
