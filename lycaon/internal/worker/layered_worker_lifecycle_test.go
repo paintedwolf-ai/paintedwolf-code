@@ -214,7 +214,7 @@ func TestUnderBudgetMaterializedWorkerRetainsGitAndCheckpointBases(t *testing.T)
 	if completed.WorkspaceOverlayPath != "" {
 		t.Fatalf("a checkpoint worker sealed an overlay too: %s", completed.WorkspaceOverlayPath)
 	}
-	store, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+	store, manifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 	testutil.FailErr(t, "open task checkpoint", err)
 	if !published || manifest.WorkerID != task.ID || len(manifest.Entries) != 2 {
 		t.Fatalf("published=%v manifest=%+v", published, manifest)
@@ -389,7 +389,7 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	if !ok || completed.MergeStatus != api.WorkerMergeStatusPending {
 		t.Fatalf("changed worker is not pending review: %+v", completed)
 	}
-	_, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+	_, manifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 	testutil.FailErr(t, "open task checkpoint store", err)
 	captured := map[string]bool{}
 	for _, entry := range manifest.Entries {
@@ -557,7 +557,7 @@ func TestCompletionPublishesEachWorkerIntoTheRecoveryStoreAndDestroyDropsItsRete
 		if !ok || completed.MergeStatus != api.WorkerMergeStatusPending {
 			t.Fatalf("worker %s is not pending review: %+v", task.ID, completed)
 		}
-		store, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+		store, manifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 		testutil.FailErr(t, "open task checkpoint store", err)
 		if !published || store.RootDir() != coordinator.CheckpointStore().RootDir() {
 			t.Fatalf("worker %s published=%v store=%v", task.ID, published, store)
@@ -715,7 +715,7 @@ func TestAWorkerRepositoryIsPrivateAndLeavesTheCheckpoint(t *testing.T) {
 		t.Fatalf("Complete: won=%v err=%v", won, err)
 	}
 	completed, _ := fixture.queue.Get(task.ID)
-	_, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+	_, manifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 	testutil.FailErr(t, "open checkpoint", err)
 	captured := map[string]bool{}
 	for _, entry := range manifest.Entries {

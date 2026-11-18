@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -46,7 +45,7 @@ func TestMaterializedWorkerPromotesThreeWayFromItsPristineBase(t *testing.T) {
 		AgentType: "implementer", Prompt: "edit", Brief: "edit",
 	})
 	testutil.FailErr(t, "enqueue", err)
-	t.Cleanup(func() { session.ClearTaskCheckpointPreview(id) })
+
 	next, err := queue.ClaimNext(ctx, ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "claim next", err)
 	task, err := queue.Branches.ClaimWorkerBranch(ctx, id)

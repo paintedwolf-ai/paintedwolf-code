@@ -88,7 +88,7 @@ func TestStressFirefoxMountedSparseWorkerLifecycle(t *testing.T) {
 	started = time.Now()
 	completed := fixture.completeWithChange(t, task, func() {})
 	t.Logf("checkpoint elapsed=%s", time.Since(started))
-	_, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+	_, manifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 	testutil.FailErr(t, "scale checkpoint", err)
 	if !published || len(manifest.Entries) != 1 || manifest.Entries[0].Path.Rel != name {
 		t.Fatal("checkpoint scope differs from the single authored file")

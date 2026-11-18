@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/oswalk"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -45,14 +46,15 @@ type promotePrimarySnapshot struct {
 
 // PromoteAssessment classifies every path as clean or conflicting.
 type PromoteAssessment struct {
-	Conflicts     []PromoteConflict `json:"conflicts,omitempty"`
-	CleanPaths    []string          `json:"clean_paths,omitempty"`
-	DeletedPaths  []string          `json:"deleted_paths,omitempty"`
-	MergeResults  []PromoteMergeResult
-	OverlapJobIDs []string           `json:"overlap_job_ids,omitempty"`
-	PathOrders    []PromotePathOrder `json:"-"`
-	checkpointID  string
-	primary       map[string]promotePrimarySnapshot
+	Conflicts         []PromoteConflict `json:"conflicts,omitempty"`
+	CleanPaths        []string          `json:"clean_paths,omitempty"`
+	DeletedPaths      []string          `json:"deleted_paths,omitempty"`
+	MergeResults      []PromoteMergeResult
+	OverlapJobIDs     []string           `json:"overlap_job_ids,omitempty"`
+	PathOrders        []PromotePathOrder `json:"-"`
+	checkpointID      string
+	checkpointPreview *checkpoint.PromotionPreview
+	primary           map[string]promotePrimarySnapshot
 }
 
 func expandOverlayPromoteFiles(promote PromoteRoots, roots []string) ([]string, error) {

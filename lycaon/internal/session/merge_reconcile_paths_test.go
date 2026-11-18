@@ -176,12 +176,12 @@ func TestOverlayChangedPathsHonorsCallerCancellation(t *testing.T) {
 		WorkspaceRoot: root, WorkspaceBaselinePath: baseline,
 		Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite},
 	}
-	if paths := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil); len(paths) != 1 {
+	if paths := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil, ""); len(paths) != 1 {
 		t.Fatalf("live inspection paths=%v", paths)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if paths := session.OverlayWorkspaceChangedPaths(ctx, task, nil); len(paths) != 0 {
+	if paths := session.OverlayWorkspaceChangedPaths(ctx, task, nil, ""); len(paths) != 0 {
 		t.Fatalf("canceled inspection continued: %v", paths)
 	}
 	if !session.OverlayAwaitingPromote(ctx, task) {
@@ -207,7 +207,7 @@ func TestOverlayChangedPathsIncludesChangesOutsideSuggestedScope(t *testing.T) {
 		WorkspaceBaselinePath: baseline,
 	}
 
-	paths := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil)
+	paths := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil, "")
 	if len(paths) != 2 || paths[0] != "a.go" || paths[1] != "b.go" {
 		t.Fatalf("OverlayWorkspaceChangedPaths = %v want [a.go b.go]", paths)
 	}
@@ -241,7 +241,7 @@ func TestOverlayAwaitingPromoteWithAbsolutePathSuggestion(t *testing.T) {
 	if !session.OverlayAwaitingPromote(t.Context(), task) {
 		t.Fatal("whole-repo absolute scope overlay must await promote, not abort")
 	}
-	paths := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil)
+	paths := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil, "")
 	if len(paths) != 2 {
 		t.Fatalf("changed = %v want index.html + src/game.js", paths)
 	}

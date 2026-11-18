@@ -179,7 +179,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	if got := strings.TrimSpace(gittest.Run(t, task.WorkspaceRoot, "rev-parse", "HEAD")); got != fields[1] {
 		t.Fatalf("restart changed worker Git history: got %s want %s", got, fields[1])
 	}
-	store, manifest, published, err := session.OpenTaskCheckpointStore(task)
+	store, manifest, published, err := session.OpenTaskCheckpointStore(task, "")
 	testutil.FailErr(t, "reopen checkpoint", err)
 	if !published || manifest.CheckpointID != recoveredCheckpoint || len(manifest.Entries) != 1 {
 		t.Fatalf("restart lost checkpoint: %+v", manifest)
@@ -244,7 +244,7 @@ func runPrepareLifecyclePhase(t *testing.T, fixture *layeredWorkerFixture, root 
 	trace("git-commit-complete")
 	completed := fixture.completeWithChange(t, task, func() {})
 	trace("checkpoint-complete")
-	_, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+	_, manifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 	testutil.FailErr(t, "checkpoint", err)
 	if !published || manifest.WorkerID != task.ID {
 		t.Fatal("completion published no checkpoint")

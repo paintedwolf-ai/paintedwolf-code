@@ -67,7 +67,7 @@ func TestEntryLeftOutOfTheBranchIsNotAWorkerDeletion(t *testing.T) {
 	if !ok {
 		t.Fatal("task missing")
 	}
-	changed, err := session.InspectOverlayChanges(ctx, task, nil)
+	changed, err := session.InspectOverlayChanges(ctx, task, nil, "")
 	testutil.FailErr(t, "changes", err)
 	if len(changed) != 1 || changed[0] != "main.go" {
 		t.Fatalf("changes = %v", changed)

@@ -95,7 +95,7 @@ func testCompletedOverlaySurvivesTreeEviction(t *testing.T, relocate bool) {
 	if len(jobs) != 1 || !jobs[0].Sealed || jobs[0].ID != id {
 		t.Fatalf("branch jobs = %+v", jobs)
 	}
-	wantChanged, err := session.InspectOverlayChanges(ctx, task, nil)
+	wantChanged, err := session.InspectOverlayChanges(ctx, task, nil, "")
 	testutil.FailErr(t, "changes before eviction", err)
 
 	if relocate {
@@ -129,7 +129,7 @@ func testCompletedOverlaySurvivesTreeEviction(t *testing.T, relocate bool) {
 	if _, err := os.Stat(filepath.Join(root, "gone.txt")); !os.IsNotExist(err) {
 		t.Fatalf("deleted file came back: %v", err)
 	}
-	gotChanged, err := session.InspectOverlayChanges(ctx, task, nil)
+	gotChanged, err := session.InspectOverlayChanges(ctx, task, nil, "")
 	testutil.FailErr(t, "changes after rebuild", err)
 	if len(gotChanged) != len(wantChanged) {
 		t.Fatalf("changes after rebuild = %v want %v", gotChanged, wantChanged)
@@ -411,7 +411,7 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 	if !ok || restoredCheckpointID != origCheckpointID {
 		t.Fatalf("restored checkpoint id = %q (ok=%v), want %q", restoredCheckpointID, ok, origCheckpointID)
 	}
-	store, manifest, published, err := session.OpenTaskCheckpointStore(task)
+	store, manifest, published, err := session.OpenTaskCheckpointStore(task, "")
 	testutil.FailErr(t, "open task checkpoint", err)
 	if !published || len(manifest.Entries) != 1 || manifest.Entries[0].Path.Rel != "main.go" {
 		t.Fatalf("published=%v manifest=%+v", published, manifest)
@@ -540,7 +540,7 @@ func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunk
 	if !handled {
 		t.Fatal("expected materialized branch to publish checkpoint")
 	}
-	store, manifest, published, err := session.OpenTaskCheckpointStore(task)
+	store, manifest, published, err := session.OpenTaskCheckpointStore(task, "")
 	testutil.FailErr(t, "open published checkpoint", err)
 	if !published || len(manifest.Entries) != 1 || manifest.Entries[0].Path.Rel != "main.go" {
 		t.Fatalf("published=%v manifest=%+v", published, manifest)

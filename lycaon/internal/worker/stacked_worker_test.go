@@ -87,7 +87,7 @@ func TestMaterializedStackedWorkerStartsFromItsParentsSealedResult(t *testing.T)
 		testutil.FailErr(t, "edit parent", os.WriteFile(filepath.Join(parent.WorkspaceRoot, "main.go"), []byte("package parent\n"), 0o644))
 		testutil.FailErr(t, "remove in parent", os.Remove(filepath.Join(parent.WorkspaceRoot, "gone.go")))
 	})
-	_, parentManifest, published, err := session.OpenTaskCheckpointStore(completed)
+	_, parentManifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 	testutil.FailErr(t, "open parent checkpoint", err)
 	if !published || parentManifest.WorkerID != parent.ID {
 		t.Fatal("parent published no checkpoint")
@@ -115,7 +115,7 @@ func TestMaterializedStackedWorkerStartsFromItsParentsSealedResult(t *testing.T)
 	childCompleted := fixture.completeWithChange(t, child, func() {
 		testutil.FailErr(t, "edit child", os.WriteFile(filepath.Join(child.WorkspaceRoot, "main.go"), []byte("package child\n"), 0o644))
 	})
-	store, manifest, published, err := session.OpenTaskCheckpointStore(childCompleted)
+	store, manifest, published, err := session.OpenTaskCheckpointStore(childCompleted, "")
 	testutil.FailErr(t, "open child checkpoint", err)
 	if !published {
 		t.Fatal("child published no checkpoint")
@@ -198,7 +198,7 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 		_ = fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: parent.ID, Root: parent.WorkspaceRoot})
 	})
 	completed := fixture.completeWithChange(t, parent, func() { write(t, parent, "main.go", "package parent\n") })
-	_, parentManifest, published, err := session.OpenTaskCheckpointStore(completed)
+	_, parentManifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 	testutil.FailErr(t, "open parent checkpoint", err)
 	if !published {
 		t.Fatal("parent published no checkpoint")
@@ -222,7 +222,7 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 	assertFileHolds(t, filepath.Join(fixture.source, "main.go"), "package main\n")
 
 	childDone := fixture.completeWithChange(t, child, func() { write(t, child, "child.go", "package child\n") })
-	_, childManifest, published, err := session.OpenTaskCheckpointStore(childDone)
+	_, childManifest, published, err := session.OpenTaskCheckpointStore(childDone, "")
 	testutil.FailErr(t, "open child checkpoint", err)
 	if !published || len(childManifest.ParentCheckpoints) == 0 || childManifest.ParentCheckpoints[0] != parentManifest.CheckpointID {
 		t.Fatalf("child checkpoint parents = %v, want %s", childManifest.ParentCheckpoints, parentManifest.CheckpointID)
@@ -363,7 +363,7 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 		t.Fatal("mounted branch was not published")
 	}
 	task := &api.WorkerTask{ID: binding.ID, ProjectID: testdbseed.DefaultProjectID, WorkspacePath: roots[0].Path, WorkspaceRoot: binding.Root}
-	_, manifest, published, err := session.OpenTaskCheckpointStore(task)
+	_, manifest, published, err := session.OpenTaskCheckpointStore(task, "")
 	testutil.FailErr(t, "open checkpoint", err)
 	if !published {
 		t.Fatal("no checkpoint published")
@@ -378,7 +378,7 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 
 	txn, err := checkpoint.BeginTransaction(checkpoint.TransactionConfig{Dir: filepath.Join(base, "tx"), ID: "roots"})
 	testutil.FailErr(t, "begin", err)
-	testutil.FailErr(t, "apply", session.ApplyTaskCheckpoint(t.Context(), txn, task, roots))
+	testutil.FailErr(t, "apply", session.ApplyTaskCheckpoint(t.Context(), txn, task, roots, ""))
 	imported := gittest.Run(t, roots[1].Path, "for-each-ref", "--format=%(objectname)", "refs/lycaon/workers/"+binding.ID)
 	if !strings.Contains(imported, commit) {
 		t.Fatalf("secondary ref not imported: %q", imported)

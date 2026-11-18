@@ -129,7 +129,8 @@ type MergeService struct {
 	Accounted func(sessionID string, jobIDs []string)
 	// Lanes keeps a worker's lane through landing and rejection; its next
 	// round refreshes or resets it.
-	Lanes *WorkerLanes
+	Lanes   *WorkerLanes
+	reviews checkpointReviews
 }
 
 // PreviewForSession assesses one overlay without changing state.
@@ -147,6 +148,15 @@ func (s *MergeService) previewForSession(ctx context.Context, sessionID, jobID, 
 		return api.WorkerMergeResult{}, fmt.Errorf("overlay promote service not configured")
 	}
 	task, ok := s.Queue.Get(jobID)
+	if !ok || task == nil {
+		return api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": jobID})
+	}
+	lock, err := acquirePromoteFileLock(ctx, s.hostDataDirFor(task))
+	if err != nil {
+		return api.WorkerMergeResult{}, fmt.Errorf("acquire promote lock: %w", err)
+	}
+	defer lock.release()
+	task, ok = s.Queue.Get(jobID)
 	if !ok || task == nil {
 		return api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": jobID})
 	}
@@ -173,15 +183,16 @@ func (s *MergeService) previewForSession(ctx context.Context, sessionID, jobID, 
 		AgentType: task.AgentType,
 	}
 	opts := promoteOutputOpts{Detail: detail}
-	mergePaths, err := s.resolvePreviewMergePaths(ctx, jobID, task, paths)
+	checkpointID, err := promotionCheckpointID(task, nil)
+	if err != nil {
+		return api.WorkerMergeResult{}, err
+	}
+	mergePaths, err := s.resolvePreviewMergePaths(ctx, jobID, task, paths, checkpointID)
 	if err != nil {
 		return api.WorkerMergeResult{}, err
 	}
 	out.Paths = mergePaths
-	if session.CheckpointStoreDirForTask(task) != "" {
-		session.MarkTaskCheckpointPreviewBindIntent(jobID)
-	}
-	assessment, err := s.assessMerge(ctx, sessionID, task, mergePaths)
+	assessment, err := s.assessMerge(ctx, sessionID, task, mergePaths, checkpointID)
 	if err != nil {
 		return api.WorkerMergeResult{}, err
 	}
@@ -192,19 +203,20 @@ func (s *MergeService) previewForSession(ctx context.Context, sessionID, jobID, 
 	EnrichOverlayIntent(&out, task)
 	out.Status = api.WorkerMergeStatusPending
 	s.attachSourceEvidence(ctx, task, &out)
+	s.reviews.replace(jobID, assessment.checkpointPreview)
 	s.recordPromoteOutput(sessionID, jobID, &out)
 	return out, nil
 }
 
-func (s *MergeService) resolvePreviewMergePaths(ctx context.Context, jobID string, task *api.WorkerTask, paths []string) ([]string, error) {
+func (s *MergeService) resolvePreviewMergePaths(ctx context.Context, jobID string, task *api.WorkerTask, paths []string, checkpointID string) ([]string, error) {
 	roots := s.taskRootRefs(ctx, task)
-	changed, err := session.InspectOverlayChanges(ctx, task, roots)
+	changed, err := session.InspectOverlayChanges(ctx, task, roots, checkpointID)
 	if err != nil {
 		return nil, err
 	}
-	mergePaths := normalizeMergePaths(ctx, paths, *task, roots)
+	mergePaths := normalizeMergePaths(ctx, paths, *task, roots, checkpointID)
 	if len(paths) > 0 {
-		validated, err := validatePromotePaths(task, roots, s.jobPromotePaths(ctx, task), mergePaths)
+		validated, err := validatePromotePaths(task, roots, s.jobPromotePaths(ctx, task, checkpointID), mergePaths)
 		if err != nil {
 			return nil, err
 		}
@@ -264,11 +276,11 @@ func (s *MergeService) attachSourceEvidence(ctx context.Context, task *api.Worke
 	out.SourceEvidence = ev
 }
 
-func (s *MergeService) assessMerge(ctx context.Context, sessionID string, task *api.WorkerTask, mergePaths []string) (PromoteAssessment, error) {
+func (s *MergeService) assessMerge(ctx context.Context, sessionID string, task *api.WorkerTask, mergePaths []string, checkpointID string) (PromoteAssessment, error) {
 	if task == nil {
 		return PromoteAssessment{}, nil
 	}
-	if assessment, ok, err := assessCheckpointTask(ctx, s, sessionID, task, mergePaths); ok || err != nil {
+	if assessment, ok, err := assessCheckpointTask(ctx, s, sessionID, task, mergePaths, checkpointID); ok || err != nil {
 		return assessment, err
 	}
 	return AssessPromotePaths3Way(ctx, s, sessionID, task, mergePaths)
@@ -311,7 +323,7 @@ func (s *MergeService) reject(ctx context.Context, code string, data map[string]
 	return toolrejection.FormatDecisionReject(code, withResultRef(ctx, refs, data), formatter)
 }
 
-func normalizeMergePaths(ctx context.Context, paths []string, task api.WorkerTask, roots []projectroot.RootRef) []string {
+func normalizeMergePaths(ctx context.Context, paths []string, task api.WorkerTask, roots []projectroot.RootRef, checkpointID string) []string {
 	seen := map[string]struct{}{}
 	var out []string
 	add := func(p string) {
@@ -331,7 +343,7 @@ func normalizeMergePaths(ctx context.Context, paths []string, task api.WorkerTas
 	if len(out) > 0 {
 		return out
 	}
-	for _, p := range session.OverlayWorkspaceChangedPaths(ctx, &task, roots) {
+	for _, p := range session.OverlayWorkspaceChangedPaths(ctx, &task, roots, checkpointID) {
 		add(p)
 	}
 	return out
