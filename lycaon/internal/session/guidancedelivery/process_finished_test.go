@@ -32,9 +32,9 @@ func TestDeliverPendingObservesOneExitAndKeepsSeparateRefusals(t *testing.T) {
 	kicks := &kick.KickEngine{}
 	kicks.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	var signals recordedSignals
-	svc := &Service{transcript: &signals, kicks: kicks}
-	finish := anchor.InformRender(anchor.ProcessFinished)
-	refusal := anchor.InformRender(anchor.ProcessRefused)
+	svc := &Service{transcript: &signals}
+	svc.Bind(kicks, anchor.NewBus(kicks))
+	testutil.FailErr(t, "install anchor registry", svc.InstallAnchorRegistry())
 
 	// A read shows the first terminal state after its signal queues.
 	var jobs []string
@@ -51,13 +51,19 @@ func TestDeliverPendingObservesOneExitAndKeepsSeparateRefusals(t *testing.T) {
 		jobs = append(jobs, handle)
 		snapshot, err := registry.Output.ReadRawOutput(session, handle, 0)
 		testutil.FailErr(t, "read terminal state", err)
-		kicks.QueueDeferred(session, finish, kick.WithSubject(handle),
-			kick.WithCommandCompletion("handle="+handle), kick.WithDeliveryObservation(snapshot.ExitObservation))
+		svc.Emit(t.Context(), session, anchor.ProcessFinished, anchor.Envelope{
+			Subject: handle, CommandCompletionDigest: "handle=" + handle, CommandExitObservation: snapshot.ExitObservation,
+		})
 		if index == 0 {
 			registry.Observe(session, handle)
 		}
 	}
-	kicks.QueueDeferred(session, refusal, kick.WithSubject(jobs[0]), kick.WithCommandRefusal("unshown_refusals=1"))
+	if known, _ := registry.State(session, jobs[0]); known {
+		t.Fatal("completed job retention did not evict the older observed job")
+	}
+	svc.Emit(t.Context(), session, anchor.ProcessRefused, anchor.Envelope{
+		Subject: jobs[0], CommandRefusalDigest: "unshown_refusals=1",
+	})
 	for range 2 {
 		testutil.FailErr(t, "deliver queued guidance", svc.DeliverPending(t.Context(), session))
 	}
