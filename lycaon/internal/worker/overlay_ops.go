@@ -107,6 +107,9 @@ func (s *MergeService) preparePromoteOverlayPlans(
 		fillMergeResult(&out, assessment, promoteOutputOpts{Detail: in.Detail})
 		s.attachPromoteSpill(s.hostDataDirFor(work.task), work.overlayID, &out, assessment)
 		s.registerReconcilePaths(work.sessionID, assessment)
+		if work.review == nil {
+			s.reviews.replace(work.overlayID, assessment.checkpointPreview)
+		}
 		s.recordPromoteOutput(work.sessionID, work.overlayID, &out)
 		return promotePlans{}, nil, out, s.rejectConflict(ctx, work.overlayID, assessment)
 	}
