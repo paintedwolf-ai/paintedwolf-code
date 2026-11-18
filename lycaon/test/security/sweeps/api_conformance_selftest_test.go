@@ -79,7 +79,7 @@ func TestConformanceSweepDetectsEachBrokenInvariant(t *testing.T) {
 		{"undeclared detail", widgetFaults{undeclaredDetail: true}, ruleDetailsAreDeclared,
 			"getWidget: unknown {id}: session_not_found details.path is not declared by its notice context_schema"},
 		{"replay stores a second row", widgetFaults{rowPerReplay: true}, ruleKeyedOperationsAreIdempotent,
-			"renameWidget: replay: replays changed the rows naming the key: map[renames:1], then map[renames:11]"},
+			"renameWidget: replay: replays changed the rows naming the key: map[renames:1], then map[renames:3]"},
 		{"reused key applies a different body", widgetFaults{acceptsReuse: true}, ruleKeyedOperationsAreIdempotent,
 			"renameWidget: changed body: no change answered 409 idempotency_conflict (label: 200)"},
 		{"limit ignored", widgetFaults{ignoresLimit: true}, rulePagination,
