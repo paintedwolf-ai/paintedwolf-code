@@ -41,7 +41,8 @@ func TestWorkerLegToolsMatchListForPrompt(t *testing.T) {
 			testutil.FailErr(t, "SpawnChild", err)
 			prof, err := h.AgentRegistry.Get(agentType)
 			testutil.FailErr(t, "agents.Get", err)
-			// The fixture project has no skills, so the request withholds skills_read.
+			// skills_read follows the profile's skill catalog, which the explore
+			// leg test checks against the offered request; compare the rest.
 			var schema []string
 			for _, name := range sortedToolNamesFromMeta(policy.ListForPrompt(ctx, child, prof.ToolProfile)) {
 				if name != "skills_read" {
@@ -50,7 +51,12 @@ func TestWorkerLegToolsMatchListForPrompt(t *testing.T) {
 			}
 			leg, err := builder.BuildWorkerPromptContext(workercontext.WithJob(t.Context(), "leg-tools-"+agentType), child.ID, child)
 			testutil.FailErr(t, "BuildWorkerPromptContext", err)
-			got := append([]string(nil), leg.LegTools...)
+			var got []string
+			for _, name := range leg.LegTools {
+				if name != "skills_read" {
+					got = append(got, name)
+				}
+			}
 			sort.Strings(got)
 			if !reflect.DeepEqual(got, schema) {
 				t.Fatalf("LegTools %v != schema %v", got, schema)
