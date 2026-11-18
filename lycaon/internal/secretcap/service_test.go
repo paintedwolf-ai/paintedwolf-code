@@ -3,7 +3,6 @@ package secretcap
 import (
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"

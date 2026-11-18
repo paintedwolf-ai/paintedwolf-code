@@ -2,7 +2,6 @@ package hostcontracts
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/secretcap"

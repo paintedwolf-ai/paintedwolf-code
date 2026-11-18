@@ -1,13 +1,13 @@
 package mcp
 
 import (
-	"github.com/lycaon/lycaon/internal/credentialstore"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 

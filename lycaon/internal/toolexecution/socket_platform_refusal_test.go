@@ -4,7 +4,6 @@ package toolexecution
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"net"
 	"path/filepath"
 	"reflect"
@@ -15,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/secretcap"

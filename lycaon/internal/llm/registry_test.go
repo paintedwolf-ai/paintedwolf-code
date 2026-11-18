@@ -2,11 +2,6 @@ package llm
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
-	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/llm/modelinfo"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +10,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // mustCatalogCloneShipToLocal stages shipYAML as the ship catalog and clones it

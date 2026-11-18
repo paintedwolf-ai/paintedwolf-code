@@ -3,7 +3,6 @@ package llm
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 

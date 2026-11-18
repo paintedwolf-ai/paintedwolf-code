@@ -4,14 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/llm/compaction"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
-	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
-	"github.com/lycaon/lycaon/internal/llm/discovery"
-	"github.com/lycaon/lycaon/internal/llm/modelinfo"
-	"github.com/lycaon/lycaon/internal/llm/providerprofile"
-	"github.com/lycaon/lycaon/internal/modelfeed"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,6 +13,15 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/llm/compaction"
+	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
+	"github.com/lycaon/lycaon/internal/llm/discovery"
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/llm/providerprofile"
+	"github.com/lycaon/lycaon/internal/modelfeed"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestKnownModelMetadataDoesNotWaitForCatalogRefresh(t *testing.T) {

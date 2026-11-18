@@ -2,11 +2,11 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/contextpreparation"

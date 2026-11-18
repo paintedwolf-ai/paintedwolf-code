@@ -1,15 +1,15 @@
 package secretmatch
 
 import (
-	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 )
 
 func TestFingerprinterStableAndDeviceKeyed(t *testing.T) {

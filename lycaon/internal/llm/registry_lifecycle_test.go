@@ -3,10 +3,6 @@ package llm
 import (
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
-	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/secretmatch"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +11,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestRegistryReadsDoNotWaitForRebuildDiscovery(t *testing.T) {

@@ -2,11 +2,12 @@ package llm
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"testing"
-	"time"
 )
 
 // shippedPromptCache loads the provider kind catalog and installs its model

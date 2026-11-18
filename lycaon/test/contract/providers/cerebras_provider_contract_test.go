@@ -1,11 +1,11 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )

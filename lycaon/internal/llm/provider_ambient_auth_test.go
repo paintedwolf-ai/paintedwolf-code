@@ -1,11 +1,12 @@
 package llm
 
 import (
-	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // ambientShipYAML models the two ambient-capable shapes: a kind that takes a pasted

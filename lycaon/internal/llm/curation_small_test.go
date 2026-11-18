@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	anthropicprovider "github.com/lycaon/lycaon/internal/llm/providers/anthropic"

@@ -2,7 +2,6 @@ package toolfixture
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"path/filepath"
 	"testing"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/findings/findingstest"

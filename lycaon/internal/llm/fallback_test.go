@@ -2,13 +2,14 @@ package llm
 
 import (
 	"context"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"testing"
 )
 
 func TestProviderUnconfiguredFailsWithoutMockEnv(t *testing.T) {

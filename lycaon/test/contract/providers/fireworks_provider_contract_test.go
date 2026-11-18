@@ -1,13 +1,13 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )

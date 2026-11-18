@@ -1,13 +1,13 @@
 package mcp_test
 
 import (
-	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 

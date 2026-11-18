@@ -2,7 +2,6 @@ package contractfixture
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"

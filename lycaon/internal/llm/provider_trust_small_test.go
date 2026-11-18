@@ -3,6 +3,9 @@ package llm
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -10,8 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
-	"path/filepath"
-	"testing"
 )
 
 // Trust installed by an approval is withdrawn only by that approval's

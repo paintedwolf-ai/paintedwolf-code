@@ -3,6 +3,12 @@ package llm
 import (
 	"context"
 	"errors"
+	"math"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -15,11 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/pricing"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"math"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
 )
 
 // terminalErrorStream answers inside the stream, as Converse does.

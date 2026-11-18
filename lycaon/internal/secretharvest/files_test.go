@@ -3,12 +3,12 @@ package secretharvest
 import (
 	"bytes"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/credentialstore"
-	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 )

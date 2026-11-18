@@ -2,6 +2,9 @@ package llm
 
 import (
 	"context"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
@@ -11,8 +14,6 @@ import (
 	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	vertexexpressprovider "github.com/lycaon/lycaon/internal/llm/providers/vertexexpress"
-	"path/filepath"
-	"testing"
 )
 
 func TestNewProviderForEntryDispatch(t *testing.T) {

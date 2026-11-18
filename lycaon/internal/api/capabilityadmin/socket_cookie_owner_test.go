@@ -5,8 +5,6 @@ package capabilityadmin
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
-	"github.com/lycaon/lycaon/pkg/api"
 	"io"
 	"maps"
 	"net"
@@ -25,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
@@ -41,6 +40,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestUnixSocketCookieIssuerReplacementNeedsFreshDisclosureAuthority(t *testing.T) {

@@ -1,13 +1,13 @@
 package mcp
 
 import (
-	"github.com/lycaon/lycaon/internal/credentialstore"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -167,7 +167,7 @@ func TestPendingOAuthExpires(t *testing.T) {
 	client.mu.Unlock()
 
 	now = now.Add(pendingOAuthTTL + time.Minute)
-	err := client.Complete(t.Context(), "srv", "", OAuthCompleteRequest{Code: "c", State: "st"})
+	err = client.Complete(t.Context(), "srv", "", OAuthCompleteRequest{Code: "c", State: "st"})
 	if err == nil || !strings.Contains(err.Error(), "expired") {
 		t.Fatalf("Complete on an expired authorization = %v want expiry", err)
 	}

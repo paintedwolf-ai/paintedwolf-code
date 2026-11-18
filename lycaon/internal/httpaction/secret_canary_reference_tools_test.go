@@ -3,7 +3,6 @@ package httpaction
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,14 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/nativemanifest"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
+	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
