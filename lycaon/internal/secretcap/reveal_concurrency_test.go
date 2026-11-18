@@ -61,8 +61,9 @@ func TestRevealRecordsItsVersionBeforeReplacement(t *testing.T) {
 	}()
 	close(resume)
 	got := <-result
+	replaceErr := <-replaced
 	testutil.FailErr(t, "complete reveal", got.err)
-	testutil.FailErr(t, "replace after reveal", <-replaced)
+	testutil.FailErr(t, "replace after reveal", replaceErr)
 	if got.result.Version != 1 || got.result.Value.Value() != "original-deploy-token" {
 		t.Fatal("reveal did not return its verified version")
 	}
