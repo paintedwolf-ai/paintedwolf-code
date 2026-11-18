@@ -185,14 +185,14 @@ func (m InventoryAccounting) candidateInventory(ctx context.Context, run *api.Wo
 	if err != nil {
 		return empty, "", err
 	}
-	if repair == nil || repair.CandidateMessageID == "" || m.Sessions == nil {
+	if repair == nil || repair.CandidateMessageID == "" || m.TranscriptStore == nil {
 		return empty, "absent", nil
 	}
 	phase, ok := manifest.PhaseByID(run.CurrentPhase)
 	if !ok || phase.ReviewLoop == nil {
 		return empty, "absent", nil
 	}
-	messages, err := m.Sessions.Transcript.GetMessages(ctx, run.SessionID)
+	messages, err := m.TranscriptStore.GetMessages(ctx, run.SessionID)
 	if err != nil {
 		return empty, "", err
 	}

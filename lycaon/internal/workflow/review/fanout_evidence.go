@@ -69,8 +69,8 @@ func compileReviewLoopDigest(ctx context.Context, m *ReviewEvidence, run *api.Wo
 			blocks = append(blocks, block)
 		}
 	}
-	if m.Sessions != nil {
-		msgs, err := m.Sessions.Transcript.GetMessages(ctx, run.SessionID)
+	if m.TranscriptStore != nil {
+		msgs, err := m.TranscriptStore.GetMessages(ctx, run.SessionID)
 		if err == nil {
 			if cites := formatWorkerCitationDigest(msgs); cites != "" {
 				blocks = append(blocks, cites)
