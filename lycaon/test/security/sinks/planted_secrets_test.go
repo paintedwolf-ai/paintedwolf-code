@@ -104,23 +104,21 @@ func catalogPlants(t *testing.T) []plant {
 	return plants
 }
 
-// recognisedExample returns the longest value the matcher recognises in the
-// rule's first recognised example. Overlapping rules may claim the span; any
-// recognised value must stay out of every sink.
+// recognisedExample returns the example holding the longest value the
+// matcher recognises, and that value. Overlapping rules may claim the span;
+// any recognised value must stay out of every sink. The longest keeps a plant
+// distinct from ordinary words such as "secret".
 func recognisedExample(matcher *secretmatch.Matcher, examples []string) (string, string, bool) {
+	var text, best string
 	for _, example := range examples {
 		runes := []rune(example)
-		best := ""
 		for _, hit := range matcher.Screen(example) {
 			if hit.End <= len(runes) && hit.End-hit.Start > len([]rune(best)) {
-				best = string(runes[hit.Start:hit.End])
+				text, best = example, string(runes[hit.Start:hit.End])
 			}
 		}
-		if best != "" {
-			return example, best, true
-		}
 	}
-	return "", "", false
+	return text, best, best != ""
 }
 
 // spellings are the forms a value may take in a sink.
