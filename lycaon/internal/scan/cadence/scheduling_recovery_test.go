@@ -55,8 +55,9 @@ func TestCadenceRecoversPersistedDeadlineWithoutNotification(t *testing.T) {
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o600))
 	testutil.FailErr(t, "persist demand", noteCadenceWrites(t.Context(), cadence, root, []string{"main.go"}))
 	// A newly constructed repository has no process-local notifications.
-	cadence.Store = scanbase.NewSQLStore(store.DB())
-	scantest.RunService(t, cadence.Run)
+	restarted := New(scanbase.NewSQLStore(store.DB()), cadence.Coordinator, cadence.Registry, cadence.Settings, cadence.Gates, cadence.Triggers)
+	restarted.Scopes = cadence.Scopes
+	scantest.RunService(t, restarted.Run)
 	testutil.WaitFor(t, "all three scans are recorded", func() bool {
 		rows, err := store.Reads.ListByCanonicalPath(t.Context(), canonical)
 		return err == nil && len(rows) == 3

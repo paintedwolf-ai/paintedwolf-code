@@ -70,7 +70,7 @@ func (c *Service) RootAttached(root string) {
 // RetireRoot cancels dispatch and forgets demand after the last project detaches.
 // Completed scan records remain available independently of automatic scheduling.
 func (c *Service) RetireRoot(ctx context.Context, root string, attached func(context.Context, string) (bool, error)) error {
-	if c == nil || c.Store == nil || strings.TrimSpace(root) == "" {
+	if c == nil || c.series == nil || strings.TrimSpace(root) == "" {
 		return nil
 	}
 	canonical := fspath.CanonicalPath(root)
@@ -84,12 +84,12 @@ func (c *Service) RetireRoot(ctx context.Context, root string, attached func(con
 		}
 	}
 	c.roots.retire(canonical)
-	rows, err := c.Store.Series.ListSeriesForPath(ctx, canonical)
+	rows, err := c.series.ListSeriesForPath(ctx, canonical)
 	if err != nil {
 		return err
 	}
 	for _, row := range rows {
-		if err := c.Store.Series.DeleteSeries(ctx, canonical, row.ScannerID); err != nil {
+		if err := c.series.DeleteSeries(ctx, canonical, row.ScannerID); err != nil {
 			return err
 		}
 	}

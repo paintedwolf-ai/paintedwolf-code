@@ -34,8 +34,9 @@ func TestCadenceSleepsAfterBaseline(t *testing.T) {
 	cadence.Now = nil
 	testutil.FailErr(t, "attach root", cadence.BaselineRoot(t.Context(), t.TempDir()))
 	database := &scantest.CountedDB{Handle: store.DB()}
-	cadence.Store = scanbase.NewSQLStore(database)
-	scantest.RunService(t, cadence.Run)
+	restarted := New(scanbase.NewSQLStore(database), cadence.Coordinator, cadence.Registry, cadence.Settings, cadence.Gates, cadence.Triggers)
+	restarted.Scopes = cadence.Scopes
+	scantest.RunService(t, restarted.Run)
 	testutil.WaitFor(t, "the cadence reads its baseline", func() bool { return database.Reads.Load() > 0 })
 	scantest.AssertQuiet(t, database)
 }

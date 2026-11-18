@@ -46,7 +46,7 @@ func LedgerTestProject(t *testing.T) (*hostapi.Server, api.Project) {
 		surfaceGate := &settings.ProjectSurfaceGate{
 			Surface: projectcontrib.SurfaceScanConfig, Surfaces: d.Core.Settings.TrustSurfaces, Projects: d.Core.Projects,
 		}
-		cadence.OverlayRootsApply = surfaceGate.FilterPaths
+		cadence.Ignores.OverlayRootsApply = surfaceGate.FilterPaths
 		d.Scans.ScanCoordinator = coord
 		d.Scans.ScannerRegistry = registry
 		d.Scans.ScanCadence = cadence

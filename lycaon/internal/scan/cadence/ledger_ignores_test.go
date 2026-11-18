@@ -17,13 +17,11 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func ledgerCadence(store *scanbase.SQLStore) *Service {
-	return &Service{
-		IgnoreService: IgnoreService{
-			Store: store,
-			OverlayRootsApply: func(_ context.Context, rootPaths []string) []string {
-				return rootPaths
-			},
+func ledgerCadence(store *scanbase.SQLStore) *IgnoreService {
+	return &IgnoreService{
+		Store: store.Ignores,
+		OverlayRootsApply: func(_ context.Context, rootPaths []string) []string {
+			return rootPaths
 		},
 	}
 }
@@ -134,7 +132,7 @@ func TestLedgerAppliesAnIgnoreFileEditedOutsideTheHost(t *testing.T) {
 func TestLedgerRefusesAnIgnoreForAnUntrustedProject(t *testing.T) {
 	root := ledgerRoot(t)
 	store := ledgerFixture(t, root, "sast", "execution-1")
-	closed := &Service{IgnoreService: IgnoreService{Store: store}}
+	closed := &IgnoreService{Store: store.Ignores}
 
 	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 	scan := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)

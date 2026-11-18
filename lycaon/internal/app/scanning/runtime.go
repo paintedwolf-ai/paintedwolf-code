@@ -170,7 +170,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	var cadence *scancadence.Service
 	if deps.Settings != nil {
 		cadence = scancadence.New(store, coord, scannerReg, deps.Settings.SecurityScanners, gatesCfg, triggers)
-		cadence.OverlayRootsApply = filterPaths
+		cadence.Ignores.OverlayRootsApply = filterPaths
 		cadence.Preempt = runner.Preempt
 		cadence.Scopes = scopes
 		releaseCadence := cadence.ObserveRepochange()

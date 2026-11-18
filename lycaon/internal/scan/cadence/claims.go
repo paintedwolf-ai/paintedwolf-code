@@ -23,7 +23,7 @@ func (b claimBook) claimDueSeries(ctx context.Context, canonical string) ([]scan
 	if b.c.roots.isRetired(canonical) {
 		return nil, nil
 	}
-	rows, err := b.c.Store.Series.ListSeriesForPath(ctx, canonical)
+	rows, err := b.c.series.ListSeriesForPath(ctx, canonical)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +32,7 @@ func (b claimBook) claimDueSeries(ctx context.Context, canonical string) ([]scan
 	for _, scanner := range selected {
 		selectedIDs[scanner.ID] = struct{}{}
 	}
-	open, err := b.c.Store.Reads.OpenScansForPath(ctx, canonical)
+	open, err := b.c.reads.OpenScansForPath(ctx, canonical)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func (b claimBook) claimDueSeries(ctx context.Context, canonical string) ([]scan
 			slog.WarnContext(ctx, "scan dispatch claim recovered", "component", "scan_cadence",
 				"path", canonical, "scanner_id", row.ScannerID, "last_heartbeat_at", row.ClaimHeartbeatAt)
 			restoreFrozenDispatch(row, now)
-			if err := b.c.Store.Series.UpsertSeries(ctx, *row); err != nil {
+			if err := b.c.series.UpsertSeries(ctx, *row); err != nil {
 				return nil, err
 			}
 		}
@@ -79,7 +79,7 @@ func (b claimBook) claimDueSeries(ctx context.Context, canonical string) ([]scan
 			if row.ActiveScanID == "" && proactiveTrigger(active.Trigger) {
 				row.ActiveScanID = active.ID
 				row.UpdatedAt = now
-				if err := b.c.Store.Series.UpsertSeries(ctx, *row); err != nil {
+				if err := b.c.series.UpsertSeries(ctx, *row); err != nil {
 					return nil, err
 				}
 			}
@@ -107,7 +107,7 @@ func (b claimBook) claimDueSeries(ctx context.Context, canonical string) ([]scan
 		row.DueAt = time.Time{}
 		row.MaxDueAt = time.Time{}
 		row.UpdatedAt = now
-		if err := b.c.Store.Series.UpsertSeries(ctx, *row); err != nil {
+		if err := b.c.series.UpsertSeries(ctx, *row); err != nil {
 			return claimed, err
 		}
 		claimed = append(claimed, *row)
@@ -131,7 +131,7 @@ func (b claimBook) heartbeatClaims(ctx context.Context, claimed []scanbase.Serie
 			case <-ticker.C:
 				now := nowUTC(b.c)
 				for _, row := range claimed {
-					if err := b.c.Store.Series.HeartbeatClaim(ctx, row, now); err != nil {
+					if err := b.c.series.HeartbeatClaim(ctx, row, now); err != nil {
 						slog.WarnContext(ctx, "heartbeat scan dispatch claim", "scanner_id", row.ScannerID, "error", err)
 					}
 				}
@@ -180,7 +180,7 @@ func (b claimBook) finishDispatch(ctx context.Context, claimed scanbase.SeriesRo
 	}
 	planner := seriesPlanner(b)
 	b.c.mu.Lock()
-	row, err := b.c.Store.Series.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
+	row, err := b.c.series.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
 	if err != nil || row == nil {
 		b.c.mu.Unlock()
 		return err
@@ -197,13 +197,13 @@ func (b claimBook) finishDispatch(ctx context.Context, claimed scanbase.SeriesRo
 	row.ActiveScanID = record.ID
 	planner.rearmHeldDesireLocked(row)
 	row.UpdatedAt = now
-	err = b.c.Store.Series.UpsertSeries(ctx, *row)
+	err = b.c.series.UpsertSeries(ctx, *row)
 	b.c.mu.Unlock()
 	if err != nil {
 		return err
 	}
 
-	latest, err := b.c.Store.Reads.Get(ctx, record.ID)
+	latest, err := b.c.reads.Get(ctx, record.ID)
 	if err != nil {
 		return err
 	}
@@ -249,7 +249,7 @@ func (b claimBook) requeueDispatches(ctx context.Context, rows []scanbase.Series
 func (b claimBook) requeueDispatch(ctx context.Context, claimed scanbase.SeriesRow) {
 	b.c.mu.Lock()
 	defer b.c.mu.Unlock()
-	row, err := b.c.Store.Series.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
+	row, err := b.c.series.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
 	if err != nil {
 		slog.WarnContext(ctx, "read scan dispatch for requeue", "scanner_id", claimed.ScannerID, "error", err)
 		return
@@ -269,7 +269,7 @@ func (b claimBook) requeueDispatch(ctx context.Context, claimed scanbase.SeriesR
 	row.DueAt = now.Add(delay)
 	row.MaxDueAt = maxTime(row.DirtySinceAt.Add(cfg.MaxDefer()), row.DueAt)
 	row.UpdatedAt = now
-	if err := b.c.Store.Series.UpsertSeries(ctx, *row); err != nil {
+	if err := b.c.series.UpsertSeries(ctx, *row); err != nil {
 		slog.WarnContext(ctx, "requeue scan series dispatch", "scanner_id", row.ScannerID, "error", err)
 	}
 }
@@ -278,14 +278,14 @@ func (b claimBook) requeueDispatch(ctx context.Context, claimed scanbase.SeriesR
 func (b claimBook) leavePass(ctx context.Context, claimed scanbase.SeriesRow) {
 	b.c.mu.Lock()
 	defer b.c.mu.Unlock()
-	row, err := b.c.Store.Series.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
+	row, err := b.c.series.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
 	if err != nil || row == nil || row.DispatchToken != claimed.DispatchToken {
 		return
 	}
 	releaseClaim(row)
 	seriesPlanner(b).rearmHeldDesireLocked(row)
 	row.UpdatedAt = nowUTC(b.c)
-	if err := b.c.Store.Series.UpsertSeries(ctx, *row); err != nil {
+	if err := b.c.series.UpsertSeries(ctx, *row); err != nil {
 		slog.WarnContext(ctx, "release full pass member", "scanner_id", row.ScannerID, "error", err)
 	}
 }

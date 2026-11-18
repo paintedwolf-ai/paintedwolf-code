@@ -48,7 +48,7 @@ func requireSeriesBased(t *testing.T, cadence *Service, projectDir string) []sca
 	t.Helper()
 	canonical, err := scanbase.CanonicalPath(projectDir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	series, err := cadence.Store.Series.ListSeriesForPath(t.Context(), canonical)
+	series, err := cadence.series.ListSeriesForPath(t.Context(), canonical)
 	testutil.FailErr(t, "ListSeriesForPath", err)
 	if len(series) == 0 {
 		t.Fatal("scan series missing")

@@ -35,7 +35,7 @@ func (p seriesPlanner) syncLocked(ctx context.Context, canonical string) ([]scan
 	now := nowUTC(p.c)
 	out := make([]scanbase.SeriesRow, 0, len(selected))
 	for _, scanner := range selected {
-		row, err := p.c.Store.Series.GetSeries(ctx, canonical, scanner.ID)
+		row, err := p.c.series.GetSeries(ctx, canonical, scanner.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -46,14 +46,14 @@ func (p seriesPlanner) syncLocked(ctx context.Context, canonical string) ([]scan
 				Categories: scanner.Categories,
 				UpdatedAt:  now,
 			}
-			if err := p.c.Store.Series.UpsertSeries(ctx, created); err != nil {
+			if err := p.c.series.UpsertSeries(ctx, created); err != nil {
 				return nil, err
 			}
 			row = &created
 		} else if !scanbase.SameCategories(row.Categories, scanner.Categories) {
 			row.Categories = append([]api.ScanCategory(nil), scanner.Categories...)
 			row.UpdatedAt = now
-			if err := p.c.Store.Series.UpsertSeries(ctx, *row); err != nil {
+			if err := p.c.series.UpsertSeries(ctx, *row); err != nil {
 				return nil, err
 			}
 		}
@@ -66,7 +66,7 @@ func (p seriesPlanner) syncLocked(ctx context.Context, canonical string) ([]scan
 }
 
 func (p seriesPlanner) retireUnselectedLocked(ctx context.Context, canonical string, selected map[string]struct{}) error {
-	rows, err := p.c.Store.Series.ListSeriesForPath(ctx, canonical)
+	rows, err := p.c.series.ListSeriesForPath(ctx, canonical)
 	if err != nil {
 		return err
 	}
@@ -85,11 +85,11 @@ func (p seriesPlanner) retireUnselectedLocked(ctx context.Context, canonical str
 // retireLocked deletes an idle deselected series or clears its pending demand while active.
 func (p seriesPlanner) retireLocked(ctx context.Context, row *scanbase.SeriesRow, now time.Time) error {
 	if row.ActiveScanID == "" {
-		return p.c.Store.Series.DeleteSeries(ctx, row.CanonicalPath, row.ScannerID)
+		return p.c.series.DeleteSeries(ctx, row.CanonicalPath, row.ScannerID)
 	}
 	clearSeriesDemand(row)
 	row.UpdatedAt = now
-	return p.c.Store.Series.UpsertSeries(ctx, *row)
+	return p.c.series.UpsertSeries(ctx, *row)
 }
 
 func clearSeriesDemand(row *scanbase.SeriesRow) {
@@ -114,7 +114,7 @@ func (p seriesPlanner) requestFullLocked(ctx context.Context, row *scanbase.Seri
 	row.DesiredTrigger = strongerTrigger(row.DesiredTrigger, trigger)
 	p.arm(row, now, 0)
 	row.UpdatedAt = now
-	return p.c.Store.Series.UpsertSeries(ctx, *row)
+	return p.c.series.UpsertSeries(ctx, *row)
 }
 
 // requestRefreshLocked requests a generation delta, or a baseline if none exists.
@@ -126,7 +126,7 @@ func (p seriesPlanner) requestRefreshLocked(ctx context.Context, row *scanbase.S
 	row.DesiredTrigger = strongerTrigger(row.DesiredTrigger, api.ScanTriggerAuthorityRefresh)
 	p.arm(row, now, delay)
 	row.UpdatedAt = now
-	return p.c.Store.Series.UpsertSeries(ctx, *row)
+	return p.c.series.UpsertSeries(ctx, *row)
 }
 
 func (p seriesPlanner) requestPathsLocked(ctx context.Context, row *scanbase.SeriesRow, paths []string, delay time.Duration) error {
@@ -145,7 +145,7 @@ func (p seriesPlanner) requestPathsLocked(ctx context.Context, row *scanbase.Ser
 	}
 	p.arm(row, now, delay)
 	row.UpdatedAt = now
-	return p.c.Store.Series.UpsertSeries(ctx, *row)
+	return p.c.series.UpsertSeries(ctx, *row)
 }
 
 // Claimed rows retain pending work until the claim is released.

@@ -15,7 +15,7 @@ import (
 
 // IgnoreService serves finding ledger queries and project ignore rules.
 type IgnoreService struct {
-	Store *scanbase.SQLStore
+	Store *scanbase.IgnoreStore
 	// OverlayRootsApply selects trusted roots whose scan settings apply; nil disables overlays.
 	OverlayRootsApply func(ctx context.Context, rootPaths []string) []string
 }
@@ -45,7 +45,7 @@ func (s *IgnoreService) ListIgnores(ctx context.Context, projectDir string) (*ap
 	if err != nil {
 		return nil, err
 	}
-	catalog, matches, err := s.Store.Ignores.IgnoreMatches(ctx, canonical, roots)
+	catalog, matches, err := s.Store.IgnoreMatches(ctx, canonical, roots)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func (s *IgnoreService) AddIgnore(ctx context.Context, projectDir string, entry 
 	if _, err := scanignore.AddIgnoreEntry(projectDir, fromAPIIgnoreEntry(entry)); err != nil {
 		return nil, err
 	}
-	if err := s.Store.Ignores.InvalidateIgnoreDigest(ctx, canonical); err != nil {
+	if err := s.Store.InvalidateIgnoreDigest(ctx, canonical); err != nil {
 		return nil, err
 	}
 	return s.ListIgnores(ctx, projectDir)
@@ -134,7 +134,7 @@ func (s *IgnoreService) RemoveIgnore(ctx context.Context, projectDir, id string)
 	if err := scanignore.RemoveIgnoreEntry(projectDir, fileID); err != nil {
 		return nil, err
 	}
-	if err := s.Store.Ignores.InvalidateIgnoreDigest(ctx, canonical); err != nil {
+	if err := s.Store.InvalidateIgnoreDigest(ctx, canonical); err != nil {
 		return nil, err
 	}
 	return s.ListIgnores(ctx, projectDir)
@@ -184,8 +184,8 @@ func (s *IgnoreService) FindingLedger(ctx context.Context, projectDir string, re
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.Store.Ignores.SyncIgnores(ctx, canonical, roots); err != nil {
+	if _, err := s.Store.SyncIgnores(ctx, canonical, roots); err != nil {
 		return nil, err
 	}
-	return s.Store.Ignores.FindingLedger(ctx, canonical, req)
+	return s.Store.FindingLedger(ctx, canonical, req)
 }

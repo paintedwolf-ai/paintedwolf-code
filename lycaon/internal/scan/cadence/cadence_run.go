@@ -27,7 +27,7 @@ func (c *Service) Run(ctx context.Context) error {
 	dispatcher := rootDispatcher{c: c}
 	for ctx.Err() == nil {
 		changed := c.Settings.Changed()
-		seriesChanged := c.Store.Series.Changed.Wake()
+		seriesChanged := c.series.Changed.Wake()
 		planner.reconcileActive(ctx)
 		if securityOn(c) && len(active) < cadenceDispatchConcurrency {
 			for _, root := range dispatcher.dueRoots(ctx) {
@@ -66,7 +66,7 @@ func (c *Service) Run(ctx context.Context) error {
 
 func (d rootDispatcher) dueRoots(ctx context.Context) []string {
 	reconcileUnavailable(ctx, d.c)
-	due, err := d.c.Store.Series.ListDueSeries(ctx, nowUTC(d.c))
+	due, err := d.c.series.ListDueSeries(ctx, nowUTC(d.c))
 	if err != nil {
 		slog.WarnContext(ctx, "scan cadence list due", "error", err)
 		return nil
@@ -85,12 +85,12 @@ func (d rootDispatcher) dueRoots(ctx context.Context) []string {
 
 func (d rootDispatcher) nextWake(ctx context.Context, recovery time.Duration) time.Duration {
 	cfg := cadenceCfg(d.c)
-	due, err := d.c.Store.Series.NextSeriesDue(ctx)
+	due, err := d.c.series.NextSeriesDue(ctx)
 	if err != nil {
 		slog.WarnContext(ctx, "read scan dispatch deadline", "error", err)
 		return min(recovery, cfg.WriteBurstSettle())
 	}
-	heartbeat, err := d.c.Store.Series.OldestDispatchHeartbeat(ctx)
+	heartbeat, err := d.c.series.OldestDispatchHeartbeat(ctx)
 	if err != nil {
 		slog.WarnContext(ctx, "read scan dispatch lease", "error", err)
 		return min(recovery, cfg.WriteBurstSettle())
