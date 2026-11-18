@@ -300,10 +300,16 @@ detection:
   condition: sel`)},
 		},
 	}}
-	m := NewMatcher(cat)
-	hit, ok := m.Match(testEvent("command", "do boom now", "/p", true, "proxy", "s"))
+	ev := testEvent("command", "do boom now", "/p", true, "proxy", "s")
+	hit, ok := NewMatcher(cat).Match(ev)
 	if !ok || hit.Level != LevelCritical || hit.PackID != "zzz-critical" {
 		t.Fatalf("hit=%+v ok=%v", hit, ok)
+	}
+	// Reversed pack order: severity still wins, so neither first nor last pack decides.
+	cat.Packs[0], cat.Packs[1] = cat.Packs[1], cat.Packs[0]
+	hit, ok = NewMatcher(cat).Match(ev)
+	if !ok || hit.Level != LevelCritical || hit.PackID != "zzz-critical" {
+		t.Fatalf("reversed order hit=%+v ok=%v", hit, ok)
 	}
 }
 

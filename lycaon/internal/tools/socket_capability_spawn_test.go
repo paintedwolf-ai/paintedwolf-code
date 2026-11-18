@@ -2,6 +2,8 @@ package tools
 
 import (
 	"github.com/lycaon/lycaon/internal/capabilitygrants"
+	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/session/approvalstate"
 
 	"net"
 	"os"
@@ -207,25 +209,46 @@ func (r *memorySocketRuntime) ConsumePermit(identity hitl.EffectPermitIdentity, 
 	return true, nil
 }
 
-// Raw arguments cannot inject socket literals into the confine request without a host permit.
+// A resolved capability request without a host permit never reaches the
+// confine request: sockets and direct IP each refuse with their typed code,
+// and a request with neither carries no socket or direct-IP facts.
 func TestConfineRequestForSpawnIgnoresForgedRawRequest(t *testing.T) {
 	dir := shortTempDir(t)
-	_ = listenUnixSocket(t, filepath.Join(dir, "s.sock"))
+	sock := filepath.Join(dir, "s.sock")
+	_ = listenUnixSocket(t, sock)
+	g, err := confine.ResolveSocketRequest(sock)
+	testutil.FailErr(t, "ResolveSocketRequest", err)
+	ctx, scope := socketref.WithScope(t.Context())
+	defer scope.Close()
+	g, err = confine.CaptureSocketGrant(ctx, g)
+	testutil.FailErr(t, "capture socket", err)
+	identity := InvocationIdentity{SessionID: "sess", ToolCallID: "call-1"}
+	sockets := approvalstate.NewSocketCapabilityRuntime()
+	t.Cleanup(sockets.Close)
 
-	tctx := ToolContext{
-		Identity: InvocationIdentity{SessionID: "sess",
-			ToolCallID: "call-1"},
-	}
-	req, reject := ConfineRequestForSpawn(t.Context(), tctx, []string{dir})
+	tctx := ToolContext{Identity: identity}
+	req, reject := ConfineRequestForSpawn(ctx, tctx, []string{dir})
 	if reject != nil {
 		t.Fatalf("unexpected reject: %+v", reject)
 	}
-	if len(req.SocketGrants) != 0 {
-		t.Fatalf("forged raw request must not supply SocketGrants, got %#v", req.SocketGrants)
+	if len(req.SocketGrants) != 0 || req.Egress == confine.EgressDirectIP {
+		t.Fatalf("request without permits carries socket or direct facts: %+v", req)
 	}
-	contained := hitl.ContainedForRequest(req)
-	if contained.SocketCount != 0 || contained.SocketPathsDigest != "" {
-		t.Fatalf("contained must not carry socket facts from forged request: %+v", contained)
+
+	tctx.Socket = InvocationSocket{
+		SocketGrants: []confine.SocketGrant{g}, SocketActionDigest: "action-digest", SocketCapabilityRuntime: sockets,
+	}
+	if _, reject := ConfineRequestForSpawn(ctx, tctx, []string{dir}); reject == nil || reject.Code != isolation.CodeSocketPermitRequired {
+		t.Fatalf("socket without a permit = %+v, want %s", reject, isolation.CodeSocketPermitRequired)
+	}
+
+	tctx.Socket = InvocationSocket{}
+	tctx.Direct = InvocationDirect{
+		DirectIPRequested: true, DirectIPActionDigest: "action-digest", DirectIPRequestDigest: "request",
+		DirectIPConfineDigest: "confinement", DirectIPCapabilityRuntime: approvalstate.NewDirectIPCapabilityRuntime(),
+	}
+	if _, reject := ConfineRequestForSpawn(ctx, tctx, []string{dir}); reject == nil || reject.Code != isolation.CodeDirectIPAuthorizationChanged {
+		t.Fatalf("direct IP without a permit = %+v, want %s", reject, isolation.CodeDirectIPAuthorizationChanged)
 	}
 }
 

@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/toolrejection"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/confine"
@@ -21,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -156,19 +155,6 @@ func TestHardDenyWriteSpecsConsumedByBuildSeatbeltProfile(t *testing.T) {
 	}
 	if !foundPerm {
 		t.Fatalf("specs missing approvals.yaml: %+v", specs)
-	}
-}
-
-func TestHardDenyWriteSpecsNoBasenameForkInBackends(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	src, err := os.ReadFile(filepath.Join(root, "lycaon/internal/confine/confine.go"))
-	testutil.FailErr(t, "read confine.go", err)
-	if !strings.Contains(string(src), "HardDenyWriteSpecs(") {
-		t.Fatal("BuildProfile must render HardDenyWriteSpecs")
-	}
-	if strings.Contains(string(src), "approvals.yaml") {
-		t.Fatal("confine.go must not hardcode approvals.yaml — use HardDenyWriteSpecs")
 	}
 }
 

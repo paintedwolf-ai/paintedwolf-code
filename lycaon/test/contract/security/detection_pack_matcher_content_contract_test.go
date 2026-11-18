@@ -133,37 +133,3 @@ func TestDetectionPackMultiStageMatchesSingleStage(t *testing.T) {
 		t.Fatalf("aws multi-stage: single=%+v/%v multi=%+v/%v", a1, ok1, a2, ok2)
 	}
 }
-
-// TestDetectionPackMatcherSeverityBeatsPackOrder: critical in a later pack beats medium earlier.
-func TestDetectionPackMatcherSeverityBeatsPackOrder(t *testing.T) {
-	t.Parallel()
-	cat := &detectionpack.Catalog{Packs: []detectionpack.Pack{
-		{
-			ID: "aaa-medium", Enabled: true, Source: detectionpack.SourceDevice,
-			Rules: []detectionpack.Rule{mustParseDetectionRule(t, `title: Med
-id: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
-description: d
-logsource: {product: lycaon, service: tool_exec}
-level: medium
-detection:
-  sel: {CommandLine|contains: ' boom '}
-  condition: sel`)},
-		},
-		{
-			ID: "zzz-critical", Enabled: true, Source: detectionpack.SourceDevice,
-			Rules: []detectionpack.Rule{mustParseDetectionRule(t, `title: Crit
-id: bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
-description: d
-logsource: {product: lycaon, service: tool_exec}
-level: critical
-detection:
-  sel: {CommandLine|contains: ' boom '}
-  condition: sel`)},
-		},
-	}}
-	m := detectionpack.NewMatcher(cat)
-	hit, ok := m.Match(contractToolEvent("command", "do boom now", "/p", true, "proxy", "s"))
-	if !ok || hit.Level != detectionpack.LevelCritical || hit.PackID != "zzz-critical" {
-		t.Fatalf("hit=%+v ok=%v", hit, ok)
-	}
-}

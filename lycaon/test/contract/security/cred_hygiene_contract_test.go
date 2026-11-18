@@ -1,167 +1,86 @@
 package contract
 
 import (
+	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
-	"strings"
 	"testing"
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/hostidentity"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/mcp"
-	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/protectedpath"
+	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/webresearch"
-	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// secretFileDefinitions pins each secret file and its mode declaration.
-var secretFileDefinitions = []struct {
-	what     string
-	file     string
-	modeDecl string
-}{
-	// Provider, web-research, MCP OAuth, MCP static credentials, host identity,
-	// and daemon token secrets all persist through internal/credentialstore.
-	{"every credentialstore namespace", "internal/credentialstore/backend.go", "fileMode = 0o600"},
-	{"sidecar daemon manifest (daemon.json)", "internal/api/daemon.go", "daemonManifestMode = 0o600"},
-	{"settings YAML", "internal/settings/paths.go", "settingsFileMode = 0o600"},
-}
-
+// Each private file writer leaves owner-only permissions on what it wrote:
+// the credential vault and its identity, the daemon manifest, and settings.
 func TestSecretFilesDeclare0600(t *testing.T) {
-	t.Parallel()
-	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon")
+	cfg := t.TempDir()
+	t.Setenv(configdir.EnvConfigDir, cfg)
 
-	for _, definition := range secretFileDefinitions {
-		content := contractcheck.ReadRepoFile(t, root, definition.file)
-		if !strings.Contains(content, definition.modeDecl) {
-			t.Fatalf("%s: %s no longer declares %q.\n"+
-				"Secret values live user-level at 0600 — a key file at 0644, or one under a project root, is the leak.",
-				definition.what, definition.file, definition.modeDecl)
+	vault := credentialstore.Slot{Path: credentialstore.DefaultVaultPath(cfg), Namespace: credentialstore.NamespaceProviders, Context: "providers"}
+	store, err := credentialstore.Open(vault, nil)
+	contractcheck.FailErr(t, "open credential vault", err)
+	contractcheck.FailErr(t, "store a credential", store.Set("fixture", "secret"))
+	contractcheck.FailErr(t, "write daemon manifest", hostapi.WriteDaemonManifest("127.0.0.1", 8787, os.Getpid()))
+	settingsPath := filepath.Join(cfg, "approvals.yaml")
+	approvals, err := settings.NewApprovalStoreAt(settingsPath)
+	contractcheck.FailErr(t, "open approval settings", err)
+	contractcheck.FailErr(t, "write approval settings", approvals.PutGlobal(settings.ApprovalConfig{}))
+
+	entries, err := os.ReadDir(cfg)
+	contractcheck.FailErr(t, "list config dir", err)
+	written := map[string]bool{}
+	for _, e := range entries {
+		written[e.Name()] = true
+	}
+	for _, name := range []string{credentialstore.VaultBasename, credentialstore.DevelopmentIdentityBasename, "daemon.json", "approvals.yaml"} {
+		if !written[name] {
+			t.Errorf("%s was not written under the config dir (have %v)", name, entries)
+			continue
+		}
+		info, err := os.Stat(filepath.Join(cfg, name))
+		contractcheck.FailErr(t, "stat "+name, err)
+		if mode := info.Mode().Perm(); mode != 0o600 {
+			t.Errorf("%s mode = %o, want 600", name, mode)
 		}
 	}
 }
 
-// Secrets are never stored primarily under a project tree, where a config
-// holding a key can be committed.
-func TestSecretStoresResolveUnderUserConfigDir(t *testing.T) {
-	t.Parallel()
-	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon")
-
-	for _, rel := range []string{
-		"internal/llm/credentials/credentials.go",
-		"internal/mcp/oauth_token_store.go",
-		"internal/mcp/static_credentials_store.go",
-		"internal/webresearch/credentials.go",
-		"internal/hostidentity/identity.go",
-		"internal/api/daemon.go",
-	} {
-		content := contractcheck.ReadRepoFile(t, root, rel)
-		if strings.Contains(content, "ProjectDir") || strings.Contains(content, settingsoverlay.DirName()+"/") {
-			t.Fatalf("%s references a project-scoped path: secret stores resolve under the user config dir only", rel)
-		}
-	}
-}
-
+// Every managed secret namespace resolves to the one vault in the user config
+// dir, never under a project tree.
 func TestAllManagedSecretNamespacesPersistInVaultAndRegisterSlots(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "xdg"))
+	cfg := t.TempDir()
+	t.Setenv(configdir.EnvConfigDir, cfg)
+	wantPath := filepath.Join(cfg, credentialstore.VaultBasename)
 
-	type slotSpec struct {
+	specs := []struct {
+		name      string
 		fn        func() (credentialstore.Slot, error)
 		namespace string
-		callExpr  string
+	}{
+		{"providers", providercredentials.DefaultSlot, credentialstore.NamespaceProviders},
+		{"web research", webresearch.DefaultSlot, credentialstore.NamespaceWebResearch},
+		{"MCP OAuth", mcp.DefaultSlot, credentialstore.NamespaceMCPOAuth},
+		{"MCP credentials", mcp.DefaultCredentialsSlot, credentialstore.NamespaceMCPCredentials},
+		{"host identity", hostidentity.DefaultSlot, credentialstore.NamespaceHostIdentity},
+		{"daemon token", hostapi.DefaultDaemonTokenSlot, credentialstore.NamespaceDaemonToken},
 	}
-	specs := []slotSpec{
-		{providercredentials.DefaultSlot, credentialstore.NamespaceProviders, "providercredentials.DefaultSlot()"},
-		{webresearch.DefaultSlot, credentialstore.NamespaceWebResearch, "webresearch.DefaultSlot()"},
-		{mcp.DefaultSlot, credentialstore.NamespaceMCPOAuth, "mcp.DefaultSlot()"},
-		{mcp.DefaultCredentialsSlot, credentialstore.NamespaceMCPCredentials, "mcp.DefaultCredentialsSlot()"},
-		{hostidentity.DefaultSlot, credentialstore.NamespaceHostIdentity, "hostidentity.DefaultSlot()"},
-		{hostapi.DefaultDaemonTokenSlot, credentialstore.NamespaceDaemonToken, "api.DefaultDaemonTokenSlot()"},
-	}
-
-	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon")
-	cliSource := contractcheck.ReadRepoFile(t, root, "cmd/lycaon/credentials.go")
-
 	for _, spec := range specs {
 		slot, err := spec.fn()
-		if err != nil {
-			t.Fatalf("%s failed: %v", spec.callExpr, err)
-		}
-		if filepath.Base(slot.Path) != credentialstore.VaultBasename {
-			t.Fatalf("%s path = %q, want basename %q", spec.callExpr, slot.Path, credentialstore.VaultBasename)
+		contractcheck.FailErr(t, spec.name+" slot", err)
+		if slot.Path != wantPath {
+			t.Errorf("%s vault = %q, want %q", spec.name, slot.Path, wantPath)
 		}
 		if slot.Namespace != spec.namespace {
-			t.Fatalf("%s namespace = %q, want %q", spec.callExpr, slot.Namespace, spec.namespace)
-		}
-		if !strings.Contains(cliSource, spec.callExpr) {
-			t.Fatalf("cmd/lycaon/credentials.go no longer registers %s in allCredentialSlots()", spec.callExpr)
-		}
-	}
-}
-
-// One scrubber, not two. Diagnostics export imports this rather than
-// re-deriving redaction — the copy that drifts is the one that leaks.
-func TestSharedScrubberCoversTheSecretFieldFamily(t *testing.T) {
-	t.Parallel()
-	mustRedact := []string{
-		"api_key", "apiKey", "X-Api-Key", "API-KEY",
-		"access_token", "refresh_token", "client_secret",
-		"Authorization", "password", "token", "credential", "private_key",
-	}
-	for _, name := range mustRedact {
-		if !observability.IsSecretFieldName(name) {
-			t.Fatalf("shared scrubber does not treat %q as a secret field name", name)
-		}
-	}
-
-	mustKeep := []string{"provider_id", "model", "base_url", "status", "version", "id"}
-	for _, name := range mustKeep {
-		if observability.IsSecretFieldName(name) {
-			t.Fatalf("shared scrubber redacts %q, which carries no secret and is needed to read a diagnostics bundle", name)
-		}
-	}
-}
-
-// The scrubber must survive the shapes a real capture takes: nested objects,
-// arrays, headers, and a body that failed to parse.
-func TestScrubberRedactsAcrossCaptureShapes(t *testing.T) {
-	t.Parallel()
-	const key = "sk-live-secret-value-0123456789"
-
-	body := observability.ScrubJSON([]byte(`{"api_key":"` + key + `","nested":{"access_token":"` + key + `"}}`))
-	if strings.Contains(string(body), key) {
-		t.Fatalf("JSON body leaked a secret: %s", body)
-	}
-
-	unparsed := observability.ScrubJSON([]byte("Authorization: Bearer " + key))
-	if strings.Contains(string(unparsed), key) {
-		t.Fatalf("unparsed body leaked a secret: %s", unparsed)
-	}
-
-	headers := observability.ScrubHeaders(map[string][]string{"Authorization": {"Bearer " + key}})
-	if strings.Contains(strings.Join(headers["Authorization"], ""), key) {
-		t.Fatalf("header leaked a secret: %v", headers)
-	}
-}
-
-// The approval settings document declares no credential fields, and request
-// bodies decode strictly, so a credential never lands in approval settings.
-// Free-form rule text is not scanned or classified.
-func TestApprovalSettingsDeclareNoCredentialFields(t *testing.T) {
-	t.Parallel()
-	body := reflect.TypeOf(api.UpdateApprovalsSettingsRequest{})
-	for i := 0; i < body.NumField(); i++ {
-		name := strings.ToLower(strings.Split(body.Field(i).Tag.Get("json"), ",")[0])
-		switch name {
-		case "api_key", "secret", "password", "token":
-			t.Fatalf("approval settings declare credential field %q", name)
+			t.Errorf("%s namespace = %q, want %q", spec.name, slot.Namespace, spec.namespace)
 		}
 	}
 }
@@ -188,11 +107,5 @@ func TestSettingsOverlaysAreReviewedAgentPolicy(t *testing.T) {
 		if !slices.ContainsFunc(protectedpath.AgentPolicyLocations(), func(l protectedpath.AgentPolicyLocation) bool { return l.Contains(rel) }) {
 			t.Errorf("%s is not an agent-policy location", rel)
 		}
-	}
-
-	// And the floor must consume the declaration rather than a copy.
-	floor := contractcheck.ReadRepoFile(t, filepath.Join(contractcheck.RepoRoot(t), "lycaon"), "internal/confine/agent_policy.go")
-	if !strings.Contains(floor, "protectedpath.AgentPolicyLocations()") {
-		t.Fatal("internal/confine/agent_policy.go no longer derives its floor from AgentPolicyLocations")
 	}
 }

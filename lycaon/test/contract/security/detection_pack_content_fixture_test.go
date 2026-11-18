@@ -132,16 +132,6 @@ func (s stubConfineEgressDetection) Escalates(match confine.EgressDetectionCitat
 	return detectionpack.Escalates(detectionpack.Level(match.Level), posture)
 }
 
-func mustParseDetectionRule(t *testing.T, body string) detectionpack.Rule {
-	t.Helper()
-	r, err := detectionpack.ParseRule([]byte(body))
-	testutil.FailErr(t, "ParseRule", err)
-	if !r.Supported {
-		t.Fatalf("rule unsupported: %s", r.UnsupportedReason)
-	}
-	return r
-}
-
 func readRuleYAML(t *testing.T, rel config.Rel) map[string]any {
 	t.Helper()
 	data, err := config.Read(rel)

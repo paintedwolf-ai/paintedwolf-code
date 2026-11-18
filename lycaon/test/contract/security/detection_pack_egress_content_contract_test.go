@@ -2,11 +2,6 @@ package contract
 
 import (
 	"context"
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -16,8 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // TestDetectionPackEgressSuffixesAnchored: endswith values begin with '.'; proofs both ways.
@@ -116,52 +109,9 @@ func TestDetectionPackEgressSuffixesAnchored(t *testing.T) {
 	}
 }
 
-// TestDetectionPackApiActionFromArgvAST: no regexp, casing table, or map literal; aws-only populate.
-func TestDetectionPackApiActionFromArgvAST(t *testing.T) {
+// TestDetectionPackApiActionFromArgvAWSOnly: only aws argv populates ApiAction.
+func TestDetectionPackApiActionFromArgvAWSOnly(t *testing.T) {
 	t.Parallel()
-	path := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "detectionpack", "event.go")
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, path, nil, 0)
-	testutil.FailErr(t, "ParseFile event.go", err)
-	var fn *ast.FuncDecl
-	for _, decl := range f.Decls {
-		fd, ok := decl.(*ast.FuncDecl)
-		if ok && fd.Name != nil && fd.Name.Name == "ApiActionFromArgv" {
-			fn = fd
-			break
-		}
-	}
-	if fn == nil || fn.Body == nil {
-		t.Fatal("ApiActionFromArgv not found")
-	}
-	ast.Inspect(fn.Body, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.SelectorExpr:
-			if id, ok := x.X.(*ast.Ident); ok && id.Name == "regexp" {
-				t.Fatal("ApiActionFromArgv must not use regexp")
-			}
-		case *ast.CompositeLit:
-			if _, ok := x.Type.(*ast.MapType); ok {
-				t.Fatal("ApiActionFromArgv must not contain a map literal")
-			}
-		case *ast.CallExpr:
-			sel, ok := x.Fun.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			pkg, ok := sel.X.(*ast.Ident)
-			if !ok {
-				return true
-			}
-			// Allow strings.ToLower / HasPrefix / join; forbid casing tables via maps already.
-			if pkg.Name == "strings" && (sel.Sel.Name == "ToUpper" || sel.Sel.Name == "Title") {
-				t.Fatalf("ApiActionFromArgv unexpected casing helper %s", sel.Sel.Name)
-			}
-		}
-		return true
-	})
-
-	// Behavior: aws-only populate.
 	if got := detectionpack.ApiActionFromArgv("aws", []string{"aws", "iam", "create-access-key"}); got != "iam:create-access-key" {
 		t.Fatalf("aws ApiAction = %q", got)
 	}
@@ -276,13 +226,4 @@ func TestDetectionPackConnectHoldComposition(t *testing.T) {
 	if asked != 2 {
 		t.Fatalf("later detection must re-ask: asked=%d", asked)
 	}
-
-	// Detection holds reuse CheckpointKindToolApproval — no second kind.
-	kindsPath := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "pkg", "api", "checkpoint_types.go")
-	data, err := os.ReadFile(kindsPath)
-	testutil.FailErr(t, "read checkpoint_types.go", err)
-	if strings.Contains(string(data), "CheckpointKindDetection") {
-		t.Fatal("must not mint a second checkpoint kind for detection holds")
-	}
-	_ = api.CheckpointKindToolApproval // pin the existing kind remains defined
 }

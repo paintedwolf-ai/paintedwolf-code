@@ -77,3 +77,24 @@ func TestApplyAgentFetchHygieneSkipsStub(t *testing.T) {
 		t.Fatalf("stub must not be framed: %q", res.Text)
 	}
 }
+
+// The extract walk drops comments and hidden subtrees in block, heading and
+// preformatted contexts alike, and keeps the visible text around them.
+func TestExtractHTMLTextDropsCommentsAndHiddenElements(t *testing.T) {
+	raw := `<html><body>` +
+		`<h2>Heading-visible<!-- c-heading --><span hidden>h-heading</span></h2>` +
+		`<p>Para-visible</p><!-- c-block --><div style="display:none">h-block</div>` +
+		`<pre>pre-visible<!-- c-pre --><span aria-hidden="true">h-pre</span></pre>` +
+		`</body></html>`
+	_, text := extractHTMLText(raw, "https://example.com/hygiene")
+	for _, dropped := range []string{"c-heading", "h-heading", "c-block", "h-block", "c-pre", "h-pre"} {
+		if strings.Contains(text, dropped) {
+			t.Errorf("extract kept %q: %q", dropped, text)
+		}
+	}
+	for _, kept := range []string{"Heading-visible", "Para-visible", "pre-visible"} {
+		if !strings.Contains(text, kept) {
+			t.Errorf("extract lost %q: %q", kept, text)
+		}
+	}
+}

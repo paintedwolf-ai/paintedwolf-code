@@ -47,8 +47,21 @@ func TestImportDryRunWritesNothing(t *testing.T) {
 	if res.Pack.ID != "demo-pack" || len(res.Pack.Rules) != 1 {
 		t.Fatalf("result=%+v", res.Pack)
 	}
-	if _, err := os.Stat(filepath.Join(DevicePacksDir(cfg), "demo-pack")); !os.IsNotExist(err) {
-		t.Fatal("dry-run wrote device pack")
+	var written []string
+	testutil.FailErr(t, "walk config", filepath.WalkDir(cfg, func(path string, d os.DirEntry, err error) error {
+		if err == nil && path != cfg {
+			written = append(written, path)
+		}
+		return err
+	}))
+	if len(written) != 0 {
+		t.Fatalf("dry-run wrote %v", written)
+	}
+	// Positive control: the same source commits when not a dry run.
+	_, err = ImportPack(cfg, shippedPacks(t), ImportRequest{SourcePath: src})
+	testutil.FailErr(t, "ImportPack commit", err)
+	if _, err := os.Stat(filepath.Join(DevicePacksDir(cfg), "demo-pack", "pack.yaml")); err != nil {
+		t.Fatalf("committed import missing: %v", err)
 	}
 }
 

@@ -181,7 +181,7 @@ jobs:
           LYCAON_BROWSER_REQUIRED: '1'
         run: >
           ./task test:digest -- ./internal/browser
-          -run '^(TestBrowserProcessCancellationSettlesBeforeReturning|TestBrowserProcessUsesOwnedNativeDoorInBothPostures|TestHeadlessLauncherPinsSubprocessPath|TestLaunchHeadlessUnderBrowserConfinement|TestProbeUsabilityUnderBrowserConfinement|TestPoolNewPageUnderBrowserConfinement|TestCaptureURLReachesHostLoopback|TestConfinedBrowserFloorReachesHostLoopback|TestConfinedBrowserCannotReadDeniedFiles|TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt|TestLaunchHeadlessRefusesUnsafeCacheDir)$'
+          -run '^(TestBrowserProcessCancellationSettlesBeforeReturning|TestBrowserProcessUsesOwnedNativeDoorInBothPostures|TestHeadlessLauncherPinsSubprocessPath|TestLaunchHeadlessUnderBrowserConfinement|TestProbeUsabilityUnderBrowserConfinement|TestPoolNewPageUnderBrowserConfinement|TestCaptureURLReachesHostLoopback|TestConfinedBrowserFloorReachesHostLoopback|TestConfinedBrowserCannotReadDeniedFiles|TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt|TestBrowserBoundaryAppliesBrowserConfinement|TestLaunchHeadlessRefusesUnsafeCacheDir)$'
           -count=1
 
       # Release custody refusal needs the unsigned release build, which only

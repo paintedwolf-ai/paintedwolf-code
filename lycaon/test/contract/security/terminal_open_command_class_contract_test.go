@@ -3,12 +3,11 @@ package contract
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolexecution"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/argv"
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -21,42 +20,36 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// TestTerminalOpenClassifyTierParityWithCommand locks command-class irreversible
-// floor plus path-escape behavior for terminal_open.
+// TestTerminalOpenClassifyTierParityWithCommand: command and terminal_open
+// take the same tier from containment, never from the command text.
 func TestTerminalOpenClassifyTierParityWithCommand(t *testing.T) {
 	t.Parallel()
 	proj := t.TempDir()
+	contained := hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{proj}}
 	cases := []struct {
-		cmd string
+		cmd       string
+		contained hitl.Contained
+		want      settings.ReversibilityTier
 	}{
-		{"go test ./..."},
-		{"git push origin main"},
-		{"git push --force"},
-		{"cat /etc/passwd"},
-		{"cat ~/.ssh/id_rsa"},
-		{"dd if=/dev/zero of=x"},
+		{"go test ./...", contained, settings.TierRecoverable},
+		{"git push --force", contained, settings.TierRecoverable},
+		{"cat ~/.ssh/id_rsa", contained, settings.TierRecoverable},
+		{"dd if=/dev/zero of=x", contained, settings.TierRecoverable},
+		{"go test ./...", hitl.Contained{}, settings.TierIrreversible},
+		{"git push origin main", hitl.Contained{}, settings.TierIrreversible},
+		{"cat /etc/passwd", hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressDirectIP, Roots: []string{proj}}, settings.TierIrreversible},
 	}
 	for _, tc := range cases {
-		commandTier := settings.ClassifyTier(hitl.ProposedAction{
-			Invocation: hitl.ActionInvocation{
-				Tool: "command",
-				Args: map[string]any{"command": tc.cmd},
-			},
-			Scope: hitl.ActionScope{
-				ProjectDir: proj,
-			},
-		})
-		openTier := settings.ClassifyTier(hitl.ProposedAction{
-			Invocation: hitl.ActionInvocation{
-				Tool: "terminal_open",
-				Args: map[string]any{"command": tc.cmd},
-			},
-			Scope: hitl.ActionScope{
-				ProjectDir: proj,
-			},
-		})
-		if commandTier != openTier {
-			t.Fatalf("command %q: command=%v terminal_open=%v", tc.cmd, commandTier, openTier)
+		for _, tool := range []string{"command", "terminal_open"} {
+			got := settings.ClassifyTier(hitl.ProposedAction{
+				Invocation: hitl.ActionInvocation{Tool: tool, Args: map[string]any{"command": tc.cmd}},
+				Scope:      hitl.ActionScope{ProjectDir: proj},
+				Execution:  hitl.ActionExecution{Contained: tc.contained},
+			})
+			if got != tc.want {
+				t.Errorf("%s %q contained=%+v: tier %s, want %s", tool, tc.cmd, tc.contained,
+					settings.TierLabel(got), settings.TierLabel(tc.want))
+			}
 		}
 	}
 }
@@ -157,24 +150,5 @@ func TestTerminalOpenNotArgvRejectObservation(t *testing.T) {
 	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_NOT_ARGV" {
 		t.Fatalf("want COMMAND_NOT_ARGV ToolReject, got %v", err)
-	}
-}
-
-func TestTerminalOpenWiringUsesHostcmdArgv(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "internal", "tools", "native", "terminal", "session_open.go")
-	data, err := os.ReadFile(path)
-	contractcheck.FailErr(t, "read terminal/session_open.go", err)
-	text := string(data)
-	for _, marker := range []string{
-		"hostcmd.Request",
-		"tctx.CommandPlan",
-		"ErrShellMetacharacters",
-		"pipeline_not_supported",
-	} {
-		if !strings.Contains(text, marker) {
-			t.Fatalf("%s missing %q", path, marker)
-		}
 	}
 }

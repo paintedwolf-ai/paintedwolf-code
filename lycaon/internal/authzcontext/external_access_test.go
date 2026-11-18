@@ -3,6 +3,9 @@ package authzcontext_test
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -128,6 +131,54 @@ func TestBuildExternalAccess_capsAndOrdering(t *testing.T) {
 	}
 }
 
+// Socket paths under the home folder are recorded home-relative, and a query
+// suffix never reaches the record.
+func TestBuildExternalAccess_redactsSocketPaths(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	ea := authzcontext.BuildExternalAccess(authzcontext.ExternalAccessInput{
+		Sockets: []authzcontext.ExternalAccessSocketInput{{
+			ApprovedPath: filepath.Join(home, ".colima", "docker.sock") + "?token=secret",
+			ResolvedPath: filepath.Join(home, ".colima", "default", "docker.sock"),
+			Scope:        "chat",
+		}},
+	})
+	want := []api.ExternalAccessSocket{{
+		ApprovedPath:          "~/.colima/docker.sock",
+		ResolvedPath:          "~/.colima/default/docker.sock",
+		Scope:                 "chat",
+		CapabilityVisibility:  api.ExternalAccessVisibilityObserved,
+		ConnectionVisibility:  api.ExternalAccessVisibilityUnobserved,
+		InnerEffectVisibility: api.ExternalAccessVisibilityUnobserved,
+		Authority:             api.ExternalAccessSocketAuthorityOutsideSandboxDaemon,
+	}}
+	if !reflect.DeepEqual(ea.Sockets, want) {
+		t.Fatalf("sockets = %+v\nwant %+v", ea.Sockets, want)
+	}
+}
+
+// A socket grant records the outer socket only: no mediated endpoint is
+// invented for what the daemon behind it does.
+func TestBuildExternalAccess_socketInventsNoInnerEffects(t *testing.T) {
+	ea := authzcontext.BuildExternalAccess(authzcontext.ExternalAccessInput{
+		Sockets: []authzcontext.ExternalAccessSocketInput{{
+			ApprovedPath: "/var/run/docker.sock", ResolvedPath: "/var/run/docker.sock", Scope: "chat",
+		}},
+	})
+	if len(ea.Endpoints) != 0 || len(ea.DeclaredDestinations) != 0 || ea.Direct != nil {
+		t.Fatalf("socket authority invented other access: %+v", ea)
+	}
+	if len(ea.Sockets) != 1 || ea.Sockets[0].InnerEffectVisibility != api.ExternalAccessVisibilityUnobserved {
+		t.Fatalf("sockets = %+v, want the outer socket with unobserved inner effects", ea.Sockets)
+	}
+	if !slices.Equal(ea.Modes, []api.ExternalAccessMode{api.ExternalAccessModeLocalSocket}) {
+		t.Fatalf("modes = %v", ea.Modes)
+	}
+	if ea.VisibilitySummary != api.ExternalAccessVisibilitySummaryUnobserved {
+		t.Fatalf("summary = %q", ea.VisibilitySummary)
+	}
+}
+
 func TestBuildExternalAccess_declaredNeverObservedEndpoints(t *testing.T) {
 	ea := authzcontext.BuildExternalAccess(authzcontext.ExternalAccessInput{
 		DeclaredDestinations: []string{"db.example.com:5432"},
@@ -137,6 +188,28 @@ func TestBuildExternalAccess_declaredNeverObservedEndpoints(t *testing.T) {
 	}
 	if ea.VisibilitySummary != api.ExternalAccessVisibilitySummaryDeclared {
 		t.Fatalf("summary = %q", ea.VisibilitySummary)
+	}
+
+	// Direct execution keeps declarations declared and marks the real
+	// destinations unobserved.
+	direct := authzcontext.BuildExternalAccess(authzcontext.ExternalAccessInput{
+		Direct:               true,
+		DeclaredDestinations: []string{"198.51.100.9:443", "example.test:22"},
+	})
+	if len(direct.Endpoints) != 0 {
+		t.Fatalf("declared must not become endpoints: %#v", direct.Endpoints)
+	}
+	if !slices.Equal(direct.DeclaredDestinations, []string{"198.51.100.9:443", "example.test:22"}) {
+		t.Fatalf("declared = %v", direct.DeclaredDestinations)
+	}
+	if direct.Direct == nil || direct.Direct.ActualDestinationVisibility != api.ExternalAccessVisibilityUnobserved {
+		t.Fatalf("direct = %+v", direct.Direct)
+	}
+	if !slices.Equal(direct.Modes, []api.ExternalAccessMode{api.ExternalAccessModeDirectIP}) {
+		t.Fatalf("modes = %v", direct.Modes)
+	}
+	if direct.VisibilitySummary != api.ExternalAccessVisibilitySummaryUnobserved {
+		t.Fatalf("summary = %q", direct.VisibilitySummary)
 	}
 }
 
@@ -152,6 +225,11 @@ func TestBuildExternalAccess_emptyUnknownAndAffirmativeNone(t *testing.T) {
 	malformed := authzcontext.BuildExternalAccess(authzcontext.ExternalAccessInput{Malformed: true})
 	if malformed.VisibilitySummary != api.ExternalAccessVisibilitySummaryUnknown {
 		t.Fatalf("malformed = %q", malformed.VisibilitySummary)
+	}
+	// Unobserved access is known access, distinct from missing detail.
+	direct := authzcontext.BuildExternalAccess(authzcontext.ExternalAccessInput{Direct: true})
+	if direct.VisibilitySummary != api.ExternalAccessVisibilitySummaryUnobserved {
+		t.Fatalf("direct = %q want unobserved", direct.VisibilitySummary)
 	}
 }
 

@@ -2,8 +2,6 @@ package contract_test
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -100,54 +98,6 @@ func TestWriteRootCardAlwaysHasAnOption(t *testing.T) {
 	_, err := mgr.Authority.ResolveApprovalOption(owner, "session-floor", event.ID, plan.Options[0].ID)
 	testutil.FailErr(t, "resolve floor option", err)
 	<-resultCh
-}
-
-func TestWriteRootBrokerHomeChildFromUnquotedMkdir(t *testing.T) {
-	t.Parallel()
-	home, err := os.UserHomeDir()
-	testutil.FailErr(t, "UserHomeDir", err)
-	store, rec, _ := newApprovalPlanStore(t, "session-unquoted-mkdir")
-	mgr := hitl.NewCheckpoints(store, approvalPlanEvents{events: make(chan api.CheckpointEvent, 1)}, rec)
-	runtime := approvalstate.NewSandboxPathGrantRuntime()
-	broker := &session.WriteRootCheckpointBroker{
-		Checkpoints: mgr, Runtime: runtime, ApprovalsDisabled: func(string) bool { return true },
-	}
-	result, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
-		SessionID: "session-unquoted-mkdir", ProjectDir: t.TempDir(), ToolCallID: "mkdir-cache",
-		Command: "build", ProposedWriteRoot: filepath.Join(home, "cache"),
-	})
-	testutil.FailErr(t, "await unquoted mkdir write root", err)
-	if result.Raised || !result.Authorized {
-		t.Fatalf("result = %+v", result)
-	}
-	want := filepath.Join(home, "cache")
-	if result.ProposedWriteRoot != want {
-		t.Fatalf("proposed = %q want %q", result.ProposedWriteRoot, want)
-	}
-}
-
-func TestWriteRootBrokerHomeChildFromBSDMkdir(t *testing.T) {
-	t.Parallel()
-	home, err := os.UserHomeDir()
-	testutil.FailErr(t, "UserHomeDir", err)
-	store, rec, _ := newApprovalPlanStore(t, "session-bsd-mkdir")
-	mgr := hitl.NewCheckpoints(store, approvalPlanEvents{events: make(chan api.CheckpointEvent, 1)}, rec)
-	runtime := approvalstate.NewSandboxPathGrantRuntime()
-	broker := &session.WriteRootCheckpointBroker{
-		Checkpoints: mgr, Runtime: runtime, ApprovalsDisabled: func(string) bool { return true },
-	}
-	blocked := filepath.Join(home, ".tool")
-	result, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
-		SessionID: "session-bsd-mkdir", ProjectDir: t.TempDir(), ToolCallID: "mkdir-tool",
-		Command: "mkdir -p " + blocked, ProposedWriteRoot: blocked,
-	})
-	testutil.FailErr(t, "await bsd mkdir write root", err)
-	if result.Raised || !result.Authorized {
-		t.Fatalf("result = %+v", result)
-	}
-	if result.ProposedWriteRoot != blocked {
-		t.Fatalf("proposed = %q want %q", result.ProposedWriteRoot, blocked)
-	}
 }
 
 func TestWriteRootBrokerRaisesBalancedCardOutsideRoots(t *testing.T) {

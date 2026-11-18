@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/workflow"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -110,7 +111,23 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	for i := 1; i <= 5; i++ {
 		legs = append(legs, map[string]any{"agent_type": "security-reviewer", "subject": fmt.Sprintf("Boundary %d", i), "prompt": "Review the assigned boundary.", "done_when": []any{"Account for the assigned boundary"}})
 	}
+	fanoutPlanned := func() bool {
+		t.Helper()
+		vars, err := h.Workflows.Manager.Store.Runs.GetScaffoldVars(ctx, run.ID)
+		testutil.FailErr(t, "read plan gates", err)
+		gates, _ := vars["gates"].(map[string]any)
+		return gates["fanout_planned"] == true
+	}
+	// The plan phase refuses a plan without a threat model and leaves its gate shut.
+	var refused workflow.FanoutPlanToolResult
+	testutil.FailErr(t, "decode refused plan", json.Unmarshal([]byte(invoke("fanout_plan", map[string]any{"legs": legs})), &refused))
+	if refused.OK || refused.Error != "invalid_plan" || fanoutPlanned() {
+		t.Fatalf("plan without a threat model = %+v, gate planned %v", refused, fanoutPlanned())
+	}
 	invoke("fanout_plan", map[string]any{"legs": legs, "threat_model": "Local application reading untrusted project content."})
+	if !fanoutPlanned() {
+		t.Fatal("plan with a threat model left the fanout gate shut")
+	}
 	_, err = h.Workflows.Manager.Phases.Advance(ctx, run.ID)
 	testutil.FailErr(t, "enter planned execution", err)
 	for i := 1; i <= 5; i++ {
