@@ -61,6 +61,12 @@ func Verify(ctx context.Context, opts Options) (Report, error) {
 	if opts.AppPath == "" {
 		return Report{}, errors.New("bundleverify: AppPath is required")
 	}
+	// The packaged sidecar reports absolute paths, so the bundle is compared absolutely.
+	app, err := filepath.Abs(opts.AppPath)
+	if err != nil {
+		return Report{}, err
+	}
+	opts.AppPath = app
 	runner := opts.Runner
 	if runner == nil {
 		runner = execRunner{}

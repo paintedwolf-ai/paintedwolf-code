@@ -6,12 +6,14 @@ set -euo pipefail
 PACKAGE_ARGS=()
 PHASE="all"
 ARCHIVE=""
+UNSIGNED=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --pacman) PACKAGE_ARGS+=(--pacman); shift ;;
     --pacman-container) PACKAGE_ARGS+=(--pacman-container); shift ;;
     --phase) PHASE="${2:-}"; shift 2 ;;
     --archive) ARCHIVE="${2:-}"; shift 2 ;;
+    --unsigned) UNSIGNED=1; shift ;;
     *) echo "error: unsupported bundle argument $1" >&2; exit 2 ;;
   esac
 done
@@ -69,6 +71,16 @@ case "${TARGET}" in
   *-pc-windows-msvc) HOST_KIND="windows"; EXE_SUFFIX=".exe" ;;
   *) echo "error: unsupported desktop target ${TARGET}" >&2; exit 1 ;;
 esac
+# A signed macOS bundle needs its Developer ID before anything builds; the compile
+# phase signs nothing and --unsigned (the release rehearsal) signs ad hoc.
+SIGNING_IDENTITY="-"
+if [[ "${HOST_KIND}" == darwin && "${PHASE}" != compile && "${UNSIGNED}" == 0 ]]; then
+  [[ -n "${APPLE_SIGNING_IDENTITY:-}" && -n "${APPLE_ENGINE_PROVISIONING_PROFILE:-}" ]] || {
+    echo "error: a signed macOS bundle needs APPLE_SIGNING_IDENTITY and APPLE_ENGINE_PROVISIONING_PROFILE" >&2
+    exit 2
+  }
+  SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY}"
+fi
 SIDECAR_BIN="${BINARIES_DIR}/${SIDECAR_NAME}-${TARGET}${EXE_SUFFIX}"
 LOG_VIEWER_BIN="${BINARIES_DIR}/pw-logs-${TARGET}${EXE_SUFFIX}"
 DECIDE_BIN="${BINARIES_DIR}/bialy-${TARGET}${EXE_SUFFIX}"
@@ -131,8 +143,10 @@ macho_files() {
 }
 
 if [[ "${HOST_KIND}" == "darwin" ]]; then
-  python3 "${ROOT}/scripts/stage-macos-host.py" --binary "${SIDECAR_BIN}" --output "${TAURI_DIR}/host-bundle" \
-    --version "${PRODUCT_VERSION}" --release
+  # A non-empty array: macOS bash 3.2 rejects expanding an empty one under set -u.
+  HOST_ARGS=(--binary "${SIDECAR_BIN}" --output "${TAURI_DIR}/host-bundle" --version "${PRODUCT_VERSION}")
+  [[ "${SIGNING_IDENTITY}" == "-" ]] || HOST_ARGS+=(--release)
+  python3 "${ROOT}/scripts/stage-macos-host.py" "${HOST_ARGS[@]}"
   GITENGINE_ROOT="${ENGINE_ROOT}/gitengine"
   # The staged credential helper already carries its signature and profile.
   if [[ -d "${GITENGINE_ROOT}" ]]; then
@@ -140,7 +154,7 @@ if [[ "${HOST_KIND}" == "darwin" ]]; then
     GITENGINE_SIGNED=0
     while IFS= read -r f; do
       codesign --force --timestamp --options runtime \
-        -s "${APPLE_SIGNING_IDENTITY}" "${f}"
+        -s "${SIGNING_IDENTITY}" "${f}"
       GITENGINE_SIGNED=$(( GITENGINE_SIGNED + 1 ))
     done < <(macho_files "${GITENGINE_ROOT}")
     if (( GITENGINE_SIGNED == 0 )); then
@@ -166,17 +180,17 @@ if [[ "${HOST_KIND}" == "darwin" ]]; then
     fi
     find "${ENGINE_ROOT}/browser" -type f -name '*.dylib' -print0 \
       | while IFS= read -r -d '' f; do
-          codesign --force --timestamp --options runtime -s "${APPLE_SIGNING_IDENTITY}" "${f}"
+          codesign --force --timestamp --options runtime -s "${SIGNING_IDENTITY}" "${f}"
         done
     codesign --force --timestamp --options runtime \
       --entitlements "${BROWSER_ENTITLEMENTS}" \
-      -s "${APPLE_SIGNING_IDENTITY}" "${BROWSER_BIN}"
+      -s "${SIGNING_IDENTITY}" "${BROWSER_BIN}"
   fi
 fi
 
 chmod +x "${SIDECAR_BIN}"
 
-if [[ "${HOST_KIND}" == "darwin" ]]; then
+if [[ "${HOST_KIND}" == darwin && "${UNSIGNED}" == 0 ]]; then
   if [[ -n "${APPLE_API_ISSUER:-}" && -n "${APPLE_API_KEY:-}" && -n "${APPLE_API_KEY_PATH:-}" ]]; then
     echo "den:bundle — notarizing via App Store Connect API key" >&2
   elif [[ -n "${APPLE_ID:-}" && -n "${APPLE_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
@@ -312,7 +326,8 @@ if [[ "${HOST_KIND}" == "darwin" ]]; then
   APP_PATH="$(find "${BUNDLE_DIR}/macos" -maxdepth 1 -name '*.app' -print -quit 2>/dev/null || true)"
 fi
 if [[ -n "${APP_PATH}" ]]; then
-  VERIFY_ARGS=(--app "${APP_PATH}" --require-signed)
+  VERIFY_ARGS=(--app "${APP_PATH}")
+  [[ "${UNSIGNED}" == 1 ]] || VERIFY_ARGS+=(--require-signed)
   echo "den:bundle — verifying bundle integrity" >&2
   bash "${ROOT}/scripts/verify-bundle.sh" "${VERIFY_ARGS[@]}"
 fi

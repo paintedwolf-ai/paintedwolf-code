@@ -70,3 +70,35 @@ class ServerTests(unittest.TestCase):
             self.assertTrue(any("delete-certificate" in call.args[0] for call in run.call_args_list))
             self.assertTrue(any("deny" in call.args[0] for call in run.call_args_list))
             self.assertTrue(json.loads((root / "host-cleanup.json").read_text())["success"])
+
+    def test_trust_cleanup_never_empties_the_admin_trust_settings_and_attempts_every_step(self):
+        import release_upgrade.host as host
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            ca, certificate = root / "ca.pem", root / "server.pem"
+            ca.write_text("public test CA")
+            commands = []
+            def run(arguments, check=True, **_):
+                commands.append(arguments)
+                if "remove-trusted-cert" in arguments:
+                    raise host.subprocess.CalledProcessError(1, arguments)
+                return unittest.mock.Mock(stdout=b"public DER", returncode=0)
+            process = unittest.mock.Mock()
+            process.poll.return_value = 1
+            with patch.object(host, "certificates", return_value=(ca, certificate, root / "server.key")), \
+                 patch.object(host, "run", side_effect=run), \
+                 patch.object(host, "change_hosts"), \
+                 patch.object(host.subprocess, "Popen", return_value=process), \
+                 patch.object(host.socket, "getaddrinfo", return_value=[(None, None, None, None, ("127.0.0.1", 443))]):
+                with self.assertRaisesRegex(ValueError, "host cleanup failed"):
+                    with local_origin(root, root, root):
+                        pass
+            trust = [arguments[3] for arguments in commands
+                     if arguments[2:3] == ["security"] and arguments[3] in {"add-trusted-cert", "remove-trusted-cert", "delete-certificate"}]
+            # Removing the last admin trust entry prompts for a password; a denied leaf keeps one in place.
+            self.assertEqual(trust, ["add-trusted-cert", "add-trusted-cert", "remove-trusted-cert", "delete-certificate", "delete-certificate"])
+            deny = next(arguments for arguments in commands if "deny" in arguments)
+            self.assertEqual(deny[-1], str(certificate))
+            cleanup = json.loads((root / "host-cleanup.json").read_text())
+            self.assertFalse(cleanup["success"])
+            self.assertEqual(len(cleanup["errors"]), 1)
