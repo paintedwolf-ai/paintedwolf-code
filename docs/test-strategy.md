@@ -652,7 +652,7 @@ Shared execution receives only the environment variables the catalog's
 control sockets, and credentials never reach tests or separate otherwise
 identical requests. Every declared value must be a function of the checkout
 rather than of the call that submitted it: a per-invocation value gives each
-request its own digest, which ends batch sharing and result reuse with no
+request its own digest, which ends batch sharing with no
 visible failure; `scripts/verification_tests/scheduler/test_environment_identity_execution.py`
 asserts that rule against the catalog. Verification is offline: no network route
 is declared or passed through, so a stage that dials is denied by the boundary.
@@ -668,21 +668,12 @@ already proven packages and execute the remainder afterward. Within a batch,
 package results are reusable with identical execution options; full, short,
 race, tags, and filters are not interchangeable.
 
-Across batches, a passing Go package result is reused when nothing it depended
-on changed: its build identity (the content of every file compiled or embedded
-across the test binary's dependency closure, module versions, tags, race mode,
-and the toolchain, independent of the snapshot slot's path), the arguments that
-choose tests, the Go runtime settings the binary reads directly, the declared
-environment, and every input the Go test log observed (files opened or statted,
-compared by content, and environment variables read). Worker counts and timeout
-scale are not inputs. A test process that starts another process is never
-recorded, because the child's inputs are unobservable; fork observation uses
-kernel process events, available on macOS, and elsewhere every package runs.
-The per-run scratch home and temporary directories start empty and are not
-inputs. Receipts name the batch and stage that recorded a reused result.
-Results live under the user cache directory in `paintedwolf/verification-results`,
-limited to 2 GiB and 14 days since last use. Selections with explicit repeat
-counts run outside batches and never reuse.
+Across batches nothing is reused: every Go package executes, with `-count=1`,
+because Go's result cache cannot see what a test's child processes read. Each
+snapshot slot keeps its own Rust targets and compiler caches, because Cargo
+judges freshness by file times and a target another source built later would
+pass for this one; a hosted runner, which verifies only its job's source, keeps
+the checkout's restored targets.
 
 Unsupported selection flags reject before admission, as do arguments for a
 target that declares no selection grammar and information flags that would run
@@ -691,7 +682,9 @@ package and flag grammar narrowed to its own declared packages, so a scoped
 invocation keeps the target's recipe and shares outcomes with the unscoped one.
 Supported Go repeat, shuffle, and benchmark modes, fixture refreshes, and replay
 run outside a shared batch, holding what their targets declare; so does Go
-`-failfast`, whether passed on the command line or through `GOFLAGS`.
+`-failfast`, whether passed on the command line or through `GOFLAGS`. Such a
+target runs with Task's `--force`, because Task's `sources:` checksum ignores
+arguments and unlisted inputs.
 
 Every requester receives its own receipt and exit status. A gate ends at its
 first failed or unverified stage, and stages only it still needed stop;
@@ -716,8 +709,7 @@ identify the source commit/tree and link to the stage logs and reports in
 [artifact root](dev-tasks.md#build-outputs-caches-and-locks). Retention keeps
 up to 20 completed batches and 512 MiB, pruning artifacts and source refs
 together; the newest batch and active batches/subscribers are protected even
-when they exceed the budget. No receipt is reused across batches; recorded Go
-package results are.
+when they exceed the budget. No receipt or result is reused across batches.
 
 `./task test:status` shows active batches and stages, sharing and queued
 requests, global worker capacity, reserved and available slots, each operation's
@@ -1255,10 +1247,7 @@ the daily nightly. Platform-sensitive changes still select their relevant
 platform checks immediately. Do not remove architecture or data-integrity
 coverage to shorten admission.
 
-Local Go result reuse already binds to build dependencies, observed inputs,
-toolchain, test options, and declared environment. Extending that reuse to
-hosted or native test results needs equally complete input accounting; compiler
-cache hits alone do not establish a test pass. Existing recovery retains first
+Compiler cache hits alone do not establish a test pass. Existing recovery retains first
 failures and retries only demonstrated infrastructure faults. Product assertions
 and races remain blocking; there is no assertion retry policy.
 

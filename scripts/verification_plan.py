@@ -14,8 +14,7 @@ DEN = CATALOG.parent.parent / "lycaon-den"
 # The scheduler's own descriptors and per-operation paths; a nested request never forwards them.
 SCHEDULER_ENV = {"PW_TEST_EXECUTION_TICKET", "PW_TEST_EXECUTION_FD", "PW_TEST_RESOURCE_FD", "PW_TEST_COMPLETION_FD",
                  "PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW", "PW_TEST_STAGE_EVENTS", "PW_TEST_STAGE_PROGRESS",
-                 "PW_TEST_STAGE_ID", "PW_TEST_BATCH_DIRECTORY", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONMENT_IDENTITY",
-                 "PW_TEST_PACKAGE_IDENTITIES", "PW_TEST_SCRATCH_ROOT", "PW_TEST_SOURCE_ROOT", "PW_TEST_MODULE_ROOT",
+                 "PW_TEST_STAGE_ID", "PW_TEST_BATCH_DIRECTORY", "PW_TEST_MODULE_ROOT",
                  "PW_REPO_SNAPSHOT_TOKEN", "PW_TEST_KEEP_GOING"}
 # Verification is offline and fixtures are repository-local, so proxy routes stay
 # out of a shared, replayable stage.
@@ -72,7 +71,7 @@ def execution_environment(environment, declaration=None):
 
     Every declared value must be a function of the checkout rather than of the call that
     submitted it. A per-invocation value would give each request its own compatibility
-    digest, which silently ends batch sharing and result reuse."""
+    digest, which silently ends batch sharing."""
     declaration = declaration or catalog()["environment"]
     return {key: value for key, value in environment.items()
             if key not in SCHEDULER_ENV and key not in NETWORK_ENV
@@ -165,7 +164,7 @@ def unknown_flag(target, flag, allowed):
 
 
 def go_selection(arguments, target):
-    """Validate flags; `shareable` records whether the resulting package outcomes can be reused."""
+    """Validate flags; `shareable` records whether the package outcomes can serve other requests in a batch."""
     packages, flags = [], []
     shareable = True
     index = 0

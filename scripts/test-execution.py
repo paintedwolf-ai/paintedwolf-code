@@ -526,7 +526,8 @@ def main():
         # A nested request inside an admitted check runs at once, so there is no wait to protect.
         if not queue.inherited():
             probe_task_request(binary, root, arguments)
-        command = [binary, "-d", root, *serial_task_arguments(arguments)]
+        # Task's `sources:` checksum ignores arguments and unlisted inputs, so a requested target always runs.
+        command = [binary, "-d", root, "--force", *serial_task_arguments(arguments)]
         args.name = ", ".join(task_names(arguments)) or "check-fast"
         task_request = (root, binary, arguments)
     if args.action == "job-supervise":

@@ -156,7 +156,7 @@ class TerminalProcessTests(TerminalFixture):
         batch = self.capability("lease")
         directory = self.root / "batch"
         directory.mkdir()
-        request = {"ticket": "request", "order": 1, "environment_identity": "fixture"}
+        request = {"ticket": "request", "order": 1}
         plan = {"batch": {"ticket": batch.entry["ticket"], "workers": 1, "members": ["request"]},
                 "requests": [request]}
         (directory / "plan.json").write_text(json.dumps(plan))

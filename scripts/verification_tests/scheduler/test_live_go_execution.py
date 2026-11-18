@@ -4,11 +4,9 @@ from pathlib import Path
 import shutil
 import subprocess
 import time
-import unittest
 
 import verification_batch as batch
 import verification_resources as resources
-import verification_reuse as reuse
 from verification_tests import support
 
 SCRIPT = support.SCRIPT
@@ -148,46 +146,44 @@ func TestFixture(t *testing.T) {
         self.collect(first)
         self.assertIn('"Action":"pass"', raw.read_text())
 
-    def reused(self, receipt, package):
-        return receipt["evidence"][0]["results"][package].get("reused")
-
-    @unittest.skipUnless(reuse.fork_observable(), "reuse requires process fork observation")
-    def test_identical_binary_and_inputs_reuse_a_recorded_pass(self):
+    def test_a_later_run_fails_when_what_a_child_process_read_changed(self):
+        """Go's result cache cannot see an input only a child process reads, in a shared stage or in
+        an exclusive one (`-failfast` runs outside the batch, without the exec wrapper)."""
         package = self.repo / "lycaon" / "good"
         (package / "testdata").mkdir()
-        (package / "testdata" / "value.txt").write_text("one")
+        value = package / "testdata" / "value.txt"
         (package / "fixture_test.go").write_text('''package good
-import ("os"; "testing")
-func TestFixture(t *testing.T) {
- if data, err := os.ReadFile("testdata/value.txt"); err != nil || len(data) != 3 { t.Fatalf("read: %q %v", data, err) }
-}
-''')
-        (self.repo / "lycaon" / "shared" / "fixture_test.go").write_text('''package shared
 import ("os/exec"; "testing")
 func TestFixture(t *testing.T) {
- if err := exec.Command("true").Run(); err != nil { t.Fatal(err) }
+ out, err := exec.Command("cat", "testdata/value.txt").Output()
+ if err != nil || string(out) != "one" { t.Fatalf("read: %q %v", out, err) }
 }
 ''')
         self.queue.resume()
 
-        def verify():
-            self.collect(self.start("test:digest", "--", "./good", "./shared"))
+        def verify(code, *flags):
+            self.collect(self.start("test:digest", "--", *flags, "./good"), code)
             self.await_condition(lambda: not self.queue.status()["runs"])
-            return max(self.receipts(), key=lambda r: r["finished_at"])
-        first = verify()
-        self.assertIsNone(self.reused(first, "fixture/good"))
-        events = reuse.read_events(Path(first["evidence"][0]["results"]["fixture/good"]["log"]).with_name(
-            first["evidence"][0]["results"]["fixture/good"]["stage_id"] + "-events.jsonl"))
-        self.assertTrue(events["fixture/good"]["recorded"])
-        self.assertTrue(events["fixture/shared"]["forked"])
-        self.assertFalse(events["fixture/shared"]["recorded"])
-        second = verify()
-        self.assertEqual(self.reused(second, "fixture/good")["batch_id"], first["batch_id"])
-        self.assertIsNone(self.reused(second, "fixture/shared"))
-        (package / "testdata" / "value.txt").write_text("two")
-        third = verify()
-        self.assertIsNone(self.reused(third, "fixture/good"))
-        self.assertEqual(self.reused(verify(), "fixture/good")["batch_id"], third["batch_id"])
+        for flags in ((), ("-failfast",)):
+            with self.subTest(flags=flags):
+                value.write_text("one")
+                verify(0, *flags)
+                value.write_text("two")
+                verify(1, *flags)
+
+    def test_an_exclusive_target_runs_again_whatever_its_sources_checksum_says(self):
+        """Task skips a target whose `sources:` are unchanged, even when its arguments now select a failure."""
+        with (self.repo / "Taskfile.yml").open("a") as taskfile:
+            taskfile.write('''  fixture:sourced:
+    sources: [source.txt]
+    cmds:
+      - test "{{.CLI_ARGS}}" != fail
+''')
+        self.catalog["selection"]["fixture:sourced"] = "passthrough"
+        self.save_catalog()
+        self.queue.resume()
+        self.collect(self.start("fixture:sourced", "--", "pass"))
+        self.collect(self.start("fixture:sourced", "--", "fail"), 1)
 
     def test_concurrent_go_publication_cannot_replace_another_runs_evidence(self):
         if resources.capacity() < 3:

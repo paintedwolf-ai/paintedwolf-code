@@ -11,9 +11,8 @@ import subprocess
 import time
 import threading
 
-import verification_reuse as reuse
 from verification_batch import active_members, child_options, stop_child, write_lease
-from verification_history import estimate, read_history, record_duration
+from verification_history import estimate, package_durations, read_history, record_duration, record_package_durations
 from verification_plan import catalog, digest_command, expand, resolve_request, stage_key
 from verification_resources import (Reservation, blocked_reason, bounded_environment, capacity, demand, entries,
                                     order_of, profile)
@@ -30,6 +29,23 @@ def measured_durations(environment=os.environ):
     """Package seconds the hosted plan measured; every shard of one run reads the same values."""
     path = environment.get("PW_GO_TIMINGS")
     return json.loads(Path(path).read_text()) if path else {}
+
+
+def read_events(path):
+    """The last outcome each package's test binary reported in a stage."""
+    outcomes = {}
+    try:
+        text = Path(path).read_text(errors="replace")
+    except FileNotFoundError:
+        return outcomes
+    for line in text.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and isinstance(event.get("package"), str):
+            outcomes[event["package"]] = event
+    return outcomes
 
 
 def parse(shard):
@@ -295,9 +311,6 @@ class Executor:
         self.history = read_history(queue)
         self.measured = measured_durations()
         self.cache_maintenance = Maintenance(queue, dict(os.environ))
-        self.store = reuse.default_store()
-        # Every member shares one declared environment; the requester recorded its identity.
-        self.environment_identity = self.requests[0].get("environment_identity", "")
 
     def arrival(self, consumers):
         return min(order_of(request) for request in self.requests if request["ticket"] in consumers)
@@ -506,7 +519,7 @@ class Executor:
     def ordered_packages(self, stage, packages):
         """Longest packages start first, so the package that finishes last is not also the longest. This host's
         own history takes precedence over the hosted plan's measurements."""
-        durations = {**self.measured, **reuse.package_durations(self.queue, stage_key(stage))}
+        durations = {**self.measured, **package_durations(self.queue, stage_key(stage))}
         return sorted(packages, key=lambda p: (-durations.get(p, float("inf")), p))
 
     def start_stage(self, peers, stage_id, pool):
@@ -533,10 +546,7 @@ class Executor:
         if first["kind"] == "go":
             env.update(PW_TEST_STAGE_RESULT=str(result_path), PW_TEST_STAGE_RAW=str(raw),
                        PW_TEST_STAGE_EVENTS=str(events), PW_TEST_STAGE_ID=stage_id,
-                       PW_TEST_BATCH_DIRECTORY=str(self.directory),
-                       PW_TEST_ENVIRONMENT_IDENTITY=self.environment_identity)
-            if self.store is not None:
-                env["PW_TEST_REUSE_STORE"] = str(self.store)
+                       PW_TEST_BATCH_DIRECTORY=str(self.directory))
             env.setdefault("GO_TEST_P", str(len(packages)))
             if "--race" in first["options"] or any(flag.partition("=")[0] == "-race" for flag in first["flags"]):
                 env.setdefault("GOMAXPROCS", "2")
@@ -631,7 +641,7 @@ class Executor:
             report = read_json(result_path) if result_path.exists() else {}
             expected_code = 0 if report.get("process_exit_code") == report.get("digest_exit_code") == 0 else 1
             valid = report.get("completed", False) and code == expected_code
-            outcomes = reuse.read_events(job["events_path"])
+            outcomes = read_events(job["events_path"])
             failures = {**job["failures"], **job["events"].failures()}
             for package in packages:
                 action = report.get("packages", {}).get(package)
@@ -642,15 +652,8 @@ class Executor:
                 cache[package] = {"status": status, "exit_code": {"passed": 0, "failed": 1, "unverified": 2}[status],
                                   "stage_id": stage_id, "log": str(log), "report": str(result_path),
                                   **failures.get(package, {})}
-                if status == "passed" and outcomes.get(package, {}).get("reused"):
-                    cache[package]["reused"] = outcomes[package]["reused"]
-            reused = sum(1 for p in packages if "reused" in cache[p])
-            if reused:
-                print(f"test execution: {stage_id}: {reused} of {len(packages)} packages reused passing results "
-                      "recorded for identical builds and inputs", flush=True)
-            reuse.record_package_durations(self.queue, key, outcomes)
+            record_package_durations(self.queue, key, outcomes)
             result["packages"] = packages
-            result["reused_packages"] = reused
         self.history = read_history(self.queue)
         self.stages.append(result)
         write_json(self.directory / "stages.json", self.stages)
@@ -681,11 +684,8 @@ class Executor:
                     self.receipt(request, "unverified", 2, "Batch execution interrupted")
         write_json(self.directory / "summary.json", {"requests": len(self.requests), "executions": len(self.stages),
                    "requested_stages": sum(len(r["plan"]["stages"]) for r in self.requests),
-                   "reused_packages": sum(stage.get("reused_packages", 0) for stage in self.stages),
                    "source_commit": self.source, "source_tree": self.tree,
                    "started_at": self.started, "finished_at": time.time()})
-        if self.store is not None:
-            reuse.prune(self.store)
         code = 0 if all(read_json(self.directory / (r["ticket"] + ".json"))["exit_code"] == 0 for r in self.requests) else 1
         self.completion.finish(code)
         return code
