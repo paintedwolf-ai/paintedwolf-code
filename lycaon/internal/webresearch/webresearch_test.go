@@ -1,7 +1,9 @@
 package webresearch
 
 import (
+	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -146,5 +148,21 @@ func TestCredentialStoreRoundTrip(t *testing.T) {
 	got, ok := reopened.Get("brave-search")
 	if !ok || got.Value() != "stored-secret" {
 		t.Fatalf("reopened credential = %q, %v", got.Value(), ok)
+	}
+}
+
+func TestOpenCredentialStorePreservesDamagedVault(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "credential-vault.age")
+	original := []byte("damaged encrypted vault")
+	testutil.FailErr(t, "write damaged vault", os.WriteFile(path, original, 0o600))
+	store, err := OpenCredentialStore(credentialstore.Slot{Path: path, Namespace: credentialstore.NamespaceWebResearch, Context: credentialContext}, testCatalog(t))
+	if err == nil || store != nil {
+		t.Fatal("damaged vault opened as empty credentials")
+	}
+	preserved, err := os.ReadFile(path)
+	testutil.FailErr(t, "read preserved vault", err)
+	if !bytes.Equal(preserved, original) {
+		t.Fatal("opening changed damaged vault")
 	}
 }
