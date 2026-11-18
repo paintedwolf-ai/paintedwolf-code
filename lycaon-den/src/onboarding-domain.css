@@ -181,27 +181,6 @@
   line-height: 1.5;
   color: var(--den-text-muted);
 }
-.onboarding-gate__optional {
-  display: inline;
-  margin-left: 2px;
-  color: var(--den-text-muted);
-  font-size: var(--text-den-micro);
-  font-weight: 600;
-  vertical-align: middle;
-}
-.onboarding-gate__tip {
-  margin: 0;
-  padding: 12px 14px;
-  border-radius: var(--den-radius);
-  border: 1px solid color-mix(in srgb, var(--den-accent-signal) 24%, var(--den-border));
-  background: color-mix(in srgb, var(--den-accent-signal) 6%, var(--den-background));
-}
-.onboarding-gate__tip p {
-  margin: 0;
-  font-size: var(--text-den-body);
-  line-height: 1.45;
-  color: var(--den-text);
-}
 .onboarding-gate__footnote {
   margin: 0;
   text-align: center;

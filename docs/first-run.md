@@ -10,16 +10,17 @@ The hard gate a new install shows before the home stage, and how a missing provi
 
 ## The gate
 
-Fresh installations open on local model selection. Normal application downloads contain no generation weights. The host detects available hardware locally and recommends a tier. Setup preselects that tier, and the user can choose another eligible model, import a signed offline bundle, or continue without a local model. A transfer begins only after an explicit choice.
+Fresh installations from normal downloads open on local model selection. Normal application downloads contain no generation weights. The host detects available hardware locally and recommends a tier. Setup preselects that tier, and the user can choose another eligible model, import a signed offline bundle, or continue without a local model. A transfer begins only after an explicit choice.
 
 | Page | Choice |
 |------|--------|
 | **Local model** | Choose a model for this device. The page shows transfer progress and offers cancellation. |
-| **Summarizer** | Optionally select a summarizer from the available models. |
 | **Starting layout** | Open to the conversation alone or with a context view beside it. |
 | **Welcome** | Find additional providers in Settings → AI providers and enter the workspace. |
 
-After a model decision, an interrupted fresh setup resumes at the summarizer. An installation that has completed first run sees just the local model page once. Returning users keep their existing provider configuration. Settings → AI providers remains available for later model downloads, offline imports, replacement, and removal.
+An offline installer includes the selected model. The host imports it locally, and fresh setup starts at the layout page, including when the seed needs repair. Previously configured installations skip the model-only gate. Existing model choices and opt-outs survive. Settings offers recovery when the packaged model cannot load.
+
+After a model decision, interrupted fresh setup resumes at layout. An existing normal installation sees just the local model page once. Returning users keep their existing provider configuration. Settings → AI providers remains available for later model downloads, offline imports, replacement, and removal.
 
 ### Starting layout
 

@@ -107,12 +107,6 @@ export const MODELS_SETTINGS_COPY = {
     "Must be tool-calling capable — Painted Wolf Code cannot run without it. We recommend GLM 5.3 Flash, Gemini 3.5 Flash, Claude Sonnet, or a similar class model.",
   onboardingContinue: CONTINUE_LABEL,
   onboardingBack: "Back",
-  onboardingSummarizerTitle: "Add a summarizer",
-  onboardingSummarizerOptional: "Optional",
-  onboardingSummarizerLede:
-    "Optional second model for smaller tasks.",
-  onboardingSummarizerLocalSaveHint:
-    "You can choose a different model for summaries and other small tasks.",
   onboardingWelcomeTitle: "You're ready",
   onboardingWelcomeBody:
     "To connect additional providers, open Settings and choose AI providers.",

@@ -6,7 +6,6 @@ import {
   onboardingGateStep,
   onboardingLayoutChoice,
   onboardingNextPage,
-  onboardingPreviousPage,
   onboardingSplitCompanion,
   shouldShowOnboardingHardGate,
   shouldSuppressShellForFirstRun,
@@ -87,25 +86,19 @@ describe("shouldSuppressShellForFirstRun", () => {
 
 describe("onboarding page order", () => {
   it("counts progress from the page list", () => {
-    expect(ONBOARDING_GATE_STEP_COUNT).toBe(4);
+    expect(ONBOARDING_GATE_STEP_COUNT).toBe(3);
     expect(onboardingGateStep("local_model")).toBe(1);
-    expect(onboardingGateStep("summarizer")).toBe(2);
-    expect(onboardingGateStep("layout")).toBe(3);
-    expect(onboardingGateStep("welcome")).toBe(4);
+    expect(onboardingGateStep("layout")).toBe(2);
+    expect(onboardingGateStep("welcome")).toBe(3);
   });
 
   it("walks forward and back through the layout page", () => {
-    expect(onboardingNextPage("summarizer")).toBe("layout");
     expect(onboardingNextPage("layout")).toBe("welcome");
     expect(onboardingNextPage("welcome")).toBeNull();
-    expect(onboardingPreviousPage("welcome")).toBe("layout");
-    expect(onboardingPreviousPage("layout")).toBe("summarizer");
-    expect(onboardingPreviousPage("local_model")).toBeNull();
   });
 
   it("escapes from the ends and steps forward between them", () => {
     expect(onboardingEscapeTarget("local_model")).toBe("finish");
-    expect(onboardingEscapeTarget("summarizer")).toBe("layout");
     expect(onboardingEscapeTarget("layout")).toBe("welcome");
     expect(onboardingEscapeTarget("welcome")).toBe("finish");
   });

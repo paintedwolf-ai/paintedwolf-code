@@ -4,7 +4,6 @@ import { DEFAULT_SPLIT_COMPANION } from "../../shell/stage-placement.ts";
 /** Gate pages in walking order; the progress cue counts this list. */
 export const ONBOARDING_GATE_PAGES = [
   "local_model",
-  "summarizer",
   "layout",
   "welcome",
 ] as const;
@@ -44,13 +43,6 @@ export function onboardingNextPage(
   page: OnboardingGatePage,
 ): OnboardingGatePage | null {
   return ONBOARDING_GATE_PAGES[ONBOARDING_GATE_PAGES.indexOf(page) + 1] ?? null;
-}
-
-export function onboardingPreviousPage(
-  page: OnboardingGatePage,
-): OnboardingGatePage | null {
-  const index = ONBOARDING_GATE_PAGES.indexOf(page);
-  return index > 0 ? (ONBOARDING_GATE_PAGES[index - 1] ?? null) : null;
 }
 
 export function onboardingEscapeTarget(page: OnboardingGatePage): OnboardingGatePage | "finish" {

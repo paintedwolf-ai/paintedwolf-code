@@ -1,4 +1,5 @@
 import { expect } from "@playwright/test";
+import { includedProvider } from "../src/test/local-generation-fixture.ts";
 import { appStateStorageSliceKey } from "../shared/app-state-storage.ts";
 import {
   apiClearDefaultModel,
@@ -11,10 +12,10 @@ import {
 const ONBOARDING_STATE_KEY = appStateStorageSliceKey("onboarding");
 const LAYOUT_STATE_KEY = appStateStorageSliceKey("layout");
 
-/** First-run setup, summarizer, starting layout, welcome, and completion paths. */
+/** First-run model selection, starting layout, and workspace entry. */
 webE2e.describe("onboarding first-run", () => {
   webE2e(
-    "den:harness — summarizer → layout pick → welcome dismiss latches; reload skips gate",
+    "den:harness — local model → layout pick → welcome dismiss latches; reload skips gate",
     async ({ page, request }) => {
       await apiEnsureDefaultModel(request);
       await seedFirstRunUnset(page);
@@ -25,18 +26,10 @@ webE2e.describe("onboarding first-run", () => {
       });
       await page.getByRole("radio", { name: "Use no local model" }).check();
       await page.getByRole("button", { name: "Continue without a local model" }).click();
-      await expect(page.getByTestId("onboarding-summarizer")).toBeVisible({
-        timeout: 30_000,
-      });
-      await expect(page.getByTestId("onboarding-setup")).toHaveCount(0);
-      await expect(page.getByTestId("onboarding-welcome")).toHaveCount(0);
-      await expect(page.getByTestId("onboarding-summarizer-skip")).toHaveCount(0);
-
-      await page.getByTestId("onboarding-summarizer-continue").click();
       await expect(page.getByTestId("onboarding-layout")).toBeVisible({
         timeout: 15_000,
       });
-      await expect(page.getByTestId("onboarding-progress")).toHaveText("3 / 4");
+      await expect(page.getByTestId("onboarding-progress")).toHaveText("2 / 3");
       await expect(page.getByTestId("onboarding-layout-chat-radio")).toBeChecked();
       await page.getByTestId("onboarding-layout-split").click();
       await expect(page.getByTestId("onboarding-layout-split-radio")).toBeChecked();
@@ -88,17 +81,13 @@ webE2e.describe("onboarding first-run", () => {
   );
 
   webE2e(
-    "den:harness — Escape steps summarizer → layout → welcome; Escape on welcome latches",
+    "den:harness — Escape steps layout → welcome; Escape on welcome latches",
     async ({ page, request }) => {
       await apiEnsureDefaultModel(request);
       await seedFirstRunUnset(page);
       await page.goto("/");
       await page.getByRole("radio", { name: "Use no local model" }).check();
       await page.getByRole("button", { name: "Continue without a local model" }).click();
-      await expect(page.getByTestId("onboarding-summarizer")).toBeVisible({
-        timeout: 60_000,
-      });
-      await page.keyboard.press("Escape");
       await expect(page.getByTestId("onboarding-layout")).toBeVisible({
         timeout: 15_000,
       });
@@ -132,6 +121,23 @@ webE2e.describe("onboarding first-run", () => {
       expect(latch).toBe(true);
     },
   );
+
+  webE2e("offline installation with a damaged bundle starts at layout", async ({ page }) => {
+    const provider = includedProvider({state: "repair_required", recovery_action: "repair", offline_installer: true, seed_available: false});
+    await page.route("**/v1/providers", async route => {
+      if (route.request().method() === "GET") await route.fulfill({json: {providers: [provider]}});
+      else await route.continue();
+    });
+    await seedFirstRunUnset(page);
+    await page.goto("/");
+    await expect(page.getByTestId("onboarding-layout")).toBeVisible({timeout: 60_000});
+    await expect(page.getByTestId("onboarding-progress")).toHaveText("1 / 2");
+    await expect(page.getByTestId("onboarding-layout-back")).toHaveCount(0);
+    await page.getByTestId("onboarding-layout-continue").click();
+    await expect(page.getByTestId("onboarding-progress")).toHaveText("2 / 2");
+    await page.getByTestId("onboarding-welcome-dismiss").click();
+    await expect(page.getByTestId("home-view")).toBeVisible();
+  });
 
   webE2e("an existing installation sees only the model choice", async ({ page }) => {
     await seedAppState(page, {onboarding: {firstRunSetupCompleted: true, localModelOnboardingCompleted: false}});

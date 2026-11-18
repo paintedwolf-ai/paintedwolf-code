@@ -2,13 +2,8 @@ import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
 import { createOverlayScopeFocusTrap } from "../../platform/interaction/modal-focus-trap.ts";
 import type { SettingsStore } from "../../store/settings-store.ts";
-import {
-  isIncludedProvider,
-  summarizerOverrideRef,
-  summarizerPatch,
-} from "../../settings/providers/models-editor-model.ts";
+import { isIncludedProvider } from "../../settings/providers/models-editor-model.ts";
 import { MODELS_SETTINGS_COPY } from "../../settings/providers/models-settings-copy.ts";
-import { showAllModelsPref } from "../../settings/appearance/display-prefs.ts";
 import { LocalModelSelector } from "../settings/providers/LocalModelSelector.tsx";
 import { completeFirstRunSetup, completeLocalModelOnboarding, firstRunSetupCompletedPref, localModelOnboardingCompletedPref } from "../../settings/system/onboarding-prefs.ts";
 import { ChromeDragSurface } from "../shell/ChromeDragSurface.tsx";
@@ -17,20 +12,16 @@ import { chromeProps } from "../../styling/ui-chrome.ts";
 import { BrandLockup } from "../primitives/BrandLockup.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";
-import { ModelSlotPicker } from "../model/ModelSlotPicker.tsx";
 import {
   ONBOARDING_GATE_STEP_COUNT,
   onboardingEscapeTarget,
   onboardingGateStep,
-  onboardingNextPage,
-  onboardingPreviousPage,
   type OnboardingGatePage,
 } from "./onboarding-gate-model.ts";
 import { ONBOARDING_LAYOUT_COPY } from "./onboarding-layout-copy.ts";
 import { setOnboardingWelcomeDismissSink } from "./onboarding-welcome-dismiss.ts";
 import { OnboardingLayoutChoices } from "./OnboardingLayoutChoices.tsx";
 import { OnboardingSettingsTeachNav } from "./OnboardingSettingsTeachNav.tsx";
-import { SummarizerModelHint } from "../model/SummarizerModelHint.tsx";
 import { OnboardingStepPage } from "./OnboardingStepPage.tsx";
 
 type Props = {
@@ -41,29 +32,39 @@ type Props = {
 
 export function OnboardingGate(props: Props) {
   const upgrade = firstRunSetupCompletedPref();
-  const [page, setPage] = createSignal<OnboardingGatePage>(localModelOnboardingCompletedPref() ? "summarizer" : "local_model");
+  const [page, setPage] = createSignal<OnboardingGatePage | "waiting">("waiting");
+  const [includesModel, setIncludesModel] = createSignal(false);
   const [dismissing, setDismissing] = createSignal(false);
-  const [summarizerSaving, setSummarizerSaving] = createSignal(false);
-  const [summarizerError, setSummarizerError] = createSignal("");
   const localProvider = () => props.settingsStore.state.providers.find(isIncludedProvider);
-  const policy = () => props.settingsStore.state.modelPolicy;
-  const summarizerRef = () => {
-    const p = policy();
-    return p ? summarizerOverrideRef(p) : { provider_id: "", model: "" };
-  };
+  let entryResolved = false;
 
-  const advance = () => setPage((p) => onboardingNextPage(p) ?? p);
   const finishModelStep = async () => {
     if (dismissing()) return;
+    entryResolved = true;
     setDismissing(true);
     try {
       await completeLocalModelOnboarding();
-      if (!upgrade) setPage("summarizer");
+      if (!upgrade) setPage("layout");
     } finally {
       setDismissing(false);
     }
   };
-  const goBack = () => setPage((p) => onboardingPreviousPage(p) ?? p);
+
+  createEffect(() => {
+    if (entryResolved || !props.settingsChecked || !props.client) return;
+    const runtime = localProvider()?.local_runtime;
+    if (!runtime) return;
+    entryResolved = true;
+    if (runtime.offline_installer) {
+      void finishModelStep();
+    } else {
+      setIncludesModel(true);
+      setPage(localModelOnboardingCompletedPref() ? "layout" : "local_model");
+    }
+  });
+
+  const advance = () => setPage("welcome");
+  const goBack = () => setPage((p) => p === "welcome" ? "layout" : "local_model");
 
   const finishOnboarding = async () => {
     if (dismissing()) return;
@@ -76,7 +77,8 @@ export function OnboardingGate(props: Props) {
   };
 
   createEffect(() => {
-    const target = onboardingEscapeTarget(page());
+    const current = page();
+    const target = current === "waiting" ? "finish" : onboardingEscapeTarget(current);
     setOnboardingWelcomeDismissSink(() => {
       if (target === "finish") void finishOnboarding();
       else setPage(target);
@@ -84,27 +86,10 @@ export function OnboardingGate(props: Props) {
     onCleanup(() => setOnboardingWelcomeDismissSink(null));
   });
 
-  const applySummarizerRef = async (ref: {
-    provider_id: string;
-    model: string;
-  }) => {
-    const client = props.client;
-    if (!client) return;
-    const p = policy();
-    if (!p) return;
-    setSummarizerSaving(true);
-    setSummarizerError("");
-    try {
-      const updated = await client.updateModelPolicySettings(summarizerPatch(ref));
-      props.settingsStore.actions.setModelPolicy(updated);
-    } catch (err) {
-      setSummarizerError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSummarizerSaving(false);
-    }
+  const step = () => {
+    const current = page();
+    return current === "waiting" ? 0 : onboardingGateStep(current) - (includesModel() ? 0 : 1);
   };
-
-  const step = () => onboardingGateStep(page());
   const pageTitleId = () => `onboarding-${page()}-title`;
 
   let gateRef: HTMLDivElement | undefined;
@@ -145,14 +130,24 @@ export function OnboardingGate(props: Props) {
       <main class="onboarding-gate__inner">
         <BrandLockup class="onboarding-gate__brand" />
         <div class="onboarding-gate__stack">
-          <p
-            class="onboarding-gate__progress"
-            aria-hidden="true"
-            data-testid="onboarding-progress"
-          >
-            {step()} / {upgrade ? 1 : ONBOARDING_GATE_STEP_COUNT}
-          </p>
-
+          <Show when={page() !== "waiting"}>
+            <p
+              class="onboarding-gate__progress"
+              aria-hidden="true"
+              data-testid="onboarding-progress"
+            >
+              {step()} / {upgrade ? 1 : ONBOARDING_GATE_STEP_COUNT - (includesModel() ? 0 : 1)}
+            </p>
+          </Show>
+          <Show when={page() === "waiting"}>
+            <OnboardingStepPage data-testid="onboarding-waiting" aria-labelledby="onboarding-waiting-title">
+              <h1 id="onboarding-waiting-title" class="onboarding-gate__title" {...chromeProps()}>Preparing setup</h1>
+              <p role="status">{props.settingsChecked && props.client ? "Checking the installation…" : "Waiting for the local engine…"}</p>
+              <Show when={!dismissing()}>
+                <DenButton variant="secondary" onClick={() => void finishModelStep()}>Continue without configuring a model</DenButton>
+              </Show>
+            </OnboardingStepPage>
+          </Show>
           <Show when={page() === "local_model"}>
             <OnboardingStepPage data-testid="onboarding-local-model" aria-labelledby="onboarding-local_model-title">
               <header class="onboarding-gate__header">
@@ -172,85 +167,6 @@ export function OnboardingGate(props: Props) {
                     }}
                     onContinue={() => void finishModelStep()} />}
                 </Show>
-              </div>
-            </OnboardingStepPage>
-          </Show>
-
-          <Show when={page() === "summarizer"}>
-            <OnboardingStepPage
-              data-testid="onboarding-summarizer"
-              aria-labelledby="onboarding-summarizer-title"
-            >
-              <header class="onboarding-gate__header">
-                <h1
-                  class="onboarding-gate__title"
-                  id="onboarding-summarizer-title"
-                  {...chromeProps()}
-                >
-                  {MODELS_SETTINGS_COPY.onboardingSummarizerTitle}{" "}
-                  <span class="onboarding-gate__optional">
-                    {MODELS_SETTINGS_COPY.onboardingSummarizerOptional}
-                  </span>
-                </h1>
-                <p class="onboarding-gate__lede">
-                  {MODELS_SETTINGS_COPY.onboardingSummarizerLede}
-                </p>
-              </header>
-              <div class="onboarding-gate__card onboarding-gate__card--stack">
-                <div
-                  class="onboarding-gate__tip"
-                  data-testid="onboarding-summarizer-local-tip"
-                >
-                  <p>
-                    {MODELS_SETTINGS_COPY.onboardingSummarizerLocalSaveHint}
-                  </p>
-                </div>
-
-                <div
-                  class="den-settings-default-model"
-                  data-testid="onboarding-summarizer-settings"
-                >
-                  <label
-                    class="den-settings-default-model-label"
-                    for="onboarding-summarizer-select"
-                  >
-                    {MODELS_SETTINGS_COPY.defaultSummarizerModelLabel}
-                  </label>
-                  <p class="den-settings-hint">
-                    <SummarizerModelHint />
-                  </p>
-                  <ModelSlotPicker
-                    compact
-                    id="onboarding-summarizer-select"
-                    label={MODELS_SETTINGS_COPY.defaultSummarizerModelLabel}
-                    providers={props.settingsStore.state.providers}
-                    disabled={summarizerSaving()}
-                    roleSlot="lite"
-                    showAllModels={showAllModelsPref()}
-                    value={summarizerRef()}
-                    onChange={(ref) => void applySummarizerRef(ref)}
-                    data-testid="default-summarizer-model-select"
-                  />
-                </div>
-              </div>
-              <Show when={summarizerError()}><p class="den-settings-warn" role="alert">{summarizerError()}</p></Show>
-              <div class="onboarding-gate__actions onboarding-gate__actions--split">
-                <DenButton
-                  variant="ghost"
-                  data-testid="onboarding-summarizer-back"
-                  onClick={goBack}
-                >
-                  {MODELS_SETTINGS_COPY.onboardingBack}
-                </DenButton>
-                <DenButton
-                  variant="primary"
-                  data-testid="onboarding-summarizer-continue"
-                  disabled={summarizerSaving()}
-                  aria-busy={summarizerSaving()}
-                  onClick={advance}
-                >
-                  {MODELS_SETTINGS_COPY.onboardingContinue}
-                </DenButton>
               </div>
             </OnboardingStepPage>
           </Show>
@@ -275,13 +191,15 @@ export function OnboardingGate(props: Props) {
                 {ONBOARDING_LAYOUT_COPY.settingsHint}
               </p>
               <div class="onboarding-gate__actions onboarding-gate__actions--split">
-                <DenButton
-                  variant="ghost"
-                  data-testid="onboarding-layout-back"
-                  onClick={goBack}
-                >
-                  {MODELS_SETTINGS_COPY.onboardingBack}
-                </DenButton>
+                <Show when={includesModel()}>
+                  <DenButton
+                    variant="ghost"
+                    data-testid="onboarding-layout-back"
+                    onClick={goBack}
+                  >
+                    {MODELS_SETTINGS_COPY.onboardingBack}
+                  </DenButton>
+                </Show>
                 <DenButton
                   variant="primary"
                   data-testid="onboarding-layout-continue"

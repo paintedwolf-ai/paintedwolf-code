@@ -18,6 +18,8 @@ import {
   saveWorkspaceOrientation,
   startupCompanionPref,
 } from "../../shell/workspace-layout.ts";
+import { includedProvider } from "../../test/local-generation-fixture.ts";
+import { createSignal } from "solid-js";
 import { providerModel } from "../../test/provider-fixtures.ts";
 import { stageLabelFor } from "../stage/stage-registry.tsx";
 import { ONBOARDING_LAYOUT_COPY } from "./onboarding-layout-copy.ts";
@@ -63,6 +65,8 @@ const readyProvider: ProviderMeta = {
   models: [providerModel("llama3.1")],
 };
 
+const normalProvider = includedProvider({state: "opted_out", recovery_action: "none", offline_installer: false});
+
 const policyWithDefault: ModelPolicy = {
   coordinator: { provider_id: "local", model: "llama3.1" },
   lite: { provider_id: "", model: "" },
@@ -105,7 +109,6 @@ function mockClient(overrides: Partial<LycaonClient> = {}): LycaonClient {
 
 async function advanceToLayout(): Promise<void> {
   fireEvent.click(screen.getByRole("button", { name: "Continue without a local model" }));
-  fireEvent.click(await screen.findByTestId("onboarding-summarizer-continue"));
   await waitFor(() => {
     expect(screen.getByTestId("onboarding-layout")).toBeTruthy();
   });
@@ -146,10 +149,10 @@ afterEach(() => {
 describe("Local model setup", () => {
   it("starts with device selection even with a configured provider", async () => {
     const client = mockClient();
-    const store = createSettingsStore({ providers: [readyProvider], modelPolicy: policyWithDefault });
+    const store = createSettingsStore({ providers: [normalProvider, readyProvider], modelPolicy: policyWithDefault });
     render(() => <OnboardingGate client={client} settingsStore={store} settingsChecked={true} />);
     expect(screen.getByRole("dialog").getAttribute("aria-labelledby")).toBe("onboarding-local_model-title");
-    expect(screen.getByTestId("onboarding-progress").textContent).toBe("1 / 4");
+    expect(screen.getByTestId("onboarding-progress").textContent).toBe("1 / 3");
     await advanceToWelcome();
     expect(screen.getByTestId("onboarding-welcome-settings-teach").textContent).toContain("AI providers");
     expect(client.testProvider).not.toHaveBeenCalled();
@@ -157,16 +160,43 @@ describe("Local model setup", () => {
     expect(completeFirstRunSetup).toHaveBeenCalledOnce();
   });
 
-  it("resumes at the summarizer after the model decision was saved", () => {
+  it("resumes at the layout after the model decision was saved", () => {
     modelStepComplete = true;
-    render(() => <OnboardingGate client={mockClient()} settingsStore={createSettingsStore()} settingsChecked={true} />);
-    expect(screen.getByTestId("onboarding-progress").textContent).toBe("2 / 4");
-    expect(screen.getByTestId("onboarding-summarizer")).toBeTruthy();
+    render(() => <OnboardingGate client={mockClient()} settingsStore={createSettingsStore({providers: [normalProvider]})} settingsChecked={true} />);
+    expect(screen.getByTestId("onboarding-progress").textContent).toBe("2 / 3");
+    expect(screen.getByTestId("onboarding-layout")).toBeTruthy();
+  });
+
+  it("waits for the host installation fact and skips the pane for a damaged offline seed", async () => {
+    const [checked, setChecked] = createSignal(false);
+    const store = createSettingsStore({providers: [normalProvider]});
+    const client = mockClient();
+    render(() => <OnboardingGate client={client} settingsStore={store} settingsChecked={checked()} />);
+    expect(screen.getByTestId("onboarding-waiting")).toBeTruthy();
+    expect(screen.queryByTestId("onboarding-local-model")).toBeNull();
+    store.actions.setProviders([includedProvider({state: "repair_required", recovery_action: "repair",
+      offline_installer: true, seed_available: false})]);
+    setChecked(true);
+    expect(await screen.findByTestId("onboarding-layout")).toBeTruthy();
+    expect(screen.getByTestId("onboarding-progress").textContent).toBe("1 / 2");
+    expect(screen.queryByTestId("onboarding-layout-back")).toBeNull();
+    fireEvent.click(screen.getByTestId("onboarding-layout-continue"));
+    expect(screen.getByTestId("onboarding-progress").textContent).toBe("2 / 2");
+    expect(completeModelStep).toHaveBeenCalledOnce();
+  });
+
+  it("finishes the outstanding model step on a returning offline installation", async () => {
+    firstRunComplete = true;
+    const store = createSettingsStore({providers: [includedProvider({state: "opted_out", recovery_action: "none", offline_installer: true})]});
+    render(() => <OnboardingGate client={mockClient()} settingsStore={store} settingsChecked={true} />);
+    await waitFor(() => expect(completeModelStep).toHaveBeenCalledOnce());
+    expect(screen.queryByTestId("onboarding-local-model")).toBeNull();
+    expect(screen.queryByTestId("onboarding-layout")).toBeNull();
   });
 
   it("opens just one page on an existing installation", () => {
     firstRunComplete = true;
-    render(() => <OnboardingGate client={null} settingsStore={createSettingsStore()} settingsChecked={false} />);
+    render(() => <OnboardingGate client={mockClient()} settingsStore={createSettingsStore({providers: [normalProvider]})} settingsChecked={true} />);
     expect(screen.getByTestId("onboarding-progress").textContent).toBe("1 / 1");
     fireEvent.click(screen.getByRole("button", {name: "Continue without a local model"}));
     expect(completeModelStep).toHaveBeenCalledOnce();
@@ -177,7 +207,7 @@ describe("Local model setup", () => {
 describe("Setup navigation and accessibility", () => {
   it("is a labelled modal landmark that takes focus on mount", async () => {
     const settingsStore = createSettingsStore({
-      providers: [],
+      providers: [normalProvider],
       modelPolicy: {
         coordinator: { provider_id: "", model: "" },
         lite: { provider_id: "", model: "" },
@@ -206,7 +236,7 @@ describe("Setup navigation and accessibility", () => {
 
   it("welcome fades in the stage wash background", async () => {
     const settingsStore = createSettingsStore({
-      providers: [readyProvider],
+      providers: [normalProvider, readyProvider],
       modelPolicy: policyWithDefault,
     });
     const { getByTestId, queryByTestId } = render(() => (
@@ -228,7 +258,7 @@ describe("Setup navigation and accessibility", () => {
 
   it("welcome teach reuses Settings dock chrome with AI providers selected and the nav dot", async () => {
     const settingsStore = createSettingsStore({
-      providers: [readyProvider],
+      providers: [normalProvider, readyProvider],
       modelPolicy: policyWithDefault,
     });
     const { getByTestId } = render(() => (
@@ -266,9 +296,9 @@ describe("Setup navigation and accessibility", () => {
     ).toBe(false);
   });
 
-  it("Back walks welcome → layout → summarizer → model choice without latching", async () => {
+  it("Back walks welcome → layout → model choice without latching", async () => {
     const settingsStore = createSettingsStore({
-      providers: [readyProvider],
+      providers: [normalProvider, readyProvider],
       modelPolicy: policyWithDefault,
     });
     const { getByTestId, queryByTestId } = render(() => (
@@ -289,24 +319,19 @@ describe("Setup navigation and accessibility", () => {
 
     fireEvent.click(getByTestId("onboarding-layout-back"));
     await waitFor(() => {
-      expect(getByTestId("onboarding-summarizer")).toBeTruthy();
-    });
-
-    fireEvent.click(getByTestId("onboarding-summarizer-back"));
-    await waitFor(() => {
       expect(getByTestId("onboarding-local-model")).toBeTruthy();
     });
     expect(queryByTestId("onboarding-setup-back")).toBeNull();
     expect(completeFirstRunSetup).not.toHaveBeenCalled();
   });
 
-  it("Escape steps summarizer → layout → welcome without latching", async () => {
+  it("Escape steps layout → welcome without latching", async () => {
     setDispatcherPlatformForTests("macos");
     registerCommandHandler("overlay.dismiss", () => {
       tryDismissOnboardingWelcome();
     });
     const settingsStore = createSettingsStore({
-      providers: [readyProvider],
+      providers: [normalProvider, readyProvider],
       modelPolicy: policyWithDefault,
     });
     const { getByTestId } = render(() => (
@@ -317,11 +342,7 @@ describe("Setup navigation and accessibility", () => {
       />
     ));
     fireEvent.click(screen.getByRole("button", {name: "Continue without a local model"}));
-    expect(await screen.findByTestId("onboarding-summarizer")).toBeTruthy();
-    pressEscape();
-    await waitFor(() => {
-      expect(getByTestId("onboarding-layout")).toBeTruthy();
-    });
+    expect(await screen.findByTestId("onboarding-layout")).toBeTruthy();
     pressEscape();
     await waitFor(() => {
       expect(getByTestId("onboarding-welcome")).toBeTruthy();
@@ -337,7 +358,7 @@ describe("Setup navigation and accessibility", () => {
       tryDismissOnboardingWelcome();
     });
     const settingsStore = createSettingsStore({
-      providers: [readyProvider],
+      providers: [normalProvider, readyProvider],
       modelPolicy: policyWithDefault,
     });
     const { getByTestId } = render(() => (
@@ -366,7 +387,7 @@ describe("Setup navigation and accessibility", () => {
   it("omits the drag strip when custom chrome is off", () => {
     customChrome = false;
     const settingsStore = createSettingsStore({
-      providers: [],
+      providers: [normalProvider],
     });
     const { container } = render(() => (
       <OnboardingGate
@@ -382,7 +403,7 @@ describe("Setup navigation and accessibility", () => {
 describe("OnboardingGate starting layout page", () => {
   async function renderAtLayout() {
     const settingsStore = createSettingsStore({
-      providers: [readyProvider],
+      providers: [normalProvider, readyProvider],
       modelPolicy: policyWithDefault,
     });
     const view = render(() => (
@@ -399,9 +420,9 @@ describe("OnboardingGate starting layout page", () => {
   const radio = (testId: string) =>
     screen.getByTestId(testId) as HTMLInputElement;
 
-  it("sits between the summarizer and welcome as step 3 of 4", async () => {
+  it("sits between model selection and welcome as step 2 of 3", async () => {
     const { getByTestId } = await renderAtLayout();
-    expect(getByTestId("onboarding-progress").textContent).toBe("3 / 4");
+    expect(getByTestId("onboarding-progress").textContent).toBe("2 / 3");
     const gate = getByTestId("onboarding-gate");
     expect(gate.getAttribute("aria-labelledby")).toBe("onboarding-layout-title");
     expect(gate.classList.contains("onboarding-gate--layout")).toBe(true);
