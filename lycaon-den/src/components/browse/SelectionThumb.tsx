@@ -1,4 +1,4 @@
-import { createEffect, createMemo, on, onCleanup } from "solid-js";
+import { createEffect, createMemo, on, onCleanup, untrack } from "solid-js";
 import {
   playSelectionTravel,
   shouldSnapSelectionTravel,
@@ -14,6 +14,7 @@ type Travel = {
 
 type Props = {
   active: string;
+  onSelectionSettled?: () => void;
 };
 
 function boxInTrack(track: HTMLElement, target: HTMLElement): Box {
@@ -65,6 +66,12 @@ export function SelectionThumb(props: Props) {
   let shown: boolean | null = null;
   let placementFrame: number | undefined;
   let animatePlacement = false;
+  let awaitingSelection = true;
+  const settleSelection = (selection: string) => {
+    if (!awaitingSelection || selection !== props.active) return;
+    awaitingSelection = false;
+    untrack(() => props.onSelectionSettled?.());
+  };
   const schedulePlace = (animate = false) => {
     animatePlacement ||= animate;
     placementFrame ??= requestAnimationFrame(() => {
@@ -80,7 +87,7 @@ export function SelectionThumb(props: Props) {
     travel = null;
   };
 
-  const startTravel = (thumb: HTMLElement, from: Box, to: Box) => {
+  const startTravel = (thumb: HTMLElement, from: Box, to: Box, selection: string) => {
     applyBox(thumb, from);
     let next: Travel | null = null;
     const animation = playSelectionTravel(thumb, travelFrames(from, to), () => {
@@ -88,6 +95,7 @@ export function SelectionThumb(props: Props) {
       applyBox(thumb, next.to);
       destination = next.to;
       travel = null;
+      settleSelection(selection);
     });
     next = { animation, from, to };
     travel = next;
@@ -119,9 +127,10 @@ export function SelectionThumb(props: Props) {
       destination = null;
     };
 
+    const selection = props.active;
     const target = Array.from(
       track.querySelectorAll<HTMLElement>(".den-browse-segment"),
-    ).find((segment) => segment.dataset.value === props.active);
+    ).find((segment) => segment.dataset.value === selection);
     if (!target) {
       hide();
       return;
@@ -129,11 +138,18 @@ export function SelectionThumb(props: Props) {
 
     // The box matches the segment; CSS insets the painted fill.
     const box = boxInTrack(track, target);
+    if (box.width === 0 || box.height === 0) {
+      hide();
+      return;
+    }
     if (shown !== true) {
       shown = true;
       thumb.style.opacity = "1";
     }
-    if (destination && sameBox(destination, box)) return;
+    if (destination && sameBox(destination, box)) {
+      if (!travel) settleSelection(selection);
+      return;
+    }
 
     if (!animate && travel) {
       // Preserve travel while selected text changes the track geometry.
@@ -145,17 +161,21 @@ export function SelectionThumb(props: Props) {
       cancelTravel();
       applyBox(thumb, box);
       destination = box;
+      settleSelection(selection);
       return;
     }
 
     const from = travel ? boxInTrack(track, thumb) : destination;
     cancelTravel();
-    startTravel(thumb, from, box);
+    startTravel(thumb, from, box, selection);
   };
 
   // Selection and geometry notifications share one placement before paint.
   const active = createMemo(() => props.active);
-  createEffect(on(active, () => schedulePlace(true)));
+  createEffect(on(active, () => {
+    awaitingSelection = true;
+    schedulePlace(true);
+  }));
 
   createEffect(() => {
     const thumb = thumbRef;

@@ -210,6 +210,7 @@ export type DenChatListPrefs = {
 export type DenChatPrefs = {
   /** Day labels and turn finishes always show; this governs the time beside each message. */
   messageTimes?: DenMessageTimes;
+  lastStartedMode?: "agent" | "ask";
 };
 
 /** External-editor presets validated against the host catalog. */

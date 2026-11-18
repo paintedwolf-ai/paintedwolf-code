@@ -21,6 +21,7 @@ import {
   shellSessionSwitchGeneration,
   type SessionSwitchDeps
 } from "../../chat/session/session-switch.ts";
+import { setDraftSessionMode } from "../../chat/session/session-mode-state.ts";
 import { requestArmWorkflow } from "../../chat/workflow/pending-arm.ts";
 import {
   deliverStagedIdea,
@@ -215,7 +216,14 @@ export function createSessionCreation(options: {
               sessionId: session.id,
             };
           }
+          if (opts?.armWorkflow) {
+            requestArmWorkflow({
+              sessionId: session.id,
+              workflow: opts.armWorkflow,
+            });
+          }
           bindCreatedSession(options.appStore, session);
+          if (opts?.mode) setDraftSessionMode(options.appStore, session.id, opts.mode);
           // The sidebar shows the new chat with the workspace, not on the next list refresh.
           options.projectSessions?.insertRow(sessionSummaryFromSession(session));
           const scope = {
@@ -225,12 +233,6 @@ export function createSessionCreation(options: {
               ? { initialPrompt: true as const }
               : {}),
           };
-          if (opts?.armWorkflow) {
-            requestArmWorkflow({
-              sessionId: session.id,
-              workflow: opts.armWorkflow,
-            });
-          }
           return scope;
         },
         enrich: async (scope, { shouldApply }) => {

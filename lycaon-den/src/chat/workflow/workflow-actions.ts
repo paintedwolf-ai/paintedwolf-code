@@ -1,4 +1,4 @@
-import { beginSessionModeAdmission, confirmSessionModeAdmission, sessionModeView } from "../session/session-mode-state.ts";
+import { beginSessionModeAdmission, sessionModeView } from "../session/session-mode-state.ts";
 import { upgradeSessionMode } from "../session/session-mode-upgrade.ts";
 import { beginSessionSnapshotRead } from "../../api/session-snapshot-refresh.ts";
 import type { LycaonClient } from "../../api/client.ts";
@@ -184,7 +184,7 @@ export async function startWorkflowForSession(
       : { ...intent, operation_id: operationId };
     const run = await client.startWorkflowRun(sessionId, command);
     if (backendRead.isSameBackend()) {
-      confirmSessionModeAdmission(appStore, sessionId, admission.mode);
+      admission.confirm();
       await refreshWorkflowState(appStore, client, sessionId, projectDir, projects);
     }
     return run;

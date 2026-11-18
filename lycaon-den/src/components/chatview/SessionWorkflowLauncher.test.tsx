@@ -9,7 +9,7 @@ import { sessionLauncherTiles } from "../../workflow/session-launcher-model.ts";
 import type { WorkflowSummary } from "../../api/types.ts";
 
 const catalog: WorkflowSummary[] = [
-  { id: "plan", version: "1.0.0", name: "Plan", icon: "route", featured: true },
+  { id: "plan", version: "1.0.0", name: "Plan", icon: "route", featured: true, description: "Research, expand, approve, then build." },
   {
     id: "recon-pack",
     version: "1.0.0",
@@ -89,9 +89,13 @@ describe("SessionWorkflowLauncher", () => {
       { hasRepo: true },
     );
     render(() => <SessionWorkflowLauncher tiles={tiles} busy={false} askMode onSelect={onSelect} />);
-    const blocked = screen.getByRole("button", { name: "Plan — requires Agent mode" }) as HTMLButtonElement;
+    const blocked = screen.getByRole("button", { name: "Plan — needs Agent" }) as HTMLButtonElement;
     expect(blocked.disabled).toBe(true);
+    expect(blocked.textContent).toContain("Research, expand, approve, then build.");
+    expect(blocked.getAttribute("data-tip")).toBe("Plan needs Agent.");
     expect(screen.getByText("Needs Agent")).toBeTruthy();
+    fireEvent.click(blocked);
+    expect(onSelect).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Recon" }));
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "recon-pack" }));
   });

@@ -32,7 +32,7 @@ import {
   installSessionBootstrapChrome,
 } from "./session-chrome.ts";
 import { cancelPromptSubmissions, reservePromptSubmission } from "../send/prompt-submission-order.ts";
-import { beginSessionModeAdmission, confirmSessionModeAdmission } from "./session-mode-state.ts";
+import { beginSessionModeAdmission } from "./session-mode-state.ts";
 import { pendingPromptKind } from "../send/pending-sends.ts";
 
 /** Large snapshots yield a frame before hydration. */
@@ -471,7 +471,7 @@ export async function sendChatPrompt(
       };
       throw new Error(retryHint[accepted.status]);
     }
-    confirmSessionModeAdmission(appStore, sessionId, admission.mode);
+    admission.confirm();
     // Completed receipts require no admission hold.
     if (accepted.status === "complete") {
       appStore.actions.releasePromptSubmission(sessionId, operationId);

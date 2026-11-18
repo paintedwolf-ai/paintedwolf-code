@@ -3,6 +3,7 @@ import type { AppStore } from "../../store/app-state-model.ts";
 import type { BlueprintSummary } from "../../api/types.ts";
 import { sessionWorkers } from "../../chat/actions/chat-actions.ts";
 import { gitChangeBadgeCount } from "../../chat/actions/board-git-coalesce.ts";
+import { sessionModeView } from "../../chat/session/session-mode-state.ts";
 import { chatTabRailBindings } from "../../chat/composer/chat-tab-rail-bindings.ts";
 import { liveProgressItems, isProgressArchivedInTranscript } from "../../chat/progress/progress-model.ts";
 import { pendingWorkerApprovals } from "../../chat/worker/worker-approval-model.ts";
@@ -107,6 +108,7 @@ export function createSessionTabs(options: SessionTabsOptions): SessionTabs {
           pickerOpen={api.workflowPickerOpen()}
           error={api.workflowError()}
           busy={api.workflowBusy()}
+          askMode={sessionModeView(appStore, options.sessionId()).workflowNeedsAgent}
           onExit={api.onExit}
           onPause={api.onPause}
           onResume={api.onResume}

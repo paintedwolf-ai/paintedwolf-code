@@ -642,11 +642,17 @@ export function createAppStore(
       setState("currentSession", "archived_at", archived ? new Date().toISOString() : undefined);
     },
     applySessionMode(sessionId, projection) {
-      settleSessionModeIntent(actions, { id: sessionId, ...projection });
+      if (projection.mode === undefined && projection.started === undefined) return;
       const current = state.currentSession;
-      if (!current || !sessionReceivesMode(current, sessionId)) return;
-      const updated = mergeSessionMode(current, projection);
-      if (current !== updated) setState("currentSession", updated);
+      const updated = current && sessionReceivesMode(current, sessionId)
+        ? mergeSessionMode(current, projection)
+        : undefined;
+      if (updated && current !== updated) setState("currentSession", updated);
+      settleSessionModeIntent(actions, {
+        id: sessionId,
+        mode: updated?.mode ?? projection.mode,
+        started: updated?.started ?? projection.started,
+      });
     },
     mergeSession(event) {
       actions.applySessionMode(event.id, event);

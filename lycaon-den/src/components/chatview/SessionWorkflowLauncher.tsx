@@ -7,6 +7,7 @@ import { For, Show, type JSX } from "solid-js";
 import type { WorkflowSummary } from "../../api/types.ts";
 import type { LauncherTile } from "../../workflow/session-launcher-model.ts";
 import { chromeProps } from "../../styling/ui-chrome.ts";
+import { NEEDS_AGENT_BADGE, WORKFLOW_NEEDS_AGENT } from "./session-mode-copy.ts";
 
 type Props = {
   tiles: LauncherTile[];
@@ -52,7 +53,9 @@ export function SessionWorkflowLauncher(props: Props) {
                     props.armedWorkflowId === tile.workflow.id,
                 }}
                 disabled={disabled() || props.busy}
-                aria-label={needsAgent() ? `${tile.title} — requires Agent mode` : tile.title}
+                aria-label={needsAgent() ? `${tile.title} — ${WORKFLOW_NEEDS_AGENT}` : tile.title}
+                data-tip={needsAgent() ? `${tile.title} ${WORKFLOW_NEEDS_AGENT}.` : undefined}
+                data-tip-when-clipped={needsAgent() ? "[data-needs-agent]" : undefined}
                 aria-pressed={
                   props.armedWorkflowId === tile.workflow.id ? "true" : undefined
                 }
@@ -65,11 +68,13 @@ export function SessionWorkflowLauncher(props: Props) {
                   </span>
                   <span class="den-session-launcher__tile-title">{tile.title}</span>
                   <Show when={disabled()}>
-                    <span class="den-session-launcher__tile-badge">{needsAgent() ? "Needs Agent" : "Needs repo"}</span>
+                    <span class="den-workflow-needs-badge" data-needs-agent={needsAgent() ? "" : undefined}>
+                      {needsAgent() ? NEEDS_AGENT_BADGE : "Needs repo"}
+                    </span>
                   </Show>
                 </span>
                 <Show
-                  when={needsAgent() ? "Switch to Agent to start." : tile.disabled ? tile.disabledReason : tile.description}
+                  when={tile.disabled ? tile.disabledReason : tile.description}
                   keyed
                 >
                   {(text) => (

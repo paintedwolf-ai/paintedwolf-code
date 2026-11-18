@@ -11,6 +11,7 @@ import { createChatViewMode } from "./chat-view-mode.tsx";
 import { ComposerChromeStack } from "./ComposerChromeStack.tsx";
 import { APPROVALS_COPY } from "../../settings/security/approvals-copy.ts";
 import { SessionWorkflowLauncher } from "./SessionWorkflowLauncher.tsx";
+import { ASK_INPUT_HINT, WORKFLOW_NEEDS_AGENT, WORKFLOW_NEEDS_AGENT_HINT, WORKFLOW_NEEDS_AGENT_NOTICE } from "./session-mode-copy.ts";
 import { CheckpointCards } from "../checkpoint/CheckpointCards.tsx";
 import { AskUserDock } from "../workflow/AskUserDock.tsx";
 import type { AskUserDockSubmitFn } from "../workflow/AskUserDock.tsx";
@@ -47,7 +48,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
   const { viewport, chrome, workflow, blueprint, queue, surfaceActive, composerRefocus, composerRehydrate, clientOrThrow, connectedClient, chatNotices } = options;
   const { activeRun, catalogRun, chatLive, stopping, thinkingLabel, pauseHint, launcherTiles, showSessionLauncher, sessionHoldsExternalContent } = options.activity;
   const [askRefocusPulse, setAskRefocusPulse] = createSignal(0);
-  const mode = createChatViewMode(props.appStore, () => props.sessionId, connectedClient, () => chatNotices().reportError);
+  const mode = createChatViewMode(props.appStore, () => props.sessionId, surfaceActive, connectedClient, () => chatNotices().reportError);
   const armedNeedsAgent = () => mode.view().workflowNeedsAgent && workflow.armed()?.requiresAgent;
   const [checkpointRefocusPulse, setCheckpointRefocusPulse] = createSignal(0);
   let askDockSubmit: AskUserDockSubmitFn | undefined;
@@ -192,6 +193,8 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
       }
     }
 
+    if (armedNeedsAgent()) return false;
+
     const text = payload.text?.trim() ?? "";
     const armed = workflow.armed();
 
@@ -202,7 +205,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
       askMode: mode.view().workflowNeedsAgent,
     });
     if (resolution.kind === "needs_agent") {
-      chatNotices().reportError(new Error("This workflow requires Agent mode."));
+      chatNotices().reportError(new Error(WORKFLOW_NEEDS_AGENT_NOTICE));
       return false;
     }
     if (resolution.kind === "arm") {
@@ -243,7 +246,6 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                 sendWaitingOnApproval={sendWaitingOnApproval()}
               />
             }
-            mode={mode.slot}
             launcher={{
               present: showSessionLauncher,
               children: () => (
@@ -255,7 +257,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                   heading={(() => {
                     const armed = workflow.armed();
                     return armed
-                      ? `${armed.label} selected — ${armedNeedsAgent() ? "requires Agent mode" : "send a message to start"}`
+                      ? `${armed.label} selected — ${armedNeedsAgent() ? WORKFLOW_NEEDS_AGENT : "send a message to start"}`
                       : undefined;
                   })()}
                   onSelect={(wf) => workflow.armWorkflow(wf)}
@@ -274,7 +276,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                       role="status"
                     >
                       <span class="den-workflow-arm-chip__label">
-                        {armed.label} — {armedNeedsAgent() ? "requires Agent mode" : "send to start"}
+                        {armed.label} — {armedNeedsAgent() ? WORKFLOW_NEEDS_AGENT : "send to start"}
                       </span>
                       <button
                         type="button"
@@ -347,6 +349,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
             }}
             composer={
               <Composer
+                modeControl={mode.control}
                 approvalsRevision={props.appStore.state.approvalsRevision}
                 sidecarStatus={props.appStore.state.sidecarStatus}
                 sessionId={props.sessionId}
@@ -360,7 +363,6 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                   composerRefocus() +
                   askRefocusPulse() +
                   checkpointRefocusPulse() +
-                  mode.refocus() +
                   composerAttachFocusPulse()
                 }
                 rehydrateDraftPulse={composerRehydrate()}
@@ -375,14 +377,14 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                     (approvalRedirectCheckpoint()
                       ? APPROVALS_COPY.card.composerRedirect.placeholder
                       : null) ??
-                    (armed ? (armedNeedsAgent() ? "Switch to Agent to start this workflow…" : armedComposerPlaceholder(armed)) : null) ??
+                    (armed ? (armedNeedsAgent() ? WORKFLOW_NEEDS_AGENT_HINT : armedComposerPlaceholder(armed)) : null) ??
                     blueprint.composerPlaceholder() ??
                     workflowFeedbackComposerPlaceholder(
                       activeRun(),
                       pendingAskMeta(),
                     ) ??
                     activeRun()?.ui?.request?.question ??
-                    (mode.view().workflowNeedsAgent ? "Ask a question…" : undefined)
+                    (mode.view().workflowNeedsAgent ? ASK_INPUT_HINT : undefined)
                   );
                 })()}
                 emptySubmitEnabled={
@@ -399,6 +401,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                 activityLabel={stopping() ? "Stopping…" : thinkingLabel()}
                 turnClock={props.appStore.state.turnClock}
                 externalContent={sessionHoldsExternalContent()}
+                sendBlocked={Boolean(armedNeedsAgent()) && !pendingAsk() && !approvalRedirectCheckpoint()}
                 onSend={sendWithStreamFollow}
                 onStop={props.onStop}
               />

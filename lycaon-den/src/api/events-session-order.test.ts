@@ -10,7 +10,7 @@ import { resetSessionEventRevisions, subscribeEvents, type EventSubscription } f
 import type { LLMCallEvent, SessionEvent, SessionHostError } from "./types.ts";
 import { LycaonApiError } from "./http.ts";
 import { refreshSessionSnapshot } from "./session-snapshot-refresh.ts";
-import { sessionModeView } from "../chat/session/session-mode-state.ts";
+import { beginSessionModeAdmission, sessionModeView } from "../chat/session/session-mode-state.ts";
 import { upgradeSessionMode } from "../chat/session/session-mode-upgrade.ts";
 import { deferred } from "../chat/session/session-lifecycle-test-fixture.ts";
 import { stopChatActivity } from "../chat/session/session-lifecycle.ts";
@@ -32,11 +32,11 @@ afterEach(() => {
   resetTurnOutcomesForTests();
 });
 
-function setup(mode: Session["mode"] = "agent") {
+function setup(mode: Session["mode"] = "agent", started = true) {
   const store = createAppStore();
   store.actions.setCurrentSession({
     mode,
-    started: true,
+    started,
     root_session_id: sessionId,
     id: sessionId, owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: projectId, status: "busy", posture: "build",
     workspace_path: "/project", created_at: "t", activity_at: "t", updated_at: "t",
@@ -97,6 +97,18 @@ async function deliver(
 }
 
 describe("session event revision ordering", () => {
+  it("applies delayed authority fields after a newer lifecycle-only event", async () => {
+    const { store } = setup("agent", false);
+    await deliver(store, [
+      { revision: 9, data: { status: "idle", title: "Current" } },
+      { revision: 7, data: { status: "busy", title: "Older", mode: "ask" } },
+      { revision: 8, data: { status: "busy", started: true } },
+      { revision: 6, data: { status: "busy", mode: "agent", started: false } },
+    ]);
+    expect(appliedSessionRevision(store.actions, sessionId)).toBe(9);
+    expect(store.state.currentSession).toMatchObject({ status: "idle", title: "Current", mode: "ask", started: true });
+  });
+
   it("keeps the confirmed Agent effect when its PATCH response is lost after the mode event", async () => {
     const { store } = setup("ask");
     const patch = deferred<Session>();
@@ -104,12 +116,13 @@ describe("session event revision ordering", () => {
     const upgrade = upgradeSessionMode(store, stubClient({ updateSession: () => patch.promise, getSession }), sessionId);
     expect(sessionModeView(store, sessionId).upgrade).toBe("sending");
     await deliver(store, [
-      { revision: 6, data: { status: "busy", mode: "agent", started: true } },
+      { revision: 6, data: { status: "busy", mode: "agent" } },
       { revision: 7, data: { status: "busy" } },
     ]);
     patch.reject(new Error("Response lost"));
     expect(await upgrade).toBe(true);
     expect(getSession).not.toHaveBeenCalled();
+    expect(beginSessionModeAdmission(store, sessionId).mode).toBeUndefined();
     expect(sessionModeView(store, sessionId)).toMatchObject({ mode: "agent", show: false, upgrade: undefined });
   });
 

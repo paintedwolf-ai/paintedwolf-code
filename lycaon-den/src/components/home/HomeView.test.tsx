@@ -1,16 +1,34 @@
 import { assertNamedControl } from "../../test/controls.ts";
-import { afterEach, describe, expect, it, vi, onTestFinished } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from "vitest";
 import { applyWebEngineFact } from "../../platform/desktop/webkit-atspi-workaround.ts";
 import { loadFailed, loaded } from "../../store/load-state.ts";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { ALL_PROJECTS_PAGE_SIZE } from "../../home/home-model.ts";
 import type { ProjectSummary } from "../../project/project-summary.ts";
+import { syncChatPrefsFromSnapshot } from "../../settings/chat/chat-prefs.ts";
+import { getAppStateSnapshot, resetAppStateSnapshotForTests, setAppStateSnapshot } from "../../store/app-state-snapshot.ts";
+import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
+import type { ResidentPresence } from "../../ui/resident-surfaces.ts";
+import type { SessionMode } from "../../api/types.ts";
+import type { HomeIdeaDraft } from "../../home/idea-attachments.ts";
 import { HomeView } from "./HomeView.tsx";
+
+beforeEach(() => {
+  resetAppStateSnapshotForTests();
+  syncChatPrefsFromSnapshot();
+});
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
+
+function reflectStartedMode(mode: SessionMode) {
+  setAppStateSnapshot({ ...getAppStateSnapshot(), chat: { lastStartedMode: mode } });
+  syncChatPrefsFromSnapshot();
+}
 
 function stubSummary(i: number): ProjectSummary {
   return {
@@ -86,6 +104,113 @@ describe("HomeView missing provider config", () => {
 });
 
 describe("HomeView draft materialization", () => {
+  it("submits and keeps Ask, and an untouched Home uses it on its next show", async () => {
+    const onSubmitIdea = vi.fn((draft: HomeIdeaDraft) => {
+      reflectStartedMode(draft.mode);
+      return true;
+    });
+    const [presence, setPresence] = createSignal<ResidentPresence>("active");
+    render(() => <ResidentPresenceProvider presence={presence()}>
+      <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} onSubmitIdea={onSubmitIdea} />
+    </ResidentPresenceProvider>);
+    const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
+    const ask = screen.getByRole("radio", { name: "Ask" });
+    fireEvent.click(ask);
+    fireEvent.input(input, { target: { value: "First question" } });
+    fireEvent.click(screen.getByTestId("home-idea-send"));
+    await vi.waitFor(() => expect(input.value).toBe(""));
+    expect(ask.getAttribute("aria-checked")).toBe("true");
+    fireEvent.input(input, { target: { value: "Second question" } });
+    fireEvent.click(screen.getByTestId("home-idea-send"));
+    await vi.waitFor(() => expect(input.value).toBe(""));
+    expect(onSubmitIdea.mock.calls.map(([draft]) => draft.mode)).toEqual(["ask", "ask"]);
+
+    setPresence("idle");
+    reflectStartedMode("agent");
+    setPresence("active");
+    expect(screen.getByRole("radio", { name: "Agent" }).getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("retains a typed Home draft across preference changes and a rejected send", async () => {
+    reflectStartedMode("ask");
+    const [presence, setPresence] = createSignal<ResidentPresence>("active");
+    const [submitting, setSubmitting] = createSignal(false);
+    const onSubmitIdea = vi.fn((_draft: HomeIdeaDraft) => false);
+    render(() => <ResidentPresenceProvider presence={presence()}>
+      <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} submitting={submitting()} onSubmitIdea={onSubmitIdea} />
+    </ResidentPresenceProvider>);
+    const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
+    const ask = screen.getByRole("radio", { name: "Ask" });
+    expect(ask.getAttribute("aria-checked")).toBe("true");
+    fireEvent.input(input, { target: { value: "Keep this draft" } });
+    setPresence("idle");
+    reflectStartedMode("agent");
+    setPresence("active");
+
+    setSubmitting(true);
+    fireEvent.click(screen.getByRole("radio", { name: "Agent" }));
+    expect(ask.getAttribute("aria-checked")).toBe("true");
+    setSubmitting(false);
+    fireEvent.click(screen.getByTestId("home-idea-send"));
+    expect(onSubmitIdea).toHaveBeenCalledExactlyOnceWith({ text: "Keep this draft", mode: "ask", attachments: [] });
+    await Promise.resolve();
+    expect(input.value).toBe("Keep this draft");
+    expect(ask.getAttribute("aria-checked")).toBe("true");
+
+    fireEvent.input(input, { target: { value: "" } });
+    expect(screen.getByRole("radio", { name: "Agent" }).getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("keeps pointer focus and the input node while fading the empty hint", () => {
+    vi.useFakeTimers();
+    render(() => <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} />);
+    const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
+    const group = screen.getByRole("radiogroup", { name: "Session mode" });
+    const ask = screen.getByRole("radio", { name: "Ask" });
+    const agent = screen.getByRole("radio", { name: "Agent" });
+    expect(group.nextElementSibling).toBe(screen.getByTestId("home-idea-send"));
+
+    const press = (segment: HTMLElement) => {
+      const event = new Event("pointerdown", { bubbles: true, cancelable: true });
+      segment.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      fireEvent.click(segment);
+    };
+
+    input.focus();
+    press(ask);
+    expect(document.activeElement).toBe(input);
+    expect(screen.getByTestId("home-idea-input")).toBe(input);
+    expect(input.placeholder).toBe("Describe your idea…");
+    expect(input.hasAttribute("data-hint-out")).toBe(true);
+    vi.advanceTimersByTime(120);
+    expect(input.placeholder).toBe("Ask a question…");
+    expect(input.hasAttribute("data-hint-out")).toBe(false);
+
+    input.blur();
+    press(agent);
+    expect(document.activeElement).toBe(document.body);
+    fireEvent.input(input, { target: { value: "Keep the text" } });
+    expect(input.placeholder).toBe("Describe your idea…");
+    expect(input.value).toBe("Keep the text");
+
+    agent.focus();
+    fireEvent.keyDown(agent, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(ask);
+    expect(input.placeholder).toBe("Ask a question…");
+  });
+
+  it("swaps the drawn hint immediately under reduced motion", () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
+    applyWebEngineFact({ engine: "webkitgtk", version: "2.54.1" });
+    onTestFinished(() => applyWebEngineFact(null));
+    render(() => <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} />);
+    fireEvent.click(screen.getByRole("radio", { name: "Ask" }));
+    const hint = document.querySelector(".home-view__idea-hint");
+    expect(hint?.textContent).toBe("Ask a question…");
+    expect(hint?.hasAttribute("data-hint-out")).toBe(false);
+  });
+
   it("shows the idea hint as the field's placeholder without the WebKitGTK workaround", () => {
     render(() => <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} onSubmitIdea={vi.fn()} />);
     const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;

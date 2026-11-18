@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
+import type { Session } from "../src/api/types.ts";
 import { writeFileSync } from "node:fs";
 import {
   apiJson,
@@ -166,7 +167,7 @@ webE2e.describe("composer height motion", () => {
     const restingHeight = await height();
 
     await startComposerTrace(stage);
-    await page.keyboard.insertText("First line\nSecond line\nThird line\nFourth line");
+    await page.keyboard.insertText("First line\nSecond line\nThird line\nFourth line\nFifth line\nSixth line");
     await waitForComposerMotion(page);
     const growth = await stopComposerTrace(page);
 
@@ -197,6 +198,80 @@ webE2e.describe("composer height motion", () => {
     expectBottomEdgeHeld(typing.samples);
   });
 
+  webE2e("Needs Agent leaves the workflow launcher height unchanged", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 960 });
+    await bootstrapChatSession(page);
+    const stage = liveChatStage(page);
+    const launcher = stage.getByTestId("session-workflow-launcher");
+    const plan = launcher.getByTestId("session-launcher-tile-plan");
+    await expect(plan).toBeEnabled();
+    const height = () => launcher.evaluate((element) => element.getBoundingClientRect().height);
+    const agentHeight = await height();
+
+    await stage.getByRole("radio", { name: "Ask" }).click();
+    await expect(plan).toBeDisabled();
+    await expect(plan).toHaveAccessibleName("Plan — needs Agent");
+    expect(await height()).toBeCloseTo(agentHeight, 0);
+  });
+
+  webE2e("leaving Ask restores the original composer without moving its actions", async ({ page, request }) => {
+    await page.setViewportSize({ width: 420, height: 900 });
+    await bootstrapChatSession(page, request);
+    const sessionId = await settledChatSessionId(page);
+    const stage = liveChatStage(page);
+    const mode = stage.getByRole("radiogroup", { name: "Session mode" });
+    const ask = mode.getByRole("radio", { name: "Ask" });
+    const agent = mode.getByRole("radio", { name: "Agent" });
+    const composer = stage.getByTestId("chat-composer");
+    const shell = stage.locator(".den-composer");
+
+    await ask.click();
+    const measure = () => shell.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const input = element.querySelector<HTMLElement>(".den-composer-input")!;
+      const attach = element.querySelector<HTMLElement>('[data-testid="composer-attach"]')!.getBoundingClientRect();
+      const send = element.querySelector<HTMLElement>('[data-testid="composer-send"]')!.getBoundingClientRect();
+      const group = element.querySelector<HTMLElement>(".den-session-mode")?.getBoundingClientRect();
+      const style = getComputedStyle(input);
+      return {
+        height: bounds.height,
+        line: Number.parseFloat(style.lineHeight),
+        contentRight: input.getBoundingClientRect().right - Number.parseFloat(style.paddingRight),
+        attachInset: bounds.right - attach.right,
+        attachLeft: attach.left,
+        attachMiddle: attach.top + attach.height / 2,
+        sendMiddle: send.top + send.height / 2,
+        modeRight: group?.right,
+        modeLeft: group?.left,
+        modeMiddle: group && group.top + group.height / 2,
+      };
+    });
+    for (const scale of ["1", "1.3"]) {
+      await page.evaluate((scale) => document.documentElement.style.setProperty("--den-text-scale", scale), scale);
+      await composer.fill("A line that runs to the edge of the composer. ".repeat(6));
+      const row = await measure();
+      expect(row.contentRight).toBeLessThanOrEqual(row.modeLeft! + 1);
+      expect(row.modeRight).toBeLessThanOrEqual(row.attachLeft);
+      expect(row.modeMiddle).toBeCloseTo(row.attachMiddle, 0);
+      expect(row.sendMiddle).toBeCloseTo(row.attachMiddle, 0);
+    }
+    await page.evaluate(() => document.documentElement.style.setProperty("--den-text-scale", "1"));
+    await composer.fill("Describe this repository.");
+    await stage.getByTestId("composer-send").click();
+    await expect.poll(async () => {
+      const current = await apiJson<Session>(request, "GET", `/v1/sessions/${sessionId}`);
+      return current.started && current.mode === "ask" && current.status === "idle";
+    }).toBe(true);
+    await expect(stage.getByTestId("thinking-indicator")).toHaveCount(0);
+    await expect(composer).toHaveValue("");
+    const tall = await measure();
+
+    await agent.click();
+    await expect(mode).toHaveCount(0);
+    await expect.poll(async () => (await measure()).height).toBeCloseTo(tall.height - 2 * tall.line, 0);
+    expect((await measure()).attachInset).toBeCloseTo(tall.attachInset, 0);
+  });
+
   webE2e("the activity lane opens and closes on the disclosure timeline", async ({
     page,
     request,
@@ -209,7 +284,7 @@ webE2e.describe("composer height motion", () => {
     await apiJson(request, "POST", "/harness/llm/auto", { enabled: false });
     try {
       await startComposerTrace(stage);
-      const prompt = await apiPostPrompt(request, sessionId, { text: "Hold the turn open." });
+      const prompt = await apiPostPrompt(request, sessionId, { text: "Hold the turn open.", mode: "ask" });
       expect(prompt.ok(), await prompt.text()).toBe(true);
       await expect(indicator).toBeVisible({ timeout: 30_000 });
       await waitForComposerMotion(page);

@@ -357,6 +357,9 @@ function parseChat(value: unknown): DenChatPrefs | undefined {
   if (row.messageTimes === "hover" || row.messageTimes === "always") {
     chat.messageTimes = row.messageTimes;
   }
+  if (row.lastStartedMode === "agent" || row.lastStartedMode === "ask") {
+    chat.lastStartedMode = row.lastStartedMode;
+  }
   return Object.keys(chat).length > 0 ? chat : undefined;
 }
 

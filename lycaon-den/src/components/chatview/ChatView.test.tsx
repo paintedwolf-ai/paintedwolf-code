@@ -7,6 +7,7 @@ import { ChatTabChromeProvider } from "../../chat/composer/chat-tab-chrome.tsx";
 import { chatTabRailBindings, chatTabRailSessionId } from "../../chat/composer/chat-tab-rail-bindings.ts";
 import { CHAT_ATTACHMENT_DRAG_TYPE } from "../../chat/composer/chat-attachment-drag.ts";
 import { registerComposerAttachmentSink } from "../../chat/composer/add-to-chat.ts";
+import { syncChatPrefsFromSnapshot } from "../../settings/chat/chat-prefs.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { createRecentsStore } from "../../store/recents-store.ts";
 import { mockProjectsStore } from "../../test/projects-fixture.ts";
@@ -138,6 +139,7 @@ function dragData(types: string[], extra: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  syncChatPrefsFromSnapshot();
   runRewind.mockClear();
   alignRevealTarget.mockClear();
   resetTurnOutcomesForTests();
@@ -154,30 +156,44 @@ describe("ChatView composer", () => {
     const { onSend, composer, setWorkflows } = mountChat({ session: { started: false }, client: { updateSession } });
     setWorkflows({ catalog: [{ ...planWorkflow, requires_agent: true }] });
     const group = screen.getByRole("radiogroup", { name: "Session mode" });
-    const launcher = screen.getByTestId("session-workflow-launcher");
-    expect(group.compareDocumentPosition(launcher) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const attach = screen.getByTestId("composer-attach");
+    expect(group.parentElement).toBe(attach.parentElement);
+    expect(group.compareDocumentPosition(attach) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     fireEvent.click(screen.getByTestId("session-launcher-tile-plan"));
     fireEvent.click(screen.getByRole("radio", { name: "Ask" }));
     expect(updateSession).not.toHaveBeenCalled();
-    expect(screen.getByTestId("workflow-arm-chip").textContent).toContain("requires Agent mode");
+    expect(screen.getByTestId("workflow-arm-chip").textContent).toContain("needs Agent");
     typeDraft(composer(), "Plan this change");
-    fireEvent.click(screen.getByTestId("composer-send"));
+    const send = screen.getByTestId("composer-send");
+    expect(send).toHaveProperty("disabled", true);
+    fireEvent.click(send);
+    fireEvent.keyDown(composer(), { key: "Enter" });
     expect(onSend).not.toHaveBeenCalled();
     expect(composer().value).toBe("Plan this change");
     fireEvent.click(screen.getByTestId("workflow-arm-chip-clear"));
     expect(composer().placeholder).toBe("Ask a question…");
   });
 
-  it("removes the confirmed Agent control and returns focus to the same composer", async () => {
+  it("rests on Agent after confirmation before returning focus to the same composer", async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => vi.useRealTimers());
     const upgrade = vi.fn(async () => ({ id: SESSION, mode: "agent", started: true }));
     const { composer, appStore } = mountChat({ session: { mode: "ask" }, client: { updateSession: upgrade } });
     const agent = screen.getByRole("radio", { name: "Agent" });
     agent.focus();
     fireEvent.click(agent);
-    await waitFor(() => expect(screen.queryByRole("radiogroup", { name: "Session mode" })).toBeNull());
+    expect(agent).toHaveAttribute("aria-checked", "true");
+    await vi.advanceTimersByTimeAsync(0);
     expect(upgrade).toHaveBeenCalledWith(SESSION, { mode: "agent" });
-    await waitFor(() => expect(document.activeElement).toBe(composer()));
+    expect(appStore.state.currentSession?.mode).toBe("agent");
+
+    await vi.advanceTimersByTimeAsync(199);
+    expect(screen.getByRole("radiogroup", { name: "Session mode" })).toBeTruthy();
+    expect(document.activeElement).toBe(agent);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(screen.queryByRole("radiogroup", { name: "Session mode" })).toBeNull();
+    expect(document.activeElement).toBe(composer());
 
     appStore.actions.mergeSession({ id: SESSION, status: "idle", current_turn: 0 });
     expect(screen.queryByRole("radiogroup", { name: "Session mode" })).toBeNull();

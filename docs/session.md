@@ -8,10 +8,15 @@ A session is the durable boundary for one conversation and its work: ordered pro
 
 ## Agent and Ask modes
 
-Agent is the default for a new chat. Before its first prompt or workflow start,
-the composer can select either Agent or Ask. The host records the selection with
-that first admission. After admission, an Ask chat can switch to Agent once.
-Rewinding the first turn preserves the chat's mode and admission history.
+In Den, a new chat opens in the mode you last started a chat with on this
+device. Fresh installs start in Agent. Choose Agent or Ask inside the composer
+before the first prompt or workflow start. When you send an idea from Home, use
+the control inside the idea box. Opening a folder, cloning a repository, and
+starting a new session from Crossbar take you to the chat composer.
+
+The host records your mode at first admission. An Ask chat can switch to Agent
+once. This upgrade leaves your default for new chats as it was. Rewinding the
+first turn preserves the chat's mode and admission history.
 
 Ask lets the assistant investigate and answer using native read tools and
 read-scoped workers. It blocks agent-initiated file and blueprint edits,

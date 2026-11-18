@@ -22,7 +22,6 @@ const OPEN_FADE_WINDOW: [number, number] = [0.35, 1];
 const CLOSE_FADE_WINDOW: [number, number] = [0, 0.55];
 
 type ComposerChromeSlotId =
-  | "mode"
   | "launcher"
   | "arm"
   | "find"
@@ -37,7 +36,6 @@ type Props = {
   present: boolean;
   motion?: ComposerChromeSlotMotion;
   children: JSX.Element;
-  onFocusExit?: () => void;
 };
 
 export function ComposerChromeSlot(props: Props) {
@@ -56,7 +54,6 @@ export function ComposerChromeSlot(props: Props) {
 
   const runFadeOut = () => {
     const node = shell;
-    if (node?.contains(document.activeElement)) props.onFocusExit?.();
     if (!node || typeof node.animate !== "function" || prefersReducedMotion()) {
       setMounted(false);
       return;

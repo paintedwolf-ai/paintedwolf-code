@@ -1,3 +1,4 @@
+import { applyCachedSessionMode } from "../chat/session/session-chat-cache.ts";
 import type { AppStore } from "../store/app-state-model.ts";
 import type { LycaonClient } from "./client.ts";
 
@@ -58,7 +59,10 @@ export async function refreshSessionSnapshot(
   const read = beginSessionSnapshotRead(appStore, sessionId);
   try {
     const session = await client.getSession(sessionId);
-    if (read.isCurrent() && shouldApply()) appStore.actions.mergeSession(session);
+    if (read.isCurrent() && shouldApply()) {
+      applyCachedSessionMode(sessionId, session);
+      appStore.actions.mergeSession(session);
+    }
   } finally {
     read.finish();
   }

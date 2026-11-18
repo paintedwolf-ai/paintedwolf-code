@@ -30,6 +30,13 @@
   align-items: center;
   gap: 10px;
 }
+.home-view__idea-row > .den-session-mode,
+.home-view__idea-row > .home-view__idea-send {
+  align-self: flex-end;
+}
+.home-view__idea-row > .den-session-mode {
+  margin-inline-end: 4px;
+}
 /* The chip rail borrows composer chrome; the card's gap does the spacing. */
 .home-view__idea .den-composer-attach-note,
 .home-view__idea .den-composer-chip-rail {
