@@ -2,6 +2,7 @@ package cadence
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -84,8 +85,8 @@ func TestCadenceRunsExplicitlySelectedExternalScanner(t *testing.T) {
 	cadence, store := newTestCadence(t, clock)
 	dir := t.TempDir()
 	seedNonEmptyProject(t, dir)
-	external := &scanbase.MockRegistry{
-		Scanner: &scanbase.MockScanner{IDVal: "device-sast", CategoryList: []api.ScanCategory{api.ScanCategorySAST}},
+	external := &scantest.MockRegistry{
+		Scanner: &scantest.MockScanner{IDVal: "device-sast", CategoryList: []api.ScanCategory{api.ScanCategorySAST}},
 		Driver:  scancatalog.DriverExternal,
 		Command: []string{"true"},
 	}
@@ -180,7 +181,7 @@ func TestCadenceRetiresDeselectedSeriesWithoutCancelingActiveGeneration(t *testi
 	testutil.FailErr(t, "BaselineRoot", cadence.BaselineRoot(context.Background(), dir))
 	_, err := cadence.RequestFull(context.Background(), dir, nil, api.ScanTriggerManual, scanbase.FullScanContext{})
 	testutil.FailErr(t, "RequestFull", err)
-	registry := cadence.Registry.(*scanbase.MockRegistry)
+	registry := cadence.Registry.(*scantest.MockRegistry)
 	registry.Scanners = registry.Scanners[1:]
 	testutil.FailErr(t, "NoteWrites after deselection", noteCadenceWrites(context.Background(), cadence, dir, []string{"main.go"}))
 

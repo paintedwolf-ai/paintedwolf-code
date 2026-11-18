@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"regexp"
 	"testing"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -70,7 +70,7 @@ func spendRunwayHost(t *testing.T, tracker cost.CostTracker, ceilingUSD float64,
 	lim.SpendCeilingEnabled = enabled
 	lim.SessionSpendCeilingUSD = ceilingUSD
 	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
+	mgr := NewHost(mem, Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, toolstest.NewRegistry())
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfigStock", err)
 	mgr.SetWorkflowHints(hints, nil)

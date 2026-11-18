@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -21,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -39,7 +39,7 @@ func writeProjectExtensions(t *testing.T, projectDir string, body string) {
 
 func newViewManager(t *testing.T, root string, surfaces *settings.TrustSurfacesStore) (*session.Host, *catalogview.Cache) {
 	t.Helper()
-	m := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	m := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	boot := extpacks.Resolve(t.Context(), extpacks.ResolveInput{
 		Packs: func() []extpacks.PackContent {
 			c, err := extpacks.DiscoverStockContent()

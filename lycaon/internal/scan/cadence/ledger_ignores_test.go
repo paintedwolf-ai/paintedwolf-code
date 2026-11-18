@@ -3,6 +3,7 @@ package cadence
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,7 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectignore"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanignore "github.com/lycaon/lycaon/internal/scan/ignores"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -31,7 +32,7 @@ func TestLedgerIgnoreDisplacesOpenAndIsWithdrawable(t *testing.T) {
 	store := ledgerFixture(t, root, "sast", "execution-1")
 	cadence := ledgerCadence(store)
 
-	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
+	finding := findingstest.Finding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 	scan := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)
 	scan.ExecutionFingerprint = "execution-1"
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
@@ -78,7 +79,7 @@ func TestLedgerIgnoreExpiryReturnsTheFindingToOpen(t *testing.T) {
 	store := ledgerFixture(t, root, "sast", "execution-1")
 	cadence := ledgerCadence(store)
 
-	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
+	finding := findingstest.Finding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 	scan := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)
 	scan.ExecutionFingerprint = "execution-1"
 	testutil.FailErr(t, "introduce", store.Findings.RecordFindingEvents(
@@ -107,7 +108,7 @@ func TestLedgerAppliesAnIgnoreFileEditedOutsideTheHost(t *testing.T) {
 	store := ledgerFixture(t, root, "sast", "execution-1")
 	cadence := ledgerCadence(store)
 
-	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
+	finding := findingstest.Finding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 	scan := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)
 	scan.ExecutionFingerprint = "execution-1"
 	testutil.FailErr(t, "introduce", store.Findings.RecordFindingEvents(
@@ -134,7 +135,7 @@ func TestLedgerRefusesAnIgnoreForAnUntrustedProject(t *testing.T) {
 	store := ledgerFixture(t, root, "sast", "execution-1")
 	closed := &IgnoreService{Store: store.Ignores}
 
-	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
+	finding := findingstest.Finding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 	scan := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)
 	scan.ExecutionFingerprint = "execution-1"
 	testutil.FailErr(t, "introduce", store.Findings.RecordFindingEvents(

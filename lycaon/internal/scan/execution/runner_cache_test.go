@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -31,7 +32,7 @@ func TestCurrentScanCacheSurvivesUnavailableBaseBytes(t *testing.T) {
 	}
 	entries, err := snapshots.EntriesUnder(t.Context(), base.ID, root, ".")
 	testutil.FailErr(t, "base entries", err)
-	finding := scanfindings.FixtureFinding("rule", api.FindingLevelHigh, "found", "a.go", 1)
+	finding := findingstest.Finding("rule", api.FindingLevelHigh, "found", "a.go", 1)
 	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB(), Snapshots: snapshots}
 	result := &scanoutput.Result{ScannedPaths: []string{"a.go"}, Findings: []api.SecurityFinding{finding}}
 	runner.cacheCurrentFindings(t.Context(), &api.CodeScan{CanonicalPath: root, SourceSnapshotID: base.ID, SourceCaptureQuality: string(base.Quality), ExecutionFingerprint: "execution"}, scancatalog.ScannerContract{}, result)
@@ -56,7 +57,7 @@ func TestFileCacheRequiresCompleteSingleFileCoverage(t *testing.T) {
 	for _, rel := range []string{"clean.go", "unscanned.go", "moved.go", "partial.go", "first.go", "second.go"} {
 		entries = append(entries, sourcesnapshot.Entry{Path: rel, SHA256: rel})
 	}
-	spanning := scanfindings.FixtureFinding("flow", api.FindingLevelHigh, "flow", "first.go", 1)
+	spanning := findingstest.Finding("flow", api.FindingLevelHigh, "flow", "first.go", 1)
 	spanning.Locations = append(spanning.Locations, api.SecurityFindingLocation{URI: "second.go", StartLine: 1})
 	result := &scanoutput.Result{
 		ScannedPaths: []string{"clean.go", "moved.go", "partial.go", "first.go", "second.go"},

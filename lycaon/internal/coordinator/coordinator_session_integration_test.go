@@ -4,6 +4,7 @@ package coordinator_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -28,7 +29,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/testutil/prompttest"
 	"github.com/lycaon/lycaon/internal/toolhost"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -71,7 +71,7 @@ func TestManagerPromptUsesCoordinatorAssembly(t *testing.T) {
 	ctx := context.Background()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	wireManagerPromptPolicy(t, mgr, root)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root}))
 	mgr.SetCoordinatorTurnFrameSource(&phaseStubCoordinator{phase: "plan", brief: "Coordinate."})
@@ -96,7 +96,7 @@ func TestManagerKickNudgeViaRuntime(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	wireManagerPromptPolicy(t, mgr, root)
 	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root}))

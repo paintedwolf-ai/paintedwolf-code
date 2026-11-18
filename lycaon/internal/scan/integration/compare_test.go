@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/advisory"
@@ -80,15 +81,15 @@ func TestCompareNewResolvedPersisted(t *testing.T) {
 	oldID := seedCompareScan(t, store, compareSeedOpts{
 		projectDir: projectDir,
 		findings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("old-only", api.FindingLevelHigh, "gone", "gone.go", 1),
-			scanfindings.FixtureFinding("shared", api.FindingLevelMedium, "stay", "stay.go", 2),
+			findingstest.Finding("old-only", api.FindingLevelHigh, "gone", "gone.go", 1),
+			findingstest.Finding("shared", api.FindingLevelMedium, "stay", "stay.go", 2),
 		},
 	})
 	newID := seedCompareScan(t, store, compareSeedOpts{
 		projectDir: projectDir,
 		findings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("shared", api.FindingLevelMedium, "stay", "stay.go", 2),
-			scanfindings.FixtureFinding("new-only", api.FindingLevelCritical, "fresh", "fresh.go", 3),
+			findingstest.Finding("shared", api.FindingLevelMedium, "stay", "stay.go", 2),
+			findingstest.Finding("new-only", api.FindingLevelCritical, "fresh", "fresh.go", 3),
 		},
 	})
 
@@ -160,14 +161,14 @@ func TestComparePartialFixInOneFile(t *testing.T) {
 	oldID := seedCompareScan(t, store, compareSeedOpts{
 		projectDir: projectDir,
 		findings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "line 1", "pkg/a.go", 1),
-			scanfindings.FixtureFinding("rule-b", api.FindingLevelHigh, "line 2", "pkg/a.go", 2),
+			findingstest.Finding("rule-a", api.FindingLevelHigh, "line 1", "pkg/a.go", 1),
+			findingstest.Finding("rule-b", api.FindingLevelHigh, "line 2", "pkg/a.go", 2),
 		},
 	})
 	newID := seedCompareScan(t, store, compareSeedOpts{
 		projectDir: projectDir,
 		findings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("rule-b", api.FindingLevelHigh, "line 2", "pkg/a.go", 2),
+			findingstest.Finding("rule-b", api.FindingLevelHigh, "line 2", "pkg/a.go", 2),
 		},
 	})
 
@@ -186,7 +187,7 @@ func TestCompareTruncatedOnlyAtPresentationLimit(t *testing.T) {
 	oldID := seedCompareScan(t, store, compareSeedOpts{projectDir: projectDir})
 	findings := make([]api.SecurityFinding, 0, scancfg.DefaultAgentBudget().MaxGuidanceFindings+1)
 	for idx := 0; idx <= scancfg.DefaultAgentBudget().MaxGuidanceFindings; idx++ {
-		findings = append(findings, scanfindings.FixtureFinding(
+		findings = append(findings, findingstest.Finding(
 			fmt.Sprintf("rule-%d", idx), api.FindingLevelHigh, "", fmt.Sprintf("file-%d.go", idx), 1,
 		))
 	}
@@ -252,9 +253,9 @@ func TestCompareSortsNewFindingsCriticalFirst(t *testing.T) {
 	newID := seedCompareScan(t, store, compareSeedOpts{
 		projectDir: projectDir,
 		findings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("low", api.FindingLevelLow, "", "a.go", 1),
-			scanfindings.FixtureFinding("crit", api.FindingLevelCritical, "", "b.go", 2),
-			scanfindings.FixtureFinding("med", api.FindingLevelMedium, "", "c.go", 3),
+			findingstest.Finding("low", api.FindingLevelLow, "", "a.go", 1),
+			findingstest.Finding("crit", api.FindingLevelCritical, "", "b.go", 2),
+			findingstest.Finding("med", api.FindingLevelMedium, "", "c.go", 3),
 		},
 	})
 

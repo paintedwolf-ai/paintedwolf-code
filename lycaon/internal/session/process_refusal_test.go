@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 	"time"
@@ -233,7 +234,7 @@ func TestAutoNameProjectIdempotentOnReplay(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".*", Text: "ok"},
 	}})
-	mgr := NewHost(store, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, Lookup: project.ScopeLookup{Registry: reg}})

@@ -2,11 +2,12 @@ package cadence
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 	"time"
 
 	scanbase "github.com/lycaon/lycaon/internal/scan"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -17,7 +18,7 @@ func TestPresentFindingsKeepIgnoredRowsAndIsolateSeriesAcrossPages(t *testing.T)
 	cadence := ledgerCadence(store)
 	findings := make([]api.SecurityFinding, scanbase.MaxLedgerPageSize+3)
 	for i := range findings {
-		findings[i] = scanfindings.FixtureFinding(fmt.Sprintf("rule-%04d", i), api.FindingLevelHigh, "present", "a.go", i+1)
+		findings[i] = findingstest.Finding(fmt.Sprintf("rule-%04d", i), api.FindingLevelHigh, "present", "a.go", i+1)
 	}
 	job := ledgerScan(t, store, "many", root, "sast", api.ScanTargetFull, api.ScanCoverageComplete, findings...)
 	testutil.FailErr(t, "record current findings", store.Findings.RecordFindingEvents(t.Context(), &job, findings, nil, time.Now().UTC()))

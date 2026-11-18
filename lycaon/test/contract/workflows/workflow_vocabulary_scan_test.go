@@ -1,17 +1,17 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/vocabulary/vocabularytest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/vocabulary"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestScanDomainShippedInCatalog(t *testing.T) {
 	t.Parallel()
-	seen := map[string]vocabulary.CatalogEntry{}
-	for _, row := range vocabulary.ExportCatalog() {
+	seen := map[string]vocabularytest.CatalogEntry{}
+	for _, row := range vocabularytest.ExportCatalog() {
 		if row.Domain == "scan" {
 			seen[row.ID] = row
 		}

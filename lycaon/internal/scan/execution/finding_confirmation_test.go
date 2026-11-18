@@ -2,10 +2,11 @@ package execution
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 
 	scanbase "github.com/lycaon/lycaon/internal/scan"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -18,7 +19,7 @@ func TestRunnerConfirmsAbsenceOnlyWithSufficientCoverage(t *testing.T) {
 					root := ledgerRoot(t)
 					store := ledgerFixture(t, root, "sast", "execution-1")
 					runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
-					finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
+					finding := findingstest.Finding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 					first := ledgerScan(t, store, "first", root, "sast", api.ScanTargetFull, api.ScanCoverageComplete, finding)
 					first.ExecutionFingerprint = "execution-1"
 					runner.recordFindingHistory(t.Context(), &first)
@@ -59,9 +60,9 @@ func TestRunnerConfirmationPreservesScopeAndReopening(t *testing.T) {
 			store := ledgerFixture(t, root, "sast", "execution-1")
 			runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
 			findings := []api.SecurityFinding{
-				scanfindings.FixtureFinding("returns", api.FindingLevelHigh, "returns", "a.go", 1),
-				scanfindings.FixtureFinding("absent", api.FindingLevelHigh, "absent", "a.go", 2),
-				scanfindings.FixtureFinding("outside", api.FindingLevelHigh, "outside", "b.go", 1),
+				findingstest.Finding("returns", api.FindingLevelHigh, "returns", "a.go", 1),
+				findingstest.Finding("absent", api.FindingLevelHigh, "absent", "a.go", 2),
+				findingstest.Finding("outside", api.FindingLevelHigh, "outside", "b.go", 1),
 			}
 			first := ledgerScan(t, store, "first", root, "sast", api.ScanTargetFull, api.ScanCoverageComplete, findings...)
 			first.ExecutionFingerprint = "execution-1"
@@ -93,7 +94,7 @@ func TestRunnerConfirmationTraversesLedgerPagesAndExecutionChanges(t *testing.T)
 	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
 	findings := make([]api.SecurityFinding, scanbase.MaxLedgerPageSize+1)
 	for i := range findings {
-		findings[i] = scanfindings.FixtureFinding(fmt.Sprintf("rule-%04d", i), api.FindingLevelHigh, "a", "a.go", i+1)
+		findings[i] = findingstest.Finding(fmt.Sprintf("rule-%04d", i), api.FindingLevelHigh, "a", "a.go", i+1)
 	}
 	for _, step := range []struct {
 		id        string
@@ -151,7 +152,7 @@ func TestFindingConfirmationSeparatesScannerAndRoot(t *testing.T) {
 		testutil.FailErr(t, "select scanner series", store.Series.UpsertSeries(t.Context(), scanbase.SeriesRow{
 			CanonicalPath: series.root, ScannerID: series.scanner, LastCoveredExecutionFingerprint: "execution-1",
 		}))
-		finding := scanfindings.FixtureFinding(fmt.Sprintf("rule-%d", i), api.FindingLevelHigh, "a", "a.go", 1)
+		finding := findingstest.Finding(fmt.Sprintf("rule-%d", i), api.FindingLevelHigh, "a", "a.go", 1)
 		first := ledgerScan(t, store, fmt.Sprintf("first-%d", i), series.root, series.scanner, api.ScanTargetFull, api.ScanCoverageComplete, finding)
 		first.ExecutionFingerprint = "execution-1"
 		runner.recordFindingHistory(t.Context(), &first)

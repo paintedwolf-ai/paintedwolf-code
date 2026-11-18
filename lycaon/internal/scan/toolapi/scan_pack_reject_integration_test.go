@@ -4,6 +4,7 @@ package toolapi_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"strings"
 	"testing"
 
@@ -23,7 +24,7 @@ func TestScanPackRejectsLintWithStructuredCode(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	reg := &fanOutMockRegistry{scanners: []scanbase.CodeScanner{
-		&scanbase.MockScanner{IDVal: "lycaon-sca", CategoryList: []api.ScanCategory{api.ScanCategorySCA}},
+		&scantest.MockScanner{IDVal: "lycaon-sca", CategoryList: []api.ScanCategory{api.ScanCategorySCA}},
 	}}
 	scanStore := scanbase.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, scanStore, nil)

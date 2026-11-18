@@ -1,10 +1,10 @@
 package scan
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 	"time"
 
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -79,7 +79,7 @@ func TestAssessmentRecencyBreaksTimestampTiesByAdmission(t *testing.T) {
 				record := authorityScan("scan-"+id, id, root, "snapshot-"+id, "sast", api.ScanTargetFull, nil)
 				record.CreatedAt = at
 				testutil.FailErr(t, "insert assessment "+id, store.Runs.Insert(t.Context(), record, nil, ""))
-				completeNextScan(t, store, scanfindings.FixtureFinding(id, api.FindingLevelHigh, id, "main.go", 1))
+				completeNextScan(t, store, findingstest.Finding(id, api.FindingLevelHigh, id, "main.go", 1))
 			}
 			view, err := store.Findings.AssessmentView(t.Context(), paths)
 			testutil.FailErr(t, "read tied assessments", err)

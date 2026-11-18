@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,14 +19,13 @@ import (
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func newSkillsTestManager(t *testing.T) *Host {
 	t.Helper()
-	return NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	return NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 }
 
 func writeSkill(t *testing.T, root, rel, name, desc string) {
@@ -208,7 +208,7 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 	writeSkill(t, root, ".agents/skills", "release-check", "Release checklist.")
 
 	mem := store.NewMemory()
-	m := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	m := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "cs.yaml"))
 	testutil.FailErr(t, "surfaces", err)
 	reg := project.NewMemoryRegistry()

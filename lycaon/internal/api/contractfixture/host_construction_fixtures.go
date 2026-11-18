@@ -2,6 +2,7 @@ package contractfixture
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"io"
 	"net/http"
@@ -46,7 +47,7 @@ func NewServerForTest(t *testing.T, deps hostapi.Dependencies, opts ...TestDeps)
 
 func NewTestServer(t *testing.T, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
-	return NewTestServerWithRegistry(t, tools.NewStubRegistry(), opts...)
+	return NewTestServerWithRegistry(t, toolstest.NewRegistry(), opts...)
 }
 
 func NewTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...TestDeps) *hostapi.Server {
@@ -112,7 +113,7 @@ func NewTestServerWithWorkflowRegistry(t *testing.T, reg tools.ToolRegistry, opt
 
 func NewTestServerWithWorkflows(t *testing.T, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
-	return NewTestServerWithWorkflowRegistry(t, tools.NewStubRegistry(), opts...)
+	return NewTestServerWithWorkflowRegistry(t, toolstest.NewRegistry(), opts...)
 }
 
 func RequiredTestDeps(t *testing.T, deps hostapi.Dependencies) hostapi.Dependencies {

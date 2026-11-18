@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/timelayout"
@@ -47,7 +47,7 @@ func TestIncrementalBaseBreaksTimestampTiesByAdmission(t *testing.T) {
 			FingerprintScheme: record.FingerprintScheme, CoverageStatus: string(record.CoverageStatus),
 			WarningsJson: "[]", CreatedAt: timelayout.Format(time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)),
 		}))
-		finding := scanfindings.FixtureFinding(id, api.FindingLevelHigh, id, "untouched.go", 1)
+		finding := findingstest.Finding(id, api.FindingLevelHigh, id, "untouched.go", 1)
 		raw, err := json.Marshal(finding)
 		testutil.FailErr(t, "encode base finding", err)
 		testutil.FailErr(t, "insert base finding", store.tx.queries.InsertFindingEntry(t.Context(), db.InsertFindingEntryParams{

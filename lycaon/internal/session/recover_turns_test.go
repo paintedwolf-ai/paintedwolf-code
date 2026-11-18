@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 	"time"
 
@@ -200,7 +201,7 @@ func TestReviewGuidanceFollowsLiveVerdictGate(t *testing.T) {
 		for _, pending := range []bool{false, true} {
 			for _, staged := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/pending=%v/staged=%v", id, pending, staged), func(t *testing.T) {
-					mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+					mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 					mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 					kicks := mgr.Coordinator.Runtime.Kicks()
 					review := anchor.InformRender(id)

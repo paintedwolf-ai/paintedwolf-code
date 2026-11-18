@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -48,7 +49,7 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 	t.Cleanup(func() {
 		testutil.FailErr(t, "dispose process", reg.Lifecycle.DisposeSession(ctx, "session-1", bgprocess.TerminationChatDeleted))
 	})
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetBackgroundRegistry(reg)
 	handle, err := reg.StartPipeline(ctx, bgprocess.PipelineSpec{
 		SessionID:  "session-1",
@@ -83,7 +84,7 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 }
 
 func TestParkBlockedLiveCommandsDoesNothingWithoutVisibleJob(t *testing.T) {
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetBackgroundRegistry(bgprocess.NewRegistry(bgprocess.Config{}, bgprocess.Hooks{}))
 	if (&promptsource.Control{Processes: mgr.Processes, Runtime: mgr.Coordinator.Runtime}).ParkBlockedLiveCommands(context.Background(), "session-1") {
 		t.Fatal("empty process registry must not arm a wait")
@@ -257,7 +258,7 @@ func TestFailedSynthesisKeepsPublishedRecoveryAndCanonicalHistory(t *testing.T) 
 	cfg.KeepRecentMessages = 2
 
 	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(mem, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, failedCompactionSummarizer{}))
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)

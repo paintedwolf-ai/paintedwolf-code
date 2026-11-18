@@ -3,13 +3,14 @@ package integration
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -63,7 +64,7 @@ func TestIngesterEvidenceBlocksOnErrorSeverity(t *testing.T) {
 	rec, err := ing.Ingest(context.Background(), scan.ScanSourceRegistry, &scanoutput.Result{
 		FindingsCount: 1,
 		Findings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("lycaon.ruby.sql-string-concat", api.FindingLevelHigh, "sql concat", "app.rb", 10),
+			findingstest.Finding("lycaon.ruby.sql-string-concat", api.FindingLevelHigh, "sql concat", "app.rb", 10),
 		},
 	}, completeIngestMeta(t, scan.IngestMeta{
 		ScanID:           "scan-err",
@@ -100,7 +101,7 @@ func TestIngesterStoresFullGuidanceNotInjectionCap(t *testing.T) {
 	}
 	findings := make([]api.SecurityFinding, 0, 12)
 	for i := 0; i < 12; i++ {
-		findings = append(findings, scanfindings.FixtureFinding(
+		findings = append(findings, findingstest.Finding(
 			"lycaon.ruby.sql-string-concat",
 			api.FindingLevelHigh,
 			"sql concat",

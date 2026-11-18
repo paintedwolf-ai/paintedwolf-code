@@ -3,6 +3,7 @@ package toolapi_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ func registerNativeScanTools(t *testing.T) (*tools.DefaultRegistry, scanbase.Sca
 	store := scanbase.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, nil)
 	reg := tools.NewDefaultRegistry()
-	if err := scantoolapi.RegisterScanTools(reg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}, scancadence.New(store, coord, &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
+	if err := scantoolapi.RegisterScanTools(reg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scancadence.New(store, coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
 		testutil.FailErr(t, "RegisterScanTools failed", err)
 	}
 	return reg, coord, store, projectDir

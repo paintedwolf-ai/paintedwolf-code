@@ -3,12 +3,13 @@ package evidence_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
 	"github.com/lycaon/lycaon/internal/scan"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	scantoolapi "github.com/lycaon/lycaon/internal/scan/toolapi"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -62,7 +63,7 @@ func realScanQueryWireJSON(t *testing.T) (projectDir, scanID, flaggedPath, messa
 	flaggedPath = "internal/auth/handler.go"
 	message = "SQL injection via string concatenation"
 	scanID = seedCompletedScanWithFindings(t, store, []api.SecurityFinding{
-		scanfindings.FixtureFinding("lycaon.ruby.sql-string-concat", api.FindingLevelHigh, message, flaggedPath, 42),
+		findingstest.Finding("lycaon.ruby.sql-string-concat", api.FindingLevelHigh, message, flaggedPath, 42),
 	})
 
 	resp, err := coord.Query(context.Background(), scan.QueryRequest{ScanID: scanID})
@@ -209,7 +210,7 @@ func TestScanCompareWireJSONIndexesResolvedPaths(t *testing.T) {
 		OldScanID: "old",
 		NewScanID: "new",
 		ResolvedFindings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("gitleaks:token", api.FindingLevelHigh, "leak", "secrets.env", 2),
+			findingstest.Finding("gitleaks:token", api.FindingLevelHigh, "leak", "secrets.env", 2),
 		},
 		ResolvedCount: 1,
 	})

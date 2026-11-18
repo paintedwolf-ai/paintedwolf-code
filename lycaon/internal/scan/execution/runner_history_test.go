@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 
 	scanbase "github.com/lycaon/lycaon/internal/scan"
@@ -14,7 +15,7 @@ func TestRunnerRecordsFirstObservationEvenWhenBaseContainsFinding(t *testing.T) 
 	root := ledgerRoot(t)
 	store := ledgerFixture(t, root, "sast", "execution-1")
 	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
-	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "unsafe input", "a.go", 7)
+	finding := findingstest.Finding("rule-a", api.FindingLevelHigh, "unsafe input", "a.go", 7)
 	// Engines may supply a fingerprint that normalization replaces at ingestion.
 	finding.Fingerprints.Primary = "engine-local-identity"
 	result := &scanoutput.Result{Findings: []api.SecurityFinding{finding}}
@@ -47,8 +48,8 @@ func TestRunnerHistoryPreservesFindingsOutsideCompletedScope(t *testing.T) {
 			root := ledgerRoot(t)
 			store := ledgerFixture(t, root, "sast", "execution-1")
 			runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
-			a := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
-			b := scanfindings.FixtureFinding("rule-b", api.FindingLevelHigh, "b", "b.go", 1)
+			a := findingstest.Finding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
+			b := findingstest.Finding("rule-b", api.FindingLevelHigh, "b", "b.go", 1)
 			first := ledgerScan(t, store, "first", root, "sast", api.ScanTargetFull, api.ScanCoverageComplete, a, b)
 			runner.recordFindingHistory(t.Context(), &first)
 			clean := ledgerScan(t, store, "clean", root, "sast", target, api.ScanCoverageComplete)

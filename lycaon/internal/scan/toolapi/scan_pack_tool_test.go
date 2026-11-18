@@ -3,6 +3,7 @@ package toolapi_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"strings"
 	"testing"
 	"time"
@@ -36,17 +37,17 @@ func TestScanPackToolReturnsEnqueueReceipt(t *testing.T) {
 	coord := newTestCoordinator(t, store, staticHead{sha: "abc"})
 	toolReg := tools.NewDefaultRegistry()
 	scannerReg := &fanOutMockRegistry{scanners: []scanbase.CodeScanner{
-		&scanbase.MockScanner{
+		&scantest.MockScanner{
 			IDVal:        "lycaon-sca",
 			CategoryList: []api.ScanCategory{api.ScanCategorySCA, api.ScanCategorySecurity},
 			Result:       &scanoutput.Result{FindingsCount: 54},
 		},
-		&scanbase.MockScanner{
+		&scantest.MockScanner{
 			IDVal:        "lycaon-secrets",
 			CategoryList: []api.ScanCategory{api.ScanCategorySecret, api.ScanCategorySecurity},
 			Result:       &scanoutput.Result{FindingsCount: 0},
 		},
-		&scanbase.MockScanner{
+		&scantest.MockScanner{
 			IDVal:        "lycaon-sast",
 			CategoryList: []api.ScanCategory{api.ScanCategorySAST, api.ScanCategorySecurity},
 			Result:       &scanoutput.Result{FindingsCount: 0},
@@ -95,7 +96,7 @@ func TestScanPackToolCanWaitForSummary(t *testing.T) {
 	store := scanbase.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, staticHead{sha: "abc"})
 	scannerReg := &fanOutMockRegistry{scanners: []scanbase.CodeScanner{
-		&scanbase.MockScanner{
+		&scantest.MockScanner{
 			IDVal: "scanner-a", CategoryList: []api.ScanCategory{api.ScanCategorySecurity},
 			Result: &scanoutput.Result{FindingsCount: 0},
 		},
@@ -139,7 +140,7 @@ func TestScanQueryAggregatesPackAcrossEnginesByPackage(t *testing.T) {
 	coord := newTestCoordinator(t, store, nil)
 	toolReg := tools.NewDefaultRegistry()
 	registry := &fanOutMockRegistry{scanners: []scanbase.CodeScanner{
-		&scanbase.MockScanner{IDVal: "scanner-a", CategoryList: []api.ScanCategory{api.ScanCategorySCA}},
+		&scantest.MockScanner{IDVal: "scanner-a", CategoryList: []api.ScanCategory{api.ScanCategorySCA}},
 	}}
 	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, registry, scancadence.New(store, coord, registry, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
 

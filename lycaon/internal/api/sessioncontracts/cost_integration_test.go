@@ -4,6 +4,7 @@ package sessioncontracts
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -20,14 +21,13 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestHandleCostSummarySessionBreakdown(t *testing.T) {
 	tracker := costtest.NewTracker(t, nil)
 	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, toolstest.NewRegistry())
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
 	parent, err := store.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -66,7 +66,7 @@ func TestHandleCostSummarySessionBreakdown(t *testing.T) {
 func TestHandleCostSummaryProjectBreakdown(t *testing.T) {
 	tracker := costtest.NewTracker(t, nil)
 	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, toolstest.NewRegistry())
 	reg := project.NewMemoryRegistry()
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: reg, Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
@@ -109,7 +109,7 @@ func TestHandleProjectCostReportIncludesSessionBreakdownAndArchivedChats(t *test
 	sqlDB := testdbfixture.Open(t, "cost-report.db")
 	tracker := &contractfixture.ProjectReportCountingTracker{CostTracker: cost.NewSQLTracker(sqlDB, nil)}
 	memStore := store.NewSQL(sqlDB)
-	mgr := session.NewHost(memStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
+	mgr := session.NewHost(memStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, toolstest.NewRegistry())
 	reg := project.NewSQLRegistry(sqlDB)
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: memStore, Projects: reg, Sessions: mgr}}), nil, hostapi.TestAPIToken)
 

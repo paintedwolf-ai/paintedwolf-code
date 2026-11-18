@@ -2,6 +2,8 @@ package execution
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"testing"
@@ -10,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -60,7 +62,7 @@ func TestRunnerIngestUsesExactLandingAttributionAndStablePaths(t *testing.T) {
 	// A scanner reports paths under the tree it was handed.
 	scanner := &scanningRootScanner{id: "sast-one", categories: []api.ScanCategory{api.ScanCategorySAST}}
 	ingester := &attributionIngester{}
-	runner := NewRunner(store, &scanbase.MockRegistry{Scanner: scanner}, ingester, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(store, &scantest.MockRegistry{Scanner: scanner}, ingester, scancfg.DefaultRunnerConfig(), nil)
 	runner.Snapshots = snapshots
 	runner.execute(t.Context(), &rec)
 
@@ -83,7 +85,7 @@ func (s *scanningRootScanner) Categories() []api.ScanCategory { return s.categor
 
 func (s *scanningRootScanner) Run(_ context.Context, req scanbase.ScanRequest) (*scanoutput.Result, error) {
 	return &scanoutput.Result{Findings: []api.SecurityFinding{
-		scanfindings.FixtureFinding("rule-1", api.FindingLevelHigh, "finding",
+		findingstest.Finding("rule-1", api.FindingLevelHigh, "finding",
 			filepath.Join(req.ProjectDir, "src", "touched.go"), 3),
 	}}, nil
 }

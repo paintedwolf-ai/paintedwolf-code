@@ -4,6 +4,7 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	"gopkg.in/yaml.v3"
 )
@@ -61,7 +61,7 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 		Text:    "ok",
 	}}}))
 	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{
 		ModuleRoot: moduleRoot,
@@ -169,7 +169,7 @@ func TestManagerEffectiveLimitsUsesProjectOverlay(t *testing.T) {
 
 	mgr := session.NewHost(store.NewMemory(), session.Models{Client: llm.NewMockProvider(&llm.MockConfig{
 		Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}},
-	}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: limitsStore})
 	mgr.Limits.SetMaxIterations(99)
 
@@ -185,7 +185,7 @@ func TestManagerEffectiveLimitsUsesProjectOverlay(t *testing.T) {
 func TestManagerEffectiveLimitsWithoutProviderUsesStaticCfg(t *testing.T) {
 	cfg := settings.DefaultSessionLimits()
 	cfg.MaxIterations = 7
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: cfg, Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: cfg, Cost: nil}, toolstest.NewRegistry())
 	sess := &api.Session{WorkspacePath: t.TempDir()}
 	limits := mgr.Limits.Effective(t.Context(), sess)
 	if limits.MaxIterations != 7 {

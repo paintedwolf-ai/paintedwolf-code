@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
@@ -149,7 +150,7 @@ func (noFullScans) RequestFull(context.Context, string, []string, api.ScanTrigge
 func TestScanQueryAccountingViewReadsWorkflowAccounting(t *testing.T) {
 	ledger := &inventoryLedger{}
 	accounting := &recordingAccounting{}
-	scanners := &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}
+	scanners := &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register", RegisterScanTools(reg, ledger, ResultViews{}, scanners, noFullScans{}, nil, nil, accounting))
 	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: t.TempDir(), IsPrimary: true}}, ActiveRootID: "root"}}

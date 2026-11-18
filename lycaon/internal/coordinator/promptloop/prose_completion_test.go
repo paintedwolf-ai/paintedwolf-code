@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -56,7 +57,7 @@ func TestWorkerTerminalTurnRecordsOnlyAcceptedStructuredCompletion(t *testing.T)
 			if !ok {
 				t.Fatal("missing completion definition")
 			}
-			registry := tools.NewStubRegistry()
+			registry := toolstest.NewRegistry()
 			testutil.FailErr(t, "register completion handler", registry.Register(workertools.CompleteLegTool, def.Handler))
 			testutil.FailErr(t, "register mutation sentinel", registry.Register("write", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				t.Error("terminal turn executed a source mutation")
@@ -96,7 +97,7 @@ func TestProseCompletionRequiresUsablePayload(t *testing.T) {
 				sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 				testutil.FailErr(t, "create session", err)
 				calls := 0
-				registry := tools.NewStubRegistry()
+				registry := toolstest.NewRegistry()
 				testutil.FailErr(t, "register read", registry.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 					calls++
 					return "file bytes", nil
@@ -167,7 +168,7 @@ func TestProseCompletionRecoversFromBookkeepingToolCallAttempt(t *testing.T) {
 	}}
 	deps := promptloop.StoreDeps(messages)
 	deps.Model.LLM = client
-	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Tools = toolstest.NewRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Context.Limits = loopTestLimits(1)
 	deps.Context.CoordinatorFrame = investigateCoordinatorContext()

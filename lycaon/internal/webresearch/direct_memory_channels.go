@@ -112,14 +112,6 @@ func recordSeen(scope string, hits []WebHit) {
 	}
 }
 
-func resetDirectMemory() {
-	seedPlanCache.reset()
-	searchResultCache.reset()
-	searchMemory.Lock()
-	searchMemory.scopes = make(map[string]*seenScope)
-	searchMemory.Unlock()
-}
-
 // memoryWireProviderID labels hits served from the persistent web index.
 const memoryWireProviderID = "memory"
 

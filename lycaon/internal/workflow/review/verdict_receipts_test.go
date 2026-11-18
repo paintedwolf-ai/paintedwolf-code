@@ -1,6 +1,7 @@
 package review_test
 
 import (
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	testdbseed "github.com/lycaon/lycaon/internal/testdbseed"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
@@ -108,7 +109,7 @@ func receiptManager(t *testing.T) (*workflow.RunManager, *blueprint.Manager, db.
 	sessStore := store.NewSQL(sqlDB)
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs failed", err)
-	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
+	blueprintStore := blueprinttest.NewFileStore(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	blueprintMgr.Approvals = blueprint.NewApprovalStore(sqlDB, authzcontext.SQLRecorder(sqlDB))
 	mgr := workflow.NewManager(testRunStore(t, sqlDB), sessStore, manifestRegistry, nil)
