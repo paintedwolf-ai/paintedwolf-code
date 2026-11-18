@@ -12,10 +12,10 @@ import (
 // MCPBindings resolves the echo and widget bindings in the fixture pack.
 func MCPBindings(t *testing.T) []bindings.Binding {
 	t.Helper()
-	root := filepath.Join(testutil.CheckoutRoot(t), "lycaon", "internal", "testutil", "extpackstest", "testdata", "bindings")
-	manifest, err := extpacks.LoadManifest(root)
+	root := extpacks.OnDisk(filepath.Join(testutil.CheckoutRoot(t), "lycaon", "internal", "testutil", "extpackstest", "testdata", "bindings"))
+	manifest, err := extpacks.ManifestAt(root)
 	testutil.FailErr(t, "load binding fixture manifest", err)
-	pack, err := extpacks.InventoryPack(extpacks.Pack{ID: manifest.ID, Root: extpacks.OnDisk(root)}, manifest)
+	pack, err := extpacks.InventoryPack(extpacks.Pack{ID: manifest.ID, Root: root}, manifest)
 	testutil.FailErr(t, "inventory binding fixture pack", err)
 	desired := extpacks.EmptyDesired()
 	desired.Packs = []extpacks.DesiredPack{{ID: manifest.ID}}
