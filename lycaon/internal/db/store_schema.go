@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -278,8 +279,28 @@ func prepareStoreSchema(ctx context.Context, sqlDB *sql.DB, created bool) error 
 	return prepareIntegrity(ctx, sqlDB)
 }
 
-// referenceShape reads schema.sql into an in-memory store.
+// referenceShapes caches the embedded schema's shape; callers only read it.
+var referenceShapes struct {
+	sync.Mutex
+	shape *Shape
+}
+
+// referenceShape reads schema.sql into an in-memory store once per process.
 func referenceShape(ctx context.Context) (Shape, error) {
+	referenceShapes.Lock()
+	defer referenceShapes.Unlock()
+	if referenceShapes.shape != nil {
+		return *referenceShapes.shape, nil
+	}
+	shape, err := buildReferenceShape(ctx)
+	if err != nil {
+		return Shape{}, err
+	}
+	referenceShapes.shape = &shape
+	return shape, nil
+}
+
+func buildReferenceShape(ctx context.Context) (Shape, error) {
 	// The in-memory reference is not store work.
 	ref, err := sql.Open("sqlite", "file:schemaref?mode=memory&cache=private")
 	if err != nil {
