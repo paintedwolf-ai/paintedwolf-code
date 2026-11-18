@@ -43,6 +43,8 @@ func TestToolchainParsing(t *testing.T) {
 type fakeToolchainHost struct {
 	path     atomic.Value
 	delay    time.Duration
+	slow     string
+	queries  []string
 	mu       sync.Mutex
 	lookups  []string
 	versions map[string]string
@@ -62,7 +64,7 @@ func (f *fakeToolchainHost) host() toolchainHost {
 			}
 			return "", exec.ErrNotInPath
 		},
-		version: func(ctx context.Context, binary string, _ []string) string {
+		version: func(ctx context.Context, binary string, _ []string) (string, error) {
 			n := f.running.Add(1)
 			defer f.running.Add(-1)
 			for {
@@ -71,15 +73,22 @@ func (f *fakeToolchainHost) host() toolchainHost {
 					break
 				}
 			}
-			// A slow binary answers after delay unless the probe gives up first.
-			if f.delay > 0 {
+			name := filepath.Base(binary)
+			f.mu.Lock()
+			f.queries = append(f.queries, name)
+			f.mu.Unlock()
+			delay := f.delay
+			if name == f.slow {
+				delay = time.Hour
+			}
+			if delay > 0 {
 				select {
-				case <-time.After(f.delay):
+				case <-time.After(delay):
 				case <-ctx.Done():
-					return ""
+					return "", ctx.Err()
 				}
 			}
-			return f.versions[filepath.Base(binary)]
+			return f.versions[name], nil
 		},
 	}
 }
@@ -100,10 +109,10 @@ func TestToolchainsNeverBlockAssemblyAndUseResolvedPath(t *testing.T) {
 			t.Fatalf("first read returned %v before any probe completed", got)
 		}
 		probes.mu.Lock()
-		settledDuringFirstRead := len(probes.results)
+		settledDuringFirstRead := !probes.results[pathHash("/resolved/bin")+":go,javascript,typescript"].inflight
 		probes.mu.Unlock()
-		if settledDuringFirstRead != 0 {
-			t.Fatalf("first read waited for %d probes to settle instead of returning immediately", settledDuringFirstRead)
+		if settledDuringFirstRead {
+			t.Fatal("first read waited for probes instead of returning immediately")
 		}
 		probes.wg.Wait()
 		got := probes.toolchains(t.Context(), []string{"Go", "TypeScript"})
@@ -121,29 +130,61 @@ func TestToolchainsNeverBlockAssemblyAndUseResolvedPath(t *testing.T) {
 	})
 }
 
-func TestInterruptedToolchainProbeIsNotCached(t *testing.T) {
+func TestToolchainProbeKeepsAnswersAndRetriesOnlyUnknowns(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		// Each version query outlives its timeout, as a hung binary would.
-		fake := newFakeToolchainHost(time.Hour)
-		probes := newToolchainProbes(fake.host())
-		probes.toolchains(t.Context(), []string{"Go"})
-		probes.wg.Wait()
-		probes.mu.Lock()
-		_, cached := probes.results[pathHash("/resolved/bin")+":go"]
-		_, retry := probes.failed[pathHash("/resolved/bin")+":go"]
-		probes.mu.Unlock()
-		if cached || !retry {
-			t.Fatalf("interrupted probe cached=%v retry scheduled=%v", cached, retry)
+		fake := newFakeToolchainHost(time.Second)
+		fake.slow = "gradle"
+		var focus []string
+		for _, tc := range knownToolchains {
+			fake.versions[tc.binary] = "v1.2.3"
+			focus = append(focus, tc.language)
 		}
-		// The retry waits out its interval instead of re-probing on every assembly.
-		probes.toolchains(t.Context(), []string{"Go"})
-		probes.mu.Lock()
-		inflight := probes.inflight[pathHash("/resolved/bin")+":go"]
-		probes.mu.Unlock()
-		if inflight {
-			t.Fatal("interrupted probe was retried before its interval")
+		probes := newToolchainProbes(fake.host())
+		probes.toolchains(t.Context(), focus)
+		probes.wg.Wait()
+		if got := probes.toolchains(t.Context(), focus); len(got) != len(knownToolchains)-1 || slices.Contains(got, "gradle 1.2.3") {
+			t.Fatalf("versions = %v; want every answer except the interrupted query", got)
+		}
+		probes.wg.Wait()
+		if got := len(fake.queries); got != len(knownToolchains) {
+			t.Fatalf("first round ran %d queries", got)
+		}
+
+		for _, delay := range []time.Duration{time.Minute, 2 * time.Minute, 4 * time.Minute} {
+			fake.queries = nil
+			time.Sleep(delay - time.Nanosecond)
+			probes.toolchains(t.Context(), focus)
+			probes.wg.Wait()
+			if len(fake.queries) != 0 {
+				t.Fatalf("retried before %v: %v", delay, fake.queries)
+			}
+			time.Sleep(time.Nanosecond)
+			probes.toolchains(t.Context(), focus)
+			probes.wg.Wait()
+			if !slices.Equal(fake.queries, []string{"gradle"}) {
+				t.Fatalf("queries at %v = %v, want gradle only", delay, fake.queries)
+			}
+		}
+
+		fake.slow = ""
+		time.Sleep(8 * time.Minute)
+		probes.toolchains(t.Context(), focus)
+		probes.wg.Wait()
+		if got := probes.toolchains(t.Context(), focus); !slices.Contains(got, "gradle 1.2.3") {
+			t.Fatalf("successful retry missing from %v", got)
 		}
 	})
+}
+
+func TestToolchainRetryBackoffIsCapped(t *testing.T) {
+	probes := newToolchainProbes(toolchainHost{
+		lookPath: func(name, _ string) (string, error) { return name, nil },
+		version:  func(context.Context, string, []string) (string, error) { return "", exec.ErrTimeout },
+	})
+	answer := probes.probe(t.Context(), "", knownToolchains[0], toolchainResultTTL)
+	if answer.backoff != toolchainResultTTL {
+		t.Fatalf("backoff = %v, want %v", answer.backoff, toolchainResultTTL)
+	}
 }
 
 func TestCanceledCallerDoesNotCancelTheRefresh(t *testing.T) {

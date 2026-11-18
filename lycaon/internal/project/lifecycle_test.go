@@ -264,7 +264,13 @@ func TestSQLProjectTouchEventPreservesQueuedPromotion(t *testing.T) {
 	destination := t.TempDir()
 	_, err = reg.CreatePromotion(ctx, p.ID, destination, true)
 	testutil.FailErr(t, "queue promotion", err)
-	testutil.FailErr(t, "touch last opened", reg.TouchLastOpened(ctx, p.ID))
+	_, err = reg.Create(ctx, project.CreateParams{Name: "More recent project"})
+	testutil.FailErr(t, "create more recent project", err)
+	moved, err := reg.TouchLastOpened(ctx, p.ID)
+	testutil.FailErr(t, "touch last opened", err)
+	if !moved {
+		t.Fatal("project did not move to the front")
+	}
 
 	var raw string
 	testutil.FailErr(t, "read touch event", sqlDB.QueryRowContext(ctx, `

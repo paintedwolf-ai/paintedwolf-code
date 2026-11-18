@@ -2963,6 +2963,20 @@ func (q *Queries) ListWorkerJobMessagesTail(ctx context.Context, arg ListWorkerJ
 	return items, nil
 }
 
+const markSessionSeen = `-- name: MarkSessionSeen :exec
+UPDATE sessions SET seen_at = ?1 WHERE id = ?2
+`
+
+type MarkSessionSeenParams struct {
+	SeenAt sql.NullString `json:"seen_at"`
+	ID     string         `json:"id"`
+}
+
+func (q *Queries) MarkSessionSeen(ctx context.Context, arg MarkSessionSeenParams) error {
+	_, err := q.db.ExecContext(ctx, markSessionSeen, arg.SeenAt, arg.ID)
+	return err
+}
+
 const maxMessageScreenGenerationInTree = `-- name: MaxMessageScreenGenerationInTree :one
 WITH RECURSIVE tree(id) AS (
     SELECT sessions.id FROM sessions WHERE sessions.id = ?
@@ -3211,6 +3225,28 @@ func (q *Queries) SessionHasMessageBeforeOrd(ctx context.Context, arg SessionHas
 	var has_more int64
 	err := row.Scan(&has_more)
 	return has_more, err
+}
+
+const sessionSeenCrossesFinish = `-- name: SessionSeenCrossesFinish :one
+SELECT EXISTS (
+    SELECT 1 FROM turns
+    WHERE session_id = ?1 AND status = 'complete'
+      AND completed_at > COALESCE(?2, '')
+      AND completed_at <= ?3
+)
+`
+
+type SessionSeenCrossesFinishParams struct {
+	SessionID      string         `json:"session_id"`
+	PreviousSeenAt sql.NullString `json:"previous_seen_at"`
+	SeenAt         sql.NullString `json:"seen_at"`
+}
+
+func (q *Queries) SessionSeenCrossesFinish(ctx context.Context, arg SessionSeenCrossesFinishParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, sessionSeenCrossesFinish, arg.SessionID, arg.PreviousSeenAt, arg.SeenAt)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const setRewindOperationPhase = `-- name: SetRewindOperationPhase :execrows
