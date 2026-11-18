@@ -936,10 +936,21 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  # Reuses the unsigned artifacts prepared for this exact source, or builds them without secrets.
+  prepare:
+    needs: classify
+    if: ${{ needs.classify.outputs.publish == 'true' }}
+    uses: ./.github/workflows/release-prepare.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      source_sha: ${{ needs.classify.outputs.source_sha }}
+
   # Observe cache publication before immutable discovery metadata is signed.
   linux-delivery:
-    needs: [classify, ship-gates, publish-artifacts, publish-linux-repositories]
-    if: ${{ !cancelled() && needs.classify.outputs.publish == 'true' && needs.classify.outputs.linux_public == 'true' && needs.publish-linux-repositories.result == 'success' }}
+    needs: [classify, prepare, ship-gates, publish-artifacts, publish-linux-repositories]
+    if: ${{ !cancelled() && needs.classify.outputs.publish == 'true' && needs.classify.outputs.linux_public == 'true' && needs.prepare.result == 'success' && needs.publish-linux-repositories.result == 'success' }}
     uses: ./.github/workflows/release-linux-delivery.yml
     permissions:
       contents: read
@@ -950,6 +961,7 @@ jobs:
       source_sha: ${{ needs.classify.outputs.source_sha }}
       version: ${{ needs.classify.outputs.version }}
       channel: ${{ needs.classify.outputs.channel }}
+      preparation_run_id: ${{ needs.prepare.outputs.run_id }}
 
   publish-immutable:
     needs: [classify, ship-gates, publish-artifacts, publish-linux-repositories, linux-delivery]
