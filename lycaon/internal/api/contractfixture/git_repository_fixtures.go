@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
@@ -149,7 +149,7 @@ func NewGitBoard() *board.SnapshotBuilder {
 	return &board.SnapshotBuilder{Git: manager, StatusCache: git.NewStatusCache(manager)}
 }
 
-func NewGitServer(t *testing.T, sessions session.Store, reg project.Registry, opts ...TestDeps) *hostapi.Server {
+func NewGitServer(t *testing.T, sessions *store.Repositories, reg project.Registry, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: sessions, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
