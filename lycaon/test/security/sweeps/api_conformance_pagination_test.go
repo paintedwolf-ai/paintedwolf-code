@@ -188,9 +188,27 @@ func (st pageStream) rows(path string, body []byte) map[string][]any {
 	_ = json.Unmarshal(body, &envelope)
 	out := make(map[string][]any, len(st.arrays))
 	for _, array := range st.arrays {
-		out[array], _ = envelope[array].([]any)
+		out[array] = nestedRows(envelope, array)
 	}
 	return out
+}
+
+// nestedRows reads an array, or with "outer[].inner" the inner arrays of
+// every outer member, end to end.
+func nestedRows(envelope map[string]any, path string) []any {
+	outer, inner, nested := strings.Cut(path, "[].")
+	list, _ := envelope[outer].([]any)
+	if !nested {
+		return list
+	}
+	var rows []any
+	for _, member := range list {
+		if fields, ok := member.(map[string]any); ok {
+			items, _ := fields[inner].([]any)
+			rows = append(rows, items...)
+		}
+	}
+	return rows
 }
 
 // continuation is the cursor body offers for the next page: a string, or a

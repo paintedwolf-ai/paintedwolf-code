@@ -44,7 +44,7 @@ paths:
       x-multi-stream-list:
         cursor: cursor
         next: next_cursor
-        bounded: [files]
+        bounded: ["files[].effects"]
       summary: List Walk effects by lens baseline
       description: |
         File-first cross-session groups. baseline is a query parameter only

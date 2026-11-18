@@ -350,11 +350,26 @@ func multiStreamViolations(op conventionOp, code string, decl any, params, props
 	}
 	for _, raw := range bounded {
 		name := asString(raw)
-		if props[name] == nil || !schemaHasType(spec.effective(props[name]), "array") {
+		if !spec.declaresArray(props, name) {
 			violations = append(violations, fmt.Sprintf("%s: multi-stream: %s body has no array %q", op.ID, code, name))
 		}
 	}
 	return violations
+}
+
+// declaresArray reports whether props holds the array path names: an array
+// property, or with "outer[].inner" an array property of the outer array's items.
+func (s *conventionSpec) declaresArray(props map[string]map[string]any, path string) bool {
+	outer, inner, nested := strings.Cut(path, "[].")
+	schema := props[outer]
+	if schema == nil || !schemaHasType(s.effective(schema), "array") {
+		return false
+	}
+	if !nested {
+		return true
+	}
+	items, _ := s.objectShape(s.effective(asMap(s.effective(schema)["items"])))
+	return items[inner] != nil && schemaHasType(s.effective(items[inner]), "array")
 }
 
 var forbiddenPageParameters = map[string]bool{
