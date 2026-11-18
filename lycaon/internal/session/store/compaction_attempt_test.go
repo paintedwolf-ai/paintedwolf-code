@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/messageview"
@@ -35,14 +34,9 @@ func TestCompactionAttemptSurvivesStoreReopen(t *testing.T) {
 
 func TestCompactionPublicationRejectsStaleSourceAtomically(t *testing.T) {
 
-	var st interface {
-		compactionMutationStore
-		Get(ctx context.Context, id string) (*api.Session, error)
-	}
-
 	database := testdbfixture.Open(t, "publication.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
-	st = NewSQL(database)
+	st := NewSQL(database)
 
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)

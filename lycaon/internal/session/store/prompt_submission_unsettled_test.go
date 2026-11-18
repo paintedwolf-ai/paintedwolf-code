@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"encoding/json"
 	"slices"
 	"testing"
@@ -15,16 +14,13 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type unsettledPromptStore interface {
-	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-	PutPromptSubmission(context.Context, PromptSubmission) (*PromptSubmission, bool, error)
-	ClaimPromptSubmission(context.Context, string) (*PromptSubmission, bool, error)
-	FinishPromptSubmission(context.Context, string, string, PromptSubmissionStatus, string, PromptSubmissionFailure) error
-	CancelQueuedPromptSubmissions(context.Context, []string) error
-	ListUnsettledUserPromptSubmissionIDs(context.Context, string) ([]string, error)
+func openUnsettledPromptStore(t *testing.T) *SQL {
+	handle := testdbfixture.Open(t, "unsettled.db")
+	testdbseed.InsertProjectRoot(t, handle, testdbseed.DefaultProjectID, t.TempDir())
+	return NewSQL(handle)
 }
 
-func admitTestPrompt(t *testing.T, st unsettledPromptStore, sess *api.Session, origin PromptSubmissionOrigin) *PromptSubmission {
+func admitTestPrompt(t *testing.T, st *SQL, sess *api.Session, origin PromptSubmissionOrigin) *PromptSubmission {
 	t.Helper()
 	sender := ""
 	if origin == PromptSubmissionOriginUser {
@@ -39,44 +35,31 @@ func admitTestPrompt(t *testing.T, st unsettledPromptStore, sess *api.Session, o
 }
 
 func TestUnsettledUserPromptsAreQueuedOrRunningInAdmissionOrder(t *testing.T) {
-	for _, fixture := range []struct {
-		name string
-		open func(t *testing.T) unsettledPromptStore
-	}{
-		{name: "sql", open: func(t *testing.T) unsettledPromptStore {
-			handle := testdbfixture.Open(t, "unsettled.db")
-			testdbseed.InsertProjectRoot(t, handle, testdbseed.DefaultProjectID, t.TempDir())
-			return NewSQL(handle)
-		}},
-	} {
-		t.Run(fixture.name, func(t *testing.T) {
-			st := fixture.open(t)
-			sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
-			testutil.FailErr(t, "create session", err)
+	st := openUnsettledPromptStore(t)
+	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
 
-			running := admitTestPrompt(t, st, sess, PromptSubmissionOriginUser)
-			completed := admitTestPrompt(t, st, sess, PromptSubmissionOriginUser)
-			canceled := admitTestPrompt(t, st, sess, PromptSubmissionOriginUser)
-			admitTestPrompt(t, st, sess, PromptSubmissionOriginLoopWake)
-			queued := admitTestPrompt(t, st, sess, PromptSubmissionOriginUser)
+	running := admitTestPrompt(t, st, sess, PromptSubmissionOriginUser)
+	completed := admitTestPrompt(t, st, sess, PromptSubmissionOriginUser)
+	canceled := admitTestPrompt(t, st, sess, PromptSubmissionOriginUser)
+	admitTestPrompt(t, st, sess, PromptSubmissionOriginLoopWake)
+	queued := admitTestPrompt(t, st, sess, PromptSubmissionOriginUser)
 
-			_, claimed, err := st.ClaimPromptSubmission(t.Context(), running.ID)
-			testutil.FailErr(t, "claim running prompt", err)
-			if !claimed {
-				t.Fatal("running prompt was not claimable")
-			}
-			done, _, err := st.ClaimPromptSubmission(t.Context(), completed.ID)
-			testutil.FailErr(t, "claim completed prompt", err)
-			testutil.FailErr(t, "complete prompt", st.FinishPromptSubmission(t.Context(), done.ID, done.ClaimToken,
-				PromptSubmissionComplete, "", PromptSubmissionFailure{}))
-			testutil.FailErr(t, "cancel prompt", st.CancelQueuedPromptSubmissions(t.Context(), []string{canceled.ID}))
+	_, claimed, err := st.ClaimPromptSubmission(t.Context(), running.ID)
+	testutil.FailErr(t, "claim running prompt", err)
+	if !claimed {
+		t.Fatal("running prompt was not claimable")
+	}
+	done, _, err := st.ClaimPromptSubmission(t.Context(), completed.ID)
+	testutil.FailErr(t, "claim completed prompt", err)
+	testutil.FailErr(t, "complete prompt", st.FinishPromptSubmission(t.Context(), done.ID, done.ClaimToken,
+		PromptSubmissionComplete, "", PromptSubmissionFailure{}))
+	testutil.FailErr(t, "cancel prompt", st.CancelQueuedPromptSubmissions(t.Context(), []string{canceled.ID}))
 
-			got, err := st.ListUnsettledUserPromptSubmissionIDs(t.Context(), sess.ID)
-			testutil.FailErr(t, "list unsettled prompts", err)
-			if want := []string{running.ID, queued.ID}; !slices.Equal(got, want) {
-				t.Fatalf("unsettled = %v, want the running and queued human prompts %v", got, want)
-			}
-		})
+	got, err := st.ListUnsettledUserPromptSubmissionIDs(t.Context(), sess.ID)
+	testutil.FailErr(t, "list unsettled prompts", err)
+	if want := []string{running.ID, queued.ID}; !slices.Equal(got, want) {
+		t.Fatalf("unsettled = %v, want the running and queued human prompts %v", got, want)
 	}
 }
 

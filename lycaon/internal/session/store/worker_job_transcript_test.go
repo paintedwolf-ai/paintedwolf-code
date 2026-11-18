@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -15,13 +14,6 @@ const (
 	workerRunA = "11111111-1111-4111-8111-111111111111"
 	workerRunB = "22222222-2222-4222-8222-222222222222"
 )
-
-type workerTranscriptStore interface {
-	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-	AppendMessages(context.Context, string, ...api.Message) error
-	GetWorkerJobMessages(context.Context, string, string) ([]api.Message, error)
-	GetTranscriptPage(context.Context, string, api.TranscriptPageQuery) (api.SessionTranscriptPage, error)
-}
 
 func TestWorkerJobTranscriptPagination(t *testing.T) {
 	database := testdbfixture.Open(t, "worker-transcript.db")
@@ -40,7 +32,7 @@ func TestWorkerJobTranscriptPagination(t *testing.T) {
 	assertWorkerJobTranscriptPagination(t, store, session.ID)
 }
 
-func assertWorkerJobTranscriptPagination(t *testing.T, store workerTranscriptStore, sessionID string) {
+func assertWorkerJobTranscriptPagination(t *testing.T, store *SQL, sessionID string) {
 	t.Helper()
 	if _, err := store.GetWorkerJobMessages(t.Context(), sessionID, ""); err == nil {
 		t.Fatal("empty worker job id was accepted")

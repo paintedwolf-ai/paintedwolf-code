@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -13,20 +12,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type modelExecutionStore interface {
-	SettledModelOutputIteration(context.Context, string) (int, error)
-	turnTestStore
-	ConfigureModelLimit(context.Context, string, int) error
-	AdmitModelResponse(context.Context, string, string) error
-	SealTurnCloseout(context.Context, TurnCloseoutCommit) error
-	FinishTurn(context.Context, string, string, TurnStatus, string, string, string) (Turn, error)
-}
-
 func TestModelAllowanceUsesSettledOutputsAcrossTurns(t *testing.T) {
 
-	var st modelExecutionStore
-
-	st = openTurnSQLStore(t).(modelExecutionStore)
+	st := openTurnSQLStore(t)
 
 	ctx := t.Context()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -75,11 +63,8 @@ func TestModelAllowanceUsesSettledOutputsAcrossTurns(t *testing.T) {
 	if err := st.SealTurnCloseout(ctx, TurnCloseoutCommit{TurnID: second.Turn.ID, AttemptID: second.Attempt.ID, OutputID: last.ID, Message: &api.Message{ID: last.MessageID, Content: "Changed"}, CheckpointJSON: "{}"}); err == nil {
 		t.Fatal("sealed closeout changed")
 	}
-	if sqlStore, ok := st.(*SQL); ok {
-		reopened := NewSQL(sqlStore.db)
-		if err := reopened.AdmitModelResponse(ctx, sess.ID, second.Attempt.ID); !errors.Is(err, ErrModelResponseLimit) {
-			t.Fatalf("reopened allowance = %v", err)
-		}
+	if err := NewSQL(st.db).AdmitModelResponse(ctx, sess.ID, second.Attempt.ID); !errors.Is(err, ErrModelResponseLimit) {
+		t.Fatalf("reopened allowance = %v", err)
 	}
 
 }
@@ -107,7 +92,7 @@ func TestCloseoutAuthorshipDoesNotFollowAReusedDraftSlot(t *testing.T) {
 }
 
 func TestSQLCloseoutSurvivesHostTurnAndClearsOnNewUserAdmission(t *testing.T) {
-	st := openTurnSQLStore(t).(*SQL)
+	st := openTurnSQLStore(t)
 	ctx := t.Context()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -147,9 +132,7 @@ func TestSQLCloseoutSurvivesHostTurnAndClearsOnNewUserAdmission(t *testing.T) {
 
 func TestSealedCloseoutRecoversWithoutRequeueingTheModel(t *testing.T) {
 
-	var st modelExecutionStore
-
-	st = openTurnSQLStore(t).(modelExecutionStore)
+	st := openTurnSQLStore(t)
 
 	ctx := t.Context()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -200,7 +183,7 @@ func TestSealedCloseoutRecoversWithoutRequeueingTheModel(t *testing.T) {
 }
 
 func TestCloseoutRollsBackWhenFinalizingCheckpointLosesItsClaim(t *testing.T) {
-	st := openTurnSQLStore(t).(*SQL)
+	st := openTurnSQLStore(t)
 	ctx := t.Context()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -225,9 +208,7 @@ func TestSettleModelOutputIterationCollisionReturnsTypedError(t *testing.T) {
 		t.Fatalf("nil collision error = %q want %q", got, ErrModelOutputIterationCollision.Error())
 	}
 
-	var st modelExecutionStore
-
-	st = openTurnSQLStore(t).(modelExecutionStore)
+	st := openTurnSQLStore(t)
 
 	ctx := t.Context()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)

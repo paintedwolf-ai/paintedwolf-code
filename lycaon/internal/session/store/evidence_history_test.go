@@ -18,15 +18,9 @@ func TestMergeReceiptsSurviveFileObservationAndStoreReload(t *testing.T) {
 
 	ctx := context.Background()
 	dir := t.TempDir()
-	var store interface {
-		Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-		CommitEvidenceToolResult(context.Context, string, string, string, map[string]any, string) (string, string, error)
-		LoadLedger(context.Context, string) (evidence.Ledger, error)
-	}
-
 	db := testdbfixture.OpenPath(t, filepath.Join(dir, "ledger.db"))
 	testdbseed.InsertProjectRoot(t, db, testdbseed.DefaultProjectID, dir)
-	store = NewSQL(db)
+	store := NewSQL(db)
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -46,9 +40,7 @@ func TestMergeReceiptsSurviveFileObservationAndStoreReload(t *testing.T) {
 	read := commit("read", "data/og_cards.yaml", `{"path":"data/og_cards.yaml","content":"1|<<<<<<< HEAD","offset":1,"end_line":1}`)
 	write := commit("write", "data/og_cards.yaml", `{"ok":true}`)
 	gitCommit := commit("git_commit", "", `{"available":true,"hash":"dfc9c6bb","paths":["data/og_cards.yaml"]}`)
-	if sqlStore, ok := store.(*SQL); ok {
-		store = NewSQL(sqlStore.db)
-	}
+	store = NewSQL(db)
 	ev, err := store.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "reload ledger", err)
 	for _, handle := range []string{merge, status, conflict, gitCommit} {
