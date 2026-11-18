@@ -65,6 +65,11 @@ var productionScanRoots = []string{
 	"internal/session",
 	"internal/coordinator",
 	"internal/workflow",
+	"internal/hitl",
+	"internal/llm/providers",
+	"internal/mcp",
+	"internal/toolexecution",
+	"internal/toolhost",
 }
 
 // These hooks may run before the visible user turn.
