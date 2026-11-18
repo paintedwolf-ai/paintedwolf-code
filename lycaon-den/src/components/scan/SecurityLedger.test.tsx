@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  CodeScan,
   FindingLedgerEntry,
   FindingLedgerResponse,
   SecurityOverview,
@@ -141,10 +142,10 @@ function mockClient() {
       scanners: [{ id: "opengrep-sast", label: "Static analysis" }],
       rejected: [],
     })),
-    getCodeScan: vi.fn(async () => {
+    getCodeScan: vi.fn<LycaonClient["getCodeScan"]>(async () => {
       throw new Error("the ledger does not read a run");
     }),
-    queryCodeScan: vi.fn(async () => {
+    queryCodeScan: vi.fn<LycaonClient["queryCodeScan"]>(async () => {
       throw new Error("the ledger does not read a run");
     }),
     startFullScan: vi.fn<LycaonClient["startFullScan"]>(async () => ({
@@ -442,11 +443,30 @@ describe("Security ledger", () => {
   });
 
   it("opens the run behind a row as the evidence for it", async () => {
+    const opened = entry({ rule: "rule-open" });
+    const run: CodeScan = {
+      id: "scan-9", categories: ["sast"], scanner_id: "opengrep-sast", status: "complete",
+      long_running: false, findings_count: 1, findings_stored: 1, created_at: "2026-09-10T10:00:00Z",
+    };
+    client.listCodeScans.mockResolvedValue({ scans: [run] });
+    client.getCodeScan.mockImplementation(async (_projectId, scanId) => {
+      if (scanId !== "scan-9") throw new Error(`unexpected run ${scanId}`);
+      return run;
+    });
+    client.queryCodeScan.mockImplementation(async (_projectId, scanId) => {
+      if (scanId !== "scan-9") throw new Error(`unexpected run ${scanId}`);
+      return { scan_id: "scan-9", findings: [opened.finding], guidance: [], total_match: 1 };
+    });
     renderStage();
     fireEvent.click(await screen.findByTestId("ledger-row"));
+    expect((await screen.findByTestId("ledger-detail")).textContent).toContain("rule-open");
+    expect(screen.getByTestId("ledger-fix-with-agent")).toBeTruthy();
     fireEvent.click(await screen.findByTestId("ledger-open-run"));
     await screen.findByTestId("scans-run-picker");
     expect(screen.queryByTestId("ledger-rows")).toBeNull();
+    await vi.waitFor(() => expect(client.getCodeScan).toHaveBeenCalledWith("proj-1", "scan-9", "summary"));
+    const row = await screen.findByTestId("scans-finding-row");
+    expect(row.textContent).toContain("internal/api/authz.go:11");
   });
 
   it("scopes an empty open tab to what the scans covered", async () => {

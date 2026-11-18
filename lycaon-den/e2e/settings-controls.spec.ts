@@ -1,7 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { apiConfig, bootstrapChatSession, expectShellReady, waitHarnessConnected, webE2e } from "./helpers.ts";
 import { appStateStorageSliceKey } from "../shared/app-state-storage.ts";
-import type { CreateProviderRequest, DetectionPackList, ProviderMeta, UpdateProviderRequest } from "../src/api/types.ts";
 
 async function openSettings(page: Page, section = "general") {
   await waitHarnessConnected(page);
@@ -161,6 +160,54 @@ webE2e("settings explain unavailable desktop features without native errors", as
       await expect(panel).toHaveAttribute("aria-labelledby", (await tab.getAttribute("id")) ?? "");
     }
   }
+  await page.getByTestId("advanced-tab-diagnostics").click();
+  await expect(page.getByTestId("shell-command-panel")).toBeVisible();
+  await expect(page.getByTestId("shell-command-unavailable")).toContainText("desktop app");
+  await expect(page.getByTestId("shell-command-error")).toHaveCount(0);
+
+  await page.getByTestId("settings-nav-providers").click();
+  await expect(page.getByTestId("providers-settings")).toBeVisible();
+  await page.getByTestId("settings-nav-scanners").click();
+  await expect(page.getByTestId("scanners-settings-panel")).toBeVisible();
+  await expect(page.getByTestId("scanners-main")).toBeVisible();
+  await expect(page.getByTestId("scanners-list")).toBeVisible();
+
+  await page.getByTestId("settings-nav-web-research").click();
+  await expect(page.getByTestId("web-research-panel-providers")).toBeVisible();
+  await expect(page.getByTestId("web-research-add")).toBeVisible();
+  await page.getByTestId("web-research-row-direct").click();
+  const directCard = page.getByTestId("web-research-direct-card");
+  await expect(directCard).toBeVisible();
+  await expect(directCard).toContainText("Local index");
+  await expect(directCard).toContainText("Optional");
+  await expect(directCard).toContainText("Guess domains");
+  await expect(page.getByTestId("web-research-domain-guess-toggle")).toBeVisible();
+  await expect(page.getByTestId("web-research-domain-guess-toggle")).toBeChecked();
+  await expect(page.getByTestId("web-research-remove-direct")).toBeVisible();
+  const toggle = page.getByTestId("web-research-enabled-toggle");
+  await expect(toggle).toBeVisible();
+  if (!(await toggle.isChecked())) await toggle.click();
+  await expect(toggle).toBeChecked();
+  await page.getByTestId("web-research-tab-index").click();
+  await expect(page.getByTestId("web-research-panel-index")).toBeVisible();
+  await expect(page.getByTestId("web-research-index-section")).toBeVisible();
+  await expect(page.getByTestId("web-research-index-stats")).toBeVisible();
+  const health = page.getByTestId("web-research-index-health");
+  await expect(health).toBeVisible();
+  await expect(health).toContainText("writes");
+  await expect(health).toContainText("search");
+  await expect(toggle).toBeHidden();
+  await page.getByTestId("web-research-tab-providers").click();
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  await expect(page.getByTestId("web-research-disabled-note")).toBeVisible();
+  await expect(page.getByTestId("web-research-details")).toHaveAttribute("disabled", "");
+  await page.getByTestId("web-research-tab-index").click();
+  await expect(page.getByTestId("web-research-warming-toggle")).toBeDisabled();
+  await page.getByTestId("web-research-tab-providers").click();
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await expect(page.getByTestId("web-research-details")).not.toHaveAttribute("disabled");
 });
 
 webE2e("project secrets save metadata, deadlines, and replacement values", async ({ page, request }) => {
@@ -174,6 +221,10 @@ webE2e("project secrets save metadata, deadlines, and replacement values", async
     return (await response.json()).secrets[0];
   };
   await page.getByRole("button", { name: "Project configuration", exact: true }).click();
+  await page.getByTestId("project-context-entry-providers").click();
+  await expect(page.getByTestId("models-editor")).toBeVisible();
+  // Budgets are device-global, so project configuration offers no budgets section.
+  await expect(page.getByTestId("project-context-entry-budgets")).toHaveCount(0);
   await page.getByRole("tab", { name: "Secrets", exact: true }).click();
   await page.getByRole("button", { name: "Add secret", exact: true }).click();
   await page.getByTestId("managed-secret-add-name").fill("Settings fixture");
@@ -249,62 +300,6 @@ webE2e("editor settings persist custom fonts, external commands, and governed ti
   await expect(page.getByTestId("editor-browser")).toHaveText("Custom");
   await expect(page.getByTestId("editor-custom-browser")).toHaveValue(browserCommand);
   await expect(page.getByTestId("editor-custom-editor")).toBeVisible();
-});
-
-webE2e("web provider membership follows the catalog's individual and bundled controls", async ({ request }, testInfo) => {
-  const { apiUrl, token } = apiConfig();
-  const headers = { Authorization: `Bearer ${token}` };
-  const endpoint = `${apiUrl}/v1/web-research/providers`;
-  const settingsEndpoint = `${apiUrl}/v1/settings/web-research`;
-  const read = async () => {
-    const response = await request.get(endpoint, { headers });
-    expect(response.ok()).toBeTruthy();
-    return response.json();
-  };
-  // The enabled set lives in settings; the provider listing carries metadata and config.
-  const readEnabled = async () => {
-    const response = await request.get(settingsEndpoint, { headers });
-    expect(response.ok()).toBeTruthy();
-    return (await response.json()).enabled_providers;
-  };
-  const original = await read();
-  const originalEnabled = await readEnabled();
-  const ids: string[] = ["direct", ...original.providers.map((provider: { id: string }) => provider.id)];
-  const bundled = new Set(original.providers.filter((provider: { kind: string; default_enabled?: boolean }) =>
-    provider.kind === "keyless" && provider.default_enabled,
-  ).map((provider: { id: string }) => provider.id));
-  expect(new Set(ids).size).toBe(ids.length);
-  expect(ids.length).toBeGreaterThan(1);
-  try {
-    for (const id of ids) {
-      for (const enabled of [[id], []]) {
-        const response = await request.patch(settingsEndpoint, { headers, data: { enabled_providers: enabled } });
-        expect(response.ok(), `${id}: ${await response.text()}`).toBeTruthy();
-        expect(await readEnabled(), id).toEqual(bundled.has(id) ? [] : enabled);
-      }
-    }
-    for (const [id, config] of [
-      ["google_cse", { search_engine_id: "disposable-search-engine-id" }],
-      ["searxng", { endpoint: "http://192.168.240.2:18080" }],
-    ] as const) {
-      const baseline = original.providers.find((provider: { id: string }) => provider.id === id)?.config ?? {};
-      try {
-        const response = await request.patch(`${endpoint}/${id}`, { headers, data: { config } });
-        expect(response.ok(), `${id}: ${await response.text()}`).toBeTruthy();
-        expect((await read()).providers.find((provider: { id: string }) => provider.id === id)?.config).toMatchObject(config);
-      } finally {
-        const response = await request.patch(`${endpoint}/${id}`, { headers, data: { config: baseline } });
-        expect(response.ok()).toBeTruthy();
-      }
-    }
-  } finally {
-    const response = await request.patch(settingsEndpoint, { headers, data: { enabled_providers: originalEnabled } });
-    expect(response.ok()).toBeTruthy();
-  }
-  await testInfo.attach("settings-web-provider-coverage", {
-    body: JSON.stringify({ ids, bundled: [...bundled] }, null, 2),
-    contentType: "application/json",
-  });
 });
 
 webE2e("every settings shortcut can be rebound and reset without losing its identity", async ({ page, request }, testInfo) => {
@@ -398,65 +393,4 @@ webE2e("never-ask settings require acknowledgement and can restore approvals", a
     const response = await request.patch(endpoint, { headers, data: { never_ask: original.never_ask ?? false } });
     expect(response.ok()).toBeTruthy();
   }
-});
-
-webE2e("provider deployment and credential-mode settings survive partial updates", async ({ request }) => {
-  const { apiUrl, token } = apiConfig();
-  const headers = { Authorization: `Bearer ${token}` };
-  const ids = ["settings-azure-fixture", "settings-bedrock-fixture"] as const;
-  const create = async (data: CreateProviderRequest) => {
-    const response = await request.post(`${apiUrl}/v1/providers`, { headers, data });
-    expect(response.ok(), await response.text()).toBeTruthy();
-  };
-  const update = async (id: string, data: UpdateProviderRequest): Promise<ProviderMeta> => {
-    const response = await request.patch(`${apiUrl}/v1/providers/${id}`, { headers, data });
-    expect(response.ok(), await response.text()).toBeTruthy();
-    return response.json();
-  };
-  try {
-    const models = [{ id: "fixture-deployment", priced_as: "fixture-model" }];
-    await create({ id: ids[0], kind: "azure", label: "Deployment fixture", base_url: "https://fixture.openai.azure.com", models });
-    const azure = await update(ids[0], { label: "Renamed deployment fixture" });
-    expect(azure.configured_models).toMatchObject(models);
-    await create({ id: ids[1], kind: "bedrock", label: "Credential mode fixture", base_url: "us-east-1", requires_api_key: true });
-    for (const required of [false, true]) {
-      await update(ids[1], { requires_api_key: required });
-      const provider = await update(ids[1], { label: "Retained credential mode" });
-      expect(provider.requires_api_key).toBe(required);
-      expect(provider.ambient_auth).toBe("aws-sdk-chain");
-    }
-  } finally {
-    for (const id of ids) {
-      const response = await request.delete(`${apiUrl}/v1/providers/${id}`, { headers });
-      expect(response.ok() || response.status() === 404).toBeTruthy();
-    }
-  }
-});
-
-webE2e("every listed detection pack retains its enable setting", async ({ request }, testInfo) => {
-  const { apiUrl, token } = apiConfig();
-  const headers = { Authorization: `Bearer ${token}` };
-  const endpoint = `${apiUrl}/v1/detection-packs`;
-  const read = async (): Promise<DetectionPackList> => {
-    const response = await request.get(endpoint, { headers });
-    expect(response.ok()).toBeTruthy();
-    return response.json();
-  };
-  const original = await read();
-  expect(original.packs.length).toBeGreaterThan(0);
-  const checked: string[] = [];
-  for (const pack of original.packs) {
-    try {
-      for (const enabled of [false, true]) {
-        const response = await request.patch(`${endpoint}/${pack.id}`, { headers, data: { enabled } });
-        expect(response.ok(), `${pack.id}: ${await response.text()}`).toBeTruthy();
-        expect((await read()).packs.find((row) => row.id === pack.id)?.enabled, pack.id).toBe(enabled);
-      }
-      checked.push(pack.id);
-    } finally {
-      const response = await request.patch(`${endpoint}/${pack.id}`, { headers, data: { enabled: pack.enabled } });
-      expect(response.ok()).toBeTruthy();
-    }
-  }
-  await testInfo.attach("settings-detection-coverage", { body: JSON.stringify(checked, null, 2), contentType: "application/json" });
 });

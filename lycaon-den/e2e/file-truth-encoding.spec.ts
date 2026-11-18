@@ -220,10 +220,10 @@ webE2e("file truth: open tabs recover as external file types change", async ({ p
   const seeded = await openProjectFilesFixture(page, request, {
     prefix: "file-truth",
     name: "FileTruth",
-    seed: (root) => writeFileSync(
-      path.join(root, "changing.txt"),
-      Buffer.from([0, 1, 2, 3]),
-    ),
+    seed: (root) => {
+      writeFileSync(path.join(root, "changing.txt"), Buffer.from([0, 1, 2, 3]));
+      writeFileSync(path.join(root, "huge.txt"), "x".repeat(4 * 1024 * 1024 + 1));
+    },
   });
   await openTreeFile(page, "changing.txt");
   const file = path.join(seeded.root, "changing.txt");
@@ -248,6 +248,10 @@ webE2e("file truth: open tabs recover as external file types change", async ({ p
   await expect(host).toBeVisible({ timeout: 15_000 });
   await expect(host.locator(".cm-content")).toContainText("small again");
   await page.screenshot({ path: path.join(screenshotDir, "file-type-recovery.png") });
+
+  // A file already past the limit opens straight into the reader.
+  await openTreeFile(page, "huge.txt");
+  await expect(page.getByTestId("source-reader").filter({ visible: true })).toContainText("Read-only · 4.0 MB", { timeout: 15_000 });
 });
 
 webE2e("file truth: remembered byte order survives refresh and reopening", async ({ page, request }) => {

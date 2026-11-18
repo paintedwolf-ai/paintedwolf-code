@@ -135,11 +135,29 @@ modelIndependentWebE2e("file bytes paint during tab motion and joining keeps the
 
 modelIndependentWebE2e("opening and revisiting files paints each one, keeps one tab per file and records timing", async ({ page, request }, testInfo) => {
   const names = Array.from({ length: 12 }, (_, index) => `file-${String(index).padStart(2, "0")}.ts`);
+  const warnings: string[] = [];
+  await page.addInitScript(() => {
+    const warn = console.warn.bind(console);
+    console.warn = (...args: unknown[]) => {
+      if (args.some((value) => String(value).includes("computations created outside"))) {
+        warn(...args, new Error("Reactive computation trace").stack);
+      } else {
+        warn(...args);
+      }
+    };
+  });
+  page.on("console", (message) => {
+    if (message.type() === "warning" && message.text().includes("computations created outside")) {
+      warnings.push(message.text());
+    }
+  });
   await openProjectFilesFixture(page, request, {
     prefix: "file-navigation",
     name: "File navigation",
     seed: (root) => {
       for (const name of names) writeFileSync(path.join(root, name), `// ${name}\n` + "export const value = 1;\n".repeat(400));
+      writeFileSync(path.join(root, "first.md"), "# First document\n");
+      writeFileSync(path.join(root, "second.md"), "# Second document\n");
     },
   });
   const samples: { path: string; kind: string; duration: number }[] = [];
@@ -168,7 +186,17 @@ modelIndependentWebE2e("opening and revisiting files paints each one, keeps one 
   const timingPath = testInfo.outputPath("file-navigation-timing.json");
   writeFileSync(timingPath, JSON.stringify(samples, null, 2));
   await testInfo.attach("file-navigation-timing", { path: timingPath, contentType: "application/json" });
-  expect(await page.getByTestId("files-tab").count()).toBe(names.length);
+  expect(await page.locator('[data-testid="files-tab"][data-path$=".ts"]').count()).toBe(names.length);
+  // Editor activation must not create Solid computations outside an owner.
+  for (const name of ["first.md", "second.md", "first.md"]) {
+    await page.getByTestId("files-tree-file").filter({ hasText: name }).click();
+    await expect(page.locator(".den-files-editor__status:visible")).toHaveAttribute("data-editor-identity", "editing");
+    await page.getByRole("button", { name: "Project configuration", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Project configuration", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Close project configuration", exact: true }).click();
+    await expect(page.locator(".den-files-editor__status:visible")).toHaveAttribute("data-editor-identity", "editing");
+  }
+  expect(warnings).toEqual([]);
 });
 
 modelIndependentWebE2e("outbox inventory follows atomic pending-work transitions", async ({ page }) => {

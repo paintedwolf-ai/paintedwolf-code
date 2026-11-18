@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { createSettingsStore } from "../../../store/settings-store.ts";
 import { includedProvider } from "../../../test/local-generation-fixture.ts";
+import { providers as remoteProviders } from "../../../test/provider-panel-fixture.tsx";
 import { ProvidersPanel } from "./ProvidersPanel.tsx";
 
 describe("included local model settings", () => {
@@ -23,20 +24,29 @@ describe("included local model settings", () => {
     expect(screen.getByTestId("provider-secret-trust-nativegen")).toBeTruthy();
   });
 
-  it("offers repair while unconfigured and displays the host result", async () => {
+  it("offers repair while unconfigured, displays the host result, and preserves remote providers", async () => {
     const damaged = includedProvider({ state: "repair_required", recovery_action: "repair" });
     const ready = includedProvider();
-    const store = createSettingsStore({ providers: [damaged] });
+    const remote = remoteProviders[0]!;
+    const store = createSettingsStore({ providers: [damaged, remote] });
     const repair = vi.fn().mockResolvedValue({ ok: true, status: ready.local_runtime });
     render(() => <ProvidersPanel
-      client={{ listProviders: vi.fn().mockResolvedValue([ready]), listProviderKinds: vi.fn().mockResolvedValue([]), repairLocalGeneration: repair } as never}
+      client={{ listProviders: vi.fn().mockResolvedValue([ready, remote]), listProviderKinds: vi.fn().mockResolvedValue([]), repairLocalGeneration: repair } as never}
       settingsStore={store} providers={store.state.providers} onRemoveProvider={() => undefined}
     />);
     await waitFor(() => expect(screen.getByTestId("providers-row-nativegen")).toBeTruthy());
     fireEvent.click(screen.getByTestId("providers-row-nativegen"));
+    const card = await screen.findByTestId("provider-card-nativegen");
+    expect(within(card).getByRole("status").getAttribute("data-configured")).toBe("false");
+    expect(screen.queryByTestId("provider-remove-nativegen")).toBeNull();
+    expect(screen.queryByTestId("provider-endpoint-nativegen")).toBeNull();
+    expect(screen.getByTestId("provider-secret-trust-nativegen")).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: "Repair model" }));
     await waitFor(() => expect(repair).toHaveBeenCalledWith("nativegen"));
-    await waitFor(() => expect(screen.getByTestId("local-model-context")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("local-model-context").textContent).toContain((16384).toLocaleString()));
+    expect(repair).toHaveBeenCalledTimes(1);
+    expect(within(screen.getByTestId("provider-card-nativegen")).getByRole("status").getAttribute("data-configured")).toBe("true");
     expect(screen.queryByRole("button", { name: "Repair model" })).toBeNull();
+    expect(screen.getByTestId(`providers-row-${remote.id}`)).toBeTruthy();
   });
 });

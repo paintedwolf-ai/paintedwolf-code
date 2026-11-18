@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
+import type { ProjectRemovalAssessment, ProjectRemovalResult } from "../src/api/types.ts";
 import {
-  activateProject, apiAttachProjectRoot, apiConfig, apiCreateProjectWithRoot, apiRemoveProject, e2eTempDir,
+  activateProject, apiAttachProjectRoot, apiConfig, apiCreateProjectWithRoot, apiJson, e2eTempDir,
   e2eUniqueLabel, gotoShell, webE2e,
 } from "./helpers.ts";
 
@@ -26,7 +27,25 @@ webE2e("project registry mutations reach a window watching another project", asy
   expect(patched.ok(), await patched.text()).toBeTruthy();
   await expect(row).toContainText(renamed);
 
-  expect((await apiRemoveProject(request, background.id))?.project_state).toBe("deleted");
+  const removals = `/v1/projects/${background.id}/removals`;
+  const assessment = await apiJson<ProjectRemovalAssessment>(
+    request, "GET", `/v1/projects/${background.id}/removal-assessment`,
+  );
+  const operationId = crypto.randomUUID();
+  // The host accepts the removal and deletes the project on a background runner.
+  const accepted = await apiJson<ProjectRemovalResult>(request, "POST", removals, {
+    operation_id: operationId,
+    assessment_token: assessment.assessment_token,
+    remove_extensions: [],
+    force: true,
+  });
+  expect(accepted.operation_id).toBe(operationId);
+  expect(accepted.project_id).toBe(background.id);
+  await expect
+    .poll(async () => (await apiJson<ProjectRemovalResult>(request, "GET", `${removals}/${operationId}`)).project_state, {
+      timeout: 60_000,
+    })
+    .toBe("deleted");
   await expect(row).toHaveCount(0);
   await expect(page.getByTestId("project-switcher")).toContainText(foreground.name ?? "");
 });
