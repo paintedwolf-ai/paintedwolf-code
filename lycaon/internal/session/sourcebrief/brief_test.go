@@ -200,7 +200,9 @@ func TestACBRF04WorkerBranchEffectsAreExcluded(t *testing.T) {
 }
 
 type briefWindowStore struct {
-	Store
+	Transcript
+	Turns
+	Evidence
 	turn int
 }
 

@@ -72,7 +72,7 @@ type SummaryPorts struct {
 }
 
 func NewSummaries(p SummaryPorts) *Summaries {
-	return &Summaries{sessionStore: p.SessionStore, transcriptStore: p.TranscriptStore, evidenceStore: p.Sessions, tasks: p.Tasks, limits: p.Limits, decisions: p.Decisions, verification: p.Verification, resources: p.Resources, delivery: p.Delivery, cards: p.Cards, digests: p.Digests, inspectChanges: p.InspectChanges, overlayStatus: p.OverlayStatus, overlayPending: p.OverlayPending}
+	return &Summaries{sessionStore: p.SessionStore, transcriptStore: p.TranscriptStore, evidenceStore: p.EvidenceStore, tasks: p.Tasks, limits: p.Limits, decisions: p.Decisions, verification: p.Verification, resources: p.Resources, delivery: p.Delivery, cards: p.Cards, digests: p.Digests, inspectChanges: p.InspectChanges, overlayStatus: p.OverlayStatus, overlayPending: p.OverlayPending}
 }
 func (m *Summaries) SetTasks(p TaskReader)           { m.tasks = p }
 func (m *Summaries) SetDecisions(p SummaryDecisions) { m.decisions = p }

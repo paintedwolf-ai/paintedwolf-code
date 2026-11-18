@@ -12,7 +12,7 @@ import (
 
 // ReassignSessionsAfterRootDetach retargets open sessions when a folder root is removed.
 func (m *Service) ReassignSessionsAfterRootDetach(ctx context.Context, projectID, detachedRootID string, after []projectroot.RootRef) {
-	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
+	if m == nil || (m.sessionStore == nil) {
 		return
 	}
 	projectID = strings.TrimSpace(projectID)
@@ -41,7 +41,7 @@ func (m *Service) ReassignSessionsAfterRootDetach(ctx context.Context, projectID
 
 // InvalidateSessionWorkspacePaths clears hydrated workspace paths.
 func (m *Service) InvalidateSessionWorkspacePaths(ctx context.Context, projectID string) {
-	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
+	if m == nil || (m.sessionStore == nil) {
 		return
 	}
 	projectID = strings.TrimSpace(projectID)

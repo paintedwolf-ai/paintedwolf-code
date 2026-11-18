@@ -13,7 +13,7 @@ import (
 )
 
 type editedReceipt struct {
-	Store
+	Submissions
 	row      *store.PromptSubmission
 	err      error
 	editable bool
@@ -39,7 +39,7 @@ func TestInlineEditRefusalLeavesDraftAndRevisionUnchanged(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			q := queue.New()
 			draft := q.AppendOrdered("session", "submission", "person", "original", 0, time.Time{})
-			service := New(editedReceipt{row: &store.PromptSubmission{InputJSON: tc.input}, err: tc.err, editable: tc.editable}, editedReceipt{row: &store.PromptSubmission{InputJSON: tc.input}, err: tc.err, editable: tc.editable}, q, func(context.Context, string) { t.Fatal("refused edit published state") })
+			service := New(nil, editedReceipt{row: &store.PromptSubmission{InputJSON: tc.input}, err: tc.err, editable: tc.editable}, q, func(context.Context, string) { t.Fatal("refused edit published state") })
 			_, err := service.UpdateText(t.Context(), "session", draft.Revision, "submission", "replacement")
 			if err == nil {
 				t.Fatal("invalid receipt admitted an inline edit")

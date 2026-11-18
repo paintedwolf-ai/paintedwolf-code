@@ -24,10 +24,10 @@ func (m *Recovery) RecoverOrphanedTurns(ctx context.Context) error {
 	if err := m.transcript.RepairPendingOutputs(ctx); err != nil {
 		return err
 	}
-	if _, err := m.store.RecoverTurns(ctx); err != nil {
+	if _, err := m.turnStore.RecoverTurns(ctx); err != nil {
 		return err
 	}
-	if _, err := m.store.SettleAbandonedTurnClocks(ctx); err != nil {
+	if _, err := m.turnStore.SettleAbandonedTurnClocks(ctx); err != nil {
 		return err
 	}
 	for {
@@ -57,7 +57,7 @@ func (m *Recovery) RecoverOrphanedTurnsForSession(ctx context.Context, sessionID
 	if err := m.transcript.RepairPendingOutputs(ctx); err != nil {
 		return err
 	}
-	if _, err := m.store.RecoverTurnsForSession(ctx, sessionID); err != nil {
+	if _, err := m.turnStore.RecoverTurnsForSession(ctx, sessionID); err != nil {
 		return err
 	}
 	sess, err := m.sessionStore.Get(ctx, sessionID)

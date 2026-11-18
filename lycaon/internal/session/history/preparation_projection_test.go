@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type stalePreparationHistory struct{ *store.Repositories }
+type stalePreparationHistory struct{ Compaction }
 
 func (s stalePreparationHistory) GetCompactionView(context.Context, string) (*store.CompactionView, bool, error) {
 	return &store.CompactionView{Generation: 1}, true, nil
@@ -25,7 +25,7 @@ func TestPreparationHistoryDoesNotScheduleStaleCompaction(t *testing.T) {
 	sess, err := data.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append history", data.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{Role: api.MessageRoleUser, Content: "Known request"}))
-	service.sessionStore, service.transcriptStore, service.compactionStore = stalePreparationHistory{data}, stalePreparationHistory{data}, stalePreparationHistory{data}
+	service.compactionStore = stalePreparationHistory{data.Compaction}
 	// Scheduling requires admission; projection must never enter it.
 	service.Gate = nil
 	rows, err := service.Project(t.Context(), sess)

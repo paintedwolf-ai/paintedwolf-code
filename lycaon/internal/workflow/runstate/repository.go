@@ -83,7 +83,7 @@ type TransactionsRepository interface {
 	MutationEventsOutboxed() bool
 	SetEventOutbox(*eventoutbox.Outbox)
 	SetWorkerRunnableNotifier(RunnableNotifier)
-	SetSessionMutations(SessionMutations)
+	SetSessionPersistence(Sessions, Transcript)
 	SetAuthzRecorder(authzledger.TransactionalRecorder)
 }
 

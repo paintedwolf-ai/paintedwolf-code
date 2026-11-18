@@ -27,7 +27,7 @@ func (m *Service) resolveOwningSessionMeta(
 	if ownerID == "" {
 		ownerID = strings.TrimSpace(sessionID)
 	}
-	if m != nil && (m.sessionStore != nil && m.transcriptStore != nil) && sessionID != "" {
+	if m != nil && (m.sessionStore != nil) && sessionID != "" {
 		if resolved := strings.TrimSpace(sessiontree.RootID(ctx, m.sessionStore, sessionID)); resolved != "" {
 			ownerID = resolved
 		}
@@ -39,7 +39,7 @@ func (m *Service) resolveOwningSessionMeta(
 		return cached
 	}
 	meta := hydratedSessionMeta{id: ownerID}
-	if m != nil && (m.sessionStore != nil && m.transcriptStore != nil) {
+	if m != nil && (m.sessionStore != nil) {
 		if sess, err := m.sessionStore.Get(ctx, ownerID); err == nil && sess != nil {
 			meta.title = strings.TrimSpace(sess.Title)
 			meta.archived = sess.ArchivedAt != nil

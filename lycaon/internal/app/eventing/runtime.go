@@ -109,7 +109,7 @@ func Build(ctx context.Context, database *db.Store, sessions *store.Repositories
 	}
 	resources.Track("event-publisher", 125, b.Publisher.Close)
 	// Chats follow their turns from session events; documents arrive with the server.
-	b.Agents = agentpresence.New(&presenceChats{store: sessions, workerJobs: b.latestWorker}, b.Publisher)
+	b.Agents = agentpresence.New(&presenceChats{store: sessions.Sessions, workerJobs: b.latestWorker}, b.Publisher)
 	b.Publisher.SessionObserver = b.Agents
 	// One revision counter across the direct and outbox session-event paths.
 	sessions.SetSessionRevisions(b.Publisher)

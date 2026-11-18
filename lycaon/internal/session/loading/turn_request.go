@@ -75,7 +75,7 @@ func NewestUserInstruction(history []api.Message) (api.Message, bool) {
 // requestDecided reports whether a turn decision already serves the request
 // the message opened.
 func (m *Service) RequestDecided(ctx context.Context, openingMessageID string) bool {
-	if m == nil || (m.sessionStore == nil || m.compactionStore == nil || m.turnStore == nil) {
+	if m == nil || m.turnStore == nil {
 		return true
 	}
 	receipts, err := m.turnStore.ListTurnLoadReceiptsForTurns(ctx, []string{openingMessageID})

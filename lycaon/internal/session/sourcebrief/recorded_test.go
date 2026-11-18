@@ -10,7 +10,7 @@ import (
 )
 
 type briefRecords struct {
-	Store
+	Turns
 	records map[string]string
 	err     error
 }
@@ -25,7 +25,7 @@ func TestRecordedBriefPreservesOpeningAndRejectsCorruptRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("operation failed: %v", err)
 	}
-	s := New(briefRecords{records: map[string]string{"opening": string(raw), "corrupt": "{", "empty": "{}"}}, briefRecords{records: map[string]string{"opening": string(raw), "corrupt": "{", "empty": "{}"}}, briefRecords{records: map[string]string{"opening": string(raw), "corrupt": "{", "empty": "{}"}}, nil)
+	s := New(nil, briefRecords{records: map[string]string{"opening": string(raw), "corrupt": "{", "empty": "{}"}}, nil, nil)
 	got := s.Recorded(t.Context(), &api.Session{ID: "session"})
 	if len(got) != 1 || got["opening"].OtherFiles != 2 || got["opening"].OtherEffects != 3 {
 		t.Fatalf("recorded briefs = %+v", got)
@@ -37,7 +37,7 @@ func TestRecordedBriefPreservesOpeningAndRejectsCorruptRows(t *testing.T) {
 
 func TestACBRF06BriefStoredWithoutWorkingSetYieldsTheSameRows(t *testing.T) {
 	const stored = `{"files":[{"path":"a.go","actor":"user","op":"write","at":"14:02 UTC","effects":2}],"other_files":3,"other_effects":4}`
-	s := New(briefRecords{records: map[string]string{"opening": stored}}, briefRecords{records: map[string]string{"opening": stored}}, briefRecords{records: map[string]string{"opening": stored}}, nil)
+	s := New(nil, briefRecords{records: map[string]string{"opening": stored}}, nil, nil)
 	got := s.Recorded(t.Context(), &api.Session{ID: "session"})["opening"]
 	want := inject.SourceChangeFile{Path: "a.go", Actor: "user", Op: "write", At: "14:02 UTC", Effects: 2}
 	if len(got.Files) != 1 || got.Files[0] != want || got.OtherFiles != 3 || got.OtherEffects != 4 {

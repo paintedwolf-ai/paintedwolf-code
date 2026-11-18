@@ -6,7 +6,7 @@ import (
 
 // ReopenOrientation refreshes open project sessions.
 func (m *Service) ReopenOrientation(ctx context.Context, projectID string, board Orientation) {
-	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) || projectID == "" {
+	if m == nil || (m.sessionStore == nil) || projectID == "" {
 		return
 	}
 	sessions, err := m.sessionStore.List(ctx)

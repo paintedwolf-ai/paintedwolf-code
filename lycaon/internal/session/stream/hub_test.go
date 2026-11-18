@@ -23,7 +23,7 @@ func TestScheduleLiveProjectionSurvivesCallerContextCancellation(t *testing.T) {
 		ID:   "msg-live",
 		Role: api.MessageRoleAssistant,
 	}))
-	mgr.store = sessionStore
+	mgr.store = sessionStore.Transcript
 
 	turnCtx, cancel := context.WithCancel(ctx)
 	mgr.Schedule(turnCtx, sess.ID, api.Message{ID: "msg-live", Content: "partial before stop"})

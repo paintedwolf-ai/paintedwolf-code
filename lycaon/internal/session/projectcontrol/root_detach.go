@@ -108,7 +108,7 @@ func (m *Service) forceCancelDependents(ctx context.Context, projectID, rootID s
 }
 
 func (m *Service) projectSessionIDs(ctx context.Context, projectID string) map[string]struct{} {
-	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
+	if m == nil || (m.sessionStore == nil) {
 		return nil
 	}
 	sessions, err := m.sessionStore.List(ctx)
@@ -125,7 +125,7 @@ func (m *Service) projectSessionIDs(ctx context.Context, projectID string) map[s
 }
 
 func (m *Service) enqueueRootDetachCanceledKick(ctx context.Context, projectID, rootID, detachedLabel string, dependents RootDependents) {
-	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) || (len(dependents.Workers) == 0 && len(dependents.Overlays) == 0 && len(dependents.Sessions) == 0) {
+	if m == nil || (m.sessionStore == nil) || (len(dependents.Workers) == 0 && len(dependents.Overlays) == 0 && len(dependents.Sessions) == 0) {
 		return
 	}
 	sessions, err := m.sessionStore.List(ctx)

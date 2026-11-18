@@ -1,6 +1,7 @@
 package closeouts
 
 import (
+	"github.com/lycaon/lycaon/internal/session/store"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -9,10 +10,10 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newSynthesisDelayManager(t *testing.T) (*Service, *api.Session) {
+func newSynthesisDelayManager(t *testing.T) (*Service, *api.Session, *store.Repositories) {
 	t.Helper()
 	data := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := data.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create closeout fixture", err)
-	return New(data.Sessions), sess
+	return New(data.Sessions), sess, data
 }

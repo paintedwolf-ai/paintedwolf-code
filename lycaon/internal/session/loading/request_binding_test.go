@@ -12,7 +12,7 @@ import (
 )
 
 type requestReceipts struct {
-	Store
+	Turns
 	rows []store.TurnLoadReceipt
 	err  error
 }
@@ -37,7 +37,7 @@ func TestTurnRequestRetainsResolvedWorkflowAndRecordedDecision(t *testing.T) {
 		{name: "unrecorded", want: true}, {name: "request only", rows: []store.TurnLoadReceipt{{Trigger: store.TurnLoadTriggerRequest}}, want: true}, {name: "recorded", rows: []store.TurnLoadReceipt{{Trigger: store.TurnLoadTriggerTurn}}}, {name: "unreadable", err: errors.New("database unavailable")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := &Service{sessionStore: requestReceipts{rows: tc.rows, err: tc.err}, compactionStore: requestReceipts{rows: tc.rows, err: tc.err}, turnStore: requestReceipts{rows: tc.rows, err: tc.err}}
+			s := &Service{turnStore: requestReceipts{rows: tc.rows, err: tc.err}}
 			opening, text, ok := s.Request(t.Context(), promptinput.Input{}, history, "", resolved)
 			if ok != tc.want {
 				t.Fatalf("request decided=%v", ok)

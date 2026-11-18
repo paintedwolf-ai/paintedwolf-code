@@ -14,7 +14,7 @@ import (
 )
 
 type publicationOnlyStore struct {
-	Store
+	Sessions
 	reads   int
 	release <-chan struct{}
 }
@@ -28,7 +28,7 @@ func (s *publicationOnlyStore) Get(ctx context.Context, id string) (*api.Session
 			return nil, ctx.Err()
 		}
 	}
-	return s.Store.Get(ctx, id)
+	return s.Sessions.Get(ctx, id)
 }
 
 func TestPreparedPublicationDoesNotSubmitWorkUnderItsAdmissionGate(t *testing.T) {
@@ -39,8 +39,8 @@ func TestPreparedPublicationDoesNotSubmitWorkUnderItsAdmissionGate(t *testing.T)
 	rows, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read source", err)
 	release := make(chan struct{})
-	st := &publicationOnlyStore{Store: sessionStore, release: release}
-	svc := &Service{sessionStore: st, transcriptStore: st, compactionStore: st, Gate: lifecycle.New(sessionStore.Sessions), Runner: NewRunner(), Compactor: compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), nil)}
+	st := &publicationOnlyStore{Sessions: sessionStore.Sessions, release: release}
+	svc := &Service{sessionStore: st, transcriptStore: sessionStore.Transcript, compactionStore: sessionStore.Compaction, Gate: lifecycle.New(sessionStore.Sessions), Runner: NewRunner(), Compactor: compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), nil)}
 	defer func() {
 		close(release)
 		svc.Runner.Stop()

@@ -89,7 +89,7 @@ func (m *Service) Record(ctx context.Context, sess *api.Session, openingMessageI
 // Recorded returns the session's recorded briefs keyed by the message
 // that opened each turn.
 func (m *Service) Recorded(ctx context.Context, sess *api.Session) map[string]inject.SourceChangeBrief {
-	if m == nil || (m.transcriptStore == nil || m.turnStore == nil || m.evidenceStore == nil) || sess == nil {
+	if m == nil || m.turnStore == nil || sess == nil {
 		return nil
 	}
 	recorded, err := m.turnStore.TurnSourceBriefs(ctx, sess.ID)

@@ -6,17 +6,20 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const presenceChatCacheSize = 1024
 
+type presenceSessions interface {
+	Get(context.Context, string) (*api.Session, error)
+}
+
 // presenceChats places sessions in their chats. A session's project, chat, and
 // job never change, so they are cached; titles arrive through session events.
 type presenceChats struct {
-	store      *sessionstore.Repositories
+	store      presenceSessions
 	workerJobs func(ctx context.Context, childSessionID string) (*api.WorkerTask, bool)
 
 	mu    sync.Mutex
@@ -34,14 +37,14 @@ func (c *presenceChats) Chat(ctx context.Context, sessionID string) (agentpresen
 	if c.store == nil {
 		return agentpresence.ChatRef{}, false
 	}
-	sess, err := c.store.Sessions.Get(ctx, sessionID)
+	sess, err := c.store.Get(ctx, sessionID)
 	if err != nil || sess == nil || strings.TrimSpace(sess.ProjectID) == "" {
 		return agentpresence.ChatRef{}, false
 	}
 	ref = agentpresence.ChatRef{ProjectID: sess.ProjectID, SessionID: sess.ID, Title: sess.Title}
 	if strings.TrimSpace(sess.ParentSessionID) != "" {
-		root := sessiontree.RootID(ctx, c.store.Sessions, sessionID)
-		chat, err := c.store.Sessions.Get(ctx, root)
+		root := sessiontree.RootID(ctx, c.store, sessionID)
+		chat, err := c.store.Get(ctx, root)
 		if err != nil || chat == nil {
 			return agentpresence.ChatRef{}, false
 		}

@@ -139,9 +139,7 @@ func NewManager(store *runstate.Repository, sessions *sessionstore.Repositories,
 	manager.Reports.Verdicts = manager.Verdicts
 	manager.Obligations.Gates = gates
 
-	if mutations, ok := sessions.(runstate.SessionMutations); ok {
-		store.Transactions.SetSessionMutations(mutations)
-	}
+	store.Transactions.SetSessionPersistence(sessions.Sessions, sessions.Transcript)
 
 	manager.Policy.Blueprints = manager.Blueprints
 	return manager

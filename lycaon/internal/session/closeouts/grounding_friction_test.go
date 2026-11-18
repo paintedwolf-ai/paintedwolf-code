@@ -5,13 +5,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestGroundingFrictionPromptAndCycleCeilings(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	for i := 1; i <= limits.DefaultGroundingRejectsPerTurn+1; i++ {
 		friction := mgr.RecordGroundingFriction(t.Context(), sess.ID)
 		want := min(limits.DefaultGroundingRejectsPerTurn-i, limits.DefaultGroundingRejectsPerCycle-i)
@@ -22,8 +21,8 @@ func TestGroundingFrictionPromptAndCycleCeilings(t *testing.T) {
 }
 
 func TestGroundingFrictionWorkersShareOnlyCycleBudget(t *testing.T) {
-	mgr, root := newSynthesisDelayManager(t)
-	child, err := mgr.store.(*store.Repositories).Sessions.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "implementer"})
+	mgr, root, repositories := newSynthesisDelayManager(t)
+	child, err := repositories.Sessions.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create worker", err)
 	mgr.RecordGroundingFriction(t.Context(), root.ID)
 	for i := 1; i < limits.DefaultGroundingRejectsPerCycle; i++ {
@@ -41,8 +40,8 @@ func TestGroundingFrictionWorkersShareOnlyCycleBudget(t *testing.T) {
 }
 
 func TestGroundingFrictionRestartsForEachWorkflowPhase(t *testing.T) {
-	mgr, root := newSynthesisDelayManager(t)
-	child, err := mgr.store.(*store.Repositories).Sessions.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "skeptic"})
+	mgr, root, repositories := newSynthesisDelayManager(t)
+	child, err := repositories.Sessions.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "skeptic"})
 	testutil.FailErr(t, "create worker", err)
 	for i := 0; i < limits.DefaultGroundingRejectsPerCycle; i++ {
 		mgr.BeginPrompt(t.Context(), child, promptinput.Input{HostSignal: &promptinput.HostSignal{}})

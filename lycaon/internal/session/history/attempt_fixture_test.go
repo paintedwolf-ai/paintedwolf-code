@@ -133,7 +133,7 @@ func failWith(err error) func() (string, error) {
 
 // scanCountingStore counts page loads: admission never reads the published view.
 type scanCountingStore struct {
-	Store
+	Compaction
 	mu    sync.Mutex
 	scans int
 }
@@ -142,7 +142,7 @@ func (s *scanCountingStore) GetCompactionView(ctx context.Context, id string) (*
 	s.mu.Lock()
 	s.scans++
 	s.mu.Unlock()
-	return s.Store.GetCompactionView(ctx, id)
+	return s.Compaction.GetCompactionView(ctx, id)
 }
 
 func (s *scanCountingStore) count() int {
@@ -176,11 +176,11 @@ func newAttemptFixture(t *testing.T, script ...func() (string, error)) *attemptF
 	svc.SetCompactor(compaction.NewSimpleCompactor(cfg, provider))
 	clock := newVirtualClock()
 	svc.Runner.attempts.clock = clock
-	scans := &scanCountingStore{Store: sqlStore}
-	svc.sessionStore, svc.transcriptStore, svc.compactionStore = scans, scans, scans
+	scans := &scanCountingStore{Compaction: sqlStore.Compaction}
+	svc.compactionStore = scans
 	sess, err := sqlStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	f := &attemptFixture{svc: svc, sqlStore: sqlStore, sess: sess, clock: clock, provider: provider, scans: scans}
+	f := &attemptFixture{svc: svc, sqlCompaction: sqlStore.Compaction, sess: sess, clock: clock, provider: provider, scans: scans}
 	t.Cleanup(func() {
 		svc.Runner.Stop()
 		testutil.FailErr(t, "drain compaction", svc.Runner.WaitContext(context.Background()))

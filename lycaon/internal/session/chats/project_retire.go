@@ -13,7 +13,7 @@ import (
 
 // RetireForProjectDelete deletes every project chat, including worktree-bound ones.
 func (m *Service) RetireForProjectDelete(ctx context.Context, projectID string, progress func(int, int)) error {
-	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
+	if m == nil || (m.sessionStore == nil) {
 		return fmt.Errorf("session manager not configured")
 	}
 	projectID = strings.TrimSpace(projectID)
@@ -21,7 +21,7 @@ func (m *Service) RetireForProjectDelete(ctx context.Context, projectID string, 
 		return fmt.Errorf("project_id required")
 	}
 	ctx = bgprocess.WithTerminationReason(ctx, bgprocess.TerminationProjectDeleted)
-	plan, err := planProjectRetirement(ctx, m.sessionStore, m.transcriptStore, projectID)
+	plan, err := planProjectRetirement(ctx, m.sessionStore, projectID)
 	if err != nil {
 		return err
 	}

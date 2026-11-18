@@ -20,7 +20,7 @@ type Recovery struct {
 }
 
 func NewRecovery(sessionStore Sessions, turnStore Turns, transcript *transcript.Service, status *Status, rewinds *checkpointcontrol.Rewinds) *Recovery {
-	return &Recovery{sessionStore: sessionStore, transcript: transcript, status: status, rewinds: rewinds}
+	return &Recovery{sessionStore: sessionStore, turnStore: turnStore, transcript: transcript, status: status, rewinds: rewinds}
 }
 func (m *Recovery) SetRecorder(recorder invocation.Recorder) { m.invocations = recorder }
 func (m *Recovery) InterruptTools(ctx context.Context, id string) error {

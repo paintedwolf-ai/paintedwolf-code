@@ -16,7 +16,9 @@ import (
 )
 
 type decisionReceiptStore struct {
-	Store
+	Sessions
+	Compaction
+	Turns
 	receipts []store.TurnLoadReceipt
 }
 

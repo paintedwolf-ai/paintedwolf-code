@@ -74,7 +74,7 @@ func TestWorkerPresenceResolvesParentChatAndKeepsWorkerTaskIdentity(t *testing.T
 	testutil.FailErr(t, "read parent chat", err)
 	child, err := sessions.Sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create worker session", err)
-	chats := presenceChats{store: sessions, workerJobs: func(_ context.Context, id string) (*api.WorkerTask, bool) {
+	chats := presenceChats{store: sessions.Sessions, workerJobs: func(_ context.Context, id string) (*api.WorkerTask, bool) {
 		if id != child.ID {
 			t.Fatalf("task lookup changed session:%q", id)
 		}

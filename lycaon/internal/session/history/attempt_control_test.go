@@ -67,7 +67,7 @@ func TestUnchangedNoReductionSkipsScanAndSummarizerAC_COMP_01(t *testing.T) {
 		f.appendRows(t, 2*attemptResumeRows)
 		rows, err := f.sqlStore.Transcript.GetMessages(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read rows", err)
-		rewindFrom(t, f.sqlStore, f.sess.ID, rows[len(rows)-2*attemptResumeRows].ID)
+		rewindFrom(t, f.sqlStore.Rewind, f.sess.ID, rows[len(rows)-2*attemptResumeRows].ID)
 		f.appendRows(t, 3)
 		rows, err = f.sqlStore.Transcript.GetMessages(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read rows after gap", err)
@@ -476,7 +476,9 @@ func TestAttemptSourceFollowsStoreSemantics(t *testing.T) {
 
 // faultStore fails one named read so admission and settlement show their fallback.
 type faultStore struct {
-	Store
+	Sessions
+	Transcript
+	Compaction
 	failGet, failPage, failCurrent, failWindow, failPut bool
 }
 
@@ -486,35 +488,35 @@ func (s *faultStore) Get(ctx context.Context, id string) (*api.Session, error) {
 	if s.failGet {
 		return nil, errAttemptStore
 	}
-	return s.Store.Get(ctx, id)
+	return s.Sessions.Get(ctx, id)
 }
 
 func (s *faultStore) GetTranscriptPage(ctx context.Context, id string, q api.TranscriptPageQuery) (api.SessionTranscriptPage, error) {
 	if s.failPage {
 		return api.SessionTranscriptPage{}, errAttemptStore
 	}
-	return s.Store.GetTranscriptPage(ctx, id, q)
+	return s.Transcript.GetTranscriptPage(ctx, id, q)
 }
 
 func (s *faultStore) CompactionViewCurrent(ctx context.Context, id string, ord int64, msg string, seq int64) (bool, error) {
 	if s.failCurrent {
 		return false, errAttemptStore
 	}
-	return s.Store.CompactionViewCurrent(ctx, id, ord, msg, seq)
+	return s.Compaction.CompactionViewCurrent(ctx, id, ord, msg, seq)
 }
 
 func (s *faultStore) ReadMessageWindow(ctx context.Context, id string, window messageview.MessageWindow) ([]api.Message, error) {
 	if s.failWindow && window.After {
 		return nil, errAttemptStore
 	}
-	return s.Store.ReadMessageWindow(ctx, id, window)
+	return s.Transcript.ReadMessageWindow(ctx, id, window)
 }
 
 func (s *faultStore) PutCompactionAttempt(ctx context.Context, id string, attempt messageview.CompactionAttempt) error {
 	if s.failPut {
 		return errAttemptStore
 	}
-	return s.Store.PutCompactionAttempt(ctx, id, attempt)
+	return s.Compaction.PutCompactionAttempt(ctx, id, attempt)
 }
 
 func TestAttemptControlFailsOpenOnStoreFaults(t *testing.T) {
@@ -533,7 +535,7 @@ func TestAttemptControlFailsOpenOnStoreFaults(t *testing.T) {
 			f.seedRejectablePage(t)
 			f.schedule(t)
 			sc := f.svc.Compactor.(*compaction.SimpleCompactor)
-			faults := &faultStore{Store: f.sqlStore}
+			faults := &faultStore{Sessions: f.sqlStore.Sessions, Transcript: f.sqlStore.Transcript, Compaction: f.sqlStore.Compaction}
 			tc.fault(faults)
 			f.svc.sessionStore, f.svc.transcriptStore, f.svc.compactionStore = faults, faults, faults
 			if _, admitted := f.svc.attemptControl().admit(t.Context(), f.sess.ID, sc); !admitted {
@@ -554,7 +556,7 @@ func TestAttemptControlFailsOpenOnStoreFaults(t *testing.T) {
 			testutil.FailErr(t, "read session", err)
 			pass, err := f.svc.attemptControl().capture(t.Context(), sess, sc)
 			testutil.FailErr(t, "capture", err)
-			faults := &faultStore{Store: f.sqlStore}
+			faults := &faultStore{Sessions: f.sqlStore.Sessions, Transcript: f.sqlStore.Transcript, Compaction: f.sqlStore.Compaction}
 			fault(faults)
 			f.svc.sessionStore, f.svc.transcriptStore, f.svc.compactionStore = faults, faults, faults
 			f.svc.attemptControl().settle(t.Context(), sc, f.sess.ID, pass, attemptResult{outcome: attemptNoReduction})
@@ -574,13 +576,13 @@ func TestAttemptControlFailsOpenOnStoreFaults(t *testing.T) {
 		if _, recorded := f.svc.Runner.attempts.records.Load(f.sess.ID); !found || got != *memo || recorded {
 			t.Fatalf("memo=%+v found=%v recorded=%v", got, found, recorded)
 		}
-		f.svc.sessionStore, f.svc.transcriptStore, f.svc.compactionStore = &faultStore{Store: f.sqlStore, failPut: true}, &faultStore{Store: f.sqlStore, failPut: true}, &faultStore{Store: f.sqlStore, failPut: true}
+		f.svc.sessionStore, f.svc.transcriptStore, f.svc.compactionStore = &faultStore{Sessions: f.sqlStore.Sessions, Transcript: f.sqlStore.Transcript, Compaction: f.sqlStore.Compaction, failPut: true}, &faultStore{Sessions: f.sqlStore.Sessions, Transcript: f.sqlStore.Transcript, Compaction: f.sqlStore.Compaction, failPut: true}, &faultStore{Sessions: f.sqlStore.Sessions, Transcript: f.sqlStore.Transcript, Compaction: f.sqlStore.Compaction, failPut: true}
 		f.svc.attemptControl().saveMemo(t.Context(), f.sess.ID, memo)
 	})
 
 	t.Run("a retry firing for a removed session schedules nothing", func(t *testing.T) {
 		f := newAttemptFixture(t, answerUnproductive)
-		f.svc.sessionStore, f.svc.transcriptStore, f.svc.compactionStore = &faultStore{Store: f.sqlStore, failGet: true}, &faultStore{Store: f.sqlStore, failGet: true}, &faultStore{Store: f.sqlStore, failGet: true}
+		f.svc.sessionStore, f.svc.transcriptStore, f.svc.compactionStore = &faultStore{Sessions: f.sqlStore.Sessions, Transcript: f.sqlStore.Transcript, Compaction: f.sqlStore.Compaction, failGet: true}, &faultStore{Sessions: f.sqlStore.Sessions, Transcript: f.sqlStore.Transcript, Compaction: f.sqlStore.Compaction, failGet: true}, &faultStore{Sessions: f.sqlStore.Sessions, Transcript: f.sqlStore.Transcript, Compaction: f.sqlStore.Compaction, failGet: true}
 		f.svc.attemptControl().fire(f.sess.ID)
 		f.svc.Runner.Stop()
 		f.svc.attemptControl().fire(f.sess.ID)
@@ -594,7 +596,7 @@ func TestAttemptControlFailsOpenOnStoreFaults(t *testing.T) {
 		sc := f.svc.Compactor.(*compaction.SimpleCompactor)
 		sess, err := f.sqlStore.Sessions.Get(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read session", err)
-		f.svc.sessionStore, f.svc.transcriptStore, f.svc.compactionStore = &faultStore{Store: f.sqlStore, failPage: true}, &faultStore{Store: f.sqlStore, failPage: true}, &faultStore{Store: f.sqlStore, failPage: true}
+		f.svc.sessionStore, f.svc.transcriptStore, f.svc.compactionStore = &faultStore{Sessions: f.sqlStore.Sessions, Transcript: f.sqlStore.Transcript, Compaction: f.sqlStore.Compaction, failPage: true}, &faultStore{Sessions: f.sqlStore.Sessions, Transcript: f.sqlStore.Transcript, Compaction: f.sqlStore.Compaction, failPage: true}, &faultStore{Sessions: f.sqlStore.Sessions, Transcript: f.sqlStore.Transcript, Compaction: f.sqlStore.Compaction, failPage: true}
 		if pass := f.svc.attemptControl().explicit(t.Context(), sess, sc); !pass.explicit || pass.key != "" {
 			t.Fatalf("pass = %+v", pass)
 		}

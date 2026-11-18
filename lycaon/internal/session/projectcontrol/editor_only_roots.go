@@ -23,7 +23,7 @@ func (m *Service) ReassignProjectSessionsOffEditorOnlyRoots(ctx context.Context,
 }
 
 func (m *Service) reassignOffEditorOnlyRoots(ctx context.Context, inScope func(projectID string) bool) error {
-	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) || m.projects == nil {
+	if m == nil || (m.sessionStore == nil) || m.projects == nil {
 		return nil
 	}
 	sessions, err := m.sessionStore.List(ctx)

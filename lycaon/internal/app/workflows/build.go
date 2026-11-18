@@ -93,7 +93,7 @@ func Build(ctx context.Context, deps Dependencies, registerRecovery func(bootrec
 
 	workflowStore := workflowpersistence.New(deps.Database)
 	workflowStore.Transactions.SetEventOutbox(deps.EventsOutbox)
-	workflowStore.Transactions.SetSessionMutations(deps.Sessions)
+	workflowStore.Transactions.SetSessionPersistence(deps.Sessions.Sessions, deps.Sessions.Transcript)
 	workflowStore.Transactions.SetAuthzRecorder(deps.AuthzRecorder)
 
 	workflowMgr := workflow.NewManager(workflowStore, deps.Sessions, manifestRegistry, deps.EventPublisher)

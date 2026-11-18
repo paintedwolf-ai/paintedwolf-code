@@ -29,7 +29,7 @@ func (m *Service) Get(ctx context.Context, id string) (*api.Session, error) {
 
 // HasActiveProjectSessions reports whether a project has unarchived active sessions.
 func (m *Service) HasActiveProjectSessions(ctx context.Context, projectID string, activeSince time.Time) (bool, error) {
-	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
+	if m == nil || (m.sessionStore == nil) {
 		return false, nil
 	}
 	return m.sessionStore.HasActiveProjectSessions(ctx, projectID, activeSince)

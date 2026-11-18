@@ -36,7 +36,7 @@ type Compaction interface {
 	PutCompactionView(ctx context.Context, sessionID string, view store.CompactionView) error
 }
 
-// Service owns bounded history projection and durable compaction scheduling.
+// Service projects bounded history and schedules durable compaction.
 type Service struct {
 	sessionStore    Sessions
 	transcriptStore Transcript

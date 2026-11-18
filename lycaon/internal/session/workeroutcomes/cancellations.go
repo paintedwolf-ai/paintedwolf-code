@@ -72,7 +72,7 @@ func NewCancellations(ports CancellationPorts) *Cancellations {
 
 // StopRuntime releases only one worker's resources, including parked processes.
 func (m *Cancellations) StopRuntime(ctx context.Context, childID string) error {
-	child, err := m.sessionStore.Get(ctx, childID)
+	child, err := m.sessions.Get(ctx, childID)
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (m *Cancellations) StopRuntime(ctx context.Context, childID string) error {
 		return err
 	}
 	m.graceful.Finish(child.ID)
-	return m.sessionStore.SetSessionStatus(ctx, child.ID, api.SessionStatusIdle)
+	return m.sessions.SetSessionStatus(ctx, child.ID, api.SessionStatusIdle)
 }
 
 // CancellationInput is the parent cancellation envelope.

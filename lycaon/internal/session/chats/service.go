@@ -45,7 +45,7 @@ type Workers interface {
 	AbortAllWorkers(context.Context, string, string, string) error
 }
 
-// Service owns chat membership, ordering, and deletion of session trees.
+// Service manages chat membership, ordering, and session tree deletion.
 type Service struct {
 	Gate       *lifecycle.State
 	Captures   *checkpointcontrol.Capture

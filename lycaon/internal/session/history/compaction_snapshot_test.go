@@ -61,7 +61,7 @@ func TestDelayedSynthesisPreservesNewerCoverage(t *testing.T) {
 			}))
 			enriched := &messageview.Continuation{ThroughOrd: rows[0].Ord, SummaryThroughOrd: rows[0].Ord,
 				Summary: messageview.ContinuationSummary{Facts: []string{"delayed clue"}}}
-			history := &Service{sessionStore: sessionStore.Sessions, transcriptStore: sessionStore.Transcript, compactionStore: sessionStore.Compaction}
+			history := &Service{sessionTranscript: sessionStore.Transcript.Sessions, transcriptTranscript: sessionStore.Transcript.Transcript, compactionTranscript: sessionStore.Transcript.Compaction}
 			testutil.FailErr(t, "publish delayed synthesis", history.publishSynthesis(t.Context(), compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
 			view, _, err := sessionStore.Compaction.GetCompactionView(t.Context(), sess.ID)
 			testutil.FailErr(t, "read enriched view", err)
@@ -97,7 +97,7 @@ func TestDelayedSynthesisRejectsChangedCanonicalSource(t *testing.T) {
 	testutil.FailErr(t, "correct source", err)
 	enriched := &messageview.Continuation{ThroughOrd: source.Ord, SummaryThroughOrd: source.Ord,
 		Summary: messageview.ContinuationSummary{Facts: []string{"original fact"}}}
-	testutil.FailErr(t, "reject stale synthesis", (&Service{sessionStore: sessionStore.Sessions, transcriptStore: sessionStore.Transcript, compactionStore: sessionStore.Compaction}).publishSynthesis(t.Context(),
+	testutil.FailErr(t, "reject stale synthesis", (&Service{sessionTranscript: sessionStore.Transcript.Sessions, transcriptTranscript: sessionStore.Transcript.Transcript, compactionTranscript: sessionStore.Transcript.Compaction}).publishSynthesis(t.Context(),
 		compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
 	current, err := sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read generation", err)
@@ -112,13 +112,13 @@ func TestDelayedSynthesisRejectsChangedCanonicalSource(t *testing.T) {
 }
 
 type compactionInterleavedStore struct {
-	Store
+	Transcript
 	beforeSuffix func()
 }
 
 func (s *compactionInterleavedStore) ReadMessageWindow(ctx context.Context, id string, window messageview.MessageWindow) ([]api.Message, error) {
 	s.beforeSuffix()
-	return s.Store.ReadMessageWindow(ctx, id, window)
+	return s.Transcript.ReadMessageWindow(ctx, id, window)
 }
 
 func TestCompactionSuffixCannotMaskConcurrentPrefixEdit(t *testing.T) {
@@ -136,19 +136,7 @@ func TestCompactionSuffixCannotMaskConcurrentPrefixEdit(t *testing.T) {
 	}))
 	sess, err = sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read generation", err)
-	history := &Service{sessionStore: &compactionInterleavedStore{Store: sessionStore, beforeSuffix: func() {
-		last.Content = "corrected fact"
-		_, err := sessionStore.Transcript.UpdateMessage(t.Context(), sess.ID, last.ID, last)
-		testutil.FailErr(t, "edit covered prefix", err)
-		testutil.FailErr(t, "append newer suffix", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID,
-			api.Message{ID: "suffix", Role: api.MessageRoleUser, Content: "continue with the correction"}))
-	}}, transcriptStore: &compactionInterleavedStore{Store: sessionStore, beforeSuffix: func() {
-		last.Content = "corrected fact"
-		_, err := sessionStore.Transcript.UpdateMessage(t.Context(), sess.ID, last.ID, last)
-		testutil.FailErr(t, "edit covered prefix", err)
-		testutil.FailErr(t, "append newer suffix", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID,
-			api.Message{ID: "suffix", Role: api.MessageRoleUser, Content: "continue with the correction"}))
-	}}, compactionStore: &compactionInterleavedStore{Store: sessionStore, beforeSuffix: func() {
+	history := &Service{sessionStore: sessionStore.Sessions, compactionStore: sessionStore.Compaction, transcriptStore: &compactionInterleavedStore{Transcript: sessionStore.Transcript, beforeSuffix: func() {
 		last.Content = "corrected fact"
 		_, err := sessionStore.Transcript.UpdateMessage(t.Context(), sess.ID, last.ID, last)
 		testutil.FailErr(t, "edit covered prefix", err)

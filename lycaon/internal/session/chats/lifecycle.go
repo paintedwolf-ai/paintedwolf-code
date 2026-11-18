@@ -34,7 +34,7 @@ var sessionListPages = pagecursor.For[store.SummaryCursor]("session_list")
 
 // ListProjectSessions pages a project's chat sessions.
 func (m *Service) ListProjectSessions(ctx context.Context, q store.SummaryQuery) (wire.SessionListPage, error) {
-	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
+	if m == nil || (m.sessionStore == nil) {
 		return wire.SessionListPage{}, fmt.Errorf("session manager not configured")
 	}
 	if q.Cursor != "" {
@@ -109,7 +109,7 @@ func (m *Service) MovePinned(ctx context.Context, id string, position int) (*wir
 
 // changeLifecycle applies one chat lifecycle write and publishes the result.
 func (m *Service) changeLifecycle(ctx context.Context, id string, write func(id string) error) (*wire.Session, error) {
-	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
+	if m == nil || (m.sessionStore == nil) {
 		return nil, fmt.Errorf("session manager not configured")
 	}
 	id = strings.TrimSpace(id)
@@ -136,7 +136,7 @@ func (m *Service) changeLifecycle(ctx context.Context, id string, write func(id 
 
 // Delete disposes live children before removing session history.
 func (m *Service) Delete(ctx context.Context, id string) error {
-	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
+	if m == nil || (m.sessionStore == nil) {
 		return fmt.Errorf("session manager not configured")
 	}
 	id = strings.TrimSpace(id)
@@ -241,7 +241,7 @@ func (m *Service) publishSessionDeleted(ctx context.Context, sess *wire.Session)
 
 // UnarchiveOnPrompt restores a prompted session to the working set.
 func (m *Service) UnarchiveOnPrompt(ctx context.Context, sess *wire.Session) error {
-	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) || sess == nil || sess.ArchivedAt == nil {
+	if m == nil || (m.sessionStore == nil) || sess == nil || sess.ArchivedAt == nil {
 		return nil
 	}
 	if err := m.sessionStore.UpdateSession(ctx, sess.ID, func(s *wire.Session) {

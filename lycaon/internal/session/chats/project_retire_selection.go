@@ -18,7 +18,7 @@ type retirementPlan struct {
 
 // Selection uses project metadata and indexed tree identities, never full
 // presentation hydration for unrelated projects or retained transcript history.
-func planProjectRetirement(ctx context.Context, sessionStore Sessions, transcriptStore Transcript, projectID string) (retirementPlan, error) {
+func planProjectRetirement(ctx context.Context, sessionStore Sessions, projectID string) (retirementPlan, error) {
 	plan := retirementPlan{}
 	for _, archived := range []bool{false, true} {
 		query := store.SummaryQuery{ProjectID: projectID, Archived: archived, Sort: wire.SessionListSortCreated, Order: wire.SessionListOrderAsc, Limit: wire.MaxSessionListLimit}
