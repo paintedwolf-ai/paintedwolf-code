@@ -196,7 +196,8 @@
       "packages": [
         "./..."
       ],
-      "exclude": "/test/security(/|$)|/internal/launchguard$"
+      "exclude": "/test/wiring/conformance$|/test/security/(scans|sweeps)$|/internal/launchguard$",
+      "report_all_failures": true
     },
     "seatbelt:confine": {
       "options": [
@@ -1383,7 +1384,7 @@
       ],
       "suite": "race",
       "setup": "verification",
-      "shards": 3
+      "shards": 6
     },
     "fuzz": {
       "targets": [

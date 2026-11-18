@@ -16,6 +16,7 @@ import (
 type authorshipTestStore interface {
 	HostOwner(context.Context) (people.Person, error)
 	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
+	Get(context.Context, string) (*api.Session, error)
 	CreateChild(context.Context, *api.Session, api.SpawnChildRequest) (*api.Session, error)
 	PutPromptSubmission(context.Context, PromptSubmission) (*PromptSubmission, bool, error)
 	AppendMessages(context.Context, string, ...api.Message) error
@@ -61,6 +62,14 @@ func TestSessionsBelongToTheActingPersonAndChildrenShareTheOwner(t *testing.T) {
 			testutil.FailErr(t, "create child", err)
 			if child.OwnerPersonID != requested.OwnerPersonID {
 				t.Fatalf("child owner = %q, want parent owner %q", child.OwnerPersonID, requested.OwnerPersonID)
+			}
+			for _, created := range []*api.Session{hostStarted, child} {
+				created.OwnerPersonID = "detached"
+				stored, err := st.Get(t.Context(), created.ID)
+				testutil.FailErr(t, "read stored session", err)
+				if stored.OwnerPersonID != owner.ID {
+					t.Fatalf("mutating session %s changed its stored owner to %q", created.ID, stored.OwnerPersonID)
+				}
 			}
 			orphan := *requested
 			orphan.OwnerPersonID = ""

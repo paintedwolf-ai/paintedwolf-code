@@ -29,6 +29,7 @@ func moveStoreShape(t *testing.T, path string) {
 }
 
 func TestStageRefusesAnArchiveWhoseStoreShapeMoved(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")
@@ -60,6 +61,7 @@ func TestStageRefusesAnArchiveWhoseStoreShapeMoved(t *testing.T) {
 }
 
 func TestStageChecksTheStagedStoreNotOnlyTheManifestClaim(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")

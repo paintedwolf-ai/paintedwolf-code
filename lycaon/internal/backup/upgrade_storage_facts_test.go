@@ -8,6 +8,7 @@ import (
 )
 
 func TestRetainedCaptureAllocationSeparatesSharingAndSnapshotCopy(t *testing.T) {
+	t.Parallel()
 	const pages, pageBytes, scratch, payloadBytes = uint64(17), uint64(4096), uint64(123), uint64(99)
 	database := pages * pageBytes
 	for _, staged := range []bool{false, true} {

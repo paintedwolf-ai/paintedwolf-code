@@ -290,6 +290,7 @@ var retainedUserTables = []string{
 }
 
 func TestReleasedCorpusUpgradesToCurrentAndRetainsUserData(t *testing.T) {
+	testutil.SkipIfRace(t, "single-goroutine corpus replay; test:full runs it")
 	current, err := CurrentBaseline(t.Context())
 	testutil.FailErr(t, "current baseline", err)
 	for _, version := range releasedCorpusStores(t) {

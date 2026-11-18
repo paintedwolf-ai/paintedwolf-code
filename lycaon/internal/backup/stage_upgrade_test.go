@@ -14,6 +14,7 @@ import (
 )
 
 func TestStagedInspectionPreservesOperationalFailures(t *testing.T) {
+	t.Parallel()
 	for _, cause := range []error{context.Canceled, context.DeadlineExceeded, syscall.ENOSPC, os.ErrPermission} {
 		result := stagedInspectionFailure(cause, &Manifest{}, "inspect extracted history")
 		if errors.Is(result, ErrInvalid) || errors.Is(result, ErrBaselineMismatch) {
@@ -33,6 +34,7 @@ func TestStagedInspectionPreservesOperationalFailures(t *testing.T) {
 }
 
 func TestCanceledStagedInspectionLeavesSourceUntouched(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, "store.db")
 	store := testdbfixture.OpenPath(t, path)
@@ -53,6 +55,7 @@ func TestCanceledStagedInspectionLeavesSourceUntouched(t *testing.T) {
 }
 
 func TestCurrentSchemaRestoreSealsAuditObligationAndRefreshesItsManifest(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, "store.db")
 	store := testdbfixture.OpenPath(t, path)
@@ -88,6 +91,7 @@ func TestCurrentSchemaRestoreSealsAuditObligationAndRefreshesItsManifest(t *test
 }
 
 func TestStagedInspectionKeepsConfirmedInvalidity(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		reason db.RecoveryReason
 		want   error
@@ -103,6 +107,7 @@ func TestStagedInspectionKeepsConfirmedInvalidity(t *testing.T) {
 }
 
 func TestRestoreApplyPreservesOperationalFailures(t *testing.T) {
+	t.Parallel()
 	for _, cause := range []error{context.Canceled, syscall.ENOSPC, syscall.EIO, syscall.EROFS, os.ErrPermission} {
 		err := unapplicableRestore(cause)
 		if errors.Is(cause, context.Canceled) {

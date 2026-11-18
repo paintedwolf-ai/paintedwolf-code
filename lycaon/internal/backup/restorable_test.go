@@ -93,6 +93,7 @@ func writeArchiveFixture(t *testing.T, raw []byte) string {
 }
 
 func TestRestorableRelPathTracksTheBackupSet(t *testing.T) {
+	t.Parallel()
 	// The producer and installer share one durable set.
 	for _, rel := range restorableRelPaths {
 		if !RestorableRelPath(rel) {
@@ -178,6 +179,7 @@ func TestRestorableRelPathTracksTheBackupSet(t *testing.T) {
 }
 
 func TestStageRejectsArchiveNamingControlPlaneFiles(t *testing.T) {
+	t.Parallel()
 	for _, rel := range controlPlaneRelPaths {
 		cfg := t.TempDir()
 		archive := stageArchive(t, map[string]string{rel: "flag: true\n"})
@@ -196,6 +198,7 @@ func TestStageRejectsArchiveNamingControlPlaneFiles(t *testing.T) {
 }
 
 func TestStageRejectsPartialReplacementScope(t *testing.T) {
+	t.Parallel()
 	raw := stageArchive(t, map[string]string{"store.db": "not reached"})
 	archive := rewriteArchiveManifest(t, raw, func(manifest *Manifest) {
 		manifest.ReplaceRelDirs = manifest.ReplaceRelDirs[:1]
@@ -237,6 +240,7 @@ func rewriteArchiveManifest(t *testing.T, raw []byte, update func(*Manifest)) []
 }
 
 func TestWriteMarkerExclusivePreservesFirstMarker(t *testing.T) {
+	t.Parallel()
 	path := PendingMarkerPath(t.TempDir())
 	first := PendingMarker{LiveStoreFilename: storeRelPath, Operation: PendingOperationRestore, StagingDir: "/first", CreatedAt: "first"}
 	second := PendingMarker{LiveStoreFilename: storeRelPath, Operation: PendingOperationRestore, StagingDir: "/second", CreatedAt: "second"}
@@ -254,6 +258,7 @@ func TestWriteMarkerExclusivePreservesFirstMarker(t *testing.T) {
 }
 
 func TestStageAcceptsTheDurableSet(t *testing.T) {
+	t.Parallel()
 	cfg := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "store.db")
 	sqlDB, err := db.Open(dbPath)
@@ -281,6 +286,7 @@ func TestStageAcceptsTheDurableSet(t *testing.T) {
 }
 
 func TestApplyPendingRefusesAMarkerNamingAControlPlaneFile(t *testing.T) {
+	t.Parallel()
 	cfg := t.TempDir()
 	staging, recovery := makeRestoreTransactionDirs(t, cfg, "7da85e16-85da-4c89-9aa6-9aed13fcdcf9")
 	body := []byte("providers:\n  - id: pwn\n    command: /bin/sh\n")
@@ -309,6 +315,7 @@ func TestApplyPendingRefusesAMarkerNamingAControlPlaneFile(t *testing.T) {
 }
 
 func TestApplyPendingRefusesProgressOutsidePendingOperations(t *testing.T) {
+	t.Parallel()
 	cfg := t.TempDir()
 	staging, recovery := makeRestoreTransactionDirs(t, cfg, "6f1eb4aa-9125-4bc9-87bf-f4658c7abfa4")
 	body := []byte("max_iterations: 5\n")
@@ -338,6 +345,7 @@ func TestApplyPendingRefusesProgressOutsidePendingOperations(t *testing.T) {
 }
 
 func TestApplyPendingRequiresAnOperation(t *testing.T) {
+	t.Parallel()
 	cfg := t.TempDir()
 	staging, recovery := makeRestoreTransactionDirs(t, cfg, "d11335bc-e7ef-4d0f-aa64-181d1bf87253")
 	body := []byte("max_iterations: 5\n")
@@ -365,6 +373,7 @@ func TestApplyPendingRequiresAnOperation(t *testing.T) {
 }
 
 func TestApplyPendingRequiresConfiguredStoreFilename(t *testing.T) {
+	t.Parallel()
 	cfg := t.TempDir()
 	staging, recovery := makeRestoreTransactionDirs(t, cfg, "b0e6544e-4ac0-41f2-8fc4-385d1c1aee59")
 	marker := PendingMarker{Operation: PendingOperationRestore, StagingDir: staging, RecoveryDir: recovery}
@@ -377,6 +386,7 @@ func TestApplyPendingRequiresConfiguredStoreFilename(t *testing.T) {
 }
 
 func TestApplyPendingRefusesStagingOutsideConfigRoot(t *testing.T) {
+	t.Parallel()
 	cfg := t.TempDir()
 	externalRoot := t.TempDir()
 	const id = "8d06c1cb-406c-4f26-8744-754f82bd2969"
@@ -413,6 +423,7 @@ func TestApplyPendingRefusesStagingOutsideConfigRoot(t *testing.T) {
 }
 
 func TestApplyPendingRefusesMismatchedTransactionDirectories(t *testing.T) {
+	t.Parallel()
 	cfg := t.TempDir()
 	staging, _ := makeRestoreTransactionDirs(t, cfg, "2fdb5d66-23cb-4591-b2e2-b3503b4dc97f")
 	_, recovery := makeRestoreTransactionDirs(t, cfg, "ee64e83f-4cd7-4435-b6f8-c4612fcce21d")

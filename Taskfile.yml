@@ -217,7 +217,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/lint-vuln.sh
 
   test:race:
-    desc: Go race detector with full integration scenarios (excludes test/security); release gate
+    desc: Go race detector with integration scenarios and selected host journeys
     cmds:
       - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:race -- {{.CLI_ARGS}}
 
@@ -351,7 +351,7 @@ tasks:
       - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:stress -- {{.CLI_ARGS}}
 
   test:wiring:
-    desc: Integration harness tests (test/wiring); included in test:full and test:race, excluded from test:short
+    desc: Integration harness tests (test/wiring); included in test:full
     cmds:
       - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:wiring -- {{.CLI_ARGS}}
 
