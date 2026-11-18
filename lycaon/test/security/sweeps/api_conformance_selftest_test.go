@@ -155,19 +155,20 @@ func TestConformanceSweepDetectsEventPayloadFaults(t *testing.T) {
 func TestConformanceSweepDetectsAStaleCorpus(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "corpus.json")
-	recorded := newWidgetSweep(t, widgetFaults{})
+	recorded := newWidgetSweep(t, widgetFaults{labelsWidget: true})
 	recorded.runAll(t.Context())
 	recorded.checkCorpus(recorded.corpus.corpus(nil), path, true)
+	// A run whose data leaves the optional label out is not stale.
 	unchanged := newWidgetSweep(t, widgetFaults{})
 	unchanged.runAll(t.Context())
 	unchanged.checkCorpus(unchanged.corpus.corpus(nil), path, false)
 	if got := unchanged.findings.list(ruleCorpusIsCurrent); len(got) > 0 {
 		t.Fatalf("an unchanged API reads as stale:\n%s", strings.Join(got, "\n"))
 	}
-	changed := newWidgetSweep(t, widgetFaults{labelsWidget: true})
+	changed := newWidgetSweep(t, widgetFaults{numbersLabel: true})
 	changed.runAll(t.Context())
 	changed.checkCorpus(changed.corpus.corpus(nil), path, false)
-	want := `getWidget 200: corpus: $.label was "", is now "string"; refresh with ` + openapi.HostCorpusRefresh
+	want := `getWidget 200: corpus: $.label was "string", is now "number"; refresh with ` + openapi.HostCorpusRefresh
 	if got := changed.findings.list(ruleCorpusIsCurrent); !slices.Contains(got, want) {
 		t.Fatalf("stale corpus findings do not include %q:\n%s", want, strings.Join(got, "\n"))
 	}
