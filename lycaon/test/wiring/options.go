@@ -117,7 +117,7 @@ func WithoutCoordinatorLoop() Option {
 	}
 }
 
-// WithWebResearchExchange supplies the harness's bounded provider exchange.
+// WithWebResearchExchange supplies the harness's bounded research exchange.
 func WithWebResearchExchange(exchange webresearch.Exchange) Option {
 	return func(o *options) { o.webResearchExchange = exchange }
 }

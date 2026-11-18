@@ -62,7 +62,7 @@ func TestDirectIndexFirstFastPath(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	d := discovererSeedingURLs(t, srv.URL)
+	d := discovererSeedingURLs(t, discovery, srv.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "useEffect memo react", MaxResults: 5})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -84,7 +84,7 @@ func TestDirectFrontierProbesIndexCandidatesWithoutExtraModelCall(t *testing.T) 
 	}))
 	t.Cleanup(srv.Close)
 
-	d := discovererSeedingURLs(t, srv.URL)
+	d := discovererSeedingURLs(t, discovery, srv.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "useEffect react hooks", MaxResults: 1})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -118,7 +118,7 @@ func TestDirectFrontierFollowsAnchors(t *testing.T) {
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
-	d := discovererSeedingURLs(t, srv.URL)
+	d := discovererSeedingURLs(t, discovery, srv.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "widget frobnicator review", MaxResults: 5})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -143,7 +143,7 @@ func TestDirectDirectSeedURLFastPath(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	seedURL := srv.URL + "/hooks-useEffect-react.md"
-	d := discovererSeedingURLs(t, seedURL)
+	d := discovererSeedingURLs(t, discovery, seedURL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "useEffect react hooks", MaxResults: 1})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -702,7 +702,7 @@ widget frobnicator review coverage.
 	}))
 	t.Cleanup(news.Close)
 
-	d := discovererSeedingURLs(t, news.URL)
+	d := discovererSeedingURLs(t, discovery, news.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "widget frobnicator review", MaxResults: 3})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -790,7 +790,7 @@ func TestSiteIndexCacheReusedAcrossQueries(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	for i := 0; i < 3; i++ {
-		d := discovererSeedingURLs(t, srv.URL)
+		d := discovererSeedingURLs(t, discovery, srv.URL)
 		hits, err := d.Search(context.Background(), DirectRequest{Query: "useEffect react", MaxResults: 3})
 		if err != nil || len(hits) == 0 {
 			t.Fatalf("query %d: hits = %+v err = %v", i, hits, err)
@@ -817,7 +817,7 @@ func TestDirectSearchRecordsOutcomeForStarvedQuery(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	index := testIndex(t)
-	d := discovererSeedingURLsWithIndex(t, index, srv.URL)
+	d := discovererSeedingURLsWithIndex(t, discovery, index, srv.URL)
 	if _, err := d.Search(context.Background(), DirectRequest{Query: "useEffect react hooks", MaxResults: 10}); err != nil {
 		t.Fatalf("Search: %v", err)
 	}

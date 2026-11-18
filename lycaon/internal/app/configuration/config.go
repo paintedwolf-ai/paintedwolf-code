@@ -25,7 +25,7 @@ type Config struct {
 	MockLLMPath string
 	// Startup reports bundled-engine boot progress to the desktop parent.
 	Startup startupprotocol.Sink
-	// WebResearchExchange supplies bounded provider exchanges; nil uses the host transport.
+	// WebResearchExchange supplies bounded research exchanges; nil uses the host transport.
 	WebResearchExchange webresearch.Exchange
 	// APIToken is the bearer the desktop delivered over the private startup
 	// pipe; empty resolves it from the environment or generates one.

@@ -107,7 +107,7 @@ func TestProviderBackedSearchWithoutModel(t *testing.T) {
 	discovery.slots = make(chan struct{}, 1)
 
 	srv := widgetReviewSite(t)
-	d := providerBackedDiscoverer(t, "hn", "Widget frobnicator review", srv.URL+"/guide")
+	d := providerBackedDiscoverer(t, discovery, "hn", "Widget frobnicator review", srv.URL+"/guide")
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "widget frobnicator review", MaxResults: 1})
 	if err != nil {
 		t.Fatalf("Search: %v", err)

@@ -67,7 +67,7 @@ func TestDirectLiveSearchQuality(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseSeedsJSON: %v", err)
 			}
-			d := discovererSeedingURLs(t, plan.seeds...)
+			d := discovererSeedingURLs(t, discovery, plan.seeds...)
 			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 			defer cancel()
 
@@ -108,7 +108,7 @@ func TestDirectLiveIndexFindsReviewFromHostLeads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseSeedsJSON: %v", err)
 	}
-	d := discovererSeedingURLs(t, plan.seeds...)
+	d := discovererSeedingURLs(t, discovery, plan.seeds...)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	hits, err := d.Search(ctx, DirectRequest{Query: "Steam Machine 2026 hardware console review", MaxResults: 5})

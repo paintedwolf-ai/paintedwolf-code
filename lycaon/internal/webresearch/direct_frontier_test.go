@@ -114,7 +114,7 @@ func TestDirectSearchIngestsIntoIndex(t *testing.T) {
 	testutil.FailErr(t, "open index", err)
 	t.Cleanup(func() { _ = store.Close() })
 
-	d := discovererSeedingURLsWithIndex(t, store, srv.URL)
+	d := discovererSeedingURLsWithIndex(t, discovery, store, srv.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "widget frobnicator guide", MaxResults: 2})
 	if err != nil || len(hits) == 0 {
 		t.Fatalf("Search: hits=%v err=%v", hits, err)
@@ -154,7 +154,7 @@ func TestDirectDeadIndexMemoryURLEvicted(t *testing.T) {
 	store.QueuePage(t.Context(), webindex.Page{URL: deadURL, Title: "widget frobnicator review", Verified: true})
 	store.Flush()
 
-	d := discovererSeedingURLsWithIndex(t, store, live.URL)
+	d := discovererSeedingURLsWithIndex(t, discovery, store, live.URL)
 	if _, err := d.Search(context.Background(), DirectRequest{Query: "widget frobnicator guide", MaxResults: 3}); err != nil {
 		t.Fatalf("Search: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestDirectStragglerHostDoesNotBlockResults(t *testing.T) {
 	}))
 	t.Cleanup(slow.Close)
 
-	d := discovererSeedingURLs(t, fast.URL, slow.URL)
+	d := discovererSeedingURLs(t, discovery, fast.URL, slow.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	hits, err := d.Search(ctx, DirectRequest{Query: "widget frobnicator guide", MaxResults: 1})

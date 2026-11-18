@@ -46,7 +46,7 @@ func TestDirectScenarioMultiSiteMixedSeeds(t *testing.T) {
 
 	directAlpine := alpine.URL + "/install.md"
 
-	d := discovererSeedingURLs(t, directAlpine, alpine.URL, talos.URL, flatcar.URL)
+	d := discovererSeedingURLs(t, discovery, directAlpine, alpine.URL, talos.URL, flatcar.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "Alpine Talos Flatcar container linux install", MaxResults: 3})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -67,7 +67,7 @@ func TestDirectScenarioIrrelevantPageSeedRanksBelowIndexMatch(t *testing.T) {
 	srv.Config.Handler = docSiteHandler(llms, nil)
 	irrelevantSeed := srv.URL + "/about.md"
 
-	d := discovererSeedingURLs(t, irrelevantSeed, srv.URL)
+	d := discovererSeedingURLs(t, discovery, irrelevantSeed, srv.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "Talos Kubernetes immutable OS", MaxResults: 1})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -89,7 +89,7 @@ func TestDirectScenarioNoMatchQueryErrors(t *testing.T) {
 	llms := fmt.Sprintf("- [X](%s/x.md): unrelated page\n", srv.URL)
 	srv.Config.Handler = docSiteHandler(llms, nil)
 
-	d := discovererSeedingURLs(t, srv.URL)
+	d := discovererSeedingURLs(t, discovery, srv.URL)
 	if _, err := d.Search(context.Background(), DirectRequest{Query: "zzzyyyy nomatch query", MaxResults: 1}); err == nil {
 		t.Fatal("expected error when no candidate carries a rank signal")
 	}
@@ -108,7 +108,7 @@ func TestDirectScenarioEightSeeds(t *testing.T) {
 		seedURLs[i] = srv.URL
 	}
 
-	d := discovererSeedingURLs(t, seedURLs...)
+	d := discovererSeedingURLs(t, discovery, seedURLs...)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "topic3 topic5 guide", MaxResults: 5})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -128,7 +128,7 @@ func TestDirectScenarioParallelSearches(t *testing.T) {
 	srv.Config.Handler = docSiteHandler(llms, nil)
 
 	makeDiscoverer := func() DirectDiscoverer {
-		return discovererSeedingURLs(t, srv.URL)
+		return discovererSeedingURLs(t, discovery, srv.URL)
 	}
 
 	const n = 5
@@ -159,7 +159,7 @@ func TestDirectScenarioEndToEndSearchFanOut(t *testing.T) {
 	llms := fmt.Sprintf("- [React Hooks](%s/hooks.md): useEffect and useMemo in React\n", srv.URL)
 	srv.Config.Handler = docSiteHandler(llms, nil)
 
-	d := discovererSeedingURLs(t, srv.URL)
+	d := discovererSeedingURLs(t, discovery, srv.URL)
 	result := Search(context.Background(), SearchOptions{Discovery: discovery,
 		Query:      "useEffect useMemo react hooks",
 		Settings:   Settings{EnabledProviders: []string{"direct"}},
@@ -183,7 +183,7 @@ func TestDirectScenarioFetchFailureDropsHit(t *testing.T) {
 	llms := fmt.Sprintf("- [Dead](%s%s): useEffect react guide\n", srv.URL, deadPath)
 	srv.Config.Handler = docSiteHandler(llms, map[string]int{deadPath: http.StatusNotFound})
 
-	d := discovererSeedingURLs(t, srv.URL)
+	d := discovererSeedingURLs(t, discovery, srv.URL)
 	_, err := d.Search(context.Background(), DirectRequest{Query: "useEffect react", MaxResults: 1})
 	if err == nil {
 		t.Fatal("expected error when fetch fails on all candidates")
@@ -204,7 +204,7 @@ func TestDirectScenarioSparseSiteFallsBackToRoot(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	d := discovererSeedingURLs(t, srv.URL)
+	d := discovererSeedingURLs(t, discovery, srv.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "Talos Kubernetes guide", MaxResults: 1})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -272,7 +272,7 @@ func TestDirectScenarioSeedPageLinkHarvest(t *testing.T) {
 	}))
 	t.Cleanup(roundup.Close)
 
-	d := discovererSeedingURLs(t, roundup.URL)
+	d := discovererSeedingURLs(t, discovery, roundup.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "widget frobnicator review", MaxResults: 2})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -345,7 +345,7 @@ func TestDirectScenarioRobotsDisallowBlocksIndex(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	d := discovererSeedingURLs(t, srv.URL)
+	d := discovererSeedingURLs(t, discovery, srv.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "useEffect react", MaxResults: 1})
 	if err == nil {
 		// The robots-allowed homepage may surface as a root fallback; the
@@ -381,7 +381,7 @@ func TestDirectScenarioHubFallbackForIndexlessSite(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	d := discovererSeedingURLs(t, srv.URL)
+	d := discovererSeedingURLs(t, discovery, srv.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "widgets getting started", MaxResults: 3})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -416,7 +416,7 @@ func TestDirectScenarioFreshQueryPrefersRecentFeedItems(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	d := discovererSeedingURLs(t, srv.URL)
+	d := discovererSeedingURLs(t, discovery, srv.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "release notes", MaxResults: 2})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
