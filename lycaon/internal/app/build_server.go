@@ -181,6 +181,10 @@ func (b *serveBuilder) wireServer() error {
 		return err
 	}
 	b.server.Server = api.NewServer(deps, b.startup.logger, b.identity.Token)
+	b.startup.resources.Track("contribution-frames", 160, func(context.Context) error {
+		b.server.Server.Admin.Extensions.Contributions.ReleaseFrames()
+		return nil
+	})
 	watch := b.server.Server.Sources.Watch
 	b.startup.resources.Track("api-source-watches", 22, func(ctx context.Context) error { watch.Stop(ctx); return watch.Wait(ctx) })
 	return registerServerHooks(b, extensionJournal)
@@ -283,6 +287,9 @@ func wireSourceEditing(b *serveBuilder, deps *api.Dependencies) error {
 	}
 	deps.Source.SourceMutations = sourceMutations
 	deps.Source.FileOperations = fileops.NewService(fileops.NewStore(b.storage.Database))
+	if hold := b.startup.cfg.TestFileOperationHold; hold != nil {
+		deps.Source.FileOperations.HoldBeforeWorkForTest(hold)
+	}
 	b.sessions.Manager.ToolContext.SetSourceMutations(sourceMutations)
 	editorDocuments := editordoc.New(editordoc.NewStore(b.storage.Database), b.storage.SourceLedger, b.storage.SourceLedger.History, b.storage.Projects)
 	if b.worker.merge != nil {

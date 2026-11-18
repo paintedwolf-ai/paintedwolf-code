@@ -2,10 +2,13 @@ package sweeps
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -32,6 +35,47 @@ type conformanceEffects interface {
 	mark(ctx context.Context) (int64, error)
 	// since lists what changed after mark.
 	since(ctx context.Context, mark int64) ([]string, error)
+	// tables digests each table's content, so a commit can be attributed.
+	tables(ctx context.Context) (map[string]string, error)
+}
+
+// readEffect is the work a read may start: the tables it writes and the
+// event topics it publishes.
+type readEffect struct {
+	tables, topics []string
+}
+
+// hostReadEffects are the effects the host's reads may declare.
+var hostReadEffects = map[string]readEffect{
+	"file_briefing": {
+		tables: []string{"file_briefings", "briefing_epochs", "briefing_manifests", "briefing_results", "briefing_records", "briefing_record_sections", "briefing_targets", "briefing_checkpoint_pins"},
+		topics: []string{string(wire.EventTopicFileBriefing)},
+	},
+}
+
+// permit removes the changes the effect accounts for. A commit is permitted
+// only when every table it changed belongs to the effect.
+func (e readEffect) permit(changes []string, before, after map[string]string) []string {
+	var out []string
+	for _, change := range changes {
+		if topic, ok := strings.CutPrefix(change, "event "); ok && slices.Contains(e.topics, topic) {
+			continue
+		}
+		if change == "store commit" {
+			var others []string
+			for _, table := range slices.Sorted(maps.Keys(after)) {
+				if after[table] != before[table] && !slices.Contains(e.tables, table) {
+					others = append(others, table)
+				}
+			}
+			if len(others) == 0 {
+				continue
+			}
+			change = "store commit to " + strings.Join(others, ", ")
+		}
+		out = append(out, change)
+	}
+	return out
 }
 
 // sweepReads sends every GET with fixture parameters, parents before children,
@@ -48,8 +92,12 @@ func (s *conformanceSweep) sweepReads(ctx context.Context) {
 	}
 	sort.SliceStable(reads, func(i, j int) bool { return len(reads[i].PathParams) < len(reads[j].PathParams) })
 	for _, op := range reads {
-		params, _ := s.values.pathParams(op)
-		req := conformanceRequest{op: op, probe: "read", params: params, query: s.values.requiredQuery(op)}
+		req, err := s.successRequest(ctx, op)
+		if err != nil {
+			s.findings.add(ruleOperationsSucceed, op.ID, "read", "could not prepare: %v", err)
+			continue
+		}
+		req.probe = "read"
 		var ex conformanceExchange
 		if s.readObserved[op.ID] {
 			ex = s.send(ctx, req)
@@ -74,14 +122,33 @@ func (s *conformanceSweep) observedRead(ctx context.Context, req conformanceRequ
 	}
 	mark, err := s.effects.mark(ctx)
 	if err != nil {
-		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not observe host state: %v", err)
+		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not observe host state after %s: %v", s.lastMutation, err)
 		return s.send(ctx, req), nil
+	}
+	effect, declared := s.readEffects[req.op.ReadEffect]
+	if req.op.ReadEffect != "" && !declared {
+		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "declares read effect %q, which names no known work", req.op.ReadEffect)
+	}
+	var before map[string]string
+	if declared {
+		if before, err = s.effects.tables(ctx); err != nil {
+			s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not digest host state: %v", err)
+			return s.send(ctx, req), nil
+		}
 	}
 	ex := s.send(ctx, req)
 	changes, err := s.effects.since(ctx, mark)
 	if err != nil {
 		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not observe host state: %v", err)
 		return ex, nil
+	}
+	if declared {
+		after, err := s.effects.tables(ctx)
+		if err != nil {
+			s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not digest host state: %v", err)
+			return ex, nil
+		}
+		changes = effect.permit(changes, before, after)
 	}
 	slices.Sort(changes)
 	return ex, slices.Compact(changes)
@@ -144,14 +211,22 @@ type hostEffects struct {
 	conn   *sql.Conn
 	hub    *events.MemoryHub
 	events <-chan wire.EventEnvelope
+	pump   *eventPump
 	settle func(context.Context)
 	// projectDir is the watched fixture tree whose change pipeline must drain.
 	projectDir string
 	// quietGrace is how long the tree's changes must stay idle before the host
 	// counts as settled.
 	quietGrace time.Duration
-	// barrierStep makes every barrier write change the file's content.
+	// barrierStep numbers barrier files; barrierName is the one in place.
 	barrierStep int
+	barrierName string
+	// textColumns lists each table's text columns, read once.
+	textColumns map[string][]string
+	// silent is set once the watcher stops reporting; later reads fail at once.
+	silent error
+	// unmatched keeps the latest changes a barrier saw that were not its own.
+	unmatched []string
 }
 
 // conformanceDebounce is the change coalesce window the sweep's host runs
@@ -185,11 +260,93 @@ func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryH
 		_ = conn.Close()
 		_ = database.Close()
 	})
-	return &hostEffects{conn: conn, hub: hub, events: ch, settle: h.Server.WaitForBackground, projectDir: projectDir, quietGrace: 2 * debounce}
+	pump := newEventPump(ch)
+	return &hostEffects{conn: conn, hub: hub, events: pump.out, pump: pump, settle: hostSettle(h), projectDir: projectDir, quietGrace: 2 * debounce}
+}
+
+// eventPump keeps reading a subscription so a burst between two reads never
+// fills the hub's buffer, which would drop it. It is the only reader, so a
+// take collects every event the hub has delivered, including any still in
+// the subscription's buffer.
+type eventPump struct {
+	out  chan wire.EventEnvelope
+	take chan chan pumpTake
+	// done closes once the subscription ended and every event was taken.
+	done chan struct{}
+}
+
+type pumpTake struct {
+	events  []wire.EventEnvelope
+	dropped bool
+}
+
+func newEventPump(in <-chan wire.EventEnvelope) *eventPump {
+	p := &eventPump{out: make(chan wire.EventEnvelope), take: make(chan chan pumpTake), done: make(chan struct{})}
+	go p.run(in)
+	return p
+}
+
+func (p *eventPump) run(in <-chan wire.EventEnvelope) {
+	var queue []wire.EventEnvelope
+	dropped := false
+	receive := func(env wire.EventEnvelope, ok bool) {
+		if !ok {
+			in, dropped = nil, true
+			return
+		}
+		queue = append(queue, env)
+	}
+	defer close(p.done)
+	for {
+		if dropped && len(queue) == 0 {
+			close(p.out)
+			return
+		}
+		var send chan wire.EventEnvelope
+		var next wire.EventEnvelope
+		if len(queue) > 0 {
+			send, next = p.out, queue[0]
+		}
+		select {
+		case env, ok := <-in:
+			receive(env, ok)
+		case send <- next:
+			queue = queue[1:]
+		case reply := <-p.take:
+			for pending := true; pending && in != nil; {
+				select {
+				case env, ok := <-in:
+					receive(env, ok)
+				default:
+					pending = false
+				}
+			}
+			reply <- pumpTake{events: queue, dropped: dropped}
+			queue = nil
+		}
+	}
+}
+
+// collect takes every delivered event without waiting for more.
+func (p *eventPump) collect() pumpTake {
+	reply := make(chan pumpTake, 1)
+	select {
+	case p.take <- reply:
+		return <-reply
+	case <-p.done:
+		return pumpTake{dropped: true}
+	}
 }
 
 func (e *hostEffects) mark(ctx context.Context) (int64, error) {
+	if _, err := os.Stat(e.projectDir); err != nil {
+		return 0, fmt.Errorf("the fixture project folder is gone: %w", err)
+	}
+	if e.silent != nil {
+		return 0, e.silent
+	}
 	if err := e.awaitWatcherBarrier(ctx); err != nil {
+		e.silent = err
 		return 0, err
 	}
 	e.quiesce(ctx)
@@ -203,23 +360,25 @@ func (e *hostEffects) mark(ctx context.Context) (int64, error) {
 // later report outstanding, which the read that follows would be charged with, so
 // only a round that wrote once proves the pipeline empty.
 func (e *hostEffects) awaitWatcherBarrier(ctx context.Context) error {
-	for patience := time.Second; ; patience *= 2 {
+	patience := time.Second
+	for range watcherBarrierRounds {
 		rewrote, err := e.watcherBarrierRound(ctx, patience)
 		if err != nil || !rewrote {
 			return err
 		}
 		e.quiesce(ctx)
 		e.drain()
+		patience *= 2
 	}
+	return fmt.Errorf("the watcher reported none of %d barrier rounds in %s; it reported %v; coverage %+v", watcherBarrierRounds, e.projectDir, e.unmatched, repochange.Coverage(e.projectDir))
 }
 
+// watcherBarrierRounds bounds the rewrites of an unanswered barrier, so a
+// watcher that stopped reporting fails each read instead of hanging the sweep.
+const watcherBarrierRounds = 6
+
 func (e *hostEffects) watcherBarrierRound(ctx context.Context, patience time.Duration) (bool, error) {
-	path := filepath.Join(e.projectDir, watcherBarrierFile)
-	e.barrierStep++
-	write := func() error {
-		return os.WriteFile(path, fmt.Appendf(nil, "effects-barrier-%d\n", e.barrierStep), 0o644)
-	}
-	if err := write(); err != nil {
+	if err := e.placeBarrier(); err != nil {
 		return false, err
 	}
 	retry := time.NewTicker(patience)
@@ -235,26 +394,36 @@ func (e *hostEffects) watcherBarrierRound(ctx context.Context, patience time.Dur
 			if envelope.Topic != wire.EventTopicSourceChanged || json.Unmarshal(envelope.Data, &changed) != nil {
 				continue
 			}
-			if slices.ContainsFunc(changed.Changes, func(c wire.SourceChange) bool { return c.Path == watcherBarrierFile }) {
+			if slices.ContainsFunc(changed.Changes, func(c wire.SourceChange) bool { return c.Path == e.barrierName }) {
 				return rewrote, nil
 			}
+			e.noteUnmatched(changed)
 			if changed.Resync {
 				rewrote = true
-				e.barrierStep++
-				if err := write(); err != nil {
+				if err := e.placeBarrier(); err != nil {
 					return rewrote, err
 				}
 			}
 		case <-retry.C:
-			rewrote = true
-			e.barrierStep++
-			if err := write(); err != nil {
-				return rewrote, err
-			}
+			return true, nil
 		case <-ctx.Done():
 			return rewrote, ctx.Err()
 		}
 	}
+}
+
+// placeBarrier removes the previous barrier file and creates a new one. A new
+// file is a structural change every platform's watcher reports; an in-place
+// rewrite is not.
+func (e *hostEffects) placeBarrier() error {
+	if e.barrierName != "" {
+		if err := os.Remove(filepath.Join(e.projectDir, e.barrierName)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	e.barrierStep++
+	e.barrierName = fmt.Sprintf("conformance-barrier-%d.txt", e.barrierStep)
+	return os.WriteFile(filepath.Join(e.projectDir, e.barrierName), []byte("barrier\n"), 0o644)
 }
 
 func (e *hostEffects) since(ctx context.Context, mark int64) ([]string, error) {
@@ -296,6 +465,62 @@ func (e *hostEffects) quiesce(ctx context.Context) {
 	e.hub.FlushDebounced()
 }
 
+// tables digests every table's rows.
+func (e *hostEffects) tables(ctx context.Context) (map[string]string, error) {
+	rows, err := e.conn.QueryContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	digests := make(map[string]string, len(names))
+	for _, name := range names {
+		digest, err := e.tableDigest(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+		digests[name] = digest
+	}
+	return digests, nil
+}
+
+func (e *hostEffects) tableDigest(ctx context.Context, table string) (string, error) {
+	rows, err := e.conn.QueryContext(ctx, `SELECT * FROM "`+strings.ReplaceAll(table, `"`, `""`)+`"`)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	columns, err := rows.Columns()
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	values := make([]sql.RawBytes, len(columns))
+	targets := make([]any, len(columns))
+	for i := range values {
+		targets[i] = &values[i]
+	}
+	for rows.Next() {
+		if err := rows.Scan(targets...); err != nil {
+			return "", err
+		}
+		for _, v := range values {
+			_, _ = fmt.Fprintf(h, "%d:%s", len(v), v)
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil)), rows.Err()
+}
+
 func (e *hostEffects) dataVersion(ctx context.Context) (int64, error) {
 	var version int64
 	err := e.conn.QueryRowContext(ctx, "PRAGMA data_version").Scan(&version)
@@ -304,18 +529,15 @@ func (e *hostEffects) dataVersion(ctx context.Context) (int64, error) {
 
 // drain empties the subscription without blocking and names each event.
 func (e *hostEffects) drain() []string {
-	var published []string
-	for {
-		select {
-		case env, ok := <-e.events:
-			if !ok {
-				return append(published, "event stream dropped")
-			}
-			published = append(published, fmt.Sprintf("event %s", env.Topic))
-		default:
-			return published
-		}
+	taken := e.pump.collect()
+	published := make([]string, 0, len(taken.events)+1)
+	for _, env := range taken.events {
+		published = append(published, fmt.Sprintf("event %s", env.Topic))
 	}
+	if taken.dropped {
+		published = append(published, "event stream dropped")
+	}
+	return published
 }
 
 // settleSourceWatcher waits until the project's watcher has delivered every
@@ -416,5 +638,81 @@ func sourceChangeNamed(published <-chan wire.EventEnvelope, path string) bool {
 		default:
 			return false
 		}
+	}
+}
+
+// keyRows counts, per table, the rows any text column of which equals key,
+// once the work earlier requests started has settled.
+func (e *hostEffects) keyRows(ctx context.Context, key string) (map[string]int, error) {
+	e.quiesce(ctx)
+	if e.textColumns == nil {
+		columns, err := storeTextColumns(ctx, e.conn)
+		if err != nil {
+			return nil, err
+		}
+		e.textColumns = columns
+	}
+	counts := map[string]int{}
+	for table, columns := range e.textColumns {
+		conditions := make([]string, len(columns))
+		args := make([]any, len(columns))
+		for i, column := range columns {
+			conditions[i] = fmt.Sprintf("%q = ?", column)
+			args[i] = key
+		}
+		var n int
+		query := fmt.Sprintf("SELECT COUNT(*) FROM %q WHERE %s", table, strings.Join(conditions, " OR "))
+		if err := e.conn.QueryRowContext(ctx, query, args...).Scan(&n); err != nil {
+			return nil, fmt.Errorf("count %s: %w", table, err)
+		}
+		if n > 0 {
+			counts[table] = n
+		}
+	}
+	return counts, nil
+}
+
+// storeTextColumns lists the text columns of every ordinary table.
+func storeTextColumns(ctx context.Context, conn *sql.Conn) (map[string][]string, error) {
+	rows, err := conn.QueryContext(ctx, `SELECT m.name, p.name FROM sqlite_schema m JOIN pragma_table_info(m.name) p
+		WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' AND upper(p.type) LIKE '%TEXT%'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]string{}
+	for rows.Next() {
+		var table, column string
+		if err := rows.Scan(&table, &column); err != nil {
+			return nil, err
+		}
+		out[table] = append(out[table], column)
+	}
+	if len(out) == 0 && rows.Err() == nil {
+		return nil, errors.New("the store has no text columns")
+	}
+	return out, rows.Err()
+}
+
+// hostSettle waits for the server's detached work and for briefing
+// generations, which run on their own scheduler.
+func hostSettle(h *wiring.Harness) func(context.Context) {
+	return func(ctx context.Context) {
+		h.Server.WaitForBackground(ctx)
+		if briefings := h.Server.Sources.Briefings; briefings != nil && briefings.Engine != nil && briefings.Engine.Host() != nil {
+			briefings.Engine.Host().Scheduler.Wait(ctx)
+		}
+	}
+}
+
+func (e *hostEffects) noteUnmatched(changed wire.SourceChangesEvent) {
+	for _, change := range changed.Changes {
+		e.unmatched = append(e.unmatched, change.RootID+":"+change.Path)
+	}
+	if changed.Resync {
+		e.unmatched = append(e.unmatched, "resync")
+	}
+	if len(e.unmatched) > 8 {
+		e.unmatched = e.unmatched[len(e.unmatched)-8:]
 	}
 }

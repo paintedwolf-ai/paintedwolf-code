@@ -7,6 +7,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -60,12 +63,28 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '413': {$ref: '#/components/responses/Error'}
         '415': {$ref: '#/components/responses/Error'}
+  /v1/widgets/{id}/renames:
+    parameters: [{$ref: '#/components/parameters/WidgetID'}]
+    post:
+      operationId: renameWidget
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/RenameInput'}}}
+      responses:
+        '200': {description: renamed, content: {application/json: {schema: {$ref: '#/components/schemas/Widget'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '413': {$ref: '#/components/responses/Error'}
+        '415': {$ref: '#/components/responses/Error'}
   /v1/widgets/{id}/parts/{part_id}:
     parameters:
       - {$ref: '#/components/parameters/WidgetID'}
       - {name: part_id, in: path, required: true, schema: {type: string, format: uuid}}
     get:
       operationId: getPart
+      x-read-starts-work: widget_index
       responses:
         '200': {description: ok, content: {application/json: {schema: {$ref: '#/components/schemas/Part'}}}}
         '401': {$ref: '#/components/responses/Error'}
@@ -86,7 +105,7 @@ components:
       type: object
       required: [id]
       additionalProperties: false
-      properties: {id: {type: string, format: uuid}, label: {type: string}}
+      properties: {id: {type: string, format: uuid}, label: {type: [string, number]}}
     WidgetList:
       type: object
       required: [widgets]
@@ -99,6 +118,13 @@ components:
       required: [id, name]
       additionalProperties: false
       properties: {id: {type: string, format: uuid}, name: {type: string}}
+    RenameInput:
+      type: object
+      required: [operation_id, label]
+      additionalProperties: false
+      properties:
+        operation_id: {type: string, format: uuid}
+        label: {type: string, minLength: 1}
     PartInput:
       type: object
       required: [name]
@@ -111,6 +137,11 @@ components:
 const (
 	fixtureWidgetID = "7f1c2a4e-0000-4000-8000-000000000001"
 	fixturePartID   = "7f1c2a4e-0000-4000-8000-000000000002"
+	// fixtureSecondWidgetID is listed after fixtureWidgetID; the widget API
+	// serves only the first by id.
+	fixtureSecondWidgetID = "7f1c2a4e-0000-4000-8000-000000000003"
+	// widgetSecondPage is the one cursor listWidgets issues.
+	widgetSecondPage = "widgets-page-2"
 )
 
 // widgetFaults breaks one invariant each.
@@ -124,7 +155,14 @@ type widgetFaults struct {
 	echoesSecret     bool // a read reveals the stored token, base64-encoded
 	rawMessage       bool // a 404 carries Go error text as its message
 	undeclaredDetail bool // a 404 carries a details key its notice does not declare
+	refusesCreate    bool // createPart refuses every valid body
+	rowPerReplay     bool // renameWidget stores a row for every replay of a key
+	acceptsReuse     bool // renameWidget applies a different body under a used key
+	ignoresLimit     bool // listWidgets answers every row whatever the limit
+	labelsWidget     bool // getWidget answers a string label
+	numbersLabel     bool // getWidget answers its label as a number
 	unguardedRoute   bool // getPart is registered without the bearer check
+	writesPastEffect bool // getPart also writes widgets, beyond its declared index
 }
 
 // widgetAPI serves widgetSpec through the production responder.
@@ -132,9 +170,15 @@ type widgetAPI struct {
 	faults    widgetFaults
 	responses httpio.Responder
 	writes    atomic.Int64
-	mu        sync.Mutex
-	token     string
+	// indexed counts writes to widget_index, the work getPart declares.
+	indexed atomic.Int64
+	mu      sync.Mutex
+	token   string
+	// renames holds one row per operation_id: the label it applied.
+	renames []widgetRename
 }
+
+type widgetRename struct{ key, label string }
 
 func (a *widgetAPI) routes() http.Handler {
 	mux := http.NewServeMux()
@@ -146,6 +190,7 @@ func (a *widgetAPI) routes() http.Handler {
 	} else {
 		mux.HandleFunc("GET /v1/widgets/{id}/parts/{part_id}", a.requireBearer(a.getPart))
 	}
+	mux.HandleFunc("POST /v1/widgets/{id}/renames", a.requireBearer(a.renameWidget))
 	return mux
 }
 
@@ -163,18 +208,28 @@ func (a *widgetAPI) requireBearer(next http.HandlerFunc) http.HandlerFunc {
 var widgetPageLimit = httpio.MustPageLimit(20, 1, 50)
 
 func (a *widgetAPI) listWidgets(w http.ResponseWriter, r *http.Request) {
+	rows := []any{map[string]any{"id": fixtureWidgetID}, map[string]any{"id": fixtureSecondWidgetID}}
+	page := httpio.PageQuery{Limit: len(rows)}
 	if !a.faults.clampsLimit {
-		page, err := httpio.ReadPageQuery(r, widgetPageLimit)
-		if err != nil {
+		var err error
+		if page, err = httpio.ReadPageQuery(r, widgetPageLimit); err != nil {
 			a.responses.InvalidQuery(w, err)
 			return
 		}
-		if page.Cursor != "" {
+		if page.Cursor != "" && page.Cursor != widgetSecondPage {
 			a.responses.PageCursorError(w, r, "cursor", pagecursor.ErrInvalid)
 			return
 		}
 	}
-	httpio.WriteJSON(w, http.StatusOK, map[string]any{"widgets": []any{map[string]any{"id": fixtureWidgetID}}})
+	if page.Cursor == widgetSecondPage {
+		rows = rows[1:]
+	}
+	answer := map[string]any{"widgets": rows}
+	if page.Limit < len(rows) && !a.faults.ignoresLimit {
+		answer["widgets"] = rows[:page.Limit]
+		answer["next_cursor"] = widgetSecondPage
+	}
+	httpio.WriteJSON(w, http.StatusOK, answer)
 }
 
 func (a *widgetAPI) getWidget(w http.ResponseWriter, r *http.Request) {
@@ -190,6 +245,12 @@ func (a *widgetAPI) getWidget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	widget := map[string]any{"id": fixtureWidgetID}
+	if a.faults.labelsWidget {
+		widget["label"] = "relabelled"
+	}
+	if a.faults.numbersLabel {
+		widget["label"] = 7
+	}
 	if a.faults.echoesSecret {
 		a.mu.Lock()
 		widget["label"] = base64.StdEncoding.EncodeToString([]byte("token=" + a.token))
@@ -226,7 +287,7 @@ func (a *widgetAPI) createPart(w http.ResponseWriter, r *http.Request) {
 		a.responses.DecodeError(w, r, err)
 		return
 	}
-	if in.Name == "" {
+	if in.Name == "" || a.faults.refusesCreate {
 		a.responses.FailDetails(w, wire.ApiErrorCodeInvalidRequest, map[string]any{"field": "name"}, "")
 		return
 	}
@@ -236,7 +297,59 @@ func (a *widgetAPI) createPart(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusCreated, map[string]any{"id": fixturePartID, "name": in.Name})
 }
 
+func (a *widgetAPI) renameWidget(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("id") != fixtureWidgetID {
+		a.widgetNotFound(w)
+		return
+	}
+	var in struct {
+		OperationID string `json:"operation_id"`
+		Label       string `json:"label"`
+	}
+	if err := httpio.DecodeJSON(w, r, &in); err != nil {
+		a.responses.DecodeError(w, r, err)
+		return
+	}
+	if in.OperationID == "" || in.Label == "" {
+		a.responses.FailDetails(w, wire.ApiErrorCodeInvalidRequest, map[string]any{"field": "label"}, "")
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, done := range a.renames {
+		if done.key != in.OperationID || a.faults.acceptsReuse || a.faults.rowPerReplay {
+			continue
+		}
+		if done.label != in.Label {
+			a.responses.Fail(w, wire.ApiErrorCodeIdempotencyConflict, "")
+			return
+		}
+		httpio.WriteJSON(w, http.StatusOK, map[string]any{"id": fixtureWidgetID, "label": done.label})
+		return
+	}
+	a.renames = append(a.renames, widgetRename{key: in.OperationID, label: in.Label})
+	httpio.WriteJSON(w, http.StatusOK, map[string]any{"id": fixtureWidgetID, "label": in.Label})
+}
+
+// keyRows counts the renames stored under key.
+func (a *widgetAPI) keyRows(_ context.Context, key string) (map[string]int, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	counts := map[string]int{}
+	for _, done := range a.renames {
+		if done.key == key {
+			counts["renames"]++
+		}
+	}
+	return counts, nil
+}
+
 func (a *widgetAPI) getPart(w http.ResponseWriter, r *http.Request) {
+	// Reading a part indexes it, the work the operation declares.
+	a.indexed.Add(1)
+	if a.faults.writesPastEffect {
+		a.writes.Add(1)
+	}
 	unknownWidget := r.PathValue("id") != fixtureWidgetID
 	unknownPart := r.PathValue("part_id") != fixturePartID
 	switch {
@@ -253,15 +366,24 @@ func (a *widgetAPI) getPart(w http.ResponseWriter, r *http.Request) {
 }
 
 // counterEffects reports a change whenever the widget API counted a write.
-type counterEffects struct{ writes *atomic.Int64 }
+type counterEffects struct{ writes, indexed *atomic.Int64 }
 
-func (c counterEffects) mark(context.Context) (int64, error) { return c.writes.Load(), nil }
+func (c counterEffects) mark(context.Context) (int64, error) {
+	return c.writes.Load() + c.indexed.Load(), nil
+}
 
-func (c counterEffects) since(_ context.Context, mark int64) ([]string, error) {
-	if c.writes.Load() != mark {
+func (c counterEffects) since(ctx context.Context, mark int64) ([]string, error) {
+	if now, _ := c.mark(ctx); now != mark {
 		return []string{"store commit"}, nil
 	}
 	return nil, nil
+}
+
+func (c counterEffects) tables(context.Context) (map[string]string, error) {
+	return map[string]string{
+		"widgets":      strconv.FormatInt(c.writes.Load(), 10),
+		"widget_index": strconv.FormatInt(c.indexed.Load(), 10),
+	}, nil
 }
 
 // widgetNotices is the fixture catalog: every code the widget API answers,
@@ -287,6 +409,7 @@ func widgetNotices(t *testing.T) *usernotice.Catalog {
 			"invalid_request":        entry("Invalid request", "field", "reason"),
 			"invalid_query":          entry("Invalid query", "param", "reason"),
 			"invalid_page_cursor":    entry("Invalid cursor", "param"),
+			"idempotency_conflict":   entry("Operation reused"),
 			"invalid_json":           entry("Invalid JSON"),
 			"unsupported_media_type": entry("Unsupported media type"),
 			"body_too_large":         entry("Body too large"),
@@ -307,7 +430,36 @@ func newWidgetSweep(t *testing.T, faults widgetFaults) *conformanceSweep {
 	notices := widgetNotices(t)
 	api := &widgetAPI{faults: faults, responses: httpio.Responder{Logger: slog.New(slog.DiscardHandler), Notices: notices}}
 	sweep := newConformanceSweep(doc, validator, api.routes(), notices)
-	sweep.effects = counterEffects{writes: &api.writes}
+	sweep.effects = counterEffects{writes: &api.writes, indexed: &api.indexed}
+	sweep.readEffects = map[string]readEffect{"widget_index": {tables: []string{"widget_index"}}}
+	sweep.keyRows = api
+	sweep.eventSchemas = openapi.NewEventSchemas(widgetEventSchemaDir(t))
 	sweep.values.bind("/v1/widgets/{id}/parts/{part_id}", "part_id", fixturePartID)
 	return sweep
+}
+
+// widgetEventSchemaDir lays out a docs tree whose project topic schema
+// references a YAML component file, as docs/schemas/events does.
+func widgetEventSchemaDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	files := map[string]string{
+		"schemas/events/project.json": `{"$id": "https://paintedwolf.dev/schemas/events/project.json",
+  "$ref": "../../openapi/components/schemas/widgets.yaml#/components/schemas/WidgetEvent"}`,
+		"openapi/components/schemas/widgets.yaml": `components:
+  schemas:
+    WidgetEvent:
+      type: object
+      required: [widget_id]
+      additionalProperties: false
+      properties:
+        widget_id: {type: string, format: uuid}
+`,
+	}
+	for name, body := range files {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		testutil.FailErr(t, "create "+name, os.MkdirAll(filepath.Dir(path), 0o755))
+		testutil.FailErr(t, "write "+name, os.WriteFile(path, []byte(body), 0o644))
+	}
+	return dir
 }

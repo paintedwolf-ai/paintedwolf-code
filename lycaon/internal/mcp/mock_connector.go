@@ -19,6 +19,8 @@ type MockConnector struct {
 	// ConnectCount records how many times Connect ran per provider, so a test can
 	// prove a stale pooled session was evicted rather than reused.
 	ConnectCount map[string]int
+	// Results answers a provider's tool call with fixed text.
+	Results map[string]map[string]string
 	// HTTPStatusOnce fires opts.OnHTTPStatus with the given code on the provider's
 	// next CallTool, then clears itself; the call fails as on a real 401/403.
 	HTTPStatusOnce map[string]int
@@ -85,6 +87,11 @@ func (m *mockSession) CallTool(_ context.Context, name string, args map[string]a
 				Content: []sdkmcp.Content{&sdkmcp.TextContent{Text: text}},
 				IsError: true,
 			}, nil
+		}
+	}
+	if m.parent != nil {
+		if text, ok := m.parent.Results[m.providerID][name]; ok {
+			return &sdkmcp.CallToolResult{Content: []sdkmcp.Content{&sdkmcp.TextContent{Text: text}}}, nil
 		}
 	}
 	switch name {

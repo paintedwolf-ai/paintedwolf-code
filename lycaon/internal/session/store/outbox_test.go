@@ -58,6 +58,9 @@ func TestSQLMutationOutboxCommitsObserverEvents(t *testing.T) {
 	if stored[0].ToolCalls[0].Args["input"] != "secret" {
 		t.Fatalf("stored input = %v", stored[0].ToolCalls[0].Args["input"])
 	}
+	if event.Message.Visibility != stored[0].Visibility {
+		t.Fatalf("observer visibility = %q, stored %q", event.Message.Visibility, stored[0].Visibility)
+	}
 }
 
 func waitOutboxEmpty(t *testing.T, database db.Handle) {

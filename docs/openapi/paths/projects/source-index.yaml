@@ -175,7 +175,10 @@ paths:
     get:
       tags: [projects]
       operationId: searchProjectSource
-      x-multi-stream-list: true
+      x-multi-stream-list:
+        cursor: cursor
+        next: next_cursor
+        bounded: [matches]
       summary: Search the cached project source index
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId

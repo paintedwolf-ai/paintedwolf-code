@@ -17,11 +17,16 @@ type Group struct {
 	services sync.WaitGroup
 }
 
-// GoService runs a loop that lives as long as the server. Wait drains it only
-// after Stop, so an idle wait never blocks on a service.
-func (s *Group) GoService(fn func(ctx context.Context)) {
-	ctx := s.Context()
+// GoService runs a loop that lives as long as parent and the server. Wait
+// drains it only after Stop, so an idle wait never blocks on a service.
+func (s *Group) GoService(parent context.Context, fn func(ctx context.Context)) {
+	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
+	stopParent := context.AfterFunc(parent, cancel)
+	stopServer := context.AfterFunc(s.Context(), cancel) //nolint:contextcheck // Server shutdown triggers cancellation.
 	s.services.Go(func() {
+		defer stopServer()
+		defer stopParent()
+		defer cancel()
 		defer observability.GuardPanic("api.service")
 		fn(ctx)
 	})

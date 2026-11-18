@@ -2,10 +2,13 @@ package sweeps
 
 import (
 	"context"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	wire "github.com/lycaon/lycaon/pkg/api"
+	openapi "github.com/lycaon/lycaon/test/openapi"
 )
 
 // TestConformanceSweepPassesAConformingAPI proves the sweep reports nothing
@@ -19,10 +22,16 @@ func TestConformanceSweepPassesAConformingAPI(t *testing.T) {
 		{Topic: wire.EventTopicSession, Scope: wire.EventScope{Kind: wire.EventScopeSession, ProjectID: fixtureWidgetID, SessionID: fixturePartID}},
 		{Topic: wire.EventTopicSession, Scope: wire.EventScope{Kind: wire.EventScopeDevice}},
 	}, widgetHostIDs())
+	sweep.checkEventPayloads([]wire.EventEnvelope{
+		{Topic: wire.EventTopicProject, Data: []byte(`{"widget_id":"` + fixtureWidgetID + `"}`)},
+	})
 	for _, rule := range conformanceRules {
 		for _, v := range sweep.findings.list(rule) {
 			t.Errorf("%s: %s", rule, v)
 		}
+	}
+	if sweep.outcomes.paged != 1 || sweep.outcomes.replayed != 1 {
+		t.Fatalf("lists walked = %d, keyed operations replayed = %d; want listWidgets and renameWidget", sweep.outcomes.paged, sweep.outcomes.replayed)
 	}
 	if len(sweep.secrets.seeded) != 1 {
 		t.Fatalf("seeded secrets = %v, want createPart", sweep.secrets.seeded)
@@ -59,12 +68,22 @@ func TestConformanceSweepDetectsEachBrokenInvariant(t *testing.T) {
 			`listWidgets: foreign cursor: answered 200 (details.param ""), want 400 invalid_page_cursor naming "cursor"`},
 		{"read writes", widgetFaults{writesOnRead: true}, ruleReadsHaveNoEffects,
 			"getWidget: read: changed host state: store commit"},
+		{"read writes past its declared effect", widgetFaults{writesPastEffect: true}, ruleReadsHaveNoEffects,
+			"getPart: read: changed host state: store commit to widgets"},
 		{"secret echoed", widgetFaults{echoesSecret: true}, ruleNoSecretMaterial,
 			"getWidget: read: response body reveals the secret set through createPart.token"},
 		{"raw error text", widgetFaults{rawMessage: true}, ruleMessageIsNoticeCopy,
 			`getWidget: unknown {id}: session_not_found message is "sql: no rows in result set", not the notice copy "Widget not found."`},
 		{"undeclared detail", widgetFaults{undeclaredDetail: true}, ruleDetailsAreDeclared,
 			"getWidget: unknown {id}: session_not_found details.path is not declared by its notice context_schema"},
+		{"replay stores a second row", widgetFaults{rowPerReplay: true}, ruleKeyedOperationsAreIdempotent,
+			"renameWidget: replay: replays changed the rows naming the key: map[renames:1], then map[renames:11]"},
+		{"reused key applies a different body", widgetFaults{acceptsReuse: true}, ruleKeyedOperationsAreIdempotent,
+			"renameWidget: changed body: no change answered 409 idempotency_conflict (label: 200)"},
+		{"limit ignored", widgetFaults{ignoresLimit: true}, rulePagination,
+			"listWidgets: walk: limit 1 answered 2 rows"},
+		{"mutation never succeeds", widgetFaults{refusesCreate: true}, ruleOperationsSucceed,
+			"createPart: success: never answered a success; last answer success answered 400 invalid_request map[field:name]"},
 		{"route without the bearer check", widgetFaults{unguardedRoute: true}, ruleRequestsNeedTheBearer,
 			"getPart: no credential: answered 200, want 401 unauthorized"},
 		{"route without the bearer check, wrong token", widgetFaults{unguardedRoute: true}, ruleRequestsNeedTheBearer,
@@ -103,6 +122,55 @@ func TestConformanceSweepDetectsEventScopeFaults(t *testing.T) {
 	got := sweep.findings.list(ruleEventScopesAreHostIDs)
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("event scope findings:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// TestConformanceSweepDetectsEventPayloadFaults requires a field the schema
+// lacks, a wrong type, and a topic with no schema to be reported.
+func TestConformanceSweepDetectsEventPayloadFaults(t *testing.T) {
+	t.Parallel()
+	sweep := newWidgetSweep(t, widgetFaults{})
+	sweep.checkEventPayloads([]wire.EventEnvelope{
+		{Topic: wire.EventTopicProject, Data: []byte(`{"widget_id":"` + fixtureWidgetID + `","label":"extra"}`)},
+		{Topic: wire.EventTopicProject, Data: []byte(`{"widget_id":"not-a-uuid"}`)},
+		{Topic: wire.EventTopicSession, Data: []byte(`{}`)},
+	})
+	got := sweep.findings.list(ruleEventPayloadsMatchSchemas)
+	for _, want := range []string{
+		"project: payload: /: ",
+		"project: payload: /widget_id: ",
+		"session: payload: no payload schema: ",
+	} {
+		if !slices.ContainsFunc(got, func(line string) bool { return strings.HasPrefix(line, want) }) {
+			t.Errorf("event payload findings lack %q:\n%s", want, strings.Join(got, "\n"))
+		}
+	}
+	if len(got) != 3 {
+		t.Fatalf("event payload findings = %d, want 3:\n%s", len(got), strings.Join(got, "\n"))
+	}
+}
+
+// TestConformanceSweepDetectsAStaleCorpus records a conforming widget API,
+// then changes one answer's shape without refreshing the recording.
+func TestConformanceSweepDetectsAStaleCorpus(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "corpus.json")
+	recorded := newWidgetSweep(t, widgetFaults{labelsWidget: true})
+	recorded.runAll(t.Context())
+	recorded.checkCorpus(recorded.corpus.corpus(nil), path, true)
+	// A run whose data leaves the optional label out is not stale.
+	unchanged := newWidgetSweep(t, widgetFaults{})
+	unchanged.runAll(t.Context())
+	unchanged.checkCorpus(unchanged.corpus.corpus(nil), path, false)
+	if got := unchanged.findings.list(ruleCorpusIsCurrent); len(got) > 0 {
+		t.Fatalf("an unchanged API reads as stale:\n%s", strings.Join(got, "\n"))
+	}
+	changed := newWidgetSweep(t, widgetFaults{numbersLabel: true})
+	changed.runAll(t.Context())
+	changed.checkCorpus(changed.corpus.corpus(nil), path, false)
+	want := `getWidget 200: corpus: $.label was "string", is now "number"; refresh with ` + openapi.HostCorpusRefresh
+	if got := changed.findings.list(ruleCorpusIsCurrent); !slices.Contains(got, want) {
+		t.Fatalf("stale corpus findings do not include %q:\n%s", want, strings.Join(got, "\n"))
 	}
 }
 

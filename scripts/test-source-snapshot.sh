@@ -141,6 +141,7 @@ FIXTURE_REFRESHES=(
   "UPDATE_CITATION_GROUNDING_PARITY_GOLDENS=lycaon/test/fixtures/citation-grounding-parity"
   "UPDATE_CORPUS_BASELINE=lycaon/internal/oar/testdata/corpus_baseline.json"
   "UPDATE_RUST_HOST_WIRE_FIXTURES=lycaon-den/src-tauri/tests/host_wire_fixtures.json"
+  "UPDATE_HOST_CORPUS=lycaon-den/src/api/testdata/host-corpus.json"
 )
 
 # Refreshes preserve checkout edits made after capture and omit snapshot deletions.

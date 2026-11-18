@@ -569,7 +569,12 @@ paths:
       tags:
         - sessions
       operationId: getCommandProgramReceipt
-      x-multi-stream-list: true
+      x-multi-stream-list:
+        cursor: cursor
+        next: next_cursor
+        bounded:
+          - executions
+          - nodes
       summary: Inspect bounded program and host child receipts
       parameters:
         - $ref: '#/components/parameters/SessionId'
@@ -1505,9 +1510,13 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Artifact bytes
+          description: Artifact bytes, an image or a recording
           content:
             image/*:
+              schema:
+                type: string
+                format: binary
+            video/*:
               schema:
                 type: string
                 format: binary
@@ -2904,7 +2913,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: The chosen folder is not empty (FOLDER_NOT_EMPTY)
+          description: The chosen folder is not empty (FOLDER_NOT_EMPTY), or the project is not a draft (PROJECT_NOT_DRAFT)
           content:
             application/json:
               schema:
@@ -5578,7 +5587,11 @@ paths:
       tags:
         - projects
       operationId: searchProjectSource
-      x-multi-stream-list: true
+      x-multi-stream-list:
+        cursor: cursor
+        next: next_cursor
+        bounded:
+          - matches
       summary: Search the cached project source index
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -6016,7 +6029,11 @@ paths:
       tags:
         - projects
       operationId: listProjectSourceWalk
-      x-multi-stream-list: true
+      x-multi-stream-list:
+        cursor: cursor
+        next: next_cursor
+        bounded:
+          - files[].effects
       summary: List Walk effects by lens baseline
       description: |
         File-first cross-session groups. baseline is a query parameter only
@@ -6112,7 +6129,12 @@ paths:
       tags:
         - projects
       operationId: listProjectSourceVersions
-      x-multi-stream-list: true
+      x-multi-stream-list:
+        cursor: cursor
+        next: next_cursor
+        bounded:
+          - versions
+          - commits
       summary: List one file's merged history — retained versions and git lineage
       description: |
         Every retained state of the file, across primary and worker workspaces,
@@ -6357,6 +6379,7 @@ paths:
       tags:
         - projects
       operationId: getFileBriefing
+      x-read-starts-work: file_briefing
       summary: Get the AI briefing for one exact source presentation
       description: current accepts worker_id; document requires document_id and document_revision; version requires version_id. Fields for other presentation kinds are rejected.
       parameters:
@@ -8485,7 +8508,11 @@ paths:
       tags:
         - workers
       operationId: getWorkerHistory
-      x-multi-stream-list: true
+      x-multi-stream-list:
+        cursor: before
+        next: before
+        bounded:
+          - messages
       summary: Read bounded round and message history for a session worker
       parameters:
         - $ref: '#/components/parameters/ProjectIDQuery'
@@ -13964,6 +13991,7 @@ paths:
         - projects
       operationId: releaseSourceView
       x-person-action: none
+      x-idempotent-release: true
       summary: Release a source view and its work interests
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -14122,6 +14150,7 @@ paths:
         - projects
       operationId: releaseSourceViewportInterest
       x-person-action: none
+      x-idempotent-release: true
       summary: Release source viewport demand
       responses:
         '204':
@@ -14425,6 +14454,7 @@ paths:
         - projects
       operationId: releaseSourcePresentation
       x-person-action: none
+      x-idempotent-release: true
       summary: Release a source presentation
       description: Release is idempotent. A presentation belongs to one view; under any other view it is not retained and is already released.
       parameters:
@@ -15051,7 +15081,7 @@ components:
       properties:
         repo_id:
           type: string
-          format: uuid
+          pattern: ^[a-zA-Z0-9_-]+$
         label:
           type: string
         branch:
@@ -15069,7 +15099,6 @@ components:
       type: object
       required:
         - available
-        - repo_id
         - label
         - dirty
         - staged_count
@@ -15081,8 +15110,9 @@ components:
         available:
           type: boolean
         repo_id:
+          description: Absent when the active folder is not in a git repository.
           type: string
-          format: uuid
+          pattern: ^[a-zA-Z0-9_-]+$
         label:
           type: string
         branch:
@@ -22494,7 +22524,6 @@ components:
       additionalProperties: false
       required:
         - worker_id
-        - child_session_id
         - agent_type
         - status
         - envelope
@@ -22526,6 +22555,7 @@ components:
           type: string
           format: uuid
         child_session_id:
+          description: Absent for a worker cancelled before it started a session.
           type: string
           format: uuid
         agent_type:
@@ -23171,9 +23201,6 @@ components:
           format: int64
           minimum: 0
           description: Queue revision the mutation was authored against; stale mutations are rejected atomically.
-        operation_id:
-          type: string
-          format: uuid
         item_ids:
           x-go-name: ItemIDs
           type: array
@@ -24385,7 +24412,7 @@ components:
             $ref: '#/components/schemas/ApprovalSecretRecipient'
         id:
           type: string
-          pattern: ^[a-z0-9_-]+$
+          pattern: ^[A-Za-z0-9_-]+$
           description: Opaque id bound to the complete authority and security witness.
         scope:
           $ref: '#/components/schemas/ApprovalGrantScope'
@@ -26790,9 +26817,11 @@ components:
       additionalProperties: false
       properties:
         run:
-          x-go-pointer: true
-          nullable: true
-          $ref: '#/components/schemas/WorkflowRun'
+          description: The chat's active run; null when it has none.
+          x-go-type: '*WorkflowRun'
+          anyOf:
+            - $ref: '#/components/schemas/WorkflowRun'
+            - type: 'null'
     AdvanceWorkflowRunRequest:
       x-go-generate: true
       type: object
@@ -27338,6 +27367,7 @@ components:
         - project_mutation_in_progress
         - promotion_conflict
         - promotion_not_found
+        - project_not_draft
         - draft_root_immutable
         - project_busy
         - checkpoint_not_pending
@@ -27429,7 +27459,6 @@ components:
         - duplicate_root
         - duplicate_root_label
         - project_removal_assessment_changed
-        - project_removal_operation_conflict
         - extension_state_changed
         - extension_candidate_rejected
         - contributions_unavailable
@@ -32480,7 +32509,7 @@ components:
       properties:
         pack_id:
           type: string
-          pattern: ^[A-Za-z0-9_.:-]+$
+          pattern: ^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$
         disposition:
           type: string
           enum:
@@ -33054,7 +33083,6 @@ components:
       type: object
       additionalProperties: false
       required:
-        - root_id
         - path
         - from_path
         - operation_id
@@ -33071,6 +33099,7 @@ components:
         root_id:
           type: string
           format: uuid
+          description: The root the request named; absent when it named none.
         path:
           type: string
         from_path:
@@ -39769,7 +39798,6 @@ components:
         - removed_count
         - released_bytes
         - complete
-        - preview_token
       properties:
         removed_count:
           type: integer
@@ -39781,6 +39809,7 @@ components:
         complete:
           type: boolean
         preview_token:
+          description: Authorizes the next batch; absent once pruning is complete.
           type: string
           pattern: ^[a-z0-9_-]+$
     LocalDataClearRequest:

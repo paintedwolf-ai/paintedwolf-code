@@ -71,7 +71,7 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	cfg := configuration.Config{TestChangeDebounce: o.changeDebounce}
+	cfg := configuration.Config{TestChangeDebounce: o.changeDebounce, TestFileOperationHold: o.fileOperationHold}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
 	// Install packs before the builder resolves the catalog.
 	installHarnessPacks(t, o.installedPackDirs)

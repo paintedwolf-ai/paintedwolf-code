@@ -155,15 +155,13 @@ func (v *Validator) ValidateResponse(ctx context.Context, method, pathTemplate s
 		Header:                 header,
 		Options:                &openapi3filter.Options{IncludeResponseStatus: true},
 	}
-	if mediaType := responseMediaType(header); len(body) > 0 && mediaType != "application/json" {
+	if mediaType := responseMediaType(header); mediaType != "" && mediaType != "application/json" {
 		if err := declaresMediaType(route.Operation, status, mediaType); err != nil {
 			return err
 		}
 		respInput.Options.ExcludeResponseBody = true
 	}
-	if len(body) > 0 {
-		respInput.SetBodyBytes(body)
-	}
+	respInput.SetBodyBytes(body)
 	return openapi3filter.ValidateResponse(ctx, respInput)
 }
 

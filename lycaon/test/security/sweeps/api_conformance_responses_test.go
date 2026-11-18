@@ -14,8 +14,10 @@ import (
 // checkResponse: every response has a status its operation declares and a body
 // that validates against that declaration; an error body is the envelope whose
 // code's vocabulary status is the status answered. A probe never earns a 500.
-func (s *conformanceSweep) checkResponse(ctx context.Context, ex conformanceExchange) {
+// It reports whether the answer matched its declaration.
+func (s *conformanceSweep) checkResponse(ctx context.Context, ex conformanceExchange) bool {
 	op := ex.req.op
+	valid := false
 	switch {
 	case ex.status == http.StatusInternalServerError:
 		s.findings.add(ruleResponsesConform, op.ID, ex.req.probe, "answered %s", ex.outcome())
@@ -26,21 +28,24 @@ func (s *conformanceSweep) checkResponse(ctx context.Context, ex conformanceExch
 		if err != nil {
 			s.findings.add(ruleResponsesConform, op.ID, ex.req.probe, "%s does not match its declaration: %s", ex.outcome(), firstLine(err.Error()))
 		}
+		valid = err == nil
 	}
 	if ex.status < 400 {
-		return
+		return valid
 	}
 	if ex.apiErr == nil {
 		s.findings.add(ruleResponsesConform, op.ID, ex.req.probe, "%d body is not the error envelope", ex.status)
-		return
+		return false
 	}
 	if !slices.Contains(wire.AllApiErrorCodeValues(), ex.apiErr.Code) {
 		s.findings.add(ruleResponsesConform, op.ID, ex.req.probe, "code %q is not in the ApiErrorCode vocabulary", ex.apiErr.Code)
-		return
+		return false
 	}
 	if want := ex.apiErr.Code.HTTPStatus(); want != ex.status {
 		s.findings.add(ruleResponsesConform, op.ID, ex.req.probe, "code %s declares status %d but answered %d", ex.apiErr.Code, want, ex.status)
+		return false
 	}
+	return valid
 }
 
 // checkErrorCopy compares error copy and detail keys with the notice catalog.

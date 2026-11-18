@@ -1,7 +1,6 @@
 package contract
 
 import (
-	"net/http"
 	"path/filepath"
 	"testing"
 
@@ -32,18 +31,5 @@ func TestExternalScannerYAMLExampleValidates(t *testing.T) {
 		if s.Driver == scancatalog.DriverExternal && !scanoutput.IsRegisteredOutputParser(s.OutputParser) {
 			t.Fatalf("unknown parser %q for %q", s.OutputParser, s.ID)
 		}
-	}
-}
-
-func TestListScannersOpenAPIRoute(t *testing.T) {
-	t.Parallel()
-	srv := NewStubServer()
-	t.Cleanup(srv.Close)
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/v1/scanners", nil)
-	resp, err := srv.Client().Do(req)
-	contractcheck.FailErr(t, "srv.Client failed", err)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d", resp.StatusCode)
 	}
 }

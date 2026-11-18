@@ -101,9 +101,6 @@ components:
           format: int64
           minimum: 0
           description: Queue revision the mutation was authored against; stale mutations are rejected atomically.
-        operation_id:
-          type: string
-          format: uuid
         item_ids:
           x-go-name: "ItemIDs"
           type: array

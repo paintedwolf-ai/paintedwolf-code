@@ -58,24 +58,27 @@ func (s *Activity) handleUpdateHostResource(w http.ResponseWriter, r *http.Reque
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	var effect settings.ApprovalEffect
-	switch req.Access {
-	case wire.HostResourceAccessSettingInherit:
-	case wire.HostResourceAccessSettingAsk:
-		effect = settings.ApprovalEffectAsk
-	case wire.HostResourceAccessSettingDeny:
-		effect = settings.ApprovalEffectDeny
-	default:
-		s.responses.FailDetails(w, wire.ApiErrorCodeInvalidRequest, map[string]any{"field": "access"}, "access must be inherit, ask, or deny")
-		return
-	}
-	if err := s.settingsSvc.Approvals.SetHostResourceRule(scope, projectDir, id, effect); err != nil {
-		if !settingsadmin.ProjectApprovalsWriteError(s.responses, w, err) {
-			s.responses.InternalError(w, r, err)
+	// A patch without access changes nothing and answers the current state.
+	if req.Access != "" {
+		var effect settings.ApprovalEffect
+		switch req.Access {
+		case wire.HostResourceAccessSettingInherit:
+		case wire.HostResourceAccessSettingAsk:
+			effect = settings.ApprovalEffectAsk
+		case wire.HostResourceAccessSettingDeny:
+			effect = settings.ApprovalEffectDeny
+		default:
+			s.responses.FailDetails(w, wire.ApiErrorCodeInvalidRequest, map[string]any{"field": "access"}, "access must be inherit, ask, or deny")
+			return
 		}
-		return
+		if err := s.settingsSvc.Approvals.SetHostResourceRule(scope, projectDir, id, effect); err != nil {
+			if !settingsadmin.ProjectApprovalsWriteError(s.responses, w, err) {
+				s.responses.InternalError(w, r, err)
+			}
+			return
+		}
+		projectview.PublishSettings(s.events, s.projectRegistry, r.Context(), wire.SettingsAreaApprovals, string(scope), projectDir, "updated")
 	}
-	projectview.PublishSettings(s.events, s.projectRegistry, r.Context(), wire.SettingsAreaApprovals, string(scope), projectDir, "updated")
 	project := hostresources.ProjectContext{ID: ref.ID, Dir: projectDir}
 	httpio.WriteJSON(w, http.StatusOK, hostResourcesWire(s.hostResources.SnapshotFor(r.Context(), false, project, nil)))
 }

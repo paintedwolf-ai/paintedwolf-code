@@ -165,6 +165,10 @@ values:
     status: 404
     comment: >-
       project has no active save-to-folder transition
+  - id: project_not_draft
+    status: 409
+    comment: >-
+      only a draft project can be saved to a folder
   - id: draft_root_immutable
     status: 409
     comment: >-
@@ -538,10 +542,6 @@ values:
     status: 409
     comment: >-
       Project removal references changed after review; assess again.
-  - id: project_removal_operation_conflict
-    status: 409
-    comment: >-
-      A project removal operation id was reused with different input.
   - id: extension_state_changed
     status: 409
     comment: >-

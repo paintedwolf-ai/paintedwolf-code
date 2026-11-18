@@ -25,7 +25,7 @@ type secretUsePosition struct {
 }
 
 var (
-	secretUseBounds = httpio.MustPageLimit(50, 1, 100)
+	secretUseBounds = httpio.MustPageLimit(50, 1, 200)
 	secretUsePages  = pagecursor.For[secretUsePosition]("managed_secret_uses")
 )
 

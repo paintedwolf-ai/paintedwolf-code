@@ -195,14 +195,15 @@ func (v *conformanceValues) propertyValue(prop *openapi3.Schema, name string, se
 		}
 		return secret(name)
 	}
-	if value, ok := v.byName[name]; ok && (prop == nil || schemaType(prop) == openapi3.TypeString) {
+	if value, ok := v.byName[name]; ok && name != idempotencyKey && (prop == nil || schemaType(prop) == openapi3.TypeString) {
 		return value
 	}
 	return v.schemaValue(prop, name, secret)
 }
 
 func (v *conformanceValues) stringValue(schema *openapi3.Schema, name string) string {
-	if value, ok := v.byName[name]; ok {
+	// A key is fresh per request; one bound from a listing would replay it.
+	if value, ok := v.byName[name]; ok && name != idempotencyKey {
 		return value
 	}
 	switch schema.Format {
