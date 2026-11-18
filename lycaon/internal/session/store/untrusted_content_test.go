@@ -101,7 +101,7 @@ type urlStandingStore interface {
 	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
 	UpsertEvidenceRecord(ctx context.Context, sessionID string, rec evidence.Record) error
 	RecordContact(ctx context.Context, sessionID, host string, contact evidence.Contact) error
-	SessionURLStanding(sessionID, rawURL string) evidence.URLStanding
+	SessionURLStanding(ctx context.Context, sessionID, rawURL string) evidence.URLStanding
 }
 
 func TestSessionURLStandingMatchesRecordedAddressesExactly(t *testing.T) {
@@ -145,12 +145,12 @@ func testSessionURLStanding(t *testing.T, st urlStandingStore, projectID string)
 		"https://docs.example.org/":             evidence.URLUnknown,
 		"":                                      evidence.URLUnknown,
 	} {
-		if got := st.SessionURLStanding(sess.ID, address); got != want {
+		if got := st.SessionURLStanding(ctx, sess.ID, address); got != want {
 			t.Errorf("SessionURLStanding(%q) = %d, want %d", address, got, want)
 		}
 	}
 	for name, sessionID := range map[string]string{"another session": other.ID, "no session": "", "a missing session": "missing-session"} {
-		if got := st.SessionURLStanding(sessionID, recorded); got != evidence.URLUnknown {
+		if got := st.SessionURLStanding(ctx, sessionID, recorded); got != evidence.URLUnknown {
 			t.Errorf("%s knows the address: %d", name, got)
 		}
 	}
