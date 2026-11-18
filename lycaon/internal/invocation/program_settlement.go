@@ -87,11 +87,11 @@ func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in to
 		conflict = *in.Conflict
 	}
 	settleBytes := int64(len(result.Terminal) + len(result.StopCode) + len(in.HostStopCode) + len(result.EffectCertainty) + len(evidence.Kind) + len(evidence.EvidenceRef) + len(evidence.OwnerRef) + len(evidence.RecoveryRef) + len(evidence.HeldVersionID) + len(in.AcceptedRevision) + len(in.PublishedRevision) + len(in.DetailReference) + len(in.JobHandle) + len(conflict.Path) + len(conflict.ExpectedRevision) + len(conflict.ObservedRevision) + 32)
-	if err := recordConsumerClosures(ctx, tx, programID, executionID, operation, in); err != nil {
-		return err
-	}
 	settleBytes += int64(len(in.ConsumerClosedExecutions))
 	if err := chargeProgramTrace(ctx, tx, programID, 1, settleBytes, traceChargeChildSettlement); err != nil {
+		return err
+	}
+	if err := recordConsumerClosures(ctx, tx, programID, executionID, operation, in); err != nil {
 		return err
 	}
 	transition, err := tx.ExecContext(ctx, `UPDATE invocation_program_executions SET state=?,owner_invoked=?,status_code=?,stop_code=?,host_stop_code=?,output_publishable=?,complete=?,publication_eligible=?,publication_basis=?,effect_certainty=?,evidence_kind=?,evidence_ref=?,owner_ref=?,recovery_ref=?,held_version_id=?,accepted_revision=?,published_revision=?,detail_ref=?,job_handle=?,conflict_path=?,conflict_expected_revision=?,conflict_observed_revision=?,settled_at=? WHERE id=? AND state IN ('prepared','waiting','running')`, string(result.Terminal), in.OwnerInvoked, result.Status, result.StopCode, in.HostStopCode, in.OutputPublishable, result.Complete, result.PublicationEligible, int(result.PublicationBasis), string(result.EffectCertainty), evidence.Kind, evidence.EvidenceRef, evidence.OwnerRef, evidence.RecoveryRef, evidence.HeldVersionID, in.AcceptedRevision, in.PublishedRevision, in.DetailReference, in.JobHandle, conflict.Path, conflict.ExpectedRevision, conflict.ObservedRevision, time.Now().UTC().Format(time.RFC3339Nano), executionID)

@@ -60,8 +60,11 @@ func readProgramActivities(ctx context.Context, tx *sql.Tx, program api.CommandP
 	activities := composeActivityGroups(groups, state)
 	if len(activities) == 0 && state != activityProgramRunning {
 		state := program.State
-		if state == "rejected" {
+		switch {
+		case state == "rejected":
 			state = "refused"
+		case state == "completed" && program.StatusCode != nil && *program.StatusCode != 0:
+			state = "failed"
 		}
 		outcome := activityOutcome(state, program.StatusCode)
 		activities = []api.CommandActivity{{ID: program.ID, Group: "Running commands", Phase: "execute", Label: "Run command", Subject: program.StopCode, State: state, Outcome: outcome, StatusCode: program.StatusCode, ExecutionIDs: []string{}, Spans: []api.CommandActivitySpan{}, Steps: []api.CommandActivityStep{}}}
