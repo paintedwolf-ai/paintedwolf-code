@@ -186,7 +186,9 @@ type conformanceSweep struct {
 	// readEffects are the effects a read may declare with x-read-starts-work.
 	readEffects map[string]readEffect
 	// hold keeps a file operation cancelable for the cancel recipe.
-	hold    *conformanceHold
+	hold *conformanceHold
+	// memo keeps what recipes made, once per sweep.
+	memo    *sweepMemo
 	keyRows conformanceKeyRows
 	// readObserved names reads whose answered request has already been checked for effects.
 	readObserved map[string]bool
@@ -227,7 +229,7 @@ type conformanceOutcomes struct {
 func newConformanceSweep(doc *openapi3.T, validator *openapi.Validator, handler http.Handler, notices *usernotice.Catalog) *conformanceSweep {
 	s := &conformanceSweep{
 		ops: conformanceOperations(doc), validator: validator, handler: handler, notices: notices,
-		values: newConformanceValues(), secrets: &conformanceSecrets{}, findings: newConformanceFindings(), readEffects: hostReadEffects,
+		values: newConformanceValues(), secrets: &conformanceSecrets{}, findings: newConformanceFindings(), readEffects: hostReadEffects, memo: &sweepMemo{},
 		children: map[string][]string{}, readObserved: map[string]bool{},
 		outcomes: &conformanceOutcomes{succeeded: map[string]bool{}, lastAnswer: map[string]string{}, created: map[string]bool{}}, corpus: newCorpusRecorder(),
 	}
@@ -544,4 +546,39 @@ func createConformanceMCPProvider(t *testing.T, srv http.Handler) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("list MCP provider fixture tools status = %d body = %s", w.Code, w.Body.String())
 	}
+}
+
+// sweepMemo is what one sweep's recipes made; it lives as long as the sweep.
+type sweepMemo struct {
+	mu     sync.Mutex
+	values map[string]any
+}
+
+func (m *sweepMemo) load(key string) (any, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	value, ok := m.values[key]
+	return value, ok
+}
+
+func (m *sweepMemo) store(key string, value any) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.values == nil {
+		m.values = map[string]any{}
+	}
+	m.values[key] = value
+}
+
+func (m *sweepMemo) loadOrStore(key string, value any) any {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if existing, ok := m.values[key]; ok {
+		return existing
+	}
+	if m.values == nil {
+		m.values = map[string]any{}
+	}
+	m.values[key] = value
+	return value
 }

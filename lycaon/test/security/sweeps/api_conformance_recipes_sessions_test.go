@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"github.com/google/uuid"
@@ -104,32 +103,17 @@ const (
 	sessionChoiceWorkflow   = "choice-transitions-fixture"
 )
 
-// sessionMemo keeps what a recipe made, so a read recipe that runs in every
-// read pass makes its resource once per sweep.
-var sessionMemo = struct {
-	sync.Mutex
-	values map[sessionMemoKey]any
-}{values: map[sessionMemoKey]any{}}
-
-type sessionMemoKey struct {
-	sweep *conformanceSweep
-	key   string
-}
-
+// sessionOnce makes a recipe's resource once per sweep, so a read recipe
+// that runs in every read pass does not make another.
 func sessionOnce[T any](s *conformanceSweep, key string, build func() (T, error)) (T, error) {
-	sessionMemo.Lock()
-	cached, ok := sessionMemo.values[sessionMemoKey{s, key}]
-	sessionMemo.Unlock()
-	if ok {
+	if cached, ok := s.memo.load("session:" + key); ok {
 		return cached.(T), nil
 	}
 	value, err := build()
 	if err != nil {
 		return value, err
 	}
-	sessionMemo.Lock()
-	sessionMemo.values[sessionMemoKey{s, key}] = value
-	sessionMemo.Unlock()
+	s.memo.store("session:"+key, value)
 	return value, nil
 }
 

@@ -35,6 +35,7 @@ func (s *conformanceSweep) onHost(h *wiring.Harness) *conformanceSweep {
 	sub.handler, sub.host = h.Server, h
 	sub.values, sub.readObserved = newConformanceValues(), map[string]bool{}
 	sub.effects, sub.keyRows, sub.beforeDeletes = nil, nil, nil
+	sub.memo = &sweepMemo{}
 	return &sub
 }
 

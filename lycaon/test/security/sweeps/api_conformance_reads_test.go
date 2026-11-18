@@ -271,6 +271,8 @@ func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryH
 type eventPump struct {
 	out  chan wire.EventEnvelope
 	take chan chan pumpTake
+	// done closes once the subscription ended and every event was taken.
+	done chan struct{}
 }
 
 type pumpTake struct {
@@ -279,14 +281,14 @@ type pumpTake struct {
 }
 
 func newEventPump(in <-chan wire.EventEnvelope) *eventPump {
-	p := &eventPump{out: make(chan wire.EventEnvelope), take: make(chan chan pumpTake)}
+	p := &eventPump{out: make(chan wire.EventEnvelope), take: make(chan chan pumpTake), done: make(chan struct{})}
 	go p.run(in)
 	return p
 }
 
 func (p *eventPump) run(in <-chan wire.EventEnvelope) {
 	var queue []wire.EventEnvelope
-	dropped, closed := false, false
+	dropped := false
 	receive := func(env wire.EventEnvelope, ok bool) {
 		if !ok {
 			in, dropped = nil, true
@@ -294,10 +296,11 @@ func (p *eventPump) run(in <-chan wire.EventEnvelope) {
 		}
 		queue = append(queue, env)
 	}
+	defer close(p.done)
 	for {
-		if dropped && len(queue) == 0 && !closed {
+		if dropped && len(queue) == 0 {
 			close(p.out)
-			closed = true
+			return
 		}
 		var send chan wire.EventEnvelope
 		var next wire.EventEnvelope
@@ -327,8 +330,12 @@ func (p *eventPump) run(in <-chan wire.EventEnvelope) {
 // collect takes every delivered event without waiting for more.
 func (p *eventPump) collect() pumpTake {
 	reply := make(chan pumpTake, 1)
-	p.take <- reply
-	return <-reply
+	select {
+	case p.take <- reply:
+		return <-reply
+	case <-p.done:
+		return pumpTake{dropped: true}
+	}
 }
 
 func (e *hostEffects) mark(ctx context.Context) (int64, error) {

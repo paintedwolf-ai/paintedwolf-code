@@ -110,11 +110,8 @@ type sourceState struct {
 	chatMessage string
 }
 
-var sourceStates sync.Map
-
 func sourceStateOf(s *conformanceSweep) *sourceState {
-	state, _ := sourceStates.LoadOrStore(s, &sourceState{})
-	return state.(*sourceState)
+	return s.memo.loadOrStore("source-state", &sourceState{}).(*sourceState)
 }
 
 // sourceName is a fresh file name inside the fixture project.

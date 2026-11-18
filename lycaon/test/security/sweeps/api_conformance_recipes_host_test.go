@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -99,13 +98,6 @@ var hostRecipes = map[string]successRecipe{
 	"getProjectRemoval": {prepare: hostRecipeGetProjectRemoval},
 }
 
-// hostRecipeMemo holds what one sweep's recipes share, so each fixture is
-// made once per sweep.
-var hostRecipeMemo = struct {
-	sync.Mutex
-	values map[*conformanceSweep]map[string]string
-}{values: map[*conformanceSweep]map[string]string{}}
-
 func hostRecipeT(s *conformanceSweep) (*testing.T, error) {
 	if s.host == nil || s.fixture.t == nil {
 		return nil, errors.New("host recipes need the production-wired host")
@@ -114,29 +106,15 @@ func hostRecipeT(s *conformanceSweep) (*testing.T, error) {
 }
 
 func hostRecipeRecall(s *conformanceSweep, key string) (string, bool) {
-	hostRecipeMemo.Lock()
-	defer hostRecipeMemo.Unlock()
-	value, ok := hostRecipeMemo.values[s][key]
-	return value, ok
+	value, ok := s.memo.load("host:" + key)
+	text, _ := value.(string)
+	return text, ok
 }
 
 func hostRecipeRemember(s *conformanceSweep, key, value string) {
-	hostRecipeMemo.Lock()
-	defer hostRecipeMemo.Unlock()
-	if hostRecipeMemo.values[s] == nil {
-		hostRecipeMemo.values[s] = map[string]string{}
-		if s.fixture.t != nil {
-			s.fixture.t.Cleanup(func() {
-				hostRecipeMemo.Lock()
-				defer hostRecipeMemo.Unlock()
-				delete(hostRecipeMemo.values, s)
-			})
-		}
-	}
-	hostRecipeMemo.values[s][key] = value
+	s.memo.store("host:"+key, value)
 }
 
-// hostRecipeOnce returns key's value, making it the first time.
 func hostRecipeOnce(s *conformanceSweep, key string, build func() (string, error)) (string, error) {
 	if value, ok := hostRecipeRecall(s, key); ok {
 		return value, nil
