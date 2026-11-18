@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,7 +23,7 @@ func newRoundTripRegistry(t *testing.T) (*mcp.Runtime, string) {
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath:          dir,
 		GlobalOverridePath: globalPath,
-		Connector:          &mcp.MockConnector{},
+		Connector:          &mcptest.Connector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())

@@ -5,6 +5,7 @@ package mcp_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"testing"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -14,7 +15,7 @@ import (
 
 func TestSyncToolsContinuesWhenOneProviderFails(t *testing.T) {
 	// Two synthesized providers; the connector fails on svcb but succeeds on svca.
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{
 			"svca": {{Name: "do", Description: "do"}},
 			"svcb": nil,
@@ -55,7 +56,7 @@ func TestSyncToolsContinuesWhenOneProviderFails(t *testing.T) {
 }
 
 func TestSyncToolsDoesNotPropagateConnectorError(t *testing.T) {
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{"svca": nil},
 		Err:   map[string]error{"svca": errors.New("simulated process spawn failure")},
 	}

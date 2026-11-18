@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"net/http"
 	"testing"
 
@@ -14,7 +15,7 @@ import (
 // reports 401/403, the next tool call reconnects instead of replaying the stale
 // session.
 func TestMCPAuthFailureEvictsSessionForFreshReconnect(t *testing.T) {
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools:        map[string][]*sdkmcp.Tool{"svca": {{Name: "query", Description: "query"}}},
 		ConnectCount: map[string]int{},
 	}

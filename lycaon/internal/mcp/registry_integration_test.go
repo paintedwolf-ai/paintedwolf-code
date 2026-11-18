@@ -4,6 +4,7 @@ package mcp_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/mcp"
@@ -12,7 +13,7 @@ import (
 )
 
 func TestMCPSpawnAndListTools(t *testing.T) {
-	conn := &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{
+	conn := &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{
 		"svca": {{Name: "do", Description: "do"}},
 	}}
 	reg := newTestRegistry(t, conn, "svca")

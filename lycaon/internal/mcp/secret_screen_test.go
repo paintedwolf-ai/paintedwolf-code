@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
@@ -34,7 +35,7 @@ func TestMCPCallToolScreenStdio(t *testing.T) {
 `), 0o600))
 
 	calls := map[string]map[string]int{}
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{
 			"fixture": {{Name: "query", Description: "query"}},
 		},

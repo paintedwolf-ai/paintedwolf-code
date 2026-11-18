@@ -125,7 +125,7 @@ func TestWireRedactsStaticSecrets(t *testing.T) {
 
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		GlobalOverridePath: storePath,
-		Connector:          &mcp.MockConnector{},
+		Connector:          &mcptest.Connector{},
 		OAuthStore:         mcptest.OpenOAuthStore(t, oauthPath),
 	})
 	testutil.FailErr(t, "NewRuntime", err)

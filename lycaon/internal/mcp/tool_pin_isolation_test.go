@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,7 +30,7 @@ func TestMCPCorruptToolPinsIsolatesUnaffectedProviders(t *testing.T) {
     args: []
     enabled: true
 `)
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{
 			"web-a":   {{Name: "query", Description: "query"}},
 			"local-b": {{Name: "query", Description: "query"}},

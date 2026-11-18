@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -62,7 +63,7 @@ func NewMCPProviderWithDistro(t *testing.T, distroBody string, projectMCP bool, 
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath:          t.TempDir(),
 		GlobalOverridePath: globalPath,
-		Connector: &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{
+		Connector: &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{
 			"svca": {
 				{Name: "do", Description: "do"},
 				{Name: "query", Description: "query"},

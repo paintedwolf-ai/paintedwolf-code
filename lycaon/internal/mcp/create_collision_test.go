@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,7 +19,7 @@ func newCreateRegistry(t *testing.T, distroYAML, globalPath string) *mcp.Runtime
 	stageDistro(t, distroYAML)
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		GlobalOverridePath: globalPath,
-		Connector:          &mcp.MockConnector{},
+		Connector:          &mcptest.Connector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())

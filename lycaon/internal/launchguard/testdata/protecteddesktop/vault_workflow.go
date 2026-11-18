@@ -11,6 +11,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,7 +71,7 @@ func executeSecretWorkflow(op, dir string) (string, error) {
 		reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 			StatePath:          dir,
 			GlobalOverridePath: globalMCPPath,
-			Connector:          &mcp.MockConnector{},
+			Connector:          &mcptest.Connector{},
 		})
 		if err != nil {
 			return "", fmt.Errorf("mcp.NewRuntime: %w", err)
@@ -114,7 +115,7 @@ func executeSecretWorkflow(op, dir string) (string, error) {
 		reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 			StatePath:          dir,
 			GlobalOverridePath: globalMCPPath,
-			Connector:          &mcp.MockConnector{},
+			Connector:          &mcptest.Connector{},
 		})
 		if err != nil {
 			return "", fmt.Errorf("reopen mcp.NewRuntime: %w", err)

@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/mcp"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestRegisterToolPlumbsStructuredMetadata(t *testing.T) {
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{
 			"docs": {{
 				Name:        "get",

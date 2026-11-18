@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/mcp"
@@ -33,7 +34,7 @@ func TestRegistryCatalogViewConfiguredEnabled(t *testing.T) {
 }
 
 func TestRegistryResolveQualifiedTool(t *testing.T) {
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{"fixture": {{Name: "echo", Description: "echo"}}},
 	}
 	reg := newTestRegistry(t, conn, "fixture")
