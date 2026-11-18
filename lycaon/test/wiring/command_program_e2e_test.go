@@ -44,17 +44,23 @@ type commandProgramSession struct {
 	session string
 }
 
-// newProgramHost builds the host; a posture is set as the global approval
-// posture for every session it starts.
+// newProgramHost builds the host, optionally with an approval posture.
 func newProgramHost(t *testing.T, posture ...gate.Posture) *programHost {
 	t.Helper()
 	models := newSessionModels()
 	p := &programHost{h: BuildForTest(t, WithLLMClient(models)), models: models}
 	if len(posture) > 0 {
-		p.posture = posture[0]
-		testutil.FailErr(t, "set approval posture", p.h.Server.Admin.Settings.Service.Approvals.PutGlobal(settings.ApprovalConfig{Posture: p.posture}))
+		p.usePosture(t, posture[0])
 	}
 	return p
+}
+
+// usePosture makes posture the global approval posture and the posture of
+// every project the host starts from now on.
+func (p *programHost) usePosture(t *testing.T, posture gate.Posture) {
+	t.Helper()
+	p.posture = posture
+	testutil.FailErr(t, "set approval posture", p.h.Server.Admin.Settings.Service.Approvals.PutGlobal(settings.ApprovalConfig{Posture: posture}))
 }
 
 // program starts a session with a progress checklist, so project writes pass

@@ -156,9 +156,10 @@ func TestNativeChildrenReceiveCommandPathCapabilityRequests(t *testing.T) {
 }
 
 func TestNativeCommandApprovalCardCounts(t *testing.T) {
+	p := newProgramHost(t)
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		t.Run(string(posture), func(t *testing.T) {
-			p := newProgramHost(t, posture)
+			p.usePosture(t, posture)
 			contained := p.program(t, "cat notes.txt", "")
 			runCommandWithApprovals(t, contained)
 			if got := contained.outcome(t, "program-1"); got.Status != 0 || got.Stdout != "first note\nsecond note\n" {
@@ -208,6 +209,7 @@ func TestNativeCommandApprovalCardCounts(t *testing.T) {
 }
 
 func TestNativeOutsideReadUsesFolderApprovalAndAdmittedPathFrame(t *testing.T) {
+	p := newProgramHost(t)
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		for _, choice := range []struct {
 			name    string
@@ -217,7 +219,7 @@ func TestNativeOutsideReadUsesFolderApprovalAndAdmittedPathFrame(t *testing.T) {
 			{name: "chat", options: []string{"recommended"}},
 		} {
 			t.Run(string(posture)+"/"+choice.name, func(t *testing.T) {
-				p := newProgramHost(t, posture)
+				p.usePosture(t, posture)
 				outside := outsideCommandFolder(t)
 				first, second := filepath.Join(outside, "first.txt"), filepath.Join(outside, "second.txt")
 				testutil.FailErr(t, "seed first file", os.WriteFile(first, []byte("first outside\n"), 0o600))
@@ -265,9 +267,10 @@ func TestNativePathBuiltinsUseAdmittedFolder(t *testing.T) {
 }
 
 func TestSedScriptFileProjectsOutsideEffects(t *testing.T) {
+	p := newProgramHost(t)
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		t.Run(string(posture), func(t *testing.T) {
-			p := newProgramHost(t, posture)
+			p.usePosture(t, posture)
 			outside := outsideCommandFolder(t)
 			input := filepath.Join(outside, "input.txt")
 			testutil.FailErr(t, "seed sed input", os.WriteFile(input, []byte("outside sed\n"), 0o600))
@@ -300,9 +303,10 @@ func TestSedScriptFileProjectsOutsideEffects(t *testing.T) {
 }
 
 func TestSedOutsideScriptFileRequiresReadApproval(t *testing.T) {
+	p := newProgramHost(t)
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		t.Run(string(posture), func(t *testing.T) {
-			p := newProgramHost(t, posture)
+			p.usePosture(t, posture)
 			outside := outsideCommandFolder(t)
 			script := filepath.Join(outside, "replace.sed")
 			testutil.FailErr(t, "seed outside sed script", os.WriteFile(script, []byte("s/first/changed/\n"), 0o600))
@@ -319,9 +323,10 @@ func TestSedOutsideScriptFileRequiresReadApproval(t *testing.T) {
 }
 
 func TestSedOutsideScriptDisclosesOutsideEffects(t *testing.T) {
+	p := newProgramHost(t)
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		t.Run(string(posture), func(t *testing.T) {
-			p := newProgramHost(t, posture)
+			p.usePosture(t, posture)
 			sourceFolder := outsideCommandFolder(t)
 			effectFolder := outsideCommandFolder(t)
 			input := filepath.Join(effectFolder, "input.txt")
@@ -343,9 +348,10 @@ func TestSedOutsideScriptDisclosesOutsideEffects(t *testing.T) {
 }
 
 func TestSedOutsideScriptWriteReceiptAfterStagedApproval(t *testing.T) {
+	p := newProgramHost(t)
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		t.Run(string(posture), func(t *testing.T) {
-			p := newProgramHost(t, posture)
+			p.usePosture(t, posture)
 			sourceFolder := outsideCommandFolder(t)
 			writeFolder := outsideCommandFolder(t)
 			written := filepath.Join(writeFolder, "written.txt")
@@ -392,9 +398,10 @@ func TestSedOutsideScriptWriteReceiptAfterStagedApproval(t *testing.T) {
 }
 
 func TestYqExpressionAndFileApprovalCounts(t *testing.T) {
+	p := newProgramHost(t)
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		t.Run(string(posture), func(t *testing.T) {
-			p := newProgramHost(t, posture)
+			p.usePosture(t, posture)
 			expression := p.program(t, "printf 'x: 1\\n' | yq .x", "")
 			runCommandWithApprovals(t, expression)
 			if got := expression.outcome(t, "program-1"); got.Status != 0 || got.Stdout != "1\n" {

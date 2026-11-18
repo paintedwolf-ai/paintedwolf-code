@@ -379,7 +379,7 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 	})
 
 	t.Run("downstream_egress_policy_contrast_after_curl_ingestion", func(t *testing.T) {
-		balanced := newProgramHost(t, gate.PostureBalanced)
+		p.usePosture(t, gate.PostureBalanced)
 		balancedRules := "  - category: tool\n    pattern: http_request\n    effect: allow\n"
 
 		// 1. Clean local session: the first contact with sink.external.example is
@@ -396,7 +396,7 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 				FollowUpText: "Sent.",
 			},
 		}})
-		cleanSess := balanced.withClient(t, cleanMock, wire.CreateSessionRequest{}, balancedRules)
+		cleanSess := p.withClient(t, cleanMock, wire.CreateSessionRequest{}, balancedRules)
 		cleanSess.h.SeedProgress(t, t.Context(), cleanSess.session)
 		if !cleanSess.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(cleanSess.session, []uint16{uint16(port)}, "curl-proxy", "curl-fixture", nil) {
 			t.Fatal("listener grant failed")
@@ -428,7 +428,7 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 				FollowUpText: "Recovered.",
 			},
 		}})
-		ingestedSess := balanced.withClient(t, ingestedMock, wire.CreateSessionRequest{}, balancedRules)
+		ingestedSess := p.withClient(t, ingestedMock, wire.CreateSessionRequest{}, balancedRules)
 		ingestedSess.h.SeedProgress(t, t.Context(), ingestedSess.session)
 		if !ingestedSess.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(ingestedSess.session, []uint16{uint16(port)}, "curl-proxy", "curl-fixture", nil) {
 			t.Fatal("listener grant failed")
