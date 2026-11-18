@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	internalapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -69,7 +68,7 @@ func TestRetirementsAbsentFromActiveSurfacesAndMapped(t *testing.T) {
 
 	for _, route := range []string{"/v1/delegations", "/v1/delegations/del-1"} {
 		req := httptest.NewRequest(http.MethodGet, route, nil)
-		req.Header.Set("Authorization", "Bearer "+internalapi.TestAPIToken)
+		req.Header.Set("Authorization", "Bearer "+h.APIToken)
 		rec := httptest.NewRecorder()
 		h.Server.ServeHTTP(rec, req)
 		if rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
@@ -308,7 +307,7 @@ func TestRetirementsHistoricalTranscriptReadback(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/sessions/"+sess.ID+"/messages", nil)
-	req.Header.Set("Authorization", "Bearer "+internalapi.TestAPIToken)
+	req.Header.Set("Authorization", "Bearer "+h.APIToken)
 	rec := httptest.NewRecorder()
 	h.Server.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "delegate_dispatch") || !strings.Contains(rec.Body.String(), "request_budget") {

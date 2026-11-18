@@ -19,8 +19,7 @@ func TestDelegationSpawnWorkerPromptHygiene(t *testing.T) {
 		Text:    "done",
 	}}}))
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	ctx := context.Background()
 	dirtyTask := strings.Join([]string{

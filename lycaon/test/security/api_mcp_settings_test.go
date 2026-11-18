@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -32,28 +33,41 @@ func TestMCPEnableThenCheck(t *testing.T) {
 		t.Fatalf("check status = %d", w.Code)
 	}
 	var check wire.McpCheckResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &check); err != nil {
-		testutil.FailErr(t, "unmarshal JSON document", err)
+	testutil.FailErr(t, "decode provider check", json.Unmarshal(w.Body.Bytes(), &check))
+	index := slices.IndexFunc(check.Providers, func(row wire.McpCheckRow) bool {
+		return row.ProviderID == "svca"
+	})
+	if index < 0 {
+		t.Fatal("check omitted the installed provider")
 	}
-	for _, row := range check.Providers {
-		if row.ProviderID == "svca" {
-			if row.Status != wire.McpCheckRowStatusHealthy {
-				t.Fatalf("check not healthy: status=%s code=%s", row.Status, row.Code)
-			}
-		}
+	if row := check.Providers[index]; row.Status != wire.McpCheckRowStatusHealthy {
+		t.Fatalf("check not healthy: status=%s code=%s", row.Status, row.Code)
+	}
+
+	const toolName = "mcp_svca_do"
+	req = authedRequest(t, http.MethodGet, "/v1/mcp/providers/svca/tools", nil)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list tools status = %d body=%s", w.Code, w.Body.String())
+	}
+	var listed wire.McpToolListResponse
+	testutil.FailErr(t, "decode provider tools", json.Unmarshal(w.Body.Bytes(), &listed))
+	if len(listed.Tools) != 1 || listed.Tools[0].Name != toolName {
+		t.Fatalf("listed tools = %+v, want %s", listed.Tools, toolName)
+	}
+	if _, ok := h.ToolRegistry.Meta(toolName); !ok {
+		t.Fatalf("enabled tool %q is absent from dispatch", toolName)
 	}
 }
 
 func TestMCPDisabledToolsUnavailable(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
-	reg := h.MCPRegistry()
-	if reg == nil {
-		t.Fatal("MCP registry required")
-	}
-	names := reg.Catalog.RegisteredMCPTools()
-	for _, name := range names {
-		t.Fatalf("unexpected registered mcp tool %q while disabled", name)
+	for _, meta := range h.ToolRegistry.List() {
+		if meta.IsMCP() {
+			t.Fatalf("disabled provider tool %q is present in dispatch", meta.Name)
+		}
 	}
 	req := authedRequest(t, http.MethodGet, "/v1/mcp/providers", nil)
 	w := httptest.NewRecorder()
@@ -62,12 +76,16 @@ func TestMCPDisabledToolsUnavailable(t *testing.T) {
 		t.Fatalf("status = %d", w.Code)
 	}
 	var listed wire.McpProviderListResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &listed); err != nil {
-		testutil.FailErr(t, "unmarshal JSON document", err)
+	testutil.FailErr(t, "decode provider list", json.Unmarshal(w.Body.Bytes(), &listed))
+	index := slices.IndexFunc(listed.Providers, func(provider wire.McpProvider) bool {
+		return provider.ID == "svca"
+	})
+	if index < 0 {
+		t.Fatal("list omitted the installed provider")
 	}
-	for _, s := range listed.Providers {
-		if s.Enabled {
-			t.Fatalf("provider %q enabled by default", s.ID)
+	for _, provider := range listed.Providers {
+		if provider.Enabled {
+			t.Fatalf("provider %q is enabled by default", provider.ID)
 		}
 	}
 }

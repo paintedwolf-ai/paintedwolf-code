@@ -29,7 +29,7 @@ func TestAPIScanMaintainedSASTE2E(t *testing.T) {
 	testutil.FailErr(t, "verify selected source lock", bundled.VerifyFileSHA256(
 		filepath.Join(filepath.Dir(binary), "source-lock.json"), manifest.OpenGrep.SourceLockSHA256))
 	h := wiring.BuildForTest(t, wiring.WithBundledScanners())
-	t.Cleanup(h.StartBackgroundWorkers(t, t.Context()))
+	h.Start(t)
 	for _, fixture := range maintainedScanFixtures() {
 		t.Run(fixture.name, func(t *testing.T) {
 			project := t.TempDir()

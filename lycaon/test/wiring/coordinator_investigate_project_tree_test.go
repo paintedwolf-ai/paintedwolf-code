@@ -65,8 +65,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 			return `{"stages":[{"command":"true","exit_code":0}],"exit_code":0,"outcome":"passed"}`, nil
 		},
 	))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	ctx := h.OwnerCtx(t, context.Background())
 	dir := t.TempDir()

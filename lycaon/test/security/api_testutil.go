@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -17,6 +18,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
+
+func fixtureAuthorization() string {
+	return "Bearer " + os.Getenv("LYCAON_API_TOKEN")
+}
 
 func authedRequest(t *testing.T, method, path string, body io.Reader) *http.Request {
 	t.Helper()
@@ -33,7 +38,7 @@ func authedRequest(t *testing.T, method, path string, body io.Reader) *http.Requ
 	} else {
 		r = httptest.NewRequestWithContext(t.Context(), method, path, nil)
 	}
-	r.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	r.Header.Set("Authorization", fixtureAuthorization())
 	return r
 }
 
@@ -412,7 +417,7 @@ func settingsPut(t *testing.T, base, path, body string) (status int, out []byte)
 		t.Fatalf("http.NewRequest: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	req.Header.Set("Authorization", fixtureAuthorization())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PUT %s: %v", path, err)
@@ -442,7 +447,7 @@ func settingsPatch(t *testing.T, base, path, body string) (status int, out []byt
 		t.Fatalf("http.NewRequest: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	req.Header.Set("Authorization", fixtureAuthorization())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PATCH %s: %v", path, err)

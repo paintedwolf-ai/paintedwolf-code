@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -246,7 +245,7 @@ func journeyPost(t *testing.T, base, path, body string) (status int, out []byte)
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+path, strings.NewReader(body))
 	testutil.FailErr(t, "http.NewRequest failed", err)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	req.Header.Set("Authorization", fixtureAuthorization())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("POST %s: %v", path, err)
@@ -273,7 +272,7 @@ func journeyGet(t *testing.T, base, path string) (status int, out []byte) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, base+path, nil)
 	testutil.FailErr(t, "http.NewRequest failed", err)
-	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	req.Header.Set("Authorization", fixtureAuthorization())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
