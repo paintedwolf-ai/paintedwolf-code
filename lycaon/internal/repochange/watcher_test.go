@@ -46,7 +46,6 @@ func ensureLiveRoot(t *testing.T, dir string) {
 }
 
 func TestWatcher_EmitsWorktreeChanged(t *testing.T) {
-	t.Cleanup(repochange.ResetObserversForTest)
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) }) // Cleanup follows context cancellation.
 	t.Cleanup(repochange.ResetWatchersForTest)
 
@@ -57,7 +56,7 @@ func TestWatcher_EmitsWorktreeChanged(t *testing.T) {
 
 	var n atomic.Int32
 	var src repochange.Source
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		if ev.ProjectDir != root {
 			return
 		}
@@ -65,7 +64,7 @@ func TestWatcher_EmitsWorktreeChanged(t *testing.T) {
 			n.Add(1)
 			src = ev.Source
 		}
-	})
+	}))
 
 	ensureLiveRoot(t, dir)
 	testutil.FailErr(t, "write file", os.WriteFile(filepath.Join(dir, "watched.txt"), []byte("hi"), 0o644))
@@ -79,7 +78,6 @@ func TestWatcher_EmitsWorktreeChanged(t *testing.T) {
 }
 
 func TestWatcherEmitsForFilesNamedLikeDirectories(t *testing.T) {
-	t.Cleanup(repochange.ResetObserversForTest)
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) }) // Cleanup follows context cancellation.
 	t.Cleanup(repochange.ResetWatchersForTest)
 
@@ -88,7 +86,7 @@ func TestWatcherEmitsForFilesNamedLikeDirectories(t *testing.T) {
 
 	var mu sync.Mutex
 	seen := map[string]bool{}
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		if ev.ProjectDir != root {
 			return
 		}
@@ -100,7 +98,7 @@ func TestWatcherEmitsForFilesNamedLikeDirectories(t *testing.T) {
 		for _, p := range ev.Paths {
 			seen[p] = true
 		}
-	})
+	}))
 
 	ensureLiveRoot(t, dir)
 
@@ -137,7 +135,6 @@ func TestEnsureRootAcceptsRootWithNestedJunk(t *testing.T) {
 }
 
 func TestWatcherObservesHiddenAndMetadataChildren(t *testing.T) {
-	t.Cleanup(repochange.ResetObserversForTest)
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
 	t.Cleanup(repochange.ResetWatchersForTest)
 	dir := t.TempDir()
@@ -150,7 +147,7 @@ func TestWatcherObservesHiddenAndMetadataChildren(t *testing.T) {
 	}
 	var mu sync.Mutex
 	seen := map[string]bool{}
-	repochange.RegisterObserver(func(_ context.Context, event repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, event repochange.Event) {
 		if event.ProjectDir != root {
 			return
 		}
@@ -159,7 +156,7 @@ func TestWatcherObservesHiddenAndMetadataChildren(t *testing.T) {
 		for _, path := range event.Paths {
 			seen[path] = true
 		}
-	})
+	}))
 	ensureLiveRoot(t, dir)
 	repochange.SeedWatch(t.Context(), dir, directories)
 	for _, name := range []string{".hidden/new.txt", ".paintedwolf/new.txt", ".git/objects/new.txt", ".git/config"} {

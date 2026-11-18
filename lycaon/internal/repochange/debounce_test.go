@@ -12,17 +12,16 @@ import (
 )
 
 func TestDebouncer_CoalescesWorktreeBurst(t *testing.T) {
-	t.Cleanup(repochange.ResetObserversForTest)
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) }) // t.Context() is already canceled during cleanup
 
 	var n atomic.Int32
 	var lastPaths []string
 	var lastSrc repochange.Source
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		n.Add(1)
 		lastPaths = append([]string(nil), ev.Paths...)
 		lastSrc = ev.Source
-	})
+	}))
 
 	dir := t.TempDir()
 	d := repochange.NewDebouncer(30 * time.Millisecond)
@@ -46,13 +45,12 @@ func TestDebouncer_CoalescesWorktreeBurst(t *testing.T) {
 }
 
 func TestNotifyWorktreeDebounced_EmitsWithSource(t *testing.T) {
-	t.Cleanup(repochange.ResetObserversForTest)
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) }) // t.Context() is already canceled during cleanup
 
 	var got repochange.Event
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		got = ev
-	})
+	}))
 	dir := t.TempDir()
 	repochange.NotifyWorktreeDebounced(context.Background(), dir, []string{"x"}, repochange.SourceMutation)
 	repochange.ResetDebouncerForTest(t.Context()) // flush
@@ -72,20 +70,19 @@ func TestNotifyWorktreeDebounced_EmitsWithSource(t *testing.T) {
 
 // Flush callbacks may queue more work while the lock is released.
 func TestFlushForTestDeliversWorkQueuedDuringTheFlush(t *testing.T) {
-	t.Cleanup(repochange.ResetObserversForTest)
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
 
 	dir := t.TempDir()
 	var seen []string
 	var queued atomic.Bool
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		seen = append(seen, ev.Paths...)
 		// Stands in for the watcher goroutine landing an event mid-flush.
 		if queued.CompareAndSwap(false, true) {
 			repochange.NotifyWorktreeDebounced(
 				context.Background(), dir, []string{"late.go"}, repochange.SourceWatcher)
 		}
-	})
+	}))
 
 	repochange.NotifyWorktreeDebounced(
 		context.Background(), dir, []string{"first.go"}, repochange.SourceWatcher)
@@ -101,11 +98,10 @@ func TestFlushForTestDeliversWorkQueuedDuringTheFlush(t *testing.T) {
 }
 
 func TestDebouncerPreservesStructuredChangeKinds(t *testing.T) {
-	t.Cleanup(repochange.ResetObserversForTest)
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
 
 	var got repochange.Event
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) { got = ev })
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) { got = ev }))
 	dir := t.TempDir()
 	d := repochange.NewDebouncer(30 * time.Millisecond)
 	d.NotifyWorktreeChanges(context.Background(), dir, []repochange.WorktreeChange{{Path: "edit.go", Kind: repochange.WorktreeChangeContent}}, repochange.SourceWatcher)

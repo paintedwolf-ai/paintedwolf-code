@@ -11,7 +11,6 @@ import (
 )
 
 func TestStandingFlagCacheKeysByEpochAndRules(t *testing.T) {
-	repochange.ResetObserversForTest()
 	repochange.ResetWatchersForTest()
 	t.Cleanup(repochange.ResetWatchersForTest)
 	dir := t.TempDir()
@@ -43,7 +42,6 @@ func TestStandingFlagCacheKeysByEpochAndRules(t *testing.T) {
 }
 
 func TestStandingFlagCacheBypassesIncompleteWatchCoverage(t *testing.T) {
-	repochange.ResetObserversForTest()
 	repochange.ResetWatchersForTest()
 	t.Cleanup(repochange.ResetWatchersForTest)
 	dir := t.TempDir()

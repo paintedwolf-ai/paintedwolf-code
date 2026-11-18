@@ -11,18 +11,17 @@ import (
 )
 
 func TestWriteTool_EmitsWorktreeChanged(t *testing.T) {
-	t.Cleanup(repochange.ResetObserversForTest)
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) }) // t.Context() is already canceled during cleanup
 
 	dir := t.TempDir()
 	abs, _ := filepath.Abs(dir)
 	var got repochange.Event
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		if ev.ProjectDir != abs {
 			return
 		}
 		got = ev
-	})
+	}))
 
 	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{

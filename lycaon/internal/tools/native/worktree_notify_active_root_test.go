@@ -17,7 +17,6 @@ import (
 // Catalog invalidation must follow the root a mutated path resolves against
 // under the session's active root, not the primary root.
 func TestWorktreeChangesFollowTheActiveRoot(t *testing.T) {
-	t.Cleanup(repochange.ResetObserversForTest)
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) }) // t.Context() is already canceled during cleanup
 
 	base := t.TempDir()
@@ -27,12 +26,12 @@ func TestWorktreeChangesFollowTheActiveRoot(t *testing.T) {
 		{ID: "active", Label: "den", Path: secondary},
 	}
 	events := make(chan repochange.Event, 8)
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		if ev.Kind != repochange.WorktreeChanged || (ev.ProjectDir != primary && ev.ProjectDir != secondary) {
 			return
 		}
 		events <- ev
-	})
+	}))
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess"},
 		Source: tools.InvocationSource{Roots: roots, ActiveRootID: "active",

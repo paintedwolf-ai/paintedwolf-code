@@ -11,10 +11,9 @@ import (
 )
 
 func TestDebouncerOverflowBecomesStructuralResync(t *testing.T) {
-	t.Cleanup(ResetObserversForTest)
 	t.Cleanup(func() { ResetDebouncerForTest(context.Background()) })
 	var got Event
-	RegisterObserver(func(_ context.Context, ev Event) { got = ev })
+	t.Cleanup(RegisterObserver(func(_ context.Context, ev Event) { got = ev }))
 	d := NewDebouncer(time.Hour)
 	dir := t.TempDir()
 	for i := range maxDebouncePaths + 1 {

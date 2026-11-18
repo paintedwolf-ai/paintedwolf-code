@@ -80,7 +80,6 @@ func TestRecursiveDirWatchedFollowsTheRootGeometry(t *testing.T) {
 // whole reason coverage may call itself complete without registrations.
 func TestRecursiveWatchObservesWritesInUnseededDirectories(t *testing.T) {
 	skipUnlessRecursive(t)
-	t.Cleanup(ResetObserversForTest)
 	t.Cleanup(func() { ResetDebouncerForTest(context.Background()) })
 	root := t.TempDir()
 	deep := filepath.Join(root, "src", "generated", "nested")

@@ -413,12 +413,11 @@ func TestTruncatedCoverageHealsWhenCapacityFrees(t *testing.T) {
 func TestCoverageShortfallDoesNotPublishMutation(t *testing.T) {
 	root := t.TempDir()
 	var changes atomic.Int32
-	RegisterObserver(func(_ context.Context, event Event) {
+	t.Cleanup(RegisterObserver(func(_ context.Context, event Event) {
 		if event.ProjectDir == root && event.Kind == WorktreeChanged {
 			changes.Add(1)
 		}
-	})
-	defer ResetObserversForTest()
+	}))
 	defer ResetDebouncerForTest(context.Background())
 	watcher := &worktreeWatcher{root: root, watched: make(map[string]int)}
 	before := CurrentEpoch(root)
