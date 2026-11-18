@@ -23,6 +23,7 @@ type TurnAssemblyScratch struct {
 	StablePromptKey            string
 	BoardBlock                 string
 	BoardKey                   string
+	BoardSurfaceID             string
 	LastSeenSiblingNoteID      int64
 	PendingSiblingNotes        []inject.SiblingNote
 	ModeTransitionCauses       []surface.ModeTransitionCause

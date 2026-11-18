@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -185,11 +186,12 @@ type reachCell struct {
 	Surface, Phase, Posture, Loading string
 }
 
-// reachScenario is a scripted session over one posture, phase and loading
-// state. The prompt "@request" loads a tool the surface keeps deferred.
+// reachScenario is a scripted session over one approval posture, workflow
+// phase and loading state. The prompt "@request" loads a tool the surface
+// keeps deferred.
 type reachScenario struct {
 	loading  string
-	posture  api.SessionPosture
+	approval gate.Posture
 	workflow string
 	decider  decide.Decider
 	prompts  []string
@@ -233,34 +235,33 @@ func TestEveryRequestNamesOnlyWhatItOffers(t *testing.T) {
 	oracle := newReachOracle(t)
 	scenarios := []reachScenario{
 		{
-			loading: "nothing loaded", posture: api.SessionPostureBuild, decider: decide.Absent{},
+			loading: "nothing loaded", approval: gate.PostureBalanced, decider: decide.Absent{},
 			prompts: []string{"what is here", "build parallel modules with implementer"},
 			cells:   []string{"implement_investigate", surface.SurfaceImplementPark, "implementer"},
 		},
 		{
-			loading: "every unit loaded", posture: api.SessionPostureBuild, decider: decidetest.LoadAll{},
+			loading: "every unit loaded", approval: gate.PostureBalanced, decider: decidetest.LoadAll{},
 			prompts: []string{"what is here", "build parallel modules with implementer"},
 			cells:   []string{"implement_investigate", surface.SurfaceImplementPark},
 		},
 		{
-			loading: "deferred, requested, then loaded earlier", posture: api.SessionPostureBuild, decider: &decidetest.Fake{},
+			loading: "deferred, requested, then loaded earlier", approval: gate.PostureBalanced, decider: &decidetest.Fake{},
 			prompts: []string{"what is here", "@request", "use what was loaded"},
 			cells:   []string{"implement_investigate"},
 		},
 		{
-			loading: "refused calls", posture: api.SessionPostureBuild, decider: decide.Absent{},
+			loading: "refused calls", approval: gate.PostureBalanced, decider: decide.Absent{},
 			prompts: []string{"write it directly", "run nothing", "count with a cap"},
 			cells:   []string{"implement_investigate"},
 		},
-		{loading: "nothing loaded", posture: api.SessionPostureSpec, decider: decide.Absent{}, prompts: []string{"what is here", "write a note"}, cells: []string{"implement_investigate"}},
-		{loading: "nothing loaded", posture: api.SessionPostureBuild, workflow: "recon-pack", decider: decide.Absent{}, prompts: []string{"what is here"}},
-		{loading: "nothing loaded", posture: api.SessionPostureBuild, workflow: "options", decider: decide.Absent{}, prompts: []string{"what is here"}},
-		{loading: "nothing loaded", posture: api.SessionPostureBuild, workflow: "security-survey", decider: decide.Absent{}, prompts: []string{"what is here"}},
+		{loading: "nothing loaded", approval: gate.PostureStrict, decider: decide.Absent{}, prompts: []string{"what is here"}, cells: []string{"implement_investigate"}},
+		{loading: "nothing loaded", approval: gate.PostureLight, decider: decide.Absent{}, prompts: []string{"what is here", "write a note"}, cells: []string{"implement_investigate"}},
+		{loading: "nothing loaded", approval: gate.PostureBalanced, workflow: "recon-pack", decider: decide.Absent{}, prompts: []string{"what is here"}, cells: []string{"orchestrate_plan"}},
 	}
 	counts := map[reachCell]int{}
 	var codes []string
 	for _, sc := range scenarios {
-		t.Run(fmt.Sprintf("%s/%s/%s", sc.posture, sc.workflow, sc.loading), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s/%s/%s", sc.approval, sc.workflow, sc.loading), func(t *testing.T) {
 			got := runReachScenario(t, oracle, sc)
 			var seen []string
 			for cell, n := range got.counts {
@@ -284,7 +285,7 @@ func TestEveryRequestNamesOnlyWhatItOffers(t *testing.T) {
 	}
 	cells := slices.SortedFunc(maps.Keys(counts), func(a, b reachCell) int { return strings.Compare(fmt.Sprint(a), fmt.Sprint(b)) })
 	for _, cell := range cells {
-		t.Logf("%d requests on %s, phase %s, %s posture, %s", counts[cell], cell.Surface, cell.Phase, cell.Posture, cell.Loading)
+		t.Logf("%d requests on %s, phase %s, %s, %s", counts[cell], cell.Surface, cell.Phase, cell.Posture, cell.Loading)
 	}
 	slices.Sort(codes)
 	t.Logf("refusals checked: %v", slices.Compact(codes))
@@ -303,13 +304,13 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 	t.Helper()
 	config := &llm.MockConfig{Responses: reachResponses()}
 	rec := llm.NewRecordingClient(llm.NewMockProvider(config))
-	h := BuildForTest(t, WithLLMClient(rec), WithDecider(sc.decider))
+	h := BuildForTest(t, WithLLMClient(rec), WithDecider(sc.decider), withGlobalApprovalPosture(sc.approval))
 	ctx := context.Background()
 	t.Cleanup(h.StartBackgroundWorkers(t, ctx))
 	dir := t.TempDir()
 	writeTestProjectApprovalsAllowWrite(t, dir)
 	_ = writeImplementFixture(t, dir)
-	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: sc.posture}, dir)
+	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
@@ -332,7 +333,6 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 	stored, err := h.Store.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read the session", err)
 	profiles := h.Sessions.Manager.Profiles.ForSession(ctx, stored)
-	t.Logf("session posture %s", stored.Posture)
 	out := reachResult{counts: map[reachCell]int{}}
 	for i, req := range rec.AllRequests() {
 		if req.Composition != modelcall.CompositionConversation {
@@ -342,7 +342,7 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 		if where == "" {
 			where = req.Debug.AgentType
 		}
-		out.counts[reachCell{Surface: where, Phase: phase, Posture: string(stored.Posture), Loading: sc.loading}]++
+		out.counts[reachCell{Surface: where, Phase: phase, Posture: fmt.Sprintf("%s session, %s approval", stored.Posture, sc.approval), Loading: sc.loading}]++
 		for _, m := range req.Messages {
 			if m.ToolResult != nil && m.ToolResult.Outcome == api.ToolResultOutcomeRejected {
 				out.codes = append(out.codes, m.ToolResult.Codes...)
