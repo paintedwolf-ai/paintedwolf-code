@@ -259,8 +259,8 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
             <ActivityFailureChip failed={failed()} />
           </span>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
-          <Show when={props.sequence}>
-            {(sequence) => <span class="den-activity-span-hint" data-tip={sequence()} data-tip-when-clipped="">{sequence()}</span>}
+          <Show when={props.sequence !== undefined}>
+            <span class="den-activity-span-hint" data-tip={props.sequence || undefined} data-tip-when-clipped="">{props.sequence}</span>
           </Show>
         </span>
       </TranscriptDisclosureToggle>

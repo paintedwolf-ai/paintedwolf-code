@@ -37,7 +37,7 @@ it("advances the span label only on a strict rank increase (AT-ACT-HEAD-01)", ()
   const view = render(() => <CommandActivitySpan label="Running commands" entries={entries()} layout="chat" entryKey="command-groups-rank" renderToolEntry={part => <ToolPartShell part={part()} layout="chat"><span>Recorded detail</span></ToolPartShell>} />);
   const label = () => view.container.querySelector(".den-activity-span-name")?.textContent;
   const sequence = () => view.container.querySelector(".den-activity-span-hint")?.textContent;
-  expect(sequence()).toBeUndefined();
+  expect(sequence()).toBe("");
   expect(label()).toBe("Reading files");
   setEntries([entry("read", "Reading files", "completed", "inspect"), entry("search", "Searching codebase", "completed", "inspect")]);
   expect(sequence()).toBe("Reading files → Searching codebase");

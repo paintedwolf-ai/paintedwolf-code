@@ -153,7 +153,7 @@ modelIndependentWebE2e(`command activities contain long text at narrow card widt
  if (mixed) {
   await expect(sequence).toHaveText("Reading files → Running programs → Running tests · +1");
  } else {
-  await expect(sequence).toHaveCount(0);
+  await expect(sequence).toHaveText("");
  }
  for (const width of ["12rem", "48rem"]) {
   await group.evaluate((element, width) => { element.style.width = width; element.style.maxWidth = width; }, width);
@@ -162,13 +162,12 @@ modelIndependentWebE2e(`command activities contain long text at narrow card widt
   else await expect(count).toBeVisible();
   const title = await header.locator(".den-activity-span-name").boundingBox();
   const bounds = await header.boundingBox();
+  const line = await sequence.boundingBox();
+  expect(line!.height).toBeGreaterThan(0);
+  expect(line!.y).toBeGreaterThanOrEqual(title!.y + title!.height);
+  expect(line!.x + line!.width).toBeLessThanOrEqual(bounds!.x + bounds!.width);
   if (mixed) {
-   const line = await sequence.boundingBox();
-   expect(line!.y).toBeGreaterThanOrEqual(title!.y + title!.height);
-   expect(line!.x + line!.width).toBeLessThanOrEqual(bounds!.x + bounds!.width);
    expect(await sequence.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(width === "12rem");
-  } else {
-   expect(bounds!.height).toBeLessThan(title!.height * 2 + 16);
   }
  }
  if (await group.getAttribute("data-expanded") !== "true") await group.locator(":scope > .den-transcript-disclosure-header").click();

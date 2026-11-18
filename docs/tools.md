@@ -880,7 +880,7 @@ Routing handles stay in the expanded arguments. The catalog declares neutral fal
 
 Every visible tool call projects into an activity span, including a singleton. Consecutive calls share a span only when the same durable workflow run or assistant batch proves membership; the durable transcript still holds the individual calls in order.
 
-Each presentation entry declares an `activity.headline` and named `activity.salience`. Den sums salience by headline; the strongest accumulated headline names the span, with first appearance breaking ties. The collapsed header shows the headline, status, and applicable action and failure counts on one line. For commands spanning multiple activity types, a second line shows up to three distinct labels in first-appearance order and a count of any others. Expanding the group reveals the calls in order.
+Each presentation entry declares an `activity.headline` and named `activity.salience`. Den sums salience by headline; the strongest accumulated headline names the span, with first appearance breaking ties. The collapsed header shows the headline, status, and applicable action and failure counts on one line. The command header reserves a blank second line for the activity sequence. Once a second type appears, the line shows up to three distinct labels in first-appearance order and a count of any others. Expanding the group reveals the calls in order.
 
 Native search reports measured file and match counts on its running activity lease. Updates retain the activity and tool-call identities, are throttled to one per second except for phase changes, and cannot reopen a finished lease. Counts describe observed work, not an estimated completion percentage.
 
