@@ -89,12 +89,10 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 		`matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)`,
 		"matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}",
 		"needs: [classify, build-release]",
-		"release-assemble-updater-manifest.py",
+		"scripts/release_assembly/aggregate.sh",
 		"release-stage-platform-artifacts.sh",
 		"matrix.goos == 'linux'",
-		"Verify native release runner",
 		"release-public-artifacts",
-		"cargo install artifact-signing-cli --locked --version 0.11.0",
 		"PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}",
 	} {
 		if !strings.Contains(workflow, needle) {
@@ -103,30 +101,6 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 	}
 	if strings.Contains(workflow, "  linux-candidates:") {
 		t.Fatal("public Linux releases must not build a second candidate package set")
-	}
-	candidates := contractcheck.ReadRepoFile(t, root, ".github/workflows/linux-candidates.yml")
-	for _, needle := range []string{
-		"workflow_call:", "source_sha:", "ref: ${{ inputs.source_sha }}",
-		"matrix: ${{ fromJSON(needs.source.outputs.matrix) }}", "./task den:bundle",
-		"deb,rpm) ./task den:bundle ;;", "deb,rpm,pkg.tar.zst) ./task den:bundle -- --pacman-container ;;",
-		`--package-extensions "${PACKAGE_EXTENSIONS}"`, "PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}",
-		"name: linux-candidate-${{ matrix.updater_key }}",
-		"retention-days: 90", "Verify the catalog row for this candidate",
-		"CANDIDATE_RUNNER_LABEL:", "./task release:candidate:select", "./task release:rehearse:linux-signing --",
-		"./task release:candidate:diagnostics --",
-		"profile paintedwolf-candidate-diagnostic /tmp/painted-wolf-linux.*/deb/opt/painted-wolf-code/bin/pw flags=(unconfined)",
-		"TMPDIR: /tmp",
-	} {
-		if !strings.Contains(candidates, needle) {
-			t.Fatalf("Linux candidate workflow is missing %q", needle)
-		}
-	}
-	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-", "RUNNER_NAME:",
-		"push:", "refs/heads/", "path: .", "python3 .", "python3 scripts/linux_release", "release:live-test",
-		"--package-extensions deb,rpm", "PW_PACKAGE_PROBE_LEASE"} {
-		if strings.Contains(candidates, forbidden) {
-			t.Fatalf("Linux candidate workflow violates its isolation contract (%q)", forbidden)
-		}
 	}
 	if !strings.Contains(extractYAMLJob(workflow, "aggregate-release"), "pattern: platform-release-*") {
 		t.Fatal("aggregate-release must collect only signed platform results, never Linux candidates")
@@ -247,7 +221,8 @@ func TestReleaseChannelsHaveIndependentPointersAndPackageTokens(t *testing.T) {
 		t.Fatalf("updater generation policy: %v\n%s", err, output)
 	}
 	workflow := contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml")
-	if !strings.Contains(workflow, "painted-wolf-code@preview") ||
+	aggregate := contractcheck.ReadRepoFile(t, root, "scripts/release_assembly/aggregate.sh")
+	if !strings.Contains(aggregate, "render painted-wolf-code@preview preview") ||
 		!strings.Contains(workflow, "--channel \"${selected}\"") ||
 		!strings.Contains(workflow, "--advance-if-newer") ||
 		!strings.Contains(extractYAMLJob(workflow, "update-cask"), `scripts/release_distribution.py casks --source release-metadata --tap tap --channel "${CHANNEL}"`) {
@@ -304,12 +279,9 @@ func TestReleaseSigningAndPublicationCustodyAreSeparated(t *testing.T) {
 func TestWindowsCandidateIsNativelySignedAndVerified(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	workflow := extractYAMLJob(contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml"), "build-release")
+	staging := contractcheck.ReadRepoFile(t, root, "scripts/release-stage-platform-artifacts.sh")
 	for _, needle := range []string{
 		"x86_64-pc-windows-msvc",
-		"artifact-signing-cli --locked --version 0.11.0",
-		"AZURE_CLIENT_SECRET",
-		"AZURE_ARTIFACT_SIGNING_PROFILE",
 		"release-verify-windows-signature.ps1",
 		"-ApplicationPath",
 		"-SidecarPath",
@@ -320,8 +292,7 @@ func TestWindowsCandidateIsNativelySignedAndVerified(t *testing.T) {
 		"-BrowserPath",
 		"-EngineRootPath",
 	} {
-		if !strings.Contains(workflow, needle) &&
-			!strings.Contains(contractcheck.ReadRepoFile(t, root, "scripts/release-stage-platform-artifacts.sh"), needle) {
+		if !strings.Contains(staging, needle) {
 			t.Fatalf("Windows candidate release is missing %q", needle)
 		}
 	}

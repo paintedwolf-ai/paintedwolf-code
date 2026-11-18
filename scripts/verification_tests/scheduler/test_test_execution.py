@@ -20,6 +20,16 @@ spec.loader.exec_module(execution)
 import verification_resources as resources  # importable once test-execution.py extends the path
 
 
+class HostSettingIsolationTests(unittest.TestCase):
+    def test_admission_cases_hold_on_a_host_that_exports_its_capacity(self):
+        scripts = Path(__file__).resolve().parents[2]
+        environment = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path), "PW_TEST_CAPACITY": "12",
+                       "PW_TEST_WORKERS": "12", "PW_TEST_HOST": "dedicated"}
+        result = subprocess.run([sys.executable, "-m", "unittest", f"{__name__}.TaskAdmissionTests"], cwd=scripts,
+                                env=environment, capture_output=True, text=True, timeout=300)
+        self.assertEqual(result.returncode, 0, result.stderr[-4000:])
+
+
 class TaskAdmissionTests(unittest.TestCase):
     def test_task_option_values_cannot_bypass_admission(self):
         self.assertTrue(execution.scheduled_task(["--output-group-begin", "--dry", "check"]))

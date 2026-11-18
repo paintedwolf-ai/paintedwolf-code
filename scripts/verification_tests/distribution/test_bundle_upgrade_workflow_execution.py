@@ -1,5 +1,4 @@
 """A release proves its inputs, credentials and environments before building, and publishes after its upgrade gate."""
-import json
 from pathlib import Path
 import os
 import re
@@ -88,8 +87,6 @@ class WorkflowTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
         prepare = workflow.split("  prepare-bundle-upgrade:\n", 1)[1].split("  bundle-upgrade:\n", 1)[0]
         execution = workflow.split("  bundle-upgrade:\n", 1)[1].split("  publish-artifacts:\n", 1)[0]
-        publication = workflow.split("  publish-artifacts:\n", 1)[1].split("    steps:", 1)[0]
-        self.assertIn("needs: [classify, ship-gates, aggregate-release, linux-pacman-repositories]", prepare)
         self.assertIn("fixture_name: bundle-upgrade-fixtures-${{ github.run_attempt }}", prepare)
         self.assertIn("name: ${{ needs.prepare-bundle-upgrade.outputs.fixture_name }}", execution)
         self.assertIn("environment: release-publication", prepare)
@@ -102,35 +99,18 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("needs: [classify, prepare-bundle-upgrade]", execution)
         self.assertIn("working-directory: lycaon-den", execution)
         self.assertIn("bun install --frozen-lockfile", execution)
-        self.assertIn("max-parallel: 1", execution)
         self.assertIn("matrix: ${{ fromJSON(needs.prepare-bundle-upgrade.outputs.matrix) }}", execution)
         self.assertIn('matrix.case_id', execution)
-        self.assertIn("linux-pacman-repositories, bundle-upgrade]", publication)
         self.assertIn("ref: ${{ github.workflow_sha }}", prepare)
         self.assertIn("if: always()", execution)
 
-    def test_nightly_installs_the_same_rehearsal_dependencies_before_execution(self):
-        workflow = (ROOT / ".github/workflows/nightly.yml").read_text()
-        upgrade = workflow.split("  upgrade-path:\n", 1)[1].split("  nightly:\n", 1)[0]
-        self.assertLess(upgrade.index("uses: ./.github/actions/setup-verification"), upgrade.index("run: ./task upgrade:rehearse"))
-        self.assertLess(upgrade.index("brew install minisign"), upgrade.index("run: ./task upgrade:rehearse"))
-        self.assertNotIn("run: ./task build:lycaon-dev", upgrade)
-
-    def test_release_rehearsal_builds_its_candidate_only_inside_the_managed_target(self):
-        workflow = (ROOT / ".github/workflows/release.yml").read_text()
-        upgrade = workflow.split("  validate-source:\n", 1)[1].split("  ship-gates:\n", 1)[0]
-        self.assertIn("run: ./task upgrade:rehearse", upgrade)
-        self.assertNotIn("run: ./task build:lycaon-dev", upgrade)
-
-    def test_source_validation_reuses_setup_and_retains_each_gate_evidence(self):
-        workflow = (ROOT / ".github/workflows/release.yml").read_text()
-        validation = workflow.split("  validate-source:\n", 1)[1].split("  ship-gates:\n", 1)[0]
-        self.assertEqual(validation.count("uses: actions/checkout@"), 1)
-        self.assertEqual(validation.count("uses: ./.github/actions/setup-verification"), 1)
-        self.assertLess(validation.index("./task release:preflight"), validation.index("./task upgrade:rehearse"))
-        self.assertIn("name: release-preflight-${{ github.run_attempt }}", validation)
-        self.assertIn("name: release-upgrade-${{ github.run_attempt }}", validation)
-        self.assertNotIn("continue-on-error", validation)
+    def test_platform_rehearsal_checks_the_corpus_with_its_existing_engine(self):
+        workflow = (ROOT / ".github/workflows/platform-verification.yml").read_text()
+        confinement = workflow.split("  confinement:\n", 1)[1]
+        self.assertEqual(confinement.count("./task build:lycaon-dev"), 1)
+        engine = confinement.index("./task build:lycaon-dev")
+        self.assertLess(engine, confinement.index("./task release:preflight -- --require-corpus --reuse-sidecar"))
+        self.assertLess(engine, confinement.index("./task upgrade:rehearse -- --reuse-sidecar"))
 
 
 class ReplayTests(unittest.TestCase):
@@ -198,12 +178,7 @@ class ReleaseOrderTests(unittest.TestCase):
         released = {**self.jobs, **delivery}
         environments = {job["environment"] for job in released.values() if "environment" in job}
         self.assertEqual({job["environment"] for job in self.probe.values()}, environments)
-        catalog = json.loads((ROOT / "packaging/release-platforms.json").read_text())["platforms"]
-        published = {row["goos"] for row in catalog if row["publication"] == "public"}
-        unprobed = secrets(released) - secrets(self.probe)
-        # Signing credentials of a platform the catalog does not publish are never read.
-        self.assertEqual(unprobed, set() if "windows" in published else {
-            "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_TENANT_ID"})
+        self.assertEqual(secrets(released) - secrets(self.probe), set())
 
     def test_the_probe_runs_whenever_no_maintenance_is_chosen(self):
         self.assertEqual(self.jobs["credentials"].get("with", {}).keys(), {"source_sha"})

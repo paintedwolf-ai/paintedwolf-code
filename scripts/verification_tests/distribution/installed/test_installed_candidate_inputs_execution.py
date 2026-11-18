@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from linux_release.campaign import candidate_inputs as owner
+from release_preparation import STAMP, content_digest, inventory
 
 
 class CandidateInstalledInputsTests(unittest.TestCase):
@@ -16,7 +17,8 @@ class CandidateInstalledInputsTests(unittest.TestCase):
         payload.mkdir()
         source={'source_commit':'a'*40,'source_tree':'b'*40,'version':'1.2.3','release_build':14,'channel':'stable'}
         run={'id':11,'head_sha':'c'*40,'repository':{'id':7,'full_name':'owner/repo'},'head_repository':{'id':7},
-             'path':'.github/workflows/linux-candidate-requests.yml','head_branch':'main',
+             'referenced_workflows':[{'path':'owner/repo/.github/workflows/release-prepare.yml@refs/heads/main','sha':'c'*40}],
+             'head_branch':'main',
              'event':'workflow_dispatch','status':'completed','conclusion':'failure' if partial else 'success','run_attempt':1}
         selection={'artifact_id':12,'artifact_bytes':100,'artifact_sha256':'d'*64}
         rows=[]
@@ -41,9 +43,14 @@ class CandidateInstalledInputsTests(unittest.TestCase):
             document={'format_version':1,'source_commit':'a'*40,'version':'1.2.3','platform':'linux-aarch64',
                       'architecture':'aarch64','packages':rows,'qualification_status':'unverified','published':False}
             (payload/'candidate-packages.json').write_text(json.dumps(document))
-            for name,value in [('source-commit.txt','a'*40),('source-tree.txt','b'*40),('controller-commit.txt','c'*40)]:
-                (payload/name).write_text(value+'\n')
+            self.stamp(payload)
         return payload,source,run,selection
+
+    def stamp(self, payload, commit='a'*40):
+        files=inventory(payload)
+        (payload/STAMP).write_text(json.dumps({'format_version':1,'name':'prepared-linux-aarch64','kind':'linux-packages',
+                                               'source_commit':commit,'source_tree':'b'*40,
+                                               'digest':content_digest(files),'files':files}))
 
     def prepare(self, root, fixture, partial=False):
         payload,source,run,selection=fixture
@@ -113,10 +120,11 @@ class CandidateInstalledInputsTests(unittest.TestCase):
                 fixture=self.fixture(root)
                 payload=fixture[0]
                 if mutation=='source':
-                    (payload/'source-commit.txt').write_text('e'*40)
+                    self.stamp(payload,'e'*40)
                 elif mutation=='cpu':
                     path=payload/'candidate-packages.json'
                     document=json.loads(path.read_text());document['architecture']='x86_64';path.write_text(json.dumps(document))
+                    self.stamp(payload)
                 else:
                     next(payload.glob('*.deb')).write_bytes(b'changed')
                 with self.assertRaises(ValueError):
@@ -127,7 +135,7 @@ class CandidateInstalledInputsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             _,_,run,_=self.fixture(Path(temporary))
             for key,value in [('head_sha','e'*40),('head_branch','feature'),('conclusion','failure'),
-                              ('head_repository',{'id':99}),('path','.github/workflows/release.yml')]:
+                              ('head_repository',{'id':99}),('referenced_workflows',[])]:
                 with self.subTest(key=key),patch.object(owner,'artifact_for_run') as artifact:
                     with self.assertRaises(ValueError):
                         owner.select(lambda _:{**run,key:value},'owner/repo',7,11,12,'c'*40,'arm64',False)
@@ -136,7 +144,7 @@ class CandidateInstalledInputsTests(unittest.TestCase):
     def test_requests_accept_main_dispatch_schedule_and_landable_pull_requests(self):
         with tempfile.TemporaryDirectory() as temporary:
             _,_,base,_=self.fixture(Path(temporary))
-            reference={'path':'owner/repo/.github/workflows/linux-candidates.yml@refs/pull/7/merge','sha':'c'*40}
+            reference={'path':'owner/repo/.github/workflows/release-prepare.yml@refs/pull/7/merge','sha':'c'*40}
             pull={**base,'event':'pull_request','head_branch':'feature','head_sha':'e'*40,
                   'pull_requests':[{'number':7,'base':{'ref':'main'}}],'referenced_workflows':[reference]}
             for run in (base,{**base,'event':'schedule'},pull):
@@ -147,7 +155,7 @@ class CandidateInstalledInputsTests(unittest.TestCase):
             mutations=[{'pull_requests':[]},{'pull_requests':[{'base':{'ref':'feature'}}]},
                        {'referenced_workflows':[]},{'referenced_workflows':[reference,reference]},
                        {'referenced_workflows':[{**reference,'sha':'f'*40}]},
-                       {'referenced_workflows':[{**reference,'path':'foreign/repo/.github/workflows/linux-candidates.yml@main'}]},
+                       {'referenced_workflows':[{**reference,'path':'foreign/repo/.github/workflows/release-prepare.yml@main'}]},
                        {'referenced_workflows':[{**reference,'path':'owner/repo/.github/workflows/other.yml@main'}]},
                        {'head_sha':'short'}]
             for changed in mutations:
@@ -155,8 +163,7 @@ class CandidateInstalledInputsTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         owner.select(lambda _:{**pull,**changed},'owner/repo',7,11,12,'c'*40,'arm64',False)
                     artifact.assert_not_called()
-            for changed in ({'event':'push'},{'event':'schedule','head_branch':'feature'},
-                            {'path':'.github/workflows/linux-candidates.yml'}):
+            for changed in ({'event':'push'},{'event':'schedule','head_branch':'feature'}):
                 with self.subTest(changed=changed),patch.object(owner,'artifact_for_run') as artifact:
                     with self.assertRaises(ValueError):
                         owner.select(lambda _:{**base,**changed},'owner/repo',7,11,12,'c'*40,'arm64',False)
@@ -166,9 +173,9 @@ class CandidateInstalledInputsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             _,_,run,_=self.fixture(Path(temporary))
             run.update(event='pull_request',head_sha='e'*40,pull_requests=[{'base':{'ref':'main'}}],
-                       referenced_workflows=[{'path':'owner/repo/.github/workflows/linux-candidates.yml@merge','sha':'c'*40}])
+                       referenced_workflows=[{'path':'owner/repo/.github/workflows/release-prepare.yml@merge','sha':'c'*40}])
             producer=dict(id=11,head_sha='e'*40,repository_id=7,head_repository_id=7)
-            artifact=dict(id=12,name='linux-candidate-linux-aarch64',expired=False,size_in_bytes=100,
+            artifact=dict(id=12,name='prepared-linux-aarch64',expired=False,size_in_bytes=100,
                           digest='sha256:'+'d'*64,workflow_run=producer)
             for changes in ({},{'head_sha':'c'*40},{'repository_id':8},{'head_repository_id':8},{'id':12}):
                 selected={**artifact,'workflow_run':{**producer,**changes}}

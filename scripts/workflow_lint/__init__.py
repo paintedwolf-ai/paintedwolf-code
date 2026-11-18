@@ -37,6 +37,30 @@ def queues(document):
             raise ValueError(f"{name}: concurrency.queue max cannot combine with cancel-in-progress true")
 
 
+def reserved(name):
+    """The runner sets these names itself and replaces any value a workflow gives them."""
+    return name == "CI" or name.startswith("RUNNER_") or (name.startswith("GITHUB_") and name != "GITHUB_TOKEN")
+
+
+def environment(document):
+    if not isinstance(document, dict):
+        return
+    scopes = [("workflow", document.get("env"))]
+    jobs = document.get("jobs")
+    for job_name, job in (jobs.items() if isinstance(jobs, dict) else ()):
+        if not isinstance(job, dict):
+            continue
+        scopes.append((f"job {job_name}", job.get("env")))
+        steps = job.get("steps")
+        for index, step in enumerate(steps if isinstance(steps, list) else ()):
+            if isinstance(step, dict):
+                scopes.append((f"job {job_name} step {step.get('name', index + 1)}", step.get("env")))
+    for scope, values in scopes:
+        for name in (values if isinstance(values, dict) else ()):
+            if reserved(str(name)):
+                raise ValueError(f"{scope}: the runner overwrites environment variable {name}")
+
+
 def validate(root=ROOT, binary=None):
     workflows = sorted(path for path in (root / ".github/workflows").iterdir()
                        if path.is_file() and path.suffix in {".yml", ".yaml"})
@@ -46,7 +70,9 @@ def validate(root=ROOT, binary=None):
     import yaml
     for path in workflows:
         try:
-            queues(yaml.safe_load(path.read_text()))
+            document = yaml.safe_load(path.read_text())
+            queues(document)
+            environment(document)
         except (ValueError, yaml.YAMLError) as error:
             print(f"{path}: {error}", file=sys.stderr)
             return 1

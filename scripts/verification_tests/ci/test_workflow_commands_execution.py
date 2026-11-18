@@ -1,4 +1,6 @@
 """Workflow commands preserve machine-readable plans and required-job verdicts."""
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -6,27 +8,23 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import yaml
+
+import ci_verification
 
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
 class WorkflowCommandTests(unittest.TestCase):
-    def test_release_builds_declared_package_families_and_preserves_failures(self):
+    def test_release_packages_the_prepared_application_and_preserves_failures(self):
         workflow = yaml.safe_load((ROOT / '.github/workflows/release.yml').read_text())
         steps = workflow['jobs']['build-release']['steps']
-        build = next(step for step in steps if step.get('name') == 'Build, sign, and notarize')
-        self.assertEqual(build['env']['PACKAGE_EXTENSIONS'], "${{ join(matrix.package_extensions, ',') }}")
-        dependencies = next(step for step in steps if step.get('name') == 'Install Linux bundle dependencies')
-        self.assertEqual(dependencies['uses'], './.github/actions/setup-apt')
-        self.assertIn('libarchive-tools', dependencies['with']['packages'].split())
-        catalog = json.loads((ROOT / 'packaging/release-platforms.json').read_text())
-        cases = [(row['goos'], ','.join(row['package_extensions']), 0) for row in catalog['platforms']]
-        cases += [('linux', 'deb,rpm', 0), ('linux', 'deb', 0), ('linux', 'deb,rpm,pkg.tar.zst', 37)]
-        for goos, extensions, task_exit in cases:
-            with self.subTest(goos=goos, extensions=extensions, task_exit=task_exit), tempfile.TemporaryDirectory() as directory:
+        package = next(step for step in steps if step.get('name') == 'Sign, notarize, staple and package the compiled application')
+        for task_exit in (0, 37):
+            with self.subTest(task_exit=task_exit), tempfile.TemporaryDirectory() as directory:
                 scratch = Path(directory)
                 record = scratch / 'task-arguments'
                 task = scratch / 'task'
@@ -35,30 +33,30 @@ class WorkflowCommandTests(unittest.TestCase):
                 notary = scratch / '.release-controller/scripts/macos-notary-tools/notary.py'
                 notary.parent.mkdir(parents=True)
                 notary.write_text('')
-                environment = {**os.environ, 'GOOS': goos, 'PACKAGE_EXTENSIONS': extensions,
-                               'GITHUB_WORKSPACE': str(scratch), 'RUNNER_TEMP': str(scratch),
+                environment = {**os.environ, 'GITHUB_WORKSPACE': str(scratch), 'RUNNER_TEMP': str(scratch),
                                'RECORD': str(record), 'TASK_EXIT': str(task_exit)}
-                for name in ('TAURI_SIGNING_PRIVATE_KEY', 'APPLE_SIGNING_IDENTITY', 'APPLE_API_ISSUER',
-                             'APPLE_API_KEY', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID',
-                             'AZURE_ARTIFACT_SIGNING_ENDPOINT', 'AZURE_ARTIFACT_SIGNING_ACCOUNT',
-                             'AZURE_ARTIFACT_SIGNING_PROFILE'):
+                for name in ('TAURI_SIGNING_PRIVATE_KEY', 'APPLE_API_ISSUER', 'APPLE_API_KEY'):
                     environment[name] = 'fixture'
-                result = subprocess.run(['bash', '-c', build['run']], cwd=scratch, env=environment,
+                result = subprocess.run(['bash', '-c', package['run']], cwd=scratch, env=environment,
                                         capture_output=True, text=True, timeout=10)
-                if goos == 'linux' and extensions not in {'deb,rpm', 'deb,rpm,pkg.tar.zst'}:
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertFalse(record.exists(), 'unsupported package forms must not start a build')
-                else:
-                    self.assertEqual(result.returncode, task_exit, result.stderr)
-                    expected = ['den:bundle']
-                    if goos == 'linux' and extensions == 'deb,rpm,pkg.tar.zst':
-                        expected += ['--', '--pacman-container']
-                    self.assertEqual(record.read_text().splitlines(), expected)
+                self.assertEqual(result.returncode, task_exit, result.stderr)
+                self.assertEqual(record.read_text().splitlines(),
+                                 ['den:bundle', '--', '--phase', 'package', '--archive', f'{scratch}/prepared/compiled.tar'])
 
     def command(self, *arguments, **environment):
         return subprocess.run([sys.executable, 'scripts/ci_verification.py', *arguments],
                               cwd=ROOT, env={**os.environ, **environment},
                               capture_output=True, text=True, timeout=30)
+
+    def test_a_qualified_source_reports_the_preparation_qualification_checked(self):
+        run = {'id': 7, 'receipt': {'preparation_run_id': 41}}
+        output = io.StringIO()
+        with patch.object(ci_verification.verification_verdict, 'require_qualification', return_value=run) as require, \
+                patch.object(sys, 'argv', ['ci_verification.py', 'verified', 'a' * 40]), \
+                patch.dict(os.environ, {'GITHUB_REPOSITORY': 'owner/repo'}), contextlib.redirect_stdout(output):
+            ci_verification.main()
+        require.assert_called_once_with('owner/repo', 'a' * 40)
+        self.assertEqual(output.getvalue(), 'preparation_run_id=41\n')
 
     def test_required_job_verdict_reaches_the_process_exit(self):
         results = json.dumps({'verification': {'result': 'success'}, 'platform': {'result': 'skipped'}})

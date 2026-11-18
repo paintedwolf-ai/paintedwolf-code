@@ -1813,10 +1813,12 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/upgrade-corpus-boot.sh {{.CLI_ARGS}}
 
   upgrade:rehearse:
-    desc: 'Rehearse released-store upgrades, or signed desktop activation with --bundle --fixtures DIR --evidence DIR'
+    desc: 'Rehearse released-store upgrades; signed desktop activation with --bundle --fixtures DIR --evidence DIR; its fixtures with --prepare-bundle, or --prepare-bundle --published for the two newest published releases'
     preconditions:
       - sh: |
-          {{if hasPrefix "--prepare-bundle" .CLI_ARGS}}
+          {{if hasPrefix "--prepare-bundle --published" .CLI_ARGS}}
+          command -v python3 && command -v minisign
+          {{else if hasPrefix "--prepare-bundle" .CLI_ARGS}}
           command -v python3 && command -v bun && command -v minisign
           {{else if hasPrefix "--bundle" .CLI_ARGS}}
           command -v python3 && command -v openssl
@@ -1831,8 +1833,10 @@ tasks:
         {{else if hasPrefix "--bundle" .CLI_ARGS}}
         python3 {{.SCRIPTS_DIR}}/release_control.py bundle-rehearse {{trimPrefix "--bundle" .CLI_ARGS}}
         {{else}}
+        {{if not (hasPrefix "--reuse-sidecar" .CLI_ARGS)}}
         ./task build:lycaon-dev
-        bash {{.SCRIPTS_DIR}}/upgrade-rehearse.sh {{.CLI_ARGS}}
+        {{end}}
+        bash {{.SCRIPTS_DIR}}/upgrade-rehearse.sh {{trimPrefix "--reuse-sidecar" .CLI_ARGS}}
         {{end}}
 
   upgrade:corpus:prepare:
@@ -1867,7 +1871,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/release-recovery-prepare.sh {{.CLI_ARGS}}
 
   release:candidate:select:
-    desc: 'Select the native Linux candidate matrix from the platform catalog, or verify one candidate row (--platform, --runner-label, --architecture)'
+    desc: 'Verify that a native Linux runner matches its platform catalog row (--platform, --runner-label, --architecture)'
     silent: true
     cmds:
       - python3 -m scripts.linux_release.candidates {{.CLI_ARGS}}
@@ -1878,7 +1882,7 @@ tasks:
       - python3 -m scripts.linux_release.candidate_diagnostics {{.CLI_ARGS}}
 
   release:live-test:
-    desc: 'Isolated release:live-test rehearsal; --local-nix-cache uses disposable local keys, default uses test R2 credentials'
+    desc: 'Isolated release:live-test rehearsal; --assembly, --macos and local Nix modes use disposable keys, default uses test R2 credentials'
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh {{.CLI_ARGS}}
 

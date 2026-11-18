@@ -87,7 +87,7 @@ directory owned by that run. Print a location from the repository root with
 `python3 scripts/artifact_paths.py artifacts|build|bin|locks`; the examples
 below use `BUILD_DIR="$(python3 scripts/artifact_paths.py build)"`.
 
-The repository ships no pre-commit hook. **Closeout:** a change pushed for a pull request closes out in CI; a change handed off without a push runs `./task check-fast`; `./task check` is full local verification on request. **CI** (`ci.yml`) runs the fast tier for a ready PR and the affected-scope integration gate for its merge group, both behind required `check`; enabling auto-merge on a ready PR adds it to the queue once its fast tier passes. Drafts do not verify. Broad changes run the full check profile in the queue. `qualification.yml` runs full check, platform, and E2E only on manual dispatch for an exact release commit. The daily nightly covers the complete main verification signal; dispatching it with `source-sha` runs the same stages on that exact commit. Manual CI dispatch runs full check and platform, or the fast tier with `profile: fast`, and reports the required `check` on the dispatched commit as a commit status, because a pull request's checks leave out dispatch runs. Nightly also covers race, fuzz, stress, WebKit, performance, and quarantine observation. See [hosted admission and qualification](test-strategy.md#hosted-admission-and-qualification) for scope, offline execution, recovery, and queue rollout.
+The repository ships no pre-commit hook. **Closeout:** a change pushed for a pull request closes out in CI; a change handed off without a push runs `./task check-fast`; `./task check` is full local verification on request. **CI** (`ci.yml`) runs the fast tier for a ready PR and the affected-scope integration gate for its merge group, both behind required `check`; enabling auto-merge on a ready PR adds it to the queue once its fast tier passes. Drafts do not verify. Broad changes run the full check profile in the queue. `qualification.yml`, dispatched for an exact release commit, runs the nightly lane set on it unless a green full nightly already ran on exactly that commit, beside the static release checks and the unsigned preparation. The daily nightly covers the complete main verification signal; dispatching it with `source-sha` runs the same stages on that exact commit. Dispatching it with `suite: release` runs only the release rehearsal and the published installed upgrade. Manual CI dispatch runs full check and platform, or the fast tier with `profile: fast`, and reports the required `check` on the dispatched commit as a commit status, because a pull request's checks leave out dispatch runs. Nightly also covers race, fuzz, stress, WebKit, and performance. See [hosted admission and qualification](test-strategy.md#hosted-admission-and-qualification) for scope, offline execution, recovery, and queue rollout.
 
 For an isolated hosted diagnostic, select an existing catalog lane, for example
 `gh workflow run ci.yml --ref <branch> -f profile=check -f lane=runner`.
@@ -1129,29 +1129,30 @@ back from the signed file.
 | **HTTP API** | `/v1/` | Breaking wire only → `/v2/` (rare) |
 | **Workflow catalog** | `plan@1.0.0` | Manifest YAML; independent of host patch |
 
-**Primary distribution:** [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the platforms marked `publication: public` in [`packaging/release-platforms.json`](../packaging/release-platforms.json). The public set is the Apple Silicon macOS DMG and updater archive, plus Linux amd64 and arm64 DEB, RPM and pacman packages. They publish at `downloads.paintedwolf.dev`, Homebrew receives the matching cask, and the GitHub Release is a trailing mirror. Windows x86_64 remains a `candidate` outside the release matrix. Each catalog row lists its `package_extensions` (one build emits every family: `["deb", "rpm", "pkg.tar.zst"]` on Linux) and its `updater_extension`, which is `null` where the package manager owns updates. A public Linux platform uses the same lane and admission as macOS: `classify` requires the exact-source Qualification record, `build-release` signs its packages with the Linux package key, `aggregate-release` collects them, and publication follows `ship-gates`, `publish-artifacts` and the completed `publish-immutable` metadata gate; see [Linux in the next regular release](#linux-in-the-next-regular-release). The independent nonpublishing `linux-candidates` workflow retains development packages without release authority; regular releases use the public matrix once. The minimum supported macOS version is 14.0 (Sonoma), which clears the UI's WebKit requirement; the floor lives in [`lycaon/internal/platformfloor/macos_floor.txt`](../lycaon/internal/platformfloor/macos_floor.txt), and contract tests keep the catalog, Tauri, Homebrew, and compiled binary aligned.
+**Primary distribution:** [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the platforms marked `publication: public` in [`packaging/release-platforms.json`](../packaging/release-platforms.json). The public set is the Apple Silicon macOS DMG and updater archive, plus Linux amd64 and arm64 DEB, RPM and pacman packages. They publish at `downloads.paintedwolf.dev`, Homebrew receives the matching cask, and the GitHub Release is a trailing mirror. Windows x86_64 remains a `candidate` outside the release matrix. Each catalog row lists its `package_extensions` (one build emits every family: `["deb", "rpm", "pkg.tar.zst"]` on Linux) and its `updater_extension`, which is `null` where the package manager owns updates. A public Linux platform uses the same lane and admission as macOS: `classify` requires the exact-source Qualification record, which carries the source verification, upgrade corpus and prior-release upgrade rehearsal, `prepare` reuses exactly the preparation run Qualification checked (unsigned packages, Nix closures and the compiled macOS app), `build-release` refuses any artifact whose source or digest differs from that receipt and signs it, `aggregate-release` collects them, and publication follows `ship-gates`, `publish-artifacts` and the completed `publish-immutable` metadata gate; see [Linux in the next regular release](#linux-in-the-next-regular-release). The independent nonpublishing `linux-candidates` workflow retains development packages without release authority; regular releases use the public matrix once. The minimum supported macOS version is 14.0 (Sonoma), which clears the UI's WebKit requirement; the floor lives in [`lycaon/internal/platformfloor/macos_floor.txt`](../lycaon/internal/platformfloor/macos_floor.txt), and contract tests keep the catalog, Tauri, Homebrew, and compiled binary aligned.
 
 ```mermaid
 flowchart TD
     tag["Push tag v*<br/>(must equal v + VERSION)"] --> classify["Classify qualified source<br/>and check static release metadata"]
     classify --> probe["Prove every credential and both protected environments"]
-    probe --> checks["Independent catalog verification jobs"]
-    probe --> desktop["Desktop end-to-end tests"]
-    probe --> upgrade["Prior-release upgrade rehearsal"]
-    checks --> gates["ship-gates: require every result"]
-    desktop --> gates
-    upgrade --> gates
-    probe --> build["build-release public matrix<br/>Apple Silicon macOS and both Linux architectures"]
-    build --> verify["Native structure and signature checks<br/>macOS notarization"]
-    verify --> aggregate["aggregate-release<br/>Collect every public platform build"]
+    probe --> compat["Published stable compatibility"]
+    probe --> prepare["prepare: reuse the source's unsigned artifacts<br/>or build them without secrets"]
+    compat --> gates["ship-gates: require every result"]
+    prepare --> sign["build-release, in parallel<br/>macOS: sign, notarize, staple, dmg, verify<br/>Linux x86_64 and aarch64: verify source, sign"]
+    compat --> sign
+    prepare --> nix["verify-nix-closures<br/>Verify both closures against the receipt"]
+    sign --> aggregate["aggregate-release<br/>Collect every public platform build"]
     aggregate --> plan["Select one retained monotonic channel plan"]
     gates --> plan
-    plan --> setup["Build signed native generations<br/>and repository setup packages"]
-    setup --> deposit["publish-artifacts<br/>Deposit and verify immutable package bytes"]
-    gates --> deposit
+    plan --> repos["Signed apt, dnf and pacman generations<br/>and repository setup packages"]
+    plan --> cases["Prepare signed installed upgrade cases"]
+    cases --> upgrade["bundle-upgrade<br/>Cases two at a time"]
+    repos --> deposit["publish-artifacts<br/>Deposit and verify immutable package bytes"]
+    upgrade --> deposit
+    nix --> deposit
     deposit --> native["Activate apt, dnf and pacman repositories"]
-    native --> nix["Publish and observe both Nix cache closures"]
-    nix --> document["publish-immutable<br/>Sign and verify completed distribution document"]
+    native --> cache["Publish and observe both Nix cache closures"]
+    cache --> document["publish-immutable<br/>Sign and verify completed distribution document"]
     document --> cask["update-cask<br/>Homebrew tap"]
     document --> website["notify-website<br/>Exact selected channel plan and digest"]
     cask --> updater["activate-updater<br/>Publish selected signed feed pointers"]
@@ -1189,7 +1190,7 @@ The public artifact collector requires every catalog-public package, its checksu
 
 **Third-party notices.** `./task licenses:notices` generates `THIRD-PARTY-NOTICES.md` at the repo root from Go, Den npm, and Tauri crate dependency manifests plus a bundled-binaries catalog. Opengrep's catalog entry refers to the selected verified release artifact, so its version, license, notices, and corresponding-source path follow that pin. The file is gitignored and never hand-maintained. The release workflow runs generation before bundling; the fast and full verification gates run it explicitly (fail-closed on unknown licenses); the artifact audit asserts presence. About → **Third-party software** opens the shipped file.
 
-Local release packaging uses `./task den:bundle`, which injects `VERSION` into the sidecar and syncs Den package/Tauri/Cargo versions. On macOS it requires the Developer ID identity and engine provisioning profile enforced by the [bundle build](../scripts/den-build-bundle.sh). Use `./task den:app -- --debug` for local development without provisioning.
+Local release packaging uses `./task den:bundle`, which injects `VERSION` into the sidecar and syncs Den package/Tauri/Cargo versions. On macOS a signed bundle requires the Developer ID identity and engine provisioning profile, and stops before building anything when either is missing ([bundle build](../scripts/den-build-bundle.sh)). `--phase compile` signs nothing, and `--unsigned` builds the bundle signed ad hoc for the nightly release rehearsal. Use `./task den:app -- --debug` for local development without provisioning.
 
 ### Nix development and package builds
 
@@ -1357,7 +1358,7 @@ The existing R2 and feed credentials remain in `release-publication` (`CLOUDFLAR
 |---|---|---|
 | apt and dnf | Signed packages and native repository generations for both architectures; signed `painted-wolf-code-repo` setup packages install the selected repository definition and public key | Restore the selected retained generation; apt receives a fresh `Release`, dated after the halted one, over the restored indexes, because apt keeps an index cached from a later `Release`. A legacy macOS-only last-good release or no replacement activates the pre-published signed empty generation. A higher recovery version advances normally |
 | pacman | Signed packages and one repository generation per architecture | Same retained-generation or signed-empty withdrawal; no downgrade or epoch |
-| Nix cache | Build both native closures and publish signed cache objects plus availability records | Withdraw the availability record; retain closures, NARs and existing pins. A higher recovery version publishes a new availability record |
+| Nix cache | Import both prepared closures and publish signed cache objects plus availability records | Withdraw the availability record; retain closures, NARs and existing pins. A higher recovery version publishes a new availability record |
 
 A read-only selection step retains one structured monotonic channel plan before signing: stable advances Preview when no newer Preview exists; a newer Preview is preserved; a Preview release touches only Preview. Every native repository, setup package, cask, website and feed consumes that selected plan and refuses changed controls. Halts restore only channels actually offering the bad release. The shared per-channel halt plan selects the exact last-good version; default `--last-good` applies that replacement to every affected channel. Each effect prepares `withdraw` or `keep` from its actual published state, and the negative release ledger prepares separately even when feed pointers keep. The complete symmetric barrier admits all native, feed, ledger, Nix, package and website preparations before any mutation. A refusal blocks them all; retained `halt-effects.json` names every action or refusal.
 
@@ -1423,7 +1424,7 @@ The Rust shell owns discovery, preferences, downloads, staging, and activation. 
 
 Native device files live under `updates/`: versioned preferences (`preferences.json`), the newest accepted pointer timestamp per feed (`feed-state.json`), and, per installed application path under `installations/<path-sha256>/`, the verified staging directory, `ready.json`, `rejected.json`, the activation journal `transaction.json` with its `receipts/`, and the private `records.lock` and `preparation.lock` files. `install-source.json` beside them is the Homebrew receipt. Unknown preference and journal formats are refused unchanged; an unreadable preference file disables automatic updating for that run and reports why. Unreadable ephemeral records (`ready.json`, `rejected.json`, `feed-state.json`) are moved aside as `*-quarantined-<uuid>.json` and rebuilt. Records written by other releases follow [Compatibility § Device configuration](compatibility.md#device-configuration).
 
-The public macOS adapter prepares a complete app beside the installation and uses an atomic directory exchange. Its helper is a private copy of the signed application executable invoked in native-only `--apply-update` mode; no WebView or engine is created in that mode. A committed journal and exclusive installation lease are required. Preparation records the executable hash and a complete file, symlink, and permission digest from the authenticated archive. Startup restores that small receipt without re-reading the archive before opening a window. Production code-signature checks require the same Developer ID team as the running signed executable. The helper reuses that exact bundle only after validating its complete digest and signed resource seal; missing or changed preparation is rebuilt from the verified archive. Executable hashes reconcile an exchange interrupted before the final journal write. The canonical parent directory inode is the admission gate, and the installed bundle directory inode carries the lifetime lease across accounts. The gate protects lease acquisition, exchange, and downgrade; it is released while waiting for other processes. Activation locks both bundle inodes during exchange and retains the new installed inode afterward. A coordination failure refuses launch. Concurrent ordinary launches share the lifetime lease without waiting for the first process to quit. A verified external reinstall retires the superseded transaction receipt. Recovery never deletes the old bundle before publishing the new one, never treats unexpected process death as a new installation request, and never automatically launches an old binary against a newly upgraded database. The Linux adapter is check-only. `src-tauri/src/linux_install.rs` captures package ownership of the running executable through the native package database (`dpkg-query`, `rpm`, or `pacman`). That process identity stays distinct from the fresh database version observed during an update check. A general package-owner workflow is not an offer for the version in the upstream feed. The feed check runs on the shared schedule and channel preference and reads the manifest version without a Linux artifact entry; the resulting candidate carries no artifact URL or signature, so download, restart, and automatic installation are never offered, and explicit requests return the structured `package_managed` refusal. Nothing under the install root is ever written by the app. Windows has no automatic activation adapter.
+The public macOS adapter prepares a complete app beside the installation and uses an atomic directory exchange. Its helper is the signed application executable inside the installed bundle, invoked in native-only `--apply-update` mode; no WebView or engine is created in that mode. Releases through 1.0.2 ran a copy of that executable outside the bundle, which macOS kills; those installations activate a committed update on their next launch. A committed journal and exclusive installation lease are required. Preparation records the executable hash and a complete file, symlink, and permission digest from the authenticated archive. Startup restores that small receipt without re-reading the archive before opening a window. Production code-signature checks require the same Developer ID team as the running signed executable. The helper reuses that exact bundle only after validating its complete digest and signed resource seal; missing or changed preparation is rebuilt from the verified archive. Executable hashes reconcile an exchange interrupted before the final journal write. The canonical parent directory inode is the admission gate, and the installed bundle directory inode carries the lifetime lease across accounts. The gate protects lease acquisition, exchange, and downgrade; it is released while waiting for other processes. Activation locks both bundle inodes during exchange and retains the new installed inode afterward. A coordination failure refuses launch. Concurrent ordinary launches share the lifetime lease without waiting for the first process to quit. A verified external reinstall retires the superseded transaction receipt. Recovery never deletes the old bundle before publishing the new one, never treats unexpected process death as a new installation request, and never automatically launches an old binary against a newly upgraded database. The Linux adapter is check-only. `src-tauri/src/linux_install.rs` captures package ownership of the running executable through the native package database (`dpkg-query`, `rpm`, or `pacman`). That process identity stays distinct from the fresh database version observed during an update check. A general package-owner workflow is not an offer for the version in the upstream feed. The feed check runs on the shared schedule and channel preference and reads the manifest version without a Linux artifact entry; the resulting candidate carries no artifact URL or signature, so download, restart, and automatic installation are never offered, and explicit requests return the structured `package_managed` refusal. Nothing under the install root is ever written by the app. Windows has no automatic activation adapter.
 
 Linux source checks first re-read the native package database owner of the process-captured original executable path. A changed or ambiguous owner stops candidate claims; it never rewrites the captured running identity. They then use bounded, read-only cache interfaces under `linux_install/source`: python-apt selects the configured APT policy candidate, hold and trusted origin/suite; DNF5 uses cache-only JSON check-upgrade (DNF4 has a fixed query-format fallback); pacman uses a print-only full-system upgrade without refreshing its databases. The query has one eight-second deadline, a 64 KiB output cap per command and cancellation that terminates only its own child process group. A failed fresh query replaces earlier source facts. Raw package versions, configured source identifiers and suites are retained; an upstream stable/preview preference changes no repository configuration. DNF transaction/versionlock policy and unobserved pacman group holds remain explicitly unknown. Cached candidates establish neither remote freshness nor successful installation. Missing adapters, missing packages, holds, untrusted origins, ambiguous results and wrong architectures have structured outcomes; they never turn into an upgrade command. Nix source ownership remains unknown without a selected owner contract.
 
@@ -1738,34 +1739,49 @@ To rotate, append the next generation with both of its public keys; set the sour
 
 A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan. It names `source_generation` and a `feeds` array covering both source channels and every existing successor channel. Each entry declares `generation`, `channel`, and either `bad`/`last_good` or an explicit unaffected `keep_version`; a generation-1 feed must name a `last_good`, because the 1.0.x clients that read it ignore the `withdrawn` marker. The tool reads all affected feeds and validates every halt before changing any pointer; changed or omitted offers refuse the plan. The protected workflow accepts that same JSON, withdraws every bad GitHub mirror, and restores only the newest affected channel casks and website offers. A replacement bridge gets a strictly higher version and updates the source's registered bridge; retained immutable artifacts remain untouched. Every subsequent bridge must remain newer than its predecessor. The offline generation rehearsal runs with `./task release:halt -- --self-test` and through the release contract tests; credentialed pointer behavior remains in `release:live-test`.
 
-### Linux candidate builds
+### Release preparation
 
-The [Linux candidate requests workflow](../.github/workflows/linux-candidate-requests.yml)
-builds the native amd64 and arm64 deb/rpm packages through the production bundle
-and staging path. It runs weekly, when a packaging pull request into `main`
-opens ready or becomes ready, or by manual dispatch on the selected branch.
-Queue entry builds again when packaging inputs differ from the last successful
-candidate's source. Missing or uncertain retained source evidence also builds.
-Application-only pushes between readiness and queue entry do not rebuild
-packages; installed qualification still selects exact source and artifact bytes. Use
-`gh workflow run linux-candidate-requests.yml --ref <branch>` when a pull
-request into another branch needs package artifacts. The release workflow calls the reusable
-[package build](../.github/workflows/linux-candidates.yml) directly with its exact
-selected source commit, within the release runner budget. Candidate
-artifacts include checksums and the source commit and are retained for 90 days.
-Installed rehearsals select a `linux-candidate-requests.yml` run from a main
-schedule or dispatch, or a pull request into `main`, by exact run, artifact,
-controller and source identities. For PR candidates, the API head identifies
-artifact provenance while the referenced reusable workflow identifies the built
-merge controller. Compact attempt-bound source metadata supports queue-entry
-comparison; it grants no installed or publication authority.
-The workflow has read-only repository access and no signing environment or
-publication credentials. Package signing rehearsals and installed-system
-qualification remain separate requirements; a candidate build alone does not
-qualify a release. Standalone requests share the maintenance runner budget;
-release calls use the release budget and cannot be replaced by maintenance.
+The reusable [release preparation](../.github/workflows/release-prepare.yml)
+builds the unsigned artifacts of one source commit, all at once: deb, rpm and
+pacman packages for x86_64 and aarch64, the `default` Nix closure for both
+systems, and the macOS application compiled before any signing
+(`./task den:bundle -- --phase compile --archive PATH`; `--phase package`
+signs, notarizes and builds the disk image from that archive). Package jobs
+lint the production deb and rpm metadata on a tiny payload before the compile,
+then audit and lint the real packages, and rehearse signing with a disposable
+key. No job holds a signing or publication credential, and nothing is published.
 
-When a package stage fails after the build starts, the workflow runs
+Each artifact holds a `preparation.json` stamp with its source commit, source
+tree and a content digest over every file. The run ends with the
+`release-preparation-<commit>` receipt listing every artifact. A consumer runs
+`python3 -m scripts.release_preparation verify` and refuses an artifact whose
+stamp names another commit or tree, or whose bytes changed.
+
+A call first looks for a receipt for the same commit and tree that is still
+retained (90 days) and reuses it, compiling nothing. Only a receipt from a
+schedule, push or dispatch run of this repository whose workflow commit is on
+`main` counts; pull request runs and branch dispatches never vouch for
+artifacts. A failed lookup builds. A caller that names a run, as a publishing release names
+the preparation its Qualification checked, reuses that run's receipt or stops;
+it never builds a replacement. The `artifacts` output gives each artifact's id
+and digest, and consumers download by id and pass the digest to `verify`.
+
+A publishing release calls it after the credential probe with the run recorded
+in its Qualification receipt. It signs the macOS archive and the Linux packages
+and verifies the Nix closures from that run before anything is public, and
+imports the closures once, when it publishes the cache. It compiles nothing, and
+a signing rerun repeats only the signing job. A dry run reuses or builds a
+preparation of its source. The
+[Linux candidates workflow](../.github/workflows/linux-candidates.yml) calls it
+for packaging pull requests into `main` when they open ready or become ready,
+weekly for `main`, and by dispatch for any commit
+(`gh workflow run linux-candidates.yml --ref <branch> -f source_sha=<commit>`).
+Each pull request has its own concurrency group. Installed rehearsals select
+the `prepared-linux-<arch>` artifact of such a run by exact run, artifact,
+controller and source identities; the artifact grants no installed or
+publication authority.
+
+When a package stage fails after the build starts, the job runs
 `./task release:candidate:diagnostics -- --source CHECKOUT --controller SHA --output FRESH_DIR`
 from the same source checkout. It retains the canonical assembled packages with
 hashes and an explicit report that grants no complete-candidate, installed or
@@ -1903,6 +1919,22 @@ production control file, conffiles and maintainer scripts around the same payloa
 lints it with lintian, and requires an unmarked `/etc` file to fail. A ready pull
 request runs both when it changes `packaging/`, `scripts/linux_release/` or the
 package assembler.
+`./task release:live-test -- --assembly --receipt PATH` checks that no workflow sets
+an environment name the runner overwrites, holds a tiny updater archive to the
+client's download and expansion limits, and runs the release's aggregate script on
+one tiny signed result per public platform: manifest assembly and validation, the
+public artifact set and both casks, with every updater signature verified against
+a disposable key. Each check also requires its seeded fault to be refused: a
+`RUNNER_NAME` step variable, an archive over the download limit, and a signature
+bound to another version.
+`./task release:live-test -- --macos --app PATH --dmg PATH --public-key KEY --receipt PATH`
+takes an unsigned `den:bundle` build whose updater archive was signed with a
+disposable key, checks the archive's limits and signature, then renders the preview
+cask for its disk image, installs it from a local tap and origin, and uninstalls it.
+It runs only on a disposable hosted runner.
+Nightly runs both, the two metadata rehearsals, `linux-signing`,
+`native-repositories` and `pacman-repositories` through the reusable
+`release-rehearsal.yml`; no job in it holds a credential.
 `./task release:rehearse:pacman-construction -- --receipt PATH` builds and admits a
 sealed tiny fixture with native makepkg in the pinned substrate.
 `./task release:rehearse:package-probe -- --tree DIR` runs the extracted-package
@@ -1975,12 +2007,29 @@ an unmodified prior app in writable scratch space, materializes its exact corpus
 and enables automatic updates with rollout bucket zero. After automatic staging,
 it terminates the staged source process and stops its captured engine, then
 launches that installation again to exercise startup activation. The installed
-bundle must remain unchanged until that launch.
+bundle must remain unchanged until that launch. A source through 1.0.2 commits the
+update and exits on that launch, because its helper runs outside the signed bundle;
+the case waits for the committed journal and the app's exit and launches once more,
+which is how those installations activate. A launch first forgets a daemon record
+whose process has exited, so observation never reports an engine the case stopped.
 The shipped helper performs activation and relaunch. Assertions require the
 prepared bundle's inode at the installation path, matching executable and release
 identities, healthy engine/schema, startup confirmation, old-bundle removal,
-retained corpus semantics, and another healthy restart. Preview promotion keeps
+retained corpus semantics, and another healthy restart. Finally the candidate's
+executable runs `--apply-update` with an unknown transaction inside the installed
+bundle and must refuse it with status 1: helper mode executes there, where a
+killed out-of-bundle copy would end by signal. Preview promotion keeps
 the preview preference; retained generations advance through their bridge feeds.
+
+Nightly runs the same cases from `--prepare-bundle --published --source DIR
+--output DIR`. The newest channel pointer is the candidate, and the newest older
+corpus with a retained release manifest is the source. Every pointer is the one
+the channel already serves, so preparation signs nothing and refuses feed
+credentials. Both apps trust only their compiled-in keys, so the run shows that
+the harness and the published releases work and nothing about the current source;
+its job summary says so. The current source's updater is covered by the
+updater's negative-path tests, and the shipped release accepting a candidate only
+by this release gate.
 
 Upgrade fixtures and desktop evidence are retained for 14 days with attempt-specific
 artifact names. A retried desktop job consumes the successful preparation job's

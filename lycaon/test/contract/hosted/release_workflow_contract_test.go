@@ -38,9 +38,6 @@ func TestReleaseWorkflowInputsMatchContract(t *testing.T) {
 		"APPLE_CERTIFICATE_PASSWORD",
 		"APPLE_ENGINE_PROVISIONING_PROFILE_BASE64",
 		"APPLE_SIGNING_IDENTITY",
-		"AZURE_CLIENT_ID",
-		"AZURE_CLIENT_SECRET",
-		"AZURE_TENANT_ID",
 		"CLOUDFLARE_ACCOUNT_ID",
 		"CLOUDFLARE_API_TOKEN",
 		"FEED_SIGNING_KEYS_JSON",
@@ -52,9 +49,6 @@ func TestReleaseWorkflowInputsMatchContract(t *testing.T) {
 		"WWW_DISPATCH_TOKEN",
 	}
 	wantVariables := []string{
-		"AZURE_ARTIFACT_SIGNING_ACCOUNT",
-		"AZURE_ARTIFACT_SIGNING_ENDPOINT",
-		"AZURE_ARTIFACT_SIGNING_PROFILE",
 		"DOWNLOAD_BASE_URL",
 		"HOMEBREW_TAP_REPO",
 	}
@@ -79,11 +73,10 @@ func TestReleaseWorkflowValidatesTagAgainstVERSION(t *testing.T) {
 		"fetch-depth: 0",
 		"scripts/release-source-validate.sh",
 		"refs/remotes/origin/main",
-		"./task release:preflight -- --require-corpus",
 		"./task upgrade:rehearse",
 		"aggregate-release:",
 		"packaging/release-platforms.json",
-		"release-assemble-updater-manifest.py",
+		"scripts/release_assembly/aggregate.sh",
 		"publish-immutable:",
 		"activate-updater:",
 		"publish-github-release:",
@@ -91,7 +84,6 @@ func TestReleaseWorkflowValidatesTagAgainstVERSION(t *testing.T) {
 		"--channel \"${CHANNEL}\"",
 		"--prerelease",
 		"--latest=false",
-		"scripts/release-validate-updater-manifest.sh",
 		"environment: release-publication",
 	} {
 		if !strings.Contains(body, needle) {

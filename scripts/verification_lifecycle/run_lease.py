@@ -240,7 +240,9 @@ def remove_unleased(candidate: Path, killed: frozenset = frozenset()) -> None:
 
 
 def prune(root: Path, candidate: Path | None = None, killed: frozenset = frozenset()) -> None:
-    if candidate is not None and candidate.absolute().parent != root.absolute():
+    # Both sides resolve: the root may be named through a link (macOS /tmp is /private/tmp). The
+    # candidate's own name is not resolved, and a linked candidate is never removed.
+    if candidate is not None and Path(os.path.realpath(candidate.absolute().parent)) != Path(os.path.realpath(root)):
         raise ValueError("test run must be an immediate child of its isolation root")
     if not root.is_dir():
         return
