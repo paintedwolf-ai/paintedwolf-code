@@ -334,6 +334,7 @@ CREATE TABLE IF NOT EXISTS editor_documents (
     held_agent_version_id TEXT NOT NULL DEFAULT '',
     -- The path has no file on disk; the draft and saved base stay.
     absent INTEGER NOT NULL DEFAULT 0 CHECK (absent IN (0, 1)),
+    outside_parent_binding TEXT NOT NULL DEFAULT '',
     -- One document per branch path; file_id rebinds when the path is recreated.
     UNIQUE(project_id, branch_id, root_id, path)
 ) STRICT;

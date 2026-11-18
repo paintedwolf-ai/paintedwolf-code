@@ -43,6 +43,8 @@ type Document struct {
 
 // DocumentBase holds baseline file content and encoding attributes.
 type DocumentBase struct {
+	OutsideParentBinding string `json:"-"`
+
 	BaseContent, BaseSHA256, Encoding string
 	SizeBytes                         int64
 	EOL, BaseEOL                      string

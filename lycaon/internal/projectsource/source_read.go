@@ -64,17 +64,18 @@ type SourceRevision struct {
 
 // SourceReadObservation is the host fact behind one source projection.
 type SourceReadObservation struct {
-	Path      string
-	RootID    string
-	Revision  SourceRevision
-	OverLimit bool
-	SizeBytes int64
-	MTime     time.Time
-	MIME      string
-	Writable  bool
-	sniff     []byte
-	image     bool
-	decodeAs  string
+	OutsideParentIdentity string
+	Path                  string
+	RootID                string
+	Revision              SourceRevision
+	OverLimit             bool
+	SizeBytes             int64
+	MTime                 time.Time
+	MIME                  string
+	Writable              bool
+	sniff                 []byte
+	image                 bool
+	decodeAs              string
 }
 
 // SourceReadResult is sandbox-validated file content or metadata for GET …/source.
@@ -106,8 +107,9 @@ type SourceReadRequest struct {
 }
 
 type sourceReadTarget struct {
-	abs, path, rootID string
-	info              os.FileInfo
+	outsideParentIdentity string
+	abs, path, rootID     string
+	info                  os.FileInfo
 }
 
 func resolveSourceReadTarget(p ProjectSource, pathQuery, rootID string) (sourceReadTarget, error) {
@@ -186,16 +188,17 @@ func ObserveProjectSource(p ProjectSource, req SourceReadRequest) (*SourceReadOb
 	writable := SourceFileWritable(uint32(target.info.Mode().Perm()))
 
 	observation := &SourceReadObservation{
-		Path:      target.path,
-		OverLimit: overLimit,
-		SizeBytes: size,
-		MTime:     target.info.ModTime().UTC(),
-		MIME:      mime,
-		RootID:    target.rootID,
-		Writable:  writable,
-		sniff:     sniffBuf,
-		image:     image,
-		decodeAs:  req.DecodeAs,
+		OutsideParentIdentity: target.outsideParentIdentity,
+		Path:                  target.path,
+		OverLimit:             overLimit,
+		SizeBytes:             size,
+		MTime:                 target.info.ModTime().UTC(),
+		MIME:                  mime,
+		RootID:                target.rootID,
+		Writable:              writable,
+		sniff:                 sniffBuf,
+		image:                 image,
+		decodeAs:              req.DecodeAs,
 	}
 
 	var revision []byte
