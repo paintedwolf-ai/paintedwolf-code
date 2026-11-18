@@ -36,8 +36,8 @@ func TestKickTemplateIDRoundTrip(t *testing.T) {
 		anchor.WorkerRoundNotice, anchor.FeedbackPending, anchor.FeedbackReceived,
 		anchor.OverlayPromoteComplete, anchor.EditFollowUpRepeat,
 	} {
-		if got := anchor.MustAnchor(string(id)); got != id {
-			t.Fatalf("MustAnchor(%q)=%q want %s", id, got, id)
+		if got, ok := anchor.ParseID(string(id)); !ok || got != id {
+			t.Fatalf("ParseID(%q)=%q ok=%v want %s", id, got, ok, id)
 		}
 		tmpl := anchor.InformRender(id)
 		if tmpl == "" {
