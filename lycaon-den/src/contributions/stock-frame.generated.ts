@@ -1633,7 +1633,17 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "action_kind": "native_ui",
       "handler_id": "files.openOutsideFile",
       "when": {
-        "fact": "files_stage_active"
+        "all": [
+          {
+            "fact": "files_stage_active"
+          },
+          {
+            "fact": "session_exists"
+          },
+          {
+            "fact": "outside_file_picker_available"
+          }
+        ]
       },
       "result_treatment": "effect"
     },
