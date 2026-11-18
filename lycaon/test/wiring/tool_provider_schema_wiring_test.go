@@ -2,11 +2,11 @@ package wiring
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -31,7 +31,7 @@ func TestToolProfilesListForPromptHaveProviderArgsSchema(t *testing.T) {
 			if len(metas) == 0 {
 				t.Fatalf("profile %q listed no tools", prof.ID)
 			}
-			if err := tools.ValidatePromptToolMetas("profile="+prof.ID, metas); err != nil {
+			if err := toolstest.ValidatePromptToolMetas("profile="+prof.ID, metas); err != nil {
 				testutil.FailErr(t, "validate ListForPrompt tool schemas", err)
 			}
 		})
@@ -72,7 +72,7 @@ func TestBundledAgentProfilesHaveProviderArgsSchema(t *testing.T) {
 			if len(metas) == 0 {
 				t.Fatalf("agent %q profile %q listed no tools", agentType, profileID)
 			}
-			if err := tools.ValidatePromptToolMetas("agent="+agentType, metas); err != nil {
+			if err := toolstest.ValidatePromptToolMetas("agent="+agentType, metas); err != nil {
 				testutil.FailErr(t, "validate worker ListForPrompt tool schemas", err)
 			}
 		})

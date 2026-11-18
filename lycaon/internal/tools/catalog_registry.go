@@ -3,24 +3,7 @@ package tools
 import (
 	"fmt"
 	"strings"
-
-	"github.com/lycaon/lycaon/internal/nativemanifest"
 )
-
-// ParseCatalogToolIDs returns the allowlisted catalog tool ids.
-func ParseCatalogToolIDs() ([]string, error) {
-	cfg, err := LoadToolsConfig()
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]string, 0, len(cfg.Tools))
-	for _, id := range cfg.Tools {
-		if id = strings.TrimSpace(id); id != "" {
-			ids = append(ids, id)
-		}
-	}
-	return ids, nil
-}
 
 // RegisteredToolSet returns a set of registered tool names from metadata.
 func RegisteredToolSet(reg *DefaultRegistry) map[string]bool {
@@ -34,8 +17,7 @@ func RegisteredToolSet(reg *DefaultRegistry) map[string]bool {
 	return out
 }
 
-// bootToolClaimNames are tools BootRegisteredToolSet treats as available beyond
-// native-tools.yaml. Each must be registered before serve validates its surface.
+// These claims must have handlers before the engine serves tools.
 var bootToolClaimNames = []string{
 	"command", "task", "scan_pack", "scan_list", "scan_summary", "scan_query", "scan_compare",
 	"workflow_compose", "workflow_compose_from_template", "workflow_persist",
@@ -56,52 +38,6 @@ func ValidateBootToolClaimsHonest(reg *DefaultRegistry) error {
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("boot tool claims not registered: %s", strings.Join(missing, ", "))
-	}
-	return nil
-}
-
-// BootRegisteredToolSet returns the tool names registered at serve boot, read
-// only from the manifest sections that hold tool names.
-func BootRegisteredToolSet(reg *DefaultRegistry) (map[string]bool, error) {
-	registered := RegisteredToolSet(reg)
-	cfg, err := nativemanifest.Load()
-	if err != nil {
-		return nil, fmt.Errorf("native tools config: %w", err)
-	}
-	lists := [][]string{cfg.AllTools(), cfg.RequiresWorkerBranch, cfg.SpawnsProcess}
-	for _, members := range cfg.Families {
-		lists = append(lists, members)
-	}
-	for _, resourceTools := range cfg.ResourceImplied {
-		lists = append(lists, resourceTools)
-	}
-	for _, list := range lists {
-		for _, name := range list {
-			if name = strings.TrimSpace(name); name != "" && !cfg.HasOperation(name) {
-				registered[name] = true
-			}
-		}
-	}
-	for _, name := range bootToolClaimNames {
-		registered[name] = true
-	}
-	return registered, nil
-}
-
-// ValidateCatalogAllowlistSync fails when an allowlisted id is not registered.
-func ValidateCatalogAllowlistSync(registered map[string]bool) error {
-	ids, err := ParseCatalogToolIDs()
-	if err != nil {
-		return err
-	}
-	var missing []string
-	for _, id := range ids {
-		if !registered[id] {
-			missing = append(missing, id)
-		}
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("allowlisted tools not registered: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }

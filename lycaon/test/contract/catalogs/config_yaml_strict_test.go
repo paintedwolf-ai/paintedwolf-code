@@ -17,7 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
@@ -76,7 +76,7 @@ func TestConfigYAMLParsesStrictlyAgainstSchema(t *testing.T) {
 			label: "lycaon-tools",
 			glob:  "packs/painted-wolf/platform/tools/lycaon-tools.yaml",
 			decode: func(raw []byte) error {
-				var v tools.ToolsConfig
+				var v toolstest.ToolsConfig
 				return config.DecodeYAML(raw, &v)
 			},
 		},

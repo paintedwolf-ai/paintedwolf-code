@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/board"
@@ -10,8 +11,8 @@ import (
 )
 
 func TestCatalogAllowlistIncludesPackBoard(t *testing.T) {
-	cfg, err := tools.LoadToolsConfig()
-	contractcheck.FailErr(t, "tools.LoadToolsConfig failed", err)
+	cfg, err := toolstest.LoadToolsConfig()
+	contractcheck.FailErr(t, "toolstest.LoadToolsConfig failed", err)
 	allowed := map[string]bool{}
 	for _, name := range cfg.Tools {
 		allowed[name] = true

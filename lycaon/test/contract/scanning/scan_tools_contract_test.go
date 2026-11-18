@@ -3,6 +3,7 @@ package contract
 import (
 	"github.com/lycaon/lycaon/internal/scan"
 	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -20,8 +21,8 @@ import (
 )
 
 func TestScanToolsContractAllowlistAndRegistration(t *testing.T) {
-	cfg, err := tools.LoadToolsConfig()
-	contractcheck.FailErr(t, "tools.LoadToolsConfig failed", err)
+	cfg, err := toolstest.LoadToolsConfig()
+	contractcheck.FailErr(t, "toolstest.LoadToolsConfig failed", err)
 	allowed := map[string]bool{}
 	for _, name := range cfg.Tools {
 		allowed[name] = true
