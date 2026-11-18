@@ -66,7 +66,7 @@ func TestHugePasteCompaction(t *testing.T) {
 		api.Message{ID: "log", Role: api.MessageRoleUser, Content: log},
 		api.Message{ID: "ack", Role: api.MessageRoleAssistant, Content: "seen"},
 	); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 
 	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "what failed?")
@@ -367,7 +367,7 @@ func TestWorkerSpawnDoesNotGrowParentMessages(t *testing.T) {
 	if err := store.AppendMessages(ctx, parent.ID, api.Message{
 		ID: "u0", Role: api.MessageRoleUser, Content: "start",
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 
 	transcript := strings.Repeat("tool output line\n", 2000)
@@ -385,7 +385,7 @@ func TestWorkerSpawnDoesNotGrowParentMessages(t *testing.T) {
 			api.Message{ID: "tool2", Role: api.MessageRoleTool, Content: transcript},
 			api.Message{ID: "a1", Role: api.MessageRoleAssistant, Content: "done details " + transcript},
 		); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "store.AppendMessages failed", err)
 		}
 		if _, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 			Summary: "worker finished task " + string(rune('A'+i)), JobID: "job-" + child.ID,
@@ -459,7 +459,7 @@ func TestCompactOversizedSplitReadsInSession(t *testing.T) {
 		api.Message{ID: "t3", Role: api.MessageRoleTool, Content: readB},
 		api.Message{ID: "a2", Role: api.MessageRoleAssistant, Content: "Now I have what I need."},
 	); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 
 	if err := mgr.Runner.History.ScheduleChunks(ctx, sess); err != nil {
@@ -532,7 +532,7 @@ func TestCompactOversizedPreservesBoundedReadPagesInSession(t *testing.T) {
 		api.Message{ID: "t1", Role: api.MessageRoleTool, Content: readPage},
 		api.Message{ID: "t2", Role: api.MessageRoleTool, Content: readPage},
 	); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 
 	if err := mgr.Runner.History.ScheduleChunks(ctx, sess); err != nil {
@@ -579,7 +579,7 @@ func TestWorkerChildSessionDietsOversizedToolResultsInView(t *testing.T) {
 		api.Message{ID: "t2", Role: api.MessageRoleTool, Content: readB},
 		api.Message{ID: "a2", Role: api.MessageRoleAssistant, Content: "aged past hot"},
 	); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 
 	if err := mgr.Runner.History.ScheduleChunks(ctx, child); err != nil {

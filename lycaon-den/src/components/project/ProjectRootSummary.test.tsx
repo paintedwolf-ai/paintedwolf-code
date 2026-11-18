@@ -19,6 +19,9 @@ import {
   requestedFirstTimeTips,
   resetFirstTimeTipRequestsForTests,
 } from "../../first-time-tips/first-time-tips-service.ts";
+import { useElapsableClock } from "../../test/elapse.ts";
+
+const elapse = useElapsableClock();
 
 const ROOT: ProjectRoot = {
   id: "r1",
@@ -183,7 +186,7 @@ describe("ProjectRootSummary", () => {
     await waitFor(() => expect(screen.getByTestId("files-root-summary-file-count").textContent).toContain("460,498"));
     expect(screen.getByTestId("files-root-summary-resource-readme")).toBe(row);
     const calls = request.mock.calls.length;
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    await elapse(600);
     expect(request).toHaveBeenCalledTimes(calls);
     view.unmount();
   });
@@ -198,7 +201,7 @@ describe("ProjectRootSummary", () => {
         onOpenFile={vi.fn()} onOpenChanges={vi.fn()} />
     ));
     await waitFor(() => expect(screen.getByTestId("files-root-summary-file-count").textContent).toBe("—"));
-    await new Promise(resolve => setTimeout(resolve, 600));
+    await elapse(600);
     expect(request).toHaveBeenCalledTimes(1);
     fireEvent.click(assertNamedControl(screen.getByTestId("retry-file-index"), "button"));
     await waitFor(() => expect(screen.getByTestId("files-root-summary-file-count").textContent).toContain("3"));
@@ -227,7 +230,7 @@ describe("ProjectRootSummary", () => {
       onOpenFile={vi.fn()} onOpenChanges={vi.fn()} />);
     await waitFor(() => expect(screen.getByTestId("files-root-summary-file-count").textContent).toContain("3"));
     expect(screen.queryByTestId("files-root-summary-coverage")).toBeNull();
-    await new Promise(resolve => setTimeout(resolve, 600));
+    await elapse(600);
     expect(client.getProjectSourceIndex).toHaveBeenCalledTimes(1);
   });
 
@@ -241,7 +244,7 @@ describe("ProjectRootSummary", () => {
     await waitFor(() => expect(screen.getByTestId("files-root-summary-file-count").textContent).toContain("3"));
     expect(screen.getByTestId("files-root-summary-resource-readme")).toBeTruthy();
     screen.getByTestId("files-root-summary-coverage");
-    await new Promise(resolve => setTimeout(resolve, 600));
+    await elapse(600);
     expect(client.getProjectSourceIndex).toHaveBeenCalledTimes(1);
   });
 

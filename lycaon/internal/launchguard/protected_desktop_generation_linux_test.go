@@ -16,7 +16,8 @@ import (
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
 )
 
-// Only the fixture's entry and bootstrap are linked for its private policy.
+// Only the entry and the bootstrap, which reads its policy beside itself, come
+// from the fixture build.
 // All desktop/engine/resource bytes remain the explicit artifact's bytes.
 func installDesktopGeneration(dir string, artifact desktopArtifact, input *pkgmanifest.Manifest, bootstrap, entry string) error {
 	generation := filepath.Join(dir, "generation")

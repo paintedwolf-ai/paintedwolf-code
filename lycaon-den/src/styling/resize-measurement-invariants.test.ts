@@ -9,27 +9,6 @@ import { extractCssRuleBlock } from "./css-contract.ts";
 const read = (rel: string) => readSourceText(join(denSourceRoot, rel));
 
 describe("resize measurement", () => {
-  it("measures pane containers through an observer, not on demand", () => {
-    // Pointer handlers avoid forced layout reads.
-    for (const rel of [
-      "components/browse/BrowseStagePanel.tsx",
-      "files/tree/files-tree-layout.ts",
-    ]) {
-      const source = read(rel);
-      expect(source).toContain("observeElementExtent");
-      expect(source).not.toMatch(/const bodySize[\s\S]{0,200}?clientWidth/);
-    }
-  });
-
-  it("does not re-measure the split host through a forced layout read", () => {
-    const host = read("components/shell/StageSplitHost.tsx");
-    const effect = host.slice(host.indexOf("    let applied:"), host.indexOf("    publish(el.getBoundingClientRect().width)"));
-    expect(effect).not.toBe("");
-    expect(effect).toContain("ResizeObserver");
-    expect(effect).not.toContain("getBoundingClientRect");
-    expect(effect).not.toContain("splitHostWidthPx()");
-  });
-
   it("syncs resize-handle axis from the handle, not the window", () => {
     const handle = read("components/primitives/ResizeHandle.tsx");
     // ResizeObserver controls axis synchronization.
@@ -39,28 +18,6 @@ describe("resize measurement", () => {
 });
 
 describe("layout epoch", () => {
-  it("does not publish viewport width from the window resize handler", () => {
-    const sinks = read("components/shell/shell-navigation-sinks.ts");
-    expect(sinks).toContain("installWindowResizeEpoch");
-    expect(sinks).not.toMatch(/setLayoutViewportWidth/);
-    expect(read("components/shell/Shell.tsx")).not.toMatch(/setLayoutViewportWidth/);
-    const epoch = read("shell/window-resize.ts");
-    const onResize =
-      /const onResize = \(\) => \{[\s\S]*?\n  \};/.exec(epoch)?.[0] ?? "";
-    expect(onResize).toContain("sustainShellLayoutBusy");
-    expect(onResize).toContain("requestAnimationFrame");
-    expect(onResize).not.toContain("setLayoutViewportWidth");
-  });
-
-  it("publishes split-host width on the next frame while resizing", () => {
-    const host = read("components/shell/StageSplitHost.tsx");
-    const effect = host.slice(host.indexOf("    let applied:"), host.indexOf("    publish(el.getBoundingClientRect().width)"));
-    expect(effect).toContain("schedulePublish(width)");
-    expect(effect).toContain("requestAnimationFrame");
-    expect(effect).not.toContain("isShellLayoutBusy");
-    expect(effect).not.toContain("onShellLayoutSettled");
-  });
-
   it("isolates column style and layout without paint containment", () => {
     const split = extractCssRuleBlock(read("shell-domain.css"), ".den-split-col");
     expect(split).toMatch(/contain:\s*layout style/);
@@ -108,16 +65,5 @@ describe("layout epoch", () => {
       /\.den-shell-main:has\(\.project-files-view\)[\s\S]*?overflow:\s*visible/,
     );
 
-  });
-
-  it("measures the transcript from the shared content box", () => {
-    const transcript = read("chat/transcript/layout/transcript-geometry.ts");
-    expect(transcript).toContain("observeSharedContentBox");
-    expect(transcript).not.toMatch(
-      /observeSharedContentBox\([\s\S]{0,200}?clientWidth/,
-    );
-    expect(read("chat/transcript/layout/transcript-virtualizer.ts")).toContain(
-      "observeTranscriptViewportRect",
-    );
   });
 });

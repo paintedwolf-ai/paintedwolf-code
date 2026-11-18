@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/watchfd"
@@ -103,17 +102,12 @@ func TestRecursiveWatchObservesWritesInUnseededDirectories(t *testing.T) {
 	reg := newBudgetedRegistry(0)
 	t.Cleanup(reg.CloseAll)
 	reg.Ensure(t.Context(), root)
-	time.Sleep(50 * time.Millisecond)
 	testutil.FailErr(t, "write artifact",
 		os.WriteFile(filepath.Join(deep, "artifact.bin"), []byte("x"), 0o644))
-
-	for t.Context().Err() == nil && !seen.Load() {
+	testutil.WaitFor(t, "a write three directories below an unseeded root reaches the epoch", func() bool {
 		ResetDebouncerForTest(t.Context())
-		time.Sleep(20 * time.Millisecond)
-	}
-	if !seen.Load() {
-		t.Fatal("a write three directories below an unseeded root never reached the epoch")
-	}
+		return seen.Load()
+	})
 	// The event's directory was never registered; under a recursive stream
 	// that is not a shortfall and must not be counted as one.
 	if coverage := reg.Coverage(root); !coverage.Complete || coverage.Truncated != 0 {

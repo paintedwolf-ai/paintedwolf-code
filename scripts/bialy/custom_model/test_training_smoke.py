@@ -6,7 +6,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from common import digest
+from behavior import served_cases
+from common import digest, file_digest
 from test_admission import fixture_source
 from train import parser, train
 from export import export
@@ -61,14 +62,19 @@ class Smoke(unittest.TestCase):
             model.save_pretrained(model_path,safe_serialization=True)
             for mode in ("sft","dpo"):
                 for group in ("train","validation","holdout"):
-                    (root / (group+".jsonl")).write_text(json.dumps(fixture(group,mode))+"\n")
+                    # Three training rows at an accumulation of two: a full group and a short one.
+                    names = [group + "-" + str(index) for index in range(3)] if group == "train" else [group]
+                    (root / (group+".jsonl")).write_text("".join(json.dumps(fixture(name,mode))+"\n" for name in names))
                 key = fixture_source(root, {name: root / (name + ".jsonl") for name in ("train", "validation", "holdout")})
                 environment = patch.dict(os.environ, {"PW_TRAINING_SOURCE_KEY": str(key)})
                 environment.start()
                 self.addCleanup(environment.stop)
                 base = model_path if mode == "sft" else root / "merged/model"
                 argv = ["--model",str(base),"--mode",mode,"--train",str(root/"train.jsonl"),
-                        "--validation",str(root/"validation.jsonl"),"--holdout",str(root/"holdout.jsonl"),"--out",str(root/mode),"--targets","q_proj,v_proj","--rank","2","--max-length","256","--epochs","2","--checkpoint-every","1"]
+                        "--validation",str(root/"validation.jsonl"),"--holdout",str(root/"holdout.jsonl"),"--out",str(root/mode),"--targets","q_proj,v_proj","--adapted-modules","2","--rank","2","--lora-alpha","4","--lora-dropout","0.05",
+                        "--max-length","256","--epochs","2","--seed","7","--learning-rate","1e-3","--warmup-ratio","0.25",
+                        "--final-learning-rate-ratio","0.1","--accumulation","2","--weight-decay","0.01","--max-grad-norm","1.0",
+                        "--checkpoint-every","1"]
                 if mode == "dpo":
                     argv += ["--reference",str(base)]
                     argv[argv.index("--targets") + 1] = r"re:.*\.(q_proj|v_proj)"
@@ -76,7 +82,9 @@ class Smoke(unittest.TestCase):
                 self.assertEqual(paused["status"], "paused")
                 self.assertFalse((root/mode/"result.json").exists())
                 train(parser().parse_args(argv + ["--resume"]))
-                self.assertTrue((root/mode/"result.json").is_file())
+                completed = json.loads((root/mode/"result.json").read_text())
+                self.assertEqual(completed["resources"]["total_steps"], 4)
+                self.assertEqual(completed["resources"]["step"], 4)
                 uninterrupted = list(argv)
                 uninterrupted[uninterrupted.index("--out") + 1] = str(root / (mode + "-uninterrupted"))
                 train(parser().parse_args(uninterrupted))
@@ -88,7 +96,14 @@ class Smoke(unittest.TestCase):
                     torch.testing.assert_close(resumed_weights[name], full_weights[name], rtol=0, atol=0)
                 if mode == "sft":
                     export(base,root/mode,root/"merged")
-                    self.assertTrue((root/"merged/manifest.json").is_file())
+                    merged = json.loads((root/"merged/manifest.json").read_text())
+                    inputs = json.loads((root/mode/"inputs.json").read_text())
+                    self.assertEqual(merged["template_sha256"], inputs["template_sha256"])
+                    self.assertEqual(merged["template_sha256"], file_digest(root/"merged/model/chat_template.jinja"))
+                    self.assertEqual(merged["behavior_sha256"], file_digest(root/"merged/behavior.json"))
+                    reference = json.loads((root/"merged/behavior.json").read_text())
+                    self.assertEqual([prompt["name"] for prompt in reference["prompts"]], [case["name"] for case in served_cases()])
+                    self.assertTrue(all(len(prompt["tokens"]) == len(prompt["margins"]) > 0 for prompt in reference["prompts"]))
                     # Simulate a crash after directory publication, before the final receipt.
                     (root/"merged/manifest.json").unlink()
                     export(base,root/mode,root/"merged",resume=True)

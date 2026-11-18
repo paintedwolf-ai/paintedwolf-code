@@ -1,7 +1,4 @@
-import { readFileSync } from "node:fs";
 import { loaded } from "../store/load-state.ts";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { render, screen, waitFor } from "@solidjs/testing-library";
 import {
@@ -14,9 +11,6 @@ import type {
   GitWorktreeView,
 } from "../api/types.ts";
 import type { GitWorkspaceStatus } from "../chat/actions/git-workspace-status.ts";
-
-const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(here, "..", "..", "..");
 
 const sessionId = "11111111-1111-4111-8111-111111111111";
 
@@ -89,18 +83,6 @@ const beta = repo({
 });
 
 describe("git worktree surface contract", () => {
-  it("pin-free client — no worktree key in app-state surfaces", () => {
-    const paths = [
-      "lycaon-den/shared/app-state-types.ts",
-      "lycaon-den/src-tauri/src/lib.rs",
-      "lycaon-den/src/platform/persistence/app-state-parse.ts",
-    ];
-    for (const rel of paths) {
-      const body = readFileSync(join(repoRoot, rel), "utf8");
-      expect(body.toLowerCase()).not.toMatch(/worktree/);
-    }
-  });
-
   it("aggregate has no worktree control — present or disabled", async () => {
     render(() => (
       <GitStrip

@@ -180,13 +180,10 @@ func TestRetiredLineageIsReclaimedWhenItsSurvivorsExit(t *testing.T) {
 
 	_ = cmd.Process.Kill()
 	_, _ = cmd.Process.Wait()
-	for t.Context().Err() == nil {
-		if _, ok := lineage.Of(pid); !ok {
-			return
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatal("retired lineage still holds its descriptor after its last descendant exited")
+	testutil.WaitFor(t, "the retired lineage releases its descriptor", func() bool {
+		_, ok := lineage.Of(pid)
+		return !ok
+	})
 }
 
 // A session's members are the descendants of every launch it made, including

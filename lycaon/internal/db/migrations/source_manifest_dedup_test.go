@@ -208,9 +208,11 @@ END;`)
 
 func TestManifestMigrationDeduplicatesSharedChunksWithoutAmplifiedIndexSorts(t *testing.T) {
 	database, trace := newLegacyMigrationDatabase(t)
+	seed, err := database.BeginTx(t.Context(), nil)
+	testutil.FailErr(t, "begin legacy fixture", err)
 	exec := func(query string, args ...any) {
 		t.Helper()
-		_, err := database.Exec(query, args...)
+		_, err := seed.Exec(query, args...)
 		testutil.FailErr(t, "seed legacy fixture", err)
 	}
 	for _, chunkID := range []string{"shared-0", "shared-1", "delta-b", "delta-a", "orphan"} {
@@ -258,6 +260,7 @@ VALUES (?, 'rk', ?, ?, 0, 'exact', '2026-10-20T00:00:00Z')`, spec.id, spec.id, s
 		}
 	}
 
+	testutil.FailErr(t, "commit legacy fixture", seed.Commit())
 	*trace = manifestMigrationTrace{}
 	tx, err := database.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin manifest migration", err)

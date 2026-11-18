@@ -13,6 +13,9 @@ import (
 type Budget struct {
 	HeapBytes  uint64
 	Goroutines int
+	// Settle is how long cleanup may keep releasing before growth counts as
+	// retained; zero means one minute.
+	Settle time.Duration
 }
 
 // Run preserves assertion failures and checks successful suites after cleanup settles.
@@ -25,7 +28,11 @@ func Run(m interface{ Run() int }, budget Budget) int {
 	if code != 0 {
 		return code
 	}
-	deadline := time.Now().Add(time.Minute)
+	settle := budget.Settle
+	if settle == 0 {
+		settle = time.Minute
+	}
+	deadline := time.Now().Add(settle)
 	for {
 		runtime.GC()
 		var after runtime.MemStats

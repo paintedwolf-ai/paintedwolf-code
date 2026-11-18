@@ -9,6 +9,8 @@ lycaon-den/src-tauri/host-bundle/
 lycaon-den/src-tauri/engine-root/
 
 # Generated third-party notices
+/.THIRD-PARTY-NOTICES.md.*
+/lycaon-den/src-tauri/.THIRD-PARTY-NOTICES.md.*
 /THIRD-PARTY-NOTICES.md
 lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md
 

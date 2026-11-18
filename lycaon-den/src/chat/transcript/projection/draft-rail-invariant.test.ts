@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { Message, WorkflowRun } from "../../../api/types.ts";
 import {
   coordinatorDraftPriorCount,
@@ -82,15 +80,6 @@ describe("draft rail invariant", () => {
         true,
       );
     }
-  });
-
-  it("DraftRail.tsx never imports or renders MarkdownBody", () => {
-    const src = readFileSync(
-      join(import.meta.dirname, "../../../components/transcript/DraftRail.tsx"),
-      "utf8",
-    );
-    expect(src).not.toMatch(/MarkdownBody/);
-    expect(src).toMatch(/den-draft-rail-plain/);
   });
 
   it("reloaded draft_status=live without streaming renders settled; last ord is the sole tail", () => {

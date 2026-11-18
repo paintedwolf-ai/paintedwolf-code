@@ -121,6 +121,7 @@ def main(argv: list[str]) -> int:
     failed_pkgs: set[str] = set()
     build_failed_pkgs: set[str] = set()
     build_errors: list[str] = []
+    pending_waits: dict[str, list[str]] = defaultdict(list)
     packages_seen: set[str] = set()
     packages_finished: set[str] = set()
     timings: dict[tuple[str, str], float] = {}
@@ -177,6 +178,9 @@ def main(argv: list[str]) -> int:
                 ("ok  ", "=== RUN", "=== PAUSE", "=== CONT", "--- PASS")
             ):
                 continue
+            # Printed when the run's watchdog asks a test binary where it is waiting.
+            if stripped.startswith("pending wait: ") and stripped not in pending_waits[pkg]:
+                pending_waits[pkg].append(stripped)
             output[key].append(text.rstrip("\n"))
         elif action == "pass":
             output.pop(key, None)
@@ -245,6 +249,8 @@ def main(argv: list[str]) -> int:
     for pkg in bare:
         status = "build failed" if pkg in build_failed_pkgs else "FAIL (no test-level detail; see log)"
         out.write(f"    {pkg}: {status}\n")
+        for ln in pending_waits.get(pkg, []):
+            out.write(f"        {ln}\n")
         for ln in output.get((pkg, ""), [])[: args.lines]:
             out.write(f"        {ln.strip()}\n")
 

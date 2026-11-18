@@ -304,8 +304,6 @@ describe("ProjectCostView", () => {
     const sequence = screen.getByTestId("project-cost-guardrail-sequence");
     expect(sequence.getAttribute("aria-label")).toContain("$4.00");
     expect(sequence.getAttribute("aria-label")).toContain("$5.00");
-    if (action === "close out") {
-    }
   });
 
   it("keeps existing data visible when tracking is off and offers the settings path", async () => {

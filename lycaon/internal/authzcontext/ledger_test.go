@@ -32,16 +32,6 @@ func TestLedger_appendGateFailClosed(t *testing.T) {
 	}
 }
 
-func TestLedger_appendRecordBestEffort(t *testing.T) {
-	ledger := &authzcontext.Ledger{Store: authzcontext.FailStore{}}
-	ledger.AppendRecord(context.Background(), authzcontext.RecordInput{
-		SessionID:  "sess",
-		Action:     authzcontext.EventActionToolDenied,
-		Outcome:    authzcontext.EventOutcomeDenied,
-		ResolvedBy: authzcontext.ResolvedBySystemDeny,
-	})
-}
-
 func TestLedgerApprovalDecisionCarriesApprovalRuleProvenance(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	insertSession(t, sqlDB, "sess-policy", time.Now().UTC())

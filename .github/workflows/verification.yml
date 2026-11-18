@@ -64,7 +64,7 @@ jobs:
           AFFECTED: ${{ inputs.affected }}
           PLATFORM: ${{ inputs.platform }}
           LANE: ${{ inputs.lane }}
-          # Reads main's nightly receipts; without actions read access the plan uses lane budgets.
+          # Reads main's nightly timings; without actions read access the plan uses lane budgets.
           GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "$PROFILE" == integration && "$GITHUB_EVENT_NAME" == workflow_dispatch && -z "$LANE" ]]; then
@@ -102,6 +102,8 @@ jobs:
   verify:
     name: ${{ matrix.lane }}${{ matrix.shard != '' && format(' ({0})', matrix.shard) || '' }}
     needs: plan
+    # A pull request of prose alone selects no lane; the static job verifies it.
+    if: needs.plan.outputs.matrix != '{"include":[]}'
     strategy:
       # One failed run reports every failing lane, so repairs need not rediscover them a cycle at a time.
       fail-fast: false
@@ -165,7 +167,8 @@ jobs:
         run: python3 -m ci_policy.admission_metadata
 
       - name: Run verification
-        timeout-minutes: ${{ matrix.minutes }}
+        # The lane backstop needs time to report stacks, reap children and publish its digest.
+        timeout-minutes: ${{ matrix.step_minutes }}
         env:
           LANE: ${{ matrix.lane }}
           SHARD: ${{ matrix.shard }}

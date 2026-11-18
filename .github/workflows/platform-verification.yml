@@ -25,12 +25,13 @@ jobs:
   # confinement on the same runner. Booting stored databases is
   # platform-neutral, so it stays off the scarce macOS runners; the Linux
   # boundary needs a Linux runner, and sharing this one keeps the stage at two.
+  # The runner matches the cache warmer's, so the Go and engine builds restore.
   # The confine live suites (namespaces, mounts, Landlock, seccomp, the
   # supervisor's network grants and refusal reports, toolchains) fail rather
   # than skip when the host cannot confine; setup-verification loads the
   # profiles that let verification engines create user namespaces on Ubuntu.
   upgrade-corpus:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 255
     env:
       PW_TEST_HOST: dedicated
@@ -45,6 +46,10 @@ jobs:
           linux-launch: 'true'
 
       - uses: ./.github/actions/setup-bialy
+
+      - uses: ./.github/actions/cache-decide
+
+      - uses: ./.github/actions/cache-generation
 
       # Release builds refuse candidate and independent scanner authority.
       - name: Release build behaviour
@@ -136,6 +141,8 @@ jobs:
 
       - uses: ./.github/actions/cache-decide
 
+      - uses: ./.github/actions/cache-generation
+
       - uses: ./.github/actions/cache-document-core
 
       - name: Fetch pinned git engine
@@ -170,6 +177,18 @@ jobs:
           -run '^(TestBrowserProcessCancellationSettlesBeforeReturning|TestBrowserProcessUsesOwnedNativeDoorInBothPostures|TestHeadlessLauncherPinsSubprocessPath|TestLaunchHeadlessUnderBrowserConfinement|TestProbeUsabilityUnderBrowserConfinement|TestPoolNewPageUnderBrowserConfinement|TestCaptureURLReachesHostLoopback|TestConfinedBrowserFloorReachesHostLoopback|TestConfinedBrowserCannotReadDeniedFiles|TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt|TestLaunchHeadlessRefusesUnsafeCacheDir)$'
           -count=1
 
+      # Release custody refusal needs the unsigned release build, which only
+      # this job prepares; ordinary macOS test runs skip it.
+      - name: Unsigned release custody
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          release="$RUNNER_TEMP/unsigned-release"
+          (cd lycaon && go build -tags=paintedwolf_release -o "$release/pw" ./cmd/lycaon)
+          (cd lycaon && go build -tags=paintedwolf_release -o "$release/macosreleaseprobe" ./cmd/lycaon/testdata/macosreleaseprobe)
+          PW_UNSIGNED_RELEASE_DIR="$release" ./task test:digest -- ./cmd/lycaon \
+            -run '^TestMacOSUnsignedReleaseCustodyRefusalPreservesLegacyFilesAndRefusesTokenPrint$' -count=1
       # Every package holding a test that builds only on macOS. Linux lanes run
       # the rest of each package.
       - name: macOS Go packages

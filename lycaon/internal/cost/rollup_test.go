@@ -44,7 +44,7 @@ func TestCostSummarySplitsCoordinatorAndWorkers(t *testing.T) {
 			PromptTokens:     100,
 			EstimatedNanoUSD: usd(v),
 		}); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "tracker.RecordUsage failed", err)
 		}
 	}
 
@@ -155,17 +155,17 @@ func TestCostSummarySplitsSummarizer(t *testing.T) {
 	if err := tracker.RecordUsage(ctx, UsageEvent{
 		SessionID: sessionID, Caller: CallerCoordinator, PromptTokens: 10, EstimatedNanoUSD: usd(0.40),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "tracker.RecordUsage failed", err)
 	}
 	if err := tracker.RecordUsage(ctx, UsageEvent{
 		SessionID: sessionID, Caller: CallerSummarizer, PromptTokens: 50, CompletionTokens: 5, EstimatedNanoUSD: usd(0.01),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "tracker.RecordUsage failed", err)
 	}
 	if err := tracker.RecordUsage(ctx, UsageEvent{
 		SessionID: sessionID, Caller: CallerSummarizer, PromptTokens: 20, EstimatedNanoUSD: usd(0.01),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "tracker.RecordUsage failed", err)
 	}
 	summary, err := tracker.Summary(ctx, api.CostScopeSession, sessionID, "")
 	testutil.FailErr(t, "tracker.Summary failed", err)
@@ -188,7 +188,7 @@ func TestCostSummaryEmptyWorkers(t *testing.T) {
 		Caller:           CallerCoordinator,
 		EstimatedNanoUSD: usd(v),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "tracker.RecordUsage failed", err)
 	}
 	summary, err := tracker.Summary(context.Background(), api.CostScopeSession, "sess-only", "")
 	testutil.FailErr(t, "tracker.Summary failed", err)
@@ -204,17 +204,17 @@ func TestCostSummaryProjectScope(t *testing.T) {
 	if err := tracker.RecordUsage(ctx, UsageEvent{
 		SessionID: "s1", ProjectID: projectID, Caller: CallerCoordinator, EstimatedNanoUSD: usd(0.10),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "tracker.RecordUsage failed", err)
 	}
 	if err := tracker.RecordUsage(ctx, UsageEvent{
 		SessionID: "s2", ProjectID: projectID, ParentSessionID: "s1", Caller: CallerWorker, EstimatedNanoUSD: usd(0.05),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "tracker.RecordUsage failed", err)
 	}
 	if err := tracker.RecordUsage(ctx, UsageEvent{
 		SessionID: "other", ProjectID: "project-b", Caller: CallerCoordinator, EstimatedNanoUSD: usd(99),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "tracker.RecordUsage failed", err)
 	}
 
 	summary, err := tracker.Summary(ctx, api.CostScopeProject, "", projectID)

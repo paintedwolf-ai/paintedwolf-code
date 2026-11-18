@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -21,7 +20,7 @@ func TestPromptEndToEnd(t *testing.T) {
 	sess := contractfixture.CreateTestSession(t, baseURL, dir)
 
 	contractfixture.AcceptPrompt(t, baseURL, sess.ID, "hello")
-	_, streamURL := contractfixture.WaitForAssistantStream(t, baseURL, sess.ID, 10*time.Second)
+	_, streamURL := contractfixture.WaitForAssistantStream(t, baseURL, sess.ID)
 
 	content, sawDone := contractfixture.ReadSSEStream(t, baseURL+streamURL)
 	if !sawDone {
@@ -39,7 +38,7 @@ func TestPromptDoesNotInventToolOutsideCurrentCapabilitySurface(t *testing.T) {
 	sess := contractfixture.CreateTestSession(t, baseURL, dir)
 
 	contractfixture.AcceptPrompt(t, baseURL, sess.ID, "read the readme")
-	_, streamURL := contractfixture.WaitForAssistantStream(t, baseURL, sess.ID, 10*time.Second)
+	_, streamURL := contractfixture.WaitForAssistantStream(t, baseURL, sess.ID)
 
 	content, sawDone := contractfixture.ReadSSEStream(t, baseURL+streamURL)
 	if !sawDone {
@@ -56,7 +55,7 @@ func TestSSEStream(t *testing.T) {
 	sess := contractfixture.CreateTestSession(t, baseURL, dir)
 
 	contractfixture.AcceptPrompt(t, baseURL, sess.ID, "hello")
-	_, streamURL := contractfixture.WaitForAssistantStream(t, baseURL, sess.ID, 10*time.Second)
+	_, streamURL := contractfixture.WaitForAssistantStream(t, baseURL, sess.ID)
 	content, sawDone := contractfixture.ReadSSEStream(t, baseURL+streamURL)
 	if !sawDone {
 		t.Fatal("expected done chunk")
@@ -88,10 +87,10 @@ func TestCreateSessionByProjectIDPromptContext(t *testing.T) {
 	if sess.WorkspacePath != contractfixture.ResolveTestPath(t, dir) {
 		t.Fatalf("project_dir = %q", sess.WorkspacePath)
 	}
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the session leaves preparing", func() bool {
 		return contractfixture.GetSessionAtURL(t, baseURL, sess.ID).Status != wire.SessionStatusPreparing
 	})
 
 	contractfixture.AcceptPrompt(t, baseURL, sess.ID, "hello")
-	contractfixture.WaitForSessionIdle(t, baseURL, sess.ID, 10*time.Second)
+	contractfixture.WaitForSessionIdle(t, baseURL, sess.ID)
 }

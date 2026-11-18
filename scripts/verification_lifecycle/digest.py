@@ -34,6 +34,7 @@ LOG_NEWEST_LINES = 64
 JOB_TAIL_BYTES = 1 << 13
 
 LINKER_NOISE = b"ld: warning: ignoring duplicate libraries: '-lobjc'"
+PENDING_WAIT = "pending wait: "
 CONTROL = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|[\x00-\x08\x0b-\x1f\x7f]")
 DIAGNOSTIC = re.compile(r"\b(?:FAIL(?:ED)?|ERROR|[Ee]rror|panic|[Ff]atal|[Ee]xception|Traceback|want|got|expected)\b"
                         r"|\S+\.\w+:\d+|[✗✘]")
@@ -142,7 +143,7 @@ def log_lines(path):
 
 def go_records(path, packages):
     """Failure output per package from a stage's `go test -json` events."""
-    records = {package: {"failed": [], "tests": {}, "package": deque(maxlen=TEST_OUTPUT_LINES),
+    records = {package: {"failed": [], "tests": {}, "pending": [], "package": deque(maxlen=TEST_OUTPUT_LINES),
                          "build": deque(maxlen=TEST_OUTPUT_LINES)} for package in packages}
     if not records or not path:
         return records
@@ -177,7 +178,10 @@ def record_event(records, event):
         record["failed"].append(test)
     elif action == "output":
         output = str(event.get("Output", ""))
-        if isinstance(test, str):
+        # Printed by the test binary when the run's watchdog asks where it is waiting.
+        if output.startswith(PENDING_WAIT):
+            record["pending"].append(output[len(PENDING_WAIT):].strip())
+        elif isinstance(test, str):
             record["tests"].setdefault(test, deque(maxlen=TEST_OUTPUT_LINES)).append(output)
         else:
             record["package"].append(output)
@@ -194,6 +198,8 @@ def go_diagnostics(record):
     # A parent fails because a child did; the child holds the assertion.
     leaves = [test for test in failed if not any(other.startswith(test + "/") for other in failed)]
     lead, lines = [], []
+    pending = list(dict.fromkeys(record["pending"]))
+    lead.extend("Waiting: " + wait for wait in pending[:MAX_TEST_NAMES])
     if leaves:
         more = len(leaves) - MAX_TEST_NAMES
         lead.append("Tests: " + ", ".join(leaves[:MAX_TEST_NAMES]) + (f" (+{more} more)" if more > 0 else ""))

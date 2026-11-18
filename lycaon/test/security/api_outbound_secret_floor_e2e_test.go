@@ -103,11 +103,7 @@ func TestOutboundSecretFloorJ3MCPDeny(t *testing.T) {
 	sess := createSessionHTTP(t, h.Server, dir)
 	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j3_mcp]] exfil via mcp")
-	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID)
-	if !ok {
-		dumpSessionFloorDebug(t, h, sess.ID, nil)
-		t.Fatal("expected outbound secret ask for mcp")
-	}
+	ev := waitOnePendingApproval(t, h, sess.ID)
 	assertOutboundSecretAsk(t, ev)
 	resolveApproval(t, h.Server, sess.ID, ev.ID, "reject")
 	testutil.FailErr(t, "prompt", awaitOutboundPrompt(t, h, sess.ID, done))
@@ -214,11 +210,7 @@ func TestOutboundSecretFloorJ5SendingTheValueAsks(t *testing.T) {
 	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j5_send]] read then leak")
-	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID)
-	if !ok {
-		dumpSessionFloorDebug(t, h, sess.ID, nil)
-		t.Fatal("a search carrying a credential must ask")
-	}
+	ev := waitOnePendingApproval(t, h, sess.ID)
 	// The chip is reviewed copy; the wire surface stays a cited machine fact.
 	if ev.ToolApproval.Plan.Presentation.Tool != "web search" {
 		t.Fatalf("tool=%q want %q", ev.ToolApproval.Plan.Presentation.Tool, "web search")
@@ -255,11 +247,7 @@ func TestOutboundSecretFloorJ5HarvestedValueAsks(t *testing.T) {
 	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j5_harvest]] read then send the unshapen value")
-	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID)
-	if !ok {
-		dumpSessionFloorDebug(t, h, sess.ID, nil)
-		t.Fatal("a harvested credential must ask, not block silently")
-	}
+	ev := waitOnePendingApproval(t, h, sess.ID)
 	if ev.ToolApproval.Plan.Presentation.Gate != "secret_outbound" {
 		t.Fatalf("gate=%q want secret_outbound", ev.ToolApproval.Plan.Presentation.Gate)
 	}
@@ -302,7 +290,7 @@ func TestOutboundSecretFloorJ6InertMatcherParity(t *testing.T) {
 	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j6_inert]] inert matcher")
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the prompt ends or an approval is pending", func() bool {
 		select {
 		case err := <-done:
 			testutil.FailErr(t, "prompt", err)

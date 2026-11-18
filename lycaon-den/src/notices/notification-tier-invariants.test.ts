@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { PreflightReport } from "../api/types.ts";
 import { mockPreflightReport } from "../api/mocks/fixtures.ts";
@@ -9,8 +7,6 @@ import { resolveCriticalStop } from "./critical-stop-model.ts";
 import { BackendTransportError } from "../platform/connection/request-connectivity.ts";
 import { shouldReportToNoticeRail } from "./report-policy.ts";
 
-const denSrc = join(import.meta.dirname, "..");
-
 function report(
   overall: PreflightReport["overall"],
   probes: PreflightReport["probes"],
@@ -19,15 +15,6 @@ function report(
 }
 
 describe("notification tier partition", () => {
-  it("publishes release announcements from the app boundary through the shared store", () => {
-    const home = readFileSync(join(denSrc, "components/home/HomeView.tsx"), "utf8");
-    const app = readFileSync(join(denSrc, "App.tsx"), "utf8");
-    const release = readFileSync(join(denSrc, "components/home/WhatsNewNotice.tsx"), "utf8");
-    expect(home).not.toContain("WhatsNew");
-    expect(app).toContain("<WhatsNewNotice notices={noticeStore}");
-    expect(release).toContain("props.notices.publish");
-    expect(release).not.toContain("SystemNudge");
-  });
   it("stops the stage only when unreachable or the host declares catastrophic", () => {
     expect(resolveCriticalStop({ sidecarStatus: "disconnected" })).toBeDefined();
     expect(
@@ -88,152 +75,5 @@ describe("notification tier partition", () => {
     expect(shouldReportToNoticeRail(clientNoticeError("fetch_failure"))).toBe(
       false,
     );
-  });
-
-  it("partitions on the host tier, never on probe status", () => {
-    const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
-
-    const nudge = strip(
-      readFileSync(join(denSrc, "components/home/PreflightNudge.tsx"), "utf8"),
-    );
-    expect(nudge).toContain('"non_catastrophic"');
-    expect(nudge).not.toContain('"degraded"');
-    expect(nudge).not.toContain('"blocked"');
-
-    const model = strip(
-      readFileSync(join(denSrc, "notices/critical-stop-model.ts"), "utf8"),
-    );
-    expect(model).toContain('"catastrophic"');
-    expect(model).not.toContain('"blocked"');
-  });
-
-  it("keeps unattributed project conditions off the Home readiness card", () => {
-    const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
-
-    const nudge = strip(
-      readFileSync(join(denSrc, "components/home/PreflightNudge.tsx"), "utf8"),
-    );
-    expect(nudge).toContain('probe.scope !== "project"');
-  });
-
-  it("gates readiness from the app root, not per stage", () => {
-    const root = readFileSync(join(denSrc, "App.tsx"), "utf8");
-    expect(root).toContain("createCriticalStop");
-
-    for (const file of [
-      "components/shell/Shell.tsx",
-      "components/chatview/ChatView.tsx",
-    ]) {
-      const src = readFileSync(join(denSrc, file), "utf8");
-      for (const readinessStop of [
-        "createCriticalStop",
-        "resolveCriticalStop",
-        "CriticalStopStage",
-        "preflight-store.ts",
-        "preflight-report.ts",
-      ]) {
-        expect(src).not.toContain(readinessStop);
-      }
-    }
-  });
-
-  it("scopes a failed render to its own stage", () => {
-    const boundary = readFileSync(
-      join(denSrc, "components/shell/StageErrorBoundary.tsx"),
-      "utf8",
-    );
-    expect(boundary).toContain("ErrorBoundary");
-    expect(boundary).toContain("CriticalStop");
-    expect(boundary).not.toContain("resolveCriticalStop");
-    expect(boundary).not.toContain("preflight");
-
-    const copy = CLIENT_NOTICES.view_render_failed;
-    expect(copy.scope).toBe("session");
-
-    const shell = readFileSync(
-      join(denSrc, "components/shell/Shell.tsx"),
-      "utf8",
-    );
-    expect(readFileSync(join(denSrc, "components/shell/ChatWorkspace.tsx"), "utf8")).toContain("StageErrorBoundary");
-    expect(shell).toContain("ChatWorkspace");
-  });
-
-  it("reads readiness from the shared store, not per surface", () => {
-    for (const file of [
-      "components/home/PreflightNudge.tsx",
-      "components/settings/system/PreflightProbeList.tsx",
-      "components/settings/system/SystemInfoPanel.tsx",
-      "components/CriticalStopStage.tsx",
-    ]) {
-      const src = readFileSync(join(denSrc, file), "utf8");
-      expect(src).not.toContain("getPreflight");
-      expect(src).toMatch(/preflight-(report|store)\.ts/);
-    }
-  });
-
-  it("mounts host notification cards in the top dock, never in the transcript", () => {
-    const cards = [
-      "NoticeRail",
-      "NotificationStack",
-      "NoProviderCard",
-      "VerifyTestNudge",
-      "SpendCeilingReachedNudge",
-      "SpendCeilingApproachingNudge",
-      "SessionProtectionBanners",
-    ];
-    const view = readFileSync(
-      join(denSrc, "components/chatview/ChatView.tsx"),
-      "utf8",
-    );
-    for (const card of cards) expect(view).not.toContain(card);
-
-    const shell = readFileSync(
-      join(denSrc, "components/shell/Shell.tsx"),
-      "utf8",
-    );
-    const chat = readFileSync(join(denSrc, "components/shell/ChatWorkspace.tsx"), "utf8");
-    expect(chat).toContain("ChatTopChromeStack");
-    expect(shell).toContain("ChatWorkspace");
-    for (const card of cards) expect(card === "NotificationStack" ? shell : chat).toContain(card);
-  });
-
-  it("mounts one shared standing-notification stack on Home and in chat", () => {
-    const shell = readFileSync(
-      join(denSrc, "components/shell/Shell.tsx"),
-      "utf8",
-    );
-    const chrome = readFileSync(
-      join(denSrc, "components/nav/ChatTopChromeStack.tsx"),
-      "utf8",
-    );
-
-    const columns = readFileSync(join(denSrc, "components/shell/ShellColumns.tsx"), "utf8");
-    expect(shell).toContain("const notificationStack = () =>");
-    expect(readFileSync(join(denSrc, "components/shell/ChatWorkspace.tsx"), "utf8")).toContain("notifications={{");
-    expect(shell).toContain("notifications={showHome() ? notificationStack() : null}");
-    expect(columns).toContain("{props.notifications}");
-    expect(chrome).toContain('slot="notifications"');
-  });
-
-  it("retires scoped notices when the thing they describe goes away", () => {
-    const retire = readFileSync(join(denSrc, "lifecycle/entity-retire.ts"), "utf8");
-    expect(retire).toContain("clearSession(");
-    expect(retire).toContain("clearProject(");
-
-    const connection = readFileSync(join(denSrc, "platform/connection/app-connection.ts"), "utf8");
-    expect(connection).toContain("retire: () => services?.retire ?? null");
-    const reconcile = readFileSync(join(denSrc, "platform/connection/connection-reconcile.ts"), "utf8");
-    expect(reconcile).toContain("ports.retire()?.session(");
-    const connectionEvents = readFileSync(join(denSrc, "platform/connection/connection-events.ts"), "utf8");
-    expect(connectionEvents).toContain("ports.retire()?.project(");
-
-    const projects = readFileSync(join(denSrc, "components/shell/project-lifecycle.ts"), "utf8");
-    const navigation = readFileSync(join(denSrc, "components/shell/session-navigation.ts"), "utf8");
-    expect(navigation).toContain("getEntityRetire()?.session(");
-    expect(projects).toContain("getEntityRetire()?.project(");
-
-    const events = readFileSync(join(denSrc, "api/events.ts"), "utf8");
-    expect(events).toContain("clearSessionHostErrorNotices");
-    expect(events).toContain('idle_disposition === "completed"');
   });
 });

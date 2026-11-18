@@ -1,8 +1,9 @@
 package guard_test
 
 import (
-	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/coordinator/guard"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/spawn"

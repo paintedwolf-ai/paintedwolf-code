@@ -23,13 +23,15 @@ var errNoRecoveryCoordinator = errors.New("no recovery coordinator to retain wor
 // its tree may be deleted. A mounted view is skipped: settlement already salvaged its delta.
 // A tree whose changes cannot be listed is kept whole with unknown scope, because a baseline
 // that may never return must not stop the cancel. A failure to retain leaves the tree in place
-// and reports the worker unresolved.
-func (m *Manager) RetainCanceledWork(ctx context.Context, jobID, root, baselinePath string) error {
+// and reports the worker unresolved. primary is the task's root, which qualifies changed paths
+// when the branch recorded no layout.
+func (m *Manager) RetainCanceledWork(ctx context.Context, jobID, root, baselinePath string, primary projectroot.RootRef) error {
 	if _, err := os.Lstat(root); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	viewID := jobID
-	roots := []projectroot.RootRef{{ID: "primary", IsPrimary: true}}
+	primary.IsPrimary = true
+	roots := []projectroot.RootRef{primary}
 	meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(root))
 	switch {
 	case errors.Is(err, os.ErrNotExist):

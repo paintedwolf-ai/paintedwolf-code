@@ -58,6 +58,9 @@ func TestDisplayPathKeysOnActiveRoot(t *testing.T) {
 		{"d", "p", "", "@lycaon"},
 		// Empty activeRootID falls back to primary.
 		{"", "p", "src/foo.go", "src/foo.go"},
+		// A bare path that starts like a label is written so it cannot read as one.
+		{"d", "d", "@types/index.d.ts", "./@types/index.d.ts"},
+		{"d", "p", "@types/index.d.ts", "@lycaon/@types/index.d.ts"},
 		{"", "d", "src/foo.go", "@lycaon-den/src/foo.go"},
 		// Active == primary is byte-identical to the old primary-qualified output.
 		{"p", "p", "src/foo.go", "src/foo.go"},
@@ -211,5 +214,20 @@ func TestQualifyExternalRootRendersAbsolutePath(t *testing.T) {
 	// when it sits under the primary root's parent.
 	if got := Qualify(roots, "p", external, grant); got != filepath.ToSlash(grant) {
 		t.Fatalf("Qualify(external grant root) = %q want %q", got, filepath.ToSlash(grant))
+	}
+}
+
+// A displayed path resolves back to the root and file it names.
+func TestDisplayPathResolvesBackToItsRoot(t *testing.T) {
+	roots := []RootRef{
+		{ID: "p", Label: "app", Path: t.TempDir(), IsPrimary: true},
+		{ID: "d", Label: "types", Path: t.TempDir()},
+	}
+	for _, tc := range []struct{ rootID, rel string }{{"p", "@types/index.d.ts"}, {"p", "src/a.go"}, {"d", "@scope/pkg"}, {"d", "x.md"}} {
+		display := DisplayPath(roots, "p", tc.rootID, tc.rel)
+		abs, root, err := ResolveAbs(roots, "p", display)
+		if err != nil || root.ID != tc.rootID || abs != filepath.Join(root.Path, filepath.FromSlash(tc.rel)) {
+			t.Errorf("%s %q displays as %q and resolves to %q in %q (%v)", tc.rootID, tc.rel, display, abs, root.ID, err)
+		}
 	}
 }

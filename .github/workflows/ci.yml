@@ -48,6 +48,11 @@ jobs:
         with:
           go-version-file: lycaon/go.mod
           cache: false
+      # Release preflight reads the brand module.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
       - name: Check static source rules
         run: bash scripts/ci_policy/static-checks.sh
 
