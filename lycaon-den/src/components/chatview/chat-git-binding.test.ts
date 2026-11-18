@@ -103,6 +103,47 @@ describe("chat Git binding", () => {
     });
   });
 
+  it.each([
+    { operation: "commit", method: "commitGit" },
+    { operation: "stash", method: "stashGit" },
+    { operation: "discard", method: "discardGit" },
+    { operation: "push", method: "pushGit" },
+  ] as const)("reports a refused $operation once and leaves the controls free", async ({ operation, method }) => {
+    const refusal = Object.assign(new Error(`Fixture ${operation} refusal`), { code: `git_${operation}_failed` });
+    const refuse = () => vi.fn(async () => {
+      throw refusal;
+    });
+    const writes = { commitGit: refuse(), stashGit: refuse(), discardGit: refuse(), pushGit: refuse() };
+    const client = stubClient({
+      ...writes,
+      getGitStatus: vi.fn(async () => summaryOf({})),
+      listGitChanges: vi.fn(async () => ({ repo_id: REPO_ID, revision: 1, refreshing: false, files: [] })),
+      listGitRepos: vi.fn(async () => repoSet({})),
+    });
+    setLycaonClientForTest(client);
+    const appStore = createAppStore();
+    appStore.actions.setGitRepos([repo], REPO_ID);
+    const reportError = vi.fn();
+
+    await createRoot(async (dispose) => {
+      const binding = bindingFor(client, appStore, reportError);
+      if (operation === "commit") {
+        await expect(binding.onCommit("fixture commit")).resolves.toBe(false);
+      } else {
+        const run = { stash: binding.onStash, discard: binding.onDiscard, push: binding.onPush }[operation];
+        run();
+        await vi.waitFor(() => expect(reportError).toHaveBeenCalled());
+      }
+      expect(reportError).toHaveBeenCalledTimes(1);
+      expect(reportError).toHaveBeenCalledWith(refusal);
+      for (const [name, write] of Object.entries(writes)) {
+        expect(write, name).toHaveBeenCalledTimes(name === method ? 1 : 0);
+      }
+      expect(binding.busy()).toBe(false);
+      dispose();
+    });
+  });
+
   it("pulls the repository whose status is shown before the repository set loads", async () => {
     const client = stubClient({
       pullGit: vi.fn(async () => {

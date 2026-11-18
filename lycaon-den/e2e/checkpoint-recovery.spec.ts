@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
+import { realpathSync, rmSync, symlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { expect, type Page } from "@playwright/test";
+import { expect, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 import {
   activateProject,
   apiConfig,
@@ -14,6 +15,39 @@ import {
 } from "./helpers.ts";
 import { harnessSocketPath, listenHarnessSocket } from "./fixtures/harness-socket.ts";
 import type { CheckpointListResponse } from "../src/api/types.ts";
+
+type ApprovalPlanSubject = NonNullable<
+  NonNullable<CheckpointListResponse["checkpoints"][number]["tool_approval"]>["plan"]
+>["subject"];
+
+async function expectPlanSubject(
+  request: APIRequestContext,
+  sessionId: string,
+  matches: (subject: ApprovalPlanSubject) => boolean,
+): Promise<void> {
+  const { apiUrl, token } = apiConfig();
+  await expect
+    .poll(async () => {
+      const res = await request.get(
+        `${apiUrl}/v1/sessions/${sessionId}/checkpoints?kind=tool_approval`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok()) return `http ${res.status()}`;
+      const body = (await res.json()) as CheckpointListResponse;
+      return body.checkpoints.some((c) => {
+        const subject = c.tool_approval?.plan?.subject;
+        return subject != null && matches(subject);
+      })
+        ? "ready"
+        : JSON.stringify(body).slice(0, 400);
+    }, { timeout: 30_000 })
+    .toBe("ready");
+}
+
+async function openApprovalDetails(page: Page, card: Locator): Promise<Locator> {
+  await card.getByRole("button", { name: "Approval details in Files", exact: true }).click();
+  return page.getByTestId("chat-content-page");
+}
 
 async function foregroundSession(page: Page): Promise<string> {
   const stream = liveChatStage(page).getByTestId("chat-stream").first();
@@ -57,22 +91,78 @@ async function openWaitingTask(page: Page, projectId: string, sessionId: string)
   await expect.poll(() => foregroundSession(page), { timeout: 30_000 }).toBe(sessionId);
 }
 
-let socketPath: string;
+let approvedSocketPath: string;
+let resolvedSocketPath: string;
 let closeSocket: () => Promise<void>;
 
+// The card shows both paths, so the approved path is a link resolving elsewhere.
 webE2e.beforeAll(async () => {
-  socketPath = harnessSocketPath("recovery.sock");
-  closeSocket = await listenHarnessSocket(socketPath);
+  const target = harnessSocketPath("recovery.sock");
+  closeSocket = await listenHarnessSocket(target);
+  approvedSocketPath = harnessSocketPath("recovery-link.sock");
+  rmSync(approvedSocketPath, { force: true });
+  symlinkSync(target, approvedSocketPath);
+  resolvedSocketPath = realpathSync(target);
 });
-webE2e.afterAll(() => closeSocket());
+webE2e.afterAll(async () => {
+  await closeSocket();
+  rmSync(approvedSocketPath, { force: true });
+});
 
-// Fields are read when a test runs: the socket path exists only after beforeAll.
-const approvals: Array<{ name: string; fields: () => Record<string, unknown> }> = [
+type ApprovalCheck = { page: Page; request: APIRequestContext; sessionId: string; card: Locator };
+
+const directIpDestination = "https://example.test/";
+
+// Fields are read when a test runs: the socket paths exist only after beforeAll.
+const approvals: Array<{
+  name: string;
+  fields: () => Record<string, unknown>;
+  // Runs on the reopened card while it is live.
+  live?: (check: ApprovalCheck) => Promise<void>;
+  // Runs after reload, before the approval resolves.
+  details?: (check: ApprovalCheck) => Promise<void>;
+}> = [
   { name: "command", fields: () => ({}) },
-  { name: "local service", fields: () => ({ approved_path: socketPath, resolved_path: socketPath }) },
+  {
+    name: "local service",
+    fields: () => ({ approved_path: approvedSocketPath, resolved_path: resolvedSocketPath }),
+    live: async ({ request, sessionId, card }) => {
+      await expectPlanSubject(request, sessionId, (subject) =>
+        subject.kind === "socket_set" &&
+        (subject.targets ?? []).some((target) => target.details?.approved_path === approvedSocketPath));
+      await expect(card.getByTestId("approval-subject")).toContainText(approvedSocketPath);
+      await expect(card.getByTestId("approval-approve-primary")).toBeVisible();
+      await expect(card.getByTestId("approval-grant-face")).toBeVisible();
+      const no = card.getByTestId("approval-no");
+      await expect(no).toBeVisible();
+      // The shell never autofocuses a destructive control on mount.
+      await expect(no).not.toBeFocused();
+      await expect(card).toContainText("outside the sandbox");
+    },
+    details: async ({ page, card }) => {
+      await expect(await openApprovalDetails(page, card)).toContainText(resolvedSocketPath);
+    },
+  },
   {
     name: "direct IP",
-    fields: () => ({ direct_ip: true, declared_destinations: ["https://example.test/"] }),
+    fields: () => ({ direct_ip: true, declared_destinations: [directIpDestination] }),
+    live: async ({ page, request, sessionId, card }) => {
+      await expectPlanSubject(request, sessionId, (subject) =>
+        subject.kind === "direct_ip" &&
+        (subject.targets ?? []).some((target) => target.details?.visibility === "unobserved"));
+      await expect(card.getByTestId("approval-high-risk-consequence")).toBeVisible();
+      await expect(card.getByTestId("approval-approve-primary")).toContainText("Allow for this chat");
+      await card.getByRole("button", { name: "Other choices", exact: true }).click();
+      await expect(page.getByRole("menuitem", { name: /Allow once/ })).toBeVisible();
+      await page.keyboard.press("Escape");
+      // The shell never autofocuses a destructive control on mount.
+      await expect(card.getByTestId("approval-no")).not.toBeFocused();
+    },
+    details: async ({ page, card }) => {
+      const details = await openApprovalDetails(page, card);
+      await expect(details).toContainText("Unobserved");
+      await expect(details).toContainText(directIpDestination);
+    },
   },
   {
     name: "secret screen",
@@ -111,6 +201,7 @@ for (const approval of approvals) {
     await openBlankChat(page);
     await openApprovalTask(page, project.id, sessionId);
     await expect(card()).toBeVisible();
+    await approval.live?.({ page, request, sessionId, card: card() });
     if (approval.name === "command") {
       const restart = fileURLToPath(new URL("../../scripts/harness/crash-restart.sh", import.meta.url));
       await promisify(execFile)("bash", [restart], { timeout: 300_000 });
@@ -130,6 +221,7 @@ for (const approval of approvals) {
       expect.objectContaining({ session_id: sessionId, class: "needs_you", reason: "checkpoint" }),
     ]));
 
+    await approval.details?.({ page, request, sessionId, card: card() });
     if (approval.name === "command") {
       await card().getByTestId("approval-approve-primary").click();
     } else {

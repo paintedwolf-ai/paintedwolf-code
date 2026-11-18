@@ -3,7 +3,6 @@ import type { Message } from "../src/api/types.ts";
 import {
   apiGetActiveWorkflowRun,
   apiSeedSessionTranscript,
-  apiStartWorkflowRun,
   bootstrapChatSession,
   expectShellReady,
   liveChatStage,
@@ -598,10 +597,6 @@ webE2e.describe("transcript scale den", () => {
       await bootstrapChatSession(page, request);
       const sessionId = await settledChatSessionId(page);
       const ambientRun = await apiGetActiveWorkflowRun(request, sessionId);
-      const planRun = await apiStartWorkflowRun(request, sessionId, {
-        workflow_id: "plan",
-        parameters: { research_depth: "none" },
-      });
       const activityAssistantId = crypto.randomUUID();
       const activityToolCallId = "tc-expanded-wheel-tail";
       const messages = [
@@ -619,8 +614,7 @@ webE2e.describe("transcript scale den", () => {
                   ).join("\n\n")
                 : `Runway prompt ${ord}`,
             created_at: "2026-08-24T10:00:00Z",
-            workflow_run_id:
-              index < 12 ? ambientRun.id : planRun.id,
+            workflow_run_id: ambientRun.id,
             seq: ord,
             ord,
           };
@@ -637,7 +631,7 @@ webE2e.describe("transcript scale den", () => {
             },
           ],
           created_at: "2026-08-24T10:01:00Z",
-          workflow_run_id: planRun.id,
+          workflow_run_id: ambientRun.id,
           seq: 25,
           ord: 25,
         },
@@ -658,7 +652,7 @@ webE2e.describe("transcript scale den", () => {
             assistant_message_id: activityAssistantId,
           },
           created_at: "2026-08-24T10:01:01Z",
-          workflow_run_id: planRun.id,
+          workflow_run_id: ambientRun.id,
           seq: 26,
           ord: 26,
         },
@@ -676,7 +670,7 @@ webE2e.describe("transcript scale den", () => {
                   ).join("\n\n")
                 : `Tail prompt ${ord}`,
             created_at: "2026-08-24T10:02:00Z",
-            workflow_run_id: planRun.id,
+            workflow_run_id: ambientRun.id,
             seq: ord,
             ord,
           };

@@ -1,9 +1,6 @@
 import { expect } from "@playwright/test";
 import { apiSeedSessionTranscript, bootstrapChatSession, liveChatStage, settledChatSessionId, transcriptMessages, webE2e } from "./helpers.ts";
 
-const CONTEXT_ACTIVE = "project-context-zone__entry--active";
-const GEAR_ACTIVE = "project-cluster__icon-btn--active";
-
 webE2e.describe("nav single selection", () => {
   webE2e("idle stages cannot paint through the active stage", async ({ page }) => {
     await bootstrapChatSession(page);
@@ -36,17 +33,17 @@ webE2e.describe("nav single selection", () => {
     const search = page.getByTestId("project-search-entry");
 
     await config.click();
-    await expect(config).toHaveClass(new RegExp(GEAR_ACTIVE));
+    await expect(config).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("project-context-view")).toBeVisible();
 
     await search.click();
     // Search opens as a full stage.
     await expect(page.getByTestId("global-search-view")).toBeVisible();
     // Only the active destination stays selected.
-    await expect(search).toHaveClass(new RegExp(CONTEXT_ACTIVE));
-    await expect(config).not.toHaveClass(new RegExp(GEAR_ACTIVE));
-    await page.keyboard.press("Escape");
     const searchSurface = page.locator('[data-resident-key$=":search"]');
+    await expect(searchSurface).toHaveAttribute("data-resident", "active");
+    await expect(config).not.toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Escape");
     await expect(searchSurface).toHaveAttribute("data-resident", "idle");
     await expect(searchSurface).toHaveAttribute("inert", "");
   });
@@ -72,7 +69,7 @@ webE2e.describe("nav single selection", () => {
 
       const config = page.getByTestId("project-configuration-entry");
       await config.click();
-      await expect(config).toHaveClass(new RegExp(GEAR_ACTIVE));
+      await expect(config).toHaveAttribute("aria-pressed", "true");
 
       // An empty session is reused; a started conversation creates another row.
       await page.getByTestId("new-chat-btn").click();
@@ -82,7 +79,7 @@ webE2e.describe("nav single selection", () => {
       await (started ? settled.not.toBe(previousSession) : settled.toBe(previousSession));
       await expect(liveChatStage(page).getByTestId("chat-composer")).toBeVisible();
       await expect(liveChatStage(page).getByTestId("chat-composer")).toBeFocused();
-      await expect(config).not.toHaveClass(new RegExp(GEAR_ACTIVE));
+      await expect(config).not.toHaveAttribute("aria-pressed", "true");
       await expect(rows).toHaveCount(before + (started ? 1 : 0));
     });
   }
