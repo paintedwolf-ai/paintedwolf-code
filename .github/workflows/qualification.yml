@@ -107,8 +107,9 @@ jobs:
           PYTHONPATH: scripts
         run: python3 -m ci_policy.nightly_evidence select
 
+  # After custody, so the nightly lane set holds the plan's hosted runners alone.
   verification:
-    needs: [source, selection]
+    needs: [source, selection, custody]
     if: needs.selection.outputs.nightly-run-id == ''
     uses: ./.github/workflows/nightly-verification.yml
     permissions:

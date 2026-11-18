@@ -97,10 +97,13 @@ jobs:
           include-hidden-files: true
           retention-days: 14
 
+  # One case at a time, after the release rehearsal's macOS job, keeps nightly within the plan's macOS runners.
   installed-upgrade:
-    needs: installed-upgrade-fixtures
+    needs: [installed-upgrade-fixtures, release-rehearsal]
+    if: ${{ !cancelled() && needs.installed-upgrade-fixtures.result == 'success' }}
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix: ${{ fromJSON(needs.installed-upgrade-fixtures.outputs.matrix) }}
     runs-on: macos-15
     timeout-minutes: 60

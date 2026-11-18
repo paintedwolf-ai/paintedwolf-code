@@ -1118,9 +1118,11 @@ vulnerability scan and the third-party notices when a dependency graph, the
 vulnerability database or allowlist, the licensing catalog or their scripts
 change, and nightly. `command-scale` runs the scale tests and the allocation- and
 byte-gated benchmarks of the command entry, `toolhost` and `jq` when those
-packages change. `confinement-macos` runs the applied Seatbelt suites on
-`macos-15` for the same sources as `confinement-arm64`; macOS runners cannot
-isolate the network, so it runs online.
+packages change. `confinement-macos` runs the applied Seatbelt confinement suites on
+`macos-15` for the same sources as `confinement-arm64`, in the merge queue;
+nightly and dispatched checks run every applied Seatbelt suite in their platform
+job instead. macOS
+runners cannot isolate the network, so it runs online.
 
 Linux confinement compiles per architecture: seccomp filters name the audit
 architecture and syscall numbers, arm64 has no legacy calls such as `open`,
@@ -1160,7 +1162,7 @@ nightly calls, so a lane added to nightly is added to qualification. A static jo
 runs first (release metadata, published stable compatibility), then the
 credential probe; nothing compiles until both pass. The unsigned preparation then
 runs for the candidate, the macOS release custody test runs against the sidecar
-it prepared, and the nightly lane set runs unless a green full
+it prepared, and only then the nightly lane set runs, unless a green full
 nightly ran on exactly the candidate's commit and tree. A green or red nightly on
 any other commit, including the parent, is never read. One qualification runs at
 a time. Its `queue: max` concurrency queue retains up to 100 pending
@@ -1544,9 +1546,10 @@ Concurrency is bounded by construction: each class of work holds a
 fixed number of runners, through one run at a time and capped matrices. The
 merge queue's own settings budget its class: groups built at once times the
 gate's cap. The `capacity` table in
-[`verification-plan.json`](../scripts/verification-plan.json) declares each
-verification profile's
-`max_parallel`. The reusable verification workflow's plan job reads that cap
+[`verification-plan.json`](../scripts/verification-plan.json) declares those
+`hosted` ceilings and each verification profile's `max_parallel`. A workflow law
+follows nightly and qualification through every workflow they call and requires
+the heaviest set of jobs no `needs` chain orders to fit the ceilings. The reusable verification workflow's plan job reads that cap
 from the catalog and orders the matrix: lanes the catalog marks `first`, the
 cheap ones that fail most often, then the rest longest first. Complete measured
 coverage uses each lane's longest shard duration; incomplete coverage uses catalog
@@ -1554,9 +1557,9 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 
 | Class | Workflows | One run at a time | Runners (macOS) |
 |---|---|---|---|
-| Qualification | `qualification.yml` | `qualification` | the nightly cap when it runs the lane set, beside the unsigned preparation; otherwise the static job and the preparation |
+| Qualification | `qualification.yml` | `qualification` | the unsigned preparation and custody, then the nightly lane set, each within the `hosted` ceilings |
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
-| Nightly | `nightly.yml` | `nightly` | 20 (7): six verification runners, two platform jobs, two browser shards, the desktop journey, the store upgrade rehearsal, the five release rehearsal jobs, and the installed upgrade's preparation and two cases |
+| Nightly | `nightly.yml` | `nightly` | within the `hosted` 20 (5): six verification runners, two platform jobs, two browser shards, the desktop journey, the five release rehearsal jobs and the installed upgrade's preparation, then its cases one at a time |
 | Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 4 (2): the macOS signing job beside a Linux signing or import job, then installed upgrade cases two at a time beside repository assembly; a source without a retained preparation adds its five unsigned builds |
 | DCO certification | `dco.yml` | one queue per pull request or merge group | 1 per pull request or group |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
