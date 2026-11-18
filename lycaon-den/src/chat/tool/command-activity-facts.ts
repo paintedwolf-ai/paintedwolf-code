@@ -94,7 +94,7 @@ export function programActivityFacts(
     ? [...facts, programOutcome(part, program)] : facts;
 }
 
-/** Receipts without an activity snapshot use the same card and retain all operations. */
+/** Summarizes a program when no activity row was projected. */
 export function commandActivityPart(part: ToolPartView): ToolPartView {
   if (part.commandActivity || !part.commandProgram) return part;
   const fact = programOutcome(part, part.commandProgram);

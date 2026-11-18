@@ -29,7 +29,7 @@ type Props = {
   evidence?: JSX.Element;
 };
 
-/** Input, Output, Receipt and Evidence, then the opener; dragging the links attaches the output to chat. */
+/** Dragging the records attaches the call's output to chat. */
 export function ActionLinks(props: Props) {
   const content = useToolContent();
   // A Find match inside this call's input or output opens its document at the match.
@@ -72,11 +72,11 @@ export function ActionLinks(props: Props) {
           );
         }}
       </Index>
-      <Show when={hostDecisions(props.part)}>
+      <Show when={hostDecisions(props.part)} keyed>
         {(text) => (
           <ToolContentLink short label="Host decisions" testId="command-activity-decisions"
             projectId={props.projectId} pane={`action:${props.part.id}:decisions`}
-            content={{ kind: "inline", text: text() }} />
+            content={{ kind: "inline", text }} />
         )}
       </Show>
       {props.evidence}
@@ -96,7 +96,6 @@ function hostDecisions(part: ToolPartView): string | undefined {
   }).join("\n");
 }
 
-/** What a record link opens: a retained reference, the call's own text, a process, or receipts. */
 function linkContent(link: ActionLink, part: ToolPartView): ChatContentDocument["content"] | undefined {
   switch (link.kind) {
     case "input":

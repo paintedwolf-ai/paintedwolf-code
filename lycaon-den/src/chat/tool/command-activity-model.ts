@@ -6,7 +6,7 @@ import { createCommandActivityMemory, type ActivityCallMemory, type CommandActiv
 
 export const FORM_PROGRAM_TOOLS: ReadonlySet<string> = new Set(["command", "summarize", "survey_repo", "code_rewrite"]);
 
-/** Wire phase base rank (mechanics §3.1); group sub-tiers offset 0..2 within the phase. */
+/** Groups rank within their host phase. */
 const ACTIVITY_PHASE_RANK: Readonly<Record<string, number>> = { inspect: 10, execute: 20, mutate: 30 };
 const ACTIVITY_GROUP_TIER: Readonly<Record<string, number>> = {
  "Processing output": 0, "Inspecting environment": 0, "Inspecting processes": 0, "Checking file metadata": 0,
@@ -18,11 +18,7 @@ const ACTIVITY_GROUP_TIER: Readonly<Record<string, number>> = {
  "Editing files": 1, "Recording Git changes": 1, "Changing files": 1, "Recording changes": 1,
 };
 
-/**
- * Two-level monotonic rank: phase base plus the group sub-tier. Unknown groups
- * default to the inspect discovery tier and the execute/mutate base; unknown
- * phases rank 0 and never advance a headline.
- */
+/** Unknown groups use their phase's default tier, and unknown phases rank zero. */
 export function commandActivityRank(fact: CommandActivity): number {
  const base = ACTIVITY_PHASE_RANK[fact.phase ?? ""] ?? 0;
  if (base === 0) return 0;
@@ -33,7 +29,7 @@ function activityFacts(entries: readonly ActivitySpanEntry[]): CommandActivity[]
   return entries.flatMap(entry => entry.kind === "tool" && entry.part.commandActivity ? [entry.part.commandActivity.fact] : []);
 }
 
-/** The highest present (phase, group) rank anchors the group title; entries only grow, so it never oscillates. */
+/** The first activity at the highest rank names the span. */
 export function commandActivityHeadline(entries: readonly ActivitySpanEntry[], fallback: string): string {
  const activities = activityFacts(entries);
  if (!activities.length) return fallback;
@@ -140,8 +136,8 @@ export function createCommandActivityProjection(memory = createCommandActivityMe
     }
     return memory.orderRows(result.filter(({ entry }) => {
       if (entry.kind !== "turn_load") return true;
-      const placement = decisions.get(entry.key)!;
-      if (!placement.target) return true;
+      const placement = decisions.get(entry.key);
+      if (!placement?.target) return true;
       const activity = ownActivityRows.get(placement.target)?.commandActivity;
       if (activity) {
         (activity.decisions ??= []).push(entry);

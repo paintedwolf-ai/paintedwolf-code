@@ -42,8 +42,7 @@ export class CommandActivityMemory {
     this.calls.delete(key);
     this.calls.set(key, state);
     while (this.calls.size > MAX_CALLS) {
-      const oldest = this.calls.keys().next().value!;
-      const evicted = this.calls.get(oldest)!;
+      const [oldest, evicted] = this.calls.entries().next().value!;
       for (const row of evicted.rows) this.rows.delete(row);
       for (const decision of evicted.decisions) this.decisions.delete(decision);
       this.calls.delete(oldest);
@@ -139,8 +138,7 @@ function orderPinnedRows(projected: readonly ProjectedRow[], placements: Readonl
 
   const ordered: ProjectedRow[] = [];
   const pending = roots.reverse();
-  while (pending.length) {
-    const row = pending.pop()!;
+  for (let row = pending.pop(); row; row = pending.pop()) {
     ordered.push(row);
     const siblings = children.get(row.key);
     if (siblings) {
