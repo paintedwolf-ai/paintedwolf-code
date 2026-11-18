@@ -16,8 +16,11 @@ func releaseFixture(t *testing.T) (*EagerCopyAdapter, *PreparedView, *eagerViewS
 	source := t.TempDir()
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(source, "keep.txt"), []byte("original"), 0o600))
 	gittest.InitCommit(t, source, "initial")
+	secondary := t.TempDir()
+	testutil.FailErr(t, "write secondary source", os.WriteFile(filepath.Join(secondary, "other.txt"), []byte("other"), 0o600))
+	gittest.InitCommit(t, secondary, "secondary")
 	adp := NewEagerCopyAdapter()
-	view, err := adp.Prepare(t.Context(), PrepareRequest{ViewID: t.Name(), RuntimeDir: t.TempDir(), Grants: []RootGrant{{RootID: "root", SourcePath: source, IsPrimary: true}}})
+	view, err := adp.Prepare(t.Context(), PrepareRequest{ViewID: t.Name(), RuntimeDir: t.TempDir(), Grants: []RootGrant{{RootID: "root", SourcePath: source, IsPrimary: true}, {RootID: "secondary", SourcePath: secondary}}})
 	testutil.FailErr(t, "prepare materialized view", err)
 	t.Cleanup(func() { _, _ = adp.Release(context.Background(), view.ViewID) })
 	state, ok := adp.lookupViewState(view.ViewID)
@@ -48,6 +51,15 @@ func TestMaterializedReleaseCancellationRetainsRetryAcrossAdapters(t *testing.T)
 	}
 	if _, err := adp.CommandAccess(view.ViewID); err == nil {
 		t.Fatal("retiring view admitted new command access")
+	}
+	if _, _, err := adp.ChangedPaths(t.Context(), view.ViewID); err == nil {
+		t.Fatal("retiring view admitted change capture")
+	}
+	if _, release, err := adp.CheckpointBarrier(t.Context(), view.ViewID); err == nil {
+		if release != nil {
+			_ = release()
+		}
+		t.Fatal("retiring view admitted checkpoint barrier")
 	}
 	receipt, err = replacement.Release(t.Context(), view.ViewID)
 	testutil.FailErr(t, "retry release", err)
@@ -102,11 +114,14 @@ func TestMaterializedReleasePreservesRecoveryOnJournalPublicationFailure(t *test
 
 func TestMaterializedReleaseRetainsFailedGitLeaseCleanupForRetry(t *testing.T) {
 	adp, view, state := releaseFixture(t)
-	leaseFile := filepath.Join(state.gitStore.RootDir(), "leases", state.gitLeases[0]+".json")
+	leaseFile := filepath.Join(state.gitStore.RootDir(), "leases", state.gitLeases[len(state.gitLeases)-1]+".json")
 	restore := obstructReleaseFile(t, leaseFile)
 	receipt, err := adp.Release(t.Context(), view.ViewID)
 	if err == nil || receipt.Settled || receipt.ReasonCode != ReasonCleanupFailed {
 		t.Fatalf("failed lease cleanup settled release: %+v, %v", receipt, err)
+	}
+	if len(state.gitLeases) != 1 || state.gitStore.ActiveLeases() != 1 {
+		t.Fatalf("successful lease removals were not consumed: pending=%d active=%d", len(state.gitLeases), state.gitStore.ActiveLeases())
 	}
 	if _, ok := NewEagerCopyAdapter().LoadedView(view.ViewID); !ok {
 		t.Fatal("failed lease cleanup discarded retry state")
