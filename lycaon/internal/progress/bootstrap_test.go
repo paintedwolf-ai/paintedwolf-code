@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 )
 
 func TestEnsureBootstrap_staleRunRefreshesGoalAndPlan(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-root")
 	const (
 		sessionID = "sess-root"
 		priorRun  = "run-prior"
@@ -36,7 +37,7 @@ func TestEnsureBootstrap_staleRunRefreshesGoalAndPlan(t *testing.T) {
 }
 
 func TestEnsureBootstrap_sameRunOpenPlanNoOp(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-same")
 	const (
 		sessionID = "sess-same"
 		runID     = "run-1"
@@ -54,7 +55,7 @@ func TestEnsureBootstrap_sameRunOpenPlanNoOp(t *testing.T) {
 }
 
 func TestEnsureBootstrap_sameRunTerminalPlanStartsFreshRun(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-ambient")
 	const (
 		sessionID = "sess-ambient"
 		runID     = "run-ambient"
@@ -83,7 +84,7 @@ func TestEnsureBootstrap_sameRunTerminalPlanStartsFreshRun(t *testing.T) {
 }
 
 func TestEnsureBootstrap_sameRunEmptyPlanNoOp(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-empty")
 	const (
 		sessionID = "sess-empty"
 		runID     = "run-empty"
@@ -102,7 +103,7 @@ func TestEnsureBootstrap_sameRunEmptyPlanNoOp(t *testing.T) {
 }
 
 func TestAdoptActiveRun_unboundBindsWithoutWipe(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-adopt")
 	const (
 		sessionID = "sess-adopt"
 		runID     = "run-child"
@@ -122,7 +123,7 @@ func TestAdoptActiveRun_unboundBindsWithoutWipe(t *testing.T) {
 }
 
 func TestAdoptActiveRun_distinctRunResets(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-handoff")
 	const (
 		sessionID = "sess-handoff"
 		priorRun  = "run-plan"
@@ -147,7 +148,7 @@ func TestAdoptActiveRun_distinctRunResets(t *testing.T) {
 }
 
 func TestAdoptActiveRun_sameRunNoOp(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-same-adopt")
 	const (
 		sessionID = "sess-same-adopt"
 		runID     = "run-1"
@@ -165,7 +166,7 @@ func TestAdoptActiveRun_sameRunNoOp(t *testing.T) {
 }
 
 func TestEnsureBootstrap_unboundDocBindsWithoutWipe(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-bind")
 	const (
 		sessionID = "sess-bind"
 		runID     = "run-first"
@@ -185,7 +186,7 @@ func TestEnsureBootstrap_unboundDocBindsWithoutWipe(t *testing.T) {
 }
 
 func TestEnsureBootstrap_setPreservesBoundRun(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-preserve")
 	const (
 		sessionID = "sess-preserve"
 		runID     = "run-bound"

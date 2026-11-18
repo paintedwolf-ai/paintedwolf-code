@@ -10,7 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/platform"
-	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
@@ -191,7 +191,7 @@ func TestNativeDispatchBindingSubstitutionsHaveNoEffects(t *testing.T) {
 			case "zero-binding":
 				effect.Operation = toolcontract.BoundOperation{}
 			}
-			store := progress.NewMemoryStore()
+			store := progresstest.New(t, parent.SessionID)
 			testutil.FailErr(t, "seed progress", store.Set(parent.SessionID, "- [ ] Inspect"))
 			observer := nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
 				recorded = true

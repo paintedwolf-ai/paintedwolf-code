@@ -216,7 +216,7 @@ func newProgramFixture(t *testing.T) *programFixture {
 	testutil.FailErr(t, "compile profile effects", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
 	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "fixture")
-	owner := progress.NewMemoryStore()
+	owner := progress.NewSQLStore(database)
 	testutil.FailErr(t, "set actual progress", owner.Set(session, "- [ ] Run the fixture program"))
 	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	t.Cleanup(func() { _ = background.Lifecycle.Close(context.Background()) })

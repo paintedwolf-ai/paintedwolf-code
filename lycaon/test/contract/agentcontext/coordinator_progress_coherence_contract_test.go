@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	coordinatorcoordinationplane "github.com/lycaon/lycaon/test/wiring/fixtures/coordinator_coordination_plane"
 )
@@ -28,7 +29,7 @@ func TestCoordinatorProgressShadowBoardPathsNotAuthoringTarget(t *testing.T) {
 func TestProgressBootstrapRefreshesOnNewRun(t *testing.T) {
 	t.Parallel()
 	fix := coordinatorcoordinationplane.Load(t)
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "parent-session")
 	const sessionID = "parent-session"
 	store.EnsureRun(sessionID, fix.PriorRunID, fix.PriorGoal)
 	store.Set(sessionID, fix.StaleProgressContent)

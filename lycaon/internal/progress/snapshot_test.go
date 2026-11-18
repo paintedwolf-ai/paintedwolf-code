@@ -12,7 +12,7 @@ import (
 )
 
 func TestAuthorUpdateRevisionAdmitsOneConcurrentReplacement(t *testing.T) {
-	store := NewMemoryStore()
+	store := newProgressFixture(t, "session")
 	store.EnsureRun("session", "run", "Deliver change")
 	initial, err := store.Snapshot(t.Context(), "session")
 	testutil.FailErr(t, "read initial progress", err)
@@ -51,7 +51,7 @@ func TestAuthorUpdateRevisionAdmitsOneConcurrentReplacement(t *testing.T) {
 }
 
 func TestAuthorUpdateSeparatesDocumentAndDeliverableChanges(t *testing.T) {
-	store := NewMemoryStore()
+	store := newProgressFixture(t, "session")
 	apply := func(content string) AuthorUpdateResult {
 		t.Helper()
 		update, err := PrepareAuthorUpdate(content)
@@ -96,7 +96,7 @@ func TestSnapshotRevisionIncludesBoundRun(t *testing.T) {
 }
 
 func TestAuthorUpdateRejectsOversizeWithoutTruncatingState(t *testing.T) {
-	store := NewMemoryStore()
+	store := newProgressFixture(t, "session")
 	testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Keep complete"))
 	_, err := PrepareAuthorUpdate("- [ ] " + strings.Repeat("x", ContentMaxChars))
 	var rejected *AuthorUpdateRejection

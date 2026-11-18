@@ -50,7 +50,7 @@ func (r *unsettledReconciliation) Acknowledge(context.Context, string, string) b
 func TestAuthorUpdatePublishesOnlySettledStoreOutcomes(t *testing.T) {
 	for _, mode := range []string{"store failure", "callback cancellation"} {
 		t.Run(mode, func(t *testing.T) {
-			store := NewMemoryStore()
+			store := newProgressFixture(t, "unsettled")
 			testutil.FailErr(t, "seed preserved work", store.Set("unsettled", "- [ ] Deliver"))
 			before, err := store.Snapshot(t.Context(), "unsettled")
 			testutil.FailErr(t, "observe current progress", err)

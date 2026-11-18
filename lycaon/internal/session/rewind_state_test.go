@@ -156,7 +156,7 @@ func TestRewindRefusesWhileBusy(t *testing.T) {
 // Rewind clears separately persisted progress so deleted commitments stay out of the next prompt.
 func TestRewindClearsTheProgressChecklist(t *testing.T) {
 	mgr, sessionID, _, repositories := newCheckpointTestSession(t)
-	mgr.SetProgressStore(progress.NewMemoryStore())
+	mgr.SetProgressStore(progress.NewSQLStore(repositories.DB()))
 	ctx := context.Background()
 
 	_, err := mgr.Submissions.Prompt(ctx, sessionID, "the ask")

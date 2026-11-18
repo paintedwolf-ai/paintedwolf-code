@@ -138,7 +138,7 @@ func New(t testing.TB, options Options) *Fixture {
 	testutil.FailErr(t, "compile profile effects", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"command": true, "verify": true, "summarize": true, "survey_repo": true, "code_rewrite": true}, CommandEffects: classes}})
 	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "fixture")
-	owner := progress.NewMemoryStore()
+	owner := progress.NewSQLStore(database)
 	testutil.FailErr(t, "set actual progress", owner.Set(session, "- [ ] Run the fixture program"))
 	background := options.Background
 	if background == nil {

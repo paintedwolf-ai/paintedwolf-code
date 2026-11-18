@@ -55,7 +55,9 @@ func TestProgramPublicationRespectsCurrentEffectAuthority(t *testing.T) {
 				return []sandbox.ToolProfile{{ID: "fixture", CommandEffects: effects}}
 			})
 			if c.missingProgress {
-				f.Runtime.Progress = publicationProgressFacts{store: progress.NewMemoryStore()}
+				store := progress.NewSQLStore(f.Database)
+				testutil.FailErr(t, "clear progress for the fixture", store.Set(f.Session, ""))
+				f.Runtime.Progress = publicationProgressFacts{store: store}
 			}
 			reviewCalls := 0
 			if c.review {
@@ -168,7 +170,9 @@ func TestProgramPublicationRedirectRequiresCurrentWriteProgress(t *testing.T) {
 			f, _, _ := documentProgram(t)
 			path := filepath.Join(f.Dir, "existing.txt")
 			testutil.FailErr(t, "existing", os.WriteFile(path, []byte("saved\n"), 0o644))
-			f.Runtime.Progress = publicationProgressFacts{store: progress.NewMemoryStore()}
+			store := progress.NewSQLStore(f.Database)
+			testutil.FailErr(t, "clear progress for the fixture", store.Set(f.Session, ""))
+			f.Runtime.Progress = publicationProgressFacts{store: store}
 			pure := callDocumentProgram(t, f, ":")
 			if pure.Status != 0 || pure.StopCode != "" {
 				t.Fatalf("pure=%+v", pure)
