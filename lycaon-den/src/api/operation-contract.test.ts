@@ -7,12 +7,12 @@ import {
   type QueryParameter,
 } from "./operation-contract.ts";
 
-const cases = Object.entries(API_OPERATIONS).map(([id, operation]) => ({
+const cases: { id: string; template: string; path: string; method: string; parameters: readonly QueryParameter[] }[] = Object.entries(API_OPERATIONS).map(([id, operation]) => ({
   id,
   template: operation.path,
   path: operation.path.replaceAll(/\{[^{}]+\}/g, "fixture%2Fsegment"),
   method: operation.method,
-  parameters: ("query" in operation ? operation.query : []) as readonly QueryParameter[],
+  parameters: "query" in operation ? operation.query : [],
 }));
 
 function sample(parameter: QueryParameter): string {
@@ -62,19 +62,23 @@ describe("generated operation query contract", () => {
       const example = sample(parameter);
       valid(example);
       if (minimum !== undefined) {
-        valid(String(minimum));
-        invalid(String(minimum - 1));
+        const bound = parameter.type === "integer" ? Math.ceil(minimum) : minimum;
+        if (!parameter.enum || parameter.enum.includes(bound)) valid(String(bound));
+        invalid(String(bound - 1));
       }
       if (maximum !== undefined) {
-        valid(String(maximum));
-        invalid(String(maximum + 1));
+        const bound = parameter.type === "integer" ? Math.floor(maximum) : maximum;
+        if (!parameter.enum || parameter.enum.includes(bound)) valid(String(bound));
+        invalid(String(bound + 1));
       }
       if (minLength !== undefined) {
-        valid("🐺".repeat(minLength));
+        const atBound = parameter.enum?.find((value) => [...String(value)].length === minLength);
+        if (!parameter.enum || atBound !== undefined) valid(String(atBound ?? "🐺".repeat(minLength)));
         if (minLength > 0) invalid("🐺".repeat(minLength - 1));
       }
       if (maxLength !== undefined) {
-        valid("🐺".repeat(maxLength));
+        const atBound = parameter.enum?.find((value) => [...String(value)].length === maxLength);
+        if (!parameter.enum || atBound !== undefined) valid(String(atBound ?? "🐺".repeat(maxLength)));
         invalid("🐺".repeat(maxLength + 1));
       }
       if (parameter.type === "integer" || parameter.type === "number") {
