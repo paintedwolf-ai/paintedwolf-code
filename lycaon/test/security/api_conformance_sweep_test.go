@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/usernotice"
@@ -267,7 +266,7 @@ func (s *conformanceSweep) send(ctx context.Context, req conformanceRequest) con
 	reqCtx, cancel := context.WithTimeout(ctx, conformanceRequestBudget)
 	defer cancel()
 	r := httptest.NewRequestWithContext(reqCtx, req.op.Method, target, body)
-	r.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	r.Header.Set("Authorization", fixtureAuthorization())
 	if req.announcedLength > 0 {
 		r.ContentLength = req.announcedLength
 	}

@@ -18,8 +18,7 @@ func TestAPIScanPackNativeQueryE2E(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithBundledScanners())
 	t.Setenv("LYCAON_TEST", "")
 	skipIfOpenGrepUnavailable(t)
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	payload := waitScanPackComplete(t, h, projectDir, []any{"all"}, bundledScannerWaitBudget)
 	if payload.Status != wire.CodeScanStatusComplete {

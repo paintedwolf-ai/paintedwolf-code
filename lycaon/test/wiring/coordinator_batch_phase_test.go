@@ -23,8 +23,7 @@ func TestCoordinatorBatchPhaseAdvancesOnTaskDispatch(t *testing.T) {
 		},
 	}})
 	h := BuildForTest(t, WithLLMClient(mock))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -73,8 +72,7 @@ func TestCoordinatorBatchPhaseSynthesizeAfterWorkerDrain(t *testing.T) {
 		},
 	}})
 	h := BuildForTest(t, WithLLMClient(mock))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	ctx := context.Background()
 	dir := t.TempDir()

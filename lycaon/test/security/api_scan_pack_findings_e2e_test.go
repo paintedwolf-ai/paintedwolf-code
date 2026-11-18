@@ -1,7 +1,6 @@
 package security
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
@@ -19,8 +18,7 @@ func TestAPIScanPackBundledFindingsE2E(t *testing.T) {
 
 	t.Run("secret_category_single_engine", func(t *testing.T) {
 		h := wiring.BuildForTest(t, wiring.WithBundledScanners())
-		cancel := h.StartBackgroundWorkers(t, context.Background())
-		t.Cleanup(cancel)
+		h.Start(t)
 
 		payload := waitScanPackComplete(t, h, projectDir, []any{string(wire.ScanCategorySecret)}, 60*time.Second)
 		if payload.Status != wire.CodeScanStatusComplete {
@@ -47,8 +45,7 @@ func TestAPIScanPackBundledFindingsE2E(t *testing.T) {
 		// Clear test-mode scanner suppression.
 		t.Setenv("LYCAON_TEST", "")
 		skipIfOpenGrepUnavailable(t)
-		cancel := h.StartBackgroundWorkers(t, context.Background())
-		t.Cleanup(cancel)
+		h.Start(t)
 
 		payload := waitScanPackComplete(t, h, projectDir, []any{"all"}, bundledScannerWaitBudget)
 		if payload.Status != wire.CodeScanStatusComplete {
@@ -75,8 +72,7 @@ func TestAPIScanPackMatchesPerCategoryAPIRuns(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithBundledScanners())
 	t.Setenv("LYCAON_TEST", "")
 	skipIfOpenGrepUnavailable(t)
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	var perCategoryTotal int
 	for _, tc := range []struct {
