@@ -29,6 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	openapi "github.com/lycaon/lycaon/test/openapi"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 // sessionRecipes cover sessions, workflow runs, checkpoints, workers,
@@ -684,6 +685,8 @@ func sessionPrompt(ctx context.Context, s *conformanceSweep, chat, text string) 
 		return "", err
 	}
 	sessionSettle(ctx, s)
+	// A finished prompt may schedule a follow-up wake that takes the turn lock.
+	wiring.WaitForSessionIdleGate(s.fixture.t, s.host, ctx, chat)
 	return id, nil
 }
 
