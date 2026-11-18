@@ -203,3 +203,7 @@ impl Drop for Vulkan {
         unsafe { pw_generation_free(self.engine.as_ptr()) };
     }
 }
+
+#[cfg(test)]
+#[path = "vulkan_artifact_tests.rs"]
+mod artifact_tests;
