@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/sourceblob"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitrepo"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 )
 
 type preparedOperation struct {
@@ -68,7 +69,7 @@ func prepareOperation(ctx context.Context, repo gitrepo.Repo, req OperationReque
 		p.status = string(raw)
 	}
 	recordOperationVisits(ctx, strings.Count(p.status, "\x00"))
-	p.scratch, err = os.MkdirTemp("", "git-operation-*")
+	p.scratch, err = gitexec.MkdirTemp(ctx, "git-operation-*")
 	if err != nil {
 		return nil, err
 	}
