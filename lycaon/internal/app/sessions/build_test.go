@@ -12,7 +12,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/catalogview"
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -331,8 +330,6 @@ func newWiredSkillHost(t *testing.T) (*toolhost.Runtime, string) {
 	mgr.Catalog.SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create probe session", err)
-	extpacks.SetActive(cat)
-	t.Cleanup(extpacks.ClearActive)
 	wireSessionToolSources(mgr, rt, nil)
 	return rt, sess.ID
 }

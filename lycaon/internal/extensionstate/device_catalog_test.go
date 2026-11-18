@@ -19,8 +19,8 @@ import (
 func deviceCatalogFixture(t *testing.T) *catalogview.Cache {
 	t.Helper()
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	extpacks.ClearActive()
-	t.Cleanup(extpacks.ClearActive)
+	_, err := extpacks.ApplyCatalog(t.Context(), nil, nil)
+	testutil.FailErr(t, "publish initial catalog", err)
 	root := configlayout.FindModuleRoot()
 	if root == "" {
 		t.Fatal("module root not found")

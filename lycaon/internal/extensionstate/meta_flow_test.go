@@ -40,8 +40,6 @@ func writeSuiteMeta(t *testing.T, suite, id string, members []string) {
 }
 
 func TestInstallMetaPackPathMultiLeaf(t *testing.T) {
-	extpacks.ClearActive()
-	t.Cleanup(extpacks.ClearActive)
 	owner := testOwner(t)
 	suite := t.TempDir()
 	writeSuiteLeaf(t, suite, "leaf-a", "acme/leaf-a")

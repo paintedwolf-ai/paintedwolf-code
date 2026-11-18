@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/processfixture"
 )
 
 func TestLoadRegistryRejectsUnknownOn(t *testing.T) {
@@ -26,10 +27,9 @@ func TestLoadRegistryRejectsUnknownOn(t *testing.T) {
 }
 
 func TestInstallCatalogRequiredForParseID(t *testing.T) {
-	anchorcatalog.Clear()
-	t.Cleanup(func() {
-		_ = anchorcatalog.InstallBundled()
-	})
+	if !processfixture.Startup(t, nil) {
+		return
+	}
 	if _, ok := anchor.ParseID("leg.finished"); ok {
 		t.Fatal("ParseID must fail closed without catalog")
 	}

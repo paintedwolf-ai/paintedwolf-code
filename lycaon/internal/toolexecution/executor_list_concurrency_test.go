@@ -27,8 +27,6 @@ func TestExecutorListConcurrentCommandSchema(t *testing.T) {
 		Packs:   content,
 		Desired: extpacks.EmptyDesired(),
 	})
-	extpacks.SetActive(eff)
-	t.Cleanup(extpacks.ClearActive)
 
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: root, Catalog: eff})
 	testutil.FailErr(t, "toolhost.NewRuntime", err)

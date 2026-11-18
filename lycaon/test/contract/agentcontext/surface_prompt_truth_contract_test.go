@@ -113,7 +113,7 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 				}, reader)
 
 				vars := map[string]any{}
-				mergePromptBudgetSkillRoster(t, vars)
+				mergeReachableSkillRoster(t, vars, reader)
 				contractcheck.FailErr(t, "merge prompt vars", prompts.MergeCoordinatorPromptVars(surfaceID, prompts.ExecutionModePromptTransition{}, "", vars))
 				vars, err = prompts.Vars(reader, vars)
 				contractcheck.FailErr(t, "prompts.Vars", err)
