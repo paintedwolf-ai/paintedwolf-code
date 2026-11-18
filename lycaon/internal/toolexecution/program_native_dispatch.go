@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
@@ -36,11 +37,10 @@ type NativeInvocationResult struct {
 	Producer          toolcontract.ProducerResult
 }
 
-// NativeEffectStart commits the existing invocation owner's start fact before
-// any typed owner executes. Failure prevents dispatch. Settlement remains with
-// the recorder and cannot overwrite the returned domain outcome.
-type NativeEffectStart interface {
+// NativeAdmissionObserver records a child's admission transitions.
+type NativeAdmissionObserver interface {
 	BeforeNativeOwner(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error
+	BeforeNativeApprovalWait(context.Context, toolcontract.BoundOperation, string)
 }
 
 // PreparedNativeEffect binds actual reviewed/resolved inputs into one complete
@@ -74,7 +74,7 @@ type NativeEffect struct {
 // A held review keeps the same child identity; a fresh invocation uses a new one.
 //
 //nolint:funlen // Linear reached-effect admission, review, and receipt settlement pipeline.
-func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface ProgramSurface, admission *toolcontract.ProgramMemory, progressFacts ProgramProgressFacts, observer NativeEffectStart, effect NativeEffect, tc tools.ToolContext) (result NativeInvocationResult, err error) {
+func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface ProgramSurface, admission *toolcontract.ProgramMemory, progressFacts ProgramProgressFacts, observer NativeAdmissionObserver, effect NativeEffect, tc tools.ToolContext) (result NativeInvocationResult, err error) {
 	ctx, socketScope := socketref.WithScope(ctx)
 	defer socketScope.Close()
 	end, err := frame.beginUse()
@@ -188,6 +188,10 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	}
 	ctx = withSecretUse(ctx, secretUse)
 	defer func() { tc.Effects.Secrets.Finish(ctx) }()
+	var firstWait sync.Once
+	ctx = hitl.WithCheckpointWaitNotification(ctx, func(ctx context.Context, checkpointID string) {
+		firstWait.Do(func() { observer.BeforeNativeApprovalWait(ctx, effect.Operation, checkpointID) })
+	})
 	boundaryStarted = true
 	canonical, tc, boundaryApproved, err := e.applyPreInvokeBoundary(ctx, facts.Identity, surface.profile, arguments.values, tc)
 	if err != nil {
@@ -285,6 +289,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err := e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
 		return result, err
 	}
+	ctx = hitl.WithCheckpointWaitNotification(ctx, nil)
 	if err := observer.BeforeNativeOwner(ctx, bound, tc.Identity.ToolCallID, reviewed); err != nil {
 		return result, err
 	}

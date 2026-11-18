@@ -11,12 +11,14 @@ type ProgramRefusalVisibility struct {
 	BeforeAdmission bool
 }
 
+// MarkProgramProgressPublished keeps a published live program visible at settlement.
 func (o *ToolInvocationOut) MarkProgramProgressPublished() {
 	if o != nil {
 		o.programProgressPublished.Store(true)
 	}
 }
 
+// ProgramProgressPublished reports whether a live program frame was emitted.
 func (o *ToolInvocationOut) ProgramProgressPublished() bool {
 	return o != nil && o.programProgressPublished.Load()
 }
