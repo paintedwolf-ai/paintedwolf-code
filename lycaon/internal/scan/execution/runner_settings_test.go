@@ -35,7 +35,7 @@ func TestRunnerMainOffCancelsPendingScans(t *testing.T) {
 		Status: api.CodeScanStatusPending, CreatedAt: time.Now().UTC(), SourceSnapshotID: "snapshot-1",
 	}
 	testutil.FailErr(t, "Insert", store.Runs.Insert(t.Context(), rec, nil, ""))
-	runner := NewRunner(store, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(store, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scantest.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.Settings = disabledScannerSettings(t)
 	terminal := make(chan api.CodeScan, 1)
 	runner.OnTerminal = func(_ context.Context, rec api.CodeScan) { terminal <- rec }
@@ -103,7 +103,7 @@ func TestRunnerClaimsOnlyAvailableCapacity(t *testing.T) {
 		}, nil, ""))
 	}
 	probe := &cancellationProbeScanner{started: make(chan struct{}), stopped: make(chan struct{})}
-	runner := NewRunner(store, &scantest.MockRegistry{Scanner: probe}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(store, &scantest.MockRegistry{Scanner: probe}, scantest.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.MaxRunning = 1
 	runner.Snapshots = snapshots
 	ctx, cancel := context.WithCancel(t.Context())
@@ -138,7 +138,7 @@ func TestRunnerMainOffCancelsRunningScannerContext(t *testing.T) {
 	settingsStore, err := settings.NewSecurityScannersStoreAt(filepath.Join(t.TempDir(), "security.yaml"))
 	testutil.FailErr(t, "NewSecurityScannersStoreAt", err)
 	probe := &cancellationProbeScanner{started: make(chan struct{}), stopped: make(chan struct{})}
-	runner := NewRunner(store, &scantest.MockRegistry{Scanner: probe}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(store, &scantest.MockRegistry{Scanner: probe}, scantest.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.Snapshots = snapshots
 	runner.Settings = settingsStore
 
@@ -192,7 +192,7 @@ func TestRunnerInterruptedExecutionCommitsTerminalState(t *testing.T) {
 			if !tc.shutdown {
 				registry.Runtime = scancatalog.RuntimePolicy{SoftLimitSec: 1, HardLimitSec: 1, CPUUnits: 1, Parallelism: 1}
 			}
-			runner := NewRunner(store, registry, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+			runner := NewRunner(store, registry, scantest.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 			runner.Snapshots = snapshots
 			type notification struct {
 				scan       api.CodeScan

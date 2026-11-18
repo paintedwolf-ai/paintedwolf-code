@@ -26,7 +26,7 @@ func TestScanRunnerIntegrationPendingToComplete(t *testing.T) {
 	reg := &scantest.MockRegistry{Scanner: mock}
 
 	cfg := scancfg.DefaultRunnerConfig()
-	runner := scanexecution.NewRunner(store, reg, scan.NoopIngester{}, cfg, nil)
+	runner := scanexecution.NewRunner(store, reg, scantest.DiscardIngester{}, cfg, nil)
 	runner.Snapshots = coord.SnapshotStore()
 
 	dir := testProjectDir(t)

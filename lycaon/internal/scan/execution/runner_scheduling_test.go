@@ -18,7 +18,7 @@ func TestRunnerSleepsIdleAndWakesForCommittedScan(t *testing.T) {
 	database := &scantest.CountedDB{Handle: testdbfixture.Open(t, "scan.db")}
 	store := scanbase.NewSQLStore(database)
 	scanner := &scanfixtures.MockScanner{}
-	runner := NewRunner(store, &scanfixtures.MockRegistry{Scanner: scanner}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(store, &scanfixtures.MockRegistry{Scanner: scanner}, scantest.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.Snapshots = testSnapshots(t, store)
 	root := t.TempDir()
 	snapshot := publishTestSnapshot(t, runner.Snapshots, root)
@@ -46,7 +46,7 @@ func TestRunnerSleepsIdleAndWakesForCommittedScan(t *testing.T) {
 func TestDisabledRunnerSleepsAndSettingsWakeIt(t *testing.T) {
 	database := &scantest.CountedDB{Handle: testdbfixture.Open(t, "scan.db")}
 	store := scanbase.NewSQLStore(database)
-	runner := NewRunner(store, &scanfixtures.MockRegistry{Scanner: &scanfixtures.MockScanner{}}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(store, &scanfixtures.MockRegistry{Scanner: &scanfixtures.MockScanner{}}, scantest.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.Settings = disabledScannerSettings(t)
 	scantest.RunService(t, runner.Run)
 	testutil.WaitFor(t, "the runner writes the scan", func() bool { return database.Writes.Load() > 0 })

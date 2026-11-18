@@ -42,7 +42,7 @@ func TestScanSSEIntegrationPublishesTransitions(t *testing.T) {
 	mock := &scantest.MockScanner{Result: &scanoutput.Result{FindingsCount: 1}}
 	reg := &scantest.MockRegistry{Scanner: mock}
 	cfg := scancfg.DefaultRunnerConfig()
-	runner := scanexecution.NewRunner(store, reg, scan.NoopIngester{}, cfg, pub)
+	runner := scanexecution.NewRunner(store, reg, scantest.DiscardIngester{}, cfg, pub)
 	runner.Snapshots = coord.SnapshotStore()
 
 	created, err := coord.Enqueue(context.Background(), scan.EnqueueRequest{

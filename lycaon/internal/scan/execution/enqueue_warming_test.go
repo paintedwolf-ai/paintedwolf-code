@@ -88,7 +88,7 @@ func TestWarmingPublishFailureHoldsThenFails(t *testing.T) {
 		Trigger: api.ScanTriggerManual,
 	}
 	testutil.FailErr(t, "insert warming", store.Runs.Insert(t.Context(), rec, nil, ""))
-	runner := NewRunner(store, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(store, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scantest.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.Coordinator = coord
 	runner.RetryDelay = time.Nanosecond
 	terminal := make(chan api.CodeScan, 1)

@@ -46,7 +46,7 @@ func runTerminalRunner(t *testing.T, scanner scan.CodeScanner, runtime ...scanca
 	if len(runtime) > 0 {
 		registry.Runtime = runtime[0]
 	}
-	runner := scanexecution.NewRunner(store, registry, scan.NoopIngester{}, cfg, nil)
+	runner := scanexecution.NewRunner(store, registry, scantest.DiscardIngester{}, cfg, nil)
 	runner.Snapshots = coord.SnapshotStore()
 	rec := &terminalRecorder{}
 	runner.OnTerminal = rec.record

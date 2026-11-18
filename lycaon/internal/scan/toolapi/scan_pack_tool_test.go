@@ -105,7 +105,7 @@ func TestScanPackToolCanWaitForSummary(t *testing.T) {
 	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, scannerReg, scancadence.New(store, coord, scannerReg, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
 
 	runnerConfig := scancfg.DefaultRunnerConfig()
-	runner := scanexecution.NewRunner(store, scannerReg, scanbase.NoopIngester{}, runnerConfig, nil)
+	runner := scanexecution.NewRunner(store, scannerReg, scantest.DiscardIngester{}, runnerConfig, nil)
 	runner.Snapshots = coord.SnapshotStore()
 	runCtx, cancel := context.WithCancel(t.Context())
 	runnerDone := make(chan struct{})

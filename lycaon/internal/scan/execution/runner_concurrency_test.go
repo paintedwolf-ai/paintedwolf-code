@@ -28,7 +28,7 @@ func TestRunnerConcurrencyCap(t *testing.T) {
 
 	cfg := scancfg.DefaultRunnerConfig()
 	cfg.Runner.MaxConcurrency = 2
-	runner := scanexecution.NewRunner(store, reg, scan.NoopIngester{}, cfg, nil)
+	runner := scanexecution.NewRunner(store, reg, scantest.DiscardIngester{}, cfg, nil)
 	runner.Snapshots = coord.SnapshotStore()
 
 	dir := testProjectDir(t)
