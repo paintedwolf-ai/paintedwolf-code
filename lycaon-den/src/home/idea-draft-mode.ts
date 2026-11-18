@@ -3,7 +3,7 @@ import type { SessionMode } from "../api/types.ts";
 import { chatPrefsReady, lastStartedModePref } from "../settings/chat/chat-prefs.ts";
 
 export function createHomeIdeaDraftMode(visible: Accessor<boolean>, hasDraft: Accessor<boolean>) {
-  const [mode, setMode] = createSignal<SessionMode>(chatPrefsReady() ? lastStartedModePref() : undefined);
+  const [mode, setMode] = createSignal<SessionMode | undefined>(chatPrefsReady() ? lastStartedModePref() : undefined);
   let picked = false;
 
   createEffect(on([visible, chatPrefsReady], ([shown, ready]) => {
