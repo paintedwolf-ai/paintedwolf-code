@@ -35,10 +35,13 @@ import { windowViewId } from "../../platform/windows/window-subject.ts";
 import { composerAttachmentCapabilities } from "./composer-attachments.ts";
 import { INLINE_TEXT_TOO_LARGE_MESSAGE, inlineTextWithinLimit } from "./large-text-paste.ts";
 
+type StageResult = { ok: true } | { ok: false; reason: string };
+
 const DRAFT_PUBLISH_DEBOUNCE_MS = 120;
 const draftPublishTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const pendingDrafts = new Map<string, string>();
 const editorClaims = new Map<string, Promise<SharedComposerDocument>>();
+const attachmentWrites = new Map<string, Promise<StageResult>>();
 let stopMirror: (() => void) | undefined;
 
 function key(destination: ChatDestination): string {
@@ -144,7 +147,7 @@ export async function stageComposerMutation(
   destination: ChatDestination,
   attachments: ComposerPendingAttachment[],
   draftPrefill?: string,
-): Promise<{ ok: true } | { ok: false; reason: string }> {
+): Promise<StageResult> {
   const projectId = destination.projectId.trim();
   const sessionId = destination.sessionId.trim();
   if (!projectId || !sessionId) {
@@ -161,6 +164,24 @@ export async function stageComposerMutation(
     };
   }
 
+  const documentKey = key(normalized);
+  const prior = attachmentWrites.get(documentKey);
+  const write = () => applyComposerMutation(normalized, attachments, draftPrefill);
+  const settlement = prior ? prior.then(write, write) : write();
+  attachmentWrites.set(documentKey, settlement);
+  try {
+    return await settlement;
+  } finally {
+    if (attachmentWrites.get(documentKey) === settlement) attachmentWrites.delete(documentKey);
+  }
+}
+
+async function applyComposerMutation(
+  destination: ChatDestination,
+  attachments: ComposerPendingAttachment[],
+  draftPrefill?: string,
+): Promise<StageResult> {
+  const { sessionId } = destination;
   const previousAttachments = pendingAttachmentsForSession(sessionId);
   const previousDraft = composerDraftForSession(sessionId);
   const result = addPendingAttachments(sessionId, attachments);
@@ -173,7 +194,7 @@ export async function stageComposerMutation(
   try {
     const document = await applySharedComposerMutation(
       {
-        ...normalized,
+        ...destination,
         draft: previousDraft,
         attachments: previousAttachments,
       },
@@ -359,6 +380,7 @@ export function resetComposerDocumentStoreForTests(): void {
   for (const timer of draftPublishTimers.values()) clearTimeout(timer);
   draftPublishTimers.clear();
   pendingDrafts.clear();
+  attachmentWrites.clear();
   editorClaims.clear();
   stopMirror?.();
   stopMirror = undefined;
