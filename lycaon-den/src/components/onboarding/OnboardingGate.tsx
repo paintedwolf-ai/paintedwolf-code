@@ -10,7 +10,7 @@ import {
 import { MODELS_SETTINGS_COPY } from "../../settings/providers/models-settings-copy.ts";
 import { showAllModelsPref } from "../../settings/appearance/display-prefs.ts";
 import { LocalModelSelector } from "../settings/providers/LocalModelSelector.tsx";
-import { completeFirstRunSetup, firstRunSetupCompletedPref } from "../../settings/system/onboarding-prefs.ts";
+import { completeFirstRunSetup, completeLocalModelOnboarding, firstRunSetupCompletedPref, localModelOnboardingCompletedPref } from "../../settings/system/onboarding-prefs.ts";
 import { ChromeDragSurface } from "../shell/ChromeDragSurface.tsx";
 import { soleWindowControls } from "../shell/WindowControls.tsx";
 import { chromeProps } from "../../styling/ui-chrome.ts";
@@ -41,7 +41,7 @@ type Props = {
 
 export function OnboardingGate(props: Props) {
   const upgrade = firstRunSetupCompletedPref();
-  const [page, setPage] = createSignal<OnboardingGatePage>("local_model");
+  const [page, setPage] = createSignal<OnboardingGatePage>(localModelOnboardingCompletedPref() ? "summarizer" : "local_model");
   const [dismissing, setDismissing] = createSignal(false);
   const [summarizerSaving, setSummarizerSaving] = createSignal(false);
   const [summarizerError, setSummarizerError] = createSignal("");
@@ -53,6 +53,10 @@ export function OnboardingGate(props: Props) {
   };
 
   const advance = () => setPage((p) => onboardingNextPage(p) ?? p);
+  const finishModelStep = async () => {
+    await completeLocalModelOnboarding();
+    if (!upgrade) advance();
+  };
   const goBack = () => setPage((p) => onboardingPreviousPage(p) ?? p);
 
   const finishOnboarding = async () => {
@@ -153,14 +157,14 @@ export function OnboardingGate(props: Props) {
                 <Show when={props.client && localProvider()} fallback={
                   <div>
                     <p role="status">{props.settingsChecked && props.client ? "Local generation is unavailable on this device." : "Waiting for the local engine…"}</p>
-                    <DenButton variant="primary" onClick={() => upgrade ? void finishOnboarding() : advance()}>Continue without a local model</DenButton>
+                    <DenButton variant="primary" onClick={() => void finishModelStep()}>Continue without a local model</DenButton>
                   </div>
                 }>
                   {provider => <LocalModelSelector client={props.client!} provider={provider()}
                     onRefresh={async () => {
                       if (props.client) props.settingsStore.actions.setProviders(await props.client.listProviders());
                     }}
-                    onContinue={() => upgrade ? void finishOnboarding() : advance()} />}
+                    onContinue={() => void finishModelStep()} />}
                 </Show>
               </div>
             </OnboardingStepPage>

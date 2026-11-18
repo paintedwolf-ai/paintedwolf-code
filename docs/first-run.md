@@ -19,7 +19,7 @@ Fresh installations open on local model selection. Normal application downloads 
 | **Starting layout** | Open to the conversation alone or with a context view beside it. |
 | **Welcome** | Find additional providers in Settings → AI providers and enter the workspace. |
 
-An installation that has completed first run sees just the local model page once. Returning users keep their existing provider configuration. Settings → AI providers remains available for later model downloads, offline imports, replacement, and removal.
+After a model decision, an interrupted fresh setup resumes at the summarizer. An installation that has completed first run sees just the local model page once. Returning users keep their existing provider configuration. Settings → AI providers remains available for later model downloads, offline imports, replacement, and removal.
 
 ### Starting layout
 

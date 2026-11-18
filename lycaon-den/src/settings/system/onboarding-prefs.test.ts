@@ -24,6 +24,7 @@ vi.mock("../../store/app-state-snapshot.ts", () => ({
 
 import {
   completeFirstRunSetup,
+  completeLocalModelOnboarding,
   firstRunSetupCompletedPref,
   localModelOnboardingCompletedPref,
   syncOnboardingPrefsFromSnapshot,
@@ -34,6 +35,17 @@ describe("onboarding prefs durability", () => {
     state.resolveWrite = undefined;
     persistAppState.mockClear();
     syncOnboardingPrefsFromSnapshot();
+  });
+
+  it("records a completed model decision without finishing the remaining steps", async () => {
+    const saving = completeLocalModelOnboarding();
+    expect(localModelOnboardingCompletedPref()).toBe(false);
+    state.resolveWrite?.();
+    await saving;
+    expect(localModelOnboardingCompletedPref()).toBe(true);
+    expect(firstRunSetupCompletedPref()).toBe(false);
+    await completeLocalModelOnboarding();
+    expect(persistAppState).toHaveBeenCalledOnce();
   });
 
   it("does not dismiss the hard gate before the completion latch is durable", async () => {

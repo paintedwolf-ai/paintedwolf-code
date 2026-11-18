@@ -35,8 +35,12 @@ vi.mock("../../store/app-state-snapshot.ts", () => ({
 }));
 
 let firstRunComplete = false;
+let modelStepComplete = false;
+const completeModelStep = vi.fn(async () => { modelStepComplete = true; });
 const completeFirstRunSetup = vi.fn().mockResolvedValue(undefined);
 vi.mock("../../settings/system/onboarding-prefs.ts", () => ({
+  localModelOnboardingCompletedPref: () => modelStepComplete,
+  completeLocalModelOnboarding: () => completeModelStep(),
   firstRunSetupCompletedPref: () => firstRunComplete,
   completeFirstRunSetup: () => completeFirstRunSetup(),
 }));
@@ -101,7 +105,7 @@ function mockClient(overrides: Partial<LycaonClient> = {}): LycaonClient {
 
 async function advanceToLayout(): Promise<void> {
   fireEvent.click(screen.getByRole("button", { name: "Continue without a local model" }));
-  fireEvent.click(screen.getByTestId("onboarding-summarizer-continue"));
+  fireEvent.click(await screen.findByTestId("onboarding-summarizer-continue"));
   await waitFor(() => {
     expect(screen.getByTestId("onboarding-layout")).toBeTruthy();
   });
@@ -131,6 +135,8 @@ afterEach(() => {
   cleanup();
   customChrome = true;
   firstRunComplete = false;
+  modelStepComplete = false;
+  completeModelStep.mockClear();
   completeFirstRunSetup.mockClear();
   resetDispatcherForTests();
   setDispatcherPlatformForTests(null);
@@ -151,12 +157,20 @@ describe("Local model setup", () => {
     expect(completeFirstRunSetup).toHaveBeenCalledOnce();
   });
 
+  it("resumes at the summarizer after the model decision was saved", () => {
+    modelStepComplete = true;
+    render(() => <OnboardingGate client={mockClient()} settingsStore={createSettingsStore()} settingsChecked={true} />);
+    expect(screen.getByTestId("onboarding-progress").textContent).toBe("2 / 4");
+    expect(screen.getByTestId("onboarding-summarizer")).toBeTruthy();
+  });
+
   it("opens just one page on an existing installation", () => {
     firstRunComplete = true;
     render(() => <OnboardingGate client={null} settingsStore={createSettingsStore()} settingsChecked={false} />);
     expect(screen.getByTestId("onboarding-progress").textContent).toBe("1 / 1");
     fireEvent.click(screen.getByRole("button", {name: "Continue without a local model"}));
-    expect(completeFirstRunSetup).toHaveBeenCalledOnce();
+    expect(completeModelStep).toHaveBeenCalledOnce();
+    expect(completeFirstRunSetup).not.toHaveBeenCalled();
   });
 });
 
@@ -303,7 +317,7 @@ describe("Setup navigation and accessibility", () => {
       />
     ));
     fireEvent.click(screen.getByRole("button", {name: "Continue without a local model"}));
-    expect(getByTestId("onboarding-summarizer")).toBeTruthy();
+    expect(await screen.findByTestId("onboarding-summarizer")).toBeTruthy();
     pressEscape();
     await waitFor(() => {
       expect(getByTestId("onboarding-layout")).toBeTruthy();

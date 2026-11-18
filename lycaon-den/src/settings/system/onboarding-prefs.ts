@@ -28,6 +28,14 @@ export function syncOnboardingPrefsFromSnapshot(): void {
   setPrefsReady(true);
 }
 
+export async function completeLocalModelOnboarding(): Promise<void> {
+  if (localModelOnboardingCompleted()) return;
+  await persistAppStateInBackground({
+    onboarding: { ...getAppStateSnapshot().onboarding, localModelOnboardingCompleted: true },
+  });
+  setLocalModelOnboardingCompleted(true);
+}
+
 export async function completeFirstRunSetup(): Promise<void> {
   setPrefsReady(true);
   await persistAppStateInBackground({
