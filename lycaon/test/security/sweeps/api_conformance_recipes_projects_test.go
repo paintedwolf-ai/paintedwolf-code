@@ -23,7 +23,9 @@ import (
 // projectRecipes covers projects, roots, Git repositories, managed secrets,
 // ignores, and attachments.
 var projectRecipes = map[string]successRecipe{
-	"cloneProject": {prepare: projectRecipeClone},
+	"cloneProject":           {prepare: projectRecipeClone},
+	"promoteProject":         {prepare: projectRecipePromote},
+	"cancelProjectPromotion": {prepare: projectRecipeCancelPromotion},
 	"detectFolder": {prepare: func(_ context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 		return successInputs{query: map[string]string{"path": s.fixture.projectDir}}, nil
 	}},
@@ -444,4 +446,42 @@ func projectRecipeDeleteFindingIgnore(ctx context.Context, s *conformanceSweep, 
 		}
 	}
 	return successInputs{}, fmt.Errorf("the ignore catalog holds no withdrawable entry for %s", path)
+}
+
+// projectRecipeDraft creates an unsaved draft project and answers its id.
+func projectRecipeDraft(ctx context.Context, s *conformanceSweep) (string, error) {
+	created, err := s.prerequisite(ctx, "createProject", successInputs{body: []byte(`{"draft":true}`), contentType: "application/json"})
+	if err != nil {
+		return "", err
+	}
+	id, _ := created["id"].(string)
+	if id == "" {
+		return "", errors.New("createProject answered no id for the draft")
+	}
+	return id, nil
+}
+
+// projectRecipePromote saves a fresh draft into an empty folder.
+func projectRecipePromote(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	id, err := projectRecipeDraft(ctx, s)
+	if err != nil {
+		return successInputs{}, err
+	}
+	return projectRecipeJSON(map[string]string{"id": id}, nil, map[string]any{"root_path": s.fixture.t.TempDir()})
+}
+
+// projectRecipeCancelPromotion queues a save the draft has not begun, as a
+// draft with a turn in flight would, so the cancel has one to withdraw.
+func projectRecipeCancelPromotion(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	if s.host == nil {
+		return successInputs{}, errors.New("no host to queue a promotion on")
+	}
+	id, err := projectRecipeDraft(ctx, s)
+	if err != nil {
+		return successInputs{}, err
+	}
+	if _, err := s.host.Server.Admin.Project.Promotion.PromotionEngine().Create(ctx, id, s.fixture.t.TempDir(), false); err != nil {
+		return successInputs{}, err
+	}
+	return successInputs{params: map[string]string{"id": id}}, nil
 }

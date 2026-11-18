@@ -598,24 +598,26 @@ func hostRecipeDeleteCredential(ctx context.Context, s *conformanceSweep, _ *con
 // --- MCP ----------------------------------------------------------------
 
 // hostRecipeCreateMCPProvider adds an enabled custom provider; the harness
-// connector answers every provider, so enabling connects nothing real. The
-// first one created serves tool listing.
-func hostRecipeCreateMCPProvider(_ context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
-	id := hostRecipeID("conformance-mcp")
-	if _, ok := hostRecipeRecall(s, "mcp-tools-provider"); !ok {
-		hostRecipeRemember(s, "mcp-tools-provider", id)
-	}
-	return successInputs{fields: map[string]any{
-		"source": "custom", "id": id, "url": "http://127.0.0.1:9/mcp", "enabled": true,
-	}}, nil
+// connector answers every provider, so enabling connects nothing real.
+func hostRecipeCreateMCPProvider(_ context.Context, _ *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	return successInputs{fields: hostRecipeMCPProviderFields(hostRecipeID("conformance-mcp"))}, nil
+}
+
+func hostRecipeMCPProviderFields(id string) map[string]any {
+	return map[string]any{"source": "custom", "id": id, "url": "http://127.0.0.1:9/mcp", "enabled": true}
 }
 
 // hostRecipeListMCPTools lists the first created conformance provider; before
 // it exists the read answers not found.
-func hostRecipeListMCPTools(_ context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
-	id, ok := hostRecipeRecall(s, "mcp-tools-provider")
-	if !ok {
-		id = "conformance-mcp-absent"
+// hostRecipeListMCPTools lists the tools of a provider it created once.
+func hostRecipeListMCPTools(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	id, err := hostRecipeOnce(s, "mcp-tools-provider", func() (string, error) {
+		id := hostRecipeID("conformance-mcp-tools")
+		_, err := s.prerequisite(ctx, "createMcpProvider", successInputs{fields: hostRecipeMCPProviderFields(id)})
+		return id, err
+	})
+	if err != nil {
+		return successInputs{}, err
 	}
 	return successInputs{params: map[string]string{"provider_id": id}}, nil
 }

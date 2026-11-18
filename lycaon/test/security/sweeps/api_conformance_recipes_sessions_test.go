@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -54,9 +56,12 @@ var sessionRecipes = map[string]successRecipe{
 	"resolveCheckpoint":              {prepare: sessionPrepareResolveCheckpoint},
 	"beginCheckpointUnlockChallenge": {prepare: sessionPrepareUnlockChallenge},
 
-	"listWorkers":           {seed: sessionSeedWorkers},
-	"cancelWorker":          {prepare: sessionPrepareCancelWorker},
-	"getWorkerChanges":      {prepare: sessionPrepareWorkerChanges},
+	"listWorkers":      {seed: sessionSeedWorkers},
+	"cancelWorker":     {prepare: sessionPrepareCancelWorker},
+	"getWorkerChanges": {prepare: sessionPrepareWorkerChanges},
+	"getWorkerHistory": {prepare: sessionPrepareWorkerHistory},
+	// Other deletes address the fixture chat, so it goes last.
+	"deleteSession":         {stage: stageDelete, order: 1},
 	"dispatchDelegationLeg": {prepare: sessionPrepareDispatchLeg},
 
 	"previewSessionRewind":     {prepare: sessionPreparePreviewRewind},
@@ -838,15 +843,21 @@ func sessionBackgroundChat(ctx context.Context, s *conformanceSweep) (string, er
 
 // sessionStartProcess starts a long-running background process in chat, as
 // the command tool does for a background job.
+// sessionStartProcess starts a long sleep; each call sleeps a different
+// length, because the host refuses a second identical running command.
 func sessionStartProcess(ctx context.Context, s *conformanceSweep, chat string) (string, error) {
+	seconds := strconv.FormatInt(600+sessionProcesses.Add(1), 10)
 	return s.host.Sessions.Manager.Processes.Background.StartPipeline(ctx, bgprocess.PipelineSpec{
 		SessionID: chat, ProjectID: s.fixture.project.ID, Runner: hostcmd.NewRunner(), Mode: bgprocess.JobModeBackground,
 		Request: hostcmd.Request{
 			Launch: exec.HostLaunch("conformance-server"), ProjectDir: s.fixture.projectDir,
-			Stages: []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
+			Stages: []exec.Stage{{Name: "sleep", Args: []string{seconds}}},
 		},
 	})
 }
+
+// sessionProcesses numbers the processes the recipes start.
+var sessionProcesses atomic.Int64
 
 func sessionPrepareProcessOutput(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 	chat, err := sessionBackgroundChat(ctx, s)
@@ -1034,4 +1045,15 @@ func sessionRepoFile(parts ...string) string {
 		return filepath.Join(parts...)
 	}
 	return filepath.Join(append([]string{root}, parts...)...)
+}
+
+// sessionPrepareWorkerHistory reads a settled worker on the fixture chat's
+// roster.
+func sessionPrepareWorkerHistory(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	chat := s.fixture.session.ID
+	id, err := sessionOnce(s, "history-worker", func() (string, error) { return sessionSettledWorker(ctx, s, chat) })
+	if err != nil {
+		return successInputs{}, err
+	}
+	return successInputs{query: map[string]string{"project_id": s.fixture.project.ID, "session_id": chat, "worker": id}}, nil
 }

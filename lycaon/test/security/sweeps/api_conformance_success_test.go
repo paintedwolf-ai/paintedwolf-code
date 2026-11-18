@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"math"
 	"net/http"
 	"slices"
 	"sort"
@@ -94,12 +93,10 @@ func stageOf(op *conformanceOp) successStage {
 	return stageChange
 }
 
-// orderOf places an operation in its stage; an unordered one runs last.
+// orderOf places an operation in its stage: unordered ones first, then the
+// ordered ones in their order.
 func orderOf(op *conformanceOp) int {
-	if order := successRecipes[op.ID].order; order > 0 {
-		return order
-	}
-	return math.MaxInt
+	return successRecipes[op.ID].order
 }
 
 func endsWithParam(path string) bool {
