@@ -249,10 +249,11 @@ postures:
 	if err := os.WriteFile(filepath.Join(overlayDir, "postures.yaml"), overlay, 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	persistence := storetest.New(t)
+	mgr := NewHost(persistence, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Profiles.SetPostureRegistry(reg)
 	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
-	projectID := RegisterProjectContextForTest(t, mgr, dir)
+	projectID := RegisterProjectContextForTest(t, mgr, persistence.DB(), dir)
 	sess := &api.Session{ID: "s1", ProjectID: projectID, Posture: api.SessionPostureSpec, AgentType: orchestration.ProfileCoordinator, WorkspacePath: dir}
 	got, err := mgr.Profiles.PromptToolProfile(context.Background(), sess)
 	testutil.FailErr(t, "mgr.Profiles.PromptToolProfile failed", err)

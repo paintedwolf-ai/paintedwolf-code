@@ -24,13 +24,6 @@ type workerTranscriptStore interface {
 }
 
 func TestWorkerJobTranscriptPagination(t *testing.T) {
-	store := newSQLTestStore(t)
-	session, err := store.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create session", err)
-	assertWorkerJobTranscriptPagination(t, store, session.ID)
-}
-
-func TestSQLWorkerJobTranscriptPagination(t *testing.T) {
 	database := testdbfixture.Open(t, "worker-transcript.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	store := NewSQL(database)

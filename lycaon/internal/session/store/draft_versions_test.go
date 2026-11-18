@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -49,37 +48,8 @@ func TestStoreDraftVersionsCascadeOnSessionDelete(t *testing.T) {
 		testutil.FailErr(t, "store.Delete failed", err)
 	}
 	n, err := store.CountDraftVersions(ctx, sess.ID, "slot-1")
-	if err == nil {
-		t.Fatalf("expected error after session delete, count=%d", n)
-	}
-}
-
-func TestSQLStoreDraftVersionsRoundTrip(t *testing.T) {
-	sqlDB := testdbfixture.Open(t, "draft-versions.db")
-
-	store := NewSQL(sqlDB)
-	ctx := context.Background()
-	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "Create", err)
-
-	if _, err := store.AppendDraftVersion(ctx, sess.ID, "slot-1", "v0", "A"); err != nil {
-		testutil.FailErr(t, "AppendDraftVersion", err)
-	}
-	if _, err := store.AppendDraftVersion(ctx, sess.ID, "slot-1", "v1", "B"); err != nil {
-		testutil.FailErr(t, "AppendDraftVersion", err)
-	}
-	got, err := store.ListDraftVersions(ctx, sess.ID, "slot-1")
-	testutil.FailErr(t, "ListDraftVersions", err)
-	if len(got) != 2 {
-		t.Fatalf("len = %d want 2", len(got))
-	}
-	if err := store.Delete(ctx, sess.ID); err != nil {
-		testutil.FailErr(t, "store.Delete failed", err)
-	}
-	n, err := store.CountDraftVersions(ctx, sess.ID, "slot-1")
-	testutil.FailErr(t, "CountDraftVersions after delete", err)
+	testutil.FailErr(t, "count versions after delete", err)
 	if n != 0 {
-		t.Fatalf("count after delete = %d want 0", n)
+		t.Fatalf("draft versions survived session deletion: %d", n)
 	}
 }

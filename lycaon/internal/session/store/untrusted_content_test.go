@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// contactStore is the surface the contact tests exercise on both stores.
 type contactStore interface {
 	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
 	RecordContact(ctx context.Context, sessionID, host string, contact evidence.Contact) error
@@ -94,7 +93,6 @@ func TestContactRecordShape(t *testing.T) {
 	}
 }
 
-// urlStandingStore is the surface the address-standing test exercises on both stores.
 type urlStandingStore interface {
 	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
 	UpsertEvidenceRecord(ctx context.Context, sessionID string, rec evidence.Record) error

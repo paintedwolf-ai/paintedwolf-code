@@ -118,7 +118,3 @@ func (s *sqlCompaction) CountDraftVersions(ctx context.Context, sessionID, slotI
 	})
 	return int(count), err
 }
-
-func draftVersionsKey(sessionID, slotID string) string {
-	return sessionID + "\x00" + slotID
-}

@@ -30,11 +30,3 @@ func (s *sqlCompaction) PutChunkProjection(ctx context.Context, sessionID, messa
 		SessionID: sessionID, MessageID: messageID, ProjectionJson: string(raw),
 	})
 }
-
-func cloneChunkProjection(projection messageview.ChunkProjection) messageview.ChunkProjection {
-	if projection.Meta != nil {
-		meta := *projection.Meta
-		projection.Meta = &meta
-	}
-	return projection
-}

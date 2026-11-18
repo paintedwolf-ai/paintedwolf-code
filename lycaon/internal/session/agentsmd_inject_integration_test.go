@@ -70,7 +70,7 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 	}))
 
 	// AGENTS.md follows the project trust switch.
-	projectID := session.RegisterProjectContextForTest(t, mgr, projectDir)
+	projectID := session.RegisterProjectContextForTest(t, mgr, store.DB(), projectDir)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, projectID)
 	testutil.FailErr(t, "create session", err)
 	sess.WorkspacePath = projectDir
@@ -169,14 +169,15 @@ func TestManagerEffectiveLimitsUsesProjectOverlay(t *testing.T) {
 	limitsStore, err := settings.NewLimitsStoreAt(filepath.Join(t.TempDir(), "global-limits.yaml"))
 	testutil.FailErr(t, "settings.NewLimitsStoreAt failed", err)
 
-	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: llm.NewMockProvider(&llm.MockConfig{
+	persistence := storetest.New(t)
+	mgr := session.NewHost(persistence, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{
 		Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}},
 	}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: limitsStore})
 	mgr.Limits.SetMaxIterations(99)
 
 	// Project limits require project settings trust.
-	projectID := session.RegisterProjectContextForTest(t, mgr, projectDir)
+	projectID := session.RegisterProjectContextForTest(t, mgr, persistence.DB(), projectDir)
 	sess := &api.Session{ProjectID: projectID, WorkspacePath: projectDir}
 	limits := mgr.Limits.Effective(t.Context(), sess)
 	if limits.MaxIterations != 2 {

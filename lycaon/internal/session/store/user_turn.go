@@ -19,15 +19,3 @@ func (t *sqlTurnTelemetry) UserIntentBefore(ctx context.Context, sessionID strin
 	}
 	return db.ParseTime(value)
 }
-
-func cloneTurnClock(clock TurnClock) TurnClock {
-	if clock.RunningAt != nil {
-		since := *clock.RunningAt
-		clock.RunningAt = &since
-	}
-	if clock.SettledAt != nil {
-		settled := *clock.SettledAt
-		clock.SettledAt = &settled
-	}
-	return clock
-}

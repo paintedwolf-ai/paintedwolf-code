@@ -222,11 +222,3 @@ func summaryCursor(row api.SessionSummary, sortBy api.SessionListSort) SummaryCu
 	}
 	return SummaryCursor{Value: value, ID: row.ID}
 }
-
-func compareSummary(row api.SessionSummary, cursor SummaryCursor, sortBy api.SessionListSort) int {
-	value := summaryCursor(row, sortBy).Value
-	if comparison := strings.Compare(value, cursor.Value); comparison != 0 {
-		return comparison
-	}
-	return strings.Compare(row.ID, cursor.ID)
-}

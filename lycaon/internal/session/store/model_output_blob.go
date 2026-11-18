@@ -119,18 +119,3 @@ func sameSettledModelOutputRow(committed db.ModelOutputs, proposed ModelOutput, 
 		committed.ContentBlobSha256 == proposedSha &&
 		committed.FinishReason == proposed.FinishReason && (committed.Scripted != 0) == proposed.Scripted
 }
-
-// sameModelOutput compares the in-memory output values directly.
-func sameModelOutput(committed, proposed ModelOutput) bool {
-	return committed.ID == proposed.ID &&
-		committed.TurnAttemptID == proposed.TurnAttemptID &&
-		committed.SessionID == proposed.SessionID &&
-		committed.Iteration == proposed.Iteration &&
-		committed.MessageID == proposed.MessageID &&
-		committed.ProviderID == proposed.ProviderID &&
-		committed.Model == proposed.Model &&
-		committed.Content == proposed.Content &&
-		committed.ToolCallsJSON == proposed.ToolCallsJSON &&
-		committed.ReasoningJSON == proposed.ReasoningJSON &&
-		committed.FinishReason == proposed.FinishReason && committed.Scripted == proposed.Scripted
-}
