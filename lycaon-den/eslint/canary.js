@@ -1,9 +1,9 @@
-// Proves the lint laws can fail: every law and local rule is run through the
+// Proves the lint invariants can fail: every invariant and local rule is run through the
 // shipped config on source seeded with its violation.
 import { globSync } from "node:fs";
 import path from "node:path";
 import { ESLint } from "eslint";
-import laws from "./laws/index.js";
+import invariants from "./invariants/index.js";
 import { cases as computationCases } from "./rules/no-computation-in-jsx-callback.js";
 import { cases as statusCases } from "./rules/no-http-error-status-branching.js";
 import { cases as draftCases } from "./rules/no-keyed-settings-draft.js";
@@ -13,23 +13,23 @@ import { cases as leakCases } from "./rules/no-show-accessor-prop-leak.js";
 const denRoot = path.resolve(import.meta.dirname, "..");
 const failures = [];
 
-// A law that governs nothing, or exempts nothing, has outlived its subject.
+// An invariant that governs nothing, or exempts nothing, has outlived its subject.
 const names = new Set();
-for (const law of laws) {
-  if (names.has(law.name)) failures.push(`${law.name}: declared twice`);
-  names.add(law.name);
-  for (const glob of [...law.files, ...(law.ignores ?? [])]) {
-    if (globSync(glob, { cwd: denRoot }).length === 0) failures.push(`${law.name}: ${glob} matches no file`);
+for (const invariant of invariants) {
+  if (names.has(invariant.name)) failures.push(`${invariant.name}: declared twice`);
+  names.add(invariant.name);
+  for (const glob of [...invariant.files, ...(invariant.ignores ?? [])]) {
+    if (globSync(glob, { cwd: denRoot }).length === 0) failures.push(`${invariant.name}: ${glob} matches no file`);
   }
 }
 
 const cases = [
-  ...laws.map((law) => ({
-    label: law.name,
-    rule: "den/source-laws",
-    file: law.seed.file ?? law.files[0],
-    code: law.seed.code,
-    marker: `[${law.name}]`,
+  ...invariants.map((invariant) => ({
+    label: invariant.name,
+    rule: "den/invariants",
+    file: invariant.seed.file ?? invariant.files[0],
+    code: invariant.seed.code,
+    marker: `[${invariant.name}]`,
     some: true,
   })),
   ...[
