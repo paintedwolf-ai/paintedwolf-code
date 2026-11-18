@@ -42,11 +42,11 @@ func validateRoots(roots []projectroot.RootRef) error {
 	return nil
 }
 
-func rootForIdentity(roots []projectroot.RootRef, rootID string) (projectroot.RootRef, error) {
+func requireRoot(roots []projectroot.RootRef, rootID string) error {
 	for _, root := range roots {
 		if root.ID == rootID {
-			return root, nil
+			return nil
 		}
 	}
-	return projectroot.RootRef{}, fmt.Errorf("workspace baseline root %q is absent from branch topology", rootID)
+	return fmt.Errorf("workspace baseline root %q is absent from branch topology", rootID)
 }

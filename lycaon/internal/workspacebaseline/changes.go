@@ -326,7 +326,7 @@ func branchLocationAt(roots []projectroot.RootRef, branch, rootID, scopeRel stri
 	if err := validateIdentity(rootID, scopeRel); err != nil {
 		return "", "", err
 	}
-	if _, err := rootForIdentity(roots, rootID); err != nil {
+	if err := requireRoot(roots, rootID); err != nil {
 		return "", "", err
 	}
 	base = branch
@@ -414,7 +414,7 @@ func EachOverlayChange(ctx context.Context, baselinePath, overlayPath string, ro
 		return content.Bytes(), err
 	}
 	return overlay.EachIdentity(ctx, roots, func(entry Entry) error {
-		if _, err := rootForIdentity(roots, entry.RootID); err != nil {
+		if err := requireRoot(roots, entry.RootID); err != nil {
 			return err
 		}
 		base, exists, err := baseline.LookupIdentity(ctx, roots, entry.RootID, entry.ScopeRel)
