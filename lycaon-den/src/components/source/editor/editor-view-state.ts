@@ -116,6 +116,7 @@ export class EditorViewStateMap {
     rootId: string,
     fromPath: string,
     toPath: string,
+    toRootId = rootId,
   ): void {
     const moves: { from: string; to: string }[] = [];
     const prefix = `${rootId}\u0000`;
@@ -128,7 +129,7 @@ export class EditorViewStateMap {
         nextPath = `${toPath}${path.slice(fromPath.length)}`;
       }
       if (nextPath == null) continue;
-      moves.push({ from: key, to: editorViewStateKey(rootId, nextPath) });
+      moves.push({ from: key, to: editorViewStateKey(toRootId, nextPath) });
     }
     for (const m of moves) {
       const entry = this.entries.get(m.from);

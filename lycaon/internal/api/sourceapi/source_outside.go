@@ -176,8 +176,8 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 		s.responses.InvalidField(w, "path", "has no outside-project address on this platform")
 		return
 	}
-	observed, err := observeOutsideFile(abs)
-	if errors.Is(err, os.ErrNotExist) {
+	observed, err := observeOutsideFile(rel)
+	if errors.Is(err, projectsource.ErrSourceNotFound) {
 		s.responses.Fail(w, wire.ApiErrorCodeSourceNotFound, "file not found")
 		return
 	}
@@ -205,8 +205,8 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 
 // observeOutsideFile hashes a picked file, keeping its bytes only when the
 // ledger retains content of that size.
-func observeOutsideFile(abs string) (sourceledger.TrackInput, error) {
-	f, err := os.Open(abs)
+func observeOutsideFile(rel string) (sourceledger.TrackInput, error) {
+	f, err := projectsource.OpenOutsideSourceFile(rel)
 	if err != nil {
 		return sourceledger.TrackInput{}, err
 	}

@@ -6232,7 +6232,12 @@ export interface components {
             root_id: string;
             /** @description Root-relative path after the change (destination for rename). */
             path: string;
-            /** @description Root-relative path before a rename; omit for other ops. */
+            /**
+             * Format: uuid
+             * @description Source root for a rename across roots.
+             */
+            from_root_id?: string;
+            /** @description Path before a rename, relative to from_root_id when present and root_id otherwise. */
             from_path?: string;
             op: components["schemas"]["SourceChangeOp"];
             origin: components["schemas"]["SourceChangeOrigin"];

@@ -80,6 +80,26 @@ describe("source-tree-store", () => {
     second.disconnect();
   });
 
+  it("moves membership between the source and destination roots", async () => {
+    const connection = connectSourceTreeWorkspace({
+      projectId: PROJECT, workspaceId: WORKSPACE,
+      browse: async (rootId, dir) => ({
+        ...listing(dir, rootId === "root-1" ? [{ name: "note.ts", is_dir: false }] : []),
+        root_id: rootId,
+      }),
+    });
+    await connection.load("root-1", ".");
+    await connection.load("root-2", ".");
+
+    applySourceTreeChanges(event([
+      change("moved.ts", { root_id: "root-2", op: "rename", from_root_id: "root-1", from_path: "note.ts" }),
+    ]));
+
+    expect(connection.get("root-1", ".")?.listing.entries).toEqual([]);
+    expect(connection.get("root-2", ".")?.listing.entries).toEqual([{ name: "moved.ts", is_dir: false }]);
+    connection.disconnect();
+  });
+
   it("patches create, delete, and rename membership without a relist", async () => {
     const browse = vi.fn(async (_rootId: string, dir: string) =>
       listing(dir, dir === "." ? [{ name: "old.ts", is_dir: false }] : []));

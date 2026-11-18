@@ -35,9 +35,17 @@ func (s *Store) outsideRootID(ctx context.Context, q *db.Queries, projectID stri
 	return id, nil
 }
 
-// referenceChatFile records that the root chat of sessionID holds the outside
-// file at rel, and where the chat has worked. Files under attached roots need
-// no reference.
+func (s *Store) referenceMutationChatFile(ctx context.Context, q *db.Queries, in RecordInput, fileID string) error {
+	if err := s.referenceChatFile(ctx, q, in.ProjectID, in.RootID, in.Path, in.SessionID, fileID, ChatFileChanged, in.TS); err != nil {
+		return err
+	}
+	if in.FromRootID != "" && in.FromRootID != in.RootID {
+		return s.referenceChatFile(ctx, q, in.ProjectID, in.FromRootID, in.FromPath, in.SessionID, fileID, ChatFileChanged, in.TS)
+	}
+	return nil
+}
+
+// referenceChatFile links a root chat to an outside file and its location.
 func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID, rootID, rel, sessionID, fileID string, relation ChatFileRelation, ts time.Time) error {
 	if sessionID == "" || fileID == "" {
 		return nil

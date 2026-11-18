@@ -101,7 +101,7 @@ func (s *Store) recordBatchIdentityTx(ctx context.Context, q *db.Queries, inputs
 		if err := s.recordEffectWithCache(ctx, q, operationID, in, &recorded, cache); err != nil {
 			return recorded, err
 		}
-		if err := s.referenceChatFile(ctx, q, in.ProjectID, in.RootID, in.Path, in.SessionID, recorded.FileID, ChatFileChanged, in.TS); err != nil {
+		if err := s.referenceMutationChatFile(ctx, q, in.RecordInput, recorded.FileID); err != nil {
 			return recorded, err
 		}
 	}
@@ -178,14 +178,10 @@ func (s *Store) bufferCreateEffect(ctx context.Context, q *db.Queries, in prepar
 		CaptureState: "stored", CaptureReason: "", CaptureQuality: in.CaptureQuality,
 		CreatedTs: ts, Landing: LandingWorkingFile,
 	})
-	fromRootID := in.FromRootID
-	if fromRootID == "" && in.FromPath != "" {
-		fromRootID = in.RootID
-	}
 	cache.effects = append(cache.effects, db.InsertSourceEffectParams{
 		ID: effectID, ProjectID: in.ProjectID, OperationID: operationID,
 		FileID: fileID, AfterVersionID: afterVersionID,
-		RootID: in.RootID, Path: in.Path, FromRootID: fromRootID, FromPath: in.FromPath,
+		RootID: in.RootID, Path: in.Path, FromRootID: in.FromRootID, FromPath: in.FromPath,
 		Op: string(in.Op), EntryKind: in.EntryKind, Ordinal: ordinal,
 		WalkVisible: 1, CreatedTs: ts,
 	})
@@ -236,9 +232,9 @@ func (s *Store) recordEffectWithCache(ctx context.Context, q *db.Queries, operat
 		}
 		in.FileID = fileID
 	}
-	lookupPath := in.Path
+	lookupRoot, lookupPath := in.RootID, in.Path
 	if in.Op == api.SourceChangeOpRename && in.FromPath != "" {
-		lookupPath = in.FromPath
+		lookupRoot, lookupPath = in.FromRootID, in.FromPath
 	}
 	var head db.SourceBranchHeads
 	var headErr error
@@ -251,7 +247,7 @@ func (s *Store) recordEffectWithCache(ctx context.Context, q *db.Queries, operat
 		headErr = sql.ErrNoRows
 	} else {
 		head, headErr = q.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{
-			ProjectID: in.ProjectID, BranchID: in.BranchID.String(), RootID: in.RootID, Path: lookupPath,
+			ProjectID: in.ProjectID, BranchID: in.BranchID.String(), RootID: lookupRoot, Path: lookupPath,
 		})
 	}
 	if headErr != nil && !errors.Is(headErr, sql.ErrNoRows) {
@@ -259,7 +255,7 @@ func (s *Store) recordEffectWithCache(ctx context.Context, q *db.Queries, operat
 	}
 	if errors.Is(headErr, sql.ErrNoRows) && in.FileID == "" && in.BranchID.IsWorker() {
 		trunk, err := q.GetTrunkSourceHeadByPath(ctx, db.GetTrunkSourceHeadByPathParams{
-			ProjectID: in.ProjectID, RootID: in.RootID, Path: lookupPath,
+			ProjectID: in.ProjectID, RootID: lookupRoot, Path: lookupPath,
 		})
 		if err == nil {
 			in.FileID = trunk.FileID
@@ -346,14 +342,10 @@ func (s *Store) recordEffectWithCache(ctx context.Context, q *db.Queries, operat
 		return err
 	}
 	effectID := newID()
-	fromRootID := in.FromRootID
-	if fromRootID == "" && in.FromPath != "" {
-		fromRootID = in.RootID
-	}
 	if err := q.InsertSourceEffect(ctx, db.InsertSourceEffectParams{
 		ID: effectID, ProjectID: in.ProjectID, OperationID: operationID,
 		FileID: fileID, BeforeVersionID: nullableString(beforeVersionID), AfterVersionID: afterVersionID,
-		RootID: in.RootID, Path: in.Path, FromRootID: fromRootID, FromPath: in.FromPath,
+		RootID: in.RootID, Path: in.Path, FromRootID: in.FromRootID, FromPath: in.FromPath,
 		Op: string(in.Op), EntryKind: in.EntryKind, Ordinal: ordinal,
 		WalkVisible: 1, CreatedTs: in.TS.Format(time.RFC3339Nano),
 	}); err != nil {
@@ -369,6 +361,11 @@ func (s *Store) recordEffectWithCache(ctx context.Context, q *db.Queries, operat
 		Ordinal: ordinal, ObservedTs: in.TS.Format(time.RFC3339Nano),
 	}, cache); err != nil {
 		return err
+	}
+	if in.Op == api.SourceChangeOpRename && in.FromRootID != in.RootID && in.FromPath != "" {
+		if err := db.RetargetEditorDocument(ctx, q, in.ProjectID, in.BranchID.String(), fileID, in.FromRootID, in.FromPath, in.RootID, in.Path, in.TS); err != nil {
+			return err
+		}
 	}
 	hasAgent, err := recordPublicationAuthorship(ctx, q, beforeVersionID, afterVersionID, effectID, in.RecordInput)
 	if err != nil {

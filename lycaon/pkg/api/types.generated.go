@@ -7112,7 +7112,9 @@ type SourceChange struct {
 	RootID string `json:"root_id"`
 	// Root-relative path after the change (destination for rename).
 	Path string `json:"path"`
-	// Root-relative path before a rename; omit for other ops.
+	// Source root for a rename across roots.
+	FromRootID string `json:"from_root_id,omitempty"`
+	// Path before a rename, relative to from_root_id when present and root_id otherwise.
 	FromPath string             `json:"from_path,omitempty"`
 	Op       SourceChangeOp     `json:"op"`
 	Origin   SourceChangeOrigin `json:"origin"`
