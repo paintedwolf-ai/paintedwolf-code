@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	"github.com/lycaon/lycaon/internal/workflow/drafts/draftstest"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 )
@@ -202,7 +201,6 @@ phases:
 
 func TestComposeDryRunDoesNotPersist(t *testing.T) {
 	c := testComposer(t, "sess-dry")
-	store := c.SessionStore.(*workflowdrafts.Memory)
 	manifest := `id: dry
 version: 1.0.0
 extends: plan@1.0.0
@@ -220,7 +218,7 @@ phases:
 		SessionID: "sess-dry", ManifestYAML: []byte(manifest), DryRun: true,
 	})
 	testutil.FailErr(t, "c.Compose failed", err)
-	rows, err := store.ListBySession(context.Background(), "sess-dry")
+	rows, err := c.SessionStore.ListBySession(context.Background(), "sess-dry")
 	testutil.FailErr(t, "store.ListBySession failed", err)
 	if len(rows) != 0 {
 		t.Fatalf("rows = %d want 0", len(rows))
