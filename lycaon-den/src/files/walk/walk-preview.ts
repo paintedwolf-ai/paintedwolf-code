@@ -33,6 +33,16 @@ function sessionKey(projectId: string, sessionId: string): string {
   return `${projectId}\0${sessionId}`;
 }
 
+function trimInactiveAnswers(): void {
+  if (answers.size <= ANSWERED_SESSION_MEMORY) return;
+  const mounted = new Set([...previews].map((preview) => sessionKey(preview.projectId, preview.sessionId)));
+  for (const key of answers.keys()) {
+    if (mounted.has(key)) continue;
+    answers.delete(key);
+    if (answers.size <= ANSWERED_SESSION_MEMORY) break;
+  }
+}
+
 function sessionAnswers(projectId: string, sessionId: string): SessionAnswers {
   const key = sessionKey(projectId, sessionId);
   const record = answers.get(key) ?? {
@@ -40,10 +50,7 @@ function sessionAnswers(projectId: string, sessionId: string): SessionAnswers {
   };
   answers.delete(key);
   answers.set(key, record);
-  if (answers.size > ANSWERED_SESSION_MEMORY) {
-    const oldest = answers.keys().next().value;
-    if (oldest !== undefined) answers.delete(oldest);
-  }
+  trimInactiveAnswers();
   return record;
 }
 
@@ -106,6 +113,7 @@ export function subscribeWalkPreview(
     if (held.listeners.size === 0) {
       held.scheduler.cancel();
       previews.delete(held);
+      trimInactiveAnswers();
     }
   };
 }
