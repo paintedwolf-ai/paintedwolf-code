@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
@@ -329,7 +330,7 @@ func TestMountedAndMaterializedAdaptersProduceIdenticalLogicalConsumerResults(t 
 		return orient, search, ev, div
 	}
 
-	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{AdapterID: adapter.AdapterFUSELinux})
+	mountedAdp := adaptertest.NewMounted(adaptertest.MountedConfig{AdapterID: adapter.AdapterFUSELinux})
 	copyAdp := adapter.NewEagerCopyAdapter()
 
 	mOrient, mSearch, mEv, mDiv := runWithAdapter("mounted", mountedAdp)

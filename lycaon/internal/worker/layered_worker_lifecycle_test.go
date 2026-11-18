@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"io/fs"
 	"os"
 	osexec "os/exec"
@@ -21,6 +20,8 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/viewconfine"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
@@ -125,14 +126,14 @@ func surveyedPaths(t *testing.T, branchRoot string) map[string]bool {
 // Fixture evidence for the mounted sequence: the adapter has no kernel mount. It runs on every host,
 // and pins what a claim hands consumers and what settlement takes back.
 func TestOrdinaryWorkerClaimRegistersAndSettlesItsConsumerEngine(t *testing.T) {
-	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mounted := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterFUSELinux,
 		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
 			return adapter.ReasonNone, "", nil
 		},
 	})
 	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter())
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	selector.RequireConfinement, selector.Confinement = true, fixtureConfinement{}
 	fixture := newLayeredWorkerFixture(t, selector)
 	task := fixture.claim(t)
@@ -303,7 +304,7 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 		t.Skip("this host applies no confinement")
 	}
 	selector := workspace.HostSelector()
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	skipWithoutMount(t, selector)
 	fixture := newLayeredWorkerFixture(t, selector)
 	// Worker storage sits under the engine's state root, as it does in production.
@@ -512,14 +513,14 @@ func openFixtureRecovery(t *testing.T, branches string) *recovery.Coordinator {
 }
 
 func fixtureMountedSelector() *adapter.Selector {
-	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mounted := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterFUSELinux,
 		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
 			return adapter.ReasonNone, "", nil
 		},
 	})
 	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter())
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	selector.RequireConfinement, selector.Confinement = true, fixtureConfinement{}
 	return selector
 }

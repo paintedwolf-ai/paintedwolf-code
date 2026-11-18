@@ -21,7 +21,6 @@ type MountedConfig struct {
 	VerifyBackingDenialFn      func(context.Context, string) (bool, error)
 	MountViewFn                func(context.Context, string, []adapter.PreparedRoot) error
 	UnmountViewFn              func(context.Context, string, string) error
-	FlushClientFn              func(context.Context, string) error
 }
 
 // Mounted exposes Core-backed directories without a kernel mount.

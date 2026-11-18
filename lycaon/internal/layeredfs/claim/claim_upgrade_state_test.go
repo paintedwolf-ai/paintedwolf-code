@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
@@ -104,7 +105,7 @@ func TestHostAndDenWorkspaceStateAndReceiptsDistinguishGitCommandAndCheckpoint(t
 	gittest.CommitAll(t, trunk, "initial commit")
 
 	// A workspace under the preparation limit materializes without consulting a mount.
-	unavailableMount := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	unavailableMount := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterFUSELinux,
 		TargetOS:  "linux",
 		MountProbeFn: func(_ context.Context, _, _ string) (adapter.ReasonCode, string, error) {

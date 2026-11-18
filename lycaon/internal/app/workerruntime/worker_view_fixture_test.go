@@ -3,7 +3,6 @@ package workerruntime
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +13,8 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -135,7 +136,7 @@ func (f *engineFixture) bindWorkspace(selector *adapter.Selector) {
 
 // mountedSelector makes the ordinary claim path prepare a mounted view without a kernel mount.
 func mountedSelector() *adapter.Selector {
-	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mounted := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterFUSELinux, TargetOS: runtime.GOOS,
 		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
 			return adapter.ReasonNone, "", nil
@@ -143,7 +144,7 @@ func mountedSelector() *adapter.Selector {
 		MountViewFn: func(context.Context, string, []adapter.PreparedRoot) error { return nil },
 	})
 	selector := adapter.NewSelector(runtime.GOOS, mounted, mounted, adapter.NewEagerCopyAdapter())
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	selector.Confinement = fixtureConfinement{}
 	return selector
 }
