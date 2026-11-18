@@ -123,6 +123,7 @@ describe("workspace resident stage routing", () => {
     await seams.stage.callbacks.onOpenInNewWindow?.();
     expect(files.callbacks.openFileInNewWindow).toHaveBeenCalledWith("file-key", { x: 1, y: 2 });
     expect(files.callbacks.detachStageToWindow).toHaveBeenCalledWith("files");
+    seams.stage.back(); expect(files.props.workspaceContext.stageBack).toHaveBeenCalledWith("files");
     await seams.stage.callbacks.onOpenFileInNewWindow?.("root", "notes.txt", "Notes");
     expect(files.callbacks.openFileWindow).toHaveBeenCalledWith({ rootId: "root", path: "notes.txt", title: "Notes" });
     seams.stage.callbacks.onOpenSettings("providers");

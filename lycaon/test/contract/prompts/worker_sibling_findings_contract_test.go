@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/findings"
+	"github.com/lycaon/lycaon/internal/findings/findingstest"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
@@ -37,7 +37,7 @@ func TestRootSessionKeyedFindingsAppendRecentParityContract(t *testing.T) {
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer", Prompt: "leg"})
 	contractcheck.FailErr(t, "create child", err)
 
-	findingsStore := findings.NewMemoryStore()
+	findingsStore := findingstest.New(t, parent.ID)
 	scopeKey := func(c context.Context, sessionID string) string {
 		return sessiontree.RootID(c, store, sessionID)
 	}

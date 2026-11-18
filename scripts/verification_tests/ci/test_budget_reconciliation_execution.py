@@ -35,11 +35,11 @@ def zipped(value, duplicate=False):
 
 
 class EvidenceTests(unittest.TestCase):
-    def test_only_current_nightly_limits_receipt_supplies_snapshot(self):
+    def test_only_current_nightly_build_receipt_supplies_snapshot(self):
         raw = zipped(report())
-        artifact = dict(id=1, name='receipt-verification-nightly-limits-1', expired=False, size_in_bytes=len(raw))
-        ignored = [{**artifact, 'id': 2, 'name': 'receipt-verification-integration-limits-1'},
-                   {**artifact, 'id': 3, 'name': 'receipt-verification-nightly-limits-2'}]
+        artifact = dict(id=1, name='receipt-verification-nightly-build-1', expired=False, size_in_bytes=len(raw))
+        ignored = [{**artifact, 'id': 2, 'name': 'receipt-verification-integration-build-1'},
+                   {**artifact, 'id': 3, 'name': 'receipt-verification-nightly-build-2'}]
         with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
                 patch.object(evidence, 'pages', return_value=ignored + [artifact]), \
                 patch.object(evidence.subprocess, 'check_output', return_value=raw) as download:
@@ -49,7 +49,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(download.call_args.args[0][-1], 'repos/owner/repo/actions/artifacts/1/zip')
 
     def test_missing_expired_ambiguous_or_oversized_receipts_fail_closed(self):
-        artifact = dict(id=1, name='receipt-verification-nightly-limits-1', expired=False, size_in_bytes=100)
+        artifact = dict(id=1, name='receipt-verification-nightly-build-1', expired=False, size_in_bytes=100)
         for artifacts in [[], [{**artifact, 'expired': True}], [artifact, artifact],
                           [{**artifact, 'size_in_bytes': evidence.MAX_ARCHIVE_BYTES + 1}]]:
             with self.subTest(artifacts=artifacts), patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
@@ -64,7 +64,7 @@ class EvidenceTests(unittest.TestCase):
         invalid['tracking']['complete'] = False
         values.append(zipped(invalid))
         for raw in values:
-            artifact = dict(id=1, name='receipt-verification-nightly-limits-1', expired=False, size_in_bytes=len(raw))
+            artifact = dict(id=1, name='receipt-verification-nightly-build-1', expired=False, size_in_bytes=len(raw))
             with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
                     patch.object(evidence, 'pages', return_value=[artifact]), \
                     patch.object(evidence.subprocess, 'check_output', return_value=raw):

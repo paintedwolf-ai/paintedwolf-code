@@ -98,27 +98,50 @@ func itoa(n int) string {
 	return string(b[i:])
 }
 
-func TestBuildOrientationLinesIncludesLayoutLine(t *testing.T) {
-	lines := packboard.BuildOrientationLines(api.BoardSnapshot{
-		Repo: api.RepoBrief{
-			Languages: []string{"Go"},
-			FileCount: 2,
-			Layout: api.RepoLayout{
-				Files: []string{"main.go", "README.md"},
-			},
-		},
-	}, packboard.OrientOpts{})
-	foundRepo, foundFiles := false, false
-	for _, line := range lines {
-		if strings.HasPrefix(line, "Repo: ") {
-			foundRepo = true
-		}
-		if strings.HasPrefix(line, "Files: ") {
-			foundFiles = true
-		}
+// The orientation carries the repo brief once and the tier's layout list,
+// never the other tier's list.
+func TestBuildOrientationLinesCarryTierLayout(t *testing.T) {
+	const language = "SentinelLang"
+	files := []string{"orient-file-a", "orient-file-b"}
+	topLevel := []string{"orient-top-a/", "orient-top-b/"}
+	cases := []struct {
+		count  int
+		shown  []string
+		hidden []string
+	}{
+		{2, files, topLevel},
+		{12, topLevel, files},
+		{packboard.MediumMaxFiles, topLevel, files},
+		{packboard.MediumMaxFiles + 1, nil, append(append([]string(nil), files...), topLevel...)},
 	}
-	if !foundRepo || !foundFiles {
-		t.Fatalf("lines = %v", lines)
+	for _, tc := range cases {
+		lines := packboard.BuildOrientationLines(api.BoardSnapshot{Repo: api.RepoBrief{
+			FileCount: tc.count,
+			Languages: []string{language},
+			Layout:    api.RepoLayout{Files: files, TopLevel: topLevel},
+		}}, packboard.OrientOpts{})
+		linesWith := func(token string) int {
+			n := 0
+			for _, line := range lines {
+				if strings.Contains(line, token) {
+					n++
+				}
+			}
+			return n
+		}
+		if got := linesWith(language); got != 1 {
+			t.Errorf("%d files: %d lines carry the language, want 1: %q", tc.count, got, lines)
+		}
+		for _, name := range tc.shown {
+			if got := linesWith(name); got != 1 {
+				t.Errorf("%d files: %d lines carry %s, want 1: %q", tc.count, got, name, lines)
+			}
+		}
+		for _, name := range tc.hidden {
+			if got := linesWith(name); got != 0 {
+				t.Errorf("%d files: %d lines carry %s, want 0: %q", tc.count, got, name, lines)
+			}
+		}
 	}
 }
 

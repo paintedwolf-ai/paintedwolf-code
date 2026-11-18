@@ -120,6 +120,12 @@ describe("invokeCommand", () => {
 });
 
 describe("overlapping handler registrations", () => {
+  it("refuses a handler for an id the generated inventory does not declare", () => {
+    // Registration is the one seam: a handler with no declaration behind it never runs.
+    expect(() => registerCommandHandler("undeclared.handler", () => true)).toThrow();
+    expect(invokeCommand("undeclared.handler")).not.toBe("ran");
+  });
+
   it("the newest registration controls the id", () => {
     const first = vi.fn();
     const second = vi.fn();

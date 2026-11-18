@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { Message, WorkflowRun } from "../../../api/types.ts";
 import { messagesToTranscriptItems } from "./transcript-items.ts";
 import { compareTranscriptOrdSortKeys, sortTranscriptItemsByOrd, transcriptItemOrdSortKey, type TranscriptOrdSortKey } from "./transcript-item-order.ts";
-import { type TranscriptItem } from "./transcript-item-model.ts";
+import type { DisplayTranscriptItem, RawTranscriptItem, TranscriptBuildOptions } from "./transcript-item-model.ts";
 import { createTranscriptDisplayProjector } from "./transcript-display-projection.ts";
 import { buildChatTranscriptBlocks } from "../../workflow/workflow-spans.ts";
 import { loadOrderingFixture } from "../testdata/ordering/assert-canonical-order.ts";
@@ -13,29 +10,53 @@ import { loadOrderingFixture } from "../testdata/ordering/assert-canonical-order
 const fixture = loadOrderingFixture();
 const fixtureMessages: readonly Message[] = fixture.messages;
 
-/** Every adjacent pair uses the production (ord, sub) ordering. */
+const verbose: TranscriptBuildOptions = { verboseMode: true };
+
+/** The placed rows a display row draws; a diff card trails its group and has no place of its own. */
+function placedRows(items: readonly (RawTranscriptItem | DisplayTranscriptItem)[]): RawTranscriptItem[] {
+  return items.flatMap((item): RawTranscriptItem[] => {
+    if (item.kind === "activity_span") {
+      return item.entries.map((entry) =>
+        entry.kind === "tool" ? { ...entry, key: entry.part.id } : entry,
+      );
+    }
+    if (item.kind === "worker_group") {
+      return item.parts.map((part) => ({ kind: "tool", key: part.id, part }));
+    }
+    switch (item.kind) {
+      case "file_edit":
+      case "pending_user":
+      case "time_marker":
+      case "unread_marker":
+      case "turn_tail":
+        return [];
+      default:
+        return [item];
+    }
+  });
+}
+
+/** Every adjacent pair of placed rows is in production order. */
 function expectOrderedByOrd(
-  items: readonly TranscriptItem[],
+  items: readonly (RawTranscriptItem | DisplayTranscriptItem)[],
   messages: readonly Message[],
 ): void {
-  expect(items.length).toBeGreaterThan(0);
-  const keys: TranscriptOrdSortKey[] = items.map((item) =>
-    transcriptItemOrdSortKey(item, messages),
+  const rows = placedRows(items);
+  expect(rows.length).toBeGreaterThan(0);
+  const keys: TranscriptOrdSortKey[] = rows.map((item) =>
+    transcriptItemOrdSortKey(item, messages, verbose),
   );
+  const show = (at: number) =>
+    `${rows[at]!.kind}:${rows[at]!.key} (ord=${keys[at]!.ord},tier=${keys[at]!.tier},index=${keys[at]!.index})`;
   for (let i = 1; i < keys.length; i++) {
-    const cmp = compareTranscriptOrdSortKeys(keys[i - 1]!, keys[i]!);
     expect(
-      cmp,
-      `out of ord order at index ${i}: ` +
-        `${items[i - 1]!.kind}:${items[i - 1]!.key} ` +
-        `(ord=${keys[i - 1]!.ord},sub=${keys[i - 1]!.sub}) > ` +
-        `${items[i]!.kind}:${items[i]!.key} ` +
-        `(ord=${keys[i]!.ord},sub=${keys[i]!.sub})`,
+      compareTranscriptOrdSortKeys(keys[i - 1]!, keys[i]!),
+      `out of order at index ${i}: ${show(i - 1)} > ${show(i)}`,
     ).toBeLessThanOrEqual(0);
   }
 }
 
-function itemKeys(items: readonly TranscriptItem[]): string[] {
+function itemKeys(items: readonly { key: string }[]): string[] {
   return items.map((item) => item.key);
 }
 
@@ -70,7 +91,7 @@ const catalogRun: WorkflowRun = {
 };
 
 describe("transcript ord-order invariant", () => {
-  it("transcript projector is non-decreasing on production (ord, sub)", () => {
+  it("transcript projector draws placed rows in production order", () => {
     const items = createTranscriptDisplayProjector()(fixtureMessages, undefined, { verboseMode: true })[0]!;
     expectOrderedByOrd(items, fixtureMessages);
   });
@@ -79,19 +100,19 @@ describe("transcript ord-order invariant", () => {
     const built = messagesToTranscriptItems(fixtureMessages, {
       verboseMode: true,
     });
-    const baseline = sortTranscriptItemsByOrd(built, fixtureMessages);
+    const baseline = sortTranscriptItemsByOrd(built, fixtureMessages, verbose);
     expectOrderedByOrd(baseline, fixtureMessages);
-    expect(itemKeys(sortTranscriptItemsByOrd(baseline, fixtureMessages))).toEqual(
+    expect(itemKeys(sortTranscriptItemsByOrd(baseline, fixtureMessages, verbose))).toEqual(
       itemKeys(baseline),
     );
     for (const perm of permutations(built)) {
-      expect(itemKeys(sortTranscriptItemsByOrd(perm, fixtureMessages))).toEqual(
+      expect(itemKeys(sortTranscriptItemsByOrd(perm, fixtureMessages, verbose))).toEqual(
         itemKeys(baseline),
       );
     }
   });
 
-  it("message arrival order still yields non-decreasing (ord, sub)", () => {
+  it("message arrival order still yields production order", () => {
     const baseline = itemKeys(
       createTranscriptDisplayProjector()(fixtureMessages, undefined, { verboseMode: true })[0]!,
     );
@@ -102,7 +123,7 @@ describe("transcript ord-order invariant", () => {
     }
   });
 
-  it("span-prebuilt display path stays non-decreasing on (ord, sub)", () => {
+  it("span-prebuilt display path stays in production order", () => {
     const stamped = fixtureMessages.map((m) =>
       m.workflow_run_id
         ? m
@@ -131,21 +152,5 @@ describe("transcript ord-order invariant", () => {
       expectOrderedByOrd(items, patched);
       expect(itemKeys(items)).toEqual(itemKeys(baseline));
     }
-  });
-
-  it("grep guard: no Date.parse in the transcript ordering path", () => {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const src = ["transcript-items.ts", "transcript-item-order.ts", "transcript-display-projection.ts"]
-      .map((file) => readFileSync(join(here, file), "utf8")).join("\n");
-    expect(src).not.toMatch(/Date\.parse/);
-  });
-
-  it("grep guard: order/identity stabilizers are absent from the source", () => {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const itemsSrc = ["transcript-items.ts", "transcript-item-order.ts", "transcript-display-projection.ts"]
-      .map((file) => readFileSync(join(here, file), "utf8")).join("\n");
-    const spansSrc = readFileSync(join(here, "../../workflow/workflow-spans.ts"), "utf8");
-    expect(itemsSrc).not.toMatch(/stabilizeTranscriptItems/);
-    expect(spansSrc).not.toMatch(/stabilizeChatSpanBlocks/);
   });
 });

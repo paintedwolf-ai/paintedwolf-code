@@ -153,7 +153,7 @@ Speak selection and VoiceOver read the selectable transcript; there is no in-app
 
 Chrome roots stamp `data-den-chrome` via [`chromeProps()`](../lycaon-den/src/styling/ui-chrome.ts) (nav rail, tab rails, title rows, dismiss ×, drag bands); inheritance covers children, and form fields under a chrome root stay selectable. Transcript prose never takes the mark. Copy docked inside chrome (notice rail, header cards) spreads `{...proseProps()}`; a control inside a prose island takes `chromeProps()` back. Context menu handling: [`context-menu.ts`](../lycaon-den/src/platform/interaction/context-menu.ts).
 
-The chrome mark is `user-select: none`, so a stylesheet is one edit away from silencing the transcript. [`spoken-content-a11y.test.ts`](../lycaon-den/src/styling/spoken-content-a11y.test.ts) reads the shipped CSS and requires `user-select: text` on the user bubble, the assistant bubble, `.markdown-body`, and `.markdown-body pre`, and refuses a `none` on the prose body.
+The chrome mark is `user-select: none`, so a stylesheet is one edit away from silencing the transcript. [`e2e/a11y-macos.spec.ts`](../lycaon-den/e2e/a11y-macos.spec.ts) reads the computed style in the running app and requires `user-select: text` on the user bubble, the assistant bubble, `.markdown-body`, and `.markdown-body pre`; [`accessibility-macos-invariants.test.ts`](../lycaon-den/src/platform/accessibility-macos-invariants.test.ts) refuses a `none` on the prose body.
 
 ## Hover tips
 

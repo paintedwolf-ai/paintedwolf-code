@@ -3,11 +3,26 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
 
 class NoticeEntrypointsExecutionTest(unittest.TestCase):
+    def test_publication_replaces_both_copies_and_preserves_open_readers(self):
+        script = Path(__file__).resolve().parents[2] / "stage-notices.py"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "assembled"
+            source.write_text("new notices")
+            copies = [root / "THIRD-PARTY-NOTICES.md", root / "shell/THIRD-PARTY-NOTICES.md"]
+            copies[1].parent.mkdir()
+            copies[0].write_text("previous notices")
+            with copies[0].open() as reader:
+                subprocess.run([sys.executable, str(script), str(source), *map(str, copies)], check=True)
+                self.assertEqual(reader.read(), "previous notices")
+            self.assertEqual([path.read_text() for path in copies], ["new notices"] * 2)
+
     def test_every_buildable_entrypoint_reaches_the_license_check(self):
         for platform in ("darwin", "linux", "windows"):
             with self.subTest(platform=platform), tempfile.TemporaryDirectory() as temp:

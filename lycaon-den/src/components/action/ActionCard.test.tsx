@@ -3,6 +3,8 @@ import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import type { ActionDescriptor } from "../../api/types.ts";
 import { ACTION_FACT_LABELS, formatActionRow, formatFact } from "../../chat/action/action-format.ts";
+import { pendingAction } from "../../chat/action/part-action.ts";
+import { retiredToolNames } from "../../chat/tool/tool-catalog-tools.ts";
 import { searchToolPart, toolPartFindCorpus } from "../../chat/tool/tool-part-find.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import type { CardAction } from "../../chat/action/action-merge.ts";
@@ -94,6 +96,23 @@ describe("ActionCard", () => {
     expect(buttons.map((button) => button.textContent)).toEqual(["Block a.test"]);
     expect(buttons[0]!.closest("[data-kind]")?.getAttribute("data-kind")).toBe("network");
     expect([...body.children].map((child) => child.getAttribute("data-testid"))).toEqual(["action-ran", "action-facts", "action-links"]);
+  });
+
+  it("keeps unobserved external access visible with no endpoints, distinct for each egress", () => {
+    const unobserved: ToolPartView = {
+      ...part(), tool: "command", kind: "command",
+      externalAccess: { modes: ["direct_ip"], visibility_summary: "unobserved", direct: { scope: "current_action", actual_destination_visibility: "unobserved" } },
+    };
+    const shown = (["direct", "local_only", "proxy_only"] as const).map((egress) => {
+      const action: CardAction = { ...descriptor, facts: [{ kind: "network", egress }], row: ["network"], preview: undefined };
+      const { container, unmount } = render(() => <ActionCard part={unobserved} action={action} layout="chat" />);
+      open(container);
+      const value = container.querySelector('[data-testid="action-facts"] > [data-kind="network"] dd')?.textContent?.trim() ?? "";
+      unmount();
+      return value;
+    });
+    for (const value of shown) expect(value).not.toBe("");
+    expect(new Set(shown).size).toBe(shown.length);
   });
 
   it("shows a live process's own state and Stop in place of its recorded process fact", () => {
@@ -269,5 +288,18 @@ describe("ActionCard", () => {
     expect(matches).toEqual([
       { from: 6, to: 12, field: "tool_output", toolCallId: "member-call" },
     ]);
+  });
+
+  it("renders every retired tool a stored transcript may name", () => {
+    const retired = retiredToolNames();
+    expect(retired.length).toBeGreaterThan(0);
+    for (const tool of retired) {
+      const p = { ...part(), tool, output: JSON.stringify({ status: "completed" }) };
+      const { container, unmount } = render(() => (
+        <ActionCard part={p} action={pendingAction(p)} layout="chat" />
+      ));
+      expect(container.querySelector('[data-testid="action-card"]'), tool).not.toBeNull();
+      unmount();
+    }
   });
 });

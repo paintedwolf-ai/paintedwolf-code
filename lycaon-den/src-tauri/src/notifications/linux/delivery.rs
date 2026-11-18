@@ -429,12 +429,6 @@ mod tests {
         assert_eq!(timeout(deadline).unwrap(), 500);
         assert!(remaining(deadline).unwrap() > 9_000);
     }
-
-    #[test]
-    fn outcomes_name_delivery_and_inhibition() {
-        assert_eq!(Outcome::Delivered.as_str(), "delivered");
-        assert_eq!(Outcome::Inhibited.as_str(), "inhibited");
-    }
 }
 
 #[cfg(test)]

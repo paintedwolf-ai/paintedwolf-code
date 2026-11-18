@@ -194,9 +194,9 @@ describe("TranscriptDiffGroup", () => {
     renderGroup();
     const summary = screen
       .getByTestId("diff-group")
-      .querySelector(".den-diff-group-summary")!;
+      .querySelector(":scope > .den-transcript-disclosure-header")!;
     expect(summary.lastElementChild?.className).toContain(
-      "den-tool-chicklet-caret",
+      "den-disclosure-chevron",
     );
     for (const row of screen.getAllByTestId("file-edit-diff")) {
       const header = row.querySelector(".den-file-edit-diff-header")!;

@@ -93,7 +93,7 @@ func TestScreenProjectionCompletesInTheBackground(t *testing.T) {
 	d, err := f.h.EditorDocuments.CurrentSnapshot(t.Context(), f.project.ID, opened.ID)
 	testutil.FailErr(t, "read document", err)
 	var screen *wire.SecretScreen
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the screen projection completes", func() bool {
 		status, projected := f.h.EditorScreenProjection(t.Context(), d)
 		screen = projected
 		return status == wire.SecretScreenComplete

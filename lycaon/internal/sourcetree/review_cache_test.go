@@ -94,7 +94,7 @@ func TestReviewPreparationDoesNotBlockConcurrentReads(t *testing.T) {
 	close(unblock)
 	var projection *ReviewProjection
 	var release func()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the review projection is prepared", func() bool {
 		projection, release, err = review.projection(view.ctx, source, "intent", nil)
 		return !errors.Is(err, pagedview.ErrPreparing)
 	})
@@ -141,7 +141,7 @@ func TestReviewProjectionSurvivesUnrelatedDiscovery(t *testing.T) {
 	testutil.FailErr(t, "finish review", err)
 	testutil.FailErr(t, "install review", view.SetReview(review))
 	var frame Frame
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the frame is prepared", func() bool {
 		frame, err = frameForTest(t, view, t.Context(), FrameRequest{Limit: 10, Anchor: &Address{Root: root.ID, Path: "."}})
 		return !errors.Is(err, pagedview.ErrPreparing)
 	})

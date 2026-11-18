@@ -42,7 +42,7 @@ func TestScanStubPredicatesWithSQLiteLedger(t *testing.T) {
 			"guidance": []api.ScanGuidanceSummary{{Severity: "medium", Message: "ok"}},
 		},
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.SaveIngest failed", err)
 	}
 
 	deps := scanDomainDeps(stubScanLedger{}, nil)

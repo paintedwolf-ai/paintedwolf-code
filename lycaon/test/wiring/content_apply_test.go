@@ -72,7 +72,7 @@ func TestContentApplyEmittedWhenPolicyOn(t *testing.T) {
 		done <- err
 	}()
 	var checkpointID string
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the content apply card is pending", func() bool {
 		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
 		if err == nil && len(pending) == 1 {
 			checkpointID = pending[0].ID
@@ -149,7 +149,7 @@ func TestContentApplyRejectStructuredError(t *testing.T) {
 		done <- err
 	}()
 	var checkpointID string
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the content apply card is pending", func() bool {
 		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
 		if err == nil && len(pending) == 1 {
 			checkpointID = pending[0].ID
@@ -220,7 +220,7 @@ func TestContentApplyHoldsEveryContentMutatingTool(t *testing.T) {
 			}()
 
 			var checkpointID string
-			testutil.WaitFor(t, func() bool {
+			testutil.WaitFor(t, "the content apply card is pending", func() bool {
 				pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
 				if err == nil && len(pending) == 1 {
 					checkpointID = pending[0].ID

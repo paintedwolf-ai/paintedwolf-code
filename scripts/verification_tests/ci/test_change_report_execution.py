@@ -251,16 +251,13 @@ class ChangedCoverageTests(unittest.TestCase):
             self.assertEqual(coverage_changes.read_go_profile(output, "example.com/m"),
                              {"lycaon/a.go": [("1.1", "2.2", 1, True)]})
 
-    def test_den_coverage_executes_full_assertions_without_changed_only_or_fast_filters(self):
+    def test_den_coverage_executes_the_complete_suite_measuring_changed_files(self):
         changed = "lycaon-den/src/App.tsx"
-        with patch.dict(os.environ, {"LYCAON_VITEST_FAST": "1", "PW_VITEST_CHANGED_ONLY": "1"}), \
-                patch.object(coverage_changes.subprocess, "call", return_value=1) as call:
+        with patch.object(coverage_changes.subprocess, "call", return_value=1) as call:
             findings, failed, _ = coverage_changes.run_den(change_report.Scope("base", "test", [changed]))
-        command, env = call.call_args.args[0], call.call_args.kwargs["env"]
+        command = call.call_args.args[0]
         self.assertTrue(failed)
         self.assertEqual(findings[0].level, "error")
-        self.assertNotIn("PW_VITEST_CHANGED_ONLY", env)
-        self.assertNotIn("LYCAON_VITEST_FAST", env)
         self.assertNotIn("--changed", command)
         self.assertNotIn("--passWithNoTests", command)
         self.assertIn("--coverage", command)

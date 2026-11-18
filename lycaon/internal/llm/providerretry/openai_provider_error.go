@@ -143,6 +143,40 @@ func FormatOpenAIProviderError(err error) error {
 	return fmt.Errorf("openai request failed: %w", err)
 }
 
+// ProviderStreamError is an error a provider reported inside a response stream.
+type ProviderStreamError struct {
+	Code    string
+	Param   string
+	Type    string
+	Message string
+}
+
+func (e *ProviderStreamError) Error() string {
+	for _, detail := range []string{e.Message, e.Code, e.Type} {
+		if detail != "" {
+			return "provider stream error: " + detail
+		}
+	}
+	return "provider stream error"
+}
+
+// StreamError reads the error member of a stream frame. An absent or null
+// member is not an error.
+func StreamError(member json.RawMessage) *ProviderStreamError {
+	member = bytes.TrimSpace(member)
+	if len(member) == 0 || bytes.Equal(member, []byte("null")) {
+		return nil
+	}
+	if parsed, ok := ParseOpenAICompatError(member); ok {
+		return &ProviderStreamError{Code: parsed.Code, Param: parsed.Param, Type: parsed.Type, Message: parsed.Message}
+	}
+	var text string
+	if err := json.Unmarshal(member, &text); err == nil {
+		return &ProviderStreamError{Message: strings.TrimSpace(text)}
+	}
+	return &ProviderStreamError{Message: string(member)}
+}
+
 type ParsedProviderError struct {
 	Message string
 	Code    string
