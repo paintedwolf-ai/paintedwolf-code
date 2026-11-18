@@ -917,11 +917,10 @@ func TestBoundaryEgress(t *testing.T) {
 	)
 	grantedPort := uint16(upstream.Listener.Addr().(*net.TCPAddr).Port)
 	p.SetLoopbackConnectAuthority(func(_ string, port uint16) bool { return port == grantedPort })
-	if _, err := p.Start(); err != nil {
-		testutil.FailErr(t, "p.Start failed", err)
-	}
+	addrs, err := p.Start()
+	testutil.FailErr(t, "start HTTP broker", err)
 	defer func() { _ = p.Close() }()
-	via := confine.Confinement{Roots: []string{proj}, Network: confine.NetworkProxyOnly, ProxyAddr: p.Addr()}
+	via := confine.Confinement{Roots: []string{proj}, Network: confine.NetworkProxyOnly, ProxyAddr: addrs.HTTP}
 	cmd, cleanup, err := confine.Command(context.Background(), self, "/usr/bin/curl",
 		[]string{"-sf", "--max-time", "5", upstream.URL}, via)
 	testutil.FailErr(t, "confine.Command failed", err)
@@ -951,11 +950,10 @@ func TestProxyOnlyRoutesThroughInAppProxy(t *testing.T) {
 			var d net.Dialer
 			return d.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", ep.Host, ep.Port))
 		}
-		if _, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint}); err != nil {
-			testutil.FailErr(t, "p.Start failed", err)
-		}
+		addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
+		testutil.FailErr(t, "start HTTP broker", err)
 		defer func() { _ = p.Close() }()
-		c := confine.Confinement{Roots: []string{dir}, Network: confine.NetworkProxyOnly, ProxyAddr: p.Addr()}
+		c := confine.Confinement{Roots: []string{dir}, Network: confine.NetworkProxyOnly, ProxyAddr: addrs.HTTP}
 		cmd, cleanup, err := confine.Command(context.Background(), self, "/usr/bin/curl",
 			[]string{"-sf", "--max-time", "5", upstream.URL}, c)
 		testutil.FailErr(t, "confine.Command failed", err)

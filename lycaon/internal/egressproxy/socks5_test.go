@@ -3,10 +3,12 @@ package egressproxy_test
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -255,25 +257,32 @@ func TestSocksRejectsBindAndUDPAssociate(t *testing.T) {
 
 func TestStartRollbackOnSocksFailure(t *testing.T) {
 	p := egressproxy.New(nil)
+	var httpListener net.Listener
 	calls := 0
-	_, err := p.Start(egressproxy.Options{
-		ListenHTTP: net.Listen,
+	addrs, err := p.Start(egressproxy.Options{
+		ListenHTTP: func(network, address string) (net.Listener, error) {
+			listener, err := net.Listen(network, address)
+			if err == nil {
+				httpListener = listener
+				t.Cleanup(func() { _ = listener.Close() })
+			}
+			return listener, err
+		},
 		ListenSOCKS: func(network, address string) (net.Listener, error) {
 			calls++
 			return nil, io.EOF
 		},
 	})
+	if !errors.Is(err, io.EOF) || addrs != (egressproxy.Addrs{}) {
+		t.Fatalf("failed start published endpoint or lost its error: addrs=%+v err=%v", addrs, err)
+	}
+	if calls != 1 || httpListener == nil {
+		t.Fatalf("HTTP must start before the failed SOCKS listen: calls=%d listener=%v", calls, httpListener)
+	}
+	conn, err := net.DialTimeout("tcp", httpListener.Addr().String(), time.Second)
 	if err == nil {
-		t.Fatal("expected socks failure")
-	}
-	if calls != 1 {
-		t.Fatalf("socks listen calls=%d", calls)
-	}
-	if p.Addr() != "" {
-		t.Fatal("http listener must not remain published")
-	}
-	if p.SocksAddr() != "" {
-		t.Fatal("socks listener must not remain published")
+		_ = conn.Close()
+		t.Fatal("HTTP listener accepted a connection after start rolled back")
 	}
 }
 
