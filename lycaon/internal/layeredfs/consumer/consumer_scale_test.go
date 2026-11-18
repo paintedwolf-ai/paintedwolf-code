@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
+	"github.com/lycaon/lycaon/internal/layeredfs/consumer/consumertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 )
 
@@ -151,7 +152,7 @@ func TestInstrumentedFullWorkerTurnOn2MEntrySimulatedLower(t *testing.T) {
 
 	const simulatedScale = 2_000_000
 	var archiveQueried atomic.Bool
-	indexProvider := consumer.SourceIndexFunc(func(_ context.Context, q consumer.SourceIndexQuery) (consumer.SourceIndexResult, error) {
+	indexProvider := consumertest.IndexFunc(func(_ context.Context, q consumer.SourceIndexQuery) (consumer.SourceIndexResult, error) {
 		for _, r := range q.RootIDs {
 			if r == "archive" {
 				archiveQueried.Store(true)
@@ -301,7 +302,7 @@ func TestAbsentAndStaleIndexEntriesResolveViaMountAndReportIncompleteSearch(t *t
 		t.Fatalf("RegisterLowerProvider: %v", err)
 	}
 
-	partialIndex := consumer.SourceIndexFunc(func(_ context.Context, _ consumer.SourceIndexQuery) (consumer.SourceIndexResult, error) {
+	partialIndex := consumertest.IndexFunc(func(_ context.Context, _ consumer.SourceIndexQuery) (consumer.SourceIndexResult, error) {
 		return consumer.SourceIndexResult{
 			Entries: []consumer.SourceIndexEntry{{
 				Path: layeredfs.QualifiedPath{RootID: "code", Rel: "pkg/auth/login.go"}, Kind: layeredfs.EntryRegular,

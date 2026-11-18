@@ -177,7 +177,7 @@ func commitOnBranch(t *testing.T, exec *privategit.GitExecutor, branch, file str
 	testutil.FailErr(t, "checkout "+branch, err)
 	_, err = exec.Run(ctx, ".", "add", file)
 	testutil.FailErr(t, "add "+file, err)
-	_, err = exec.Commit(ctx, "commit on "+branch)
+	_, err = exec.Run(ctx, ".", "commit", "-m", "commit on "+branch)
 	testutil.FailErr(t, "commit "+branch, err)
 	oid, err := exec.Run(ctx, ".", "rev-parse", "HEAD")
 	testutil.FailErr(t, "rev-parse "+branch, err)

@@ -75,7 +75,7 @@ func TestPrepareViewGitOperationMountedBindingAndCopiedWorktreeDoubleIsolation(t
 	exec := NewGitExecutor(mgr, "view-mounted", RemotePolicy{})
 	_, err = exec.Run(t.Context(), ".", "add", "worker_edit.txt")
 	testutil.FailErr(t, "git add", err)
-	_, err = exec.Commit(t.Context(), "worker mounted commit")
+	_, err = exec.Run(t.Context(), ".", "commit", "-m", "worker mounted commit")
 	testutil.FailErr(t, "git commit", err)
 
 	// (d) Verify materialized mode (eagercopy) shares zero trunk inodes and protects trunk from in-place

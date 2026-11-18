@@ -125,14 +125,14 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	}
 
 	gitExec := privategit.NewGitExecutor(gitMgr, viewID, privategit.RemotePolicy{})
-	statusOut, err := gitExec.Status(t.Context(), "--porcelain=v1")
+	statusOut, err := gitExec.Run(t.Context(), ".", "status", "--porcelain=v1")
 	if err != nil || !strings.Contains(statusOut, "README.md") || !strings.Contains(statusOut, "pkg/") {
 		t.Fatalf("unexpected git status over mounted view: err=%v\n%s", err, statusOut)
 	}
 	if _, err := gitExec.Run(t.Context(), ".", "add", "README.md", "pkg/feature.go"); err != nil {
 		t.Fatalf("git add over mounted view: %v", err)
 	}
-	if _, err := gitExec.Commit(t.Context(), "worker commit over real nfsdarwin mount"); err != nil {
+	if _, err := gitExec.Run(t.Context(), ".", "commit", "-m", "worker commit over real nfsdarwin mount"); err != nil {
 		t.Fatalf("git commit over mounted view: %v", err)
 	}
 	if _, err := gitExec.Run(t.Context(), ".", "branch", "worker/feature"); err != nil {
@@ -289,13 +289,13 @@ func assertReleaseClosesPrivateGit(t *testing.T, adp *nfsdarwin.Adapter, gitExec
 	if err != nil || !relReceipt.Settled {
 		t.Fatalf("Release failed: receipt=%+v err=%v", relReceipt, err)
 	}
-	if _, err := gitExec.Status(t.Context()); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
+	if _, err := gitExec.Run(t.Context(), ".", "status"); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
 		t.Fatalf("expected ErrMountedWorktreeUnavailable from Status after Release, got %v", err)
 	}
 	if _, err := gitExec.Run(t.Context(), ".", "add", "README.md"); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
 		t.Fatalf("expected ErrMountedWorktreeUnavailable from Add after Release, got %v", err)
 	}
-	if _, err := gitExec.Commit(t.Context(), "post-release"); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
+	if _, err := gitExec.Run(t.Context(), ".", "commit", "-m", "post-release"); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
 		t.Fatalf("expected ErrMountedWorktreeUnavailable from Commit after Release, got %v", err)
 	}
 	if _, _, _, err := privategit.PrepareViewGitOperation(t.Context(), trunkDir, workerID); !errors.Is(err, privategit.ErrMountedWorktreeUnavailable) {
