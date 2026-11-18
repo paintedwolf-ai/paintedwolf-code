@@ -3,6 +3,7 @@ package laws_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -10,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/test/contract/laws/closure"
 	"github.com/lycaon/lycaon/test/contract/laws/densource"
 	"github.com/lycaon/lycaon/test/contract/laws/enumclosure"
+	"github.com/lycaon/lycaon/test/contract/laws/forbiddencalls"
 	"github.com/lycaon/lycaon/test/contract/laws/vendorpin"
 )
 
@@ -149,5 +151,35 @@ func TestClosureFailsClosed(t *testing.T) {
 		unreadableFiles: with(clean, map[string]string{
 			"lycaon/internal/debugpaths/broken.go": "package debugpaths\n\nfunc broken( {\n",
 		}),
+	}.run(t)
+}
+
+const promptsDir = "lycaon/internal/prompts/"
+
+var readerFactsTree = map[string]string{
+	promptsDir + "reader.go": "package prompts\n\ntype Reader struct{ facts map[string]any }\n\n" +
+		"func (r Reader) Facts() map[string]any { return r.facts }\n\n" +
+		"type ReaderFacts struct{ Root string }\n\nfunc (f ReaderFacts) Map() map[string]any { return map[string]any{\"root\": f.Root} }\n\n" +
+		"func project(f ReaderFacts) map[string]any { return f.Map() }\n",
+	promptsDir + "reader_facts.go":       "package prompts\n\nfunc build() ReaderFacts { return ReaderFacts{Root: \"@a\"} }\n",
+	promptsDir + "reader_facts_vocab.go": "package prompts\n\nfunc Vars(r Reader, occurrence map[string]any) (map[string]any, error) {\n\tout := r.Facts()\n\tfor k, v := range occurrence {\n\t\tout[k] = v\n\t}\n\treturn out, nil\n}\n",
+}
+
+// Reader facts reach templates only through Vars, the one site that may read
+// them raw.
+func TestPromptVarsThroughVarsFailsClosed(t *testing.T) {
+	t.Parallel()
+	failureModes{
+		rule:  bare(rule(t, forbiddencalls.Family, "prompt-vars-through-vars")),
+		clean: readerFactsTree,
+		seeded: with(readerFactsTree, map[string]string{
+			"lycaon/internal/kick/render.go": "package kick\n\nimport \"github.com/lycaon/lycaon/internal/prompts\"\n\nfunc render(r prompts.Reader) map[string]any { return r.Facts() }\n",
+		}),
+		renamed: with(readerFactsTree, map[string]string{
+			promptsDir + "reader_facts_vocab.go": strings.ReplaceAll(readerFactsTree[promptsDir+"reader_facts_vocab.go"], "func Vars(", "func Variables("),
+		}),
+		empty:           tree(nil),
+		unreadable:      bare(rule(t, forbiddencalls.Family, "prompt-vars-through-vars")),
+		unreadableFiles: with(readerFactsTree, map[string]string{promptsDir + "broken.go": "package prompts\n\nfunc broken( {\n"}),
 	}.run(t)
 }
