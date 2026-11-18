@@ -133,7 +133,6 @@ func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c comm
 	sess, err := r.h.Store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: projectID}, projectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "set implementer agent", r.h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
-	wiring.AttachDefaultAmbient(t, r.h, t.Context(), sess.ID)
 	r.h.SeedProgress(t, t.Context(), sess.ID)
 	var plans []wire.ApprovalPlan
 	if expectedCards == 0 {

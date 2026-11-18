@@ -257,15 +257,21 @@ func (h *Harness) CoordinatorToolContext(t *testing.T, ctx context.Context, sess
 	}
 }
 
-// SeedProgress supplies a pending checklist that survives turn bootstrap.
+// SeedProgress supplies a pending checklist that survives turn bootstrap. It binds
+// the session's workflow first, as a user request does before any plan write.
 func (h *Harness) SeedProgress(t *testing.T, ctx context.Context, sessionID string) {
 	t.Helper()
 	if h == nil || h.ToolRegistry == nil {
 		t.Fatal("harness tool registry missing")
 	}
+	if h.Workflows.Manager == nil {
+		t.Fatal("harness has no workflow manager; a plan needs a workflow run")
+	}
+	_, err := h.Workflows.Manager.Ambient.EnsureSessionWorkflow(ctx, sessionID)
+	testutil.FailErr(t, "bind session workflow", err)
 	args := map[string]any{"content": "## Progress\n- [ ] wiring test plan\n"}
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sessionID}}
-	_, err := h.ToolRegistry.Run(ctx, "update_progress", args, tc)
+	_, err = h.ToolRegistry.Run(ctx, "update_progress", args, tc)
 	if reject := toolrejection.AsToolReject(err); reject != nil && reject.Code == "PROGRESS_REVISION_REQUIRED" {
 		// Workflow setup may already hold a checklist; replace it at its revision.
 		current, ok := reject.Data["snapshot"].(progress.Snapshot)
