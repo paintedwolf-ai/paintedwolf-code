@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/secretcap/create.go",
+  "kind": "module",
+  "workstream": "secret-capability-boundaries",
+  "disposition": "retain",
+  "reason": "Retain capability creation and its input validation together. Publication orders protected screening and encrypted storage before the metadata/version transaction, with compensation on failure and scoped idempotency on retry.",
+  "reviewed_commit": "05d2a79fb028573bc599fd368420cf8791ed13ea",
+  "ceiling": 395,
+  "boundaries": {
+    "lycaon/internal/secretcap/service_test.go": "a81e152b15a50ea08859b47522023c666257146610c18a709faa847b028b8c65",
+    "lycaon/internal/secretcap/durable_screening_test.go": "d1536bbdb27542493742b827fbd7c4e4b12870800c2af2c35732a4d6bfc1ae60"
+  }
+}
