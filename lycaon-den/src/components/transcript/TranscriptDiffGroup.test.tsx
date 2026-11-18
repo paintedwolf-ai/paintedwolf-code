@@ -237,7 +237,7 @@ describe("TranscriptDiffGroup", () => {
     expect(links).toEqual(["src/pipeline.py", "src/cli.py", "tests/test_cli.py"]);
   });
 
-  it("does not toggle a diff when the path is clicked on its way to Files", () => {
+  it("opens a closed diff from its path and leaves an open diff's path to Files", () => {
     const folds = foldFileEdits(RUN);
     render(() => (
       <TranscriptDiffGroup
@@ -248,12 +248,12 @@ describe("TranscriptDiffGroup", () => {
         entryKey="group-3"
       />
     ));
+    const openState = () =>
+      screen.getAllByTestId("file-edit-diff").map((row) => row.getAttribute("data-expanded"));
     screen.getAllByTestId("source-path-link")[0]!.click();
-    expect(
-      screen
-        .getAllByTestId("file-edit-diff")
-        .map((row) => row.getAttribute("data-expanded")),
-    ).toEqual(["false", "false", "false"]);
+    expect(openState()).toEqual(["true", "false", "false"]);
+    screen.getAllByTestId("source-path-link")[0]!.click();
+    expect(openState()).toEqual(["true", "false", "false"]);
   });
 
   it("toggles from anywhere else on the row", () => {

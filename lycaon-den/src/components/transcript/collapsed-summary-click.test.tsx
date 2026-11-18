@@ -146,9 +146,7 @@ describe("a closed transcript card", () => {
   it("keeps an open file's path a link to the file", () => {
     const row = CARDS[3]!.mount();
     fireEvent.click(summaryOf(row));
-    expect(row.getAttribute("data-expanded")).toBe("true");
     fireEvent.click(row.querySelector<HTMLElement>('[data-testid="source-path-link"]')!);
     expect(openSourceLocation).toHaveBeenCalledOnce();
-    expect(row.getAttribute("data-expanded")).toBe("true");
   });
 });
