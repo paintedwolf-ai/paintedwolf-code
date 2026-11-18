@@ -56,6 +56,19 @@ func TestOutsideNavigationFollowsTheRecordedFile(t *testing.T) {
 	if resolved.Status != api.NavigationResolved || resolved.Path != movedRel || resolved.FileID != head.FileID {
 		t.Fatalf("stable reference resolved to %+v", resolved)
 	}
+	testutil.FailErr(t, "remove the current file", os.Remove(moved))
+	missing := workspace.ResolveNavigationPaths(ctx, p, sourcebranch.Trunk, []api.NavigationReference{ref})[0]
+	if missing.Status != api.NavigationMissing || missing.Deleted {
+		t.Fatalf("missing file resolved to %+v", missing)
+	}
+	testutil.FailErr(t, "redirect its address to the replacement", os.Symlink(old, moved))
+	redirected := workspace.ResolveNavigationPaths(ctx, p, sourcebranch.Trunk, []api.NavigationReference{ref})[0]
+	if redirected.Status != api.NavigationUnavailable || redirected.Deleted {
+		t.Fatalf("redirected address resolved to %+v", redirected)
+	}
+	testutil.FailErr(t, "remove the redirected address", os.Remove(moved))
+	testutil.FailErr(t, "restore the current file", os.WriteFile(moved, content, 0o600))
+
 	_, err = database.ExecContext(ctx, `DELETE FROM source_chat_files WHERE file_id = ?`, head.FileID)
 	testutil.FailErr(t, "remove chat reference", err)
 	released := workspace.ResolveNavigationPaths(ctx, p, sourcebranch.Trunk, []api.NavigationReference{ref})[0]

@@ -101,6 +101,14 @@ func normalizeNavigableProjectPath(raw string) (string, error) {
 }
 
 func resolveProjectPathInRoot(root projectroot.RootRef, rel string) (ResolvedProjectPath, error) {
+	if root.Outside {
+		target, file, err := openOutsideSourceRead(rel, root.ID)
+		if err != nil {
+			return ResolvedProjectPath{}, err
+		}
+		_ = file.Close()
+		return ResolvedProjectPath{RootID: root.ID, Path: target.path, EntryKind: ProjectPathFile, info: target.info}, nil
+	}
 	rootPath := strings.TrimSpace(root.Path)
 	if rootPath == "" {
 		return ResolvedProjectPath{}, ErrSourceNotFound
