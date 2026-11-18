@@ -30,7 +30,7 @@ func NewPersistTestServer(t *testing.T) (*api.Server, wire.Session, workflowdraf
 	testutil.FailErr(t, "reg.Create failed", err)
 	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID}, p.ID)
 	testutil.FailErr(t, "create session in store", err)
-	testdbseed.BindSessionWorkspace(t, store, sess.ID, projectDir)
+	testdbseed.BindSessionWorkspace(t, store.DB(), sess.ID, projectDir)
 	sess, err = store.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get session", err)
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
