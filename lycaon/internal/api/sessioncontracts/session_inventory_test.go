@@ -22,10 +22,10 @@ import (
 )
 
 func TestCreateSessionReturnsBeforeInventoryAndDetachesCancellation(t *testing.T) {
-	// The project is created on the registry, not through the server: project
-	// creation schedules its own inventory, and the fake must see only the
-	// session's.
-	registry := project.NewMemoryRegistry()
+	// Direct project setup isolates session-triggered inventory.
+	database := testdbfixture.Open(t, "session-inventory.db")
+	sessions := store.NewSQL(database)
+	registry := project.NewSQLRegistry(database)
 	p, err := project.CreateWithRoot(t.Context(), registry, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	fake := &contractfixture.BlockingInventoryService{
@@ -33,6 +33,7 @@ func TestCreateSessionReturnsBeforeInventoryAndDetachesCancellation(t *testing.T
 	}
 	srv := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) {
 		d.Core.Projects = registry
+		d.Core.Store = sessions
 		d.Source.SourceInventory = fake
 	})
 

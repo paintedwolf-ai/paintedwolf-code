@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -34,7 +34,8 @@ func TestScanGuidancePrependDoesNotPersistMessages(t *testing.T) {
 		Provider: provider,
 	}
 
-	sessStore := storetest.New(t, testdbseed.DefaultProjectID)
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
+	sessStore := store.NewSQL(sqlDB)
 	mgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	loader, err := oar.NewLoader(filepath.Join(configlayout.FindModuleRoot(), "..", "schemas"))
 	testutil.FailErr(t, "create policy loader", err)
@@ -46,10 +47,8 @@ func TestScanGuidancePrependDoesNotPersistMessages(t *testing.T) {
 	mgr.SetScanGuidance(adapter)
 
 	ctx := context.Background()
-	sess, err := mgr.Chats.CreateForProject(ctx, projectDir, api.SessionPostureBuild)
+	sess, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create failed", err)
-	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
-	testdbseed.InsertSession(t, sqlDB, sess.ID, testdbseed.DefaultProjectID)
 	_ = seedScanWithGuidance(t, scanStore, sess.ID, []api.ScanGuidanceSummary{
 		{Code: "SCAN_SQL_INJECTION", Message: "fix sql", RuleID: "lycaon.ruby.sql-string-concat", Severity: "ERROR"},
 	})

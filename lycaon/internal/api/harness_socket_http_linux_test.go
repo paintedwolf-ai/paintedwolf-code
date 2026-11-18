@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -40,7 +39,6 @@ func TestHarnessSocketHTTPUsesActualTargetAndRejectsChangedIdentity(t *testing.T
 	chat, err := sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create chat", err)
 	deps := requiredTestDeps(t, Dependencies{Core: CoreDependencies{Projects: projects, Store: sessions}})
-	testdbseed.InsertSession(t, deps.Core.Database, chat.ID, p.ID)
 	server := NewServer(deps, nil, "harness-test-token")
 	for _, tc := range []struct {
 		name, approved, resolved string
