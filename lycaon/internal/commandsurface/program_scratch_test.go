@@ -23,8 +23,11 @@ func TestAdmittedParseChargesActualScratchAndReleasesAfterLowering(t *testing.T)
 	if memory.InUse().Working != 0 {
 		t.Fatalf("scratch outlived lowering: %+v", memory.InUse())
 	}
-	if string(plan.Source()) != "printf '%s' \"$value\"" {
-		t.Fatal("released scratch invalidated retained host plan")
+	view, err := plan.SnapshotWithMemory(t.Context(), memory)
+	testutil.FailErr(t, "retained execution snapshot", err)
+	defer view.Close()
+	if len(view.Plan.Statements) != 1 {
+		t.Fatal("released scratch invalidated the retained statement")
 	}
 }
 

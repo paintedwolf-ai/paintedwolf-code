@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/commandsurface/commandsurfacetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -17,9 +18,9 @@ import (
 // parsedStatements parses a real program through the admission parser.
 func parsedStatements(t *testing.T, source string) []commandsurface.Statement {
 	t.Helper()
-	parsed, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{SourceName: "inline"})
+	parsed, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{SourceName: "inline"})
 	testutil.FailErr(t, "parse "+source, err)
-	return parsed.Snapshot().Statements
+	return parsed.View(t).Statements
 }
 
 // parsedWords returns the argument words of a program's single simple command.
