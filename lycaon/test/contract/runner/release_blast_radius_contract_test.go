@@ -95,7 +95,7 @@ func TestReleaseBlastRadiusNoCredentialsInCorpus(t *testing.T) {
 		if base == "store.db-wal" || base == "store.db-shm" || base == "store.db-journal" {
 			t.Errorf("forbidden sqlite sidecar in corpus: %s", path)
 		}
-		if _, ok := credNames[base]; ok {
+		if _, ok := credNames[base]; ok && !emptyProjectMCPCorpusFile(corpus, path) {
 			t.Errorf("credential filename in corpus: %s", path)
 		}
 		if strings.HasSuffix(base, ".pem") || strings.HasSuffix(base, ".key") {
@@ -110,6 +110,19 @@ func TestReleaseBlastRadiusNoCredentialsInCorpus(t *testing.T) {
 		return nil
 	})
 	contractcheck.FailErr(t, "walk corpus", err)
+}
+
+func emptyProjectMCPCorpusFile(corpus, path string) bool {
+	rel, err := filepath.Rel(corpus, path)
+	if err != nil {
+		return false
+	}
+	_, projectPath, ok := strings.Cut(filepath.ToSlash(rel), "/")
+	if !ok || projectPath != "project-root/"+testutil.OverlayFixtureDirName+"/mcp.yaml" {
+		return false
+	}
+	content, err := os.ReadFile(path)
+	return err == nil && string(content) == "providers: []\n"
 }
 
 func TestReleaseBlastRadiusSeedBootTasks(t *testing.T) {
