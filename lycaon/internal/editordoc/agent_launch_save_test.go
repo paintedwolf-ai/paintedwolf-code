@@ -1,0 +1,377 @@
+package editordoc
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/testutil"
+)
+
+// launchDraftState is one state a document can be in when a process launches.
+// Each lives in its own directory, so a state that needs an unwritable
+// directory constrains only itself.
+type launchDraftState struct {
+	name string
+	// arrange leaves <name>/f.txt in the state and returns its document.
+	arrange func(t *testing.T, f agentFixture, path string) *Document
+	// cause is why the launch save leaves the draft unsaved; empty means the
+	// state holds nothing unsaved after the call.
+	cause UnsavedCause
+	// publishes is set when the call writes the draft to disk.
+	publishes bool
+	// release lifts what blocked the save, where a later launch can save it.
+	release func(t *testing.T, f agentFixture, path string)
+}
+
+func (f agentFixture) holdDirectory(t *testing.T, path string) {
+	t.Helper()
+	dir := filepath.Join(f.root, filepath.Dir(path))
+	testutil.FailErr(t, "hold directory", os.Chmod(dir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+}
+
+func (f agentFixture) releaseDirectory(t *testing.T, path string) {
+	t.Helper()
+	testutil.FailErr(t, "release directory", os.Chmod(filepath.Join(f.root, filepath.Dir(path)), 0o755))
+}
+
+// heldAgentEdit accepts an agent edit whose publication fails, so the document
+// holds agent text only the reviewed publication door may publish.
+func (f agentFixture) heldAgentEdit(t *testing.T, d *Document, path, content string) *Document {
+	t.Helper()
+	f.holdDirectory(t, path)
+	result, err := f.service.ApplyAgentEdit(t.Context(), agentEdit(d, content))
+	testutil.FailErr(t, "accept agent edit", err)
+	if result.Saved || result.PublicationError == nil || result.HeldVersionID == "" {
+		t.Fatalf("agent edit was not held: %+v", result)
+	}
+	f.releaseDirectory(t, path)
+	return result.Document
+}
+
+var launchDraftStates = []launchDraftState{
+	{name: "clean", arrange: func(t *testing.T, f agentFixture, path string) *Document {
+		return f.open(t, path)
+	}},
+	{name: "person", publishes: true, arrange: func(t *testing.T, f agentFixture, path string) *Document {
+		return f.typeDraft(t, f.open(t, path), "typed by the person\n")
+	}},
+	{name: "person-crlf", publishes: true, arrange: func(t *testing.T, f agentFixture, path string) *Document {
+		f.write(t, path, "saved\r\nsecond\r\n")
+		d := f.open(t, path)
+		typed, err := f.service.ReplaceSnapshot(t.Context(), d.ID, f.project.ID, SnapshotReplacement{
+			DocumentCommand: DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: d.Revision}, Content: "typed\nover crlf\n", EOL: "crlf"})
+		testutil.FailErr(t, "type over crlf", err)
+		return typed
+	}},
+	{name: "changed-outside", cause: UnsavedChangedOutside, arrange: func(t *testing.T, f agentFixture, path string) *Document {
+		d := f.typeDraft(t, f.open(t, path), "typed before an outside write\n")
+		f.write(t, path, "written outside\n")
+		return d
+	}},
+	{name: "observed-diverged", cause: UnsavedChangedOutside, arrange: func(t *testing.T, f agentFixture, path string) *Document {
+		d := f.typeDraft(t, f.open(t, path), "typed before divergence\n")
+		f.write(t, path, "outside\xff\n")
+		observed, err := f.service.ObserveDisk(t.Context(), f.project, d.ID, "window")
+		testutil.FailErr(t, "observe disk", err)
+		if !observed.Diverged {
+			t.Fatal("fixture did not diverge")
+		}
+		return observed
+	}},
+	{name: "not-written", cause: UnsavedNotWritten,
+		arrange: func(t *testing.T, f agentFixture, path string) *Document {
+			d := f.typeDraft(t, f.open(t, path), "typed in a held directory\n")
+			f.holdDirectory(t, path)
+			return d
+		},
+		release: func(t *testing.T, f agentFixture, path string) { f.releaseDirectory(t, path) },
+	},
+	{name: "agent-edit-held", cause: UnsavedAgentEditHeld, arrange: func(t *testing.T, f agentFixture, path string) *Document {
+		return f.heldAgentEdit(t, f.open(t, path), path, "agent text awaiting review\n")
+	}},
+	{name: "person-over-agent-edit-held", cause: UnsavedAgentEditHeld, arrange: func(t *testing.T, f agentFixture, path string) *Document {
+		held := f.heldAgentEdit(t, f.open(t, path), path, "agent text awaiting review\n")
+		return f.typeDraft(t, held, "agent text awaiting review\nand the person's line\n")
+	}},
+}
+
+// launchObservation is what a launch save may change about one document.
+type launchObservation struct {
+	disk     string
+	draft    string
+	dirty    bool
+	revision int64
+}
+
+func (f agentFixture) observeLaunchDraft(t *testing.T, id, path string) launchObservation {
+	t.Helper()
+	d, err := f.store.Get(t.Context(), id)
+	testutil.FailErr(t, "read "+path, err)
+	return launchObservation{disk: f.disk(t, path), draft: d.Draft, dirty: d.Dirty, revision: d.Revision}
+}
+
+func unsavedByPath(unsaved []UnsavedDocument) map[string]UnsavedCause {
+	out := make(map[string]UnsavedCause, len(unsaved))
+	for _, document := range unsaved {
+		out[document.Path] = document.Cause
+	}
+	return out
+}
+
+func launchCall(tool string) AgentCall {
+	return AgentCall{SessionID: "chat-launch", Turn: 5, ToolCallID: "call-launch-" + tool, ToolName: tool}
+}
+
+// launchOperations counts the save operations the ledger attributes to call.
+func (f agentFixture) launchOperations(t *testing.T, call AgentCall) int {
+	t.Helper()
+	var n int
+	testutil.FailErr(t, "count launch operations", f.store.db.QueryRowContext(t.Context(),
+		`SELECT COUNT(1) FROM source_operations WHERE tool_call_id=?`, call.ToolCallID).Scan(&n))
+	return n
+}
+
+// A launch save publishes exactly the drafts that are the person's to publish,
+// returns every other draft with its cause, changes nothing about a draft it
+// returns, and is the same whichever draft states share the project.
+func TestSaveForAgentLaunchHoldsForEveryDraftState(t *testing.T) {
+	for _, tool := range []string{"command", "verify"} {
+		t.Run(tool, func(t *testing.T) {
+			f, _ := newLedgerAgentFixture(t, nil)
+			call := launchCall(tool)
+			documents := map[string]*Document{}
+			for _, state := range launchDraftStates {
+				path := state.name + "/f.txt"
+				testutil.FailErr(t, "make "+state.name, os.Mkdir(filepath.Join(f.root, state.name), 0o755))
+				f.write(t, path, "saved\n")
+				documents[path] = state.arrange(t, f, path)
+			}
+			before := map[string]launchObservation{}
+			for path, d := range documents {
+				before[path] = f.observeLaunchDraft(t, d.ID, path)
+			}
+
+			unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, call)
+			testutil.FailErr(t, "launch save", err)
+
+			got, want, published := unsavedByPath(unsaved), map[string]UnsavedCause{}, 0
+			for _, state := range launchDraftStates {
+				path := state.name + "/f.txt"
+				was, now := before[path], f.observeLaunchDraft(t, documents[path].ID, path)
+				if now.draft != was.draft {
+					t.Errorf("%s: the save changed the document's text: %q -> %q", state.name, was.draft, now.draft)
+				}
+				switch {
+				case state.publishes:
+					published++
+					if now.dirty {
+						t.Errorf("%s: still unsaved after the launch save", state.name)
+					}
+					if d := documents[path]; diskText(t, d, now.disk) != was.draft {
+						t.Errorf("%s: disk = %q, want the draft %q", state.name, now.disk, was.draft)
+					}
+				case state.cause != "":
+					want[path] = state.cause
+					if now.disk != was.disk || !now.dirty {
+						t.Errorf("%s: an unsaved draft was touched: disk %q -> %q, dirty=%v", state.name, was.disk, now.disk, now.dirty)
+					}
+				default:
+					if now != was {
+						t.Errorf("%s: a clean document changed: %+v -> %+v", state.name, was, now)
+					}
+				}
+			}
+			if !equalCauses(got, want) {
+				t.Fatalf("unsaved = %v, want %v", got, want)
+			}
+			if n := f.launchOperations(t, call); n != published {
+				t.Fatalf("ledger operations for the call = %d, want one per published draft (%d)", n, published)
+			}
+			f.assertLaunchAuthorship(t, call)
+
+			// A second launch finds nothing new to publish and reports the same drafts.
+			settled := map[string]launchObservation{}
+			for path, d := range documents {
+				settled[path] = f.observeLaunchDraft(t, d.ID, path)
+			}
+			again, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, call)
+			testutil.FailErr(t, "second launch save", err)
+			if !equalCauses(unsavedByPath(again), want) {
+				t.Fatalf("second launch unsaved = %v, want %v", unsavedByPath(again), want)
+			}
+			for path, d := range documents {
+				if now := f.observeLaunchDraft(t, d.ID, path); now.disk != settled[path].disk || now.draft != settled[path].draft || now.dirty != settled[path].dirty {
+					t.Errorf("%s: a second launch changed it: %+v -> %+v", path, settled[path], now)
+				}
+			}
+			if n := f.launchOperations(t, call); n != published {
+				t.Fatalf("a second launch recorded operations: %d, want %d", n, published)
+			}
+
+			// Once what blocked a save is lifted, the next launch saves that draft.
+			for _, state := range launchDraftStates {
+				if state.release == nil {
+					continue
+				}
+				path := state.name + "/f.txt"
+				state.release(t, f, path)
+				delete(want, path)
+				released, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, call)
+				testutil.FailErr(t, "launch save after release", err)
+				if !equalCauses(unsavedByPath(released), want) {
+					t.Fatalf("after releasing %s unsaved = %v, want %v", state.name, unsavedByPath(released), want)
+				}
+				if now := f.observeLaunchDraft(t, documents[path].ID, path); now.dirty || diskText(t, documents[path], now.disk) != before[path].draft {
+					t.Errorf("%s: not saved once released: %+v", state.name, now)
+				}
+			}
+		})
+	}
+}
+
+// diskText is the LF text of disk bytes saved in the document's line ending.
+func diskText(t *testing.T, d *Document, disk string) string {
+	t.Helper()
+	if d.EOL != "crlf" {
+		return disk
+	}
+	if strings.Count(disk, "\n") != strings.Count(disk, "\r\n") {
+		t.Errorf("a crlf document was saved with bare line feeds: %q", disk)
+	}
+	return strings.ReplaceAll(disk, "\r\n", "\n")
+}
+
+func equalCauses(got, want map[string]UnsavedCause) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for path, cause := range want {
+		if got[path] != cause {
+			return false
+		}
+	}
+	return true
+}
+
+// assertLaunchAuthorship holds every operation of call to the agent's call
+// and tool, and every text contribution it published to its own author.
+func (f agentFixture) assertLaunchAuthorship(t *testing.T, call AgentCall) {
+	t.Helper()
+	var foreign int
+	testutil.FailErr(t, "operation attribution", f.store.db.QueryRowContext(t.Context(),
+		`SELECT COUNT(1) FROM source_operations WHERE tool_call_id=? AND NOT (origin='agent' AND tool_name=? AND session_id=? AND turn=?)`,
+		call.ToolCallID, call.ToolName, call.SessionID, call.Turn).Scan(&foreign))
+	if foreign != 0 {
+		t.Errorf("%d launch operations do not name the agent's call and tool %q", foreign, call.ToolName)
+	}
+	var agentText, personText int
+	testutil.FailErr(t, "published contributions", f.store.db.QueryRowContext(t.Context(),
+		`SELECT COALESCE(SUM(c.origin='agent'),0), COALESCE(SUM(c.origin!='agent'),0)
+ FROM source_effect_contributions ec
+ JOIN source_text_contributions c ON c.id=ec.contribution_id
+ JOIN source_effects e ON e.id=ec.effect_id
+ JOIN source_operations o ON o.id=e.operation_id
+ WHERE o.tool_call_id=?`, call.ToolCallID).Scan(&agentText, &personText))
+	if agentText != 0 || personText == 0 {
+		t.Errorf("a launch save published agent text or lost the person's authorship: agent=%d person=%d", agentText, personText)
+	}
+}
+
+// Each state alone gives the result it gives among the others: no state's
+// outcome depends on which other drafts are held.
+func TestSaveForAgentLaunchTreatsEachDraftStateAlone(t *testing.T) {
+	for _, state := range launchDraftStates {
+		t.Run(state.name, func(t *testing.T) {
+			f, _ := newLedgerAgentFixture(t, nil)
+			path := state.name + "/f.txt"
+			testutil.FailErr(t, "make directory", os.Mkdir(filepath.Join(f.root, state.name), 0o755))
+			f.write(t, path, "saved\n")
+			d := state.arrange(t, f, path)
+			was := f.observeLaunchDraft(t, d.ID, path)
+			unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"))
+			testutil.FailErr(t, "launch save", err)
+			want := map[string]UnsavedCause{}
+			if state.cause != "" {
+				want[path] = state.cause
+			}
+			if !equalCauses(unsavedByPath(unsaved), want) {
+				t.Fatalf("unsaved = %v, want %v", unsavedByPath(unsaved), want)
+			}
+			if now := f.observeLaunchDraft(t, d.ID, path); now.dirty != (state.cause != "") || (state.publishes && diskText(t, d, now.disk) != was.draft) {
+				t.Fatalf("after the launch save: %+v (was %+v)", now, was)
+			}
+		})
+	}
+}
+
+// Text typed after one launch is the next launch's to save, and every launch
+// leaves the disk holding exactly what the document held when it saved.
+func TestSaveForAgentLaunchFollowsLaterTyping(t *testing.T) {
+	f, _ := newLedgerAgentFixture(t, map[string]string{"a.txt": "saved\n"})
+	d := f.open(t, "a.txt")
+	for _, text := range []string{"first\n", "first\nsecond\n", "third replaces both\n"} {
+		current, err := f.store.Get(t.Context(), d.ID)
+		testutil.FailErr(t, "current document", err)
+		f.typeDraft(t, current, text)
+		if got := f.disk(t, "a.txt"); got == text {
+			t.Fatalf("typing reached disk without a save: %q", got)
+		}
+		unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"))
+		testutil.FailErr(t, "launch save", err)
+		if len(unsaved) != 0 || f.disk(t, "a.txt") != text {
+			t.Fatalf("after typing %q: unsaved=%v disk=%q", text, unsaved, f.disk(t, "a.txt"))
+		}
+	}
+}
+
+// A launch whose context has ended reports that, never a draft it could not save.
+func TestSaveForAgentLaunchReturnsACanceledContext(t *testing.T) {
+	f, _ := newLedgerAgentFixture(t, map[string]string{"a.txt": "saved\n"})
+	f.typeDraft(t, f.open(t, "a.txt"), "typed\n")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	unsaved, err := f.service.SaveForAgentLaunch(ctx, f.project.ID, f.project.SourceBranch, launchCall("command"))
+	if !errors.Is(err, context.Canceled) || unsaved != nil {
+		t.Fatalf("unsaved=%v err=%v", unsaved, err)
+	}
+	if f.disk(t, "a.txt") != "saved\n" {
+		t.Fatal("a canceled launch saved a draft")
+	}
+}
+
+// A mutation at a path keeps its own rule: it publishes what the document
+// holds, and a draft it cannot save refuses the operation.
+func TestSaveForAgentOperationKeepsItsRefusals(t *testing.T) {
+	f, _ := newLedgerAgentFixture(t, nil)
+	for _, state := range launchDraftStates {
+		path := state.name + "/f.txt"
+		testutil.FailErr(t, "make "+state.name, os.Mkdir(filepath.Join(f.root, state.name), 0o755))
+		f.write(t, path, "saved\n")
+		d := state.arrange(t, f, path)
+		err := f.service.SaveForAgentOperation(t.Context(), f.project.ID, f.project.SourceBranch, d.RootID, path, false, autosaveCall)
+		var conflict *ExecutionConflict
+		var failed *PublicationFailure
+		switch state.cause {
+		case UnsavedChangedOutside:
+			if !errors.As(err, &conflict) || conflict.Path != path {
+				t.Errorf("%s: err = %v, want a conflict at the path", state.name, err)
+			}
+		case UnsavedNotWritten:
+			if !errors.As(err, &failed) || failed.Path != path || failed.Err == nil {
+				t.Errorf("%s: err = %v, want a publication failure at the path", state.name, err)
+			}
+		default:
+			// A held agent edit is the mutation's to publish: its write is admitted at the path.
+			testutil.FailErr(t, state.name+": save for a mutation", err)
+			if now := f.observeLaunchDraft(t, d.ID, path); now.dirty {
+				t.Errorf("%s: a mutation left the draft unsaved", state.name)
+			}
+		}
+	}
+}

@@ -143,23 +143,6 @@ func typeHumanDraft(t *testing.T, service *editordoc.Service, p *project.Project
 	return typed
 }
 
-// Native reads serve the person's text; an installed program sees disk until
-// an agent operation saves it.
-func TestProgramReadsThePersonsUnsavedText(t *testing.T) {
-	f, service, p := documentProgram(t)
-	testutil.FailErr(t, "saved file", os.WriteFile(filepath.Join(f.Dir, "a.txt"), []byte("saved\n"), 0o644))
-	doc := typeHumanDraft(t, service, p, "a.txt", "human unsaved\n")
-	result := callDocumentProgram(t, f, `cat a.txt; python3 -c 'from pathlib import Path; print(Path("a.txt").read_text(),end="")'; cat < a.txt`)
-	if result.Status != 0 || result.Stdout != "human unsaved\nsaved\nhuman unsaved\n" || result.Stderr != "" {
-		t.Fatalf("reads=%+v", result)
-	}
-	live, err := service.CurrentSnapshot(t.Context(), p.ID, doc.ID)
-	testutil.FailErr(t, "draft after reads", err)
-	if !live.Dirty || live.Draft != "human unsaved\n" {
-		t.Fatalf("a read changed the draft: %+v", live)
-	}
-}
-
 // A native write over the person's draft lands with it and saves both.
 func TestProgramWriteSavesThePersonsDraftWithIt(t *testing.T) {
 	f, service, p := documentProgram(t)
