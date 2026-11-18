@@ -97,7 +97,8 @@ func TestExtractHTMLTextPreservesResolvableLinks(t *testing.T) {
 
 func TestCredentialStoreReopen(t *testing.T) {
 	dir := t.TempDir()
-	store := NewCredentialStoreAt(dir+"/credential-vault.age", testCatalog(t))
+	store, openErr := OpenCredentialStore(credentialstore.Slot{Path: dir + "/credential-vault.age", Namespace: credentialstore.NamespaceWebResearch, Context: "web research"}, testCatalog(t))
+	testutil.FailErr(t, "open web research store", openErr)
 	if err := store.Set("brave-search", "secret"); err != nil {
 		testutil.FailErr(t, "Set", err)
 	}
@@ -117,7 +118,8 @@ func TestCredentialStoreReopen(t *testing.T) {
 }
 
 func TestValidID(t *testing.T) {
-	store := NewCredentialStoreAt(t.TempDir()+"/credential-vault.age", testCatalog(t))
+	store, openErr := OpenCredentialStore(credentialstore.Slot{Path: t.TempDir() + "/credential-vault.age", Namespace: credentialstore.NamespaceWebResearch, Context: "web research"}, testCatalog(t))
+	testutil.FailErr(t, "open web research store", openErr)
 	if !store.ValidID("brave-search") {
 		t.Fatal("brave-search should be valid")
 	}
@@ -130,10 +132,11 @@ func TestCredentialStoreRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "credential-vault.age")
 	cat := testCatalog(t)
 
-	first := NewCredentialStoreAt(path, cat)
+	first, openErr := OpenCredentialStore(credentialstore.Slot{Path: path, Namespace: credentialstore.NamespaceWebResearch, Context: "web research"}, cat)
+	testutil.FailErr(t, "open web research store", openErr)
 	testutil.FailErr(t, "Set", first.Set("brave-search", "stored-secret"))
 
-	reopened, err := openCredentialStore(credentialstore.Slot{
+	reopened, err := OpenCredentialStore(credentialstore.Slot{
 		Path:      path,
 		Namespace: credentialstore.NamespaceWebResearch,
 		Context:   credentialContext,

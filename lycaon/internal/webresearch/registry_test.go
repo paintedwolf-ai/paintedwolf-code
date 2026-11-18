@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -52,7 +53,8 @@ func TestRegistryBraveSearch(t *testing.T) {
 func TestDefaultSettingsResolvesCatalogKeys(t *testing.T) {
 	dir := t.TempDir()
 	cat := testCatalog(t)
-	store := NewCredentialStoreAt(dir+"/credential-vault.age", cat)
+	store, openErr := OpenCredentialStore(credentialstore.Slot{Path: dir + "/credential-vault.age", Namespace: credentialstore.NamespaceWebResearch, Context: "web research"}, cat)
+	testutil.FailErr(t, "open web research store", openErr)
 	testutil.FailErr(t, "Set brave", store.Set("brave-search", "stored-brave"))
 	s := DefaultSettings(store, nil, cat)
 	if s.Keys["brave"] != "stored-brave" {

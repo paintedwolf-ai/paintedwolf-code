@@ -2,6 +2,7 @@ package hostcontracts
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -19,8 +20,10 @@ import (
 func TestGetWebResearchProvidersStatus(t *testing.T) {
 	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t))
 	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
-	cfg := webresearch.NewConfigStoreAt(filepath.Join(t.TempDir(), "web-research-config.yaml"))
-	creds := webresearch.NewCredentialStoreAt(filepath.Join(t.TempDir(), "credential-vault.age"), reg.Catalog())
+	cfg, openErr := webresearch.OpenConfigStore(filepath.Join(t.TempDir(), "web-research-config.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
+	creds, openErr := webresearch.OpenCredentialStore(credentialstore.Slot{Path: filepath.Join(t.TempDir(), "credential-vault.age"), Namespace: credentialstore.NamespaceWebResearch, Context: "web research"}, reg.Catalog())
+	testutil.FailErr(t, "open web research store", openErr)
 	s := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{
 		Catalog:  reg.Catalog(),
 		Registry: reg,
@@ -134,8 +137,10 @@ func TestTestWebResearchProviderNotConfigured(t *testing.T) {
 func TestUpdateWebResearchProviderConfigRejectsMetadataEndpoint(t *testing.T) {
 	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t))
 	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
-	cfg := webresearch.NewConfigStoreAt(filepath.Join(t.TempDir(), "web-research-config.yaml"))
-	creds := webresearch.NewCredentialStoreAt(filepath.Join(t.TempDir(), "credential-vault.age"), reg.Catalog())
+	cfg, openErr := webresearch.OpenConfigStore(filepath.Join(t.TempDir(), "web-research-config.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
+	creds, openErr := webresearch.OpenCredentialStore(credentialstore.Slot{Path: filepath.Join(t.TempDir(), "credential-vault.age"), Namespace: credentialstore.NamespaceWebResearch, Context: "web research"}, reg.Catalog())
+	testutil.FailErr(t, "open web research store", openErr)
 	s := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{
 		Catalog:  reg.Catalog(),
 		Registry: reg,

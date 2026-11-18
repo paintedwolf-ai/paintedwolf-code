@@ -219,9 +219,11 @@ func TestSearchFanOutSkipsUnconfiguredEnabledProvider(t *testing.T) {
 
 func TestConfigStorePrefsRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "web-research-config.yaml")
-	store := NewConfigStoreAt(path)
+	store, openErr := OpenConfigStore(path)
+	testutil.FailErr(t, "open web research store", openErr)
 	testutil.FailErr(t, "ApplyPrefs", store.ApplyPrefs(nil, nil, nil, []string{"direct", "brave", "serper"}))
-	reloaded := NewConfigStoreAt(path)
+	reloaded, openErr := OpenConfigStore(path)
+	testutil.FailErr(t, "open web research store", openErr)
 	providers, explicit := reloaded.ProviderSelection()
 	assertStringSetEqual(t, "enabled", []string{"direct", "brave", "serper"}, providers)
 	if !explicit {
@@ -231,11 +233,13 @@ func TestConfigStorePrefsRoundTrip(t *testing.T) {
 
 func TestConfigStorePrefsPreservedAcrossPartialUpdates(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "web-research-config.yaml")
-	store := NewConfigStoreAt(path)
+	store, openErr := OpenConfigStore(path)
+	testutil.FailErr(t, "open web research store", openErr)
 	testutil.FailErr(t, "ApplyPrefs enabled", store.ApplyPrefs(nil, nil, nil, []string{"brave"}))
 	warming, guess := true, false
 	testutil.FailErr(t, "ApplyPrefs warming", store.ApplyPrefs(&warming, &guess, nil, nil))
-	reloaded := NewConfigStoreAt(path)
+	reloaded, openErr := OpenConfigStore(path)
+	testutil.FailErr(t, "open web research store", openErr)
 	providers, explicit := reloaded.ProviderSelection()
 	assertStringSetEqual(t, "enabled preserved", []string{"brave"}, providers)
 	if !explicit {
@@ -248,7 +252,8 @@ func TestConfigStorePrefsPreservedAcrossPartialUpdates(t *testing.T) {
 
 func TestDefaultSettingsReadsPersistedPrefs(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "web-research-config.yaml")
-	cfg := NewConfigStoreAt(path)
+	cfg, openErr := OpenConfigStore(path)
+	testutil.FailErr(t, "open web research store", openErr)
 	testutil.FailErr(t, "ApplyPrefs", cfg.ApplyPrefs(nil, nil, nil, []string{"tavily"}))
 	cat := testCatalog(t)
 	s := DefaultSettings(nil, cfg, cat)
