@@ -42,5 +42,4 @@ func TestLoadBugbashManifest(t *testing.T) {
 	if spec.Pipeline == nil || len(spec.Pipeline.Stages) != 4 {
 		t.Fatalf("stages = %d want 4", len(spec.Pipeline.Stages))
 	}
-
 }
