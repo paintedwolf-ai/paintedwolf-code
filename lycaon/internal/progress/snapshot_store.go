@@ -23,32 +23,30 @@ func (s *MemoryStore) Snapshot(ctx context.Context, sessionID string) (Snapshot,
 	return snapshotVersion(record.runID, record.content, record.itemIDs, strconv.FormatUint(record.revision, 10), record.revision), nil
 }
 
-func (s *MemoryStore) Update(ctx context.Context, sessionID string, change func(Snapshot) (Document, error)) (Snapshot, error) {
+func (s *MemoryStore) Update(ctx context.Context, sessionID string, change func(Snapshot) (Document, error)) (after Snapshot, err error) {
 	if err := ctx.Err(); err != nil {
 		return Snapshot{}, err
 	}
 	s.mu.Lock()
-	before, after, err := s.update(ctx, sessionID, change)
-	s.mu.Unlock()
-	if err == nil && !before.Equal(after) {
-		NotifyWriteObservers(ctx, WriteEvent{SessionID: sessionID, Before: before, After: after})
-	}
-	return after, err
-}
-
-func (s *MemoryStore) update(ctx context.Context, sessionID string, change func(Snapshot) (Document, error)) (Snapshot, Snapshot, error) {
 	key := normalizeKey(sessionID)
 	record := s.bySess[key]
 	before := snapshotVersion(record.runID, record.content, record.itemIDs, strconv.FormatUint(record.revision, 10), record.revision)
+	committed := false
+	defer func() {
+		s.mu.Unlock()
+		if committed && !before.Equal(after) {
+			NotifyWriteObservers(ctx, WriteEvent{SessionID: sessionID, Before: before, After: after})
+		}
+	}()
 	if err := ctx.Err(); err != nil {
-		return before, before, err
+		return before, err
 	}
 	doc, err := change(before)
 	if err != nil {
-		return before, before, err
+		return before, err
 	}
 	if err := ctx.Err(); err != nil {
-		return before, before, err
+		return before, err
 	}
 	content := clampContent(doc.Content)
 	ids := resolveDocumentItemIDs(before, Document{Content: content, ItemIDs: doc.ItemIDs})
@@ -61,8 +59,9 @@ func (s *MemoryStore) update(ctx context.Context, sessionID string, change func(
 	}
 	record.content, record.itemIDs, record.runID = content, ids, runID
 	s.bySess[key] = record
-	after := snapshotVersion(runID, content, ids, strconv.FormatUint(record.revision, 10), record.revision)
-	return before, after, nil
+	after = snapshotVersion(runID, content, ids, strconv.FormatUint(record.revision, 10), record.revision)
+	committed = true
+	return after, nil
 }
 
 func querySnapshot(ctx context.Context, queries *db.Queries, key string) (Snapshot, error) {
