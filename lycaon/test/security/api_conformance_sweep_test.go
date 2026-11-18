@@ -41,12 +41,13 @@ const (
 	ruleMessageIsNoticeCopy   conformanceRule = "error_message_is_notice_copy"
 	ruleDetailsAreDeclared    conformanceRule = "error_details_are_declared"
 	ruleEventScopesAreHostIDs conformanceRule = "event_scopes_name_host_resources"
+	ruleRequestsNeedTheBearer conformanceRule = "requests_need_the_bearer"
 )
 
 var conformanceRules = []conformanceRule{
 	ruleResponsesConform, ruleUnknownResources, ruleRequestBodies, rulePagination,
 	ruleReadsHaveNoEffects, ruleNoSecretMaterial, ruleMessageIsNoticeCopy,
-	ruleDetailsAreDeclared, ruleEventScopesAreHostIDs,
+	ruleDetailsAreDeclared, ruleEventScopesAreHostIDs, ruleRequestsNeedTheBearer,
 }
 
 // conformanceRequestBudget bounds one request so a handler that never returns
@@ -164,7 +165,9 @@ func newConformanceSweep(doc *openapi3.T, validator *openapi.Validator, handler 
 
 // runAll runs every phase in dependency order: reads discover fixtures and
 // prove read purity; secrets are seeded and reads repeated so every later
-// response is scanned for them; the probes then run against real fixtures.
+// response is scanned for them; the probes then run against real fixtures,
+// unauthenticated ones last so a route that acts without a credential cannot
+// disturb the others.
 func (s *conformanceSweep) runAll(ctx context.Context) {
 	s.sweepReads(ctx)
 	s.seedSecrets(ctx)
@@ -172,6 +175,7 @@ func (s *conformanceSweep) runAll(ctx context.Context) {
 	s.probePagination(ctx)
 	s.probeUnknownResources(ctx)
 	s.probeRequestBodies(ctx)
+	s.probeCredentials(ctx)
 }
 
 // report prints each rule's violations, sorted, as its own subtest.
@@ -205,6 +209,7 @@ type conformanceRequest struct {
 	// announcedLength, when positive, is the Content-Length the request declares.
 	announcedLength int64
 	contentType     string
+	credential      requestCredential
 }
 
 // conformanceExchange is one observed response.
@@ -267,7 +272,13 @@ func (s *conformanceSweep) send(ctx context.Context, req conformanceRequest) con
 	reqCtx, cancel := context.WithTimeout(ctx, conformanceRequestBudget)
 	defer cancel()
 	r := httptest.NewRequestWithContext(reqCtx, req.op.Method, target, body)
-	r.Header.Set("Authorization", api.TestAuthHeader())
+	switch req.credential {
+	case credentialValid:
+		r.Header.Set("Authorization", api.TestAuthHeader())
+	case credentialWrong:
+		r.Header.Set("Authorization", "Bearer not-"+api.TestAPIToken)
+	case credentialNone:
+	}
 	if req.announcedLength > 0 {
 		r.ContentLength = req.announcedLength
 	}

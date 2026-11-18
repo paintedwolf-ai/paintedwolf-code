@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -25,6 +26,7 @@ import (
 const widgetSpec = `
 openapi: 3.1.0
 info: {title: widgets, version: 1.0.0}
+security: [{bearerAuth: []}]
 paths:
   /v1/widgets:
     get:
@@ -35,12 +37,14 @@ paths:
       responses:
         '200': {description: ok, content: {application/json: {schema: {$ref: '#/components/schemas/WidgetList'}}}}
         '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
   /v1/widgets/{id}:
     parameters: [{$ref: '#/components/parameters/WidgetID'}]
     get:
       operationId: getWidget
       responses:
         '200': {description: ok, content: {application/json: {schema: {$ref: '#/components/schemas/Widget'}}}}
+        '401': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
   /v1/widgets/{id}/parts:
     parameters: [{$ref: '#/components/parameters/WidgetID'}]
@@ -52,6 +56,7 @@ paths:
       responses:
         '201': {description: created, content: {application/json: {schema: {$ref: '#/components/schemas/Part'}}}}
         '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '413': {$ref: '#/components/responses/Error'}
         '415': {$ref: '#/components/responses/Error'}
@@ -63,8 +68,11 @@ paths:
       operationId: getPart
       responses:
         '200': {description: ok, content: {application/json: {schema: {$ref: '#/components/schemas/Part'}}}}
+        '401': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
 components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
   parameters:
     WidgetID: {name: id, in: path, required: true, schema: {type: string, format: uuid}}
   responses:
@@ -116,6 +124,7 @@ type widgetFaults struct {
 	echoesSecret     bool // a read reveals the stored token, base64-encoded
 	rawMessage       bool // a 404 carries Go error text as its message
 	undeclaredDetail bool // a 404 carries a details key its notice does not declare
+	unguardedRoute   bool // getPart is registered without the bearer check
 }
 
 // widgetAPI serves widgetSpec through the production responder.
@@ -129,11 +138,26 @@ type widgetAPI struct {
 
 func (a *widgetAPI) routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/widgets", a.listWidgets)
-	mux.HandleFunc("GET /v1/widgets/{id}", a.getWidget)
-	mux.HandleFunc("POST /v1/widgets/{id}/parts", a.createPart)
-	mux.HandleFunc("GET /v1/widgets/{id}/parts/{part_id}", a.getPart)
+	mux.HandleFunc("GET /v1/widgets", a.requireBearer(a.listWidgets))
+	mux.HandleFunc("GET /v1/widgets/{id}", a.requireBearer(a.getWidget))
+	mux.HandleFunc("POST /v1/widgets/{id}/parts", a.requireBearer(a.createPart))
+	if a.faults.unguardedRoute {
+		mux.HandleFunc("GET /v1/widgets/{id}/parts/{part_id}", a.getPart)
+	} else {
+		mux.HandleFunc("GET /v1/widgets/{id}/parts/{part_id}", a.requireBearer(a.getPart))
+	}
 	return mux
+}
+
+// requireBearer admits only the test bearer, as the host's route seam does.
+func (a *widgetAPI) requireBearer(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if api.BearerTokenFromRequest(r) != api.TestAPIToken {
+			a.responses.Fail(w, wire.ApiErrorCodeUnauthorized, "")
+			return
+		}
+		next(w, r)
+	}
 }
 
 var widgetPageLimit = httpio.MustPageLimit(20, 1, 50)
@@ -267,6 +291,7 @@ func widgetNotices(t *testing.T) *usernotice.Catalog {
 			"unsupported_media_type": entry("Unsupported media type"),
 			"body_too_large":         entry("Body too large"),
 			"internal_error":         entry("Internal error"),
+			"unauthorized":           entry("Not signed in"),
 		})
 	testutil.FailErr(t, "build the fixture notice catalog", err)
 	return usernotice.NewCatalog(cfg)

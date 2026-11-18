@@ -65,6 +65,10 @@ func TestConformanceSweepDetectsEachBrokenInvariant(t *testing.T) {
 			`getWidget: unknown {id}: session_not_found message is "sql: no rows in result set", not the notice copy "Widget not found."`},
 		{"undeclared detail", widgetFaults{undeclaredDetail: true}, ruleDetailsAreDeclared,
 			"getWidget: unknown {id}: session_not_found details.path is not declared by its notice context_schema"},
+		{"route without the bearer check", widgetFaults{unguardedRoute: true}, ruleRequestsNeedTheBearer,
+			"getPart: no credential: answered 200, want 401 unauthorized"},
+		{"route without the bearer check, wrong token", widgetFaults{unguardedRoute: true}, ruleRequestsNeedTheBearer,
+			"getPart: wrong credential: carries fields beyond the error envelope: id, name"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
