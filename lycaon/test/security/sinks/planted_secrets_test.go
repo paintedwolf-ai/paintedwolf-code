@@ -146,27 +146,10 @@ func TestPlantedSecretsReachNoSink(t *testing.T) {
 	plants = append(plants, plant{rule: "managed secret", value: managed})
 
 	project := t.TempDir()
-	var env, source, emit strings.Builder
-	emit.WriteString("#!/bin/sh\n")
-	for i, p := range plants {
-		fmt.Fprintf(&env, "PLANT_%d=%s\n", i, p.value)
-		quoted, _ := json.Marshal(p.value)
-		fmt.Fprintf(&source, "PLANT_%d = %s\n", i, quoted)
-		fmt.Fprintf(&emit, "printf '%%s\\n' %s\n", shellQuote(p.value))
-	}
-	for name, body := range map[string]string{".env": env.String(), "config.py": source.String(), "emit.sh": emit.String()} {
-		testutil.FailErr(t, "plant "+name, os.WriteFile(filepath.Join(project, name), []byte(body), 0o644))
-	}
-
+	calls := plantFiles(t, project, plants)
+	calls = append(calls, llm.MockToolCall{ID: "child-env", Name: "command", Args: map[string]any{"command": "env > child-env.txt"}})
 	script := &llm.MockConfig{Responses: []llm.MockResponseEntry{{
-		Pattern: "read the planted files",
-		ToolCalls: []llm.MockToolCall{
-			{ID: "read-env", Name: "command", Args: map[string]any{"command": "cat .env"}},
-			{ID: "read-source", Name: "command", Args: map[string]any{"command": "cat config.py"}},
-			{ID: "run-emitter", Name: "command", Args: map[string]any{"command": "sh emit.sh"}},
-			{ID: "child-env", Name: "command", Args: map[string]any{"command": "env > child-env.txt"}},
-		},
-		FollowUpText: "Read them.",
+		Pattern: "read the planted files", ToolCalls: calls, FollowUpText: "Read them.",
 	}}}
 	hostDir := t.TempDir()
 	h := wiring.BuildForTestAt(t, hostDir, wiring.WithRecordedScript(script))
@@ -249,6 +232,37 @@ func TestPlantedSecretsReachNoSink(t *testing.T) {
 	}
 }
 
+// plantChunk bounds how many values one file or command carries.
+const plantChunk = 50
+
+// plantFiles writes every plant into an env file, a source file and a script
+// that prints it, a chunk per file, and returns the calls that read them all.
+func plantFiles(t *testing.T, project string, plants []plant) []llm.MockToolCall {
+	t.Helper()
+	var calls []llm.MockToolCall
+	for start := 0; start < len(plants); start += plantChunk {
+		chunk := plants[start:min(start+plantChunk, len(plants))]
+		var env, source, emit strings.Builder
+		emit.WriteString("#!/bin/sh\n")
+		for i, p := range chunk {
+			fmt.Fprintf(&env, "PLANT_%d=%s\n", start+i, p.value)
+			quoted, _ := json.Marshal(p.value)
+			fmt.Fprintf(&source, "PLANT_%d = %s\n", start+i, quoted)
+			fmt.Fprintf(&emit, "printf '%%s\\n' %s\n", shellQuote(p.value))
+		}
+		n := start / plantChunk
+		files := map[string]string{fmt.Sprintf(".env.%02d", n): env.String(), fmt.Sprintf("config_%02d.py", n): source.String(), fmt.Sprintf("emit_%02d.sh", n): emit.String()}
+		for name, body := range files {
+			testutil.FailErr(t, "plant "+name, os.WriteFile(filepath.Join(project, name), []byte(body), 0o644))
+		}
+		calls = append(calls,
+			llm.MockToolCall{ID: fmt.Sprintf("read-env-%02d", n), Name: "command", Args: map[string]any{"command": fmt.Sprintf("cat .env.%02d", n)}},
+			llm.MockToolCall{ID: fmt.Sprintf("read-source-%02d", n), Name: "command", Args: map[string]any{"command": fmt.Sprintf("cat config_%02d.py", n)}},
+			llm.MockToolCall{ID: fmt.Sprintf("run-emitter-%02d", n), Name: "command", Args: map[string]any{"command": fmt.Sprintf("sh emit_%02d.sh", n)}})
+	}
+	return calls
+}
+
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
@@ -288,12 +302,18 @@ func promptAnsweringCards(t *testing.T, h *wiring.Harness, sess *wire.Session, p
 			testutil.FailErr(t, "encode checkpoint", err)
 			var card wire.CheckpointEvent
 			testutil.FailErr(t, "decode checkpoint", json.Unmarshal(data, &card))
-			if card.Status != wire.CheckpointStatusPending || answered[card.ID] || card.ToolApproval == nil {
+			t.Logf("checkpoint %s kind %s status %s", card.ID, card.Kind, card.Status)
+			if card.Status != wire.CheckpointStatusPending || answered[card.ID] {
 				continue
 			}
 			answered[card.ID] = true
-			_, err = h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(h.OwnerCtx(t, t.Context()),
-				card.SessionID, card.ID, card.ToolApproval.Plan.RecommendedOptionID)
+			if card.ToolApproval == nil {
+				_, err = h.Sessions.Checkpoints.ResolveCheckpoint(h.OwnerCtx(t, t.Context()), card.SessionID, card.ID, card.Kind,
+					&hitl.DecisionResult{Approved: true}, nil)
+			} else {
+				_, err = h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(h.OwnerCtx(t, t.Context()),
+					card.SessionID, card.ID, card.ToolApproval.Plan.RecommendedOptionID)
+			}
 			testutil.FailErr(t, "answer card", err)
 		}
 	}
