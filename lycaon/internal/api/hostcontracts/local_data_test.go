@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/localdata"
+	"github.com/lycaon/lycaon/internal/localdata/localdatatest"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -26,7 +27,7 @@ func TestLocalDataGetAndClear(t *testing.T) {
 	fetchDir := filepath.Join(base, "fetch-cache")
 	testutil.FailErr(t, "mkdir fetch", os.MkdirAll(fetchDir, 0o700))
 	testutil.FailErr(t, "write fetch", os.WriteFile(filepath.Join(fetchDir, "a"), []byte("body"), 0o600))
-	testutil.FailErr(t, "seed durable", localdata.SeedDurableMarkers(base))
+	protected := localdatatest.SeedProtected(t, base)
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, Storage: hostapi.StorageDependencies{DataDir: base}}), nil, hostapi.TestAPIToken)
 
@@ -79,7 +80,7 @@ func TestLocalDataGetAndClear(t *testing.T) {
 	if len(entries) != 0 {
 		t.Fatalf("fetch-cache not cleared: %v", entries)
 	}
-	for _, p := range localdata.DurableAbsPaths(base) {
+	for _, p := range protected {
 		data, err := os.ReadFile(p)
 		testutil.FailErr(t, "durable", err)
 		if string(data) != "keep\n" {

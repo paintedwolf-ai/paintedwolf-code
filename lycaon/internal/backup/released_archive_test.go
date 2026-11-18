@@ -12,7 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/backup"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/localdata"
+	"github.com/lycaon/lycaon/internal/localdata/localdatatest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -92,7 +92,7 @@ func TestCreateArchiveExcludesSecretAndLegacyPaths(t *testing.T) {
 	testutil.FailErr(t, "create", err)
 
 	files := zipNames(t, raw)
-	for _, rel := range localdata.CredentialRelPaths() {
+	for _, rel := range localdatatest.SecretFiles() {
 		if _, ok := files[rel]; ok {
 			t.Fatalf("backup must never contain the secret store %s", rel)
 		}

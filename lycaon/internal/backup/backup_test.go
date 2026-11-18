@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/backup"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/localdata"
+	"github.com/lycaon/lycaon/internal/localdata/localdatatest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -59,7 +60,7 @@ func TestCreateArchiveIncludesVacuumedStoreAndManifest(t *testing.T) {
 	})
 	testutil.FailErr(t, "create", err)
 
-	for _, rel := range localdata.CredentialRelPaths() {
+	for _, rel := range localdatatest.SecretFiles() {
 		if _, ok := zipNames(t, raw)[rel]; ok {
 			t.Fatalf("backup must never contain the secret store %s", rel)
 		}
@@ -165,7 +166,7 @@ func TestCreateNeverArchivesSecretStores(t *testing.T) {
 	dbPath := filepath.Join(configDir, "store.db")
 	sqlDB := testdbfixture.OpenPath(t, dbPath)
 
-	for _, rel := range append(localdata.CredentialRelPaths(), "daemon.json") {
+	for _, rel := range append(localdatatest.SecretFiles(), "daemon.json") {
 		testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(configDir, rel), []byte("x\n"), 0o600))
 	}
 	testutil.FailErr(t, "seed app-state dir", os.MkdirAll(filepath.Join(configDir, "app-state-v1"), 0o700))
@@ -182,7 +183,7 @@ func TestCreateNeverArchivesSecretStores(t *testing.T) {
 	})
 	testutil.FailErr(t, "create", err)
 	files := zipNames(t, raw)
-	for _, rel := range localdata.CredentialRelPaths() {
+	for _, rel := range localdatatest.SecretFiles() {
 		if _, ok := files[rel]; ok {
 			t.Fatalf("backup must never contain the secret store %s", rel)
 		}

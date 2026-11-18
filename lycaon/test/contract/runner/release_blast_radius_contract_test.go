@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/localdata"
+	"github.com/lycaon/lycaon/internal/localdata/localdatatest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -81,7 +81,7 @@ func TestReleaseBlastRadiusNoCredentialsInCorpus(t *testing.T) {
 	t.Parallel()
 	corpus := filepath.Join(root, "lycaon", "testdata", "upgrade-corpus")
 	credNames := map[string]struct{}{}
-	for _, rel := range localdata.CredentialRelPaths() {
+	for _, rel := range localdatatest.SecretFiles() {
 		credNames[filepath.Base(rel)] = struct{}{}
 	}
 	err := filepath.Walk(corpus, func(path string, info os.FileInfo, err error) error {
