@@ -202,12 +202,10 @@ func TestDetectionOverlayNeverSuppressesRequired(t *testing.T) {
 // Empty catalogs report completed scans; absent producers remain unreported.
 func TestDetectionOverlayZeroPackParity(t *testing.T) {
 	emptyCfg := t.TempDir()
-	// An empty bundled directory isolates the zero-pack case.
 	configtest.Only(t, map[config.Rel]string{
-		config.DetectionPacksDir.Join(".keep"): "",
-		config.SecurityApprovals:               "rules: []\n",
+		config.SecurityApprovals: "rules: []\n",
 	})
-	cat, err := detectionpack.LoadCatalog(detectionInput(t, emptyCfg, ""))
+	cat, err := detectionpack.LoadCatalog(detectionpack.Input{ConfigDir: emptyCfg})
 	testutil.FailErr(t, "LoadCatalog empty", err)
 	m := detectionpack.NewMatcher(cat)
 
