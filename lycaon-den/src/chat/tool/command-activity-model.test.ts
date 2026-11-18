@@ -25,6 +25,27 @@ describe("command activity composition", () => {
   const rows = parts(project([entry("call", [fact("build"), fact("test")])]));
   expect(rows.map(row => row.id)).toEqual(["call", "call:activity:test"]);
  });
+ it("keeps live rows when a displayed call settles without activity facts", () => {
+  const project = createCommandActivityProjection();
+  const live = entry("call", [fact("build", { state: "running" }), fact("test", { state: "waiting" })]);
+  const keys = parts(project([live])).map(row => row.id);
+  const settled = entry("call", []);
+  if (settled.kind !== "tool") throw new Error("Expected a tool entry");
+  settled.part.shownInFlight = true;
+  const rows = parts(project([settled]));
+  expect(rows.map(row => row.id)).toEqual(keys);
+  expect(rows.map(row => row.commandActivity?.fact.state)).toEqual(["unknown", "unknown"]);
+ });
+ it("takes failure from host activity state while preserving raw exit codes", () => {
+  const project = createCommandActivityProjection();
+  const rows = parts(project([entry("call", [
+   fact("no-match", { status_code: 1 }),
+   fact("closed", { status_code: 141 }),
+   fact("failed", { status_code: 1, state: "failed" }),
+  ])]));
+  expect(rows.map(row => row.status)).toEqual(["completed", "completed", "error"]);
+  expect(rows.map(row => row.commandActivity?.fact.status_code)).toEqual([1, 141, 1]);
+ });
  it("coalesces consecutive read-only calls into the established row", () => {
   const project = createCommandActivityProjection();
   const first = entry("a", [fact("read-a")]);

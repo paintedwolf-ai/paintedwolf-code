@@ -5,7 +5,7 @@ import { type ActivitySpanEntry, type TranscriptItem } from "./transcript-item-m
 import { createTranscriptDisplayProjector } from "./transcript-display-projection.ts";
 import { taskCardStatus } from "../../task/task-card-model.ts";
 import { isTaskToolName } from "../../tool/tool-part-model.ts";
-import { LONG_RUNNING_COORDINATOR_TOOLS } from "../../tool/tool-presentation.generated.ts";
+import { PROGRAM_ACTIVITY_TOOLS } from "../../tool/program-tool-visibility.ts";
 
 function taskJobMessages(status: string): Message[] {
   return [
@@ -143,7 +143,6 @@ function inFlightVisibleToolRejected(tool: string): Message[] {
         tool,
         tool_call_id: "tc1",
         assistant_message_id: "a1",
-        // Long-running tools keep the chicklet when the settle is benign.
         ui_visibility: "benign",
       },
       created_at: "t",
@@ -193,15 +192,13 @@ describe("action completeness invariant", () => {
     expect(taskCardStatus(cards[0]!.part)).toBe("canceled");
   });
 
-  it("in-flight-visible tool rejects stay as durable error cards (verbose off)", () => {
-    for (const tool of LONG_RUNNING_COORDINATOR_TOOLS) {
-      const items = createTranscriptDisplayProjector()(inFlightVisibleToolRejected(tool), undefined, {
-        verboseMode: false,
-      })[0]!;
-		const cards = toolCards(items, tool);
-      expect(cards, tool).toHaveLength(1);
-      expect(cards[0]!.part.status, tool).toBe("error");
-    }
+  it.each([...PROGRAM_ACTIVITY_TOOLS])("%s omits pre-admission benign refusals in quiet chat", (tool) => {
+    const messages = inFlightVisibleToolRejected(tool);
+    const project = createTranscriptDisplayProjector();
+    expect(toolCards(project(messages, undefined, { verboseMode: false })[0]!, tool)).toHaveLength(0);
+    const cards = toolCards(project(messages, undefined, { verboseMode: true })[0]!, tool);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.part.status).toBe("error");
   });
 
   it("failed worker dispatch rejects hide when verbose is off", () => {
@@ -222,13 +219,13 @@ describe("action completeness invariant", () => {
     expect(cards[0]!.part.status).toBe("error");
   });
 
-  it("in-flight-visible completed+benign (doom-loop warn) never vanishes (verbose off)", () => {
-    for (const tool of LONG_RUNNING_COORDINATOR_TOOLS) {
-      const items = createTranscriptDisplayProjector()(inFlightVisibleToolCompletedBenign(tool), undefined, { verboseMode: false })[0]!;
-		const cards = toolCards(items, tool);
-      expect(cards, tool).toHaveLength(1);
-      expect(cards[0]!.part.status, tool).toBe("completed");
-    }
+  it.each([...PROGRAM_ACTIVITY_TOOLS])("%s hides benign repeat outcomes that never went live", (tool) => {
+    const messages = inFlightVisibleToolCompletedBenign(tool);
+    const project = createTranscriptDisplayProjector();
+    expect(toolCards(project(messages, undefined, { verboseMode: false })[0]!, tool)).toHaveLength(0);
+    const cards = toolCards(project(messages, undefined, { verboseMode: true })[0]!, tool);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.part.status).toBe("completed");
   });
 
   it("resolved checkpoint retains the checkpoint lifecycle key", () => {
