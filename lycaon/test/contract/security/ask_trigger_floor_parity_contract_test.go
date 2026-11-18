@@ -21,7 +21,10 @@ func TestCredentialFloorPathsAreInTheSensitiveCatalog(t *testing.T) {
 
 	paths, err := detectionpack.BundledKeyMaterialPaths()
 	testutil.FailErr(t, "load key material floor", err)
-	boundary := confine.BoundaryOf(&confine.Confinement{Roots: []string{home}})
+	boundary := confine.BoundaryOf(&confine.Confinement{Roots: []string{t.TempDir()}})
+	if !boundary.Applied {
+		t.Fatal("credential floor fixture did not create a boundary")
+	}
 	for _, path := range paths {
 		rel, ok := strings.CutPrefix(path, "~/")
 		if !ok || rel == "" || filepath.IsAbs(rel) {
