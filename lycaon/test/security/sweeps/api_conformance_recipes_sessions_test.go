@@ -770,23 +770,26 @@ func sessionPrepareCostSummary(_ context.Context, s *conformanceSweep, _ *confor
 	return successInputs{query: map[string]string{"session_id": s.fixture.session.ID}}, nil
 }
 
-// sessionProgram is a settled command program in the fixture chat and the
-// revision of its receipt document.
-type sessionProgram struct{ id, revision string }
+// sessionProgram is a settled command program, its chat and the revision of
+// its receipt document.
+type sessionProgram struct{ chat, id, revision string }
 
 // sessionFixtureProgram runs the mock model's readme prompt, whose command
 // program the receipt reads address.
 func sessionFixtureProgram(ctx context.Context, s *conformanceSweep) (sessionProgram, error) {
 	return sessionOnce(s, "program", func() (sessionProgram, error) {
-		chat := s.fixture.session.ID
+		chat, err := sessionNewChat(ctx, s, s.fixture.project.ID, string(wire.SessionPostureBuild))
+		if err != nil {
+			return sessionProgram{}, err
+		}
 		if _, err := sessionPrompt(ctx, s, chat, "read the readme"); err != nil {
 			return sessionProgram{}, err
 		}
-		var program sessionProgram
+		program := sessionProgram{chat: chat}
 		if err := s.host.DB.QueryRowContext(ctx, `SELECT p.id FROM invocation_programs p
 			JOIN invocation_receipts r ON r.id = p.parent_receipt_id
 			WHERE r.session_id = ? ORDER BY p.started_at DESC LIMIT 1`, chat).Scan(&program.id); err != nil {
-			return sessionProgram{}, fmt.Errorf("find the readme command program: %w; the chat holds receipts %s and last said %s", err, sessionReceipts(ctx, s, chat), sessionLastMessage(ctx, s, chat))
+			return sessionProgram{}, fmt.Errorf("find the readme command program: %w; %s", err, sessionTurnState(ctx, s, chat))
 		}
 		document, err := s.prerequisite(ctx, "getCommandReceiptDocument", successInputs{
 			params: map[string]string{"id": chat}, query: map[string]string{"scopes": program.id},
@@ -804,7 +807,7 @@ func sessionPrepareProgramReceipt(ctx context.Context, s *conformanceSweep, _ *c
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{params: map[string]string{"id": s.fixture.session.ID, "program_id": program.id}}, nil
+	return successInputs{params: map[string]string{"id": program.chat, "program_id": program.id}}, nil
 }
 
 func sessionPrepareReceiptDocument(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
@@ -812,7 +815,7 @@ func sessionPrepareReceiptDocument(ctx context.Context, s *conformanceSweep, _ *
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{params: map[string]string{"id": s.fixture.session.ID}, query: map[string]string{"scopes": program.id}}, nil
+	return successInputs{params: map[string]string{"id": program.chat}, query: map[string]string{"scopes": program.id}}, nil
 }
 
 func sessionPrepareReceiptSearch(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
@@ -820,7 +823,7 @@ func sessionPrepareReceiptSearch(ctx context.Context, s *conformanceSweep, _ *co
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{params: map[string]string{"id": s.fixture.session.ID}, query: map[string]string{
+	return successInputs{params: map[string]string{"id": program.chat}, query: map[string]string{
 		// Every receipt row carries a type field, so a search walks many matches.
 		"scopes": program.id, "revision": program.revision, "q": `"type"`,
 	}}, nil
@@ -829,10 +832,18 @@ func sessionPrepareReceiptSearch(ctx context.Context, s *conformanceSweep, _ *co
 // sessionSeedInvocations answers two readme prompts, each a command
 // invocation in the fixture chat.
 func sessionSeedInvocations(ctx context.Context, s *conformanceSweep) error {
+	chat := s.fixture.session.ID
 	for range 2 {
-		if _, err := sessionPrompt(ctx, s, s.fixture.session.ID, "read the readme"); err != nil {
+		if _, err := sessionPrompt(ctx, s, chat, "read the readme"); err != nil {
 			return err
 		}
+	}
+	var receipts int
+	if err := s.host.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM invocation_receipts WHERE session_id = ?`, chat).Scan(&receipts); err != nil {
+		return err
+	}
+	if receipts < 2 {
+		return fmt.Errorf("two readme prompts left %d receipts; %s", receipts, sessionTurnState(ctx, s, chat))
 	}
 	return nil
 }
@@ -1096,30 +1107,38 @@ func sessionRosterWorker(ctx context.Context, s *conformanceSweep, chat string) 
 	return name, err
 }
 
-// sessionReceipts names a chat's tool receipts by tool and status.
-func sessionReceipts(ctx context.Context, s *conformanceSweep, chat string) string {
-	rows, err := s.host.DB.QueryContext(ctx, `SELECT tool_name, status FROM invocation_receipts WHERE session_id = ? ORDER BY started_at`, chat)
-	if err != nil {
-		return err.Error()
+// sessionTurnState names why a chat may not have run a prompt: its status,
+// receipts, queue and newest messages.
+func sessionTurnState(ctx context.Context, s *conformanceSweep, chat string) string {
+	var status string
+	if err := s.host.DB.QueryRowContext(ctx, `SELECT status FROM sessions WHERE id = ?`, chat).Scan(&status); err != nil {
+		status = err.Error()
 	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var tool, status string
-		if rows.Scan(&tool, &status) == nil {
-			out = append(out, tool+"="+status)
+	queue, err := s.prerequisite(ctx, "getSessionQueue", successInputs{params: map[string]string{"id": chat}})
+	queued := fmt.Sprint(queue)
+	if err != nil {
+		queued = err.Error()
+	}
+	var receipts []string
+	if rows, err := s.host.DB.QueryContext(ctx, `SELECT tool_name, status FROM invocation_receipts WHERE session_id = ? ORDER BY started_at`, chat); err == nil {
+		for rows.Next() {
+			var tool, state string
+			if rows.Scan(&tool, &state) == nil {
+				receipts = append(receipts, tool+"="+state)
+			}
 		}
+		_ = rows.Close()
 	}
-	return fmt.Sprint(out)
-}
-
-// sessionLastMessage is a chat's newest message, by role.
-func sessionLastMessage(ctx context.Context, s *conformanceSweep, chat string) string {
-	var role, content string
-	err := s.host.DB.QueryRowContext(ctx, `SELECT m.role, m.content FROM messages m JOIN session_entries e ON e.id = m.entry_id
-		WHERE m.session_id = ? ORDER BY e.ord DESC LIMIT 1`, chat).Scan(&role, &content)
-	if err != nil {
-		return err.Error()
+	var messages []string
+	if rows, err := s.host.DB.QueryContext(ctx, `SELECT m.role, m.content FROM messages m JOIN session_entries e ON e.id = m.entry_id
+		WHERE m.session_id = ? ORDER BY e.ord DESC LIMIT 4`, chat); err == nil {
+		for rows.Next() {
+			var role, content string
+			if rows.Scan(&role, &content) == nil {
+				messages = append(messages, fmt.Sprintf("%s %.80q", role, content))
+			}
+		}
+		_ = rows.Close()
 	}
-	return fmt.Sprintf("%s %q", role, content)
+	return fmt.Sprintf("the chat is %s with receipts %v, queue %s and newest messages %v", status, receipts, queued, messages)
 }

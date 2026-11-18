@@ -29,12 +29,19 @@ const sourceClientID = "window:conformance-source"
 // search replacement, chat content and briefings.
 var sourceRecipes = map[string]successRecipe{
 	// Source views.
+	// A retained view expires or yields to newer ones over a long sweep, so
+	// each operation on one addresses a view of its own.
 	"createSourceView":              {stage: stageCreate, prepare: sourceCreateViewInputs},
+	"getSourceView":                 {prepare: sourceViewInputs},
 	"applySourceViewIntent":         {prepare: sourceApplyViewIntentInputs},
 	"createSourcePresentation":      {prepare: sourceCreatePresentationInputs},
+	"getSourceViewRows":             {prepare: sourcePresentationInputs},
+	"searchSourceView":              {prepare: sourcePresentationInputs},
 	"locateSourceView":              {prepare: sourceLocateViewInputs},
+	"releaseSourcePresentation":     {prepare: sourcePresentationInputs},
 	"replaceSourceViewportInterest": {prepare: sourceViewportInterestInputs},
-	"releaseSourceView":             {prepare: sourceReleaseViewInputs},
+	"releaseSourceViewportInterest": {prepare: sourceReleaseInterestInputs},
+	"releaseSourceView":             {prepare: sourceViewInputs},
 
 	// Editor documents.
 	"createEditorDocumentSnapshot":   {prepare: sourceEditorSnapshotInputs},
@@ -303,21 +310,55 @@ func sourceCreateViewInputs(ctx context.Context, s *conformanceSweep, _ *conform
 	return successInputs{fields: fields}, err
 }
 
-// sourceViewRevision waits for the bound view to finish preparing and
-// answers its intent revision.
-func sourceViewRevision(ctx context.Context, s *conformanceSweep) (string, error) {
+// sourceView is a fresh tree view, ready, and its intent revision.
+func sourceView(ctx context.Context, s *conformanceSweep) (string, string, error) {
 	if s.host == nil {
-		return "", errors.New("the sweep has no production host")
+		return "", "", errors.New("the sweep has no production host")
 	}
-	s.host.Server.WaitForBackground(ctx)
-	view, err := s.prerequisite(ctx, "getSourceView", successInputs{})
+	fields, err := sourceTreeViewFields(ctx, s)
 	if err != nil {
-		return "", err
+		return "", "", err
+	}
+	created, err := s.prerequisite(ctx, "createSourceView", successInputs{fields: fields})
+	if err != nil {
+		return "", "", err
+	}
+	id := sourceString(created, "id")
+	s.host.Server.WaitForBackground(ctx)
+	view, err := s.prerequisite(ctx, "getSourceView", successInputs{params: map[string]string{"view_id": id}})
+	if err != nil {
+		return "", "", err
 	}
 	if state := sourceString(view, "state"); state != "ready" {
-		return "", fmt.Errorf("the source view is %q after its preparation settled", state)
+		return "", "", fmt.Errorf("the source view is %q after its preparation settled", state)
 	}
-	return sourceString(view, "intent_revision"), nil
+	return id, sourceString(view, "intent_revision"), nil
+}
+
+// sourceViewPresentation is a presentation of a fresh view.
+func sourceViewPresentation(ctx context.Context, s *conformanceSweep) (map[string]string, error) {
+	view, revision, err := sourceView(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+	created, err := s.prerequisite(ctx, "createSourcePresentation", successInputs{
+		params: map[string]string{"view_id": view},
+		fields: map[string]any{"operation_id": uuid.NewString(), "intent_revision": revision},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{"view_id": view, "presentation_id": sourceString(created, "id")}, nil
+}
+
+func sourceViewInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	view, _, err := sourceView(ctx, s)
+	return successInputs{params: map[string]string{"view_id": view}}, err
+}
+
+func sourcePresentationInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	params, err := sourceViewPresentation(ctx, s)
+	return successInputs{params: params}, err
 }
 
 func sourceApplyViewIntentInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
@@ -325,26 +366,26 @@ func sourceApplyViewIntentInputs(ctx context.Context, s *conformanceSweep, _ *co
 	if err != nil {
 		return successInputs{}, err
 	}
-	revision, err := sourceViewRevision(ctx, s)
+	view, revision, err := sourceView(ctx, s)
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{fields: map[string]any{
+	return successInputs{params: map[string]string{"view_id": view}, fields: map[string]any{
 		"kind": "tree", "operation_id": uuid.NewString(), "expected_intent_revision": revision,
 		"command": map[string]any{"kind": "reveal", "address": map[string]any{"root_id": root, "path": "README.md"}},
 	}}, nil
 }
 
 func sourceCreatePresentationInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
-	revision, err := sourceViewRevision(ctx, s)
+	view, revision, err := sourceView(ctx, s)
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{fields: map[string]any{"operation_id": uuid.NewString(), "intent_revision": revision}}, nil
+	return successInputs{params: map[string]string{"view_id": view}, fields: map[string]any{"operation_id": uuid.NewString(), "intent_revision": revision}}, nil
 }
 
 // sourceLocateViewInputs locates README.md by the tree anchor a row carries.
-func sourceLocateViewInputs(_ context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+func sourceLocateViewInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 	root, err := sourceRootID(s)
 	if err != nil {
 		return successInputs{}, err
@@ -353,29 +394,36 @@ func sourceLocateViewInputs(_ context.Context, s *conformanceSweep, _ *conforman
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{query: map[string]string{"anchor": base64.RawURLEncoding.EncodeToString(anchor)}}, nil
+	params, err := sourceViewPresentation(ctx, s)
+	return successInputs{params: params, query: map[string]string{"anchor": base64.RawURLEncoding.EncodeToString(anchor)}}, err
 }
 
-func sourceViewportInterestInputs(_ context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
-	presentation := s.values.byPrefix["/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}"]
-	if presentation == "" {
-		return successInputs{}, errors.New("no source presentation was created")
-	}
-	return successInputs{fields: map[string]any{"presentation_id": presentation, "sequence": 1, "start": 0, "end": 1, "direction": 1}}, nil
-}
-
-// sourceReleaseViewInputs releases a view of its own, so the bound view
-// outlives it for the presentation and interest releases.
-func sourceReleaseViewInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
-	fields, err := sourceTreeViewFields(ctx, s)
+// sourceInterest declares demand for the first row of a fresh presentation.
+func sourceInterest(ctx context.Context, s *conformanceSweep) (successInputs, error) {
+	params, err := sourceViewPresentation(ctx, s)
 	if err != nil {
 		return successInputs{}, err
 	}
-	view, err := s.prerequisite(ctx, "createSourceView", successInputs{fields: fields})
+	presentation := params["presentation_id"]
+	return successInputs{
+		params: map[string]string{"view_id": params["view_id"], "interest_id": uuid.NewString()},
+		fields: map[string]any{"presentation_id": presentation, "sequence": 1, "start": 0, "end": 1, "direction": 1},
+	}, nil
+}
+
+func sourceViewportInterestInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	return sourceInterest(ctx, s)
+}
+
+func sourceReleaseInterestInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	interest, err := sourceInterest(ctx, s)
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{params: map[string]string{"view_id": sourceString(view, "id")}}, nil
+	if _, err := s.prerequisite(ctx, "replaceSourceViewportInterest", interest); err != nil {
+		return successInputs{}, err
+	}
+	return successInputs{params: interest.params}, nil
 }
 
 // --- Editor documents -----------------------------------------------------
@@ -1277,8 +1325,9 @@ func sourcePricingRefreshInputs(_ context.Context, _ *conformanceSweep, _ *confo
 	return successInputs{params: map[string]string{"source_id": "models-dev"}}, nil
 }
 
-// sourceContributionSearchInputs searches the first source the captured
-// contribution frame declares.
+// sourceContributionSearchInputs searches the first source the contribution
+// frame declares. A client holds the device frame's revision, so a project's
+// frame must carry the same one.
 func sourceContributionSearchInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 	frame, err := s.prerequisite(ctx, "getContributions", successInputs{})
 	if err != nil {
@@ -1288,8 +1337,16 @@ func sourceContributionSearchInputs(ctx context.Context, s *conformanceSweep, _ 
 	if len(sources) == 0 {
 		return successInputs{}, errors.New("the contribution frame declares no search source")
 	}
+	device := sourceString(frame, "frame_revision")
+	projected, err := s.host.Server.Admin.Extensions.Contributions.CaptureContributionFrame(ctx, s.fixture.project.ID, s.fixture.projectDir)
+	if err != nil {
+		return successInputs{}, err
+	}
+	if projected.Revision != device {
+		return successInputs{}, fmt.Errorf("the project frame revision %s differs from the device frame revision %s", projected.Revision, device)
+	}
 	return successInputs{
 		params: map[string]string{"source_id": sourceString(sources[0], "id")},
-		fields: map[string]any{"frame_revision": sourceString(frame, "frame_revision"), "query": "conformance"},
+		fields: map[string]any{"frame_revision": device, "query": "conformance"},
 	}, nil
 }
