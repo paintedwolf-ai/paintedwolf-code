@@ -4,7 +4,6 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -330,7 +329,7 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
-	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
+	q := worker.NewSQLQueue(sqlDB, 4)
 	mgr.SetWorkerQueue(q)
 	wireImplementConvergenceHooks(t, mgr, wfMgr, q)
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
@@ -411,7 +410,7 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
-	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
+	q := worker.NewSQLQueue(sqlDB, 4)
 	mgr.SetWorkerQueue(q)
 	wireImplementConvergenceHooks(t, mgr, wfMgr, q)
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
@@ -514,7 +513,7 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
-	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
+	q := worker.NewSQLQueue(sqlDB, 4)
 	mgr.SetWorkerQueue(q)
 	wireImplementConvergenceHooks(t, mgr, wfMgr, q)
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
@@ -634,7 +633,7 @@ func TestImplementWorkerSummaryPartialSkipsLoopWake(t *testing.T) {
 	wfMgr := workflow.NewManager(wfStore, store, nil, nil)
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
-	mgr.SetWorkerQueue(workertest.NewQueue(t, 4, testdbseed.DefaultProjectID))
+	mgr.SetWorkerQueue(worker.NewSQLQueue(sqlDB, 4))
 
 	ctx := context.Background()
 	dir := t.TempDir()

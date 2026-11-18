@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/api/briefingadmin"
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -51,7 +53,7 @@ func DeleteProject(t *testing.T, srv *hostapi.Server, projectID string) {
 // newSnapshotTestServer serves a source ledger and keeps the project registry
 // in the ledger's database.
 
-func EnqueueBranchJob(t *testing.T, q *worker.SQLQueue, projectID, branchRoot string) string {
+func EnqueueBranchJob(t *testing.T, q *worker.SQLQueue, database db.Handle, projectID, branchRoot string) string {
 	t.Helper()
 	id, err := q.EnqueueWithProjectID(context.Background(), projectID, wire.WorkerTask{
 		Prompt:        "fixture",
@@ -62,6 +64,9 @@ func EnqueueBranchJob(t *testing.T, q *worker.SQLQueue, projectID, branchRoot st
 		Scope:         &wire.TaskScope{Mode: wire.TaskScopeModeWrite, Paths: []string{"."}},
 	})
 	testutil.FailErr(t, "enqueue", err)
+	if branchRoot != "" {
+		workertest.BindBranch(t, database, id, branchRoot)
+	}
 	return id
 }
 

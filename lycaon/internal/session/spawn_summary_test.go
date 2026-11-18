@@ -3,8 +3,6 @@ package session_test
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/worker/workertest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -18,9 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/sourceledger"
-	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -134,9 +130,11 @@ func TestAppendWorkerSummaryEmptyStatusPartial(t *testing.T) {
 
 func TestAppendWorkerSummaryWriteWorkerOpenStatus(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	database := testdbfixture.Open(t, "session-workers.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	store := store.NewSQL(database)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
+	q := workertest.OnDatabase(t, database, 4)
 	mgr.SetWorkerQueue(q)
 	dir := t.TempDir()
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -188,16 +186,13 @@ func TestAppendWorkerSummaryWriteWorkerOpenStatus(t *testing.T) {
 
 func TestAppendWorkerSummaryUnmetEvidenceKeepsDeliveredWork(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	database := testdbfixture.Open(t, "session-workers.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	mem := store.NewSQL(database)
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
+	q := workertest.OnDatabase(t, database, 4)
 	mgr.SetWorkerQueue(q)
-	primary := t.TempDir()
-	overlay := filepath.Join(primary, settingsoverlay.DirName(), "overlays", "job-ev")
-	testutil.FailErr(t, "MkdirAll", os.MkdirAll(overlay, 0o755))
-	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(overlay, "game.py"), []byte("print(1)\n"), 0o644))
-	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py"}}
-	baseline := testbaseline.Capture(t, primary)
+	primary, overlay, scope, baseline := overlaySourceFixture(t, mem.DB())
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
@@ -217,6 +212,7 @@ func TestAppendWorkerSummaryUnmetEvidenceKeepsDeliveredWork(t *testing.T) {
 		WorkspaceBaselinePath: baseline,
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
+	bindWorkerFixture(t, mem.DB(), jobID, overlay, baseline, api.WorkerMergeStatusPending)
 	status, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		JobID:          jobID,
 		ChildSessionID: child.ID,
@@ -248,19 +244,16 @@ func TestAppendWorkerSummaryUnmetEvidenceKeepsDeliveredWork(t *testing.T) {
 
 func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	database := testdbfixture.Open(t, "session-workers.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	mem := store.NewSQL(database)
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	ledger := sourceledger.New(testdbfixture.Open(t, "source.db"), t.TempDir())
 	t.Cleanup(func() { testutil.FailErr(t, "close source snapshot store", ledger.Snapshots.Close()) })
 	mgr.SetSourceLedger(ledger, tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
-	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
+	q := workertest.OnDatabase(t, database, 4)
 	mgr.SetWorkerQueue(q)
-	primary := t.TempDir()
-	overlay := filepath.Join(primary, settingsoverlay.DirName(), "overlays", "job-ok")
-	testutil.FailErr(t, "MkdirAll", os.MkdirAll(overlay, 0o755))
-	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(overlay, "game.py"), []byte("print(1)\n"), 0o644))
-	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py"}}
-	baseline := testbaseline.Capture(t, primary)
+	primary, overlay, scope, baseline := overlaySourceFixture(t, mem.DB())
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
@@ -280,6 +273,7 @@ func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 		WorkspaceBaselinePath: baseline,
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
+	bindWorkerFixture(t, mem.DB(), jobID, overlay, baseline, api.WorkerMergeStatusPending)
 	revision, digest := sourceledger.VerificationState(ctx, ledger.Inventory, overlay)
 	testutil.FailErr(t, "AppendMessages", mem.AppendMessages(ctx, child.ID, api.Message{
 		Role: api.MessageRoleTool, WorkerID: jobID,

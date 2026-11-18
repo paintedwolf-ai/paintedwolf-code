@@ -5,6 +5,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -41,7 +42,7 @@ func TestWorkerSourceReadsUseRecordedRootLayout(t *testing.T) {
 		d.Core.Database = database
 		d.Core.Projects = project.NewSQLRegistry(database)
 	})
-	primary, branchRoot := t.TempDir(), t.TempDir()
+	primary, branchRoot := t.TempDir(), workertest.NewBranch(t, database)
 	p := contractfixture.CreateProjectForTest(t, srv, primary)
 	rootID := p.Roots[0].ID
 	roots := []workspace.JobMetaRoot{
@@ -59,7 +60,7 @@ func TestWorkerSourceReadsUseRecordedRootLayout(t *testing.T) {
 	testutil.FailErr(t, "record worker roots", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branchRoot), workspace.JobMeta{
 		Roots: roots, SnapshotComplete: true,
 	}))
-	workerID := contractfixture.EnqueueBranchJob(t, queue, p.ID, branchRoot)
+	workerID := contractfixture.EnqueueBranchJob(t, queue, database, p.ID, branchRoot)
 	read := func(root string) *httptest.ResponseRecorder {
 		t.Helper()
 		q := url.Values{"path": {"same.go"}, "root_id": {root}, "worker_id": {workerID}, "include_deleted": {"true"}}

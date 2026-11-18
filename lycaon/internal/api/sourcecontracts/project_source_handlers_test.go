@@ -96,15 +96,16 @@ func TestProjectSourceMutationRejectsLifecycleTransition(t *testing.T) {
 func TestWorkerBranchRoot(t *testing.T) {
 	t.Parallel()
 	const projectID = "11111111-1111-4111-8111-111111111111"
-	branch := t.TempDir()
-
-	contractfixture.CompleteBranchMeta(t, branch)
 	database := testdbfixture.Open(t, "workers.db")
+	branch := workertest.NewBranch(t, database)
+	contractfixture.CompleteBranchMeta(t, branch)
 	testdbseed.InsertProject(t, database, projectID)
 	testdbseed.InsertProject(t, database, "22222222-2222-4222-8222-222222222222")
 	q := worker.NewSQLQueue(database, 1)
-	workerID := contractfixture.EnqueueBranchJob(t, q, projectID, branch)
-	otherJobID := contractfixture.EnqueueBranchJob(t, q, "22222222-2222-4222-8222-222222222222", t.TempDir())
+	workerID := contractfixture.EnqueueBranchJob(t, q, database, projectID, branch)
+	otherBranch := workertest.NewBranch(t, database)
+	contractfixture.CompleteBranchMeta(t, otherBranch)
+	otherJobID := contractfixture.EnqueueBranchJob(t, q, database, "22222222-2222-4222-8222-222222222222", otherBranch)
 
 	sources := contractfixture.NewTestSources(t, q)
 
@@ -139,7 +140,7 @@ func TestWorkerBranchRootEmptyAfterPromoteReleasesOverlay(t *testing.T) {
 	const projectID = "44444444-4444-4444-8444-444444444444"
 
 	q := workertest.NewQueue(t, 1, projectID)
-	workerID := contractfixture.EnqueueBranchJob(t, q, projectID, "")
+	workerID := contractfixture.EnqueueBranchJob(t, q, nil, projectID, "")
 
 	sources := contractfixture.NewTestSources(t, q)
 	if got, release := sources.Workspace.WorkerBranchRoot(context.Background(), projectID, workerID); got != "" {

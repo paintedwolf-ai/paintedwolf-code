@@ -2,6 +2,10 @@
 package workertest
 
 import (
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/sourceblob"
+	"github.com/lycaon/lycaon/internal/workspacebaseline"
+	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -17,5 +21,14 @@ func NewQueue(t testing.TB, maxRunning int, projectID string, sessionIDs ...stri
 	for _, sessionID := range sessionIDs {
 		testdbseed.InsertSession(t, database, sessionID, projectID)
 	}
-	return worker.NewSQLQueue(database, maxRunning)
+	return OnDatabase(t, database, maxRunning)
+}
+
+// OnDatabase shares durable worker and session state in one fixture installation.
+func OnDatabase(t testing.TB, database db.Handle, maxRunning int) *worker.SQLQueue {
+	t.Helper()
+	queue := worker.NewSQLQueue(database, maxRunning)
+	root := db.DataDir(database)
+	queue.SetBaselineStore(workspacebaseline.New(database, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "worker-baselines")))
+	return queue
 }

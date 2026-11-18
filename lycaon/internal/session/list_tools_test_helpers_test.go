@@ -3,7 +3,6 @@ package session_test
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerplan/plantest"
 	"github.com/lycaon/lycaon/internal/workerrecords"
@@ -207,7 +206,7 @@ func registerContextualToolsCoordinatorExtras(
 	bundledDir string,
 ) {
 	t.Helper()
-	queue := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
+	queue := worker.NewSQLQueue(sqlDB, 4)
 	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
 		Queue:         queue,
 		Agents:        agents,

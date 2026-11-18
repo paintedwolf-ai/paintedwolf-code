@@ -4,8 +4,6 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"testing"
 	"time"
 
@@ -31,7 +29,7 @@ func requireWorkflowCloseoutRejection(t *testing.T, resp *promptresult.Result, e
 func TestLegFinishedQueuesKickAndAutoPrompts(t *testing.T) {
 	fix := setupLoopFixture(t, settings.DefaultSessionLimits())
 	ctx := context.Background()
-	queue := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
+	queue := worker.NewSQLQueue(fix.store.DB(), 4)
 	fix.mgr.SetWorkerQueue(queue)
 	child, err := fix.store.CreateChild(ctx, fix.sess, wire.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
 	testutil.FailErr(t, "create child", err)

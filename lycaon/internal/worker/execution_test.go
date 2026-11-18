@@ -50,6 +50,7 @@ func wireExecutionCloseoutPolicy(t *testing.T, manager *session.Host) {
 func newExecutionStack(t *testing.T) (*session.Host, *SQLQueue, *LocalWorkerExecutor, *LocalWorkerPoller) {
 	t.Helper()
 	queue := newTestQueue(t, DefaultWorkersConfig().Poller.MaxConcurrency, testdbseed.DefaultProjectID)
+	testdbseed.InsertProjectRoot(t, queue.db, testdbseed.DefaultProjectID, t.TempDir())
 	store := store.NewSQL(queue.db)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wireExecutionCloseoutPolicy(t, mgr)
