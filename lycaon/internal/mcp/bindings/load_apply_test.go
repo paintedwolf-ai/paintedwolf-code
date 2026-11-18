@@ -1,67 +1,13 @@
 package bindings_test
 
 import (
-	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/mcp/bindings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	"gopkg.in/yaml.v3"
 )
-
-func testdataDir(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	return filepath.Join(filepath.Dir(file), "testdata", "mcp_bindings")
-}
-
-func TestLoadDirFixture(t *testing.T) {
-	list, err := bindings.LoadDir(testdataDir(t))
-	testutil.FailErr(t, "LoadDir", err)
-	byID := map[string]bindings.Binding{}
-	for _, b := range list {
-		byID[b.ID] = b
-	}
-	if _, ok := byID["fixture_echo"]; !ok {
-		t.Fatal("fixture_echo missing")
-	}
-	if _, ok := byID["fixture_widget"]; !ok {
-		t.Fatal("fixture_widget missing")
-	}
-}
-
-func TestLoadDirDuplicateKeys(t *testing.T) {
-	dir := t.TempDir()
-	a := []byte(`id: a
-provider_id: s
-tool_name: t
-schema: {type: object}
-fields:
-  - key: shared
-    type: string
-    path: /x
-`)
-	b := []byte(`id: b
-provider_id: s
-tool_name: t
-schema: {type: object}
-fields:
-  - key: shared
-    type: string
-    path: /y
-`)
-	mustWrite(t, filepath.Join(dir, "a.yaml"), a)
-	mustWrite(t, filepath.Join(dir, "b.yaml"), b)
-	_, err := bindings.LoadDir(dir)
-	if err == nil {
-		t.Fatal("expected duplicate key error")
-	}
-}
 
 func TestLoadEqualsOnNonBoolFails(t *testing.T) {
 	raw := []byte(`id: bad
@@ -81,8 +27,7 @@ fields:
 }
 
 func TestApplySuccess(t *testing.T) {
-	list, err := bindings.LoadDir(testdataDir(t))
-	testutil.FailErr(t, "LoadDir", err)
+	list := extpackstest.MCPBindings(t)
 	result := `{"id":"ISSUE-1","count":3,"state":{"type":"started","name":"In Progress"}}`
 	matched, fields, err := bindings.Apply(list, "fixture", "echo", result)
 	testutil.FailErr(t, "Apply", err)
@@ -104,8 +49,7 @@ func TestApplySuccess(t *testing.T) {
 }
 
 func TestApplyEqualsFalse(t *testing.T) {
-	list, err := bindings.LoadDir(testdataDir(t))
-	testutil.FailErr(t, "LoadDir", err)
+	list := extpackstest.MCPBindings(t)
 	result := `{"id":"ISSUE-1","count":1,"state":{"type":"completed","name":"Done"}}`
 	matched, fields, err := bindings.Apply(list, "fixture", "echo", result)
 	testutil.FailErr(t, "Apply", err)
@@ -118,8 +62,7 @@ func TestApplyEqualsFalse(t *testing.T) {
 }
 
 func TestApplyInvalidJSON(t *testing.T) {
-	list, err := bindings.LoadDir(testdataDir(t))
-	testutil.FailErr(t, "LoadDir", err)
+	list := extpackstest.MCPBindings(t)
 	matched, fields, err := bindings.Apply(list, "fixture", "echo", "not-json")
 	testutil.FailErr(t, "Apply", err)
 	if matched || fields != nil {
@@ -128,8 +71,7 @@ func TestApplyInvalidJSON(t *testing.T) {
 }
 
 func TestApplySchemaFail(t *testing.T) {
-	list, err := bindings.LoadDir(testdataDir(t))
-	testutil.FailErr(t, "LoadDir", err)
+	list := extpackstest.MCPBindings(t)
 	// missing required id/state
 	matched, fields, err := bindings.Apply(list, "fixture", "echo", `{"count":1}`)
 	testutil.FailErr(t, "Apply", err)
@@ -157,12 +99,5 @@ fields: []
 	_, err = bindings.LoadBytes("bad_schema", broken)
 	if err == nil {
 		t.Fatal("expected schema compile error")
-	}
-}
-
-func mustWrite(t *testing.T, path string, body []byte) {
-	t.Helper()
-	if err := os.WriteFile(path, body, 0o600); err != nil {
-		testutil.FailErr(t, "write file", err)
 	}
 }

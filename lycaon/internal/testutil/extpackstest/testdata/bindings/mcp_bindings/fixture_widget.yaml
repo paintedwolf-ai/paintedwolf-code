@@ -1,4 +1,3 @@
-# Golden MCP schema binding — fake server id "fixture", no real MCP spawn.
 id: fixture_widget
 provider_id: fixture
 tool_name: widget

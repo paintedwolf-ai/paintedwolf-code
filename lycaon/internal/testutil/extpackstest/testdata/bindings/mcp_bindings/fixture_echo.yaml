@@ -1,4 +1,3 @@
-# fixture_echo.yaml — testdata schema binding for unit tests.
 id: fixture_echo
 provider_id: fixture
 tool_name: echo
