@@ -122,8 +122,11 @@ func TestAPIConformance(t *testing.T) {
 	sweep.values.bind("/v1/web-research/providers/{provider_id}", "", string(wire.WebSearchProviderTavily))
 	sweep.host = h
 	sweep.fixture = conformanceFixture{t: t, presenceKey: presenceKey, projectDir: projectDir, project: project, session: sess}
+	effects.probe(t, "after the settle")
 	sweep.runTerminal(t)
+	effects.probe(t, "after the terminal hosts")
 	hostIDs := conformanceHostLookup(t, h)
+	effects.probe(t, "after the host lookup")
 	sweep.beforeDeletes = hostIDs.remember
 	sweep.runAll(t.Context())
 
