@@ -14,7 +14,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/go-git/go-billy/v5"
 	"github.com/go-git/go-billy/v5/osfs"
 	nfs "github.com/willscott/go-nfs"
 	nfshelper "github.com/willscott/go-nfs/helpers"
@@ -53,7 +55,8 @@ func Mount(t *testing.T, mode Mode) *Volume {
 	if err != nil {
 		t.Fatalf("listen for the NFS server: %v", err)
 	}
-	handler := nfshelper.NewCachingHandler(nfshelper.NewNullAuthHandler(osfs.New(backing)), 4096)
+	served := changeFS{Filesystem: osfs.New(backing), root: backing}
+	handler := nfshelper.NewCachingHandler(nfshelper.NewNullAuthHandler(served), 4096)
 	go func() { _ = nfs.Serve(server, handler) }()
 	r, err := newRelay(server.Addr().String())
 	if err != nil {
@@ -124,6 +127,20 @@ func (v *Volume) serve(commands net.Listener) {
 		_ = conn.Close()
 	}
 }
+
+// changeFS lets clients set modes, owners and times on the served files.
+type changeFS struct {
+	billy.Filesystem
+	root string
+}
+
+func (f changeFS) Chmod(name string, mode os.FileMode) error { return os.Chmod(f.path(name), mode) }
+func (f changeFS) Lchown(name string, uid, gid int) error  { return os.Lchown(f.path(name), uid, gid) }
+func (f changeFS) Chown(name string, uid, gid int) error   { return os.Chown(f.path(name), uid, gid) }
+func (f changeFS) Chtimes(name string, atime, mtime time.Time) error {
+	return os.Chtimes(f.path(name), atime, mtime)
+}
+func (f changeFS) path(name string) string { return filepath.Join(f.root, name) }
 
 type relay struct {
 	server   string

@@ -39,6 +39,7 @@ in stdenvNoCC.mkDerivation {
       -audit-output "$out/scanner-audit.json" > "$out/scanner-identity.base64"
     test -s "$out/scanner-identity.base64"
     test -s "$artifact/consumer-finalization.json"
+    cp recipe.json "$out/consumer-recipe.json"
     ${scannerTools}/bin/opengrep-artifact -mode audit \
       -artifact-directory ${inputs.scannerOriginal}/artifact -packaged-directory "$artifact" \
       -consumer-identity-file "$out/scanner-identity.base64" \

@@ -1080,9 +1080,11 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal {{.CLI_ARGS}}
 
   nix:check:
-    desc: Evaluate pinned Linux Nix package and development-shell contracts
+    desc: Evaluate pinned Linux Nix package and development-shell contracts, then run the Go tests that need Nix
     cmds:
       - python3 -m scripts.linux_release.nix check {{.CLI_ARGS}}
+      # --prepare provisions inputs for a lane that later runs offline; it runs no tests.
+      - '{{if not (contains "--prepare" .CLI_ARGS)}}bash {{.SCRIPTS_DIR}}/nix-native-tests.sh{{end}}'
 
   nix:build:
     desc: Build the native Linux Nix closure from pinned inputs

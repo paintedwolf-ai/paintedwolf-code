@@ -3,7 +3,9 @@ package nfs
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"os"
+	"time"
 
 	"github.com/go-git/go-billy/v5"
 	"github.com/willscott/go-nfs-client/nfs/xdr"
@@ -27,6 +29,7 @@ func onCreate(ctx context.Context, w *response, userHandle Handler) error {
 		return &NFSStatusError{NFSStatusInval, err}
 	}
 	var attrs *SetFileAttributes
+	var verf [8]byte
 	if how == createModeUnchecked || how == createModeGuarded {
 		sattr, err := ReadSetFileAttributes(w.req.Body)
 		if err != nil {
@@ -34,14 +37,9 @@ func onCreate(ctx context.Context, w *response, userHandle Handler) error {
 		}
 		attrs = sattr
 	} else if how == createModeExclusive {
-		// read createverf3
-		var verf [8]byte
 		if err := xdr.Read(w.req.Body, &verf); err != nil {
 			return &NFSStatusError{NFSStatusInval, err}
 		}
-		Log.Errorf("failing create to indicate lack of support for 'exclusive' mode.")
-		// Exclusive mode is handled by custom handler implementations (#1660).
-		return &NFSStatusError{NFSStatusNotSupp, os.ErrPermission}
 	} else {
 		// invalid
 		return &NFSStatusError{NFSStatusNotSupp, os.ErrInvalid}
@@ -61,12 +59,21 @@ func onCreate(ctx context.Context, w *response, userHandle Handler) error {
 
 	newFile := append(path, string(obj.Filename))
 	newFilePath := fs.Join(newFile...)
+	changer := userHandle.Change(fs)
+	created := true
 	if s, err := fs.Stat(newFilePath); err == nil {
 		if s.IsDir() {
 			return &NFSStatusError{NFSStatusExist, nil}
 		}
 		if how == createModeGuarded {
 			return &NFSStatusError{NFSStatusExist, os.ErrPermission}
+		}
+		if how == createModeExclusive {
+			// A retransmitted exclusive create finds the verifier it stored.
+			if !s.ModTime().Equal(exclusiveTime(verf[:4])) {
+				return &NFSStatusError{NFSStatusExist, os.ErrExist}
+			}
+			created = false
 		}
 	} else {
 		if s, err := fs.Stat(fs.Join(path...)); err != nil {
@@ -76,19 +83,28 @@ func onCreate(ctx context.Context, w *response, userHandle Handler) error {
 		}
 	}
 
-	file, err := fs.Create(newFilePath)
-	if err != nil {
-		Log.Errorf("Error Creating: %v", err)
-		return &NFSStatusError{NFSStatusAccess, err}
-	}
-	if err := file.Close(); err != nil {
-		Log.Errorf("Error Creating: %v", err)
-		return &NFSStatusError{NFSStatusAccess, err}
+	if created {
+		file, err := fs.Create(newFilePath)
+		if err != nil {
+			Log.Errorf("Error Creating: %v", err)
+			return &NFSStatusError{NFSStatusAccess, err}
+		}
+		if err := file.Close(); err != nil {
+			Log.Errorf("Error Creating: %v", err)
+			return &NFSStatusError{NFSStatusAccess, err}
+		}
 	}
 
 	fp := userHandle.ToHandle(fs, newFile)
-	changer := userHandle.Change(fs)
-	if err := attrs.Apply(changer, fs, newFilePath); err != nil {
+	if how == createModeExclusive {
+		// The verifier lives in the file times until the client's SETATTR replaces them (RFC 1813, CREATE3).
+		if changer == nil {
+			return &NFSStatusError{NFSStatusNotSupp, os.ErrPermission}
+		}
+		if err := changer.Chtimes(newFilePath, exclusiveTime(verf[4:]), exclusiveTime(verf[:4])); err != nil {
+			return &NFSStatusError{NFSStatusIO, err}
+		}
+	} else if err := attrs.Apply(changer, fs, newFilePath); err != nil {
 		Log.Errorf("Error applying attributes: %v\n", err)
 		return &NFSStatusError{NFSStatusIO, err}
 	}
@@ -105,7 +121,7 @@ func onCreate(ctx context.Context, w *response, userHandle Handler) error {
 	if err := xdr.Write(writer, fp); err != nil {
 		return &NFSStatusError{NFSStatusServerFault, err}
 	}
-	if err := WritePostOpAttrs(writer, tryStat(fs, []string{file.Name()})); err != nil {
+	if err := WritePostOpAttrs(writer, tryStat(fs, newFile)); err != nil {
 		return &NFSStatusError{NFSStatusServerFault, err}
 	}
 
@@ -121,4 +137,8 @@ func onCreate(ctx context.Context, w *response, userHandle Handler) error {
 		return &NFSStatusError{NFSStatusServerFault, err}
 	}
 	return nil
+}
+
+func exclusiveTime(half []byte) time.Time {
+	return time.Unix(int64(binary.BigEndian.Uint32(half)), 0)
 }
