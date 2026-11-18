@@ -41,19 +41,19 @@ webE2e.describe("extensions settings", () => {
     const panel = page.getByTestId("extensions-settings-panel");
     await expect(panel).toBeVisible({ timeout: 15_000 });
     await expect(panel).toHaveAttribute("data-surface", "settings");
-    await expect(page.getByTestId("extensions-panel-model")).toBeVisible();
-    await expect(page.getByTestId("extensions-device-banner")).toBeVisible();
-    await expect(page.getByTestId("extensions-tab-units")).toBeVisible();
-    await page.getByTestId("extensions-tab-packs").click();
-    await expect(page.getByTestId("extensions-pack-list")).toBeVisible();
-    await expect(page.getByTestId("extensions-pack-list")).toContainText("Stock", {
+    await expect(panel.getByTestId("extensions-panel-model")).toBeVisible();
+    await expect(panel.getByTestId("extensions-device-banner")).toBeVisible();
+    await expect(panel.getByTestId("extensions-tab-units")).toBeVisible();
+    await panel.getByTestId("extensions-tab-packs").click();
+    await expect(panel.getByTestId("extensions-pack-list")).toBeVisible();
+    await expect(panel.getByTestId("extensions-pack-list")).toContainText("Stock", {
       timeout: 15_000,
     });
     const catalog = await apiJson<ExtensionsCatalogView>(request, "GET", "/v1/extensions");
     expect(catalog.packs.length).toBeGreaterThan(0);
     for (const pack of catalog.packs) {
       await expect(
-        page.getByTestId(`extensions-pack-${encodeURIComponent(pack.id)}`),
+        panel.getByTestId(`extensions-pack-${encodeURIComponent(pack.id)}`),
         pack.id,
       ).toHaveCount(1);
     }
@@ -62,19 +62,19 @@ webE2e.describe("extensions settings", () => {
         new URL(response.url()).pathname === "/v1/extensions/packs" &&
         response.request().method() === "POST",
     );
-    await page.getByTestId("extensions-add-folder").click();
+    await panel.getByTestId("extensions-add-folder").click();
     await page.getByRole("textbox", { name: "Folder path", exact: true }).fill(E2E_EXAMPLE_PACK_DIR);
     await page.getByRole("button", { name: "Choose folder", exact: true }).click();
     const installResponse = await installed;
     expect(installResponse.ok(), await installResponse.text()).toBeTruthy();
 
-    const packList = page.getByTestId("extensions-pack-list");
+    const packList = panel.getByTestId("extensions-pack-list");
     await expect(packList).toContainText("Editor Surface", { timeout: 30_000 });
-    await expect(page.getByTestId("extensions-panel-packs")).toBeVisible();
-    await expect(page.getByTestId("extensions-panel-model")).toBeHidden();
+    await expect(panel.getByTestId("extensions-panel-packs")).toBeVisible();
+    await expect(panel.getByTestId("extensions-panel-model")).toBeHidden();
 
-    await page.getByTestId("extensions-tab-settings").click();
-    const toggle = page.getByTestId(
+    await panel.getByTestId("extensions-tab-settings").click();
+    const toggle = panel.getByTestId(
       "extensions-configuration-input-example/editor-surface:offer-summarize",
     );
     await expect(toggle).toBeVisible({ timeout: 15_000 });

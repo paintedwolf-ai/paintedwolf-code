@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, type Page } from "@playwright/test";
+import { animationsFinished } from "./fixtures/settle.ts";
 import { bootstrapChatSession, liveChatStage, openProjectFilesFixture, webE2e } from "./helpers.ts";
 
 async function openSplit(page: Page) {
@@ -321,6 +322,9 @@ webE2e.describe("session tabs in the stage title bar", () => {
     await expect(page.getByTestId("files-tree")).toBeVisible();
     await expect(stageTab(page, "progress")).toBeVisible();
 
+    // The drawer slides in, so measure once its entrance has finished.
+    await animationsFinished(drawer);
+    await animationsFinished(page.getByTestId("split-col-stage"));
     // The drawer lies over the stage's trailing edge and the stage keeps its width.
     const stage = await page.getByTestId("split-col-stage").boundingBox();
     const box = await drawer.boundingBox();
