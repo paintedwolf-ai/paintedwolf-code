@@ -2,8 +2,9 @@ package releasedstore
 
 import (
 	"database/sql"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // SeedDelegations populates retained delegation history in a released store.
