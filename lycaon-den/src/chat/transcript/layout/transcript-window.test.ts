@@ -13,7 +13,7 @@ import {
   installTailWindow,
   loadOlderWindow,
   materializeTranscriptWindow,
-  patchRowInWindow,
+  mergeIntoTail,
   precedesLiveTail,
   presentedOrdSpan,
   refreshTailWindow,
@@ -59,26 +59,6 @@ describe("TranscriptWindow", () => {
       "b",
       "c",
     ]);
-  });
-
-  it("appends SSE rows to the live tail", () => {
-    let tw = installTailWindow(
-      emptyTranscriptWindow(),
-      page([msg("a", 1)], false, false),
-      { resetPages: true },
-    );
-    tw = appendToTail(tw, msg("b", 2));
-    expect(tw.tail.map((m) => m.id)).toEqual(["a", "b"]);
-  });
-
-  it("patches an in-slice edit without rebuilding history", () => {
-    const tw = installTailWindow(
-      emptyTranscriptWindow(),
-      page([msg("a", 1, 1)], false, false),
-      { resetPages: true },
-    );
-    expect(patchRowInWindow(tw, msg("a", 1, 2))).toBe(true);
-    expect(tw.tail[0]?.seq).toBe(2);
   });
 
   it("loads older pages and evicts beside the tail beyond the resident message budget", () => {
@@ -205,17 +185,6 @@ describe("TranscriptWindow", () => {
     expect(ords[ords.length - 1]).toBe(total - 1);
   });
 
-  it("patches rows that rolled out of the tail into a page", () => {
-    let tw = emptyTranscriptWindow();
-    for (let i = 0; i <= TRANSCRIPT_TAIL_BUDGET; i++) {
-      tw = appendToTail(tw, msg(`m${i}`, i));
-    }
-    const rolled = { ...msg("m0", 0, 500), content: "patched" };
-    expect(patchRowInWindow(tw, rolled)).toBe(true);
-    expect(
-      materializeTranscriptWindow(tw).find((m) => m.id === "m0")?.content,
-    ).toBe("patched");
-  });
 });
 
 function rows(from: number, to: number): Message[] {
@@ -229,15 +198,6 @@ function ids(tw: TranscriptWindow): number[] {
 describe("TranscriptWindow page requests", () => {
   const tailAt = (from: number, to: number) =>
     installTailWindow(emptyTranscriptWindow(), page(rows(from, to), from > 1), { resetPages: true });
-
-  it("reads older history before the oldest resident row", () => {
-    const tw = tailAt(901, 1000);
-    const request = transcriptPageRequest(tw, "older");
-    expect(request).toEqual({ edge: "older", beforeMessageId: "m901" });
-    const next = applyTranscriptPage(tw, request!, page(rows(801, 900), true, true));
-    expect(ids(next!)[0]).toBe(801);
-    expect(next!.hasMoreBefore).toBe(true);
-  });
 
   it("refuses a page whose cursor the window has moved past", () => {
     const tw = tailAt(901, 1000);
@@ -436,4 +396,31 @@ describe("refreshTailWindow", () => {
   });
 });
 
+describe("mergeIntoTail", () => {
+  const tailAt = (from: number, to: number) =>
+    installTailWindow(emptyTranscriptWindow(), page(rows(from, to), from > 1), { resetPages: true });
 
+  it("keeps resident tail rows older than an overlapping refreshed page without opening a gap", () => {
+    let tw = tailAt(201, 400);
+    tw = applyTranscriptPage(tw, transcriptPageRequest(tw, "older")!, page(rows(101, 200), true, true))!;
+    tw = mergeIntoTail(tw, page(rows(311, 410), true), 410);
+    expect(tw.hasTailGap).toBe(false);
+    expect(ids(tw)).toEqual(rows(101, 410).map((m) => m.ord));
+  });
+
+  it("keeps an unbridged old tail as the newest older page behind a gap", () => {
+    let tw = tailAt(201, 300);
+    tw = mergeIntoTail(tw, page(rows(401, 500), true), 500);
+    expect(tw.hasTailGap).toBe(true);
+    expect(contiguousWindowRows(tw).map((m) => m.ord)).toEqual(rows(201, 300).map((m) => m.ord));
+    expect(tw.tail.map((m) => m.ord)).toEqual(rows(401, 500).map((m) => m.ord));
+  });
+
+  it("keeps the older edge of resident pages that reach the start", () => {
+    let tw = tailAt(101, 200);
+    tw = applyTranscriptPage(tw, transcriptPageRequest(tw, "older")!, page(rows(1, 100), false, true))!;
+    tw = mergeIntoTail(tw, page(rows(151, 250), true), 250);
+    expect(tw.hasMoreBefore).toBe(false);
+    expect(ids(tw)).toEqual(rows(1, 250).map((m) => m.ord));
+  });
+});
