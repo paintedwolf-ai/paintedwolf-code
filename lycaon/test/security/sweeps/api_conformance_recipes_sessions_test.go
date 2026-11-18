@@ -85,9 +85,10 @@ var sessionRecipes = map[string]successRecipe{
 	"deleteProjectArtifact": {prepare: sessionPrepareDeleteArtifact},
 	"listProjectArtifacts":  {seed: sessionSeedProjectArtifacts},
 
-	"invokeSessionCommand": {prepare: sessionPrepareInvokeSessionCommand},
-	"invokeProjectCommand": {prepare: sessionPrepareInvokeProjectCommand},
-	"landGitWorktree":      {prepare: sessionPrepareLandWorktree},
+	"invokeSessionCommand":       {prepare: sessionPrepareInvokeSessionCommand},
+	"invokeProjectCommand":       {prepare: sessionPrepareInvokeProjectCommand},
+	"resolveContributionChoices": {prepare: sessionPrepareResolveChoices},
+	"landGitWorktree":            {prepare: sessionPrepareLandWorktree},
 }
 
 const sessionJSONType = "application/json"
@@ -985,23 +986,26 @@ func sessionPrepareInvokeSessionCommand(ctx context.Context, s *conformanceSweep
 	return successInputs{}, errors.New("the contribution frame has no summarize editor action")
 }
 
-// sessionPrepareInvokeProjectCommand invokes a project-scoped command of the
-// device catalog. Bundled packs contribute none.
+// sessionPrepareInvokeProjectCommand invokes the conformance pack's composer
+// prefill command.
 func sessionPrepareInvokeProjectCommand(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 	frame, err := s.host.Server.Admin.Extensions.Contributions.CaptureContributionFrame(ctx, s.fixture.project.ID, s.fixture.projectDir)
 	if err != nil {
 		return successInputs{}, err
 	}
-	for _, command := range frame.View.Contributions.Commands() {
-		resolved, ok := frame.View.Contributions.ResolveCommand(command)
-		if !ok || contribution.InvocationScopeFor(resolved.Action.Kind) != contribution.InvocationProject {
-			continue
-		}
-		return sessionJSON(map[string]string{"id": s.fixture.project.ID, "command_id": command.ID}, map[string]any{
-			"operation_id": uuid.NewString(), "frame_revision": frame.Revision,
-		}), nil
+	return sessionJSON(map[string]string{"id": s.fixture.project.ID, "command_id": "conformance/sweep:prefill"}, map[string]any{
+		"operation_id": uuid.NewString(), "frame_revision": frame.Revision,
+	}), nil
+}
+
+// sessionPrepareResolveChoices loads the conformance pack's MCP choice step.
+func sessionPrepareResolveChoices(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	frame, err := s.host.Server.Admin.Extensions.Contributions.CaptureContributionFrame(ctx, s.fixture.project.ID, s.fixture.projectDir)
+	if err != nil {
+		return successInputs{}, err
 	}
-	return successInputs{}, errors.New("the contribution frame has no project-scoped command")
+	return sessionJSON(map[string]string{"id": s.fixture.project.ID, "command_id": "conformance/sweep:choose", "step_id": "item"},
+		map[string]any{"frame_revision": frame.Revision}), nil
 }
 
 // sessionPrepareLandWorktree binds a chat in a committed repository project

@@ -26,12 +26,14 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	openapi "github.com/lycaon/lycaon/test/openapi"
 	"github.com/lycaon/lycaon/test/wiring"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // conformanceRule names one runtime invariant of the sweep.
@@ -81,7 +83,9 @@ func TestAPIConformance(t *testing.T) {
 	presencePublic, presenceKey, err := ed25519.GenerateKey(rand.Reader)
 	testutil.FailErr(t, "generate a presence key", err)
 	t.Setenv(presence.PublicKeyEnv, base64.RawURLEncoding.EncodeToString(presencePublic))
-	h := wiring.BuildForTest(t, wiring.WithChangeDebounce(conformanceDebounce))
+	h := wiring.BuildForTest(t, wiring.WithChangeDebounce(conformanceDebounce),
+		wiring.WithInstalledPack(filepath.Join("testdata", "conformance-pack")),
+		wiring.WithMCPConnector(conformanceMCP()))
 	hub := h.MemoryHub()
 	if hub == nil {
 		t.Fatal("conformance sweep needs the in-memory event hub")
@@ -96,6 +100,7 @@ func TestAPIConformance(t *testing.T) {
 	t.Cleanup(h.ProjectLiveness.ClaimWorkspace(project.ID))
 	sess := security.CreateSessionForProjectHTTP(t, h.Server, project.ID, wire.SessionPostureBuild)
 	provider := createConformanceProvider(t, h.Server)
+	createConformanceMCPProvider(t, h.Server)
 
 	validator, err := openapi.Bundled()
 	testutil.FailErr(t, "load the bundled OpenAPI document", err)
@@ -474,4 +479,39 @@ type conformanceFixture struct {
 	projectDir  string
 	project     wire.Project
 	session     wire.Session
+}
+
+// conformanceMCPProvider serves the conformance pack's choice step, search
+// source and read command.
+const conformanceMCPProvider = "conformance-tracker"
+
+func conformanceMCP() *mcp.MockConnector {
+	return &mcp.MockConnector{
+		Tools: map[string][]*sdkmcp.Tool{
+			"svca": {{Name: "do", Description: "do"}},
+			conformanceMCPProvider: {
+				{Name: "list_items", Description: "List items"},
+				{Name: "search_items", Description: "Search items"},
+				{Name: "get_item", Description: "Read an item"},
+			},
+		},
+		Results: map[string]map[string]string{conformanceMCPProvider: {
+			"list_items":   `{"choices":[{"id":"item-1","label":"Item one","description":"The first item"}]}`,
+			"search_items": `{"results":[{"item_id":"item-1","title":"Item one","kind":"task","state":"open","activation":{"item-id":"item-1"}}]}`,
+			"get_item":     `{"item_id":"item-1","title":"Item one"}`,
+		}},
+	}
+}
+
+// createConformanceMCPProvider enables the provider the conformance pack
+// requires.
+func createConformanceMCPProvider(t *testing.T, srv http.Handler) {
+	t.Helper()
+	req := security.AuthedRequest(t, http.MethodPost, "/v1/mcp/providers",
+		strings.NewReader(`{"source":"custom","id":"`+conformanceMCPProvider+`","url":"http://127.0.0.1:9/mcp","enabled":true}`))
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create MCP provider fixture status = %d body = %s", w.Code, w.Body.String())
+	}
 }

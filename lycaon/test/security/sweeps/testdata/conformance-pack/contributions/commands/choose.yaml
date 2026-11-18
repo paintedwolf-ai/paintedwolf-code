@@ -1,0 +1,20 @@
+id: conformance/sweep:choose
+title: Choose an item
+category: Conformance
+icon: tool
+enablement:
+  fact: mcp_requirement_ready
+  is: conformance/sweep:tracker
+interaction:
+  steps:
+    - id: item
+      title: Item
+      kind: choice
+      required: true
+      source:
+        kind: mcp
+        requirement: conformance/sweep:tracker
+        tool: list_items
+action:
+  kind: composer_prefill
+  text: Conformance choice

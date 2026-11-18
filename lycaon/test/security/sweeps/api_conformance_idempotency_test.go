@@ -76,7 +76,7 @@ func (s *conformanceSweep) checkIdempotent(ctx context.Context, first conformanc
 	}
 	// Some properties are preconditions a retry may refresh; the key must
 	// still guard the operation's input, so some change must be refused.
-	var answers []string
+	var outcomes []string
 	for _, name := range slices.Sorted(maps.Keys(changed)) {
 		conflict := first.req
 		conflict.probe, conflict.body = "changed body", changed[name]
@@ -84,9 +84,9 @@ func (s *conformanceSweep) checkIdempotent(ctx context.Context, first conformanc
 		if ex.status == http.StatusConflict && ex.code() == string(wire.ApiErrorCodeIdempotencyConflict) {
 			return
 		}
-		answers = append(answers, name+": "+ex.outcome())
+		outcomes = append(outcomes, name+": "+ex.outcome())
 	}
-	s.findings.add(ruleKeyedOperationsAreIdempotent, op.ID, "changed body", "no change answered 409 %s (%s)", wire.ApiErrorCodeIdempotencyConflict, strings.Join(answers, ", "))
+	s.findings.add(ruleKeyedOperationsAreIdempotent, op.ID, "changed body", "no change answered 409 %s (%s)", wire.ApiErrorCodeIdempotencyConflict, strings.Join(outcomes, ", "))
 }
 
 func (s *conformanceSweep) compareReplay(first, replay conformanceExchange) {

@@ -607,8 +607,6 @@ func hostRecipeMCPProviderFields(id string) map[string]any {
 	return map[string]any{"source": "custom", "id": id, "url": "http://127.0.0.1:9/mcp", "enabled": true}
 }
 
-// hostRecipeListMCPTools lists the first created conformance provider; before
-// it exists the read answers not found.
 // hostRecipeListMCPTools lists the tools of a provider it created once.
 func hostRecipeListMCPTools(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 	id, err := hostRecipeOnce(s, "mcp-tools-provider", func() (string, error) {
