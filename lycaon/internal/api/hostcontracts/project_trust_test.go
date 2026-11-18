@@ -10,14 +10,15 @@ import (
 	"testing"
 
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestPutProjectTrustAcceptsIndependentFields(t *testing.T) {
 	srv, _, registry := contractfixture.NewSettingsTestServer(t)
-	created, err := project.CreateWithRoot(t.Context(), registry, t.TempDir())
+	created, err := projecttest.CreateWithRoot(t.Context(), registry, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 
 	for name, body := range map[string]string{
@@ -37,7 +38,7 @@ func TestPutProjectTrustAcceptsIndependentFields(t *testing.T) {
 
 func TestPutProjectTrustRejectsEmptyUpdate(t *testing.T) {
 	srv, _, registry := contractfixture.NewSettingsTestServer(t)
-	created, err := project.CreateWithRoot(t.Context(), registry, t.TempDir())
+	created, err := projecttest.CreateWithRoot(t.Context(), registry, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 
 	req := contractfixture.NewAuthedRequest(http.MethodPatch, "/v1/projects/"+created.ID+"/trust", strings.NewReader(`{}`))
@@ -53,7 +54,7 @@ func TestProjectTrustCachedDiscoveryDoesNotCacheSwitches(t *testing.T) {
 	srv, _, registry := contractfixture.NewSettingsTestServer(t)
 	root := t.TempDir()
 	testutil.FailErr(t, "write guidance", os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("Guidance\n"), 0o600))
-	created, err := project.CreateWithRoot(t.Context(), registry, root)
+	created, err := projecttest.CreateWithRoot(t.Context(), registry, root)
 	testutil.FailErr(t, "create project", err)
 	url := "/v1/projects/" + created.ID + "/trust"
 	get := func() wire.ProjectTrust {

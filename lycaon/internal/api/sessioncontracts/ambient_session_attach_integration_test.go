@@ -17,6 +17,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -43,7 +44,7 @@ func TestCreateSessionAttachesAmbientImplementRun(t *testing.T) {
 
 	dir := t.TempDir()
 	projReg := project.NewSQLRegistry(sqlDB)
-	p, err := project.CreateWithRoot(t.Context(), projReg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), projReg, dir)
 	testutil.FailErr(t, "reg.Create failed", err)
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: projReg}, Workflow: hostapi.WorkflowDependencies{
@@ -101,7 +102,7 @@ func TestCreateSessionCatalogOmitsImplement(t *testing.T) {
 
 	dir := t.TempDir()
 	projReg := project.NewSQLRegistry(sqlDB)
-	p, err := project.CreateWithRoot(t.Context(), projReg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), projReg, dir)
 	testutil.FailErr(t, "reg.Create failed", err)
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: projReg}, Workflow: hostapi.WorkflowDependencies{
@@ -169,7 +170,7 @@ attach:
 	testutil.FailErr(t, "write invalid workflow", os.WriteFile(filepath.Join(wfDir, "workflow.yaml"), []byte(invalidYAML), 0o644))
 
 	projReg := project.NewSQLRegistry(sqlDB)
-	p, err := project.CreateWithRoot(t.Context(), projReg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), projReg, dir)
 	testutil.FailErr(t, "reg.Create failed", err)
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: projReg}, Workflow: hostapi.WorkflowDependencies{
@@ -218,7 +219,7 @@ attach:
 	testutil.FailErr(t, "write invalid workflow", os.WriteFile(filepath.Join(wfDir, "workflow.yaml"), []byte(invalidYAML), 0o644))
 
 	projReg := project.NewSQLRegistry(sqlDB)
-	p, err := project.CreateWithRoot(t.Context(), projReg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), projReg, dir)
 	testutil.FailErr(t, "reg.Create failed", err)
 
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)

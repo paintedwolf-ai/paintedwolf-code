@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -53,7 +54,7 @@ func TestWorkersBoardAndCancelHandlers(t *testing.T) {
 	ctx := t.Context()
 	rootDir := resolveTestPath(t, t.TempDir())
 	projReg := project.NewSQLRegistry(sessionFixture.DB())
-	proj, err := project.CreateWithRoot(ctx, projReg, rootDir)
+	proj, err := projecttest.CreateWithRoot(ctx, projReg, rootDir)
 	testutil.FailErr(t, "create project", err)
 
 	sessStore := sessionFixture

@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -165,7 +166,7 @@ func NewGitTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, string) 
 	dir := InitDirtyRepo(t)
 	sessions := storetest.New(t)
 	reg := project.NewSQLRegistry(sessions.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open", err)
 
 	drafter := func(d *hostapi.Dependencies) {

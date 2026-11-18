@@ -7,7 +7,8 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/editordoc"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
@@ -28,7 +29,7 @@ func TestExternalWatchRevalidatesDirectoriesAndHeadOnlyBatches(t *testing.T) {
 				d.Source.EditorDocuments = documents
 			})
 			root := t.TempDir()
-			p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
+			p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 			testutil.FailErr(t, "create project", err)
 			testdbseed.InsertProjectRootWithID(t, database, p.ID, p.Roots[0].ID, root)
 			testutil.FailErr(t, "create directory", os.Mkdir(filepath.Join(root, "src"), 0o755))
@@ -70,7 +71,7 @@ func TestEnsureSourceWatchBindsBeforeTheCatalogWalk(t *testing.T) {
 		}
 	})
 	dir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
 	t.Cleanup(func() { sourcefeed.StopProjectWatch(context.Background(), p.ID) })
 

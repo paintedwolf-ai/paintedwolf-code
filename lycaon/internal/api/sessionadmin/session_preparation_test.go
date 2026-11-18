@@ -8,7 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/contextpreparation"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
@@ -18,7 +19,7 @@ import (
 func TestSessionSeenOffersPreparationAfterSuccessfulLookup(t *testing.T) {
 	deps := apitestdeps.Deps{}
 	apitestdeps.Fill(t, &deps)
-	proj, err := project.CreateWithRoot(t.Context(), deps.Projects, t.TempDir())
+	proj, err := projecttest.CreateWithRoot(t.Context(), deps.Projects, t.TempDir())
 	testutil.FailErr(t, "create preparation project", err)
 	sess, err := deps.Store.CreateWithStatus(t.Context(), api.CreateSessionRequest{ProjectID: proj.ID}, proj.ID, api.SessionStatusIdle)
 	testutil.FailErr(t, "create preparation chat", err)

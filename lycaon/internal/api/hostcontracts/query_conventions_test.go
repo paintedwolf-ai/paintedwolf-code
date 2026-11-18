@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/cost/costtest"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -29,7 +30,7 @@ func TestBoardRequiresProjectID(t *testing.T) {
 
 	dir := t.TempDir()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	sessionStore := sessionFixture
@@ -71,7 +72,7 @@ func TestBoardRequiresSessionIDMissing(t *testing.T) {
 
 	dir := t.TempDir()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
@@ -91,7 +92,7 @@ func TestWorkersRequiresSessionID(t *testing.T) {
 
 	dir := t.TempDir()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{

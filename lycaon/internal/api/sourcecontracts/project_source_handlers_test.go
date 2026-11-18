@@ -17,6 +17,7 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
@@ -34,7 +35,7 @@ func TestMakeProjectSourceEditableRoute(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "locked.txt")
 	testutil.FailErr(t, "write fixture", os.WriteFile(path, []byte("locked\n"), 0o444))
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "create project", err)
 	read, err := projectsource.ReadProjectSource(p, projectsource.SourceReadRequest{RootID: p.Roots[0].ID, Path: "locked.txt"})
 	testutil.FailErr(t, "read source", err)
@@ -70,7 +71,7 @@ func TestProjectSourceMutationRejectsLifecycleTransition(t *testing.T) {
 		}
 	})
 	root := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "create project", err)
 	testutil.FailErr(t, "begin lifecycle transition", gate.BeginMutation(p.ID))
 	t.Cleanup(func() { gate.EndMutation(p.ID) })
@@ -161,7 +162,7 @@ func TestProjectSourceIndexWarmsOffRequestPath(t *testing.T) {
 	srv := contractfixture.NewTestServer(t)
 	dir := t.TempDir()
 	testutil.FailErr(t, "write fixture", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x"), 0o644))
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
 
 	var summary wire.SourceIndexSummary
@@ -191,7 +192,7 @@ func TestSourceSearchRestrictsCoverageToRequestedRoot(t *testing.T) {
 	srv := contractfixture.NewTestServer(t)
 	dir := t.TempDir()
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(dir, "match.txt"), []byte("source"), 0600))
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
 	other := t.TempDir()
 	_, err = srv.Sources.Workspace.ProjectRegistry.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: other})
@@ -217,7 +218,7 @@ func TestSourceSearchReadsAPastedFullPathAndLocation(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FailErr(t, "create directory", os.MkdirAll(filepath.Join(dir, "docs"), 0o700))
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(dir, "docs", "release.md"), []byte("source"), 0o600))
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
 	search := func(q string) (wire.SourceSearchResponse, string) {
 		var result wire.SourceSearchResponse
@@ -267,7 +268,7 @@ func TestProjectSourceReadCarriesWorkspaceIdentity(t *testing.T) {
 	srv := contractfixture.NewTestServer(t, contractfixture.WithSQLProjects(t))
 	dir := t.TempDir()
 	testutil.FailErr(t, "write fixture", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x"), 0o644))
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/source?path=a.txt", nil)
@@ -286,7 +287,7 @@ func TestProjectSourceReadCarriesWorkspaceIdentity(t *testing.T) {
 func TestSourceWorkspaceCarriesResolvedRoots(t *testing.T) {
 	srv := contractfixture.NewTestServer(t)
 	dir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/source/workspace", nil)
@@ -308,7 +309,7 @@ func TestSourceWorkspaceCarriesResolvedRoots(t *testing.T) {
 func TestSourceWorkspaceReportsWatchCoverage(t *testing.T) {
 	srv := contractfixture.NewTestServer(t)
 	dir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
 	// Bind by the path the project records, as the server does; the registry
 	// keys watchers by that string.
@@ -371,7 +372,7 @@ func TestProjectSourceReadsRejectWorkspaceChangedDuringRead(t *testing.T) {
 				0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
 			}
 			testutil.FailErr(t, "write image fixture", os.WriteFile(filepath.Join(dir, "a.png"), png, 0o644))
-			p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+			p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 			testutil.FailErr(t, "create project", err)
 
 			replacement := *p
@@ -424,7 +425,7 @@ func TestProjectSourceFileReadsSurviveTheWorkspaceChanging(t *testing.T) {
 			dir := t.TempDir()
 			testutil.FailErr(t, "write text fixture", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("old"), 0o644))
 			testutil.FailErr(t, "write image fixture", os.WriteFile(filepath.Join(dir, "a.png"), png, 0o644))
-			p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+			p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 			testutil.FailErr(t, "create project", err)
 
 			// The same root, re-addressed while the read is in flight.

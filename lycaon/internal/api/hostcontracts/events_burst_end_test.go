@@ -13,6 +13,7 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -28,7 +29,7 @@ func TestEventStreamEndsBurstWithComment(t *testing.T) {
 	defer restore()
 	hub := events.NewMemoryHub()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "project.CreateWithRoot failed", err)
 
 	sessionStore := sessionFixture

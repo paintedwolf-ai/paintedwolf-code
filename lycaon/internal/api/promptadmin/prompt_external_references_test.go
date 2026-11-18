@@ -8,7 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/grantedpath"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/promptattach"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
@@ -156,7 +157,7 @@ func TestReadReferenceImageValidatesProjectRootFile(t *testing.T) {
 	var deps apitestdeps.Deps
 	apitestdeps.Fill(t, &deps)
 	rootDir := canonPath(t, t.TempDir())
-	p, err := project.CreateWithRoot(t.Context(), deps.Projects, rootDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), deps.Projects, rootDir)
 	testutil.FailErr(t, "create project", err)
 	rootID := p.Roots[0].ID
 

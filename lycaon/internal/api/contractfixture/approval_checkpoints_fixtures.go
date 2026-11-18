@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -53,7 +54,7 @@ func NewCheckpointHandlerFixture(t *testing.T) (*api.Server, *hitl.Checkpoints, 
 
 	reg := project.NewSQLRegistry(sqlDB)
 	dir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Create failed", err)
 
 	store := store.NewSQL(sqlDB)

@@ -16,7 +16,7 @@ import (
 func TestHostDataDirUsesProjectIDWhenKnown(t *testing.T) {
 	ctx := context.Background()
 	reg := projecttest.NewRegistry(t)
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	rootPath := project.PrimaryRootPath(p)
 

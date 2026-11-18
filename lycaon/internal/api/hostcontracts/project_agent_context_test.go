@@ -9,7 +9,8 @@ import (
 	"testing"
 
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -27,7 +28,7 @@ func TestProjectAgentContextReportsActualPathChain(t *testing.T) {
 	} {
 		testutil.FailErr(t, "write "+rel, os.WriteFile(filepath.Join(root, filepath.FromSlash(rel)), []byte(body), 0o644))
 	}
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "CreateWithRoot", err)
 
 	load := func() wire.ProjectAgentContext {
@@ -69,7 +70,7 @@ func TestProjectAgentContextReportsActualPathChain(t *testing.T) {
 
 func TestProjectAgentContextRejectsPathOutsideSelectedRoot(t *testing.T) {
 	srv := contractfixture.TrustSettingsServer(t)
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, t.TempDir())
 	testutil.FailErr(t, "CreateWithRoot", err)
 	req := contractfixture.NewAuthedRequest(http.MethodGet,
 		"/v1/projects/"+p.ID+"/agent-context?root_id="+p.Roots[0].ID+"&path=../outside", nil)

@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -30,7 +31,7 @@ func elevatedTestHandler(t *testing.T) (*Handler, *wire.Session) {
 	testutil.FailErr(t, "create approvals", err)
 	sessions := sessionFixture
 	projects := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), projects, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), projects, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	chat, err := sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create chat", err)

@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/apitest"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
@@ -88,7 +89,7 @@ func TestScanSummaryHTTPIntegration(t *testing.T) {
 		ScanCoordinator: coord, ScannerRegistry: reg}}), nil, api.TestAPIToken)
 
 	projectDir := t.TempDir()
-	proj, err := project.CreateWithRoot(t.Context(), projects, projectDir)
+	proj, err := projecttest.CreateWithRoot(t.Context(), projects, projectDir)
 	testutil.FailErr(t, "create scan project", err)
 	created, err := coord.Enqueue(t.Context(), scan.EnqueueRequest{
 		ProjectDir: projectDir,

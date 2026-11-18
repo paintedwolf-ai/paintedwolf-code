@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -55,7 +56,7 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 	}
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	projects := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(ctx, projects, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, projects, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	mgr.SetProjectRegistry(projects)
 	// Reserve one iteration for prose closeout.

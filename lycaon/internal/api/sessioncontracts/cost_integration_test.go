@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/cost/costtest"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -76,7 +77,7 @@ func TestHandleCostSummaryProjectBreakdown(t *testing.T) {
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: reg, Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
 	dir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
 	parent, err := store.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild, ProjectID: p.ID}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
@@ -119,7 +120,7 @@ func TestHandleProjectCostReportIncludesSessionBreakdownAndArchivedChats(t *test
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionStore, Projects: reg, Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
 	dir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "create project", err)
 	first, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{
 		Posture: wire.SessionPostureBuild, ProjectID: p.ID,

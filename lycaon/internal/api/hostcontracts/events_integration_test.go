@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -32,7 +33,7 @@ func TestSSEEndToEnd(t *testing.T) {
 	hub := events.NewMemoryHub()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
 	ctx := context.Background()
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	store := sessionFixture
@@ -234,7 +235,7 @@ func TestSSEHeartbeat(t *testing.T) {
 	hub := events.NewMemoryHub()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
 	ctx := context.Background()
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	store := sessionFixture
