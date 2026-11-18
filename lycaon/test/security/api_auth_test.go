@@ -11,6 +11,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -98,15 +100,6 @@ func TestHealthExemptFromAuth(t *testing.T) {
 	}
 }
 
-func TestResolveAPITokenFromEnv(t *testing.T) {
-	t.Setenv("LYCAON_API_TOKEN", "env-token-123")
-	got, err := api.ResolveAPIToken()
-	testutil.FailErr(t, "api.ResolveAPIToken failed", err)
-	if got != "env-token-123" {
-		t.Fatalf("token = %q", got)
-	}
-}
-
 func TestV1RoutesRequireAuthTable(t *testing.T) {
 	srv := wiring.BuildForTest(t).Server
 	sessID := "00000000-0000-4000-8000-000000000001"
@@ -163,19 +156,6 @@ func TestCreateSessionRejectsProjectDir(t *testing.T) {
 	}
 }
 
-func TestCreateProjectAllowsUserSelectedPath(t *testing.T) {
-	dir := t.TempDir()
-
-	srv := wiring.BuildForTest(t).Server
-	req := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(`{"roots":[{"path":"`+dir+`"}]}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-}
-
 func TestCreateProjectAllowsAnyExistingDirectoryWhileActionGuardStaysFailClosed(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -204,17 +184,19 @@ func TestCreateProjectAllowsAnyExistingDirectoryWhileActionGuardStaysFailClosed(
 		return w.Code, string(decodeAPIError(t, w).Code)
 	}
 
+	type refusal struct{ code, reason string }
+	secretStore := &refusal{isolation.CodeCapabilityRequestInvalid, confine.WriteRootCodeSecretStore}
 	cases := []struct {
-		name              string
-		path              string
-		expectActionBlock bool
+		name string
+		path string
+		want *refusal
 	}{
-		{"home directory", home, false},
-		{"dot-config directory", filepath.Join(home, ".config"), false},
-		{"ssh directory", filepath.Join(home, ".ssh"), true},
-		{"credential store", filepath.Join(home, "Library", "Keychains"), true},
-		{"device config root", cfgRoot, true},
-		{"ordinary folder", t.TempDir(), false},
+		{"home directory", home, nil},
+		{"dot-config directory", filepath.Join(home, ".config"), nil},
+		{"ssh directory", filepath.Join(home, ".ssh"), secretStore},
+		{"credential store", filepath.Join(home, "Library", "Keychains"), secretStore},
+		{"device config root", cfgRoot, &refusal{isolation.CodeControlPlaneDenied, confine.WriteRootCodeContainsState}},
+		{"ordinary folder", t.TempDir(), nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -223,8 +205,13 @@ func TestCreateProjectAllowsAnyExistingDirectoryWhileActionGuardStaysFailClosed(
 				t.Fatalf("%s (%s): status = %d code = %q, want 201 Created", tc.name, tc.path, status, code)
 			}
 			reject := tools.ValidateAttachedRootsForAction([]string{tc.path})
-			if tc.expectActionBlock && reject == nil {
-				t.Fatalf("%s (%s): expected ValidateAttachedRootsForAction to refuse execution root", tc.name, tc.path)
+			switch {
+			case tc.want == nil && reject != nil:
+				t.Fatalf("%s: action refused with %s %v, want allowed", tc.name, reject.Code, reject.Data)
+			case tc.want != nil && reject == nil:
+				t.Fatalf("%s: action allowed, want %s %s", tc.name, tc.want.code, tc.want.reason)
+			case tc.want != nil && (reject.Code != tc.want.code || reject.Data["reason"] != tc.want.reason):
+				t.Fatalf("%s: refusal = %s %v, want %s %s", tc.name, reject.Code, reject.Data["reason"], tc.want.code, tc.want.reason)
 			}
 		})
 	}

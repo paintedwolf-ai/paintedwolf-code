@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -33,27 +32,28 @@ func TestImplementDefaultTaskEnqueueWiresToolResultJobID(t *testing.T) {
 
 	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "h.Sessions.Manager.GetMessages failed", err)
-	var found bool
+	var dispatch *api.WorkerDispatch
 	for _, msg := range msgs {
-		if msg.Role != api.MessageRoleTool {
+		if msg.ToolResult == nil || msg.ToolResult.ToolCallID != "call_task" {
 			continue
 		}
-		if !strings.Contains(msg.Content, `"worker"`) {
-			continue
+		if msg.ToolResult.Outcome != api.ToolResultOutcomeCompleted || msg.ToolResult.Dispatch == nil {
+			t.Fatalf("task tool result = outcome %q dispatch %+v, want completed with a dispatch", msg.ToolResult.Outcome, msg.ToolResult.Dispatch)
 		}
-		if msg.ToolResult == nil {
-			t.Fatalf("tool message missing tool_result envelope: content=%q", msg.Content)
-		}
-		if msg.ToolResult.Dispatch == nil || strings.TrimSpace(msg.ToolResult.Dispatch.WorkerID) == "" {
-			t.Fatalf("tool_result.dispatch missing on enqueued task: %+v content=%q", msg.ToolResult, msg.Content)
-		}
-		if msg.ToolResult.Outcome == "" {
-			t.Fatalf("tool_result.outcome empty on enqueued task: %+v", msg.ToolResult)
-		}
-		found = true
-		break
+		dispatch = msg.ToolResult.Dispatch
 	}
-	if !found {
-		t.Fatalf("expected enqueued task tool message with tool_result.dispatch; got %d messages", len(msgs))
+	if dispatch == nil {
+		t.Fatalf("no tool result for call_task among %d messages", len(msgs))
 	}
+	jobs, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)
+	testutil.FailErr(t, "list session jobs", err)
+	for _, job := range jobs {
+		if job.ID == dispatch.WorkerID {
+			if job.AgentType != "implementer" || dispatch.AgentType != job.AgentType {
+				t.Fatalf("dispatch %+v names job with agent %q, want implementer", dispatch, job.AgentType)
+			}
+			return
+		}
+	}
+	t.Fatalf("dispatch worker_id %q names no queued job of the session (%d jobs)", dispatch.WorkerID, len(jobs))
 }

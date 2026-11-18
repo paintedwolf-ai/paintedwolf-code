@@ -40,15 +40,27 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	// Prompt events.
 	acceptPromptOpenAPI(t, base, sess.ID, `{"text":"hub probe"}`)
 
-	sessionEnv := hub.waitForField(t, wire.EventTopicSession, "last_message")
-	assertField(t, sessionEnv, "id", sess.ID)
-	assertField(t, sessionEnv, "status", "") // status is enum string but value varies; just assert key present
-	assertField(t, sessionEnv, "last_message", "")
+	sessionEvent := decodeEnvelope[wire.SessionEvent](t, hub.waitForField(t, wire.EventTopicSession, "last_message"))
+	if sessionEvent.ID != sess.ID || sessionEvent.ProjectID != project.ID {
+		t.Fatalf("session event = %+v, want session %s in project %s", sessionEvent, sess.ID, project.ID)
+	}
+	if sessionEvent.Status != wire.SessionStatusBusy && sessionEvent.Status != wire.SessionStatusIdle {
+		t.Fatalf("session event status = %q, want busy or idle", sessionEvent.Status)
+	}
 
-	msgEnv := hub.waitFor(t, wire.EventTopicMessage)
-	assertField(t, msgEnv, "session_id", sess.ID)
-	assertField(t, msgEnv, "op", "")
-	assertField(t, msgEnv, "message", "")
+	msgEvent := decodeEnvelope[wire.MessageEvent](t, hub.waitFor(t, wire.EventTopicMessage))
+	if msgEvent.SessionID != sess.ID || (msgEvent.Op != wire.MessageChangeAppend && msgEvent.Op != wire.MessageChangePatch) {
+		t.Fatalf("message event = session %q op %q, want %s append or patch", msgEvent.SessionID, msgEvent.Op, sess.ID)
+	}
+	transcript := listMessagesOpenAPI(t, base, map[string]string{"id": sess.ID}, http.StatusOK)
+	if !transcriptHas(transcript, func(m wire.Message) bool { return m.ID == msgEvent.Message.ID }) {
+		t.Fatalf("message event names %q, which is not in the transcript", msgEvent.Message.ID)
+	}
+	if !transcriptHas(transcript, func(m wire.Message) bool {
+		return sessionEvent.LastMessage != "" && strings.HasPrefix(m.Content, sessionEvent.LastMessage)
+	}) {
+		t.Fatalf("session event last_message %q matches no transcript message", sessionEvent.LastMessage)
+	}
 
 	// Host loop event.
 	acceptPromptOpenAPI(t, base, sess.ID, `{"text":"`+surface.HostLoopWakeSentinel+`"}`)
@@ -56,8 +68,13 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 		memHub.FlushDebounced()
 	}
 	llmEnv := hub.waitFor(t, wire.EventTopicLLM)
-	assertField(t, llmEnv, "call_id", "")
-	assertField(t, llmEnv, "status", "")
+	llmEvent := decodeEnvelope[wire.LLMCallEvent](t, llmEnv)
+	if llmEvent.CallID == "" || llmEvent.SessionID != sess.ID {
+		t.Fatalf("llm event = %+v, want a call of session %s", llmEvent, sess.ID)
+	}
+	if llmEvent.Status != wire.LLMCallStatusActive && llmEvent.Status != wire.LLMCallStatusOK {
+		t.Fatalf("llm event status = %q, want active or ok", llmEvent.Status)
+	}
 	assertFieldAbsent(t, llmEnv, "token") // no per-token deltas here
 
 	// Workflow event.
@@ -67,10 +84,11 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 		"/v1/sessions/"+sess.ID+"/workflow-runs",
 		`{"workflow_id":"plan","workflow_version":"1.0.1"}`, http.StatusCreated)
 
-	wfEnv := hub.waitForWorkflowRunID(t, run.ID)
-	assertField(t, wfEnv, "workflow_id", "plan")
-	assertField(t, wfEnv, "workflow_run_id", run.ID)
-	assertField(t, wfEnv, "status", "")
+	wfEvent := decodeEnvelope[wire.WorkflowEvent](t, hub.waitForWorkflowRunID(t, run.ID))
+	if wfEvent.WorkflowID != "plan" || wfEvent.WorkflowRunID != run.ID || wfEvent.Status != string(run.Status) {
+		t.Fatalf("workflow event = %s/%s status %q, want plan/%s status %q",
+			wfEvent.WorkflowID, wfEvent.WorkflowRunID, wfEvent.Status, run.ID, run.Status)
+	}
 
 	// Provider events.
 	_ = openAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil,
@@ -115,8 +133,29 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	queueBody, err := json.Marshal(wire.QueueMutateRequest{Op: "hold", Hold: &hold, ExpectedRevision: queue.Revision})
 	testutil.FailErr(t, "encode queue hold", err)
 	journeyPatch(t, base, "/v1/sessions/"+sess.ID+"/queue", string(queueBody), http.StatusOK)
-	queueEnv := hub.waitFor(t, wire.EventTopicQueue)
-	assertField(t, queueEnv, "revision", "")
+	queueEvent := decodeEnvelope[wire.QueueEvent](t, hub.waitFor(t, wire.EventTopicQueue))
+	held := openAPIGetJSON[wire.QueueDraft](t, base, "/v1/sessions/{id}/queue", map[string]string{"id": sess.ID}, http.StatusOK)
+	if queueEvent.Revision <= queue.Revision || queueEvent.Revision != held.Revision {
+		t.Fatalf("queue event revision = %d, want above %d and equal to the held queue's %d", queueEvent.Revision, queue.Revision, held.Revision)
+	}
+}
+
+func decodeEnvelope[T any](t *testing.T, env wire.EventEnvelope) T {
+	t.Helper()
+	var out T
+	if err := json.Unmarshal(env.Data, &out); err != nil {
+		t.Fatalf("topic %s data does not decode as %T: %v (data=%s)", env.Topic, out, err, env.Data)
+	}
+	return out
+}
+
+func transcriptHas(msgs []wire.Message, match func(wire.Message) bool) bool {
+	for _, m := range msgs {
+		if match(m) {
+			return true
+		}
+	}
+	return false
 }
 
 type projectHub struct {
@@ -254,7 +293,7 @@ func stringField(raw map[string]any, key string) string {
 	return s
 }
 
-// assertField requires a field and optionally its value.
+// assertField requires a string field with the given value.
 func assertField(t *testing.T, env wire.EventEnvelope, field, want string) {
 	t.Helper()
 	var raw map[string]any
@@ -264,9 +303,6 @@ func assertField(t *testing.T, env wire.EventEnvelope, field, want string) {
 	v, ok := raw[field]
 	if !ok {
 		t.Fatalf("topic %s envelope missing field %q (data=%v)", env.Topic, field, raw)
-	}
-	if want == "" {
-		return
 	}
 	got, _ := v.(string)
 	if got != want {

@@ -1,4 +1,4 @@
-package security
+package wiring
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
@@ -31,8 +33,11 @@ import (
 )
 
 func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
-	// Isolate the test from device hint and suppression files.
-	stageEmptyHintsAndSuppressions(t)
+	// Empty catalogs isolate the gate from bundled hints and suppressions.
+	configtest.Overlay(t, map[config.Rel]string{
+		config.ScanHints:   "hints: {}\n",
+		config.ScanIgnores: "version: 1\nfindings: []\n",
+	})
 	projectDir := t.TempDir()
 	testutil.FailErr(t, "write landed source fixture", os.WriteFile(
 		filepath.Join(projectDir, "main.go"), []byte("package main\n"), 0o600))
@@ -46,7 +51,7 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 	testutil.FailErr(t, "bind child-closeout parent", err)
 
 	store := scan.NewSQLStore(sqlDB)
-	coord := scantest.Coordinator(t, store, staticHeadSHA{sha: "closeout-head"})
+	coord := scantest.Coordinator(t, store, fixedHeadSHA("closeout-head"))
 	proactive := scancfg.DefaultGatesConfig().Gates.ProactiveCategories
 
 	records := workerrecords.New(sqlDB)
@@ -153,7 +158,7 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 		AssessmentID:     completed.AssessmentID, CoverageStatus: completed.CoverageStatus,
 		ExecutionManifest: completed.ExecutionManifest, ExecutionFingerprint: completed.ExecutionFingerprint,
 		TaskID:     api.ScanTaskID(created.ID),
-		Scanner:    securityScannerContract(created.ScannerID),
+		Scanner:    closeoutScannerContract(created.ScannerID),
 		Categories: proactive,
 	})
 	testutil.FailErr(t, "ing.Ingest failed", err)
@@ -208,7 +213,7 @@ func commitRequiredSecurityLanding(
 	if !claimed {
 		t.Fatal("merge apply was not claimed")
 	}
-	manifest, fingerprint, err := scancatalog.ExecutionManifest(securityScannerContract("sast-one"))
+	manifest, fingerprint, err := scancatalog.ExecutionManifest(closeoutScannerContract("sast-one"))
 	testutil.FailErr(t, "build scanner execution manifest", err)
 	// The first assessment needs a full scan because no incremental baseline exists.
 	plan := obligation.Plan{
@@ -226,4 +231,16 @@ func commitRequiredSecurityLanding(
 		t.Fatal("landed scan obligation missing")
 	}
 	return rec
+}
+
+type fixedHeadSHA string
+
+func (s fixedHeadSHA) HeadSHA(context.Context, string) (string, error) { return string(s), nil }
+
+func closeoutScannerContract(id string) scancatalog.ScannerContract {
+	return scancatalog.ScannerContract{
+		ScannerID: id, Engine: "security-test", Driver: "security-test",
+		Scope:                 scancatalog.ScopeSourceDriver,
+		DefinitionFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}
 }

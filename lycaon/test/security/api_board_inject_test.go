@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -56,18 +58,37 @@ func TestCoordinatorPromptInjectDedup(t *testing.T) {
 	}
 	sess := createSessionHTTP(t, srv, dir)
 	exitAmbientRunHTTP(t, srv, sess.ID)
-	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "one"); err != nil {
-		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
-	}
-	for _, prompt := range []string{"two", "three", "four"} {
+
+	var injected []bool
+	for _, prompt := range []string{"one", "two", "three", "four"} {
+		before := len(rec.AllRequests())
 		if _, err := mgr.Submissions.Prompt(ctx, sess.ID, prompt); err != nil {
 			testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 		}
-		if !boardInjectInMessages(rec.LastRequest().Messages) {
-			return
+		reqs := rec.AllRequests()[before:]
+		if len(reqs) == 0 {
+			t.Fatalf("prompt %q made no coordinator request", prompt)
 		}
+		carries := false
+		for _, req := range reqs {
+			carries = carries || boardInjectInMessages(req.Messages)
+		}
+		if len(injected) == 0 && !boardInjectInMessages(reqs[0].Messages) {
+			t.Fatal("the first coordinator request lacks the board inject")
+		}
+		injected = append(injected, carries)
 	}
-	t.Fatal("expected board injects to deduplicate after repo orientation settled")
+	// Once orientation settles the inject stays out of every later request.
+	settled := false
+	for i, carries := range injected {
+		if settled && carries {
+			t.Fatalf("board inject returned on prompt %d after settling: %v", i+1, injected)
+		}
+		settled = settled || !carries
+	}
+	if !settled {
+		t.Fatalf("board inject never deduplicated across four prompts: %v", injected)
+	}
 }
 
 func boardInjectInMessages(msgs []api.Message) bool {
@@ -80,6 +101,6 @@ func boardInjectInMessages(msgs []api.Message) bool {
 }
 
 func boardInjectMarker(content string) bool {
-	return strings.Contains(content, "lycaon-board-orientation:v1") ||
-		strings.Contains(content, "pack-board:v1")
+	return strings.Contains(content, inject.BoardOrientationInjectSentinel) ||
+		strings.Contains(content, packboard.PackBoardSentinel)
 }

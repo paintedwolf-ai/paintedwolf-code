@@ -165,6 +165,11 @@ func (o *OrchestratorImpl) Run(ctx context.Context, req RunRequest) (*RunResult,
 	if err != nil {
 		return nil, o.settleRunFailure(ctx, workflowContextFromInput(req), "", err)
 	}
+	if TopologyRequiresIsolation(resolved.Topology) {
+		if err := o.ensureWorkspaceManager(resolved.Topology.WorkspaceMode); err != nil {
+			return nil, o.settleRunFailure(ctx, wfRun, "", err)
+		}
+	}
 	var result *RunResult
 	switch resolved.Topology.Pattern {
 	case TopologyPipeline:

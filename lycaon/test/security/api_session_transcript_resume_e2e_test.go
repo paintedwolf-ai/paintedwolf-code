@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -61,6 +62,11 @@ func TestSessionTranscriptWorkflowRunIdHTTP(t *testing.T) {
 		t.Fatalf("GET workflow run status = %d body = %s", wRun.Code, wRun.Body.String())
 	}
 	AssertResponseMatchesOpenAPI(t, wRun, http.MethodGet, "/v1/workflow-runs/{id}", map[string]string{"id": runID})
+	var gotRun api.WorkflowRun
+	testutil.FailErr(t, "decode workflow run", json.Unmarshal(wRun.Body.Bytes(), &gotRun))
+	if gotRun.ID != runID || gotRun.Status != api.WorkflowRunStatusCanceled {
+		t.Fatalf("exited run = %s status %q, want %s canceled", gotRun.ID, gotRun.Status, runID)
+	}
 
 	listReq := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/messages", nil)
 	wMsgs := httptest.NewRecorder()
@@ -69,4 +75,18 @@ func TestSessionTranscriptWorkflowRunIdHTTP(t *testing.T) {
 		t.Fatalf("GET messages status = %d body = %s", wMsgs.Code, wMsgs.Body.String())
 	}
 	AssertResponseMatchesOpenAPI(t, wMsgs, http.MethodGet, "/v1/sessions/{id}/messages", map[string]string{"id": sess.ID})
+	var page api.SessionTranscriptPage
+	testutil.FailErr(t, "decode transcript page", json.Unmarshal(wMsgs.Body.Bytes(), &page))
+	found := false
+	for _, m := range page.Messages {
+		if m.Content == "after complete" {
+			found = true
+			if m.WorkflowRunID != runID {
+				t.Fatalf("appended message workflow_run_id = %q, want %q", m.WorkflowRunID, runID)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("appended message missing from the transcript page")
+	}
 }

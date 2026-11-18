@@ -33,30 +33,38 @@ func createAPISessionForProject(t *testing.T, serve http.Handler, projectDir, po
 	return createSessionForProjectHandlerHTTP(t, serve, proj.ID, wire.SessionPosture(posture))
 }
 
+// writePostureLabel writes a project overlay that relabels the spec posture.
+func writePostureLabel(t *testing.T, projectDir, label string) {
+	t.Helper()
+	overlayDir := filepath.Join(projectDir, settingsoverlay.DirName())
+	testutil.FailErr(t, "create overlay directory", os.MkdirAll(overlayDir, 0o755))
+	testutil.FailErr(t, "write postures overlay", os.WriteFile(filepath.Join(overlayDir, "postures.yaml"),
+		[]byte("postures:\n  spec:\n    label: "+label+"\n"), 0o644))
+}
+
+// effectiveSpecLabel reads the spec posture label the session resolves.
+func effectiveSpecLabel(t *testing.T, h *wiring.Harness, sessionID string) string {
+	t.Helper()
+	stored, err := h.Store.Get(t.Context(), sessionID)
+	testutil.FailErr(t, "load session", err)
+	postures, err := h.Sessions.Manager.Profiles.EffectivePostures(t.Context(), stored)
+	testutil.FailErr(t, "EffectivePostures", err)
+	spec, err := postures.Get(wire.SessionPostureSpec)
+	testutil.FailErr(t, "spec posture", err)
+	return spec.Label
+}
+
 func TestPostureOverlayWarmOnCreateSession(t *testing.T) {
 	h := wiring.BuildForTest(t)
-	srv := h.Server
-	mgr := h.Sessions.Manager
-
 	projectDir := t.TempDir()
-	overlayDir := filepath.Join(projectDir, settingsoverlay.DirName())
-	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
-		testutil.FailErr(t, "create directory", err)
-	}
-	if err := os.WriteFile(filepath.Join(overlayDir, "postures.yaml"), []byte(`
-postures:
-  spec:
-    label: Audit
-`), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
+	writePostureLabel(t, projectDir, "Audit")
 
-	sess := createAPISessionForProject(t, srv, projectDir, "spec")
+	sess := createAPISessionForProject(t, h.Server, projectDir, "spec")
 
-	if sess.AgentType != "coordinator" {
-		t.Fatalf("agent_type = %q want coordinator", sess.AgentType)
+	if got := effectiveSpecLabel(t, h, sess.ID); got != "Audit" {
+		t.Fatalf("spec posture label = %q, want the overlay's Audit", got)
 	}
-	got, err := mgr.Profiles.ResolvePromptToolProfile(t.Context(), sess.ID)
+	got, err := h.Sessions.Manager.Profiles.ResolvePromptToolProfile(t.Context(), sess.ID)
 	testutil.FailErr(t, "mgr.Profiles.ResolvePromptToolProfile failed", err)
 	if got != "coordinator" {
 		t.Fatalf("root coordinator profile = %q want coordinator (a posture overlay selects no profile)", got)
@@ -110,34 +118,27 @@ postures:
 	})
 }
 
+// The overlay cache is keyed by root, so a session created after the file
+// changes still sees the overlay POST /v1/projects loaded.
 func TestCreateProjectWarmsPostureOverlay(t *testing.T) {
 	h := wiring.BuildForTest(t)
-	srv := h.Server
-	mgr := h.Sessions.Manager
-
 	projectDir := t.TempDir()
-	overlayDir := filepath.Join(projectDir, settingsoverlay.DirName())
-	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
-		testutil.FailErr(t, "create directory", err)
-	}
-	if err := os.WriteFile(filepath.Join(overlayDir, "postures.yaml"), []byte(`
-postures:
-  spec:
-    label: Audit
-`), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
+	writePostureLabel(t, projectDir, "Audit")
 
 	createBody := `{"roots":[{"path":"` + projectDir + `"}]}`
 	req := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(createBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
+	h.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create status = %d body = %s", w.Code, w.Body.String())
 	}
+	var proj wire.Project
+	testutil.FailErr(t, "decode project", json.Unmarshal(w.Body.Bytes(), &proj))
 
-	if err := mgr.Profiles.WarmPostureOverlay(projectDir); err != nil {
-		testutil.FailErr(t, "mgr.Profiles.WarmPostureOverlay failed", err)
+	writePostureLabel(t, projectDir, "Rewritten")
+	sess := createSessionForProjectHandlerHTTP(t, h.Server, proj.ID, wire.SessionPostureSpec)
+	if got := effectiveSpecLabel(t, h, sess.ID); got != "Audit" {
+		t.Fatalf("spec posture label = %q, want Audit warmed by project create", got)
 	}
 }

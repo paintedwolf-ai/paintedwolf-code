@@ -2,15 +2,14 @@ package security
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -22,7 +21,10 @@ func TestProjectRemovalCascadeAndSSE(t *testing.T) {
 	dir := t.TempDir()
 	projectRow := createTestProjectHTTP(t, srv, dir)
 
-	_ = createSessionForProjectHTTP(t, srv, projectRow.ID, wire.SessionPostureBuild)
+	sess := createSessionForProjectHTTP(t, srv, projectRow.ID, wire.SessionPostureBuild)
+	ch, unsub, err := h.MemoryHub().Subscribe(t.Context(), events.Subscription{Project: projectRow.ID, Viewer: testutil.HostOwner()})
+	testutil.FailErr(t, "subscribe to project events", err)
+	defer unsub()
 
 	assessReq := authedRequest(t, http.MethodGet, "/v1/projects/"+projectRow.ID+"/removal-assessment", nil)
 	assessW := httptest.NewRecorder()
@@ -48,10 +50,7 @@ func TestProjectRemovalCascadeAndSSE(t *testing.T) {
 		t.Fatalf("accepted removal = %+v", accepted)
 	}
 	// Deletion runs in the server task group; the operation settles after it drains.
-	settleCtx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-	srv.WaitForBackground(settleCtx)
-	testutil.FailErr(t, "settle project removal", settleCtx.Err())
+	srv.WaitForBackground(t.Context())
 	resultW := httptest.NewRecorder()
 	srv.ServeHTTP(resultW, authedRequest(t, http.MethodGet, "/v1/projects/"+projectRow.ID+"/removals/"+operationID, nil))
 	if resultW.Code != http.StatusOK {
@@ -68,6 +67,22 @@ func TestProjectRemovalCascadeAndSSE(t *testing.T) {
 	srv.ServeHTTP(getW, getReq)
 	if getW.Code != http.StatusNotFound {
 		t.Fatalf("get after removal status = %d want 404", getW.Code)
+	}
+	sessW := httptest.NewRecorder()
+	srv.ServeHTTP(sessW, authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID, nil))
+	if sessW.Code != http.StatusNotFound {
+		t.Fatalf("get removed project's session status = %d want 404", sessW.Code)
+	}
+	for {
+		env := testutil.Receive(t, "the project deleted event", ch)
+		if env.Topic != wire.EventTopicProject {
+			continue
+		}
+		var ev wire.ProjectEvent
+		testutil.FailErr(t, "decode project event", json.Unmarshal(env.Data, &ev))
+		if ev.ID == projectRow.ID && ev.Action == wire.ProjectEventDeleted {
+			return
+		}
 	}
 }
 

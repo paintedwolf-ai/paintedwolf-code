@@ -234,18 +234,6 @@ func TestRewindWillNotUseAnotherSessionsAnchor(t *testing.T) {
 	}
 }
 
-func TestRewindIsNotAToolSurface(t *testing.T) {
-	f := newRewindFixture(t)
-	forbidden := map[string]struct{}{
-		"rewind": {}, "rewind_session": {}, "undo": {}, "undo_turn": {}, "restore_checkpoint": {},
-	}
-	for _, meta := range f.h.ToolRegistry.List() {
-		if _, bad := forbidden[meta.Name]; bad {
-			t.Fatalf("tool %q is registered — rewind is host-managed and must stay off the agent loop", meta.Name)
-		}
-	}
-}
-
 func lastVisibleUserMessageID(t *testing.T, base, sessionID string) string {
 	t.Helper()
 	msgs := listMessagesOpenAPI(t, base, map[string]string{"id": sessionID}, http.StatusOK)

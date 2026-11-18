@@ -1,27 +1,33 @@
 package security
 
 import (
-	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func TestDetachThenReadDenied(t *testing.T) {
-	h := wiring.BuildForTest(t)
+	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
+		Pattern:      "read the note",
+		ToolCalls:    []llm.MockToolCall{{ID: "call_read", Name: "command", Args: map[string]any{"command": "cat note.txt"}}},
+		FollowUpText: "done",
+	}}})
+	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))
 	srv := httptest.NewServer(h.Server)
 	t.Cleanup(srv.Close)
 	base := srv.URL
 
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte("hello"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte("detached-note-sentinel"), 0o600); err != nil {
 		testutil.FailErr(t, "write fixture file", err)
 	}
 
@@ -60,13 +66,26 @@ func TestDetachThenReadDenied(t *testing.T) {
 		t.Fatalf("workspace_root_id = %q want empty", gotSess.WorkspaceRootID)
 	}
 
-	_, err = h.ToolRegistry.Run(t.Context(), "command", map[string]any{"command": "cat note.txt"}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{ProjectID: project.ID,
-			SessionID: sess.ID},
-		Source: tools.InvocationSource{Roots: nil},
-	})
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "PROJECT_HAS_NO_ROOTS" {
-		t.Fatalf("read err = %v want PROJECT_HAS_NO_ROOTS", err)
+	if _, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "read the note"); err != nil {
+		testutil.FailErr(t, "prompt after detach", err)
+	}
+	msgs, err := h.Store.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "get messages", err)
+	var result *wire.ToolResult
+	for _, m := range msgs {
+		if m.ToolResult != nil && m.ToolResult.ToolCallID == "call_read" {
+			result = m.ToolResult
+		}
+	}
+	if result == nil {
+		t.Fatal("the read after detach produced no tool result row")
+	}
+	if result.Outcome != wire.ToolResultOutcomeRejected || !slices.Contains(result.Codes, "PROJECT_HAS_NO_ROOTS") {
+		t.Fatalf("read after detach = outcome %q codes %v, want rejected with PROJECT_HAS_NO_ROOTS", result.Outcome, result.Codes)
+	}
+	for _, m := range msgs {
+		if strings.Contains(m.Content, "detached-note-sentinel") {
+			t.Fatalf("the detached root's file content reached the transcript: %+v", m)
+		}
 	}
 }

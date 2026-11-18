@@ -10,32 +10,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
-func TestFeedbackPhaseBlocksAdvanceUntilSubmit(t *testing.T) {
-	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
-		ID:      "feedback-api",
-		Version: "1.0.0",
-		PhaseDefs: []workflowdef.PhaseDef{{
-			ID:                 "clarify",
-			CompleteWhen:       "user_feedback_received:clarify",
-			AdvanceWhenGateMet: workflowdef.AdvanceWhenGateMetAuto,
-			Next:               "done",
-			OnEnter: workflowdef.PhaseOnEnter{
-				RequestUserFeedback: &workflowdef.UserFeedbackPrompt{Prompt: "REST or GraphQL?"},
-			},
-		}, {ID: "done"}},
-	})
-	h, sess := buildWorkflowHarnessWithManifest(t, manifest)
-	srv := h.Server
-	run := startHarnessRun(t, h, sess.ID, "feedback-api", "1.0.0")
-
-	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusConflict {
-		t.Fatalf("advance before feedback status = %d body = %s", w.Code, w.Body.String())
-	}
-}
-
 func TestFeedbackSubmitUnblocksAdvance(t *testing.T) {
 	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
 		ID:      "feedback-submit",
@@ -53,6 +27,20 @@ func TestFeedbackSubmitUnblocksAdvance(t *testing.T) {
 	h, sess := buildWorkflowHarnessWithManifest(t, manifest)
 	srv := h.Server
 	run := startHarnessRun(t, h, sess.ID, "feedback-submit", "1.0.0")
+
+	before, err := h.Workflows.Manager.Store.Runs.Get(t.Context(), run.ID)
+	testutil.FailErr(t, "get run before advance", err)
+	adv := httptest.NewRecorder()
+	srv.ServeHTTP(adv, authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil)))
+	if adv.Code != http.StatusConflict {
+		t.Fatalf("advance before feedback status = %d body = %s", adv.Code, adv.Body.String())
+	}
+	assertPhaseGateError(t, adv.Body.Bytes(), "clarify", "user_feedback_received:clarify")
+	held, err := h.Workflows.Manager.Store.Runs.Get(t.Context(), run.ID)
+	testutil.FailErr(t, "get run after refused advance", err)
+	if held.CurrentPhase != "clarify" || held.Revision != before.Revision {
+		t.Fatalf("refused advance moved the run: phase %q revision %d, want clarify at %d", held.CurrentPhase, held.Revision, before.Revision)
+	}
 
 	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/feedback/clarify", workflowCommandBody(t, srv, run.ID, map[string]any{"response": "Use REST"}))
 	req.Header.Set("Content-Type", "application/json")

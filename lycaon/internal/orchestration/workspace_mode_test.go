@@ -25,10 +25,21 @@ func TestEffectiveWorkspaceModeDefaultsShared(t *testing.T) {
 }
 
 func TestTopologyRequiresIsolation(t *testing.T) {
-	if !TopologyRequiresIsolation(TopologySpec{Pattern: TopologyPack, WorkspaceMode: WorkspaceIsolated}) {
-		t.Fatal("isolated pack should require isolation")
-	}
-	if TopologyRequiresIsolation(TopologySpec{Pattern: TopologyPack, WorkspaceMode: WorkspaceShared}) {
-		t.Fatal("shared pack should not require isolation flag")
+	for _, tc := range []struct {
+		pattern TopologyPattern
+		mode    WorkspaceMode
+		want    bool
+	}{
+		{TopologyPack, WorkspaceIsolated, true},
+		{TopologyPack, WorkspaceShared, false},
+		{TopologyFanOut, WorkspaceIsolated, true},
+		{TopologyFanOut, WorkspaceShared, false},
+		{TopologyFanOut, "", false},
+		{TopologyPipeline, WorkspaceIsolated, false},
+	} {
+		got := TopologyRequiresIsolation(TopologySpec{Pattern: tc.pattern, WorkspaceMode: tc.mode})
+		if got != tc.want {
+			t.Errorf("TopologyRequiresIsolation(%s, %q) = %v, want %v", tc.pattern, tc.mode, got, tc.want)
+		}
 	}
 }

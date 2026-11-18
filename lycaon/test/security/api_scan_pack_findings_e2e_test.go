@@ -2,7 +2,10 @@ package security
 
 import (
 	"context"
+	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -78,7 +81,8 @@ func TestAPIScanPackMatchesPerCategoryAPIRuns(t *testing.T) {
 	cancel := h.StartBackgroundWorkers(t, context.Background())
 	t.Cleanup(cancel)
 
-	var perCategoryTotal int
+	perCategory := map[string]bool{}
+	var projectID string
 	for _, tc := range []struct {
 		category wire.ScanCategory
 		engine   string
@@ -88,24 +92,49 @@ func TestAPIScanPackMatchesPerCategoryAPIRuns(t *testing.T) {
 		{wire.ScanCategorySAST, "lycaon-sast"},
 	} {
 		created := enqueueCodeScan(t, h.Server, projectDir, []wire.ScanCategory{tc.category})
+		projectID = created.ProjectID
 		got := waitScanComplete(t, h.Server, created.ProjectID, created.ID)
 		if got.Status != wire.CodeScanStatusComplete {
 			t.Fatalf("category %s status = %q error=%q", tc.category, got.Status, got.Error)
 		}
-		if got.ScannerID != "" && got.ScannerID != tc.engine {
+		if got.ScannerID != tc.engine {
 			t.Fatalf("category %s scanner_id = %q, want %q", tc.category, got.ScannerID, tc.engine)
 		}
-		perCategoryTotal += got.FindingsCount
+		for key := range findingKeys(got) {
+			perCategory[key] = true
+		}
+	}
+	if len(perCategory) == 0 {
+		t.Fatal("per-category scans of the fixture reported no findings")
 	}
 
 	payload := waitScanPackComplete(t, h, projectDir, []any{"all"}, bundledScannerWaitBudget)
 	if payload.Status != wire.CodeScanStatusComplete {
 		t.Fatalf("scan_pack status = %q error=%q", payload.Status, payload.Error)
 	}
-	if payload.FindingsCount < perCategoryTotal {
-		t.Fatalf("scan_pack aggregate %d < sum of per-category API scans %d", payload.FindingsCount, perCategoryTotal)
-	}
 	if len(payload.ScanIDs) != 3 {
 		t.Fatalf("scan_ids = %v, want 3 engine rows", payload.ScanIDs)
 	}
+	pack := map[string]bool{}
+	for _, id := range payload.ScanIDs {
+		for key := range findingKeys(getCodeScan(t, h.Server, projectID, id)) {
+			pack[key] = true
+		}
+	}
+	if !maps.Equal(pack, perCategory) {
+		t.Fatalf("scan_pack findings differ from the per-category scans:\npack:         %v\nper category: %v", slices.Sorted(maps.Keys(pack)), slices.Sorted(maps.Keys(perCategory)))
+	}
+}
+
+// findingKeys identifies each finding by scanner, rule and first location.
+func findingKeys(scan wire.CodeScan) map[string]bool {
+	keys := map[string]bool{}
+	for _, f := range scan.Findings {
+		key := scan.ScannerID + " " + f.RuleID
+		if len(f.Locations) > 0 {
+			key += fmt.Sprintf(" %s:%d", f.Locations[0].URI, f.Locations[0].StartLine)
+		}
+		keys[key] = true
+	}
+	return keys
 }
