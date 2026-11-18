@@ -3,6 +3,7 @@ package evidence_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -66,7 +67,7 @@ func TestBuildLedgerFromTranscript_readAndGrep(t *testing.T) {
 	}
 
 	ev := ledgertest.BuildFromMessages(root, msgs)
-	if !evidence.PathObserved(ev, "pkg/main.go") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev), "pkg/main.go") {
 		t.Fatalf("expected pkg/main.go in evidence, got %v", evidence.ObservedPathsSorted(ev))
 	}
 	if _, ok := evidence.ResolveHandle(ev, "grep#1"); !ok {
@@ -95,7 +96,7 @@ File "/Users/example/work/space/game.py", line 8, in <module>
 
 	ev := ledgertest.BuildFromMessages(root, msgs)
 	for _, junk := range []string{"$PATH", "(most", "-c", "-m", "1", "8", "<module>", "File", "No", "import"} {
-		if evidence.PathObserved(ev, junk) {
+		if slices.Contains(evidence.ObservedPathsSorted(ev), junk) {
 			t.Fatalf("traceback token %q must not become observed path; paths=%v", junk, evidence.ObservedPathsSorted(ev))
 		}
 	}
@@ -122,7 +123,7 @@ func TestBuildLedgerFromTranscript_commandJSONIndexesFileCommandPath(t *testing.
 		},
 	}
 	ev := ledgertest.BuildFromMessages(root, msgs)
-	if !evidence.PathObserved(ev, "docs/coordination.md") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev), "docs/coordination.md") {
 		t.Fatalf("expected file command path in evidence, got %v", evidence.ObservedPathsSorted(ev))
 	}
 	for _, junk := range evidence.ObservedPathsSorted(ev) {
@@ -158,7 +159,7 @@ func TestBuildLedgerFromTranscript_commandJSONIndexesPythonOpenPath(t *testing.T
 		},
 	}
 	ev := ledgertest.BuildFromMessages(root, msgs)
-	if !evidence.PathObserved(ev, "docs/sample.md") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev), "docs/sample.md") {
 		t.Fatalf("expected python open() path in evidence, got %v", evidence.ObservedPathsSorted(ev))
 	}
 }
@@ -181,7 +182,7 @@ func TestBuildLedgerFromTranscript_commandStdoutRegistersGitStatusPath(t *testin
 	}
 
 	ev := ledgertest.BuildFromMessages(root, msgs)
-	if !evidence.PathObserved(ev, "internal/session/worker_cycle.go") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev), "internal/session/worker_cycle.go") {
 		t.Fatalf("expected git status path in evidence, got %v", evidence.ObservedPathsSorted(ev))
 	}
 }

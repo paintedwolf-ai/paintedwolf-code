@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -108,7 +109,7 @@ func TestSynthesisGroundingInvariants_dispatchedLegEvidenceIsObserved(t *testing
 
 	ev, err := guidance.UnionLegEvidence(ctx, store, []guidance.EvidenceLeg{{ChildSessionID: child.ID}})
 	testutil.FailErr(t, "UnionLegEvidence", err)
-	if !evidence.PathObserved(ev.Ledger, "src/a.go") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev.Ledger), "src/a.go") {
 		t.Fatalf("dispatched leg evidence not observed; paths=%v", evidence.ObservedPathsSorted(ev.Ledger))
 	}
 }
