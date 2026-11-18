@@ -15,17 +15,18 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/gitengine"
+	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestMain(m *testing.M) {
+	gittestsetup.Enable()
 	os.Exit(m.Run())
 }
 
 func useBundledGit(t *testing.T) string {
 	t.Helper()
 	bin := bundledGitBinary(t)
-	gitengine.TestingEnableBundledBinary()
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	t.Setenv("HOME", t.TempDir()) // isolate ~/.gitconfig
 	return bin
