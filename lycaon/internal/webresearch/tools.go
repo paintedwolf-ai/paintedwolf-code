@@ -57,7 +57,7 @@ type ToolDeps struct {
 	VisualScreen *visualscreen.Gate
 	// AddressOrigin reports how a session's evidence knows this exact
 	// address; nil means the agent wrote every address.
-	AddressOrigin func(sessionID, rawURL string) confine.AddressOrigin
+	AddressOrigin func(ctx context.Context, sessionID, rawURL string) confine.AddressOrigin
 }
 
 const (

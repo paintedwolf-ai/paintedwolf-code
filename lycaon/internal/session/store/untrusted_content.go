@@ -95,12 +95,12 @@ func (ev *sqlEvidence) SessionContacts(sessionID string) map[string]evidence.Con
 	return evidence.ContactsFromLedger(ledger)
 }
 
-func (ev *sqlEvidence) SessionURLStanding(sessionID, rawURL string) evidence.URLStanding {
+func (ev *sqlEvidence) SessionURLStanding(ctx context.Context, sessionID, rawURL string) evidence.URLStanding {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return evidence.URLUnknown
 	}
-	ledger, err := loadLedger(context.Background(), ev.core, ev.core.queries, sessionID)
+	ledger, err := loadLedger(ctx, ev.core, ev.core.queries, sessionID)
 	if err != nil {
 		return evidence.URLUnknown
 	}
