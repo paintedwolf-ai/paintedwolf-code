@@ -303,8 +303,7 @@ func TestGitEngineProbeWithoutHostGit(t *testing.T) {
 		cmd := exec.CommandContext(t.Context(), exe, "-test.run=^TestGitEngineProbeWithoutHostGit$")
 		cmd.Env = append(cmd.Environ(), childEnv+"=1", "PATH=")
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("probe in a fresh process with empty PATH: %v
-%s", err, out)
+			t.Fatalf("probe in a fresh process with empty PATH: %v\n%s", err, out)
 		}
 		return
 	}
