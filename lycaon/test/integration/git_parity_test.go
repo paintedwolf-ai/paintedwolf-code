@@ -726,10 +726,11 @@ func TestLargeFileWithinCaps(t *testing.T) {
 
 func TestLFSAbsentDegradesGracefully(t *testing.T) {
 	skipIfShort(t)
-	ref := requireReferenceGit(t)
 	if stagedInstallation(t, false) {
 		return
 	}
+	ref, err := gitengine.BinaryPath()
+	testutil.FailErr(t, "resolve staged Git", err)
 	f := buildFixture(t, ref, fixPlain)
 
 	ops := [][]string{
