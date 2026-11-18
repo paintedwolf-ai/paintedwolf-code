@@ -1,9 +1,8 @@
 //go:build linux
 
-package osprocess
+package proccredentials
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -26,7 +25,7 @@ func TestLinuxSecurityObservationPreservesCapabilityInputs(t *testing.T) {
 	}
 }
 func TestLinuxSecurityObservationMatchesActualInheritableCapabilities(t *testing.T) {
-	facts, err := ProcessCredentials(os.Getpid())
+	facts, err := ReadSelf()
 	testutil.FailErr(t, "observe native own credentials", err)
 	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
 	var data [2]unix.CapUserData

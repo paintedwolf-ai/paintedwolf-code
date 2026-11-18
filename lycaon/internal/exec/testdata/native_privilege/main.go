@@ -15,12 +15,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/lycaon/lycaon/internal/osprocess"
+	"github.com/lycaon/lycaon/internal/testutil/proccredentials"
 	"golang.org/x/sys/unix"
 )
 
 type nativePrivilegeFacts struct {
-	Credentials               osprocess.ProcessSecurity
+	Credentials               proccredentials.ProcessSecurity
 	Arguments                 []string
 	Directory, KernelFilename string
 }
@@ -29,7 +29,7 @@ func main() {
 	if os.Getenv("PW_NATIVE_PRIVILEGE_PAYLOAD") != "1" || len(os.Args) != 4 {
 		os.Exit(2)
 	}
-	security, err := osprocess.ProcessCredentials(os.Getpid())
+	security, err := proccredentials.ReadSelf()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(3)
