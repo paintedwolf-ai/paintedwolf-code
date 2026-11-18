@@ -1112,7 +1112,7 @@ func TestMaxTimeSpellingsBindTheSameDuration(t *testing.T) {
 
 func TestHostControlledHeaderReportsItsPolicyCode(t *testing.T) {
 	h := newHarness(t)
-	for _, header := range []string{"Host", "Content-Length", "Proxy-Authorization"} {
+	for _, header := range []string{"Connection", "Content-Length", "Proxy-Authorization"} {
 		result := h.curl(t.Context(), "--header", header+": fixture", "http://localhost")
 		reject := toolrejection.AsToolReject(result.err)
 		if reject == nil || reject.Code != "HTTP_REQUEST_HEADER_CONTROLLED" || reject.Data["controlled_header"] != header {

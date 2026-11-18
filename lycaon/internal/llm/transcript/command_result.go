@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
-
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -83,9 +82,10 @@ type commandResultPayload struct {
 	Stdout    string `json:"stdout"`
 	Stderr    string `json:"stderr"`
 	Refusal   *struct {
-		Code     string          `json:"code"`
-		Feedback string          `json:"feedback"`
-		Details  json.RawMessage `json:"details"`
+		Code            string                         `json:"code"`
+		Feedback        string                         `json:"feedback"`
+		Details         json.RawMessage                `json:"details"`
+		DeliveryFailure *commandRefusalDeliveryFailure `json:"delivery_failure"`
 	} `json:"refusal"`
 }
 
@@ -120,9 +120,20 @@ type commandExitMetadata struct {
 }
 
 type commandRefusalMetadata struct {
-	Code            string `json:"code"`
-	DetailsRetained bool   `json:"details_retained,omitempty"`
-	ResultMessageID string `json:"result_message_id,omitempty"`
+	Code            string                         `json:"code"`
+	DeliveryFailure *commandRefusalDeliveryFailure `json:"delivery_failure,omitempty"`
+	DetailsRetained bool                           `json:"details_retained,omitempty"`
+	ResultMessageID string                         `json:"result_message_id,omitempty"`
+}
+
+type commandRefusalDeliveryFailure struct {
+	Kind     string `json:"kind"`
+	Capacity *struct {
+		LimitID      string `json:"limit_id"`
+		ResourceUnit string `json:"resource_unit"`
+		Maximum      int64  `json:"maximum"`
+		Observed     int64  `json:"observed"`
+	} `json:"capacity,omitempty"`
 }
 
 func (p *commandResultPayload) projectRefusal(messageID string, receipt *api.CommandProgramReceipt) (string, bool) {
@@ -134,7 +145,7 @@ func (p *commandResultPayload) projectRefusal(messageID string, receipt *api.Com
 		(receipt.StopCode == "" && receipt.State != "running") {
 		return "", false
 	}
-	metadata := &commandRefusalMetadata{Code: refusal.Code}
+	metadata := &commandRefusalMetadata{Code: refusal.Code, DeliveryFailure: refusal.DeliveryFailure}
 	if len(refusal.Details) > 0 && string(refusal.Details) != "null" {
 		if messageID == "" {
 			return "", false

@@ -100,11 +100,17 @@ func invocationFeedback(result *api.ToolResult) (json.RawMessage, bool) {
 }
 
 func projectedFeedbackDetails(result *api.ToolResult, feedback api.ToolFeedback) map[string]any {
+	_, hasNextCalls := feedback.Details[api.ToolFeedbackNextCalls]
+	invocation := result.Invocation
+	isInvocationRejection := invocation != nil && invocation.Status == api.InvocationStatusRejected &&
+		invocation.Tool == result.Tool && invocation.ToolCallID == result.ToolCallID &&
+		invocation.Failure != nil && invocation.Failure.Code == feedback.Code
+	if !hasNextCalls && !isInvocationRejection {
+		return feedback.Details
+	}
 	details := maps.Clone(feedback.Details)
 	delete(details, api.ToolFeedbackNextCalls)
-	invocation := result.Invocation
-	if invocation != nil && invocation.Status == api.InvocationStatusRejected &&
-		invocation.Failure != nil && invocation.Failure.Code == feedback.Code {
+	if isInvocationRejection {
 		delete(details, "tool")
 		delete(details, "owner_ref")
 		delete(details, "failure_class")
