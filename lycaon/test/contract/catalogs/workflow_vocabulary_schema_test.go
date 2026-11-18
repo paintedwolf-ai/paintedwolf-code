@@ -2,6 +2,7 @@ package contract
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/vocabulary/vocabularytest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,7 +14,7 @@ import (
 func TestWorkflowVocabularySchemaValidatesExport(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	entries := vocabulary.ExportCatalog()
+	entries := vocabularytest.ExportCatalog()
 	if len(entries) == 0 {
 		t.Fatal("expected non-empty vocabulary export")
 	}

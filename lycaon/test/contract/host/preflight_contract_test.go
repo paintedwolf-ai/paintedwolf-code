@@ -79,7 +79,7 @@ func TestPreflightSurfaceHasNoOrphanCodes(t *testing.T) {
 		declared[code] = true
 	}
 
-	for _, code := range usernotice.PreflightCodes(cfg) {
+	for _, code := range noticeSurfaceCodes(cfg, "preflight") {
 		if !declared[code] {
 			t.Fatalf("user-notice code %q claims surfaces: [preflight] but no probe emits it", code)
 		}
@@ -93,7 +93,7 @@ func TestPreflightNoticesAreAppScoped(t *testing.T) {
 	t.Parallel()
 	cfg := loadUserNoticeConfig(t)
 
-	for _, code := range usernotice.PreflightCodes(cfg) {
+	for _, code := range noticeSurfaceCodes(cfg, "preflight") {
 		entry := cfg.UserNotices[code]
 		if entry.Notification == nil {
 			continue
