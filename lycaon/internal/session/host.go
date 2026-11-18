@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/queue"
 	"github.com/lycaon/lycaon/internal/session/authorization"
 	"github.com/lycaon/lycaon/internal/session/batchcontrol"
@@ -193,7 +194,9 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	m.Profiles = profiles.New(store, &m.Catalog, m.Workspace)
 	m.ToolPolicy = policyfacts.New(m.Profiles)
 	m.Coordinator.Feedback = policyfeedback.New()
-	workerState := workeroutcomes.NewState(workeroutcomes.StatePorts{Sessions: store, Verification: m.Verification, Workspace: m.Workspace, OverlayChanges: OverlayWorkspaceChangedPaths})
+	workerState := workeroutcomes.NewState(workeroutcomes.StatePorts{Sessions: store, Verification: m.Verification, Workspace: m.Workspace, OverlayChanges: func(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) []string {
+		return OverlayWorkspaceChangedPaths(ctx, task, roots, "")
+	}})
 	m.Coordinator.Loading = loading.New(store, m.Workspace, router, models, tracker, nil, m.Profiles.EffectiveSkillsForProfile, workerState.ForSession)
 	m.Coordinator.Loading.SetProfiles(m.Profiles.ForSession)
 	m.ToolPolicy.SetSources(store, m.Workspace, m.Coordinator.Feedback, m.Coordinator.Loading.Ledger)
@@ -229,7 +232,9 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	workerCancellations := workeroutcomes.NewCancellations(workeroutcomes.CancellationPorts{Sessions: store, Execution: turnExecution, Stops: m.Stops, Graceful: workerCancel, Cards: workerCards})
 	workerDelivery := workeroutcomes.NewDeliveryPolicy(workeroutcomes.DeliveryPolicyPorts{Sessions: store, Profiles: m.Profiles, Facts: m.ToolPolicy, Feedback: m.Coordinator.Feedback})
 	workerResults := workeroutcomes.NewResults(workeroutcomes.ResultPorts{Sessions: store, Limits: m.Limits, Cancellations: workerCancellations, Digests: workerDigests})
-	workerSummaries := workeroutcomes.NewSummaries(workeroutcomes.SummaryPorts{Sessions: store, Limits: m.Limits, Verification: m.Verification, Resources: m.Chats, Delivery: workerDelivery, Cards: workerCards, Digests: workerDigests, InspectChanges: InspectOverlayChanges, OverlayStatus: ResolveWorkerSummaryStatus, OverlayPending: OverlayAwaitingPromote})
+	workerSummaries := workeroutcomes.NewSummaries(workeroutcomes.SummaryPorts{Sessions: store, Limits: m.Limits, Verification: m.Verification, Resources: m.Chats, Delivery: workerDelivery, Cards: workerCards, Digests: workerDigests, InspectChanges: func(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) ([]string, error) {
+		return InspectOverlayChanges(ctx, task, roots, "")
+	}, OverlayStatus: ResolveWorkerSummaryStatus, OverlayPending: OverlayAwaitingPromote})
 	workerResults.SetSummaries(workerSummaries)
 	m.Coordinator.Guidance = guidancedelivery.New(store, turnTranscript, workerState, workerResults, m.Coordinator.ProgressClosure)
 	m.Processes = processcontrol.New(store, m.Verification, m.ToolPolicy, m.Coordinator.Guidance)

@@ -65,11 +65,11 @@ func remainingPromoteWork(assessment PromoteAssessment, applied []string) Promot
 	return out
 }
 
-func (s *MergeService) jobPromotePaths(ctx context.Context, task *api.WorkerTask) []string {
+func (s *MergeService) jobPromotePaths(ctx context.Context, task *api.WorkerTask, checkpointID string) []string {
 	if s == nil || task == nil {
 		return nil
 	}
-	return normalizeMergePaths(ctx, nil, *task, s.taskRootRefs(ctx, task))
+	return normalizeMergePaths(ctx, nil, *task, s.taskRootRefs(ctx, task), checkpointID)
 }
 
 func unionPromotePaths(groups ...[]string) []string {

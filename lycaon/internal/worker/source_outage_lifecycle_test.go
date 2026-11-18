@@ -45,7 +45,7 @@ func assertWorkerSourceOutageRetry(t *testing.T, service *MergeService, task *ap
 		testutil.FailErr(t, "restore fixture on failure", os.WriteFile(filepath.Join(control, "restore.request"), nil, 0600))
 		workerOutageMarker(t, control, "restored.json")
 	})
-	store, before, published, err := session.OpenTaskCheckpointStore(task)
+	store, before, published, err := session.OpenTaskCheckpointStore(task, "")
 	testutil.FailErr(t, "open worker checkpoint before source outage", err)
 	if !published {
 		t.Fatal("recovered worker lacks checkpoint")
@@ -71,7 +71,7 @@ func assertWorkerSourceOutageRetry(t *testing.T, service *MergeService, task *ap
 	if !ok || current == nil {
 		t.Fatal("failed promotion lost worker task")
 	}
-	_, reopened, exists, err := session.OpenTaskCheckpointStore(current)
+	_, reopened, exists, err := session.OpenTaskCheckpointStore(current, "")
 	testutil.FailErr(t, "reopen checkpoint through current task", err)
 	if !exists || !reflect.DeepEqual(before, reopened) {
 		t.Fatal("failed promotion detached the task checkpoint")

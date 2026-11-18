@@ -36,7 +36,7 @@ func (d presenceDrafts) ReadyFiles(ctx context.Context, jobID string) ([]agentpr
 		return nil, err
 	}
 	roots := project.RootRefsFrom(p)
-	paths, err := session.InspectOverlayChanges(ctx, task, roots)
+	paths, err := session.InspectOverlayChanges(ctx, task, roots, "")
 	if err != nil {
 		return nil, err
 	}

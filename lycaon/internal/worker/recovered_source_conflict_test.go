@@ -31,7 +31,7 @@ func assertRecoveredSourceConflict(t *testing.T, service *MergeService, task *ap
 	if !ok {
 		t.Fatal("rejected promotion removed worker")
 	}
-	store, manifest, published, err := session.OpenTaskCheckpointStore(retained)
+	store, manifest, published, err := session.OpenTaskCheckpointStore(retained, "")
 	testutil.FailErr(t, "reopen rejected checkpoint", err)
 	if !published || manifest.CheckpointID != checkpointID || len(manifest.Entries) != 1 {
 		t.Fatalf("rejected promotion changed retained checkpoint: %+v", manifest)

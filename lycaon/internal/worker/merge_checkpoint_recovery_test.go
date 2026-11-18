@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -31,7 +30,7 @@ func TestEmptyCheckpointPromotionRollsBackRefsOnCommitFailure(t *testing.T) {
 	testdbseed.InsertSessionWithRoot(t, sqlDB, "parent", testdbseed.DefaultProjectID, primary)
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ID: "refs-only", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, AgentType: "implementer", Prompt: "checkpoint", Brief: "retain refs", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}})
 	testutil.FailErr(t, "enqueue worker", err)
-	t.Cleanup(func() { session.ClearTaskCheckpointPreview(id) })
+
 	overlay := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", id)
 	baseline := testbaseline.Durable(t, sqlDB, id, primary)
 	cpStore := openRecoveryCheckpointStore(t)
@@ -110,7 +109,6 @@ func TestCheckpointPromotionSingleStageCleanAndStage1Resolutions(t *testing.T) {
 		Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite},
 	})
 	testutil.FailErr(t, "enqueue worker", err)
-	t.Cleanup(func() { session.ClearTaskCheckpointPreview(jobID) })
 
 	overlay := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", jobID)
 	testutil.FailErr(t, "mkdir overlay", os.MkdirAll(overlay, 0o755))
