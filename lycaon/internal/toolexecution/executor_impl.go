@@ -75,13 +75,9 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 	if reject := admitCredentialFiles(ctx, qualifiedName, tc); reject != nil {
 		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
 	}
-	secretUse, parseErr := parseSecretUse(tc.Invocation.Contract, args)
+	secretUse, parseErr := parseSecretUse(qualifiedName, tc.Invocation.Contract, args)
 	if parseErr != nil {
-		var reject *toolrejection.ToolReject
-		if errors.As(parseErr, &reject) {
-			return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
-		}
-		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"tool": qualifiedName, "reason": parseErr.Error()}))
+		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, toolrejection.AsToolReject(parseErr))
 	}
 	ctx = withSecretUse(ctx, secretUse)
 	args, tc, _, err = e.applyPreInvokeBoundary(ctx, qualifiedName, profileID, args, tc)

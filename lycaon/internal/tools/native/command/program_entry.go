@@ -703,7 +703,7 @@ func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.
 			request["loopback_connect"] = map[string]any{"ports": ports}
 		}
 	}
-	if secretUse, ok := r.envelope["secret_use"]; ok && contract.SecretReferenceSurface != "" {
+	if secretUse, ok := r.envelope["secret_use"]; ok && contract.AcceptsSecretUse() {
 		arguments["secret_use"] = secretUse
 	}
 	return arguments
