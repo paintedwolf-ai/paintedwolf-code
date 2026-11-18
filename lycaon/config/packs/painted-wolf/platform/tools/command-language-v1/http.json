@@ -547,6 +547,28 @@
             "recovery"
           ],
           "mode": "-o--D--c-to-file"
+        },
+        {
+          "requires": [
+            "read-request-inputs",
+            "egress",
+            "secret-disclosure",
+            "managed-jar-write"
+          ],
+          "mode": "managed-jar-update"
+        },
+        {
+          "requires": [
+            "read-request-inputs",
+            "egress",
+            "secret-disclosure",
+            "write",
+            "review",
+            "revision",
+            "recovery",
+            "managed-jar-write"
+          ],
+          "mode": "managed-jar-update-to-file"
         }
       ],
       "platform_capabilities": [

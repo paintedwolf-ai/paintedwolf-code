@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // JarOutput screens one invocation's delivered bytes, including replaced values.
@@ -52,4 +53,67 @@ func (o *JarOutput) Text(s string) string {
 		o.replacer = strings.NewReplacer(pairs...)
 	}
 	return o.replacer.Replace(s)
+}
+
+type jarDiagnostic struct {
+	cause  error
+	text   string
+	reject *toolrejection.ToolReject
+}
+
+func (e *jarDiagnostic) Error() string { return e.text }
+func (e *jarDiagnostic) Unwrap() error { return e.cause }
+func (e *jarDiagnostic) As(target any) bool {
+	p, ok := target.(**toolrejection.ToolReject)
+	if !ok || e.reject == nil {
+		return false
+	}
+	*p = e.reject
+	return true
+}
+
+func (o *JarOutput) diagnostic(err error) error {
+	if err == nil || o == nil || len(o.forms) == 0 {
+		return err
+	}
+	projected := &jarDiagnostic{cause: err, text: o.Text(err.Error())}
+	if source := toolrejection.AsToolReject(err); source != nil {
+		reject := *source
+		reject.Data, _ = o.fact(source.Data).(map[string]any)
+		projected.reject = &reject
+	}
+	return projected
+}
+
+func (o *JarOutput) fact(raw any) any {
+	switch value := raw.(type) {
+	case string:
+		return o.Text(value)
+	case []string:
+		clean := make([]string, len(value))
+		for i, s := range value {
+			clean[i] = o.Text(s)
+		}
+		return clean
+	case map[string]string:
+		clean := make(map[string]string, len(value))
+		for k, s := range value {
+			clean[k] = o.Text(s)
+		}
+		return clean
+	case []any:
+		clean := make([]any, len(value))
+		for i, v := range value {
+			clean[i] = o.fact(v)
+		}
+		return clean
+	case map[string]any:
+		clean := make(map[string]any, len(value))
+		for k, v := range value {
+			clean[k] = o.fact(v)
+		}
+		return clean
+	default:
+		return value
+	}
 }

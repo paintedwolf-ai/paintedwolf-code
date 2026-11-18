@@ -90,6 +90,8 @@ type ExchangeOptions struct {
 // screening belong to the command's model-delivery boundary. SentBodyBytes
 // and SentBodySHA256 identify the request body as it went on the wire.
 type Exchange struct {
+	CookieJarRef   string
+	TokenJarRef    string
 	Response       outboundhttp.Response
 	FinalURL       string
 	Redirects      []outboundhttp.Hop
@@ -114,7 +116,7 @@ func Perform(ctx context.Context, deps Deps, args map[string]any, tctx tools.Too
 	}
 	ex, err := exchange(ctx, deps, args, tctx, opts)
 	if err != nil {
-		return Exchange{}, err
+		return Exchange{}, opts.Output.diagnostic(err)
 	}
 	sum := sha256.Sum256(ex.outbound.body)
 	extURLs := externalObservedURLs(tctx.Effects.Secrets, ex.spec, ex.finalURL, ex.redirects)
@@ -122,6 +124,7 @@ func Perform(ctx context.Context, deps Deps, args map[string]any, tctx tools.Too
 		extURLs[i] = opts.Output.Text(u)
 	}
 	return Exchange{
+		CookieJarRef: ex.cookieJarRef, TokenJarRef: ex.tokenJarRef,
 		Response:       ex.resp,
 		FinalURL:       opts.Output.Text(ex.finalURL),
 		Redirects:      ex.redirects,
@@ -148,13 +151,15 @@ func (f *TransportFailure) Error() string   { return f.Reject.Error() }
 func (f *TransportFailure) Unwrap() []error { return []error{f.Reject, f.Cause} }
 
 type exchanged struct {
-	spec        requestSpec
-	outbound    outboundRequest
-	resp        outboundhttp.Response
-	finalURL    string
-	redirects   []outboundhttp.Hop
-	sentHeaders []outboundhttp.Header
-	listener    *api.LoopbackListenerFact
+	cookieJarRef string
+	tokenJarRef  string
+	spec         requestSpec
+	outbound     outboundRequest
+	resp         outboundhttp.Response
+	finalURL     string
+	redirects    []outboundhttp.Hop
+	sentHeaders  []outboundhttp.Header
+	listener     *api.LoopbackListenerFact
 }
 
 // exchange is the owner's complete request lifecycle up to presentation.
@@ -273,6 +278,9 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 			}
 			rejection.Data["cookies"] = cookieReceipt.facts()
 		}
+		if opts.Output != nil {
+			rejection.Data, _ = opts.Output.fact(rejection.Data).(map[string]any)
+		}
 		return exchanged{}, &TransportFailure{Reject: rejection, Cause: err}
 	}
 	cookies := saveCookieJar(ctx, deps, jarReq, jar)
@@ -296,8 +304,15 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 	if tokens != nil && !tokens.Persisted {
 		return exchanged{}, afterResponse(resp, &toolrejection.ToolReject{Code: TokenJarFailedCode, Data: tokens.facts()})
 	}
+	var cookieRef, tokenRef string
+	if cookies != nil {
+		cookieRef = cookies.Reference
+	}
+	if tokens != nil {
+		tokenRef = tokens.Reference
+	}
 	finalURL, redirects := resp.FinalURL, resp.Redirects
-	return exchanged{spec: spec, outbound: outbound, resp: resp, finalURL: finalURL, redirects: redirects,
+	return exchanged{cookieJarRef: cookieRef, tokenJarRef: tokenRef, spec: spec, outbound: outbound, resp: resp, finalURL: finalURL, redirects: redirects,
 		sentHeaders: sentHeaders(spec, statedHeaders(tctx, args, screened)),
 		listener:    listenerFact}, nil
 }
@@ -408,7 +423,11 @@ func send(
 		// Cookie review comes first: approving the disclosure is consent to
 		// the connection that carries it.
 		if outbound.beforeCookieHop != nil {
-			if err := outbound.beforeCookieHop(hopCtx, hop); err != nil {
+			reviewHop := hop
+			if jar != nil {
+				reviewHop = outboundhttp.HopRequest{URL: hop.URL, Method: hop.Method, HostHeader: hop.HostHeader}
+			}
+			if err := outbound.beforeCookieHop(hopCtx, reviewHop); err != nil {
 				return err
 			}
 		}
@@ -420,15 +439,12 @@ func send(
 			}
 		}
 		if jar != nil {
-			changed, err := deps.Jars.RefreshCookieJar(hopCtx, jar)
+			_, err := deps.Jars.RefreshCookieJar(hopCtx, jar)
 			if err != nil {
 				return cookieJarOpenReject(jar.Name, err)
 			}
-			if changed {
-				if err := outbound.beforeCookieHop(hopCtx, hop); err != nil {
-					return err
-				}
-			}
+			// The delivery filter contains only cookies reviewed before the route wait.
+			hop.FreezeCookies(jar.Store.Cookies(hop.URL))
 			if outbound.validateJarSlots != nil {
 				if err := outbound.validateJarSlots(hop); err != nil {
 					return err

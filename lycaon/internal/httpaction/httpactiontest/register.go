@@ -8,6 +8,7 @@ import (
 	"errors"
 
 	"github.com/lycaon/lycaon/internal/httpaction"
+	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -16,7 +17,18 @@ import (
 // body.
 func Register(registry *tools.DefaultRegistry, deps httpaction.Deps) error {
 	return registry.Register("http_request", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		ex, err := httpaction.Perform(ctx, deps, args, tctx, httpaction.ExchangeOptions{MaxBodyBytes: 4 << 20})
+		opts := httpaction.ExchangeOptions{MaxBodyBytes: 4 << 20, WireHeaders: true, Output: &httpaction.JarOutput{}}
+		if body, ok := args["body_text"].(string); ok {
+			opts.Slots.Body = &body
+		}
+		headers, _ := args["headers"].([]any)
+		for _, item := range headers {
+			h, _ := item.(map[string]any)
+			name, _ := h["name"].(string)
+			value, _ := h["value"].(string)
+			opts.Slots.Headers = append(opts.Slots.Headers, outboundhttp.Header{Name: name, Value: value})
+		}
+		ex, err := httpaction.Perform(ctx, deps, args, tctx, opts)
 		var transport *httpaction.TransportFailure
 		if errors.As(err, &transport) {
 			return "", transport.Reject
@@ -26,7 +38,7 @@ func Register(registry *tools.DefaultRegistry, deps httpaction.Deps) error {
 		}
 		httpaction.ReportLoopbackListener(tctx, ex.Listener)
 		out, err := json.Marshal(map[string]any{
-			"status": ex.Response.Status, "final_url": ex.FinalURL, "body": string(ex.Response.Body),
+			"status": ex.Response.Status, "final_url": ex.FinalURL, "body": opts.Output.Text(string(ex.Response.Body)),
 		})
 		return string(out), err
 	})

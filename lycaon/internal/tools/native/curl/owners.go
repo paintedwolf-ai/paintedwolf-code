@@ -111,12 +111,19 @@ func (o *Owners) SelectMode(argv commandprogram.Fields) (string, bool) {
 	return transferMode(opts), true
 }
 
-// transferMode writes files when an output, header dump or cookie jar names one.
+// A response can update a managed jar even when the body goes to stdout.
 func transferMode(opts options) string {
+	updatesJar := opts.managedCookies != "" || len(opts.captures) > 0
 	for _, destination := range []string{opts.output, opts.dumpHeader, opts.cookieJar} {
 		if destination != "" && destination != "-" && destination != "/dev/null" {
+			if updatesJar {
+				return "managed-jar-update-to-file"
+			}
 			return "-o--D--c-to-file"
 		}
+	}
+	if updatesJar {
+		return "managed-jar-update"
 	}
 	return "request"
 }

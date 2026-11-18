@@ -1,14 +1,32 @@
 package secretcap
 
 import (
+	"github.com/lycaon/lycaon/internal/backup"
+	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"net/url"
+	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestReleasedHTTPJarsReopenAfterReconciliation(t *testing.T) {
-	service, values, _ := testService(t)
+func TestReleasedHTTPJarsReopenAfterArchiveRestore(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "store.db")
+	store := testdbfixture.OpenPath(t, path)
+	testdbseed.InsertProject(t, store, testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, store, "root-1", testdbseed.DefaultProjectID)
+	slot := credentialstore.Slot{Path: filepath.Join(root, credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "released HTTP jars"}
+	openVault := func() *credentialstore.Store {
+		t.Helper()
+		values, err := credentialstore.Open(slot, validID)
+		testutil.FailErr(t, "open vault", err)
+		return values
+	}
+	service := NewWithStore(store, openVault(), nil)
 	ctx := t.Context()
 	cookieRequest := jarRequest("open-cookie")
 	tokenRequest := tokenJarRequest("open-token")
@@ -28,7 +46,17 @@ func TestReleasedHTTPJarsReopenAfterReconciliation(t *testing.T) {
 	tokenRef := seed(tokenRequest.Name, OriginTokenJar, tokenJarPurpose,
 		`{"session":{"value":"fixture-token","origin":"service.example@fixture","origin_label":"https://service.example:443"}}`)
 
-	reopened := NewWithStore(service.repository.handle, values, nil)
+	archive := filepath.Join(t.TempDir(), "backup.zip")
+	_, err := backup.Create(ctx, backup.CreateOpts{ConfigDir: root, DBPath: path, SQLDB: store, AppVersion: "test", SchemaUserVersion: db.SchemaVersion}, archive)
+	testutil.FailErr(t, "create archive", err)
+	name := "changed-after-backup"
+	_, err = service.Update(ctx, UpdateRequest{ProjectID: cookieRequest.ProjectID, Reference: cookieRef, Name: &name})
+	testutil.FailErr(t, "rename jar after backup", err)
+	_, err = backup.Stage(ctx, backup.StageOpts{ConfigDir: root, DBPath: path, SQLDB: store, ArchivePath: archive, SchemaVersion: db.SchemaVersion})
+	testutil.FailErr(t, "stage archive", err)
+	testutil.FailErr(t, "close store before restore", store.Close())
+	testutil.FailErr(t, "apply archive", backup.ApplyPending(ctx, root))
+	reopened := NewWithStore(testdbfixture.OpenPath(t, path), openVault(), nil)
 	testutil.FailErr(t, "reconcile vault", reopened.Reconcile(ctx))
 	assertDurableValues(t, reopened, "fixture-cookie", "fixture-token")
 	cookies, err := reopened.Jars.OpenCookieJar(ctx, cookieRequest)

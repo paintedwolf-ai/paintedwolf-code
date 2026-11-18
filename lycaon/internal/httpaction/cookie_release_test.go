@@ -12,11 +12,14 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/httpcookies"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -86,6 +89,186 @@ func TestCookieScreenFaultsStopTheRequestBeforeDelivery(t *testing.T) {
 	}
 }
 
+func TestForeignIssuerCookieFaultsStopTheRequestBeforeDelivery(t *testing.T) {
+	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
+	testutil.FailErr(t, "cookie matcher", err)
+	fingerprinter, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("f", 32)))
+	testutil.FailErr(t, "cookie fingerprinter", err)
+	matcher.SetFingerprinter(fingerprinter)
+
+	cases := []struct {
+		name    string
+		matcher *secretmatch.Matcher
+		ask     func(*atomic.Int64) secretmatch.AskFunc
+		asked   int64
+		stage   string
+	}{
+		{name: "disclosure_unwired", matcher: matcher, stage: secretmatch.FaultStageScreenUnwired},
+		{name: "matcher_unavailable", ask: answering(nil), stage: secretmatch.FaultStageScreenUnwired},
+		{name: "disclosure_error", matcher: matcher, ask: answering(errors.New("card store offline")), asked: 1, stage: secretmatch.FaultStageRaise},
+		{name: "disclosure_fault", matcher: matcher, ask: answering(secretmatch.NewAskFault(secretmatch.FaultStageNoSession, nil)), asked: 1, stage: secretmatch.FaultStageNoSession},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			secrets, _ := testSecrets(t)
+			var requests atomic.Int64
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests.Add(1)
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			t.Cleanup(server.Close)
+			before := seedRetainedIssuerCookie(t, secrets, server.URL)
+
+			var asked atomic.Int64
+			deps := Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars, SecretMatcher: tc.matcher}
+			if tc.ask != nil {
+				deps.SecretAsk = tc.ask(&asked)
+			}
+			_, err := runRequest(t, deps, map[string]any{
+				"url": server.URL + "/private", "cookie_jar": "service",
+				"capability_request": loopbackCapability(t, server.URL),
+			}, sessionContext(t.TempDir(), "ordinary-transport"))
+			var reject *toolrejection.ToolReject
+			if !errors.As(err, &reject) || reject.Code != toolrejection.OutboundSecretScreenFailedCode || reject.Data["fault_stage"] != tc.stage {
+				t.Fatalf("error = %v, want %s at %s", err, toolrejection.OutboundSecretScreenFailedCode, tc.stage)
+			}
+			if requests.Load() != 0 || asked.Load() != tc.asked {
+				t.Fatalf("requests=%d asks=%d, want no delivery and %d asks", requests.Load(), asked.Load(), tc.asked)
+			}
+			after, err := secrets.Jars.OpenCookieJar(t.Context(), cookieSeedRequest("inspect"))
+			testutil.FailErr(t, "reopen protected jar", err)
+			if !reflect.DeepEqual(after.Store.Snapshot(), before) {
+				t.Fatal("a disclosure fault changed the protected cookie")
+			}
+		})
+	}
+}
+
+func cookieSeedRequest(operation string) secretcap.CookieJarRequest {
+	return secretcap.CookieJarRequest{ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1", OperationID: operation, Name: "service"}
+}
+
+// seedRetainedIssuerCookie stores a cookie as an accepted response over a
+// retained socket object writes it, and returns its persisted form.
+func seedRetainedIssuerCookie(t *testing.T, secrets *secretcap.Service, rawURL string) []httpcookies.Cookie {
+	t.Helper()
+	jar, err := secrets.Jars.OpenCookieJar(t.Context(), cookieSeedRequest("seed"))
+	testutil.FailErr(t, "open seed jar", err)
+	target, err := url.Parse(rawURL + "/private")
+	testutil.FailErr(t, "seed target", err)
+	jar.Store.SetDelivery("retained-service-binding", nil)
+	jar.Store.SetCookies(target, []*http.Cookie{{Name: "session", Value: "retained-service-session-4411", Path: "/"}})
+	_, err = secrets.Jars.SaveCookieJar(t.Context(), cookieSeedRequest("seed"), jar)
+	testutil.FailErr(t, "persist seed jar", err)
+	stored, err := secrets.Jars.OpenCookieJar(t.Context(), cookieSeedRequest("inspect"))
+	testutil.FailErr(t, "reopen seed jar", err)
+	snapshot := stored.Store.Snapshot()
+	if len(snapshot) != 1 || snapshot[0].NativeIssuer == "" {
+		t.Fatalf("seeded cookie lacks its issuer receipt: %+v", snapshot)
+	}
+	return snapshot
+}
+
+func testJarModifiedDuringEgressWaitCannotSendUnreviewedCookie(t *testing.T) {
+	secrets, _ := testSecrets(t)
+	var receivedCookie string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedCookie = r.Header.Get("Cookie")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	target, err := url.Parse(server.URL + "/api")
+	testutil.FailErr(t, "parse target", err)
+	seedJar, err := secrets.Jars.OpenCookieJar(t.Context(), cookieSeedRequest("seed-initial"))
+	testutil.FailErr(t, "open seed jar", err)
+	seedJar.Store.SetCookies(target, []*http.Cookie{{Name: "benign", Value: "public-cookie-value-1111", Path: "/"}})
+	_, err = secrets.Jars.SaveCookieJar(t.Context(), cookieSeedRequest("seed-initial"), seedJar)
+	testutil.FailErr(t, "save seed jar", err)
+
+	confine.SetEgressPosture(confine.PostureAsk)
+	confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, _ egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
+		// While egress route admission waits, another operation injects a foreign-issuer
+		// cookie into the managed jar.
+		mutated, openErr := secrets.Jars.OpenCookieJar(t.Context(), cookieSeedRequest("mutate-during-wait"))
+		testutil.FailErr(t, "open jar during wait", openErr)
+		mutated.Store.SetDelivery("retained-socket-issuer", nil)
+		mutated.Store.SetCookies(target, []*http.Cookie{{Name: "injected", Value: "foreign-secret-cookie-9999", Path: "/"}})
+		_, saveErr := secrets.Jars.SaveCookieJar(t.Context(), cookieSeedRequest("mutate-during-wait"), mutated)
+		testutil.FailErr(t, "save jar during wait", saveErr)
+		return true
+	})
+	t.Cleanup(func() {
+		confine.SetEgressPosture(confine.PostureObserve)
+		restoreResolver()
+	})
+
+	var secretAsks atomic.Int64
+	deps := Deps{
+		Boundary: testBoundary(),
+		Secrets:  secrets, Jars: secrets.Jars,
+		SecretMatcher: testSecretMatcher(t),
+		SecretAsk: func(_ context.Context, a secretmatch.Alert) (secretmatch.Resolution, error) {
+			secretAsks.Add(1)
+			return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
+		},
+	}
+	_, err = runRequest(t, deps, map[string]any{
+		"url":                server.URL + "/api",
+		"cookie_jar":         "service",
+		"capability_request": loopbackCapability(t, server.URL),
+	}, sessionContext(t.TempDir(), "egress-wait-call"))
+	testutil.FailErr(t, "request after egress wait", err)
+	// The hop's cookies were reviewed and frozen before the connection wait,
+	// so a cookie injected during it is never sent and needs no review.
+	if secretAsks.Load() != 0 {
+		t.Fatalf("secretAsks = %d, want 0 (a cookie injected after the hop's review is not part of it)", secretAsks.Load())
+	}
+	if strings.Contains(receivedCookie, "foreign-secret-cookie-9999") {
+		t.Fatalf("server received withheld foreign cookie injected during wait: %q", receivedCookie)
+	}
+	if receivedCookie != "benign=public-cookie-value-1111" {
+		t.Fatalf("server received Cookie %q, want %q", receivedCookie, "benign=public-cookie-value-1111")
+	}
+}
+
+func testJarRevokedDuringSecretReviewWaitStopsBeforeDelivery(t *testing.T) {
+	secrets, _ := testSecrets(t)
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+	seedRetainedIssuerCookie(t, secrets, server.URL)
+	opened, err := secrets.Jars.OpenCookieJar(t.Context(), cookieSeedRequest("lookup-ref"))
+	testutil.FailErr(t, "open seeded jar", err)
+
+	deps := Deps{
+		Boundary: testBoundary(),
+		Secrets:  secrets, Jars: secrets.Jars,
+		SecretMatcher: testSecretMatcher(t),
+		SecretAsk: func(ctx context.Context, _ secretmatch.Alert) (secretmatch.Resolution, error) {
+			// While the secret review card is waiting, the cookie jar is revoked.
+			_, revokeErr := secrets.RevokeByAgent(ctx, testdbseed.DefaultProjectID, "root-1", opened.Reference)
+			testutil.FailErr(t, "revoke jar during secret ask", revokeErr)
+			return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
+		},
+	}
+	_, err = runRequest(t, deps, map[string]any{
+		"url":                server.URL + "/private",
+		"cookie_jar":         "service",
+		"capability_request": loopbackCapability(t, server.URL),
+	}, sessionContext(t.TempDir(), "revoked-during-wait"))
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != CookieJarFailedCode {
+		t.Fatalf("err = %v, want %s when jar is revoked during review wait", err, CookieJarFailedCode)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("server received %d requests after jar revocation during wait, want 0", requests.Load())
+	}
+}
+
 func answering(err error) func(*atomic.Int64) secretmatch.AskFunc {
 	return func(asked *atomic.Int64) secretmatch.AskFunc {
 		return func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
@@ -95,7 +278,9 @@ func answering(err error) func(*atomic.Int64) secretmatch.AskFunc {
 	}
 }
 
-func TestFrontendJarAndGrantFreshnessAcrossReviewWait(t *testing.T) {
+func TestJarAndGrantFreshnessAcrossReviewWait(t *testing.T) {
+	t.Run("changed_while_waiting", testJarModifiedDuringEgressWaitCannotSendUnreviewedCookie)
+	t.Run("revoked_during_review", testJarRevokedDuringSecretReviewWaitStopsBeforeDelivery)
 	t.Run("unbacked_frontend_cookie_jar_fails_closed_before_delivery", testUnbackedFrontendCookieJarFailsClosedBeforeDelivery)
 
 	t.Run("standing_secret_grant_revoked_across_wait_and_redirect_with_real_approval_store", testStandingGrantRevokedAcrossWaitAndRedirect)
