@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
-	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -195,7 +194,7 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 	starts := append([]string{snapshotID}, s.baselineOutside(ctx, window, in.Outside)...)
 	if err := s.retention.Retain(ctx, window.id, window.retained, starts...); err != nil {
 		// No window opens, so nothing else would end the row.
-		return nil, errors.Join(err, s.finishWindow(context.WithoutCancel(ctx), window.id, "", nil, time.Now().UTC()))
+		return nil, errors.Join(err, s.finishWindow(context.WithoutCancel(ctx), window, "", nil, time.Now().UTC()))
 	}
 	s.windowsMu.Lock()
 	s.openWindows[in.ProjectID] = append(s.openWindows[in.ProjectID], window)
@@ -502,12 +501,7 @@ func (s *Commands) settleCommandWindow(ctx context.Context, w *openCommandWindow
 	w.mu.Unlock()
 	var finishErr error
 	if lockErr == nil {
-		finishErr = s.finishWindow(ctx, w.id, admission, append(attached, w.outside.decided()...), ended)
-		if finishErr == nil {
-			if err := sourcefeed.EmitProjectSignal(ctx, w.projectID, rootRefsOf(w.roots)); err != nil {
-				slog.WarnContext(ctx, "publish command observation", "window_id", w.id, "err", err)
-			}
-		}
+		finishErr = s.finishWindow(ctx, w, admission, append(attached, w.outside.decided()...), ended)
 	}
 	s.windowsMu.Lock()
 	defer s.windowsMu.Unlock()
@@ -552,33 +546,6 @@ func (s *Commands) notePassCompleted(projectID string, roots []RootSpec) {
 			s.forgetWindow(window)
 		}
 	}
-}
-
-// finishWindow ends the row and keeps it while file or Git history names it.
-func (s *Commands) finishWindow(ctx context.Context, id, admissionMode string, coverage []FolderCoverage, ended time.Time) error {
-	s.recordMu.Lock()
-	defer s.recordMu.Unlock()
-	tx, err := s.sqlDB.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	q := s.queries.WithTx(tx)
-	if err := q.EndSourceCommandWindow(ctx, db.EndSourceCommandWindowParams{
-		AdmissionMode: admissionMode, EndedTs: ended.Format(time.RFC3339Nano), ID: id,
-	}); err != nil {
-		return err
-	}
-	if err := writeWindowCoverage(ctx, q, id, coverage); err != nil {
-		return err
-	}
-	if err := q.DeleteSourceCommandWindowObjects(ctx, id); err != nil {
-		return err
-	}
-	if _, err := q.DeleteSourceCommandWindowIfUnreferenced(ctx, id); err != nil {
-		return err
-	}
-	return tx.Commit()
 }
 
 // RecoverInterruptedWindows settles rows an earlier process left running:

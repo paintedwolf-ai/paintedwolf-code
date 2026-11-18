@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -115,6 +117,46 @@ func writeWindowCoverage(ctx context.Context, q *db.Queries, windowID string, co
 			return err
 		}
 	}
+	return nil
+}
+
+// Coverage and its invalidation commit with the window's final state.
+func (s *Commands) finishWindow(ctx context.Context, w *openCommandWindow, admissionMode string, coverage []FolderCoverage, ended time.Time) error {
+	var committedSignal *sourcefeed.StagedDelivery
+	defer func() { committedSignal.DeliverCommitted() }()
+	s.recordMu.Lock()
+	defer s.recordMu.Unlock()
+	tx, err := s.sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	q := s.queries.WithTx(tx)
+	if err := q.EndSourceCommandWindow(ctx, db.EndSourceCommandWindowParams{
+		AdmissionMode: admissionMode, EndedTs: ended.Format(time.RFC3339Nano), ID: w.id,
+	}); err != nil {
+		return err
+	}
+	if err := writeWindowCoverage(ctx, q, w.id, coverage); err != nil {
+		return err
+	}
+	if err := q.DeleteSourceCommandWindowObjects(ctx, w.id); err != nil {
+		return err
+	}
+	if _, err := q.DeleteSourceCommandWindowIfUnreferenced(ctx, w.id); err != nil {
+		return err
+	}
+	var signal *sourcefeed.StagedDelivery
+	if len(coverage) > 0 {
+		signal, err = sourcefeed.EmitProjectSignalTx(ctx, tx, w.projectID, rootRefsOf(w.roots))
+		if err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committedSignal = signal
 	return nil
 }
 
