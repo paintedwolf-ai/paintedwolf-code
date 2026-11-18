@@ -1,5 +1,7 @@
 import { expect } from "@playwright/test";
+import type { ExtensionsCatalogView } from "../src/api/types.ts";
 import {
+  apiJson,
   bootstrapChatSession,
   CONTEXT_NAV_WITH,
   E2E_EXAMPLE_PACK_DIR,
@@ -8,38 +10,14 @@ import {
 } from "./helpers.ts";
 
 webE2e.describe("extensions settings", () => {
-  webE2e("Settings → Extensions is device-only (How it works first)", async ({
+  webE2e("installs a pack from a folder and renders its settings", async ({
     page,
+    request,
   }) => {
-    await bootstrapChatSession(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await expect(page.getByTestId("settings-view")).toBeVisible({
-      timeout: 15_000,
-    });
-    const nav = page.getByTestId("settings-nav-extensions");
-    await nav.scrollIntoViewIfNeeded();
-    await nav.click();
-    await expect(page.getByTestId("extensions-settings-panel")).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(page.getByTestId("extensions-panel-model")).toBeVisible();
-    await expect(page.getByTestId("extensions-settings-panel")).toHaveAttribute("data-surface", "settings");
-    await expect(page.getByTestId("extensions-device-banner")).toBeVisible();
-    await expect(page.getByTestId("extensions-tab-units")).toBeVisible();
-    await page.getByTestId("extensions-tab-packs").click();
-    await expect(page.getByTestId("extensions-pack-list")).toBeVisible();
-    await expect(page.getByTestId("extensions-pack-list")).toContainText(
-      "Stock",
-      { timeout: 15_000 },
-    );
-  });
-
-  webE2e("Context → Extensions shows Active for the project", async ({
-    page,
-  }) => {
-    await bootstrapChatSession(page, undefined, {
+    await bootstrapChatSession(page, request, {
       contextNav: CONTEXT_NAV_WITH("extensions"),
     });
+
     await page.getByTestId("project-extensions-entry").click();
     await expect(page.getByTestId("project-extensions-view")).toBeVisible({
       timeout: 15_000,
@@ -52,21 +30,33 @@ webE2e.describe("extensions settings", () => {
     await expect(page.getByTestId("extensions-unit-detail")).toBeVisible({
       timeout: 15_000,
     });
-  });
-
-  webE2e("installs a pack from a folder and renders its settings", async ({
-    page,
-  }) => {
-    await bootstrapChatSession(page);
 
     await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(page.getByTestId("settings-view")).toBeVisible({
+      timeout: 15_000,
+    });
     const nav = page.getByTestId("settings-nav-extensions");
     await nav.scrollIntoViewIfNeeded();
     await nav.click();
-    await expect(page.getByTestId("extensions-settings-panel")).toBeVisible({
+    const panel = page.getByTestId("extensions-settings-panel");
+    await expect(panel).toBeVisible({ timeout: 15_000 });
+    await expect(panel).toHaveAttribute("data-surface", "settings");
+    await expect(page.getByTestId("extensions-panel-model")).toBeVisible();
+    await expect(page.getByTestId("extensions-device-banner")).toBeVisible();
+    await expect(page.getByTestId("extensions-tab-units")).toBeVisible();
+    await page.getByTestId("extensions-tab-packs").click();
+    await expect(page.getByTestId("extensions-pack-list")).toBeVisible();
+    await expect(page.getByTestId("extensions-pack-list")).toContainText("Stock", {
       timeout: 15_000,
     });
-    await page.getByTestId("extensions-tab-packs").click();
+    const catalog = await apiJson<ExtensionsCatalogView>(request, "GET", "/v1/extensions");
+    expect(catalog.packs.length).toBeGreaterThan(0);
+    for (const pack of catalog.packs) {
+      await expect(
+        page.getByTestId(`extensions-pack-${encodeURIComponent(pack.id)}`),
+        pack.id,
+      ).toHaveCount(1);
+    }
     const installed = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname === "/v1/extensions/packs" &&

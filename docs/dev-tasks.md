@@ -390,19 +390,32 @@ The loop: `./task den:harness` → point a browser tool at the URL → drive the
 
 ### Recording media measurement
 
-With FFmpeg and FFprobe installed, run
-`PW_RECORDING_MEASURE_DIR="$(python3 scripts/artifact_paths.py artifacts)/recording-measurement" PLAYWRIGHT_WEB_BROWSER=webkit ./task den:harness:test -- recording-encoding-measurement.spec.ts --retries=0`.
-The explicit fixture records three 20-second static, typing, and scrolling scenes
+With FFmpeg and FFprobe installed and `./task den:harness` running, pass the
+`open` URL its banner prints:
+`LYCAON_E2E_BASE_URL=<open> PW_RECORDING_MEASURE_DIR="$(python3 scripts/artifact_paths.py artifacts)/recording-measurement" PLAYWRIGHT_WEB_BROWSER=webkit bun scripts/harness/measure-recording-encoding.ts`.
+The script records three 20-second static, typing, and scrolling scenes
 through the production recorder and retains untouched recorder chunks, finalized
 MP4s, lossless stream-copy candidates, and JSON observations (sizes, gzip sizes,
 canvas draw times, decoded-frame hashes, packet hashes, presentation timestamps,
-playback duration, seeking). Without the output variable the measurement is
-skipped; the byte-preservation regression also runs in the regular Den unit suite.
+playback duration, seeking). It exits nonzero when a preservation check fails.
+The byte-preservation regression runs in the regular Den unit suite.
 
 Finalization preserves recorder bytes. Wall-clock capture metadata can differ
 from the browser's encoded media duration; playback uses the media duration.
 Compare actual frames and timing before changing encoding, and do not infer user
 storage growth from one browser's fixture capture cadence.
+
+### Transcript streaming cost
+
+With `./task den:harness` running, pass the `open`, `sidecar`, and `token` values
+its banner prints:
+`LYCAON_E2E_BASE_URL=<open> LYCAON_E2E_API_URL=<sidecar> LYCAON_E2E_TOKEN=<token> PW_STREAMING_COST_REPORT=<file> bun scripts/harness/measure-transcript-streaming.ts`.
+It opens a chat in the Harness project, seeds 80 rows and a settled diff row,
+then streams 40 more through the host and times every animation-frame callback
+while they arrive. The JSON report (busy callbacks, p50, p90, max, long frames,
+DOM mutations, rows added, comparison reads) is review evidence, not a gate;
+`PLAYWRIGHT_WEB_BROWSER=webkit` measures WebKit. That a settled diff row is not
+read again is asserted by `e2e/transcript-streaming-requests.spec.ts`.
 
 ## Sidecar performance
 

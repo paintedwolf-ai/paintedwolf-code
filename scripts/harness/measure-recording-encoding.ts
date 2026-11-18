@@ -1,9 +1,21 @@
-import { expect, test, type Page } from "@playwright/test";
+// Records static, typing, and scrolling scenes through Den's production live-tool
+// recorder in a running harness and writes the media plus JSON observations.
+//
+//   LYCAON_E2E_BASE_URL=<harness open URL> PW_RECORDING_MEASURE_DIR=<dir> \
+//     [PLAYWRIGHT_WEB_BROWSER=webkit|chromium] bun scripts/harness/measure-recording-encoding.ts
+//
+// Requires ffmpeg and ffprobe. Exits 1 when a preservation check fails.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
-import type { LiveToolRecording } from "../src/chat/visual/live-tool-recording.ts";
+import type { Page } from "@playwright/test";
+import type { LiveToolRecording } from "../../lycaon-den/src/chat/visual/live-tool-recording.ts";
+
+const denDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../lycaon-den");
+const playwright = createRequire(path.join(denDir, "package.json"))("@playwright/test") as typeof import("@playwright/test");
 
 type MeasurementWindow = Window & {
   fixtureRecording?: LiveToolRecording | null;
@@ -11,7 +23,17 @@ type MeasurementWindow = Window & {
   fixtureRaw?: Promise<ArrayBuffer>;
   fixtureDrawTimes?: number[];
 };
-const outputDir = process.env.PW_RECORDING_MEASURE_DIR;
+
+function required(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`Set ${name}`);
+  return value;
+}
+
+const baseURL = required("LYCAON_E2E_BASE_URL");
+const outputDir = required("PW_RECORDING_MEASURE_DIR");
+const browserName = process.env.PLAYWRIGHT_WEB_BROWSER ?? "webkit";
+if (browserName !== "webkit" && browserName !== "chromium") throw new Error("PLAYWRIGHT_WEB_BROWSER must be webkit or chromium");
 const seconds = 20;
 const fixture = `<!doctype html><html><head><style>
 *{box-sizing:border-box}body{margin:0;background:#f3f5f8;color:#243044;font:16px Arial,sans-serif}
@@ -72,21 +94,15 @@ async function playback(page: Page, bytes: Buffer, seekDuration?: number) {
   }, { encoded: bytes.toString("base64"), seekDuration });
 }
 
-test("recording encoding measurement preserves decoded frames and seeking", async ({ page, browserName, browser }) => {
-  if (!outputDir) {
-    test.skip(true, "Set PW_RECORDING_MEASURE_DIR for the explicit recording measurement.");
-    return;
-  }
-  test.setTimeout(240_000);
-  mkdirSync(outputDir, { recursive: true });
-  await page.setViewportSize({ width: 720, height: 540 });
+async function measure(page: Page, browserVersion: string) {
+  // Served from the Vite origin so the page can import the recorder module.
   await page.route("**/recording-measurement-fixture", (route) => route.fulfill({ contentType: "text/html", body: fixture }));
   const measurements = [];
   for (const scene of ["static", "typing", "scroll"] as const) {
-    await page.goto("/recording-measurement-fixture");
+    await page.goto(new URL("/recording-measurement-fixture", baseURL).href);
     const encoder = await page.evaluate(async () => {
       const modulePath = "/src/chat/visual/live-tool-recording.ts";
-      const module: typeof import("../src/chat/visual/live-tool-recording.ts") = await import(modulePath);
+      const module: typeof import("../../lycaon-den/src/chat/visual/live-tool-recording.ts") = await import(modulePath);
       const win = window as unknown as MeasurementWindow;
       const Recorder = window.MediaRecorder;
       window.MediaRecorder = class extends Recorder {
@@ -109,7 +125,8 @@ test("recording encoding measurement preserves decoded frames and seeking", asyn
       }));
       return { supported: !!win.fixtureRecording, mime: module.LIVE_TOOL_RECORDING_MIME, captureFps: module.LIVE_TOOL_RECORDING_CAPTURE_FPS, ingestionFps: module.LIVE_TOOL_RECORDING_FPS, userAgent: navigator.userAgent, visibility: document.visibilityState, focused: document.hasFocus() };
     });
-    expect(encoder.supported).toBe(true);
+    if (!encoder.supported) throw new Error(`${browserName} has no supported recording encoder`);
+    // Frames arrive once a second, as live previews do.
     const began = Date.now();
     for (let index = 0; index < seconds; index++) {
       const delay = began + index * 1000 - Date.now();
@@ -143,7 +160,7 @@ test("recording encoding measurement preserves decoded frames and seeking", asyn
       if (!win.fixtureRaw) throw new Error("Raw recording chunks are unavailable");
       return { ...win.fixtureResult, raw: Array.from(new Uint8Array(await win.fixtureRaw)), drawTimes: win.fixtureDrawTimes ?? [] };
     });
-    expect(result.bytes.length).toBeGreaterThan(0);
+    if (result.bytes.length === 0) throw new Error(`${scene} recording is empty`);
     const original = path.join(outputDir, `${scene}-original.mp4`);
     const candidate = path.join(outputDir, `${scene}-stream-copy.mp4`);
     writeFileSync(original, Buffer.from(result.bytes));
@@ -168,20 +185,38 @@ test("recording encoding measurement preserves decoded frames and seeking", asyn
       && JSON.stringify(seekHashes(elapsedRaw)) === JSON.stringify(seekHashes(elapsedCandidate));
     const sameSeekFrames = originalPlayback.seeks.length === candidatePlayback.seeks.length
       && originalPlayback.seeks.every((seek, index) => seek.pixelHash === candidatePlayback.seeks[index]?.pixelHash);
-    const measured = { scene, browserName, browserVersion: browser.version(), encoder, requestedSeconds: seconds, recordedDurationMs: result.durationMs,
+    measurements.push({ scene, browserName, browserVersion, encoder, requestedSeconds: seconds, recordedDurationMs: result.durationMs,
       originalBytes: statSync(original).size, candidateBytes: statSync(candidate).size, gzipOriginalBytes: gzipSync(readFileSync(original), { level: 9 }).length, rawBytesUnchanged: Buffer.from(result.bytes).equals(Buffer.from(result.raw)),
-      elapsedOriginal, elapsedRaw, elapsedCandidate, sameElapsedSeekFrames, rawPlayback, rawInfo, rawSamePacketPayloads: JSON.stringify(packetHashes(raw)) === JSON.stringify(packetHashes(original)), rawSameFrameTimes: JSON.stringify(frameTimes(rawInfo)) === JSON.stringify(frameTimes(originalInfo)), drawTimes: result.drawTimes, rawSameFrames: JSON.stringify(decodedHashes(raw)) === JSON.stringify(originalFrames), originalInfo, candidateInfo, decodedFrameCount: originalFrames.length, sameFrames, samePacketPayloads, sameFrameTimes, sameSeekFrames, originalPlayback, candidatePlayback };
-    measurements.push(measured);
+      elapsedOriginal, elapsedRaw, elapsedCandidate, sameElapsedSeekFrames, rawPlayback, rawInfo, rawSamePacketPayloads: JSON.stringify(packetHashes(raw)) === JSON.stringify(packetHashes(original)), rawSameFrameTimes: JSON.stringify(frameTimes(rawInfo)) === JSON.stringify(frameTimes(originalInfo)), drawTimes: result.drawTimes, rawSameFrames: JSON.stringify(decodedHashes(raw)) === JSON.stringify(originalFrames), originalInfo, candidateInfo, decodedFrameCount: originalFrames.length, sameFrames, samePacketPayloads, sameFrameTimes, sameSeekFrames, originalPlayback, candidatePlayback });
     writeFileSync(path.join(outputDir, "measurement.json"), JSON.stringify(measurements, null, 2));
   }
-  for (const measured of measurements) {
-    expect(measured.sameFrames, measured.scene).toBe(true);
-    expect(measured.samePacketPayloads, measured.scene).toBe(true);
-    expect(measured.rawBytesUnchanged, measured.scene).toBe(true);
-    expect(measured.originalPlayback.duration, measured.scene).toBeCloseTo(measured.rawPlayback.duration, 6);
-    expect(measured.rawSameFrames, measured.scene).toBe(true);
-    expect(measured.rawSamePacketPayloads, measured.scene).toBe(true);
-    expect(measured.rawSameFrameTimes, measured.scene).toBe(true);
-    expect(measured.sameElapsedSeekFrames, measured.scene).toBe(true);
-  }
-});
+  return measurements;
+}
+
+mkdirSync(outputDir, { recursive: true });
+const browser = await playwright[browserName].launch();
+let failures: string[] = [];
+try {
+  const page = await browser.newPage({ viewport: { width: 720, height: 540 } });
+  const measurements = await measure(page, browser.version());
+  failures = measurements.flatMap((measured) => {
+    const checks = {
+      sameFrames: measured.sameFrames,
+      samePacketPayloads: measured.samePacketPayloads,
+      rawBytesUnchanged: measured.rawBytesUnchanged,
+      rawPlaybackDuration: Math.abs(measured.originalPlayback.duration - measured.rawPlayback.duration) < 5e-7,
+      rawSameFrames: measured.rawSameFrames,
+      rawSamePacketPayloads: measured.rawSamePacketPayloads,
+      rawSameFrameTimes: measured.rawSameFrameTimes,
+      sameElapsedSeekFrames: measured.sameElapsedSeekFrames,
+    };
+    return Object.entries(checks).filter(([, held]) => !held).map(([name]) => `${measured.scene}: ${name}`);
+  });
+} finally {
+  await browser.close();
+}
+console.log(`recording measurement: ${path.join(outputDir, "measurement.json")}`);
+if (failures.length > 0) {
+  console.error(`recording measurement: failed checks\n${failures.join("\n")}`);
+  process.exit(1);
+}
