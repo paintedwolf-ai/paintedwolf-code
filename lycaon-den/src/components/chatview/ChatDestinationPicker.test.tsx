@@ -90,7 +90,7 @@ describe("ChatDestinationPicker", () => {
     const unregister = registerChatDestinationOpenSink(open);
     createSessionForProject.mockResolvedValue({
       mode: "agent" as const,
-      started: true,
+      started: false,
       root_session_id: "session-new",
       id: "session-new",
       owner_person_id: "00000000-0000-4000-8000-000000000002",

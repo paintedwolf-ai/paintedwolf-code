@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { appStateStorageSliceKey } from "../shared/app-state-storage.ts";
 import { overlayRel } from "../src/platform/files/overlay-dir.ts";
 import {
   PLAN_STUB_VALID_CONTENT,
@@ -26,6 +27,9 @@ webE2e.describe("project blueprints launch", () => {
     async ({ page, request }) => {
       test.setTimeout(180_000);
 
+      await page.addInitScript((key) => {
+        localStorage.setItem(key, JSON.stringify({ lastStartedMode: "ask" }));
+      }, appStateStorageSliceKey("chat"));
       await page.goto("/");
       await page.waitForFunction(
         () =>
@@ -41,6 +45,7 @@ webE2e.describe("project blueprints launch", () => {
       const project = await apiFindHarnessProject(request);
       await activateProject(page, project.id);
       await openNewChatSession(page);
+      await expect(liveChatStage(page).getByRole("radio", { name: "Ask" })).toBeChecked();
 
       const source = await apiCreateBlueprint(request, project.id, {
         title: e2eUniqueLabel("Harness blueprint seed"),
@@ -85,13 +90,18 @@ webE2e.describe("project blueprints launch", () => {
       await expect(liveChatStage(page).getByTestId("workflow-arm-chip")).toContainText(
         "Plan — send to start",
       );
+      await expect(liveChatStage(page).getByRole("radio", { name: "Agent" })).toBeChecked();
       const launchedSessionId = await settledChatSessionId(page);
       expect(launchedSessionId, "launched chat-stream session").toBeTruthy();
 
       await liveChatStage(page)
         .getByTestId("chat-composer")
         .fill("Use the selected blueprint as the plan seed");
+      const posted = page.waitForRequest((request) =>
+        request.method() === "POST" && new URL(request.url()).pathname === `/v1/sessions/${launchedSessionId}/prompts`,
+      );
       await liveChatStage(page).getByTestId("chat-composer").press("Enter");
+      expect((await posted).postDataJSON()).toMatchObject({ mode: "agent" });
 
       await expect
         .poll(
