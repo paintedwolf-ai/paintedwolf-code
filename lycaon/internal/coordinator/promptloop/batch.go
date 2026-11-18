@@ -217,14 +217,15 @@ func (l *toolBatch) executeToolCallsInTurn(
 		assistantCommitted = true
 		return nil
 	}
-	// Commit tool cards before execution.
-	if err := commitAssistant(); err != nil {
-		return result, err
-	}
-	// Publication precedes every tool, and the wait guard reads its result.
+	// Publication precedes every tool, and the wait guard reads its result. It
+	// also precedes the tool cards, which a reader sees below the note.
 	published, err := l.publishMidTurnText(ctx, sess, sessionID, result.history, assistantMessageID, turnSurfaceID, toolCalls, &lastToolTS, st)
 	result.history = published
 	if err != nil {
+		return result, err
+	}
+	// Commit tool cards before execution.
+	if err := commitAssistant(); err != nil {
 		return result, err
 	}
 	// Batch closure survives request cancellation.

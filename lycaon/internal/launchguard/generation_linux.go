@@ -23,8 +23,8 @@ import (
 // PolicyPath is selected by the administrator, never by the desktop caller.
 const PolicyPath = "/etc/paintedwolf/launch.json"
 
-// The installed layout. These are variables only so a test build can place a
-// root-owned fixture elsewhere at link time (-ldflags -X); no runtime input,
+// The installed layout. These are variables only so a fixture build (the
+// launchfixture tag) can place a root-owned fixture beside its executable; no
 // environment or argument selects them. Production builds anchor at "/" and
 // require uid 0 on every ancestor and object.
 var (

@@ -12,6 +12,8 @@ fi
 bash "${ROOT}/scripts/ensure-tauri-binaries.sh"
 bash "${ROOT}/scripts/toolchain/decide-test.sh" --no-run
 bash "${ROOT}/scripts/build-decide.sh"
+bash "${ROOT}/scripts/generation/run.sh" prepare --backend native
+bash "${ROOT}/scripts/generation/run.sh" build --backend native
 cd "${ROOT}/lycaon-den/src-tauri"
 cargo test --locked --workspace --all-targets --no-run
 
@@ -20,3 +22,6 @@ PYTHONPATH="${ROOT}/scripts" python3 -m ci_policy.cache_payload workspace "${ROO
 
 CARGO_TARGET_DIR="$(python3 "${ROOT}/scripts/artifact_paths.py" compiler-cache "${ROOT}")/decide" \
   PYTHONPATH="${ROOT}/scripts" python3 -m ci_policy.cache_payload workspace "${ROOT}/lycaon/internal/decide/native/Cargo.toml"
+
+CARGO_TARGET_DIR="$(python3 "${ROOT}/scripts/artifact_paths.py" compiler-cache "${ROOT}")/generation-rust" \
+  PYTHONPATH="${ROOT}/scripts" python3 -m ci_policy.cache_payload workspace "${ROOT}/lycaon/internal/generation/native/Cargo.toml"

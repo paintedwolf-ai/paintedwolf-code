@@ -63,7 +63,7 @@ export function TurnWalkCard(props: Props) {
   return (
     <Show when={summary()?.steps ? summary() : null}>
       {(value) => (
-        <aside class="den-turn-walk" data-testid="turn-walk-card">
+        <aside class="den-transcript-card den-turn-walk" data-testid="turn-walk-card">
           <div class="den-turn-walk__copy">
             <strong>Changes in this turn</strong>
             <span>

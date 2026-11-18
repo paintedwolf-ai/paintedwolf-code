@@ -66,7 +66,7 @@ function makeSnapshot(partial: Partial<BriefingSnapshot>): BriefingSnapshot {
 afterEach(() => resetBriefingLiveForTests());
 
 describe("WorkerSummarySection render", () => {
-  it("requests briefing by result_handle and renders pending then settled summary blocks", async () => {
+  it("requests its briefing by result handle and shows three labelled blocks waiting, then settled with evidence", async () => {
     const clock = new FakeClock();
     setBriefingClockForTests(clock);
     const requestBriefing = vi.fn(async () =>
@@ -82,8 +82,13 @@ describe("WorkerSummarySection render", () => {
     const pendingView = render(() => (
       <WorkerSummarySection worker={() => finishedWorker} onSelect={vi.fn()} onPresence={onPresence} />
     ));
+    const blocks = () => [...screen.getByTestId("worker-summary").querySelectorAll<HTMLElement>("[data-section]")]
+      .map((block) => [block.dataset.section, block.dataset.state ?? block.dataset.source]);
     clock.advance(BRIEFING_DEBOUNCE_MS);
-    await waitFor(() => expect(pendingView.getByTestId("worker-summary")).toBeTruthy());
+    await waitFor(() => expect(blocks()).toEqual([
+      ["Contribution", "waiting"], ["Verification", "waiting"], ["Remaining", "waiting"],
+    ]));
+    expect(screen.queryByTestId("briefing-evidence-link")).toBeNull();
     expect(requestBriefing).toHaveBeenCalledWith("proj-1", {
       profile_id: "worker_result",
       target_ref: { result_handle: RESULT_HANDLE },
@@ -118,8 +123,10 @@ describe("WorkerSummarySection render", () => {
     }));
     render(() => <WorkerSummarySection worker={() => finishedWorker} onSelect={vi.fn()} onPresence={vi.fn()} />);
     clock.advance(BRIEFING_DEBOUNCE_MS);
-    await waitFor(() => expect(screen.getByText(/Added worker card\./)).toBeTruthy());
-    expect(screen.getByTestId("briefing-evidence-link")).toBeTruthy();
+    await waitFor(() => expect(blocks()).toEqual([
+      ["Contribution", "summarizer"], ["Verification", "summarizer"], ["Remaining", "summarizer"],
+    ]));
+    expect(screen.queryByTestId("briefing-evidence-link")).not.toBeNull();
   });
 
   it("skips briefing when no result_handle is present and supports inline round summaries", async () => {

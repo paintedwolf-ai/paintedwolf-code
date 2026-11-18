@@ -116,9 +116,10 @@ development checkout installs the matching set under
 them into the engine root that `den:sidecar` and `den:app` run against.
 Missing or mismatched required heads fail staging. The host intersects the
 release vocabulary with permitted tools; new tools remain requestable without
-changing the preloader's encoded options. Refresh the vocabulary and evaluate it
-with its head before releasing it. The factory's `release_manifest.py` rebuilds
-the manifest from the selected artifacts and their evaluated corpus.
+changing the preloader's encoded options. The vocabulary is replaced only
+together with the heads trained on it: `preload.py --corpus corpus.json --model
+CHECKPOINT_DIR` derives the block from the training corpus, the factory freezes
+it into its selector policy, and `adopt_heads.py` writes it with the pins.
 
 Python is training-side only. `parity_probe.py --model ID --head FILE
 --examples FILE --engine <launcher>` scores turns through the trainer's own
@@ -364,12 +365,23 @@ scripts/bialy/adopt_heads.py --policy p0.json --heads HEADS_DIR --release NAME \
   --factory-tag TAG --factory-commit SHA
 ```
 
-It checks each head file against the policy's digest and that the policy was
-frozen against this `decisions.yaml` version. It then writes the three pins
-into `decision-release.json` and the policy's thresholds into `decisions.yaml`,
-keeping the comments and order. Run the parity probe for the three heads after
-it. Retune nothing in an adoption: the campaign's student segment refuses a
-host whose pins or thresholds differ from the policy.
+It checks each head file against the policy's digest, that the policy was
+frozen against this `decisions.yaml` version and over the pinned backbone, and
+that the turn-load head was trained under the policy's `preload` vocabulary
+with the encoding this `decisions.yaml` serves. It then writes the three pins
+and that vocabulary into `decision-release.json` and the policy's thresholds
+into `decisions.yaml`, keeping the comments and order. The policy was qualified
+before it was frozen, parity probe included. Retune nothing in an adoption: the
+campaign's student segment refuses a host whose pins, vocabulary or thresholds
+differ from the policy.
+
+## Factory contract
+
+The factory runs `train.py`, `rerank/train_rerank.py`, `calibrate.py`,
+`replay_eval.py`, `parity_probe.py` and `preload.py` from a pinned checkout and
+records the flags it passes them. Before a run it reads each script's
+`add_argument` declarations from that checkout and refuses one that no longer
+declares a recorded flag, so keep flag names as string literals in those calls.
 
 ## Tuning the shipped policy
 

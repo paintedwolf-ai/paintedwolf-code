@@ -211,6 +211,47 @@ describe("SessionTranscript tools and progress", () => {
     expect(container.textContent).not.toContain("Worker ·");
   });
 
+  it("shows the plan as a box and each later progress row as one line", () => {
+    const host = { role: "system", origin: "host", authority: "system", trust_tier: "trusted", content: "" } as const;
+    const messages: Message[] = [
+      {
+        ...host,
+        id: "pu-plan",
+        kind: "progress_update",
+        progress_update: {
+          initial: true,
+          seq: 1,
+          steps: [{ state: "pending", label: "Ship auth" }, { state: "pending", label: "Verify build" }],
+        },
+        created_at: "2026-06-28T04:45:10.000Z",
+      },
+      {
+        ...host,
+        id: "pu-change",
+        kind: "progress_update",
+        progress_update: { seq: 2, changes: [{ kind: "done", label: "Ship auth", state: "done" }] },
+        created_at: "2026-06-28T04:45:11.000Z",
+      },
+      {
+        ...host,
+        id: "pc-done",
+        kind: "progress_complete",
+        progress_complete: {
+          seq: 3,
+          steps: [{ state: "done", label: "Ship auth" }, { state: "done", label: "Verify build" }],
+        },
+        created_at: "2026-06-28T04:45:12.000Z",
+      },
+    ];
+    render(() => <SessionTranscript layout="chat" sessionId="s-progress-lines" messages={messages} />);
+
+    const visible = (rows: HTMLElement[]) => rows.filter((row) => !row.closest("[hidden]"));
+    expect(visible(screen.getAllByTestId("progress-strip-item")).map((row) => row.textContent))
+      .toEqual(["○Ship auth", "○Verify build"]);
+    expect(screen.getAllByTestId("progress-strip-rest").map((line) => line.textContent).sort())
+      .toEqual(["✓All 2 steps done", "✓Ship auth"]);
+  });
+
   it("keeps progress snapshot DOM stable while unrelated messages arrive", async () => {
     const progress: Message = {
       id: "pu-stable",

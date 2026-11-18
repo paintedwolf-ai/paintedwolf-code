@@ -464,7 +464,7 @@ func TestMatcherBuiltOnceAtBoot(t *testing.T) {
 func BenchmarkScreenShortQuery(b *testing.B) {
 	m, err := BuildMatcher(Bundled())
 	if err != nil {
-		b.Fatal(err)
+		testutil.FailErr(b, "BuildMatcher failed", err)
 	}
 	q := "search docs about " + plantAWS + " and related APIs"
 	b.ResetTimer()

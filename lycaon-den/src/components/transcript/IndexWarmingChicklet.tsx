@@ -63,7 +63,7 @@ export function IndexWarmingChicklet(props: Props) {
         bindTranscriptEntry(el);
         setShellEl(el);
       }}
-      class="den-tool-part-card den-transcript-disclosure-card den-tool-part"
+      class="den-tool-part-card den-transcript-card den-transcript-disclosure-card den-tool-part"
       data-testid="index-warming-chicklet"
       data-layout={props.layout}
       data-status="done"

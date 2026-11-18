@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -77,7 +78,7 @@ func notifyWorktreeChangedLocations(ctx context.Context, tctx tools.ToolContext,
 
 // mutationRootPath maps a root id onto the host path the catalog indexes for it.
 func mutationRootPath(tctx tools.ToolContext, rootID string) string {
-	if rootID == "worker-branch" {
+	if rootID == projectroot.WorkerBranchRootID {
 		return strings.TrimSpace(tctx.Source.WorkerBranchRoot)
 	}
 	for _, root := range tctx.Source.Roots {

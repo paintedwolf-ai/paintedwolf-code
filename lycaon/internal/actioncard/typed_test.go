@@ -45,6 +45,10 @@ func TestNetworkNamesHostsOnceAndHowTrafficLeft(t *testing.T) {
 	if !ok || sockets.Egress != "local_only" {
 		t.Fatalf("socket network %+v (ok=%v)", sockets, ok)
 	}
+	bypass, ok := fact(ForResult(api.ToolResult{Tool: "command", ExternalAccess: &api.ExternalAccess{Modes: []api.ExternalAccessMode{api.ExternalAccessModeFullBypass}}}, nil).Facts, api.ActionFactNetwork)
+	if !ok || bypass.Egress != "direct" {
+		t.Fatalf("full bypass network %+v (ok=%v)", bypass, ok)
+	}
 }
 
 func TestListeningProcessStatesItsPortInsteadOfCompletion(t *testing.T) {

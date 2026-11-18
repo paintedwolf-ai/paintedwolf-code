@@ -58,8 +58,7 @@ func TestConsoleSinkWriteReturnsWhileOutputIsStalled(t *testing.T) {
 	}
 
 	close(out.release)
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	testutil.FailErr(t, "flush", sink.flush(ctx))
 
 	got := out.String()
@@ -89,8 +88,7 @@ func TestConsoleSinkDropsBacklogAndReportsCountOnceDrained(t *testing.T) {
 	}
 
 	close(out.release)
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	testutil.FailErr(t, "flush", sink.flush(ctx))
 
 	got := out.String()
@@ -125,8 +123,7 @@ func TestConsoleSinkDropsWhenByteBudgetIsExhausted(t *testing.T) {
 	}
 
 	close(out.release)
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	testutil.FailErr(t, "flush", sink.flush(ctx))
 	if got := strings.Count(out.String(), line); got != 2 {
 		t.Fatalf("delivered %d lines want 2:\n%s", got, out.String())
@@ -139,8 +136,7 @@ func TestConsoleSinkPreservesOrder(t *testing.T) {
 	for i := range 20 {
 		_, _ = fmt.Fprintf(sink, "%d\n", i)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	testutil.FailErr(t, "flush", sink.flush(ctx))
 
 	var want strings.Builder

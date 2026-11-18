@@ -3,7 +3,6 @@
 package hostpower
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/lycaon/lycaon/internal/linuxbus"
@@ -119,11 +117,7 @@ func TestPortalWithoutRegistryEntersApplicationScopeOnceWhenUnscoped(t *testing.
 	}
 
 	testutil.FailErr(t, "release both layers", held.Release())
-	select {
-	case <-portal.closed:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("release left the session layer open")
-	}
+	testutil.AwaitClosed(t, "the release closes the session layer", portal.closed)
 	if !descriptorsClosed(t, logind, reader) {
 		t.Fatal("release left the system layer open")
 	}
@@ -135,8 +129,7 @@ func TestPortalWithoutRegistrySkipsTransientScopeWhenAlreadyScoped(t *testing.T)
 	manager := serveSystemdManager(t, path, testAppID, false)
 	provider := portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: manager.currentUnit}
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	testutil.FailErr(t, "check already-scoped portal", provider.Check(ctx))
 	held, err := provider.Acquire(ctx)
 	testutil.FailErr(t, "acquire already-scoped portal", err)
@@ -153,8 +146,7 @@ func TestPortalWithoutRegistryConcurrentAttributionEntersScopeOnce(t *testing.T)
 	manager := serveSystemdManager(t, path, "", false)
 	provider := portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: manager.currentUnit}
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	start := make(chan struct{})
 	const workers = 6
 	errs := make(chan error, workers)
@@ -179,8 +171,7 @@ func TestPortalWithoutRegistryConcurrentAttributionEntersScopeOnce(t *testing.T)
 }
 
 func TestPortalWithoutRegistryRefusesForeignScopeAndTransientUnitFailure(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 
 	t.Run("foreign application unit is not migrated", func(t *testing.T) {
 		path := fixtureBus(t)

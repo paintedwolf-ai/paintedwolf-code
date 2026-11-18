@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -244,7 +245,7 @@ func TestDifferentialAgainstHostMikefarahYq(t *testing.T) {
 			if errors.As(err, &exit) {
 				status = exit.ExitCode()
 			} else if err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "run the reference program", err)
 			}
 			r := h.exec(c.stdin, words...)
 			r.expect(t, c.argv, string(out), status)
@@ -280,7 +281,7 @@ func TestDifferentialAgainstHostPythonYq(t *testing.T) {
 			if errors.As(err, &exit) {
 				status = exit.ExitCode()
 			} else if err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "run the reference program", err)
 			}
 			r := h.exec(c.stdin, words...)
 			r.expect(t, c.argv, string(out), status)

@@ -3,9 +3,11 @@
 package launchguard
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
@@ -61,12 +63,7 @@ func TestGuardianQueuedDiagnosticAndSettlementDoNotFabricateFailureNotification(
 			pin, err := unix.PidfdOpen(command.Process.Pid, 0)
 			testutil.FailErr(t, "pin exact owned report child", err)
 			defer unix.Close(pin)
-			polls := []unix.PollFd{{Fd: int32(pin), Events: unix.POLLIN}}
-			_, err = unix.Poll(polls, 5000)
-			testutil.FailErr(t, "await actual child death before supervisor begins", err)
-			if polls[0].Revents&unix.POLLIN == 0 {
-				t.Fatal("owned report child did not exit before supervisor check")
-			}
+			pollReadableIgnoringEINTR(t, "await actual child death before supervisor begins", "owned report child did not exit before supervisor check", pin, 5*time.Second)
 			lifetimeR, lifetimeW, err := os.Pipe()
 			testutil.FailErr(t, "create owned lifetime witness", err)
 			defer lifetimeR.Close()
@@ -122,12 +119,7 @@ func TestGuardianQueuedSettlementAfterInitialDrainIsReadBeforeDeathWarning(t *te
 	pin, err := unix.PidfdOpen(command.Process.Pid, 0)
 	testutil.FailErr(t, "retain exact gated guardian pidfd", err)
 	defer unix.Close(pin)
-	polls := []unix.PollFd{{Fd: int32(controlFD), Events: unix.POLLIN}}
-	_, err = unix.Poll(polls, 5000)
-	testutil.FailErr(t, "await queued diagnostic before initial drain", err)
-	if polls[0].Revents&unix.POLLIN == 0 {
-		t.Fatal("owned guardian did not queue its first diagnostic")
-	}
+	pollReadableIgnoringEINTR(t, "await queued diagnostic before initial drain", "owned guardian did not queue its first diagnostic", controlFD, 5*time.Second)
 	caller := Identity{UID: uint32(os.Getuid()), GID: uint32(os.Getgid())}
 	reports := guardianSupervisorReports{}
 	reports.drain(control, command.Process.Pid, pin, caller)
@@ -136,9 +128,7 @@ func TestGuardianQueuedSettlementAfterInitialDrainIsReadBeforeDeathWarning(t *te
 	}
 	_, err = gateW.Write([]byte{1})
 	testutil.FailErr(t, "allow only owned guardian to queue its final settlement", err)
-	var status unix.WaitStatus
-	actual, err := unix.Wait4(command.Process.Pid, &status, 0, nil)
-	testutil.FailErr(t, "reap exact guardian after initial drain but before classification", err)
+	actual, status := wait4IgnoringEINTR(t, "reap exact guardian after initial drain but before classification", command.Process.Pid)
 	reaped = true
 	if actual != command.Process.Pid || !status.Exited() || status.ExitStatus() != 0 {
 		t.Fatal("gated guardian failed before final queued settlement")
@@ -154,5 +144,41 @@ func TestGuardianQueuedSettlementAfterInitialDrainIsReadBeforeDeathWarning(t *te
 	testutil.FailErr(t, "read final death presentation", err)
 	if !reports.settled || reports.status != 0 || reports.notified || len(raw) != 0 {
 		t.Fatalf("final queued settlement was misclassified: %+v warning=%q", reports, raw)
+	}
+}
+
+func pollReadableIgnoringEINTR(t *testing.T, label, timeoutMsg string, fd int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			t.Fatal(timeoutMsg)
+		}
+		polls := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
+		_, err := unix.Poll(polls, int((remaining+time.Millisecond-1)/time.Millisecond))
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
+		testutil.FailErr(t, label, err)
+		if polls[0].Revents&unix.POLLIN != 0 {
+			return
+		}
+		if polls[0].Revents != 0 {
+			t.Fatal(timeoutMsg)
+		}
+	}
+}
+
+func wait4IgnoringEINTR(t *testing.T, label string, pid int) (int, unix.WaitStatus) {
+	t.Helper()
+	for {
+		var status unix.WaitStatus
+		actual, err := unix.Wait4(pid, &status, 0, nil)
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
+		testutil.FailErr(t, label, err)
+		return actual, status
 	}
 }

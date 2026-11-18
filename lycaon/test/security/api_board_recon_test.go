@@ -27,7 +27,7 @@ func TestBoardRepoBriefPopulated(t *testing.T) {
 
 	var board wire.BoardView
 	var boardBody string
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the board carries the repository brief", func() bool {
 		req := authedRequest(t, http.MethodGet, "/v1/projects/"+p.ID+"/board?session_id="+sess.ID, nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
