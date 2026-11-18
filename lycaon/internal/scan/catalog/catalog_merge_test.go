@@ -72,27 +72,39 @@ func TestCatalogStoreRollsBackWhenRegistryPublicationFails(t *testing.T) {
 	}
 }
 
+// An enable-only project overlay loaded from YAML disables one stock scanner
+// in the bundled catalog and leaves a valid merged catalog.
 func TestMergeScannerCatalogProjectEnableOnly(t *testing.T) {
-	enabled := true
-	disabled := false
-	host := &scancatalog.ScannerConfig{Scanners: []scancatalog.ScannerEntry{{
-		ID: "lycaon-sca", Driver: scancatalog.DriverLibrary, Impl: "osv_scalibr", Engine: "osv-scalibr", ScopeKind: string(scancatalog.ScopeDependencies),
-		Categories: []string{"sca"}, Enabled: &enabled,
-	}}}
-	project := &scancatalog.ScannerConfig{Scanners: []scancatalog.ScannerEntry{{
-		ID: "lycaon-sca", Enabled: &disabled,
-	}}}
+	project, err := scancatalog.LoadUserScannerOverlay(filepath.Join("testdata", "project-scanners.yaml"))
+	testutil.FailErr(t, "LoadUserScannerOverlay", err)
+	host, err := scancatalog.LoadScannerConfig()
+	testutil.FailErr(t, "LoadScannerConfig", err)
+	stock, ok := findScanner(host.Scanners, "lycaon-sca")
+	if !ok || !stock.EnabledOrDefault() {
+		t.Fatalf("bundled lycaon-sca = %+v, found %v; the fixture needs an enabled stock scanner", stock, ok)
+	}
 	entries, rejected, err := scancatalog.MergeScannerCatalog(host, nil, project, scancatalog.MergeOptions{})
 	testutil.FailErr(t, "MergeScannerCatalog", err)
 	if len(rejected) != 0 {
 		t.Fatalf("rejected = %+v", rejected)
 	}
-	if len(entries) != 1 || entries[0].EnabledOrDefault() {
-		t.Fatalf("want disabled stock id, got %+v", entries)
+	if len(entries) != len(host.Scanners) {
+		t.Fatalf("merged %d entries, want the %d bundled", len(entries), len(host.Scanners))
 	}
-	if entries[0].CatalogSource != scancatalog.CatalogSourceProject {
-		t.Fatalf("catalog_source = %q", entries[0].CatalogSource)
+	merged, ok := findScanner(entries, "lycaon-sca")
+	if !ok || merged.EnabledOrDefault() || merged.CatalogSource != scancatalog.CatalogSourceProject {
+		t.Fatalf("merged lycaon-sca = %+v, found %v; want disabled from the project layer", merged, ok)
 	}
+	testutil.FailErr(t, "ValidateScannerConfig", scancatalog.ValidateScannerConfig(&scancatalog.ScannerConfig{Scanners: entries}))
+}
+
+func findScanner(entries []scancatalog.ScannerEntry, id string) (scancatalog.ScannerEntry, bool) {
+	for _, e := range entries {
+		if e.ID == id {
+			return e, true
+		}
+	}
+	return scancatalog.ScannerEntry{}, false
 }
 
 func TestMergeScannerCatalogProjectCommandRejected(t *testing.T) {

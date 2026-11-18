@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -57,6 +58,19 @@ func TestDefaultSettingsResolvesCatalogKeys(t *testing.T) {
 	s := DefaultSettings(store, nil, cat)
 	if s.Keys["brave"] != "stored-brave" {
 		t.Fatalf("keys = %+v", s.Keys)
+	}
+}
+
+// Out of the box only direct search is enabled, with or without the bundled
+// catalog; bundled keyless providers ride along as soft providers instead.
+func TestDefaultSettingsEnablesOnlyDirect(t *testing.T) {
+	for name, cat := range map[string]*Catalog{"no catalog": nil, "bundled catalog": testCatalog(t)} {
+		t.Run(name, func(t *testing.T) {
+			s := DefaultSettings(nil, nil, cat)
+			if !s.SearchEnabled || !slices.Equal(s.EnabledProviders, []string{"direct"}) {
+				t.Fatalf("search_enabled = %v, enabled_providers = %v, want true and [direct]", s.SearchEnabled, s.EnabledProviders)
+			}
+		})
 	}
 }
 

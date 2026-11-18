@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -72,17 +73,8 @@ func TestGetWebResearchProvidersStatus(t *testing.T) {
 		t.Fatal("search_enabled should default true")
 	}
 	// Direct on by default; bundled results-only keyless rows ride SoftProviderIDs.
-	wantEnabled := webresearch.DefaultSettings(creds, cfg, reg.Catalog()).EnabledProviders
-	if len(settings.EnabledProviders) != len(wantEnabled) {
-		t.Fatalf("enabled_providers = %v want %v out of the box", settings.EnabledProviders, wantEnabled)
-	}
-	for i, id := range wantEnabled {
-		if settings.EnabledProviders[i] != id {
-			t.Fatalf("enabled_providers = %v want %v out of the box", settings.EnabledProviders, wantEnabled)
-		}
-	}
-	if settings.EnabledProviders[0] != string(wire.WebSearchProviderDirect) {
-		t.Fatalf("enabled_providers[0] = %q want direct", settings.EnabledProviders[0])
+	if !slices.Equal(settings.EnabledProviders, []string{string(wire.WebSearchProviderDirect)}) {
+		t.Fatalf("enabled_providers = %v, want [direct] out of the box", settings.EnabledProviders)
 	}
 	var rawSettings map[string]json.RawMessage
 	testutil.FailErr(t, "Decode raw", json.Unmarshal(settingsRec.Body.Bytes(), &rawSettings))

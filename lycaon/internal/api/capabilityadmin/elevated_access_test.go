@@ -115,6 +115,32 @@ func TestElevatedAccessRevokeHasNoBulkIDCeiling(t *testing.T) {
 	}
 }
 
+// An unknown session answers session_not_found on both routes and leaves
+// another chat's authority in place.
+func TestElevatedAccessUnknownSessionNotFound(t *testing.T) {
+	s, chat := elevatedTestHandler(t)
+	addElevatedGrant(t, s, chat, "grant_kept")
+	router := chi.NewRouter()
+	router.Get("/v1/sessions/{id}/elevated-access", s.Access.HandleGetElevatedAccess)
+	router.Post("/v1/sessions/{id}/elevated-access/revoke", s.Access.HandleRevokeElevatedAccess)
+	unknown := "00000000-0000-4000-8000-0000000000ff"
+	for _, route := range []struct{ method, suffix string }{{http.MethodGet, ""}, {http.MethodPost, "/revoke"}} {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(route.method, "/v1/sessions/"+unknown+"/elevated-access"+route.suffix, nil))
+		var body wire.ErrorResponse
+		testutil.FailErr(t, "decode error", json.Unmarshal(response.Body.Bytes(), &body))
+		if response.Code != http.StatusNotFound || body.Code != wire.ApiErrorCodeSessionNotFound {
+			t.Fatalf("%s %s = %d %s, want 404 %s", route.method, route.suffix, response.Code, body.Code, wire.ApiErrorCodeSessionNotFound)
+		}
+	}
+	if grants := s.Access.Gate.ListGrants(chat.ID); len(grants) != 1 || grants[0].ID != "grant_kept" {
+		t.Fatalf("grants after unknown-session requests = %+v", grants)
+	}
+	if got := elevatedSummary(t, s, chat); got.Total != 1 {
+		t.Fatalf("summary after unknown-session requests = %+v", got)
+	}
+}
+
 type failedElevatedLedger struct{}
 
 func (failedElevatedLedger) ForgetChatGrant(context.Context, string) (bool, error) {

@@ -5,21 +5,43 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// The plan_stub_valid gate and the rules engine's stub validator answer the
+// same fixed verdict for each plan body.
 func TestPlanStubValid(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		BlueprintGet: func(_ context.Context, _ string) (*api.Blueprint, error) {
-			return &api.Blueprint{Content: conditions.TestPlanContentWithTasks}, nil
-		},
-	})
-	testutil.FailErr(t, "build conditions registry", err)
-	ec := conditions.EvalContext{BlueprintPath: "p1"}
-	ok, err := reg.Evaluate("plan_stub_valid", ec)
-	if err != nil || !ok {
-		t.Fatalf("plan_stub_valid = %v err=%v", ok, err)
+	cases := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"valid stub", conditions.TestPlanContentWithTasks, true},
+		{"missing title", "---\nresearch_depth: none\n---\n## Goal\n\nx\n\n## Assumptions\n\nx\n\n## Plan implementation scope\n\n**Size:** small\n\n## Plan breaking changes\n\nnone\n\n## Approach\n\nship it\n", false},
+		{"missing research depth", "## Goal\n\nx\n\n## Assumptions\n\nx\n", false},
+		{"missing scope", "---\nresearch_depth: none\n---\n## Goal\n\nx\n\n## Assumptions\n\nx\n\n## Plan breaking changes\n\nnone\n", false},
+		{"empty", "", false},
+		{"approach only", "## Approach\n\nship it\n", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
+				BlueprintGet: func(_ context.Context, _ string) (*api.Blueprint, error) {
+					return &api.Blueprint{Path: "p1", Content: tc.body}, nil
+				},
+			})
+			testutil.FailErr(t, "build conditions registry", err)
+			gate, err := reg.Evaluate("plan_stub_valid", conditions.EvalContext{Ctx: t.Context(), BlueprintPath: "p1"})
+			testutil.FailErr(t, "evaluate plan_stub_valid", err)
+			if gate != tc.want {
+				t.Errorf("plan_stub_valid = %v, want %v", gate, tc.want)
+			}
+			if got := (rules.StubValidator{Content: tc.body}).Valid(); got != tc.want {
+				t.Errorf("rules.StubValidator.Valid = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 
