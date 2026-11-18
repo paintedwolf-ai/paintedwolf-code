@@ -2292,6 +2292,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{id}/source/command-windows/{window_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a chat command window's observation gaps */
+        get: operations["getProjectSourceCommandObservation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{id}/source/git-changes/{git_change_id}/review": {
         parameters: {
             query?: never;
@@ -14413,6 +14430,10 @@ export interface components {
         SourceWalkSummary: {
             turns: components["schemas"]["SourceWalkTurnSummary"][];
         };
+        CommandObservationStatus: {
+            settling: boolean;
+            coverage: components["schemas"]["CommandFolderCoverage"][];
+        };
         /** @enum {string} */
         SourceGitChangeKind: "checkout" | "commit" | "amend" | "merge" | "rebase" | "pull" | "reset" | "cherry_pick" | "revert" | "clone" | "repo_appeared" | "repo_gone" | "other" | "unknown";
         /**
@@ -23759,6 +23780,34 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    getProjectSourceCommandObservation: {
+        parameters: {
+            query: {
+                session_id: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                window_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Observation gaps currently recorded for this window */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandObservationStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
     getProjectSourceGitReview: {
         parameters: {
             query?: {
@@ -31896,6 +31945,7 @@ export type SourceSymbol = components["schemas"]["SourceSymbol"];
 export type SourceSymbolsResponse = components["schemas"]["SourceSymbolsResponse"];
 export type SourceWalkTurnSummary = components["schemas"]["SourceWalkTurnSummary"];
 export type SourceWalkSummary = components["schemas"]["SourceWalkSummary"];
+export type CommandObservationStatus = components["schemas"]["CommandObservationStatus"];
 export type SourceGitChangeKind = components["schemas"]["SourceGitChangeKind"];
 export type SourceGitChange = components["schemas"]["SourceGitChange"];
 export type SourceGitCommitDetails = components["schemas"]["SourceGitCommitDetails"];

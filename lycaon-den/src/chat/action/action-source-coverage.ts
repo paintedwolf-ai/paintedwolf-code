@@ -13,15 +13,19 @@ export function useActionCoverage(
   scope: { client?: LycaonClient | null; projectId?: string; sessionId?: string },
 ): Accessor<CardAction> {
   const observation = () => action().facts.find((fact) => fact.kind === "source_observation");
-  const ids = createMemo(() => observation()?.source_windows?.join(",") ?? "");
-  const [loaded, setLoaded] = createSignal<FolderCoverage[]>([]);
-  createEffect(() => {
+  const windows = createMemo(() => observation()?.source_windows?.join(",") ?? "");
+  const address = createMemo(() => {
     const { client, projectId, sessionId } = scope;
-    const windows = ids();
-    setLoaded([]);
-    if (!client || !projectId || !sessionId || !windows) return;
+    const ids = windows();
+    return client && projectId && sessionId && ids ? { client, projectId, sessionId, ids } : null;
+  });
+  const [loaded, setLoaded] = createSignal<{ address: ReturnType<typeof address>; coverage: FolderCoverage[] }>();
+  createEffect(() => {
+    const requested = address();
+    if (!requested) return;
+    const { client, projectId, sessionId, ids } = requested;
     const controller = new AbortController();
-    const pending = new Set(windows.split(","));
+    const pending = new Set(ids.split(","));
     const coverage = new Map<string, FolderCoverage[]>();
     let refreshing = false;
     let again = false;
@@ -44,7 +48,7 @@ export function useActionCoverage(
           }
         }));
         if (controller.signal.aborted) return;
-        setLoaded([...coverage.values()].flat());
+        setLoaded({ address: requested, coverage: [...coverage.values()].flat() });
       } while (again && pending.size);
       refreshing = false;
     };
@@ -61,7 +65,8 @@ export function useActionCoverage(
     const current = action();
     const fact = observation();
     if (!fact?.source_windows?.length) return current;
-    const coverage = [...(fact.source_coverage ?? []), ...loaded()];
+    const resolved = loaded();
+    const coverage = [...(fact.source_coverage ?? []), ...(resolved && resolved.address === address() ? resolved.coverage : [])];
     const facts = coverage.length
       ? current.facts.map((entry) => entry === fact ? { ...fact, source_coverage: coverage } : entry)
       : current.facts.filter((entry) => entry !== fact);

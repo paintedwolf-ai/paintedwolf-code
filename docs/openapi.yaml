@@ -5974,6 +5974,39 @@ paths:
           $ref: '#/components/responses/Conflict'
         default:
           $ref: '#/components/responses/Error'
+  /v1/projects/{id}/source/command-windows/{window_id}:
+    get:
+      tags:
+        - projects
+      operationId: getProjectSourceCommandObservation
+      summary: Read a chat command window's observation gaps
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: session_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: window_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Observation gaps currently recorded for this window
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandObservationStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/projects/{id}/source/git-changes/{git_change_id}/review:
     get:
       tags:
@@ -36251,6 +36284,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SourceWalkTurnSummary'
+    CommandObservationStatus:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - settling
+        - coverage
+      properties:
+        settling:
+          type: boolean
+        coverage:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandFolderCoverage'
     SourceGitChangeKind:
       type: string
       enum:

@@ -1763,6 +1763,12 @@ type CommandInvokeResponse struct {
 	Error  *CommandInvokeError `json:"error,omitempty"`
 }
 
+// CommandObservationStatus
+type CommandObservationStatus struct {
+	Settling bool                    `json:"settling"`
+	Coverage []CommandFolderCoverage `json:"coverage"`
+}
+
 // CommandProgramNode
 type CommandProgramNode struct {
 	// Host syntax node identity within its program.
