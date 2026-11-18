@@ -32,7 +32,8 @@ func TestPrepareStartChecksAuthorityAndReachedExecutables(t *testing.T) {
 		{name: "authority changed", refuse: authorityChanged, stages: []exec.Stage{{Name: "/bin/true"}}},
 		{name: "missing pipeline stage", stages: []exec.Stage{{Name: "/bin/true"}, {Name: "./missing"}}},
 		{name: "sequenced stage not reached", stages: []exec.Stage{{Name: "/bin/false"}, {Name: "./missing", Connector: argv.ConnectorAnd}}, ready: true},
-		{name: "effective stage PATH", stages: []exec.Stage{{Name: "stage-tool", Env: map[string]string{"PATH": dir}}}, ready: true},
+		{name: "effective search path", stages: []exec.Stage{{Name: "stage-tool"}}, ready: true},
+		{name: "reserved stage environment", stages: []exec.Stage{{Name: "stage-tool", Env: map[string]string{"PATH": dir}}}, refuse: exec.ErrBlockedEnvKey},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
@@ -49,8 +50,10 @@ func TestPrepareStartChecksAuthorityAndReachedExecutables(t *testing.T) {
 					return want, nil
 				},
 			}
-			req.InlineEnv = map[string]string{"PATH": t.TempDir()}
-			req.Launch.CurrentAuthority = func(context.Context) error { return tc.refuse }
+			req.PathExtra = []string{dir}
+			if tc.refuse == authorityChanged {
+				req.Launch.CurrentAuthority = func(context.Context) error { return authorityChanged }
+			}
 			got, err := req.PrepareStart(ctx)
 			if tc.ready {
 				if !called || got != want || err != nil {
