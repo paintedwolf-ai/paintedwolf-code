@@ -96,7 +96,9 @@ func TestFileEvidencePersistenceFailureDoesNotPublishBindings(t *testing.T) {
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{7}, 32))
 	testutil.FailErr(t, "fingerprinter", err)
 	harvest := NewRuntime(fp)
-	store := credentialstoretest.Open(t, credentialstore.Slot{Path: t.TempDir(), Namespace: credentialstore.NamespaceCredentialFiles, Context: "file evidence"}, nil)
+	path := filepath.Join(t.TempDir(), credentialstore.VaultBasename)
+	store := credentialstoretest.Open(t, credentialstore.Slot{Path: path, Namespace: credentialstore.NamespaceCredentialFiles, Context: "file evidence"}, nil)
+	testutil.FailErr(t, "obstruct vault publication", os.Mkdir(path, 0o700))
 	testutil.FailErr(t, "configure store", harvest.RestoreFiles(store))
 	if err := observeFile(harvest, FileContent{ProjectID: "project", RootID: "root", Path: ".env", Content: []byte("TOKEN=person-value-4411")}); err == nil {
 		t.Fatal("failed persistence admitted binding")
