@@ -102,7 +102,7 @@ func ValidateCatalog(ctx context.Context, opts CatalogValidateOptions) ([]api.Co
 		if issues := workflowvalidation.PredicateLoadErrors(err, ""); len(issues) > 0 {
 			return issues, nil
 		}
-		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("load_error"), "catalog", //nolint:nilerr // the load error is returned as a api.ComposeValidationError, which is this API's error channel
+		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("load_error"), "catalog",
 			map[string]any{"detail": err.Error()})}, nil
 	}
 	if err := assertSourceBijection(reg, sources); err != nil {

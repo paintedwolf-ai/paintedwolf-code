@@ -2,6 +2,7 @@ package drafts
 
 import (
 	"context"
+	"errors"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/timelayout"
@@ -16,7 +17,7 @@ func (s *SQL) DeletePublished(ctx context.Context, draft Record) error {
 
 func (s *Memory) DeletePublished(ctx context.Context, draft Record) error {
 	current, err := s.Get(ctx, draft.SessionID, draft.WorkflowID, draft.Version)
-	if err == ErrNotFound {
+	if errors.Is(err, ErrNotFound) {
 		return nil
 	}
 	if err != nil {
