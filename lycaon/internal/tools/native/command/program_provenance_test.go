@@ -14,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type fakeProvenanceStore struct {
@@ -32,10 +31,6 @@ func (f *fakeProvenanceStore) seed(sessionID, path string, urls ...string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.custody[sessionID+"\x00"+path] = append([]string(nil), urls...)
-}
-
-func (f *fakeProvenanceStore) Get(context.Context, string) (*api.Session, error) {
-	return nil, nil
 }
 
 func (f *fakeProvenanceStore) CommitProgramHTTPProvenance(_ context.Context, sessionID, _ string, prov evidence.ProgramHTTPProvenance) (string, error) {
