@@ -72,6 +72,23 @@ describe("BudgetsEditor", () => {
   });
 
 
+  it("shows an unreadable limits.yaml and locks the limits until it is fixed", async () => {
+    const settingsStore = createSettingsStore({
+      providers: [],
+      limits: { ...sampleLimits(), rejected: [{ code: "project_unreadable", detail: ".paintedwolf/limits.yaml: unknown field max_iteration" }] },
+    });
+    const updateLimitsSettings = vi.fn();
+    render(() => <BudgetsEditor client={{ updateLimitsSettings } as never} settingsStore={settingsStore} />);
+    const alert = screen.getByTestId("budgets-rejected");
+    expect(alert.getAttribute("role")).toBe("alert");
+    expect(alert.textContent).toContain("unknown field max_iteration");
+    const toggle = await screen.findByTestId("spend-ceiling-enabled");
+    expect(toggle.closest("fieldset")?.disabled).toBe(true);
+    fireEvent.click(toggle);
+    await Promise.resolve();
+    expect(updateLimitsSettings).not.toHaveBeenCalled();
+  });
+
   it("saves edits made while an earlier field update is in flight", async () => {
     let finishFirst!: (limits: SettingsLimitsResponse) => void;
     const updateLimitsSettings = vi.fn()

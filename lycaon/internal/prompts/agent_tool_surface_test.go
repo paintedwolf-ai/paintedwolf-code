@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/configlayout"
@@ -314,5 +316,32 @@ func TestRequestableToolsCarryTheEngineOptionText(t *testing.T) {
 	testutil.FailErr(t, "LoadAgentToolSurface without schemas", err)
 	if len(bare.Requestable) != len(data.Requestable) || bare.Requestable[0].Summary != "" {
 		t.Fatalf("without schemas the roster lists bare names: %+v", bare.Requestable)
+	}
+}
+
+func TestPreventiveRejectEmittersBackedByLiveHints(t *testing.T) {
+	t.Parallel()
+	cfg, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load hint registry", err)
+
+	live := make(map[string]bool)
+	for _, entry := range cfg.HintCodes {
+		if strings.TrimSpace(entry.Category) == "recoverable" {
+			live[strings.TrimSpace(entry.Emit)] = true
+		}
+	}
+
+	var orphaned []string
+	for _, emit := range prompts.PreventiveRejectEmitters() {
+		if !live[emit] {
+			orphaned = append(orphaned, emit)
+		}
+	}
+	sort.Strings(orphaned)
+	if len(orphaned) > 0 {
+		t.Fatalf(`preventiveRejectEmitters names guards with no live recoverable hint: %v
+
+The prompt tool-surface table filters on emit; a rename or removal here silently drops codes from the table.
+Fix: update prompts.preventiveRejectEmitters to match the guard's current emit, or remove the stale entry.`, orphaned)
 	}
 }

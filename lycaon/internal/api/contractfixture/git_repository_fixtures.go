@@ -79,7 +79,7 @@ func GitStatusViaAPI(t *testing.T, srv *hostapi.Server, projectID, repoID string
 	// Readiness waits on the host's refresh within the test's own deadline; a fixed
 	// wall-clock bound fails on loaded runners before the first status lands.
 	var snapshot GitStatusSnapshot
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "git status is served", func() bool {
 		req := NewAuthedRequest(http.MethodGet, statusURL, nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)

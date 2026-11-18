@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -141,40 +142,43 @@ func TestMaintenanceDefersUntilPreparedRecordCommits(t *testing.T) {
 }
 
 func TestRunBlobGCRetriesADeferredSweep(t *testing.T) {
-	store, ctx := openLedger(t)
-	orphan := agedOrphan(t, store, "waits for the capture to end\n")
-	releaseCapture := store.Content.AcquireReferenceLease()
+	synctest.Test(t, func(t *testing.T) {
+		store, ctx := openLedger(t)
+		orphan := agedOrphan(t, store, "waits for the capture to end\n")
+		releaseCapture := store.Content.AcquireReferenceLease()
 
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	stopped := make(chan error, 1)
-	go func() { stopped <- store.Retention.RunBlobGC(runCtx, time.Hour, 5*time.Millisecond) }()
+		runCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		stopped := make(chan error, 1)
+		go func() { stopped <- store.Retention.RunBlobGC(runCtx, time.Hour, 5*time.Millisecond) }()
 
-	time.Sleep(100 * time.Millisecond)
-	if exists, err := store.Content.Exists(orphan); err != nil || !exists {
-		t.Fatalf("gc removed an object during a capture: exists=%v err=%v", exists, err)
-	}
-	releaseCapture()
-	for {
-		exists, err := store.Content.Exists(orphan)
-		testutil.FailErr(t, "stat orphan", err)
-		if !exists {
-			break
+		time.Sleep(100 * time.Millisecond)
+		synctest.Wait()
+		if exists, err := store.Content.Exists(orphan); err != nil || !exists {
+			t.Fatalf("gc removed an object during a capture: exists=%v err=%v", exists, err)
 		}
-		if t.Context().Err() != nil {
-			t.Fatal("gc never retried the sweep it deferred")
+		releaseCapture()
+		for {
+			exists, err := store.Content.Exists(orphan)
+			testutil.FailErr(t, "stat orphan", err)
+			if !exists {
+				break
+			}
+			if t.Context().Err() != nil {
+				t.Fatal("gc never retried the sweep it deferred")
+			}
+			time.Sleep(5 * time.Millisecond)
 		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	cancel()
-	select {
-	case err := <-stopped:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("gc stopped with %v, want context.Canceled", err)
+		cancel()
+		select {
+		case err := <-stopped:
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("gc stopped with %v, want context.Canceled", err)
+			}
+		case <-t.Context().Done():
+			t.Fatal("gc did not stop with its context")
 		}
-	case <-t.Context().Done():
-		t.Fatal("gc did not stop with its context")
-	}
+	})
 }
 
 func TestInventoryPassCompletesWhenItsRepairIsDeferred(t *testing.T) {

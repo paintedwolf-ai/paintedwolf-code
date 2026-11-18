@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -216,38 +217,37 @@ func TestStopCancelsTheHeldCall(t *testing.T) {
 	if err != nil || !stop.Running {
 		t.Fatalf("stop = %+v, %v", stop, err)
 	}
-	for t.Context().Err() == nil {
-		status, statusErr := registry.Status("s", outcome.Handle)
-		if statusErr != nil {
-			testutil.FailErr(t, "status", statusErr)
-		}
-		if status.Settled != nil {
-			if status.Settled.Content != "canceled" || !status.Stopped {
-				t.Fatalf("status = %+v", status)
-			}
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	var status Status
+	testutil.WaitFor(t, "the stopped call settles", func() bool {
+		var statusErr error
+		status, statusErr = registry.Status("s", outcome.Handle)
+		testutil.FailErr(t, "status", statusErr)
+		return status.Settled != nil
+	})
+	if status.Settled.Content != "canceled" || !status.Stopped {
+		t.Fatalf("status = %+v", status)
 	}
-	t.Fatal("stop did not cancel the call")
 }
 
 func TestTurnCancellationCancelsAnUnheldCall(t *testing.T) {
-	registry := New(nil, nil)
-	ctx, cancel := context.WithCancel(t.Context())
-	release := make(chan struct{})
-	defer close(release)
-	go func() {
-		time.Sleep(20 * time.Millisecond)
-		cancel()
-	}()
-	outcome, err := registry.Run(ctx, spec("find", "a", time.Minute), blocked(release))
-	if err != nil {
-		testutil.FailErr(t, "run", err)
-	}
-	if outcome.Settled == nil || outcome.Settled.Content != "canceled" {
-		t.Fatalf("outcome = %+v, want the canceled result", outcome)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		registry := New(nil, nil)
+		ctx, cancel := context.WithCancel(t.Context())
+		release := make(chan struct{})
+		defer close(release)
+		go func() {
+			// Cancel once the call is running and blocked, not before it starts.
+			synctest.Wait()
+			cancel()
+		}()
+		outcome, err := registry.Run(ctx, spec("find", "a", time.Minute), blocked(release))
+		if err != nil {
+			testutil.FailErr(t, "run", err)
+		}
+		if outcome.Settled == nil || outcome.Settled.Content != "canceled" {
+			t.Fatalf("outcome = %+v, want the canceled result", outcome)
+		}
+	})
 }
 
 func TestPanickingCallSettlesAsAnError(t *testing.T) {
@@ -291,13 +291,10 @@ func TestSettledResultsAreRetainedUpToTheBound(t *testing.T) {
 
 func waitSettled(t *testing.T, registry *Registry, handle string) {
 	t.Helper()
-	for t.Context().Err() == nil {
-		if known, running := registry.State("s", handle); !known || !running {
-			return
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-	t.Fatalf("%s did not settle", handle)
+	testutil.WaitFor(t, handle+" settles", func() bool {
+		known, running := registry.State("s", handle)
+		return !known || !running
+	})
 }
 
 func TestDisposeSessionCancelsAndForgetsHeldCalls(t *testing.T) {

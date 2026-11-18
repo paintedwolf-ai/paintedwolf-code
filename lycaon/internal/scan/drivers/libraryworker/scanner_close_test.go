@@ -87,7 +87,7 @@ func TestRetireAllowsAdmittedScanToFinish(t *testing.T) {
 	<-entered
 	retired := make(chan error, 1)
 	go func() { retired <- scanner.Retire(t.Context()) }()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the scanner refuses new work", func() bool {
 		_, finish, err := scanner.work.Begin(t.Context())
 		if err == nil {
 			finish()

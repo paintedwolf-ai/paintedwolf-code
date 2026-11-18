@@ -317,7 +317,7 @@ func TestClosingDuringStartStopsTheStartingEngine(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 	_, _, _ = client.Rank(ctx, decide.HeadCodeRank, "t", []string{"a"})
-	testutil.WaitFor(t, func() bool { return launches() == 1 })
+	testutil.WaitFor(t, "the engine launches", func() bool { return launches() == 1 })
 	testutil.FailErr(t, "close", client.Close())
 	if name := client.Engine().Name; name != "" {
 		t.Fatalf("an engine started before close was installed: %q", name)
@@ -356,7 +356,7 @@ func TestClientAdmissionRetainsTimedOutNativeWork(t *testing.T) {
 		if err == nil {
 			t.Fatal("unsupported state encoded successfully")
 		}
-		ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 		_, _, err = client.Rank(ctx, decide.HeadCodeRank, "after encoding error", []string{"a", "b"})
 		testutil.FailErr(t, "admit request after encoding failure", err)

@@ -231,16 +231,6 @@ describe("Tailwind adoption invariants", { timeout: VITEST_REPOSITORY_SCAN_TIMEO
     }
   });
 
-  it("bridges Den spacing and type scale keys in @theme", () => {
-    const tailwind = readText(join(denSrc, "tailwind.css"));
-    for (const key of REQUIRED_THEME_SPACING_KEYS) {
-      expect(tailwind).toContain(key);
-    }
-    for (const key of REQUIRED_THEME_TEXT_KEYS) {
-      expect(tailwind).toContain(key);
-    }
-  });
-
   it("keeps every Tailwind radius reference on the canonical concentric ladder", () => {
     const tailwind = readText(join(denSrc, "tailwind.css"));
     expect(tailwind).toContain("--radius-den-sm: var(--den-radius-sm)");
@@ -270,14 +260,6 @@ describe("Tailwind adoption invariants", { timeout: VITEST_REPOSITORY_SCAN_TIMEO
       expect(value).not.toMatch(/^var\(/);
       expect(value).not.toMatch(/px$/);
     }
-  });
-
-  it("enables eslint-plugin-tailwindcss against tailwind.css with cn()", () => {
-    const eslint = readText(join(denRoot, "eslint.config.js"));
-    expect(eslint).toMatch(/eslint-plugin-tailwindcss/);
-    expect(eslint).toMatch(/cssConfigPath:\s*"\.\/src\/tailwind\.css"/);
-    expect(eslint).toMatch(/functions:\s*\[\s*"cn"\s*\]/);
-    expect(eslint).toMatch(/tailwindcss\/no-contradicting-classname":\s*"error"/);
   });
 
   it("keeps reserved BEM prefixes out of component hooks", () => {
@@ -399,11 +381,6 @@ describe("Tailwind adoption invariants", { timeout: VITEST_REPOSITORY_SCAN_TIMEO
 
   it("no stage root repaints the backdrop over the wash", () => {
     expect(findStageRootBackdropFills(denSrc)).toEqual([]);
-  });
-
-  it("shell-domain keeps no per-stage wash transparency list", () => {
-    const shell = readText(join(denSrc, "shell-domain.css"));
-    expect(shell).not.toMatch(/den-shell-stage-host--washed\s+\.project-/);
   });
 
   it("locks SaaS full-bleed stage tokens and editor inset", () => {

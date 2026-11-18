@@ -46,19 +46,17 @@ type macOSReleaseProbeResult struct {
 	ReadToken    macOSReleaseProbeErrorClassification `json:"read_token"`
 }
 
-func TestMacOSUnsignedReleaseCustodyRefusalPreservesLegacyFilesAndRefusesTokenPrint(t *testing.T) {
-	binDir := t.TempDir()
-	probeBin := filepath.Join(binDir, "macosreleaseprobe")
-	pwBin := filepath.Join(binDir, "pw-release-unsigned")
+// unsignedReleaseDirEnv names a directory holding the unsigned release build
+// of pw and of testdata/macosreleaseprobe; the macOS platform job builds them.
+const unsignedReleaseDirEnv = "PW_UNSIGNED_RELEASE_DIR"
 
-	buildProbe := exec.Command("go", "build", "-tags=paintedwolf_release", "-o", probeBin, "./testdata/macosreleaseprobe")
-	if out, err := buildProbe.CombinedOutput(); err != nil {
-		t.Fatalf("build macosreleaseprobe: %v\n%s", err, string(out))
+func TestMacOSUnsignedReleaseCustodyRefusalPreservesLegacyFilesAndRefusesTokenPrint(t *testing.T) {
+	binDir := os.Getenv(unsignedReleaseDirEnv)
+	if binDir == "" {
+		t.Skip(unsignedReleaseDirEnv + " names no unsigned release build; the macOS platform job provides one")
 	}
-	buildPW := exec.Command("go", "build", "-tags=paintedwolf_release", "-o", pwBin, ".")
-	if out, err := buildPW.CombinedOutput(); err != nil {
-		t.Fatalf("build release pw: %v\n%s", err, string(out))
-	}
+	probeBin := filepath.Join(binDir, "macosreleaseprobe")
+	pwBin := filepath.Join(binDir, "pw")
 
 	homeDir := t.TempDir()
 	configDir := filepath.Join(homeDir, ".config", "paintedwolf")

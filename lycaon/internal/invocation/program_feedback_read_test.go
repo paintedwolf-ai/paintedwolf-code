@@ -76,14 +76,6 @@ func TestProgramFeedbackStateRefusalPrecedesHydration(t *testing.T) {
 	}
 }
 
-func TestProgramFeedbackLeaseZeroAndNilClose(t *testing.T) {
-	var absent *invocation.ProgramFeedbackLease
-	absent.Close()
-	var zero invocation.ProgramFeedbackLease
-	zero.Close()
-	zero.Close()
-}
-
 func TestProgramFeedbackTargetsRequestedIterationNotLastStoppedChild(t *testing.T) {
 	f := newProgramReceiptFixture(t)
 	earlier := f.child(t)

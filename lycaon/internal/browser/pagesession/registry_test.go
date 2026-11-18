@@ -93,16 +93,10 @@ func TestRegistryIdleReap(t *testing.T) {
 	e, err := reg.Open(context.Background(), "sess-idle", held)
 	testutil.FailErr(t, "Open", err)
 
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the idle page is reaped", func() bool {
 		reg.reapIdle()
-		if reg.CountLive("sess-idle") == 0 {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if reg.CountLive("sess-idle") != 0 {
-		t.Fatal("expected idle reap")
-	}
+		return reg.CountLive("sess-idle") == 0
+	})
 	if _, err := reg.RequireRunning("sess-idle", e.ID); !errors.Is(err, ErrPageNotFound) {
 		t.Fatalf("require after reap: %v", err)
 	}

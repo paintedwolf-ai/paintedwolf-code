@@ -38,7 +38,7 @@ func TestResolveBundledHonorsOwn(t *testing.T) {
 	testutil.FailErr(t, "resolve", err)
 	extpacks.SetActive(eff)
 
-	body, at, err := DefaultBundledLayout().ReadBundled("guidance/dup")
+	body, at, err := (BundledLayout{}).ReadBundled("guidance/dup")
 	testutil.FailErr(t, "resolve guidance/dup", err)
 	if filepath.Base(at.Parent().Parent().String()) != "fork" {
 		t.Fatalf("own winner not used: %s", at)
@@ -59,12 +59,12 @@ func TestResolveBundledRefusesDisabledUnit(t *testing.T) {
 	testutil.FailErr(t, "resolve", err)
 	extpacks.SetActive(eff)
 
-	_, _, err = DefaultBundledLayout().ReadBundled("guidance/fork-only")
+	_, _, err = (BundledLayout{}).ReadBundled("guidance/fork-only")
 	if !errors.Is(err, ErrTemplateNotEffective) {
 		t.Fatalf("err = %v, want ErrTemplateNotEffective", err)
 	}
 
-	if _, _, err := DefaultBundledLayout().ReadBundled("guidance/stockish-only"); err != nil {
+	if _, _, err := (BundledLayout{}).ReadBundled("guidance/stockish-only"); err != nil {
 		t.Fatalf("sibling unit must still resolve: %v", err)
 	}
 }

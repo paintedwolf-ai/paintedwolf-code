@@ -189,6 +189,8 @@ func TestOpenWaitsForWatcherEventsStillArriving(t *testing.T) {
 	repochange.DisableWatchersForTest()
 	t.Cleanup(repochange.ResetWatchersForTest)
 	store, ctx, root := openLedgerOnDisk(t)
+	// The wait under test runs on its production values.
+	store.Commands.SetWindowStartQuietForTest(windowStartQuietGrace, windowStartQuietWait)
 	repochange.MarkCoverageCompleteForTest(root)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	writeRootFile(t, root, "seed.txt", "seed\n")
@@ -209,7 +211,7 @@ func TestOpenWaitsForWatcherEventsStillArriving(t *testing.T) {
 			}
 		}
 	}()
-	testutil.WaitFor(t, func() bool { return arrivals.Load() > 0 })
+	testutil.WaitFor(t, "a watcher event arrives", func() bool { return arrivals.Load() > 0 })
 	recorder := arrivalsAtPass{store.Commands.inventory, &arrivals, make(chan int64, 1)}
 	store.Commands.inventory = recorder
 	before := arrivals.Load()

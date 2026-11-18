@@ -23,6 +23,7 @@ for flag in ("-dir", "-root"):
 if tree.endswith("/lycaon"):
     tree = tree[: -len("/lycaon")]
 data = json.load(open(tree + "/findings.json"))
+json.dump(args, open(tree + "/args-" + args[0] + ".json", "w"))
 print(json.dumps(data.get(args[0], [])))
 """
 
@@ -157,6 +158,27 @@ class ArchLintChangesTest(unittest.TestCase):
         self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "next")
         later = self.git("rev-parse", "HEAD").strip()
         self.assertEqual(arch_lint_changes.base_checks(self.repo, later, self.binary, POLICY, self.cache), {})
+
+    def test_reach_receives_the_product_checks_the_policy_names(self):
+        product = {**POLICY["reach"], "product": ["./cmd/app"]}
+        arch_lint_changes.checks(self.binary, self.repo, {**POLICY, "reach": {**product, "config_fields": True},
+                                                          "emitters": {"registry": "r.json"}})
+        args = json.loads((self.repo / "args-reach.json").read_text())
+        self.assertEqual(json.loads(args[args.index("-emitters") + 1]), {"registry": "r.json"})
+        self.assertEqual(args[args.index("-repo") + 1], str(self.repo))
+        self.assertEqual(args[args.index("-product") + 1], "./cmd/app")
+        self.assertIn("-config-fields", args)
+        arch_lint_changes.checks(self.binary, self.repo, {**POLICY, "reach": product})
+        args = json.loads((self.repo / "args-reach.json").read_text())
+        self.assertNotIn("-emitters", args)
+        self.assertNotIn("-config-fields", args)
+        arch_lint_changes.checks(self.binary, self.repo, POLICY)
+        self.assertNotIn("-product", json.loads((self.repo / "args-reach.json").read_text()))
+    def test_vet_receives_the_identity_fields_the_policy_names(self):
+        vet = {"packages": ["./..."], "identity": {"fields": ["x/p.Ref.ID", "x/q.Path.RootID"], "owner": "x/p"}}
+        self.assertEqual(arch_lint_changes.identity_flags(vet),
+                         ["-identity-fields", "x/p.Ref.ID,x/q.Path.RootID", "-identity-owner", "x/p"])
+        self.assertEqual(arch_lint_changes.identity_flags({"packages": ["./..."]}), [])
 
     def test_target_platforms_follow_the_host(self):
         reach = {"goos": {"darwin": ["darwin", "linux"], "linux": ["linux"]}}

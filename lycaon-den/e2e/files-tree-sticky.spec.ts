@@ -114,6 +114,12 @@ test("deep paged trees keep sticky geometry through thumb jumps and reversals", 
     const thumb = await bar.locator(".os-scrollbar-handle").boundingBox();
     expect(track).not.toBeNull(); expect(thumb).not.toBeNull();
     const x = thumb!.x + thumb!.width / 2;
+    // The scrollbar stays reachable over the pinned folder rows.
+    const sticky = frame.getByTestId("files-tree-sticky");
+    if (await sticky.count()) {
+      const band = (await sticky.boundingBox())!;
+      expect(await page.evaluate(([px, py]) => !!document.elementFromPoint(px!, py!)?.closest(".os-scrollbar"), [x, band.y + 4])).toBe(true);
+    }
     await page.mouse.move(x, thumb!.y + thumb!.height / 2);
     await page.mouse.down();
     await page.evaluate(({ levels, depth }) => {

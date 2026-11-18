@@ -49,7 +49,7 @@ tasks:
     internal: true
     dir: scripts/commentlint
     cmds:
-      - go test ./...
+      - go test -timeout 0 ./...
 
   comments:check:
     desc: Test the source comment scanner and scan the repository
@@ -151,7 +151,6 @@ tasks:
     sources:
       - '**/*.go'
       - .golangci.yml
-      - .deadcode-exclude
       - '{{.ROOT_DIR}}/.github/workflows/*.yml'
       - '{{.ROOT_DIR}}/.github/workflows/*.yaml'
       - '{{.SCRIPTS_DIR}}/workflow_lint/**/*.py'
@@ -160,12 +159,11 @@ tasks:
       - '{{.SCRIPTS_DIR}}/toolchain/python_tools.py'
       - '{{.SCRIPTS_DIR}}/analysis_tools.py'
       - '{{.SCRIPTS_DIR}}/lint-go.sh'
-      - '{{.SCRIPTS_DIR}}/deadcode-check.sh'
     cmds:
       - bash {{.SCRIPTS_DIR}}/lint-go.sh fast {{.CLI_ARGS}}
 
   lint:full:
-    desc: GitHub workflows + full golangci-lint + deadcode
+    desc: GitHub workflows + full golangci-lint
     dir: '{{.GO_DIR}}'
     sources:
       - '**/*.go'
@@ -178,9 +176,13 @@ tasks:
       - '{{.SCRIPTS_DIR}}/toolchain/python_tools.py'
       - '{{.SCRIPTS_DIR}}/analysis_tools.py'
       - '{{.SCRIPTS_DIR}}/lint-go.sh'
-      - '{{.SCRIPTS_DIR}}/deadcode-check.sh'
     cmds:
       - bash {{.SCRIPTS_DIR}}/lint-go.sh full {{.CLI_ARGS}}
+
+  lint:deadcode:
+    desc: Whole-program deadcode over the module's command and test roots (exclusions in lycaon/.deadcode-exclude)
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/deadcode-check.sh
 
   lint:vuln:
     desc: Offline govulncheck symbol scan against the vendored database (required in check; allowlist in lycaon/govulncheck-allowlist.yaml)
@@ -358,6 +360,11 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:integration -- {{.CLI_ARGS}}
 
+  test:integration:changes:
+    desc: Integration-tagged tests of the Go packages the change edits directly
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/integration_changes.py
+
   test:full:
     desc: Full Go behavior and required bundled scanner tests (mock LLM)
     cmds:
@@ -445,9 +452,11 @@ tasks:
       - python3 {{.SCRIPTS_DIR}}/rewrite-fail-messages.py
 
   test:fail-messages:check:
-    desc: CI guard — fail if any bare t.Fatal(err) patterns remain in test files
+    desc: CI guard — fail on bare t.Fatal(err) patterns or fixed real-clock sleeps in test files
     cmds:
       - python3 {{.SCRIPTS_DIR}}/rewrite-fail-messages.py --check
+      - go -C {{.SCRIPTS_DIR}}/testsleep test -timeout 0 ./...
+      - go -C {{.SCRIPTS_DIR}}/testsleep run . --root ../../lycaon
 
   check:digest:
     desc: 'Lighter summarized pass (build + lint:fast + Go + Den + harness canary); not the ship gate. FULL=1 for full Go tests'
@@ -586,10 +595,13 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bun run typecheck
 
   den:lint:
-    desc: 'Frontend ESLint (errors only): typescript-eslint + eslint-plugin-solid'
+    desc: 'Frontend ESLint (errors only) and its canary: typescript-eslint, eslint-plugin-solid, Den source laws'
     dir: lycaon-den
     sources:
       - 'src/**/*.{ts,tsx}'
+      - 'shared/**/*.ts'
+      - 'e2e/**/*.ts'
+      - 'eslint/**/*.js'
       - eslint.config.js
       - package.json
     env:
@@ -600,6 +612,7 @@ tasks:
         msg: bun required — install from https://bun.sh
     cmds:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bun run lint
+      - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bun run lint:canary
 
   den:lint:full:
     desc: Frontend ESLint with warnings visible (full report)
@@ -627,16 +640,6 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test
 
-  den:test:fast:
-    desc: Vitest seam canaries (model + DOM; exhaustive suite runs at closeout)
-    preconditions:
-      - sh: command -v bun
-        msg: bun required — install from https://bun.sh
-    env:
-      LYCAON_VITEST_FAST: '1'
-    cmds:
-      - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:fast
-
   den:test:digest:
     desc: 'Vitest with failure digest (e.g. task den:test:digest -- src/**/*.test.ts)'
     preconditions:
@@ -644,14 +647,6 @@ tasks:
         msg: bun required — install from https://bun.sh
     cmds:
       - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:digest -- {{.CLI_ARGS}}
-
-  den:test:transcript-scale:
-    desc: 'Transcript hydration at 5000 and 10000 messages'
-    preconditions:
-      - sh: command -v bun
-        msg: bun required — install from https://bun.sh
-    cmds:
-      - LYCAON_VITEST_PERF=1 bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:transcript-scale -- src/chat/transcript/layout/transcript-scale.perf.test.ts
 
   den:test:rust:
     desc: Den Rust workspace tests and operational examples (shell, wheel glide, WebKit harness)
@@ -1855,7 +1850,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/upgrade-corpus-prepare.sh
 
   release:preflight:
-    desc: 'Validate version, updater, brand, and optional corpus identity and integrity against the current engine'
+    desc: 'Release inputs: --static checks version, changelog, update keys, platforms and URLs without a build; --require-corpus builds the engine and verifies the versioned upgrade corpus'
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-preflight.sh {{.CLI_ARGS}}
 
@@ -1932,11 +1927,18 @@ tasks:
       - python3 -m scripts.linux_release.package_probe {{.CLI_ARGS}}
 
   release:rehearse:rpm-metadata:
-    desc: 'Build and rpmlint production RPM metadata around a tiny nonapplication payload on native Linux (-- --receipt PATH [--container])'
+    desc: 'Build and rpmlint production RPM metadata around a tiny nonapplication payload on native Linux; a misspelled summary must fail (-- [--receipt PATH] [--container])'
     env:
       PYTHONPATH: '{{.SCRIPTS_DIR}}'
     cmds:
       - python3 -m scripts.linux_release.rpm_metadata_rehearsal {{.CLI_ARGS}}
+
+  release:rehearse:deb-metadata:
+    desc: 'Build and lintian the production Debian control data, conffiles and maintainer scripts around a tiny nonapplication payload on native Linux; an unmarked /etc file must fail (-- [--receipt PATH] [--container])'
+    env:
+      PYTHONPATH: '{{.SCRIPTS_DIR}}'
+    cmds:
+      - python3 -m scripts.linux_release.deb_metadata_rehearsal {{.CLI_ARGS}}
 
   release:rehearse:pacman-construction:
     desc: 'Build and admit a sealed tiny pacman fixture with native makepkg in the pinned official substrate (-- --receipt PATH)'

@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/oardraft"
 )
 
 // NextStepsKindRoot holds the host catalog of reachable steps, one file per rule.
@@ -211,6 +212,15 @@ func InventoryPack(p Pack, man Manifest) (PackContent, error) {
 				return fmt.Errorf("read %s: %w", at, err)
 			}
 			if kind == "policy" {
+				upgraded, _, err := oardraft.Upgrade(data)
+				if err != nil {
+					diags = append(diags, Diagnostic{
+						Code: DiagPolicyCandidateRefused, UnitID: id, PackID: p.ID,
+						Message: fmt.Sprintf("%s: %v; run `pw rules upgrade` and finish the rule by hand", at, err),
+					})
+					return nil
+				}
+				data = upgraded
 				identity, _, oar, err := PolicyDocumentIdentity(data)
 				if err != nil {
 					return fmt.Errorf("%s: %w", at, err)
@@ -298,6 +308,10 @@ func validateUniqueUnitIDs(packID string, units []InventoriedUnit) error {
 
 // DiagUnitNotRegular identifies non-regular files excluded from publication.
 const DiagUnitNotRegular = "unit_not_regular"
+
+// DiagPolicyCandidateRefused identifies an OAR 1.0 candidate rule with no OAR
+// 1.0 equivalent; the rest of its pack loads.
+const DiagPolicyCandidateRefused = "policy_candidate_refused"
 
 // UnitIDFor maps a pack-relative path to its public unit id.
 // Provider-scoped kinds return empty when packID is missing.

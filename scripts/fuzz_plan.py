@@ -114,7 +114,7 @@ def schedule(mode, packages, plan=None):
 
 
 def explore(package, target, seconds, tags, workers):
-    command = ["test", f"-tags={','.join(tags)}", "-timeout=0", f"-parallel={workers}", "-run=^$",
+    command = ["test", f"-tags={','.join(tags)}", "-timeout=0", f"-p={workers}", f"-parallel={workers}", "-run=^$",
                f"-fuzz=^{target}$", f"-fuzztime={seconds}s", package]
     return go(*command, capture=False).returncode
 

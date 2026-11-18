@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
@@ -64,15 +63,4 @@ func newBlockingCadence(t *testing.T, clock *testClock) (*Service, *scanbase.SQL
 	coord := &blockingCoordinator{CoordinatorImpl: cadence.Coordinator.(*scanbase.CoordinatorImpl), release: make(chan struct{})}
 	cadence.Coordinator = coord
 	return cadence, store, coord
-}
-
-func waitFor(t *testing.T, ready func() bool) {
-	t.Helper()
-	for t.Context().Err() == nil {
-		if ready() {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatal("condition not reached in time")
 }

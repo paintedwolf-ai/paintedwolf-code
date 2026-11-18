@@ -16,6 +16,10 @@
   box-sizing: border-box;
 }
 
+.den-seam[data-seam="part"] {
+  padding-top: var(--transcript-part-gap);
+}
+
 .den-seam[data-seam="row"] {
   padding-top: var(--transcript-row-gap);
 }

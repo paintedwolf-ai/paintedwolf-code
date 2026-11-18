@@ -10,19 +10,13 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// envelopeOnlyNativeFiles are the production sources for the six envelope-only
-// analysis tools. They must consume safecmd for path resolve / shared caps /
+// envelopeOnlyNativeFiles are the production sources of the envelope-only
+// analysis code. They must consume safecmd for path resolve / shared caps /
 // confine scaffolding — not re-declare those arms locally.
 var envelopeOnlyNativeFiles = []string{
-	"internal/tools/native/survey/stat.go",
-	"internal/tools/native/survey/wc.go",
-	"internal/tools/native/survey/list_dir.go",
-	"internal/tools/native/survey/list_dir_altitude.go",
 	"internal/tools/native/survey/find.go",
 	"internal/tools/native/survey/find_walk.go",
 	"internal/tools/native/survey/grep.go",
-	"internal/tools/native/survey/grep_scope_guard.go",
-	"internal/tools/native/jq/jq.go",
 	"internal/tools/native/jq/decode.go",
 }
 
@@ -41,6 +35,11 @@ func TestEnvelopeOnlyToolsUseSafecmdAST(t *testing.T) {
 	}
 
 	var violations []string
+	defer func() {
+		for rel := range want {
+			t.Errorf("%s is listed but is not a production file", rel)
+		}
+	}()
 	for _, gf := range corp.Files() {
 		if gf.IsTest {
 			continue
@@ -49,6 +48,7 @@ func TestEnvelopeOnlyToolsUseSafecmdAST(t *testing.T) {
 		if _, ok := want[rel]; !ok {
 			continue
 		}
+		delete(want, rel)
 		ast.Inspect(gf.AST, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
 			if !ok || sel.Sel == nil {
