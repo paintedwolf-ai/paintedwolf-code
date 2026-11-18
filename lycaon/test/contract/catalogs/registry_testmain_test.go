@@ -10,7 +10,7 @@ import (
 
 func TestMain(m *testing.M) {
 	contractcheck.Setup()
-	// The registry contract builds a whole host.
+	// The allowlist contract builds a whole host.
 	wiring.PrepareHostProcess()
 	os.Exit(m.Run())
 }
