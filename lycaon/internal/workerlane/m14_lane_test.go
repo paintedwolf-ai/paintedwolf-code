@@ -17,7 +17,7 @@ import (
 func realLane(t *testing.T) (*roundFixture, []projectroot.RootRef) {
 	t.Helper()
 	f := newRoundFixture(t)
-	mgr := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), nil)
+	mgr := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	f.lanes = workerlane.New(mgr, f.records)
 	project := t.TempDir()
 	testutil.FailErr(t, "seed project", os.WriteFile(filepath.Join(project, "main.go"), []byte("package main\n"), 0o644))

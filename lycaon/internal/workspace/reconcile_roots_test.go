@@ -181,7 +181,7 @@ func TestResolveDispatchWorkspaceSelectionNarrowsRoots(t *testing.T) {
 	testutil.FailErr(t, "write docs readme", os.WriteFile(filepath.Join(rootB, "README.md"), []byte("# docs\n"), 0o644))
 
 	branches := t.TempDir()
-	mgr := workspace.NewManager(branches, platform.NewSelector(platform.Config{}), nil)
+	mgr := workspace.NewManager(branches, platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	narrowSel := adapter.WorkspaceSelection{
 		RootIDs:  []string{"primary"},
 		Subroots: map[string]string{"primary": "services/api"},

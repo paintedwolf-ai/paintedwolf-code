@@ -129,7 +129,7 @@ func (f *engineFixture) bindWorkspace(selector *adapter.Selector) {
 	if selector == nil {
 		selector = platform.NewSelector(platform.Config{})
 	}
-	f.engine.Workspace = workspace.NewManager(f.engine.BranchRoot, selector, nil).WithRecovery(f.engine.Recovery)
+	f.engine.Workspace = workspace.NewManager(f.engine.BranchRoot, selector, workspace.Filesystem{}).WithRecovery(f.engine.Recovery)
 	f.engine.Queue.Branches.SetWorkerWorkspaceManager(f.engine.Workspace)
 }
 

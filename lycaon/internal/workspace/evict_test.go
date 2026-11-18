@@ -31,7 +31,7 @@ func createBranch(t *testing.T, mgr *workspace.Manager, jobID string) (string, s
 
 func TestEvictJobTreeKeepsRecordAndRebuildRestores(t *testing.T) {
 	branches := t.TempDir()
-	mgr := workspace.NewManager(branches, platform.NewSelector(platform.Config{}), nil)
+	mgr := workspace.NewManager(branches, platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	_, root := createBranch(t, mgr, "job-evict")
 	if !workspace.BranchTreePresent(root) {
 		t.Fatal("fresh branch must read as present")
@@ -77,7 +77,7 @@ func TestEvictJobTreeKeepsRecordAndRebuildRestores(t *testing.T) {
 }
 
 func TestEvictJobTreeRefusesWhileLeased(t *testing.T) {
-	mgr := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), nil)
+	mgr := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	_, root := createBranch(t, mgr, "job-lease")
 	release, err := workspace.AcquireBranchUse(context.Background(), root)
 	testutil.FailErr(t, "lease", err)
@@ -90,7 +90,7 @@ func TestEvictJobTreeRefusesWhileLeased(t *testing.T) {
 
 func TestListJobTreesReportsPresenceSizeAndLastUse(t *testing.T) {
 	branches := t.TempDir()
-	mgr := workspace.NewManager(branches, platform.NewSelector(platform.Config{}), nil)
+	mgr := workspace.NewManager(branches, platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	_, kept := createBranch(t, mgr, "job-kept")
 	_, evicted := createBranch(t, mgr, "job-evicted")
 	old := time.Now().Add(-48 * time.Hour)
@@ -118,7 +118,7 @@ func TestListJobTreesReportsPresenceSizeAndLastUse(t *testing.T) {
 
 func TestEvictVerifiedCheckpointBranchAndRebuildWithLocalDataInventory(t *testing.T) {
 	branches := t.TempDir()
-	mgr := workspace.NewManager(branches, platform.NewSelector(platform.Config{}), nil)
+	mgr := workspace.NewManager(branches, platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	project, root := createBranch(t, mgr, "job-cp-evict")
 
 	cpStore, err := checkpoint.NewStore(t.TempDir())

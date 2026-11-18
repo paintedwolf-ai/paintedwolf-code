@@ -93,10 +93,6 @@ func TestEnvelopeOnlyToolsUseSafecmdAST(t *testing.T) {
 					}
 					n := name.Name
 					if strings.HasPrefix(n, "host") && (strings.Contains(n, "Max") || strings.Contains(n, "Timeout") || strings.Contains(n, "Bytes") || strings.Contains(n, "Depth") || strings.Contains(n, "Scan") || strings.Contains(n, "Zoom") || strings.Contains(n, "Entries") || strings.Contains(n, "Paths") || strings.Contains(n, "Files") || strings.Contains(n, "Matches") || strings.Contains(n, "Results") || strings.Contains(n, "Pattern") || strings.Contains(n, "Context") || strings.Contains(n, "Recursive")) {
-						// Allow package vars that tests mutate (hostGrepMaxFileBytes).
-						if gen.Tok.String() == "var" && n == "hostGrepMaxFileBytes" {
-							continue
-						}
 						pos := corp.Fset.Position(name.Pos())
 						violations = append(violations, rel+":"+strconv.Itoa(pos.Line)+" redeclared "+n+" (use safecmd)")
 					}

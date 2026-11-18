@@ -7,26 +7,13 @@ import (
 	"errors"
 	"net/url"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func resetCache(t *testing.T) {
-	t.Helper()
-	cache.mu.Lock()
-	cache.at, cache.config, cache.err = time.Time{}, Configuration{}, nil
-	cache.mu.Unlock()
-	t.Cleanup(func() {
-		cache.mu.Lock()
-		cache.at, cache.config, cache.err = time.Time{}, Configuration{}, nil
-		cache.mu.Unlock()
-	})
-}
-
 func TestDesktopSourcesAreConsultedInOrderUntilOneDeclaresAMode(t *testing.T) {
 	calls := []string{}
-	sources := []func(context.Context) (Configuration, bool, error){
+	sources := []desktopSource{
 		func(context.Context) (Configuration, bool, error) {
 			calls = append(calls, "absent")
 			return Configuration{}, false, nil
@@ -56,7 +43,7 @@ func TestDesktopSourcesAreConsultedInOrderUntilOneDeclaresAMode(t *testing.T) {
 		t.Fatalf("undeclared configuration = %+v", config)
 	}
 	failure := errors.New("settings unavailable")
-	if _, err := resolveDesktopConfiguration(t.Context(), []func(context.Context) (Configuration, bool, error){
+	if _, err := resolveDesktopConfiguration(t.Context(), []desktopSource{
 		func(context.Context) (Configuration, bool, error) {
 			return Configuration{}, false, failure
 		},
@@ -66,19 +53,18 @@ func TestDesktopSourcesAreConsultedInOrderUntilOneDeclaresAMode(t *testing.T) {
 }
 
 func TestLookupCachesTheDesktopConfiguration(t *testing.T) {
-	resetCache(t)
-	previous := desktopSources
-	t.Cleanup(func() { desktopSources = previous })
 	reads := 0
-	desktopSources = []func(context.Context) (Configuration, bool, error){
+	cache := desktopCache{sources: []desktopSource{
 		func(context.Context) (Configuration, bool, error) {
 			reads++
 			config, err := parseGSettingsDump([]byte(gnomeManualDump))
 			return config, err == nil, err
 		},
-	}
+	}}
 	for range 3 {
-		proxy, err := Lookup(mustTarget(t, "https://api.example/"))
+		config, err := cache.current(t.Context())
+		testutil.FailErr(t, "current", err)
+		proxy, err := config.ProxyFor(mustTarget(t, "https://api.example/"))
 		testutil.FailErr(t, "lookup", err)
 		if proxy == nil || proxy.Host != "proxy.example:3128" {
 			t.Fatalf("proxy = %v", proxy)
@@ -93,22 +79,20 @@ func TestLookupCachesTheDesktopConfiguration(t *testing.T) {
 }
 
 func TestGSettingsToolOutcomesMapToConfigurationFacts(t *testing.T) {
-	previous := runGSettings
-	t.Cleanup(func() { runGSettings = previous })
-	runGSettings = func(context.Context) ([]byte, int, error) { return nil, 1, nil }
-	if _, ok, err := gsettingsConfiguration(t.Context()); ok || err != nil {
+	read := func(context.Context) ([]byte, int, error) { return nil, 1, nil }
+	if _, ok, err := gsettingsConfiguration(t.Context(), read); ok || err != nil {
 		t.Fatalf("absent schema = %v, %v", ok, err)
 	}
-	runGSettings = func(context.Context) ([]byte, int, error) { return nil, -1, errors.New("timed out") }
-	if _, ok, err := gsettingsConfiguration(t.Context()); ok || err == nil {
+	read = func(context.Context) ([]byte, int, error) { return nil, -1, errors.New("timed out") }
+	if _, ok, err := gsettingsConfiguration(t.Context(), read); ok || err == nil {
 		t.Fatalf("tool failure = %v, %v", ok, err)
 	}
-	runGSettings = func(context.Context) ([]byte, int, error) { return []byte("garbage\n"), 0, nil }
-	if _, _, err := gsettingsConfiguration(t.Context()); err == nil {
+	read = func(context.Context) ([]byte, int, error) { return []byte("garbage\n"), 0, nil }
+	if _, _, err := gsettingsConfiguration(t.Context(), read); err == nil {
 		t.Fatal("malformed output was accepted")
 	}
-	runGSettings = func(context.Context) ([]byte, int, error) { return []byte(gnomeManualDump), 0, nil }
-	config, ok, err := gsettingsConfiguration(t.Context())
+	read = func(context.Context) ([]byte, int, error) { return []byte(gnomeManualDump), 0, nil }
+	config, ok, err := gsettingsConfiguration(t.Context(), read)
 	if err != nil || !ok || config.Mode != ModeManual {
 		t.Fatalf("manual configuration = %+v, %v, %v", config, ok, err)
 	}
