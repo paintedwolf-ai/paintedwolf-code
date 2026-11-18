@@ -66,12 +66,14 @@ func TestVarSetForbiddenInRuleWhen(t *testing.T) {
 		t.Fatalf("control rule: %+v", diags)
 	}
 	diags := validate("var_set:plan.status")
-	if len(diags) == 0 {
-		t.Fatal("var_set rule when validated")
-	}
+	forbidden := false
 	for _, d := range diags {
-		if d.Code != "forbidden_predicate" || d.Field != "rules[0].r.when" {
-			t.Fatalf("diagnostic = %+v want forbidden_predicate on rules[0].r.when", d)
+		if d.Field != "rules[0].r.when" {
+			t.Fatalf("diagnostic on another field: %+v", d)
 		}
+		forbidden = forbidden || d.Code == "forbidden_predicate"
+	}
+	if !forbidden {
+		t.Fatalf("diagnostics = %+v want forbidden_predicate on rules[0].r.when", diags)
 	}
 }

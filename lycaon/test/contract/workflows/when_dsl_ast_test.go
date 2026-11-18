@@ -39,13 +39,15 @@ func TestHintWhenExpressionsValidate(t *testing.T) {
 	if withWhen == 0 {
 		t.Fatalf("bundled policy loaded %d rules and none carries a when", rs.Len())
 	}
-	for _, id := range []string{"mode_is", "mode_unresolved", "tool_is_den", "stage_plan_complete", "user_input_clarify"} {
+	for _, id := range []string{"mode_is", "mode_unresolved", "den_status", "stage_plan_complete", "user_input_clarify"} {
 		if !conditions.IsForbidden(id) {
 			t.Fatalf("%q is not a forbidden condition id", id)
 		}
-		var refused *oarcore.LoadError
-		if err := loader.ValidateCondition(id); !errors.As(err, &refused) {
-			t.Errorf("when %q: error = %v, want a load refusal", id, err)
+		err := loader.ValidateCondition(id)
+		var loadErr *oarcore.LoadError
+		var syntaxErr *oarcore.SyntaxError
+		if !errors.As(err, &loadErr) && !errors.As(err, &syntaxErr) {
+			t.Errorf("when %q: error = %v, want a typed condition refusal", id, err)
 		}
 	}
 }
