@@ -74,14 +74,12 @@ esac
 # A signed macOS bundle needs its Developer ID before anything builds; the compile
 # phase signs nothing and --unsigned (the release rehearsal) signs ad hoc.
 SIGNING_IDENTITY="-"
-HOST_SIGNING=()
 if [[ "${HOST_KIND}" == darwin && "${PHASE}" != compile && "${UNSIGNED}" == 0 ]]; then
   [[ -n "${APPLE_SIGNING_IDENTITY:-}" && -n "${APPLE_ENGINE_PROVISIONING_PROFILE:-}" ]] || {
     echo "error: a signed macOS bundle needs APPLE_SIGNING_IDENTITY and APPLE_ENGINE_PROVISIONING_PROFILE" >&2
     exit 2
   }
   SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY}"
-  HOST_SIGNING=(--release)
 fi
 SIDECAR_BIN="${BINARIES_DIR}/${SIDECAR_NAME}-${TARGET}${EXE_SUFFIX}"
 LOG_VIEWER_BIN="${BINARIES_DIR}/pw-logs-${TARGET}${EXE_SUFFIX}"
@@ -145,8 +143,10 @@ macho_files() {
 }
 
 if [[ "${HOST_KIND}" == "darwin" ]]; then
-  python3 "${ROOT}/scripts/stage-macos-host.py" --binary "${SIDECAR_BIN}" --output "${TAURI_DIR}/host-bundle" \
-    --version "${PRODUCT_VERSION}" "${HOST_SIGNING[@]}"
+  # A non-empty array: macOS bash 3.2 rejects expanding an empty one under set -u.
+  HOST_ARGS=(--binary "${SIDECAR_BIN}" --output "${TAURI_DIR}/host-bundle" --version "${PRODUCT_VERSION}")
+  [[ "${SIGNING_IDENTITY}" == "-" ]] || HOST_ARGS+=(--release)
+  python3 "${ROOT}/scripts/stage-macos-host.py" "${HOST_ARGS[@]}"
   GITENGINE_ROOT="${ENGINE_ROOT}/gitengine"
   # The staged credential helper already carries its signature and profile.
   if [[ -d "${GITENGINE_ROOT}" ]]; then

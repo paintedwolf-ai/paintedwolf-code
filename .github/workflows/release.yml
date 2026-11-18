@@ -507,7 +507,7 @@ jobs:
           CASK_TOKEN: ${{ needs.classify.outputs.cask_token }}
           DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
         run: |
-          bash scripts/release-aggregate.sh --artifacts release-artifacts --output aggregate --public public-artifacts \
+          bash scripts/release_assembly/aggregate.sh --artifacts release-artifacts --output aggregate --public public-artifacts \
             --version "${VERSION}" --channel "${CHANNEL}" --cask-token "${CASK_TOKEN}"
 
       - name: Upload aggregate release metadata
@@ -938,7 +938,7 @@ jobs:
 
   # Reuses the unsigned artifacts prepared for this exact source, or builds them without secrets.
   prepare:
-    needs: classify
+    needs: [classify, credentials]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     uses: ./.github/workflows/release-prepare.yml
     permissions:

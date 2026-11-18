@@ -109,9 +109,13 @@ class StampTests(SourceFixture):
 
     def test_verify_cli_exits_nonzero_for_another_commit(self):
         directory = self.artifact("prepared-nix-x86_64-linux", "nix-closure")
-        arguments = ["verify", "--artifact", str(directory), "--name", "prepared-nix-x86_64-linux"]
-        self.assertEqual(preparation.main([*arguments, "--source-commit", self.second]), 0)
-        self.assertEqual(preparation.main([*arguments, "--source-commit", self.first]), 1)
+        command = [sys.executable, "-m", "release_preparation", "verify", "--artifact", str(directory),
+                   "--name", "prepared-nix-x86_64-linux", "--source-commit"]
+        environment = {**os.environ, "PYTHONPATH": str(ROOT / "scripts")}
+        accepted = subprocess.run([*command, self.second], env=environment, capture_output=True, text=True)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        refused = subprocess.run([*command, self.first], env=environment, capture_output=True, text=True)
+        self.assertEqual(refused.returncode, 1)
 
 
 class ReceiptFixture(SourceFixture):

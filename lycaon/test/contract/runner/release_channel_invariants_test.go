@@ -89,7 +89,7 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 		`matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)`,
 		"matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}",
 		"needs: [classify, build-release]",
-		"scripts/release-aggregate.sh",
+		"scripts/release_assembly/aggregate.sh",
 		"release-stage-platform-artifacts.sh",
 		"matrix.goos == 'linux'",
 		"Verify native release runner",
@@ -223,7 +223,7 @@ func TestReleaseChannelsHaveIndependentPointersAndPackageTokens(t *testing.T) {
 		t.Fatalf("updater generation policy: %v\n%s", err, output)
 	}
 	workflow := contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml")
-	aggregate := contractcheck.ReadRepoFile(t, root, "scripts/release-aggregate.sh")
+	aggregate := contractcheck.ReadRepoFile(t, root, "scripts/release_assembly/aggregate.sh")
 	if !strings.Contains(aggregate, "render painted-wolf-code@preview preview") ||
 		!strings.Contains(workflow, "--channel \"${selected}\"") ||
 		!strings.Contains(workflow, "--advance-if-newer") ||

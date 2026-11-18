@@ -30,7 +30,7 @@ def read_json(path: Path):
 
 
 def process_identity(pid: int) -> str | None:
-    result = subprocess.run(["ps", "-p", str(pid), "-o", "lstart=,comm="], capture_output=True, text=True, timeout=5)
+    result = subprocess.run(["ps", "-p", str(pid), "-o", "lstart=,comm="], capture_output=True, text=True)
     return result.stdout.strip() if result.returncode == 0 else None
 
 
@@ -68,7 +68,7 @@ class Installation:
         commands = {str(self.executable): 1, **{str(path): 0 for path in helpers},
                     str(self.app / "Contents/MacOS/pw"): 2,
                     str(self.app / "Contents/Helpers/Painted Wolf Code engine.app/Contents/MacOS/pw"): 2}
-        result = subprocess.run(["ps", "-axo", "pid=,ppid=,comm="], check=True, capture_output=True, text=True, timeout=5)
+        result = subprocess.run(["ps", "-axo", "pid=,ppid=,comm="], check=True, capture_output=True, text=True)
         rows = [row.strip().split(None, 2) for row in result.stdout.splitlines()]
         rows = [(int(row[0]), int(row[1]), row[2]) for row in rows if len(row) == 3 and row[0].isdigit() and row[1].isdigit()]
         for pid, _, executable in rows:
@@ -104,7 +104,7 @@ class Installation:
         if self.owned.get(pid) != (engine, 2):
             return None
         self.last_observation["state"] = "parent_unavailable"
-        parent = subprocess.run(["ps", "-p", str(pid), "-o", "ppid="], capture_output=True, text=True, timeout=5)
+        parent = subprocess.run(["ps", "-p", str(pid), "-o", "ppid="], capture_output=True, text=True)
         if parent.returncode or not parent.stdout.strip().isdigit():
             return None
         app_pid = int(parent.stdout.strip())

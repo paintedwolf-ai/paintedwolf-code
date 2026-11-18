@@ -15,7 +15,7 @@ import sys
 from urllib.parse import quote
 import zipfile
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from ci_policy.github import api, pages
 from linux_release.candidates import matrix
@@ -278,6 +278,3 @@ def main(argv=None) -> int:
         return 1
     return 0
 
-
-if __name__ == "__main__":
-    raise SystemExit(main())

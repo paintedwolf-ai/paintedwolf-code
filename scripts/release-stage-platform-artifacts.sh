@@ -393,7 +393,7 @@ esac
 if [[ -n "${UPDATER_EXTENSION}" ]]; then
 SIGNATURE="${UPDATER}.sig"
 [[ -f "${SIGNATURE}" ]] || { echo "error: missing updater signature ${SIGNATURE}" >&2; exit 1; }
-python3 "${ROOT}/scripts/release_artifact_limits.py" --artifact "${UPDATER}" --version "${VERSION}" --platform "${PLATFORM}"
+python3 "${ROOT}/scripts/release_assembly/artifact_limits.py" --artifact "${UPDATER}" --version "${VERSION}" --platform "${PLATFORM}"
 bash "${ROOT}/scripts/verify-updater-signature.sh" "${UPDATER}" "${SIGNATURE}" "${VERSION}"
 fi
 
