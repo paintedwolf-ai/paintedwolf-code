@@ -1,5 +1,6 @@
 """Load private rehearsal configuration without evaluating shell code."""
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -7,12 +8,15 @@ import re
 import stat
 import sys
 from urllib.parse import urlsplit
+import urllib.request
 
 DEFAULT_CONFIG = Path.home() / ".config/paintedwolf/release-rehearsal.json"
 FIELDS = {"endpoint_url", "bucket", "access_key_id", "secret_access_key", "download_base_url"}
 ENVIRONMENT = {"endpoint_url": "RELEASE_TEST_R2_ENDPOINT_URL", "bucket": "RELEASE_TEST_R2_BUCKET",
                "access_key_id": "RELEASE_TEST_R2_ACCESS_KEY_ID", "secret_access_key": "RELEASE_TEST_R2_SECRET_ACCESS_KEY",
                "download_base_url": "RELEASE_TEST_DOWNLOAD_BASE_URL", "session_token": "RELEASE_TEST_R2_SESSION_TOKEN"}
+S3_FIELDS = {"endpoint_url", "access_key_id", "secret_access_key"}
+TOKEN_ENVIRONMENT = ("RELEASE_TEST_R2_ACCOUNT_ID", "RELEASE_TEST_R2_API_TOKEN")
 
 
 class MissingFields(ValueError):
@@ -20,7 +24,10 @@ class MissingFields(ValueError):
 
     def __init__(self, fields):
         self.fields = tuple(sorted(fields))
-        super().__init__("configuration lacks " + ", ".join(f"{field} ({ENVIRONMENT[field]})" for field in self.fields))
+        message = "configuration lacks " + ", ".join(f"{field} ({ENVIRONMENT[field]})" for field in self.fields)
+        if set(self.fields) & S3_FIELDS:
+            message += "; or set " + " and ".join(TOKEN_ENVIRONMENT) + " to derive the S3 credentials"
+        super().__init__(message)
 
 
 def unique_object(pairs):
@@ -89,12 +96,38 @@ def environment(config, inherited):
     return result
 
 
-def configuration(inherited):
+def token_id(account, token, fetch=urllib.request.urlopen):
+    # An R2 API token may be owned by the account or by a user; each has its own verify endpoint.
+    for path in (f"accounts/{account}/tokens/verify", "user/tokens/verify"):
+        request = urllib.request.Request(f"https://api.cloudflare.com/client/v4/{path}",
+                                         headers={"Authorization": f"Bearer {token}"})
+        try:
+            with fetch(request, timeout=30) as response:
+                body = json.load(response)
+        except (OSError, ValueError):
+            continue
+        identity = body.get("result", {}).get("id") if isinstance(body, dict) and body.get("success") else None
+        if isinstance(identity, str) and identity:
+            return identity
+    raise ValueError("Cloudflare did not verify RELEASE_TEST_R2_API_TOKEN for RELEASE_TEST_R2_ACCOUNT_ID")
+
+
+def derived_credentials(account, token, fetch=urllib.request.urlopen):
+    """R2's S3 credentials for an API token: its id, and the SHA-256 of its value."""
+    return {"endpoint_url": f"https://{account}.r2.cloudflarestorage.com", "access_key_id": token_id(account, token, fetch),
+            "secret_access_key": hashlib.sha256(token.encode()).hexdigest()}
+
+
+def configuration(inherited, fetch=urllib.request.urlopen):
     selected = inherited.get("RELEASE_TEST_CONFIG")
     if selected or DEFAULT_CONFIG.exists():
         return load_file(Path(selected).expanduser() if selected else DEFAULT_CONFIG)
-    return {"schema_version": 1, **{field: inherited[name] for field, name in ENVIRONMENT.items()
-                                   if inherited.get(name)}}
+    config = {"schema_version": 1, **{field: inherited[name] for field, name in ENVIRONMENT.items()
+                                     if inherited.get(name)}}
+    account, token = (inherited.get(name) for name in TOKEN_ENVIRONMENT)
+    if not S3_FIELDS & set(config) and account and token:
+        config.update(derived_credentials(account, token, fetch))
+    return config
 
 
 def main():

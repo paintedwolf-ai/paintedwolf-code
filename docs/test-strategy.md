@@ -740,8 +740,9 @@ engine staging acquire a separate exclusive reservation through
 `den:harness -- --prepare`, which ends before interactive startup. Automated
 harness tests and canaries remain queued for their whole execution.
 
-The default worker budget is three quarters of the available CPUs, rounded down
-and bounded between one and eight. `PW_TEST_WORKERS` selects a per-invocation
+The default worker budget is three quarters of the available CPUs, rounded down,
+at least one, and at most one worker per 2 GiB of memory. `PW_TEST_CAPACITY`
+set on a host replaces that derived budget for every checkout on it. `PW_TEST_WORKERS` selects a per-invocation
 ceiling between one and that budget; shared execution also obeys the global
 capacity. The catalog's `resources` declarations reserve half that capacity for
 a parallel Go, Rust, or Vitest operation, and one slot for frontend lint or
@@ -754,7 +755,7 @@ package obey the same per-process share; Vitest uses at most four workers.
 Fuzzing and Rust builds share the same budget. Runners use the worker limits
 assigned at admission. Hosted CI sets
 `PW_TEST_HOST=dedicated`: one lane owns the runner, so the budget is every CPU
-(still at most eight) and a shared operation reserves all of it.
+(still bounded by memory) and a shared operation reserves all of it.
 
 Resource names are global locks: Go digests share `go`, Go lint holds `lint`,
 frontend checks hold `frontend`, Cargo tests hold `rust`, and the isolated
@@ -1484,7 +1485,7 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
 | Nightly | `nightly.yml` | `nightly` | 20 (7): the `nightly` profile capped at six, beside the two platform jobs, two browser shards with the desktop journey, the store upgrade rehearsal, the five release rehearsal jobs, and the installed upgrade's preparation and two cases |
 | Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 4 (2): the macOS signing job beside a Linux signing or import job, then installed upgrade cases two at a time beside repository assembly; a source without a retained preparation adds its five unsigned builds |
-| DCO certification | `dco.yml` | `dco-certification` | 1 |
+| DCO certification | `dco.yml` | one queue per pull request or merge group | 1 per pull request or group |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
 | Queue batching | `queue-batching.yml` | `queue-batching` | 1 |
 | Release rehearsals | release dry runs and replays, the weekly release-system live test, a dispatched release secrets check | one group per dry run or replay; `release-system-live-test`; none for the read-only secrets check | a dry run as a release; 1 otherwise |
