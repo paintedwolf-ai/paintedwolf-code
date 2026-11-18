@@ -2,6 +2,7 @@ package board
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"reflect"
 	"slices"

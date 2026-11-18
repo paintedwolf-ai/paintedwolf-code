@@ -5,6 +5,7 @@ package property
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"testing"
 	"time"

@@ -3,6 +3,7 @@ package worker_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"reflect"
 	"testing"

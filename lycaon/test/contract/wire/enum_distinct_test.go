@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"testing"
 )

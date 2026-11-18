@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"testing"
 )
