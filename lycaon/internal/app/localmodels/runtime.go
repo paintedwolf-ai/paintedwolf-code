@@ -64,6 +64,10 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	store := modelstore.New(options.StoreRoot, authority)
+	if _, err := store.Collect(); err != nil {
+		resources.Close()
+		return nil, err
+	}
 	decision := options.Decision
 	decision.Resources = resources.Decision
 	physicalBytes := device.TotalBytes

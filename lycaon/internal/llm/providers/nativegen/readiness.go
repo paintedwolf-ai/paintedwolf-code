@@ -71,11 +71,15 @@ func (p *Runtime) settleReadiness(err error) {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		result.State = "idle"
 	case p.config.ModelStore != nil:
-		status := p.config.ModelStore.Status(DefaultModelID, p.config.Backend)
+		selection, readErr := p.config.ModelStore.Selection()
+		if readErr != nil || selection.Model == "" {
+			break
+		}
+		status := p.config.ModelStore.Status(selection.Model, p.config.Backend)
 		if status.State != modelstore.StateReady {
 			result.State, result.Action = "repair_required", "repair"
-			if p.config.SeedDirectory == "" {
-				result.Action = "reinstall"
+			if !p.seedAvailable() {
+				result.Action = "retry"
 			}
 		}
 	}

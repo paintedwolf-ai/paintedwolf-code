@@ -56,12 +56,16 @@ func (s *Handler) SelectLocalModel(w http.ResponseWriter, r *http.Request) {
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	ctx := context.WithoutCancel(r.Context())
-	err := s.service.Registry.SelectLocalModel(req, func() {
+	err := s.selectLocalModel(r.Context(), req)
+	s.modelOperationResponse(w, err)
+}
+
+func (s *Handler) selectLocalModel(ctx context.Context, req wire.LocalModelSelectionRequest) error {
+	ctx = context.WithoutCancel(ctx)
+	return s.service.Registry.SelectLocalModel(req, func() {
 		s.service.ResetPlanes()
 		s.publishProviderEvent(ctx, "models_refreshed", llm.IncludedProviderID)
 	})
-	s.modelOperationResponse(w, err)
 }
 
 func (s *Handler) CancelLocalModelTransfer(w http.ResponseWriter, r *http.Request) {
@@ -74,12 +78,20 @@ func (s *Handler) RemoveLocalModel(w http.ResponseWriter, r *http.Request) {
 	if !s.localProvider(w, r) {
 		return
 	}
-	err := s.service.Registry.RemoveLocalModel(r.Context())
+	s.modelOperationResponse(w, s.OptOutLocalModel(r.Context()))
+}
+
+func (s *Handler) OptOutLocalModel(ctx context.Context) error {
+	err := s.service.Registry.RemoveLocalModel(ctx)
 	if err == nil {
 		s.service.ResetPlanes()
-		s.publishProviderEvent(r.Context(), "models_refreshed", llm.IncludedProviderID)
+		s.publishProviderEvent(ctx, "models_refreshed", llm.IncludedProviderID)
 	}
-	s.modelOperationResponse(w, err)
+	return err
+}
+
+func (s *Handler) ImportLocalModel(ctx context.Context, model, path string) error {
+	return s.selectLocalModel(ctx, wire.LocalModelSelectionRequest{Model: model, BundlePath: path})
 }
 
 func (s *Handler) modelOperationResponse(w http.ResponseWriter, err error) {
