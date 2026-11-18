@@ -60,7 +60,7 @@ func TestTerminalSendInputRedactedOnObserverPaths(t *testing.T) {
 
 	// Published message events carry the transcript projection.
 	foundEvent := false
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "terminal_send message event", func() bool {
 		select {
 		case envelope, ok := <-ch:
 			if !ok {
