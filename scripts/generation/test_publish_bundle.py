@@ -1,3 +1,4 @@
+import hashlib
 """Contracts for uploading signed student bundles."""
 
 import io
@@ -82,6 +83,22 @@ class PublishTests(unittest.TestCase):
             self.assertEqual(log.read_text().split(), keys)
             self.assertEqual(keys, ["models/gemma4-e4b-paintedwolf/vulkan/r1/model.gguf",
                                     "models/gemma4-e4b-paintedwolf/vulkan/r1/manifest.json"])
+
+    def test_release_pin_binds_manifest_bytes_and_all_payload_sizes(self):
+        manifest = signed(publish_bundle.MODELS[1], "mlx")
+        manifest["manifest"]["artifact"]["bytes"] = 4
+        for entry in manifest["manifest"]["files"]:
+            entry["bytes"] = 3
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory)
+            raw = json.dumps(manifest, indent=2).encode()
+            (bundle / "manifest.json").write_bytes(raw)
+            pin = publish_bundle.release_pin(bundle, manifest)
+            self.assertEqual(pin["ManifestSHA256"], hashlib.sha256(raw).hexdigest())
+            self.assertEqual(pin["TotalBytes"], 4 + 3 * len(manifest["manifest"]["files"]))
+            (bundle / "manifest.json").write_text("{}")
+            with self.assertRaisesRegex(ValueError, "changed"):
+                publish_bundle.release_pin(bundle, manifest)
 
     def test_the_command_line_prints_each_key(self):
         calls = []

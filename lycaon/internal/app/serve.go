@@ -219,7 +219,11 @@ func (a *ServeApp) Run(ctx context.Context) error {
 	}
 
 	if a.projects != nil && a.eventPub != nil {
-		sock, err := clisocket.Listen(ctx, a.projects, a.eventPub)
+		var models clisocket.LocalModels
+		if a.Server != nil && a.Server.Admin.Models != nil {
+			models = a.Server.Admin.Models
+		}
+		sock, err := clisocket.Listen(ctx, a.projects, a.eventPub, models)
 		if err != nil {
 			slog.WarnContext(ctx, "cli socket unavailable", "err", err)
 		} else {

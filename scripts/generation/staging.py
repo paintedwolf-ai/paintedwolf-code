@@ -10,7 +10,6 @@ import tempfile
 
 from provenance import file_digest, verified_build
 
-MODEL = "gemma4-e4b-paintedwolf"
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 
 
@@ -48,17 +47,17 @@ def stage_runtime(build, binary, destination, resources, backend):
     return receipt
 
 
-def verify_seed(verifier, bundle, authority, backend):
+def verify_seed(verifier, bundle, authority, backend, model):
     raw = subprocess.check_output([str(verifier), "-bundle", str(bundle), "-authority", str(authority),
-                                   "-model", MODEL, "-device", backend])
+                                   "-model", model, "-device", backend])
     return json.loads(raw)
 
 
-def stage_seed(verifier, bundle, authority, resources, backend):
+def stage_seed(verifier, bundle, authority, resources, backend, model):
     """Publish only named signed payloads, after verifying the copied bytes."""
     if backend not in {"mlx", "vulkan"}:
         raise ValueError("generation backend must be mlx or vulkan")
-    signed = verify_seed(verifier, bundle, authority, backend)
+    signed = verify_seed(verifier, bundle, authority, backend, model)
     manifest = signed["manifest"]
     names = [entry.get("name", "") for entry in [manifest["artifact"], *manifest.get("files", [])]]
     if any(not NAME.fullmatch(name) or name == "manifest.json" for name in names) or len(set(names)) != len(names):
@@ -72,7 +71,7 @@ def stage_seed(verifier, bundle, authority, resources, backend):
         payload.mkdir()
         for name in ["manifest.json", *names]:
             copy_file(bundle / name, payload / name)
-        if verify_seed(verifier, payload, keys, backend) != signed:
+        if verify_seed(verifier, payload, keys, backend, model) != signed:
             raise ValueError("generation manifest changed during staging")
         models = resources / "models"
         models.mkdir(exist_ok=True)

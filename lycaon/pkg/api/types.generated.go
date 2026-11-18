@@ -4311,19 +4311,23 @@ type LocalGenerationStatus struct {
 	// Authenticated revision held by the admitted model process.
 	Revision string `json:"revision,omitempty"`
 	// Admitted context capacity of the ready process.
-	ContextTokens   int              `json:"context_tokens,omitempty"`
-	SelectedModel   string           `json:"selected_model,omitempty"`
-	TargetModel     string           `json:"target_model,omitempty"`
-	DownloadedBytes int              `json:"downloaded_bytes,omitempty"`
-	TotalBytes      int              `json:"total_bytes,omitempty"`
+	ContextTokens   int    `json:"context_tokens,omitempty"`
+	SelectedModel   string `json:"selected_model,omitempty"`
+	TargetModel     string `json:"target_model,omitempty"`
+	DownloadedBytes int    `json:"downloaded_bytes,omitempty"`
+	TotalBytes      int    `json:"total_bytes,omitempty"`
+	// Tier contained in the packaged offline seed.
+	SeedModel       string           `json:"seed_model,omitempty"`
 	SeedAvailable   bool             `json:"seed_available,omitempty"`
 	AvailableModels []LocalModelTier `json:"available_models,omitempty"`
 }
 
 // LocalModelSelectionRequest
 type LocalModelSelectionRequest struct {
-	Model      string `json:"model"`
-	BundlePath string `json:"bundle_path,omitempty"`
+	Model string `json:"model"`
+	// Use the packaged offline seed for the requested tier.
+	PackagedSeed bool   `json:"packaged_seed,omitempty"`
+	BundlePath   string `json:"bundle_path,omitempty"`
 }
 
 // LocalModelTier

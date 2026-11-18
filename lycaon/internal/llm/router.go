@@ -17,11 +17,11 @@ type StaticModelRouter struct {
 	scope        SettingsScope
 	projectDir   string
 	projectDirs  []string
-	localDefault func(context.Context) bool
+	localDefault func(context.Context) string
 }
 
 // WithLocalDefault enables bundled local-model fallback for unset coordinator and lite roles.
-func (r *StaticModelRouter) WithLocalDefault(localAvailable func(context.Context) bool) *StaticModelRouter {
+func (r *StaticModelRouter) WithLocalDefault(localAvailable func(context.Context) string) *StaticModelRouter {
 	cp := *r
 	cp.localDefault = localAvailable
 	return &cp
@@ -104,7 +104,11 @@ func (r *StaticModelRouter) effectivePolicy(ctx context.Context) (ModelPolicy, e
 	if err != nil {
 		return ModelPolicy{}, err
 	}
-	return ResolveModelPolicy(policy, r.localDefault != nil && r.localDefault(ctx)), nil
+	model := ""
+	if r.localDefault != nil {
+		model = r.localDefault(ctx)
+	}
+	return ResolveModelPolicy(policy, model), nil
 }
 
 // Coordinator returns the coordinator model selection.

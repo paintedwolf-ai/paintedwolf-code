@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/modelfeed"
+	"github.com/lycaon/lycaon/internal/modelstore"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -44,6 +45,7 @@ type registryRouting struct {
 
 type registryCore struct {
 	registryState
+	localStore      *modelstore.Store
 	localRuntime    *nativegen.Runtime
 	localStartup    nativegen.Readiness
 	discovery       *discovery.Cache

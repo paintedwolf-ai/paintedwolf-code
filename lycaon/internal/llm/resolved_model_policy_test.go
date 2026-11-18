@@ -12,7 +12,12 @@ import (
 func TestRuntimePolicyDefaultsReachWorkersWithoutPersistence(t *testing.T) {
 	store := NewInMemoryPolicyStore(ModelPolicy{})
 	available := true
-	router := NewStaticModelRouter(store).WithLocalDefault(func(context.Context) bool { return available })
+	router := NewStaticModelRouter(store).WithLocalDefault(func(context.Context) string {
+		if available {
+			return DefaultLocalModelRef().Model
+		}
+		return ""
+	})
 	for _, view := range []*StaticModelRouter{router, router.WithScope(SettingsScopeProject, t.TempDir())} {
 		for _, ready := range []bool{true, false, true} {
 			available = ready
@@ -49,7 +54,7 @@ func TestRuntimePolicyDefaultsReachWorkersWithoutPersistence(t *testing.T) {
 func TestResolvedPolicyPreservesExplicitAssignmentsAndOwnsItsSlices(t *testing.T) {
 	remote := ModelRef{ProviderID: "remote", Model: "chosen"}
 	original := ModelPolicy{Coordinator: remote, Lite: remote, AgentPool: AgentPool{Models: []ModelRef{remote}}}
-	resolved := ResolveModelPolicy(original, true)
+	resolved := ResolveModelPolicy(original, DefaultLocalModelRef().Model)
 	if !reflect.DeepEqual(resolved, original) {
 		t.Fatalf("explicit policy changed: %+v", resolved)
 	}

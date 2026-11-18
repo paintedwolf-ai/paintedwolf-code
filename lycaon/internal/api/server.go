@@ -50,7 +50,7 @@ type administrativeHandlers struct {
 	Git           gitadmin.Handler
 	mcpAdmin      *mcpadmin.Handler
 	researchAdmin *researchadmin.Handler
-	modelAdmin    *modeladmin.Handler
+	Models        *modeladmin.Handler
 	historyAdmin  *historyadmin.Handler
 }
 

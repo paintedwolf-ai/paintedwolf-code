@@ -53,7 +53,7 @@ func NewService(ctx context.Context, mock modelcall.LLMClient, local *nativegen.
 	if ProviderUtilityCallsEnabled() {
 		refreshCancel, refreshDone = startModelFeedRefresh(ctx, feed)
 	}
-	router := NewStaticModelRouter(policy).WithLocalDefault(registry.IncludedModelAvailable)
+	router := NewStaticModelRouter(policy).WithLocalDefault(registry.IncludedModel)
 
 	svc := &Service{
 		modelFeedRefreshCancel: refreshCancel,
@@ -122,6 +122,7 @@ func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *pro
 	if local != nil {
 		r.localRuntime = local.Runtime
 		r.localStartup = local.Initial
+		r.localStore = local.Store
 	}
 	r.rateGate = providerretry.NewProviderRateGate(rateDirectory)
 	r.catalog = catalog

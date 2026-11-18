@@ -43,12 +43,6 @@ func (p *Runtime) loadModel(ctx context.Context, model string) error {
 	}
 	p.publishReadiness("loading", "none")
 	runtime := &p.config
-	if runtime.ModelStore.Status(model, runtime.Backend).State == modelstore.StateAbsent && runtime.SeedDirectory != "" {
-		target := modelstore.Slot{Model: model, Device: runtime.Backend}
-		if err := runtime.ModelStore.ImportBundle(ctx, runtime.SeedDirectory, target); err != nil {
-			return err
-		}
-	}
 	device, err := runtime.Devices.Bind(runtime.PhysicalDevice)
 	if err != nil {
 		return err

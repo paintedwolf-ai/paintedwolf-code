@@ -759,3 +759,13 @@ Every provider request passes the outbound secret screen before it leaves. A per
 - A failure with no HTTP status is still a classified fault, and a delivered request is never reported as one that never arrived.
 - Utility work is bounded, tool-free, and non-critical.
 - Credentials never enter durable transcript, backup, or diagnostics.
+
+### Import a local model from the command line
+
+Run `pw local-model import <path>` with a signed model directory or plain tar `.pwmodel` archive. The CLI asks the local host to import it and reports when the request is accepted. Follow progress in Settings → AI providers. Run `pw local-model opt-out` to remove the installed local generation model.
+
+### Local model downloads
+
+Normal application downloads contain the generation adapter. In setup or Settings → AI providers, choose a local model to download or import a signed bundle. Device detection uses local memory capacity and the adapter's working-set budget. The host shows the exact payload size for each published download. It keeps one selected revision across restarts. Choosing another tier replaces that revision. Explicit remote provider assignments stay in effect.
+
+After training, use `scripts/generation/publish_bundle.py --print-pin` with the signed bundle, model, device, release authority and verifier. Add its output to `lycaon/internal/llm/providers/nativegen/release-pins.json` after publishing the immutable objects. Supply the matching public authority through `BIALY_GENERATION_AUTHORITY` when staging application resources. Unpublished tiers remain available for hardware assessment and signed offline import. An offline installer build can include one authenticated seed using `--with-local-model=e4b|12b|26b` and `BIALY_GENERATION_BUNDLE`.

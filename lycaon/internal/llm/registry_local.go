@@ -12,10 +12,24 @@ func (r *registryCore) LocalGenerationStatus() api.LocalGenerationStatus {
 	if r.localRuntime == nil && r.localStartup.State != "" {
 		status = r.localStartup
 	}
-	return api.LocalGenerationStatus{
+	out := api.LocalGenerationStatus{
 		State: string(status.State), RecoveryAction: string(status.Action), Detail: status.Detail,
 		Revision: status.Revision, ContextTokens: status.ContextTokens,
 	}
+	r.localRuntime.SelectionStatus(&out)
+	if r.localRuntime == nil && r.localStore != nil {
+		selection, err := r.localStore.Selection()
+		if err != nil {
+			out.Detail = err.Error()
+		} else {
+			out.SelectedModel = selection.Model
+			if selection.State == "opted_out" {
+				out.State = "opted_out"
+				out.RecoveryAction = "none"
+			}
+		}
+	}
+	return out
 }
 
 // projectLocalRuntime overlays live admission on cached catalog metadata.
@@ -49,4 +63,21 @@ func (r *Registry) RepairLocalGeneration(ctx context.Context, id string) error {
 		return err
 	}
 	return r.RefreshModels(ctx, id)
+}
+
+func (r *Registry) SelectLocalModel(req api.LocalModelSelectionRequest, settled func()) error {
+	return r.localRuntime.StartSelection(req, func() { r.RefreshDiscovery(IncludedProviderID); settled() })
+}
+
+func (r *Registry) RemoveLocalModel(ctx context.Context) error {
+	if r.localRuntime == nil && r.localStore != nil {
+		return r.localStore.PurgeAll()
+	}
+	err := r.localRuntime.RemoveModel(ctx)
+	r.RefreshDiscovery(IncludedProviderID)
+	return err
+}
+
+func (r *Registry) CancelLocalModelTransfer(ctx context.Context) error {
+	return r.localRuntime.CancelTransfer(ctx)
 }

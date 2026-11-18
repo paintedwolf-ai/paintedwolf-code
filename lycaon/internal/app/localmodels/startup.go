@@ -12,11 +12,13 @@ import (
 	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/inference"
 	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
+	"github.com/lycaon/lycaon/internal/modelstore"
 )
 
 // Startup retains initialization facts without making external providers depend on local hardware.
 type Startup struct {
 	Runtime  *Runtime
+	Store    *modelstore.Store
 	Decision bialy.Config
 	Issue    error
 }
@@ -29,9 +31,7 @@ func Start(ctx context.Context, fixture bool) Startup {
 	}
 	binary := configlayout.SiblingExecutable("nativegen")
 	root := configlayout.EngineRoot()
-	if binary == "" || root == "" {
-		return result
-	}
+
 	config, err := configdir.UserConfigDir()
 	if err != nil {
 		result.Issue = err
@@ -43,9 +43,25 @@ func Start(ctx context.Context, fixture bool) Startup {
 		backend = "mlx"
 		metal = filepath.Join(root, "generation", "mlx.metallib")
 	}
-	result.Runtime, result.Issue = Build(ctx, Options{
+	authorityPath := filepath.Join(root, "generation", "release-keys.json")
+	var authority *modelstore.Authority
+	if root != "" {
+		authority, err = readAuthority(authorityPath)
+	} else {
+		authority, err = modelstore.NewAuthority(nil)
+	}
+	if err != nil {
+		result.Issue = err
+		return result
+	}
+	result.Store = modelstore.New(filepath.Join(config, "local-models"), authority)
+	if binary == "" || root == "" {
+		result.Issue = errors.New("local generation adapter is unavailable")
+		return result
+	}
+	result.Runtime, result.Issue = Build(ctx, Options{Store: result.Store,
 		Binary: binary, MetalLibrary: metal,
-		Authority:   filepath.Join(root, "generation", "release-keys.json"),
+		Authority:   authorityPath,
 		Seed:        filepath.Join(root, "generation", "models", backend),
 		StoreRoot:   filepath.Join(config, "local-models"),
 		PhysicalRAM: hostprocess.PhysicalMemoryBytes(), Decision: result.Decision,
@@ -67,7 +83,7 @@ func (s *Startup) Generation() *nativegen.Availability {
 	if errors.Is(s.Issue, inference.ErrCapacity) {
 		status.State = "insufficient_memory"
 	}
-	return &nativegen.Availability{Initial: status}
+	return &nativegen.Availability{Initial: status, Store: s.Store}
 }
 
 func (s *Startup) CloseGeneration(context.Context) error {

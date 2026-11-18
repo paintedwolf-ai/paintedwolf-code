@@ -56,8 +56,16 @@ func ResolveTrueWindow(policy ModelPolicy, lookup ContextLengthLookup, windows m
 		return cfg.ModelContextWindow, WindowResolveExplicit
 	}
 
-	localAvailable := lookup != nil && lookup.ContextLength(IncludedProviderID, nativegen.DefaultModelID) > 0
-	coord := CoordinatorRefWithLocalDefault(policy, localAvailable)
+	localModel := ""
+	if lookup != nil {
+		for _, tier := range (*nativegen.Runtime)(nil).ModelTiers() {
+			if lookup.ContextLength(IncludedProviderID, tier.ID) > 0 {
+				localModel = tier.ID
+				break
+			}
+		}
+	}
+	coord := CoordinatorRefWithLocalDefault(policy, localModel)
 	provider := strings.TrimSpace(coord.ProviderID)
 	model := strings.TrimSpace(coord.Model)
 	if lookup != nil && model != "" {

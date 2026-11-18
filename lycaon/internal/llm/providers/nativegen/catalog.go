@@ -44,6 +44,11 @@ func DefaultModelEntry() modelinfo.Entry {
 
 func (p *Provider) ModelEntry(model string) (modelinfo.Entry, bool) {
 	entry, ok := p.Catalog.ModelEntry(model)
+	if !ok && KnownModel(model) {
+		entry = DefaultModelEntry()
+		entry.ID = model
+		ok = true
+	}
 	if ok && p.runtime != nil {
 		window := p.runtime.ContextWindow()
 		if entry.ContextLength <= 0 || entry.ContextLength > window {
@@ -71,11 +76,33 @@ func (p *Runtime) DiscoverModels(ctx context.Context) ([]modelinfo.Entry, error)
 		return nil, err
 	}
 	defer release()
-	if err := p.ensureLoaded(ctx, DefaultModelID); err != nil {
+	if p.config.ModelStore == nil {
+		return nil, errors.New("native generation: model store is unavailable")
+	}
+	selection, err := p.config.ModelStore.Selection()
+	if err != nil {
+		return nil, err
+	}
+	if selection.Model == "" || selection.Device != p.config.Backend || !KnownModel(selection.Model) {
+		return nil, nil
+	}
+	if err := p.ensureLoaded(ctx, selection.Model); err != nil {
 		return nil, err
 	}
 	entry := DefaultModelEntry()
+	entry.ID = selection.Model
 	entry.ContextLength = p.ContextWindow()
 	entry.ContextLengthSource = "native-runtime"
 	return []modelinfo.Entry{entry}, nil
+}
+
+// ResolveModel follows the installed selection for unassigned requests.
+func (p *Provider) ResolveModel(req modelcall.CompletionRequest) string {
+	if req.Model == "" && p.runtime != nil && p.runtime.config.ModelStore != nil {
+		selection, err := p.runtime.config.ModelStore.Selection()
+		if err == nil {
+			return selection.Model
+		}
+	}
+	return p.Catalog.ResolveModel(req)
 }

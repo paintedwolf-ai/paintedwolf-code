@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 )
 
@@ -28,16 +27,16 @@ func IncludedProviderEntry() ProviderEntry {
 	}
 }
 
-func (r *registryDiscovery) IncludedModelAvailable(ctx context.Context) bool {
+func (r *registryDiscovery) IncludedModel(ctx context.Context) string {
 	if r == nil {
-		return false
+		return ""
 	}
 	result, refresh := r.modelSnapshot(ctx, IncludedProviderID)
 	refresh()
 	for _, model := range result.Models {
-		if modelinfo.EquivalentID(IncludedProviderID, model.ID, nativegen.DefaultModelID) {
-			return true
+		if nativegen.KnownModel(model.ID) {
+			return model.ID
 		}
 	}
-	return false
+	return ""
 }
