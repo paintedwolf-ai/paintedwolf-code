@@ -36,9 +36,3 @@ func taskBody(text, name string) string {
 	}
 	return b.String()
 }
-
-type verificationGoRecipe struct {
-	Options []string `json:"options"`
-	Exclude string   `json:"exclude"`
-	Bundled bool     `json:"bundled"`
-}
