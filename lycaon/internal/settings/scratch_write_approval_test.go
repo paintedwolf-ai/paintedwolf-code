@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 	"slices"
 	"testing"
 
@@ -94,7 +95,7 @@ func TestScratchCommandStaysSilentAtStrict(t *testing.T) {
 }
 
 func TestSessionOutputReadUsesAppliedReadOnlyAuthority(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	state := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", state)
 	t.Setenv("LYCAON_SANDBOX_DENY_READ", "")

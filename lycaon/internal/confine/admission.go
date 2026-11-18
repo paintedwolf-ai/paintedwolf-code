@@ -5,41 +5,13 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/confine/internal/admissionstate"
 )
-
-var (
-	autoConfineMu sync.RWMutex
-	autoConfine   bool
-)
-
-func autoConfineEnabled() bool {
-	autoConfineMu.RLock()
-	defer autoConfineMu.RUnlock()
-	return autoConfine
-}
-
-func setAutoConfine(on bool) {
-	autoConfineMu.Lock()
-	autoConfine = on
-	autoConfineMu.Unlock()
-}
 
 // EnableAutoConfine turns confinement on for this process.
-func EnableAutoConfine() { setAutoConfine(true) }
-
-// TestingSetAutoConfine turns confinement on for this test and restores it.
-func TestingSetAutoConfine(t interface {
-	Helper()
-	Cleanup(func())
-}) {
-	t.Helper()
-	prev := autoConfineEnabled()
-	setAutoConfine(true)
-	t.Cleanup(func() { setAutoConfine(prev) })
-}
+func EnableAutoConfine() { admissionstate.ProcessEnabled.Store(true) }
 
 // BypassEnabled reports the explicit host-wide bypass.
 func BypassEnabled() bool {
@@ -53,7 +25,7 @@ func Enforcing() bool {
 
 // confinementRequired is the policy requirement, independent of kernel availability.
 func confinementRequired() bool {
-	return autoConfineEnabled() && !BypassEnabled() && !SandboxDisabled()
+	return admissionstate.ProcessEnabled.Load() && !BypassEnabled() && !SandboxDisabled()
 }
 
 // ErrNotConfined rejects a missing required boundary.

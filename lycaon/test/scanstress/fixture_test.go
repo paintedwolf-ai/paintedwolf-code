@@ -10,7 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	bundleddriver "github.com/lycaon/lycaon/internal/scan/drivers/bundled"
@@ -20,7 +20,7 @@ import (
 // newScanner builds the maintained engine driver exactly as the sidecar does.
 func newScanner(t *testing.T, id string, policy scancatalog.RuntimePolicy) *bundleddriver.OpenGrepScanner {
 	t.Helper()
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	manifest, err := bundled.LoadManifest()
 	testutil.FailErr(t, "load bundled manifest", err)
 	home, err := configdir.UserConfigDir()

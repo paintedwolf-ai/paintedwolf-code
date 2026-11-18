@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -18,7 +18,7 @@ import (
 // nothing, so a refused bind is attributable to the sandbox rather than read
 // as the child's own errno.
 func TestEveryTerminalResultStatesTheBox(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
 	t.Setenv("LYCAON_SANDBOX", "on")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
