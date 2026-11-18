@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -18,7 +17,7 @@ func TestAnalyzeTinyRepoListsEveryFile(t *testing.T) {
 		}
 	}
 	p := repotest.NewProvider(t)
-	brief, err := repoinfo.AwaitBrief(t.Context(), p, dir)
+	brief, err := repotest.AwaitBrief(t.Context(), p, dir)
 	testutil.FailErr(t, "AwaitBrief", err)
 	if brief.FileCount != 2 {
 		t.Fatalf("FileCount = %d want 2", brief.FileCount)
@@ -57,7 +56,7 @@ func TestAnalyzeSmallRepoTopLevelPromotesRootFiles(t *testing.T) {
 		}
 	}
 	p := repotest.NewProvider(t)
-	brief, err := repoinfo.AwaitBrief(t.Context(), p, dir)
+	brief, err := repotest.AwaitBrief(t.Context(), p, dir)
 	testutil.FailErr(t, "AwaitBrief", err)
 	if brief.FileCount != len(files) {
 		t.Fatalf("FileCount = %d want %d", brief.FileCount, len(files))
@@ -93,7 +92,7 @@ func TestAnalyzeMediumRepoDirsOnly(t *testing.T) {
 		testutil.FailErr(t, "write readme", err)
 	}
 	p := repotest.NewProvider(t)
-	brief, err := repoinfo.AwaitBrief(t.Context(), p, dir)
+	brief, err := repotest.AwaitBrief(t.Context(), p, dir)
 	testutil.FailErr(t, "AwaitBrief", err)
 	if brief.FileCount <= 50 || brief.FileCount > 500 {
 		t.Fatalf("FileCount = %d want medium tier", brief.FileCount)
@@ -120,7 +119,7 @@ func TestAnalyzeLargeRepoOmitsLayout(t *testing.T) {
 		}
 	}
 	p := repotest.NewProvider(t)
-	brief, err := repoinfo.AwaitBrief(t.Context(), p, dir)
+	brief, err := repotest.AwaitBrief(t.Context(), p, dir)
 	testutil.FailErr(t, "AwaitBrief", err)
 	if brief.FileCount <= 500 {
 		t.Fatalf("FileCount = %d want >500", brief.FileCount)
