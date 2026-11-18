@@ -14,8 +14,10 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -54,6 +56,11 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 	if write {
 		if _, err := p.paths.Bind(ctx, repo.Root, true); err != nil {
 			return settleMutationError(err, toolcontract.NoEffect)
+		}
+		// Refs and repository metadata are changes the file-change review never
+		// sees, so access prepared for that review cannot authorise them.
+		if projectpaths.ReliesOnPreparedAccess(tc, repo.Root) {
+			return settleMutationError(&toolrejection.ToolReject{Code: "FILE_CHANGE_APPROVAL_UNAVAILABLE", Data: map[string]any{"path": repo.Root}}, toolcontract.NoEffect)
 		}
 	}
 	scopedTC := withRepoRoot(tc, repo.Root)

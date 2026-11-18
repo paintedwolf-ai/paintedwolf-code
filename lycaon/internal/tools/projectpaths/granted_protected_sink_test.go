@@ -12,6 +12,7 @@ import (
 	"weak"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -251,5 +252,25 @@ func TestReleasedGrantOwnerDoesNotReplaceCurrentPathAuthority(t *testing.T) {
 	}
 	if _, err := projectpaths.ResolveRead(t.Context(), nil, tctx, currentPath); err == nil {
 		t.Fatal("closed owner still supplied external path authority")
+	}
+}
+
+// Access prepared for a file-change review alone does not authorise a change
+// that review will not see; access a person granted does.
+func TestReliesOnPreparedAccessOnlyWithoutAGrant(t *testing.T) {
+	abs := t.TempDir()
+	review := func(context.Context, []tools.FileChange) error { return nil }
+	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session-1"}}
+	if projectpaths.ReliesOnPreparedAccess(tctx, abs) {
+		t.Fatal("no prepared access reported as relied on")
+	}
+	tctx.Files.FileChangeReview = review
+	tctx.Files.PreparedFileAccess = []hitl.GrantedPathDelta{{Path: abs, Write: true}}
+	if !projectpaths.ReliesOnPreparedAccess(tctx, abs) {
+		t.Fatal("prepared-only write access was not reported")
+	}
+	tctx.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: abs, Write: true}}
+	if projectpaths.ReliesOnPreparedAccess(tctx, abs) {
+		t.Fatal("granted write access was reported as prepared only")
 	}
 }

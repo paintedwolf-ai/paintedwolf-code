@@ -317,3 +317,22 @@ func TestOctalPermissionParsingRejectsPartialInput(t *testing.T) {
 		testutil.FailErr(t, "parse complete octal mode", err)
 	}
 }
+
+// A hard-linked file's metadata is shared with names outside review, so chmod
+// refuses it and leaves every name's mode unchanged.
+func TestChmodToolRefusesHardLinkedFile(t *testing.T) {
+	project, elsewhere := t.TempDir(), t.TempDir()
+	other := filepath.Join(elsewhere, "shared.txt")
+	testutil.FailErr(t, "write file", os.WriteFile(other, []byte("x"), 0o644))
+	testutil.FailErr(t, "hard link", os.Link(other, filepath.Join(project, "linked.txt")))
+	tool := &ChmodTool{Boundary: nativefixture.Boundary(t)}
+	_, err := tool.Run(context.Background(), map[string]any{"paths": []any{"linked.txt"}, "mode": "600"}, nativefixture.Context(project))
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "METADATA_TARGET_HARD_LINKED" {
+		t.Fatalf("chmod of a hard-linked file = %v", err)
+	}
+	info, err := os.Stat(other)
+	testutil.FailErr(t, "stat other name", err)
+	if info.Mode().Perm() != 0o644 {
+		t.Fatalf("other name's mode = %v", info.Mode().Perm())
+	}
+}

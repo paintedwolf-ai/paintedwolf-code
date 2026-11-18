@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/desktoptrash"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -187,5 +188,24 @@ func TestRecoveryRefusesUnacknowledgedNativeMoves(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Probing whether an entry can move aside, which happens before the person
+// decides, creates nothing; the approved move creates the recovery area.
+func TestRecoveryProbeChangesNothingUntilTheMove(t *testing.T) {
+	root := t.TempDir()
+	abs := filepath.Join(root, "notes.txt")
+	testutil.FailErr(t, "write note", os.WriteFile(abs, []byte("note\n"), 0o644))
+	effects := &SourceEffects{}
+	if same, err := effects.canMoveAside(root, abs); err != nil || !same {
+		t.Fatalf("probe = %v, %v; want the same filesystem", same, err)
+	}
+	if _, err := os.Lstat(settingsoverlay.RecoveryDir(root)); !os.IsNotExist(err) {
+		t.Fatalf("probe created the recovery area: %v", err)
+	}
+	testutil.FailErr(t, "prepare recovery area", prepareRecoveryArea(root))
+	if info, err := os.Stat(settingsoverlay.RecoveryDir(root)); err != nil || !info.IsDir() {
+		t.Fatalf("approved move left no recovery area: %v", err)
 	}
 }

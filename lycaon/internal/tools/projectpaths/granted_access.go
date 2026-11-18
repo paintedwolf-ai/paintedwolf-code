@@ -106,3 +106,24 @@ func approvedAccess(tctx tools.ToolContext, rootSession, abs string, write bool)
 	}
 	return Access{}, false
 }
+
+// ReliesOnPreparedAccess reports that write access to abs exists only as access
+// prepared for a pending file-change review. That review authorises only the
+// file changes it sees, so a change it will not see has no authority.
+func ReliesOnPreparedAccess(tctx tools.ToolContext, abs string) bool {
+	abs = filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(abs)))
+	prepared := false
+	for _, access := range tctx.Files.PreparedFileAccess {
+		prepared = prepared || access.Path == abs && access.Write
+	}
+	if !prepared {
+		return false
+	}
+	rootSession := strings.TrimSpace(tctx.Identity.ParentSessionID)
+	if rootSession == "" {
+		rootSession = strings.TrimSpace(tctx.Identity.SessionID)
+	}
+	tctx.Files.FileChangeReview = nil
+	_, held := approvedAccess(tctx, rootSession, abs, true)
+	return !held
+}
