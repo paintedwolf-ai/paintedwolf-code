@@ -31,6 +31,8 @@ type ActionDescriptor struct {
 // ActionFact One typed fact. The fields a kind uses are listed on each field; Den formats the values and owns the label for each kind.
 type ActionFact struct {
 	Kind ActionFactKind `json:"kind"`
+	// source_observation: gaps in a command's before-and-after comparison.
+	SourceCoverage []CommandFolderCoverage `json:"source_coverage,omitempty"`
 	// result: how the action ended.
 	Outcome string `json:"outcome,omitempty"`
 	// result: process exit status.
@@ -1702,6 +1704,16 @@ type CommandExecutionReceipt struct {
 	// Latest retained stdout and stderr of this child, each with a bounded screened preview. Absent streams retained nothing.
 	Outputs          []CommandExecutionOutput `json:"outputs,omitempty"`
 	RevisionConflict *CommandRevisionConflict `json:"revision_conflict,omitempty"`
+}
+
+// CommandFolderCoverage
+type CommandFolderCoverage struct {
+	// The covered folder's host path. A slash alone with unconfined coverage denotes all folders outside the project.
+	Folder            string                 `json:"folder"`
+	Coverage          SourceWindowCoverage   `json:"coverage"`
+	Reason            SourceWindowGapReason  `json:"reason,omitempty"`
+	Boundaries        []SourceWindowBoundary `json:"boundaries,omitempty"`
+	OmittedBoundaries int                    `json:"omitted_boundaries,omitempty"`
 }
 
 // CommandInvokeContext Structured invocation coordinates. The host resolves and verifies these against machine state; a Den boolean is never authority.

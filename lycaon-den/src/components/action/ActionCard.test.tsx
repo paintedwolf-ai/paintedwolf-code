@@ -45,6 +45,20 @@ describe("ActionCard", () => {
     expect(container.querySelector('[data-testid="action-card"]')?.getAttribute("data-status")).toBe("done");
   });
 
+  it("shows incomplete file observation on the row and explains the covered folder in the card", () => {
+    const action: ActionDescriptor = {
+      ...descriptor,
+      facts: [{ kind: "source_observation", source_coverage: [{ folder: "/srv/shared", coverage: "not_observed", reason: "time_budget" }] }],
+      row: ["source_observation"],
+    };
+    const { container } = render(() => <ActionCard part={part()} action={action} layout="chat" />);
+    const row = container.querySelector('[data-testid="action-card"] > button')!;
+    expect(row.textContent).toContain("File observation incomplete");
+    open(container);
+    const coverage = container.querySelector('[data-kind="source_observation"] dd');
+    expect(coverage?.textContent).toContain("/srv/shared was not observed: the observation ran out of time.");
+  });
+
   it("opens to what ran, the summary, facts, preview and records, in that order and nothing else", () => {
     const summary = <div data-testid="supplied-summary">supplied summary</div>;
     const evidence = <button type="button" data-testid="supplied-evidence">supplied evidence</button>;

@@ -23,7 +23,7 @@ type commandWindow struct {
 	open *sourceledger.OpenCommandWindow
 	// unobserved lists the folders a window was due to cover when it could not
 	// open; empty when one opened or none was due.
-	unobserved []hostcmd.FolderCoverage
+	unobserved []api.CommandFolderCoverage
 }
 
 // openCommandWindow opens the window for a primary-tree command. Worker
@@ -67,24 +67,24 @@ func outsideRootSpecs(tctx tools.ToolContext) []sourceledger.OutsideRootSpec {
 
 // unobservedFolders states every folder a window was due to cover as not
 // observed: none had its starting state recorded before the command started.
-func unobservedFolders(tctx tools.ToolContext, outside []sourceledger.OutsideRootSpec) []hostcmd.FolderCoverage {
-	out := make([]hostcmd.FolderCoverage, 0, len(tctx.Source.Roots)+len(outside))
+func unobservedFolders(tctx tools.ToolContext, outside []sourceledger.OutsideRootSpec) []api.CommandFolderCoverage {
+	out := make([]api.CommandFolderCoverage, 0, len(tctx.Source.Roots)+len(outside))
 	for _, root := range tctx.Source.Roots {
-		out = append(out, hostcmd.FolderCoverage{Folder: root.Path, Coverage: string(api.SourceWindowCoverageNotObserved), Reason: string(api.SourceWindowGapBaselineIncomplete)})
+		out = append(out, api.CommandFolderCoverage{Folder: root.Path, Coverage: api.SourceWindowCoverageNotObserved, Reason: api.SourceWindowGapBaselineIncomplete})
 	}
 	for _, root := range outside {
-		out = append(out, hostcmd.FolderCoverage{Folder: root.Path, Coverage: string(api.SourceWindowCoverageNotObserved), Reason: string(api.SourceWindowGapBaselineIncomplete)})
+		out = append(out, api.CommandFolderCoverage{Folder: root.Path, Coverage: api.SourceWindowCoverageNotObserved, Reason: api.SourceWindowGapBaselineIncomplete})
 	}
 	return out
 }
 
 // coverageFact projects the ledger's folder coverage onto the command result.
-func coverageFact(coverage []sourceledger.FolderCoverage) []hostcmd.FolderCoverage {
-	out := make([]hostcmd.FolderCoverage, 0, len(coverage))
+func coverageFact(coverage []sourceledger.FolderCoverage) []api.CommandFolderCoverage {
+	out := make([]api.CommandFolderCoverage, 0, len(coverage))
 	for _, folder := range coverage {
-		fact := hostcmd.FolderCoverage{Folder: folder.Folder, Coverage: string(folder.State), Reason: string(folder.Reason), OmittedBoundaries: folder.OmittedBoundaries}
+		fact := api.CommandFolderCoverage{Folder: folder.Folder, Coverage: folder.State, Reason: folder.Reason, OmittedBoundaries: folder.OmittedBoundaries}
 		for _, boundary := range folder.Boundaries {
-			fact.Boundaries = append(fact.Boundaries, hostcmd.CoverageBoundary{Path: boundary.Path, Reason: string(boundary.Reason)})
+			fact.Boundaries = append(fact.Boundaries, api.SourceWindowBoundary{Path: boundary.Path, Reason: boundary.Reason})
 		}
 		out = append(out, fact)
 	}
@@ -142,4 +142,20 @@ func (w commandWindow) closeOnExit(ctx context.Context, registry *bgprocess.Regi
 	}
 	background := context.WithoutCancel(ctx)
 	registry.Lifecycle.OnExit(sessionID, handle, func() { w.closeNow(background) })
+}
+
+// stateObservation records only gaps in the window’s comparison.
+func stateObservation(tctx tools.ToolContext, window *hostcmd.SourceWindow) {
+	if tctx.Effects.Out == nil || window == nil {
+		return
+	}
+	var gaps []api.CommandFolderCoverage
+	for _, folder := range window.Coverage {
+		if folder.Coverage != api.SourceWindowCoverageComplete {
+			gaps = append(gaps, folder)
+		}
+	}
+	if len(gaps) > 0 {
+		tctx.Effects.Out.StateCardFact(api.ActionFact{Kind: api.ActionFactSourceObservation, SourceCoverage: gaps})
+	}
 }

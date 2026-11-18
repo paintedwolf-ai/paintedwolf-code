@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // A launch stopped during the open started no process, so nothing states that one
@@ -19,7 +20,7 @@ func TestLaunchStoppedDuringTheOpenReportsNoWindowFact(t *testing.T) {
 	window := &programWindow{due: true, clock: commandprogram.SystemClock(), ready: make(chan struct{}), open: func(ctx context.Context) commandWindow {
 		close(entered)
 		<-ctx.Done()
-		return commandWindow{unobserved: []hostcmd.FolderCoverage{{Folder: "/work", Coverage: "not_observed", Reason: "baseline_incomplete"}}}
+		return commandWindow{unobserved: []api.CommandFolderCoverage{{Folder: "/work", Coverage: "not_observed", Reason: "baseline_incomplete"}}}
 	}}
 	launch, stop := context.WithCancel(t.Context())
 	done := make(chan error, 1)

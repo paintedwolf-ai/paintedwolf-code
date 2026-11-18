@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // programWindow is one program's observation window, opened by whichever
@@ -22,10 +23,10 @@ type programWindow struct {
 	open func(context.Context) commandWindow
 	// unobservedFolders lists what the window was due to cover, for a launch
 	// that ran with no window open.
-	unobservedFolders func() []hostcmd.FolderCoverage
-	clock  commandprogram.Clock
-	once   sync.Once
-	cancel context.CancelFunc
+	unobservedFolders func() []api.CommandFolderCoverage
+	clock             commandprogram.Clock
+	once              sync.Once
+	cancel            context.CancelFunc
 	// ready closes once window is written and the program may launch.
 	ready  chan struct{}
 	window commandWindow
@@ -37,9 +38,9 @@ type programWindow struct {
 
 func newProgramWindow(tc tools.ToolContext, commandLine string, clock commandprogram.Clock) *programWindow {
 	return &programWindow{
-		due:   commandWindowDue(tc),
-		open:  func(ctx context.Context) commandWindow { return openCommandWindow(ctx, tc, "command", commandLine) },
-		unobservedFolders: func() []hostcmd.FolderCoverage {
+		due:  commandWindowDue(tc),
+		open: func(ctx context.Context) commandWindow { return openCommandWindow(ctx, tc, "command", commandLine) },
+		unobservedFolders: func() []api.CommandFolderCoverage {
 			return unobservedFolders(tc, outsideRootSpecs(tc))
 		},
 		clock: clock,

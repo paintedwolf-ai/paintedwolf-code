@@ -8335,10 +8335,12 @@ export interface components {
             redaction?: components["schemas"]["HostSecretRedactionMeta"];
         };
         /** @enum {string} */
-        ActionFactKind: "result" | "changed" | "found" | "took" | "steps" | "stopped_by" | "network" | "worker" | "budget" | "process" | "captured" | "containment" | "loaded_by";
+        ActionFactKind: "result" | "source_observation" | "changed" | "found" | "took" | "steps" | "stopped_by" | "network" | "worker" | "budget" | "process" | "captured" | "containment" | "loaded_by";
         /** @description One typed fact. The fields a kind uses are listed on each field; Den formats the values and owns the label for each kind. */
         ActionFact: {
             kind: components["schemas"]["ActionFactKind"];
+            /** @description source_observation: gaps in a command's before-and-after comparison. */
+            source_coverage?: components["schemas"]["CommandFolderCoverage"][];
             /**
              * @description result: how the action ended.
              * @enum {string}
@@ -10906,6 +10908,26 @@ export interface components {
         /** @description Host-recorded provenance for spans replaced in this message copy. Presence is authoritative; literal marker text in content is not a redaction signal. Every replacement in this copy is listed, so a client renders from the list rather than by searching content, and the list describes this copy alone rather than accumulating across projections of one message. */
         HostSecretRedactionMeta: {
             spans: components["schemas"]["RedactedSpan"][];
+        };
+        /** @enum {string} */
+        SourceWindowCoverage: "complete" | "partial" | "not_observed";
+        /** @enum {string} */
+        SourceWindowGapReason: "unconfined" | "baseline_incomplete" | "canceled" | "io_error" | "settlement_failed" | "time_budget";
+        /** @enum {string} */
+        SourceWindowBoundaryReason: "scope" | "directory_cap" | "subtree_cap" | "walk_budget" | "unreadable";
+        /** @description One folder a partial observation did not enter. */
+        SourceWindowBoundary: {
+            /** @description Slash-separated, relative to the covered folder; "." is the folder itself. */
+            path: string;
+            reason: components["schemas"]["SourceWindowBoundaryReason"];
+        };
+        CommandFolderCoverage: {
+            /** @description The covered folder's host path. A slash alone with unconfined coverage denotes all folders outside the project. */
+            folder: string;
+            coverage: components["schemas"]["SourceWindowCoverage"];
+            reason?: components["schemas"]["SourceWindowGapReason"];
+            boundaries?: components["schemas"]["SourceWindowBoundary"][];
+            omitted_boundaries?: number;
         };
         ChatContentRow: {
             index: number;
@@ -14510,18 +14532,6 @@ export interface components {
         };
         /** @enum {string} */
         SourceCommandWindowState: "running" | "ended" | "interrupted";
-        /** @enum {string} */
-        SourceWindowCoverage: "complete" | "partial" | "not_observed";
-        /** @enum {string} */
-        SourceWindowGapReason: "unconfined" | "baseline_incomplete" | "canceled" | "io_error" | "settlement_failed" | "time_budget";
-        /** @enum {string} */
-        SourceWindowBoundaryReason: "scope" | "directory_cap" | "subtree_cap" | "walk_budget" | "unreadable";
-        /** @description One folder a partial observation did not enter. */
-        SourceWindowBoundary: {
-            /** @description Slash-separated, relative to the covered folder; "." is the folder itself. */
-            path: string;
-            reason: components["schemas"]["SourceWindowBoundaryReason"];
-        };
         /**
          * @description How much of one folder the window compared. root_id is an attached
          *     root, with an empty path for its whole tree, or the project's outside
@@ -31232,6 +31242,11 @@ export type RedactionKind = components["schemas"]["RedactionKind"];
 export type RedactionSource = components["schemas"]["RedactionSource"];
 export type RedactedSpan = components["schemas"]["RedactedSpan"];
 export type HostSecretRedactionMeta = components["schemas"]["HostSecretRedactionMeta"];
+export type SourceWindowCoverage = components["schemas"]["SourceWindowCoverage"];
+export type SourceWindowGapReason = components["schemas"]["SourceWindowGapReason"];
+export type SourceWindowBoundaryReason = components["schemas"]["SourceWindowBoundaryReason"];
+export type SourceWindowBoundary = components["schemas"]["SourceWindowBoundary"];
+export type CommandFolderCoverage = components["schemas"]["CommandFolderCoverage"];
 export type ChatContentRow = components["schemas"]["ChatContentRow"];
 export type ChatContentReference = components["schemas"]["ChatContentReference"];
 export type CommandActivity = components["schemas"]["CommandActivity"];
@@ -31545,10 +31560,6 @@ export type SourceContributor = components["schemas"]["SourceContributor"];
 export type SourceWalkEffect = components["schemas"]["SourceWalkEffect"];
 export type SourceWalkFile = components["schemas"]["SourceWalkFile"];
 export type SourceCommandWindowState = components["schemas"]["SourceCommandWindowState"];
-export type SourceWindowCoverage = components["schemas"]["SourceWindowCoverage"];
-export type SourceWindowGapReason = components["schemas"]["SourceWindowGapReason"];
-export type SourceWindowBoundaryReason = components["schemas"]["SourceWindowBoundaryReason"];
-export type SourceWindowBoundary = components["schemas"]["SourceWindowBoundary"];
 export type SourceWindowFolderCoverage = components["schemas"]["SourceWindowFolderCoverage"];
 export type SourceCommandWindow = components["schemas"]["SourceCommandWindow"];
 export type SourceWalkResponse = components["schemas"]["SourceWalkResponse"];

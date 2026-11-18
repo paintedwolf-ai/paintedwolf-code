@@ -315,6 +315,7 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	outcome.Refusal = refusal
 	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
 	outcome.SourceWindow = run.window.fact()
+	stateObservation(run.tc, outcome.SourceWindow)
 	if settledNow {
 		recordProgramAttempt(r.FailureTracker, e.failureAttempt, ctx, outcome)
 		stampProgramRun(run.tc, run.source, e.paths.Cwd(), outcome, e.verification)

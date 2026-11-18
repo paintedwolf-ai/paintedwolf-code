@@ -75,6 +75,11 @@ func ForActivity(program api.CommandProgramReceipt, activity api.CommandActivity
 		Links:  activityLinks(program, activity, result),
 	}
 	var facts []api.ActionFact
+	for _, fact := range result.CardFacts {
+		if fact.Kind == api.ActionFactSourceObservation {
+			facts = append(facts, fact)
+		}
+	}
 	switch activity.State {
 	case "completed":
 		facts = append(facts, exitFact(exitOutcome(activity.StatusCode), activity.StatusCode))
@@ -111,6 +116,7 @@ func ForActivity(program api.CommandProgramReceipt, activity api.CommandActivity
 		descriptor.Opener = &api.ActionOpener{Kind: "running", ProcessHandle: activity.JobHandle}
 	}
 	descriptor.Facts = ordered(facts)
+	descriptor.Row = commandObservationRow(descriptor.Row, descriptor.Facts)
 	if len(activity.ExecutionIDs) > 0 {
 		descriptor.Preview = &api.ActionPreview{Kind: "output", Receipts: []api.ActionReceiptScope{{ProgramID: program.ID, ActivityID: activity.ID}}}
 	}
@@ -118,6 +124,18 @@ func ForActivity(program api.CommandProgramReceipt, activity api.CommandActivity
 		descriptor.Opener = pathOpener(result.ToolArgs)
 	}
 	return descriptor
+}
+
+func commandObservationRow(row []api.ActionFactKind, facts []api.ActionFact) []api.ActionFactKind {
+	for _, fact := range facts {
+		if fact.Kind == api.ActionFactSourceObservation && len(fact.SourceCoverage) > 0 {
+			if slices.Contains(row, fact.Kind) {
+				return row
+			}
+			return append(row[:min(len(row), 1)], fact.Kind)
+		}
+	}
+	return row
 }
 
 // commandRan carries the command's redaction marks when it shows the whole

@@ -19,6 +19,7 @@ import { visualFromPart } from "../../chat/visual/visual-artifact-model.ts";
 import { visualProducerEntryKey } from "../../chat/visual/visual-artifact-canonical.ts";
 import { TranscriptVisualSlot } from "../transcript/TranscriptVisualSlot.tsx";
 import { ActionPreview } from "./ActionPreview.tsx";
+import { activityCoverageNotices } from "../../chat/action/action-source-coverage.ts";
 
 const RAN_FIELD = "ran.text";
 
@@ -126,7 +127,11 @@ function ActionFacts(props: { facts: readonly ActionFact[]; allowedHosts: Readon
             <div data-kind={fact.kind} data-tone={dangerous(fact) ? "danger" : undefined}>
               <dt>{ACTION_FACT_LABELS[fact.kind]}</dt>
               <dd>
-                {formatFact(fact)}
+                <Show when={fact.kind === "source_observation"} fallback={formatFact(fact)}>
+                  <ul class="den-action-card__observation">
+                    <For each={activityCoverageNotices(fact.source_coverage)}>{(notice) => <li>{notice}</li>}</For>
+                  </ul>
+                </Show>
                 <Show when={fact.kind === "network"}>
                   <BlockHosts hosts={(fact.hosts ?? []).filter((host) => props.allowedHosts.has(host))} />
                 </Show>

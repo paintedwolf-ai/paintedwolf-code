@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/argv"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // Request runs one or more host command stages in projectDir.
@@ -95,34 +96,16 @@ func StagePlaceholders(stages []exec.Stage) []StageResult {
 // each folder the window covered once that folder is decided; with no ID, no
 // window opened and every folder it was due to cover is not observed.
 type SourceWindow struct {
-	ID       string           `json:"id,omitempty"`
-	Settled  bool             `json:"settled"`
-	Coverage []FolderCoverage `json:"coverage,omitempty"`
-}
-
-// FolderCoverage is how much of one folder the window compared: complete,
-// partial with the folders it did not enter, or not observed with a reason.
-// Partial and not observed never mean the folder did not change.
-type FolderCoverage struct {
-	Folder            string             `json:"folder"`
-	Coverage          string             `json:"coverage"`
-	Reason            string             `json:"reason,omitempty"`
-	Boundaries        []CoverageBoundary `json:"boundaries,omitempty"`
-	OmittedBoundaries int                `json:"omitted_boundaries,omitempty"`
-}
-
-// CoverageBoundary is a folder, relative to the covered one, a partial
-// observation did not enter.
-type CoverageBoundary struct {
-	Path   string `json:"path"`
-	Reason string `json:"reason"`
+	ID       string                      `json:"id,omitempty"`
+	Settled  bool                        `json:"settled"`
+	Coverage []api.CommandFolderCoverage `json:"coverage,omitempty"`
 }
 
 // MarshalJSON states settlement only for a window that exists.
 func (w SourceWindow) MarshalJSON() ([]byte, error) {
 	if w.ID == "" {
 		return json.Marshal(struct {
-			Coverage []FolderCoverage `json:"coverage"`
+			Coverage []api.CommandFolderCoverage `json:"coverage"`
 		}{w.Coverage})
 	}
 	type plain SourceWindow

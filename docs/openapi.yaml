@@ -21821,6 +21821,7 @@ components:
       type: string
       enum:
         - result
+        - source_observation
         - changed
         - found
         - took
@@ -21843,6 +21844,11 @@ components:
       properties:
         kind:
           $ref: '#/components/schemas/ActionFactKind'
+        source_coverage:
+          type: array
+          description: 'source_observation: gaps in a command''s before-and-after comparison.'
+          items:
+            $ref: '#/components/schemas/CommandFolderCoverage'
         outcome:
           type: string
           description: 'result: how the action ended.'
@@ -28211,6 +28217,65 @@ components:
           minItems: 1
           items:
             $ref: '#/components/schemas/RedactedSpan'
+    SourceWindowCoverage:
+      type: string
+      enum:
+        - complete
+        - partial
+        - not_observed
+    SourceWindowGapReason:
+      type: string
+      enum:
+        - unconfined
+        - baseline_incomplete
+        - canceled
+        - io_error
+        - settlement_failed
+        - time_budget
+    SourceWindowBoundaryReason:
+      type: string
+      enum:
+        - scope
+        - directory_cap
+        - subtree_cap
+        - walk_budget
+        - unreadable
+    SourceWindowBoundary:
+      x-go-generate: true
+      type: object
+      required:
+        - path
+        - reason
+      additionalProperties: false
+      description: One folder a partial observation did not enter.
+      properties:
+        path:
+          type: string
+          description: Slash-separated, relative to the covered folder; "." is the folder itself.
+        reason:
+          $ref: '#/components/schemas/SourceWindowBoundaryReason'
+    CommandFolderCoverage:
+      x-go-generate: true
+      type: object
+      required:
+        - folder
+        - coverage
+      additionalProperties: false
+      properties:
+        folder:
+          type: string
+          description: The covered folder's host path. A slash alone with unconfined coverage denotes all folders outside the project.
+        coverage:
+          $ref: '#/components/schemas/SourceWindowCoverage'
+        reason:
+          $ref: '#/components/schemas/SourceWindowGapReason'
+        boundaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceWindowBoundary'
+        omitted_boundaries:
+          type: integer
+          minimum: 0
     ChatContentRow:
       x-go-generate: true
       type: object
@@ -36489,43 +36554,6 @@ components:
         - running
         - ended
         - interrupted
-    SourceWindowCoverage:
-      type: string
-      enum:
-        - complete
-        - partial
-        - not_observed
-    SourceWindowGapReason:
-      type: string
-      enum:
-        - unconfined
-        - baseline_incomplete
-        - canceled
-        - io_error
-        - settlement_failed
-        - time_budget
-    SourceWindowBoundaryReason:
-      type: string
-      enum:
-        - scope
-        - directory_cap
-        - subtree_cap
-        - walk_budget
-        - unreadable
-    SourceWindowBoundary:
-      x-go-generate: true
-      type: object
-      required:
-        - path
-        - reason
-      additionalProperties: false
-      description: One folder a partial observation did not enter.
-      properties:
-        path:
-          type: string
-          description: Slash-separated, relative to the covered folder; "." is the folder itself.
-        reason:
-          $ref: '#/components/schemas/SourceWindowBoundaryReason'
     SourceWindowFolderCoverage:
       x-go-generate: true
       type: object
