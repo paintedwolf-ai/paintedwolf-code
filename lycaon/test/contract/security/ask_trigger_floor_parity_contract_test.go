@@ -15,6 +15,7 @@ import (
 func TestCredentialFloorPathsAreInTheSensitiveCatalog(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	catalog, err := sensitivepath.Load(sensitivepath.Bundled())
 	testutil.FailErr(t, "sensitivepath.Load failed", err)
 
@@ -41,6 +42,7 @@ func TestCredentialFloorPathsAreInTheSensitiveCatalog(t *testing.T) {
 func TestKeyMaterialIsCataloguedForReads(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	catalog, err := sensitivepath.Load(sensitivepath.Bundled())
 	testutil.FailErr(t, "sensitivepath.Load failed", err)
 

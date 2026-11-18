@@ -90,6 +90,7 @@ func TestKeyMaterialFloorIsPackDerived(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	previous := confine.SetKeyMaterialPathsSource(nil)
 	t.Cleanup(func() { confine.SetKeyMaterialPathsSource(previous) })
 	if paths := confine.KeyMaterialWritePaths(); len(paths) != 0 {
