@@ -80,6 +80,7 @@ func TestPromptRenderReachFailsOnASeededTemplate(t *testing.T) {
 	// No tool schema has wait_ms, so the argument is stale wherever it is
 	// attributed.
 	staleArg := string(stockKick) + "\nAsk again with `ask_user(prompt=…, wait_ms=500)`.\n"
+	ownArg := string(stockKick) + "{% if profile_has_ask_user %}\nAsk again with `ask_user(prompt=…)`.\n{% endif %}"
 	for name, tc := range map[string]struct {
 		overlay string
 		want    outcome
@@ -89,6 +90,7 @@ func TestPromptRenderReachFailsOnASeededTemplate(t *testing.T) {
 		"reworded":        {overlay: reworded, want: passes},
 		"seeded tool":     {overlay: seeded, want: violates, names: []string{"complete_leg"}},
 		"seeded argument": {overlay: staleArg, want: violates, names: []string{"wait_ms", "ask_user"}},
+		"own argument":    {overlay: ownArg, want: passes},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
