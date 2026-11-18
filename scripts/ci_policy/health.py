@@ -1,13 +1,44 @@
 """Daily queue latency, lane duration, and recurring structured failure signatures."""
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+import io
 import json
 import os
 from pathlib import Path
+import subprocess
+import zipfile
 
 from .github import api, pages, repository
-from .recovery import evidence
 from . import health_metrics
+
+MAX_ARTIFACT_BYTES = 32 * 1024 * 1024
+MAX_MEMBER_BYTES = 1024 * 1024
+
+
+def evidence(run):
+    """Read the run's own-attempt receipts as bounded JSON; archives are never extracted."""
+    records, failures = [], []
+    for artifact in pages(f"{repository()}/actions/runs/{run['id']}/artifacts", 'artifacts'):
+        if (not artifact['name'].startswith('receipt-') or artifact['expired']
+                or artifact['size_in_bytes'] > MAX_ARTIFACT_BYTES
+                or not artifact['name'].endswith('-' + str(run['run_attempt']))):
+            continue
+        raw = subprocess.check_output(['gh', 'api', f"{repository()}/actions/artifacts/{artifact['id']}/zip"])
+        if len(raw) > MAX_ARTIFACT_BYTES:
+            continue
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            for member in archive.infolist():
+                if member.file_size > MAX_MEMBER_BYTES:
+                    continue
+                if member.filename.endswith('ci/run.json'):
+                    value = json.loads(archive.read(member))
+                    if isinstance(value, dict):
+                        records.append(value)
+                elif member.filename.endswith('ci/failures.json'):
+                    value = json.loads(archive.read(member))
+                    if isinstance(value, list):
+                        failures.extend(value)
+    return records, failures
 
 
 def seconds(start, end):

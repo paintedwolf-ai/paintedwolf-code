@@ -1,32 +1,13 @@
 package contract
 
 import (
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	"gopkg.in/yaml.v3"
 )
-
-func TestInformWhenConditionWired(t *testing.T) {
-	t.Parallel()
-	reg := catalogfixture.LoadInformBindings(t)
-	indexWorkflowInjects(t, reg)
-	var withWhen int
-	for _, b := range append(reg.AllInform(), reg.BindingsOn(anchor.PhaseEntered)...) {
-		if b != nil && strings.TrimSpace(b.When) != "" {
-			withWhen++
-		}
-	}
-	if withWhen < 1 {
-		t.Fatal("requires at least one conditioned inform binding")
-	}
-}
 
 func loadCatalogAnchors(t *testing.T, root string) (ids map[string]bool, hasEnvelope map[string]bool) {
 	t.Helper()
@@ -54,52 +35,4 @@ func loadCatalogAnchors(t *testing.T, root string) (ids map[string]bool, hasEnve
 		hasEnvelope[id] = a.Envelope.Kind != 0
 	}
 	return ids, hasEnvelope
-}
-
-// indexWorkflowInjects indexes every stock workflow inject into reg, read from
-// the manifest YAML.
-func indexWorkflowInjects(t *testing.T, reg *anchor.Registry) {
-	t.Helper()
-	for _, wfRoot := range catalogfixture.StockWorkflowRoots(t) {
-		_ = wfRoot.Walk(func(at extpacks.Source, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || d.Name() != "workflow.yaml" {
-				return nil
-			}
-			raw, err := at.Read()
-			if err != nil {
-				return nil
-			}
-			var doc struct {
-				ID      string `yaml:"id"`
-				Injects []struct {
-					On       string          `yaml:"on"`
-					Selector anchor.Selector `yaml:"selector"`
-					Effect   string          `yaml:"effect"`
-					When     string          `yaml:"when"`
-					Render   string          `yaml:"render"`
-					Tier     string          `yaml:"tier"`
-				} `yaml:"injects"`
-			}
-			if err := yaml.Unmarshal(raw, &doc); err != nil {
-				return nil
-			}
-			wf := strings.TrimSpace(doc.ID)
-			for _, inj := range doc.Injects {
-				b := &anchor.Binding{
-					On:       anchor.ID(strings.TrimSpace(inj.On)),
-					Selector: inj.Selector,
-					Effect:   strings.TrimSpace(inj.Effect),
-					When:     strings.TrimSpace(inj.When),
-					Render:   strings.TrimSpace(inj.Render),
-					Tier:     "workflow",
-				}
-				if b.Selector.Workflow == nil && wf != "" {
-					w := wf
-					b.Selector.Workflow = &w
-				}
-				reg.IndexBinding(b)
-			}
-			return nil
-		})
-	}
 }

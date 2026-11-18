@@ -192,7 +192,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
             result.append({"lane": name,
                            "timing_row": row_key(name, f"{index}/{count}" if count > 1 else ""),
                            "shard": f"{index}/{count}" if count > 1 else "",
-                           "minutes": lane["minutes"], "job_minutes": lane["minutes"] + 30,
+                           "minutes": lane["minutes"], "step_minutes": lane["minutes"] + 1, "job_minutes": lane["minutes"] + 30,
                            "setup": lane["setup"],
                            "runtime_engines": lane.get("runtime_engines", True),
                            "notices": "licenses:notices" in lane["targets"],

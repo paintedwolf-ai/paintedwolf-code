@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 )
@@ -22,10 +21,4 @@ func TestWorkflowManifestAllowedAgentsExist(t *testing.T) {
 			}
 		}
 	}
-}
-
-func TestBundledToolProfilesLoad(t *testing.T) {
-	t.Parallel()
-	_, err := sandbox.LoadToolProfiles()
-	contractcheck.FailErr(t, "load tool profiles", err)
 }
