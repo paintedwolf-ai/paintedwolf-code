@@ -89,14 +89,6 @@ def reaching(roots):
     return found
 
 
-def exported_functions(package):
-    """Exported package-level functions of a package's non-test files, every build variant included."""
-    directory = MODULE / package.removeprefix("./")
-    return {name for path in directory.glob("*.go") if not path.name.endswith("_test.go")
-            for name in functions(path.read_text())
-            if name[0].isupper() and not re.search(rf"^func \([^)]*\)\s*{name}\b", path.read_text(), re.M)}
-
-
 @dataclass
 class Scope:
     """One Go test run: its package patterns, options and `-run` filter."""

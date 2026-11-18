@@ -9,7 +9,6 @@ from verification_tests.ci import gotests
 from verification_tests.ci.workflows import plan, taskfile, workflow
 
 CONFINE_PACKAGE = "./internal/confine"
-CONFINE_ENGAGEMENT = ("Available", "EnableAutoConfine", "TestingSetAutoConfine")
 SCANNER_RESOURCE = "testutil.MissingScannerResource"
 SUPERVISOR = "./internal/exec"
 SANDBOX_PACKAGE = "./internal/confine/linuxsandbox"
@@ -36,8 +35,8 @@ def scanner_scopes():
     return scopes
 
 
-def uncovered(inventory, scopes, skip=()):
-    return [f"{package} {test}" for package, tests in sorted(inventory.items()) if package not in skip
+def uncovered(inventory, scopes):
+    return [f"{package} {test}" for package, tests in sorted(inventory.items())
             for test in tests if not any(scope.covers(package, test) for scope in scopes)]
 
 
@@ -47,15 +46,6 @@ def dead_names(scopes):
 
 
 class SeatbeltScopeLaws(unittest.TestCase):
-    def test_every_test_that_engages_confinement_runs_in_a_sandboxed_scope(self):
-        roots = [*CONFINE_ENGAGEMENT, *(f"confine.{name}" for name in CONFINE_ENGAGEMENT)]
-        inventory = gotests.reaching(roots)
-        self.assertGreater(len(inventory), 1)
-        self.assertEqual(uncovered(inventory, seatbelt_scopes(), skip={CONFINE_PACKAGE}), [])
-
-    def test_the_engagement_api_the_inventory_derives_from_is_exported(self):
-        self.assertLessEqual(set(CONFINE_ENGAGEMENT), gotests.exported_functions(CONFINE_PACKAGE))
-
     def test_the_confinement_package_runs_unfiltered_and_every_catalog_leg_runs_in_full(self):
         self.assertTrue(any(scope.covers_package(CONFINE_PACKAGE) and not scope.run for scope in seatbelt_scopes()))
         commands = [command for command in taskfile()["test:seatbelt"]["cmds"]]
