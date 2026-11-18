@@ -62,14 +62,14 @@ func (r Resolver) ForRun(ctx context.Context, run *api.WorkflowRun) (workflowdef
 			return workflowdef.Manifest{}, err
 		}
 		if data != "" {
-			m, err := workflowdef.ParseManifestYAML([]byte(data))
+			m, err := workflowdef.DecodeRunManifest(data)
 			if err != nil {
 				return workflowdef.Manifest{}, fmt.Errorf("read stored workflow: %w", err)
 			}
 			if m.ID != run.WorkflowID || m.Version != run.WorkflowVersion {
 				return workflowdef.Manifest{}, fmt.Errorf("stored workflow differs from run %s", run.ID)
 			}
-			return workflowdef.FinalizeManifest(m), nil
+			return m, nil
 		}
 	}
 	manifest, err := r.ForSession(ctx, r.ProjectDirForRun(ctx, run), run.SessionID, run.WorkflowID, run.WorkflowVersion)

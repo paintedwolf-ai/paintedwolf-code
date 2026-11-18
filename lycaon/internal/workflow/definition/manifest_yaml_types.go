@@ -6,7 +6,6 @@ import (
 )
 
 type workflowFile struct {
-	WorkflowFormat     *int                             `yaml:"workflow_format,omitempty"`
 	ID                 string                           `yaml:"id"`
 	Version            string                           `yaml:"version"`
 	Attach             *attachYAML                      `yaml:"attach"`
@@ -32,6 +31,7 @@ type workflowFile struct {
 	Blueprint          *blueprintYAML                   `yaml:"blueprint"`
 	Presets            []manifestPresetYAML             `yaml:"presets"`
 	Injects            []anchor.WorkflowInject          `yaml:"injects"`
+	WorkflowFormat     *int                             `yaml:"workflow_format,omitempty"`
 }
 
 type agentYAML struct {

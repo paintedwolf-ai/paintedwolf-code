@@ -109,6 +109,7 @@ func ParseManifestYAML(data []byte) (Manifest, error) {
 		return Manifest{}, err
 	}
 	if wf.WorkflowFormat != nil {
+		m.WorkflowFormat = *wf.WorkflowFormat
 		if err := m.checkPredicates(true); err != nil {
 			return Manifest{}, err
 		}

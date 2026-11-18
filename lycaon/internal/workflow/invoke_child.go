@@ -139,7 +139,7 @@ func (m *Children) InvokeChild(ctx context.Context, parentRunID string, spec wor
 		childRun.EndMessageID = childBoundary.ID
 		messages = append(messages, childBoundary)
 	}
-	snapshot, err := workflowdef.MarshalManifestYAML(childManifest)
+	snapshot, err := workflowdef.EncodeRunManifest(childManifest)
 	if err != nil {
 		return nil, err
 	}

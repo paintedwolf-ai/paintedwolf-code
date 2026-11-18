@@ -187,7 +187,9 @@ func validateOne(
 	out = append(out, checkLeaveability(opts, path, m)...)
 	out = append(out, checkClosure(opts, path, m, overlayRules)...)
 	if overlayRules {
-		out = append(out, checkOverlayGateKit(path, m)...)
+		if m.WorkflowFormat == 0 {
+			out = append(out, checkOverlayGateKit(path, m)...)
+		}
 		out = append(out, checkOverlayExplicitSurfaces(path, m)...)
 		out = append(out, checkOverlayAttachSessionCreate(path, m)...)
 	}

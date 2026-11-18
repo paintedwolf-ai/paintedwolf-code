@@ -305,7 +305,7 @@ func (m *Admission) initializeWorkflowStart(
 		messages = append(messages, boundary)
 	}
 	run.StartMessageID = api.SpanScrollAnchor(messages, startMessage)
-	snapshot, err := workflowdef.MarshalManifestYAML(manifest)
+	snapshot, err := workflowdef.EncodeRunManifest(manifest)
 	if err != nil {
 		return nil, err
 	}

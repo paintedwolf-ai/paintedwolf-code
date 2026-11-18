@@ -16,8 +16,9 @@ import (
 
 // Manifest describes a workflow definition loaded from YAML.
 type Manifest struct {
-	ID      string
-	Version string
+	WorkflowFormat int
+	ID             string
+	Version        string
 	// Retired definitions remain available to existing runs but leave the start catalog.
 	Retired            bool
 	Attach             ManifestAttach

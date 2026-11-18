@@ -45,7 +45,7 @@ func TestReportRuntimeAndUIFollowEffectiveManifest(t *testing.T) {
 	testutil.FailErr(t, "read report-disabled UI", err)
 	available, err = mgr.Presentation.ReportAvailable(t.Context(), run.ID)
 	testutil.FailErr(t, "authorize disabled report", err)
-	if available || ui.ReportAvailable {
-		t.Fatal("effective manifest disables document access")
+	if !available || !ui.ReportAvailable {
+		t.Fatal("editing the catalog changed an admitted run’s report settings")
 	}
 }

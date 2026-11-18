@@ -444,6 +444,14 @@ reader-fact prefixes (`profile_`, `mints`, `receipt_kind`, `tool_check_`,
 `runner_`, `agent_has_skill_`, `visual_show_`, `caps`) emit a load note naming
 the template and variable.
 
+### Writer and reader qualification
+
+For a durable artifact, qualify each supported writer against the reader that will reopen its output. Keep representative bytes emitted by a published writer, the release commit, the triggering operation, and assertions about behavior. Exercise the current writer through publication and a fresh reader. A failed publication must leave recoverable input. When an interpretation changes, document the discriminator and the behavior of existing bytes, including copies and edits. A document-supplied version selects its grammar. The host derives authority from the operation and its current grants.
+
+Session workflow composition stores authored YAML beside its resolved definition. Project publication writes the authored overrides with `workflow_format: 2` and validates predicates in those overrides against the generic gate kit. Inherited predicates come from the referenced parent. Released unmarked project manifests and session rows without authored YAML retain the flattened representation. The [v1.0.2 fixture](../lycaon/internal/workflow/catalog/testdata/v1.0.2/workflow.yaml) came from the released persistence test at commit `b6120abc30359d6ea98b6f32a3d10deed80066be`, using `TestPersistWritesFileAndDeletesSessionRow` and its `/hotfix-custom` trigger. Its build phase retains both the delegation closeout and verify gates.
+
+New runs store their selected workflow definition in the same transaction as run creation. Existing runs without a snapshot resolve their recorded workflow ID and version. Workflow manifests describe execution. Each operation continues through the host's current authorization checks.
+
 ## Agent-public vocabulary
 
 Structured tool names, `Code:` meanings, rule effects, theme tokens, and other model- or extension-authored ids are contracts because external text or content can name them.
