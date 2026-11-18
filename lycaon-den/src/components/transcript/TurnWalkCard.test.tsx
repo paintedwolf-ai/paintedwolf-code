@@ -53,7 +53,11 @@ describe("Turn Walk cards in the live chat timeline", () => {
     ]);
     render(() => <SessionTranscript layout="chat" projectId="p1" sessionId="s1"
       messages={messages()} visibleTurnActive={active()} checkpointClient={client} />);
+    const footer = screen.getByTestId("turn-tail").closest("[data-seam]");
+    expect(footer?.getAttribute("data-seam")).toBe("message");
     const card = await screen.findByTestId("turn-walk-card");
+    expect(footer?.getAttribute("data-seam")).toBe("item");
+    expect(card.parentElement?.dataset.seam).toBe("message");
     setActive(true);
     expect(screen.getByTestId("turn-walk-card")).toBe(card);
     setMessages((previous) => [...previous, {

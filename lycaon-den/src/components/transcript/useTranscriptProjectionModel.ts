@@ -97,6 +97,7 @@ export type UseTranscriptProjectionModelOptions = {
   checkpointAppStore: () => AppStore | undefined;
   exploreContext: () => CitationExploreContext | undefined;
   hasMessageActions: () => boolean;
+  hasWalkClient: () => boolean;
   disclosureOpen: (key: TranscriptDisclosureKey) => boolean;
   rowMetrics: () => TranscriptRowMetrics | null;
   rowGeometry: () => string | undefined;
@@ -251,7 +252,7 @@ export function useTranscriptProjectionModel(options: UseTranscriptProjectionMod
     (row.kind === "user" || row.kind === "pending_user" || row.kind === "assistant");
   const closesWithCard = (row: Pick<DisplayTranscriptItem, "key">) => {
     const turn = reviewTurns().get(row.key);
-    return Boolean(turn && options.layout() === "chat" &&
+    return Boolean(turn && options.layout() === "chat" && options.hasWalkClient() &&
       hasWalkPreviewCard(options.projectId()?.trim() ?? "", options.sessionId()?.trim() ?? "", turn));
   };
   const seamContext = { hasActions, closesWithCard };
@@ -397,7 +398,7 @@ export function useTranscriptProjectionModel(options: UseTranscriptProjectionMod
   const rowPresentation = (item: DisplayTranscriptItem): string => {
     const presentation = transcriptRowPresentation(item, options.disclosureOpen);
     const actionsTag = hasActions(item) ? "+actions" : "";
-    const cardTag = closesWithCard(item) ? "+review" : "";
+    const cardTag = closesWithCard(item) ? `+review:${transcriptSpacing().messageGap}` : "";
     const timeTag =
       (item.kind === "user" || item.kind === "pending_user") &&
       messageTimesPref() === "always"

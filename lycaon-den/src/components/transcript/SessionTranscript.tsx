@@ -181,6 +181,7 @@ export function SessionTranscript(props: Props) {
     checkpointAppStore: () => props.checkpointAppStore,
     exploreContext: () => props.exploreContext,
     hasMessageActions: () => Boolean(props.recovery),
+    hasWalkClient: () => Boolean(props.checkpointClient),
     disclosureOpen,
     rowMetrics,
     rowGeometry,
