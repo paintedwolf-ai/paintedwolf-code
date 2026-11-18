@@ -14,12 +14,12 @@ import (
 
 func (s *Content) HandleListDraftVersions(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	if !requestscope.SessionExists(s.Store.Sessions, s.responses, w, r, sessionID) {
+	if !requestscope.SessionExists(s.SessionQueries, s.responses, w, r, sessionID) {
 		return
 	}
 	slotID := chi.URLParam(r, "slot_id")
 	// A draft slot is the coordinator message the versions superseded.
-	if _, err := s.Store.Transcript.GetMessage(r.Context(), sessionID, slotID); err != nil {
+	if _, err := s.TranscriptQueries.GetMessage(r.Context(), sessionID, slotID); err != nil {
 		if errors.Is(err, store.ErrMessageNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeMessageNotFound, "That message is not in this chat.")
 			return
@@ -27,7 +27,7 @@ func (s *Content) HandleListDraftVersions(w http.ResponseWriter, r *http.Request
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	versions, err := s.Store.Transcript.ListDraftVersions(r.Context(), sessionID, slotID)
+	versions, err := s.TranscriptQueries.ListDraftVersions(r.Context(), sessionID, slotID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return

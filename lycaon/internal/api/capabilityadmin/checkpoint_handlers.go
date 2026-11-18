@@ -80,7 +80,7 @@ func (s *CheckpointActions) HandleResolveCheckpoint(w http.ResponseWriter, r *ht
 		return
 	}
 	req.Guidance = observability.RedactCaptureText(req.Guidance)
-	secretBlock, err := secretview.ReferenceBlock(s.Store, s.ManagedSecrets, r.Context(), sessionID, req.Secrets)
+	secretBlock, err := secretview.ReferenceBlock(s.Store.Sessions, s.ManagedSecrets, r.Context(), sessionID, req.Secrets)
 	if err != nil {
 		secretview.WriteError(s.responses, w, r, err)
 		return

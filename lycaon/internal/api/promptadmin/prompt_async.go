@@ -77,20 +77,20 @@ func (s *Execution) PublishTurnFailure(ctx context.Context, sessionID string, er
 	if !shouldPublishPromptHostError(err) {
 		return
 	}
-	sess, getErr := s.Store.Sessions.Get(ctx, sessionID)
+	sess, getErr := s.SessionQueries.Get(ctx, sessionID)
 	if getErr != nil {
 		return
 	}
 	projectKey := sess.ProjectID
-	hostErr := renderPromptHostError(s.responses.Notices, err, failedTurnProgress(ctx, s.Store, sessionID))
+	hostErr := renderPromptHostError(s.responses.Notices, err, failedTurnProgress(ctx, s.TranscriptQueries, sessionID))
 	s.EventPublisher.PublishSessionHostError(ctx, projectKey, sessionID, hostErr)
 }
 
 // failedTurnProgress reports whether a failed turn may have produced effects. A
 // transcript that cannot be read may hold tool effects, so only a read
 // transcript can rule progress out and offer a plain retry.
-func failedTurnProgress(ctx context.Context, st *store.Repositories, sessionID string) bool {
-	msgs, err := st.Transcript.GetMessages(ctx, sessionID)
+func failedTurnProgress(ctx context.Context, st TranscriptHistory, sessionID string) bool {
+	msgs, err := st.GetMessages(ctx, sessionID)
 	if err != nil {
 		return true
 	}

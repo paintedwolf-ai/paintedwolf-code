@@ -171,7 +171,7 @@ func (s *References) resolveReferencePath(ctx context.Context, projectID, rootID
 
 // lookupReferenceArtifact validates reused artifacts before they become provider image blocks.
 func (s *References) lookupReferenceArtifact(ctx context.Context, sessionID, artifactID string) (string, error) {
-	root := sessiontree.RootID(ctx, s.Store.Sessions, sessionID)
+	root := sessiontree.RootID(ctx, s.SessionQueries, sessionID)
 	id, res := visual.ResolveRef(ctx, s.VisualStore, root, artifactID)
 	if !res.IsPresent() {
 		return "", fmt.Errorf("artifact %s: %s", artifactID, res.Note())
@@ -183,15 +183,14 @@ func (s *References) lookupReferenceArtifact(ctx context.Context, sessionID, art
 }
 
 func (s *References) lookupReferenceEvidence(ctx context.Context, projectID, sourceRef, hitKind, sessionID string) (promptattach.ReferenceEvidence, error) {
-	sqlStore := s.Store
-	if sqlStore == nil || sqlStore.DB() == nil {
+	if s.Database == nil {
 		return promptattach.ReferenceEvidence{}, search.ErrEvidenceNotFound
 	}
-	row, err := search.LookupBySourceRef(ctx, sqlStore.DB(), projectID, sourceRef, hitKind, sessionID)
+	row, err := search.LookupBySourceRef(ctx, s.Database, projectID, sourceRef, hitKind, sessionID)
 	if err != nil {
 		return promptattach.ReferenceEvidence{}, err
 	}
-	sourceContext, err := sourceref.ReadContext(ctx, sqlStore.DB(), row.SessionID, row.MessageID)
+	sourceContext, err := sourceref.ReadContext(ctx, s.Database, row.SessionID, row.MessageID)
 	if err != nil {
 		return promptattach.ReferenceEvidence{}, err
 	}

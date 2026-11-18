@@ -59,7 +59,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 			minDenVersion:      strings.TrimSpace(deps.Storage.MinDenVersion),
 		},
 	}
-	s.Admin.SessionView = sessionview.New(sessionview.Projector{Workflows: deps.Workflow.Workflows, Store: deps.Core.Store, Sessions: deps.Core.Sessions, Projects: deps.Core.Projects})
+	s.Admin.SessionView = sessionview.New(sessionview.Projector{Workflows: deps.Workflow.Workflows, Evidence: deps.Core.Store.Evidence, Sessions: deps.Core.Sessions, Projects: deps.Core.Projects})
 	s.Admin.Git = gitadmin.New(&s.responses, gitadmin.Deps{
 		Board: deps.Workflow.Board, CommitDrafter: deps.Providers.CommitDrafter, LLMService: deps.Providers.LLM, ProjectRegistry: deps.Core.Projects,
 		RepoSetCache: deps.Workflow.RepoSetCache, SessionStore: deps.Core.Store, Sessions: deps.Core.Sessions, DataDir: s.dataDir,

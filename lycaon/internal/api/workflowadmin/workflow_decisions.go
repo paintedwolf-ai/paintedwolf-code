@@ -37,7 +37,7 @@ func (s *RunControl) HandleResolveWorkflowDecision(w http.ResponseWriter, r *htt
 	}
 	comment := strings.TrimSpace(req.Comment)
 	comment = observability.RedactCaptureText(comment)
-	secretBlock, err := secretview.ReferenceBlock(s.Store, s.ManagedSecrets, r.Context(), sessionID, req.Secrets)
+	secretBlock, err := secretview.ReferenceBlock(s.Store.Sessions, s.ManagedSecrets, r.Context(), sessionID, req.Secrets)
 	if err != nil {
 		secretview.WriteError(s.responses, w, r, err)
 		return
@@ -72,7 +72,7 @@ func (s *RunControl) HandleResolveWorkflowFeedback(w http.ResponseWriter, r *htt
 	}
 	response := strings.TrimSpace(req.Response)
 	response = observability.RedactCaptureText(response)
-	secretBlock, err := secretview.ReferenceBlock(s.Store, s.ManagedSecrets, r.Context(), sessionID, req.Secrets)
+	secretBlock, err := secretview.ReferenceBlock(s.Store.Sessions, s.ManagedSecrets, r.Context(), sessionID, req.Secrets)
 	if err != nil {
 		secretview.WriteError(s.responses, w, r, err)
 		return

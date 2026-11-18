@@ -24,7 +24,7 @@ func newPromptAttachmentRecoveryFixture(t *testing.T) (*Handler, *store.Reposito
 	testutil.FailErr(t, "create session", err)
 	manager := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	manager.SetDataDir(t.TempDir())
-	server := &Handler{Attachments: &Attachments{Store: sessions, Sessions: manager}, Submission: &Submission{Sessions: manager}}
+	server := &Handler{Attachments: &Attachments{SessionQueries: sessions.Sessions, AttachmentBlobs: sessions.Attachments, Sessions: manager}, Submission: &Submission{Sessions: manager}}
 	attachmentStore, available := server.Attachments.AttachmentStore(t.Context(), sess.ProjectID)
 	if !available {
 		t.Fatal("attachment store unavailable")

@@ -272,7 +272,7 @@ func (s *Submission) preparePromptAdmission(
 }
 
 func (s *Submission) promptSessionForAdmission(w http.ResponseWriter, r *http.Request, id string) (*wire.Session, bool) {
-	sess, ok := requestscope.Session(s.Store.Sessions, s.responses, w, r, id)
+	sess, ok := requestscope.Session(s.SessionQueries, s.responses, w, r, id)
 	if !ok {
 		return nil, false
 	}

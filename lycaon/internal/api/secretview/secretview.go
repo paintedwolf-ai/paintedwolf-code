@@ -17,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -84,11 +83,11 @@ func Metadata(item secretcap.Metadata) wire.ManagedSecret {
 
 const maxPromptSecretReferences = 32
 
-func ReferenceBlock(store *sessionstore.Repositories, secrets *secretcap.Service, ctx context.Context, sessionID string, refs []wire.PromptSecretReferencePart) (string, error) {
+func ReferenceBlock(store sessiontree.Reader, secrets *secretcap.Service, ctx context.Context, sessionID string, refs []wire.PromptSecretReferencePart) (string, error) {
 	if len(refs) == 0 {
 		return "", nil
 	}
-	sess, err := store.Sessions.Get(ctx, sessionID)
+	sess, err := store.Get(ctx, sessionID)
 	if err != nil {
 		return "", err
 	}
@@ -99,7 +98,7 @@ func ReferenceBlock(store *sessionstore.Repositories, secrets *secretcap.Service
 	return strings.Join(lines, "\n"), nil
 }
 
-func ReferenceLines(store *sessionstore.Repositories, secrets *secretcap.Service,
+func ReferenceLines(store sessiontree.Reader, secrets *secretcap.Service,
 	ctx context.Context,
 	sess *wire.Session,
 	refs []wire.PromptSecretReferencePart,
@@ -113,7 +112,7 @@ func ReferenceLines(store *sessionstore.Repositories, secrets *secretcap.Service
 	if secrets == nil {
 		return nil, fmt.Errorf("managed secret storage not configured")
 	}
-	chatSessionID := sessiontree.RootID(ctx, store.Sessions, sess.ID)
+	chatSessionID := sessiontree.RootID(ctx, store, sess.ID)
 	seen := make(map[string]struct{}, len(refs))
 	lines := make([]string, 0, len(refs))
 	for _, ref := range refs {
