@@ -3,6 +3,7 @@ package hitl
 import (
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -65,5 +66,18 @@ func TestDirectIPApprovalOptionsContinueTheHeldAction(t *testing.T) {
 		if option.Authority[0].Kind != AuthorityDirectIPPermit {
 			t.Fatalf("option %q first authority = %q, want direct-IP permit", option.ID, option.Authority[0].Kind)
 		}
+	}
+}
+
+// A harvested value is labelled by its provenance alone; a detector rule keeps its title.
+func TestSecretEvidenceLabelKeysOnTheRuleID(t *testing.T) {
+	provenanceOnly := secretEvidenceLabel(&SecretScreen{VarName: "TOKEN", Container: ".env"})
+	harvested := secretEvidenceLabel(&SecretScreen{RuleID: secretmatch.HarvestRuleID, RuleTitle: "any title", VarName: "TOKEN", Container: ".env"})
+	detected := secretEvidenceLabel(&SecretScreen{RuleID: "kingfisher.aws.2", RuleTitle: "any title", VarName: "TOKEN", Container: ".env"})
+	if harvested != provenanceOnly {
+		t.Fatalf("harvested label %q, want the provenance label %q", harvested, provenanceOnly)
+	}
+	if detected == provenanceOnly {
+		t.Fatalf("detector label dropped its rule title: %q", detected)
 	}
 }
