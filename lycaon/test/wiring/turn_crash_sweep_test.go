@@ -140,7 +140,7 @@ func diffDumps(before, after storeDump) []string {
 // reclaimedTables hold rows that recovery or delivery may remove after a
 // crash: each removal is the row's purpose being fulfilled.
 var reclaimedTables = map[string]string{
-	"event_outbox":    "a delivered event leaves the outbox; delivery is checked separately",
+	"event_outbox":    "a settled event leaves the outbox; settlement is checked separately",
 	"llm_cost_totals": "an aggregate keyed by call status: settling an abandoned call moves its count and drops the empty bucket",
 }
 
@@ -250,14 +250,18 @@ func checkCrashRun(t *testing.T, run, reference crashRun) {
 			}
 		}
 	}
+	// The outbox is checked for settlement only: every committed event is one
+	// the drain publishes rather than discards, and none is left queued.
+	// Delivery to subscribers, in order and across restarts, is
+	// TestDrainPreservesOrderAcrossFailedPublishesAndRestart's to prove.
 	for _, event := range rowsOf(t, run.crashed, "event_outbox") {
 		if event["topic"] == "" || !json.Valid([]byte(event["data_json"].(string))) {
-			t.Errorf("committed event %v cannot be delivered", event["event_id"])
+			t.Errorf("committed event %v would be discarded as malformed", event["event_id"])
 		}
 	}
 	for _, dump := range []storeDump{run.boot1, run.boot2} {
 		if queued := len(dump["event_outbox"]); queued != 0 {
-			t.Errorf("%d committed events still queued after boot", queued)
+			t.Errorf("%d committed events left unsettled after boot", queued)
 		}
 	}
 	users := map[string]int{}
