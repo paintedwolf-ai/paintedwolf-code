@@ -167,9 +167,7 @@ func TestOmittedCompactionPercentagesKeepTheBand(t *testing.T) {
 	cfg.BudgetTriggerPct, cfg.TargetTokensPct, cfg.HardCeilingPct = 0, 0, 0
 	cfg.HardCeilingTokens, cfg.TargetTokens = 0, 0
 	cfg, err := NormalizeConfig(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "normalize compaction config", err)
 	assertCompactionBand(t, cfg)
 }
 

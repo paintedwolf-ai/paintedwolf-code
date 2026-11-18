@@ -24,7 +24,8 @@ func (s *countingSummarizer) Summarize(ctx context.Context, system, user string,
 }
 
 // oversizedSession holds history above the hard ceiling, so a request fit
-// schedules compaction and a background pass summarizes and publishes a view.
+// schedules compaction, a background pass publishes a view and its synthesis
+// calls the summarizer.
 func oversizedSession(t *testing.T, summarizer compaction.Summarizer) (*Service, *store.Memory, *api.Session) {
 	t.Helper()
 	m, st := newCompactionManager(t, compaction.DefaultCompactionConfig())
@@ -92,8 +93,10 @@ func TestCompactionSyncPathAvoidsSummarizer(t *testing.T) {
 	release()
 	m.Runner.Wait()
 	requirePublishedView(t, st, sess.ID)
+	// Provider summaries come from the synthesis the scheduled pass starts.
+	testutil.FailErr(t, "wait for synthesis", m.Runner.Synthesis.WaitContext(t.Context()))
 	if summarizer.calls.Load() == 0 {
-		t.Fatal("the scheduled pass never summarized, so the request-path check proved nothing")
+		t.Fatal("the scheduled work never summarized, so the request-path check proved nothing")
 	}
 }
 
