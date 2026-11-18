@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -48,7 +49,7 @@ func newTestSecrets(t *testing.T) (*secretcap.Service, *[]secretmatch.Remembered
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, database, "root-1", testdbseed.DefaultProjectID)
-	values := credentialstore.NewEmpty(credentialstore.Slot{
+	values := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets,
 		Context:   "test managed secret",

@@ -2,11 +2,11 @@ package llm
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -18,7 +18,7 @@ func TestProviderFeaturesMetaPromptCache(t *testing.T) {
 			CatalogEntry{ID: "ollama", Kind: "ollama", BaseURL: "http://127.0.0.1:11434"},
 			CatalogEntry{ID: "fireworks", Kind: "fireworks", BaseURL: "https://api.fireworks.ai/inference/v1"},
 		),
-		providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil,
+		credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil,
 	)
 	if err == nil {
 		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
@@ -47,7 +47,7 @@ func TestRegistryListCachedReusesSnapshot(t *testing.T) {
 		mustTestProviderCatalog(t,
 			CatalogEntry{ID: "ollama", Kind: "ollama", BaseURL: "http://127.0.0.1:11434"},
 		),
-		providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil,
+		credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil,
 	)
 	if err == nil {
 		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
@@ -70,7 +70,7 @@ func TestRegistryListCachedReusesSnapshot(t *testing.T) {
 func TestRegistryListCachedEmptyStaysArray(t *testing.T) {
 	reg, err := NewRegistry(t.Context(),
 		mustTestProviderCatalog(t),
-		providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil,
+		credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil,
 	)
 	if err == nil {
 		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
@@ -99,7 +99,7 @@ func TestRegistryListCachedServesStaleWhileRefreshing(t *testing.T) {
 		mustTestProviderCatalog(t,
 			CatalogEntry{ID: "ollama", Kind: "ollama", BaseURL: "http://127.0.0.1:11434"},
 		),
-		providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil,
+		credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil,
 	)
 	if err == nil {
 		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))

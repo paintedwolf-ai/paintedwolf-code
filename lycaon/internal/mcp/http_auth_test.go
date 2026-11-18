@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -125,7 +126,7 @@ func TestWireRedactsStaticSecrets(t *testing.T) {
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		GlobalOverridePath: storePath,
 		Connector:          &mcp.MockConnector{},
-		OAuthStore:         mcp.NewOAuthTokenStoreAt(oauthPath),
+		OAuthStore:         mcptest.OpenOAuthStore(t, oauthPath),
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	testutil.FailErr(t, "load", reg.Catalog.Load(t.Context()))

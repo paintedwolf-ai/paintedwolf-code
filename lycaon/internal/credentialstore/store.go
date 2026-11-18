@@ -95,14 +95,6 @@ func openWith(backend Backend, context string, validate Validator) (*Store, erro
 	return s, nil
 }
 
-// NewEmpty constructs an unloaded slot with a development identity file.
-func NewEmpty(slot Slot, validate Validator) *Store {
-	return &Store{
-		backend: newDevelopmentBackend(slot.Path, slot.Namespace), keys: make(map[string]string),
-		validate: validate, context: strings.TrimSpace(slot.Context),
-	}
-}
-
 // Get returns a stored key wrapped in SecretValue.
 func (s *Store) Get(id string) (SecretValue, bool) {
 	if s == nil {

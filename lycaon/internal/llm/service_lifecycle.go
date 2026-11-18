@@ -27,7 +27,11 @@ func NewService(ctx context.Context, mock modelcall.LLMClient, local *nativegen.
 	if err != nil {
 		return nil, err
 	}
-	credentials, err := providercredentials.New()
+	slot, err := providercredentials.DefaultSlot()
+	if err != nil {
+		return nil, err
+	}
+	credentials, err := providercredentials.Open(slot)
 	if err != nil {
 		return nil, err
 	}

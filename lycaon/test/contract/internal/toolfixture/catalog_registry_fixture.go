@@ -2,6 +2,7 @@ package toolfixture
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"path/filepath"
 	"testing"
 
@@ -200,7 +201,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	if err := scantoolapi.RegisterScanTools(rt.Registry, coord, &scan.MockRegistry{Scanner: &scan.MockScanner{}}, scancadence.New(scan.StoreFromCoordinator(coord), coord, &scan.MockRegistry{Scanner: &scan.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
 		contractcheck.FailErr(t, "scan.RegisterScanTools failed", err)
 	}
-	secretValues := credentialstore.NewEmpty(credentialstore.Slot{
+	secretValues := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets,
 		Context:   "contract managed secret",

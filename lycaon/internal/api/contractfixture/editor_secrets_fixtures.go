@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -80,7 +81,7 @@ func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x5a}, 32))
 	testutil.FailErr(t, "fingerprinter", err)
 	matcher.SetFingerprinter(fp)
-	values := credentialstore.NewEmpty(credentialstore.Slot{
+	values := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets,
 		Context:   "test managed secret",

@@ -28,7 +28,9 @@ func TestRemoveStorePreservesProviderConfiguration(t *testing.T) {
 		Models:         []modelinfo.Entry{{ID: "launch-model"}},
 	}))
 
-	credentials, err := providercredentials.New()
+	slot, err := providercredentials.DefaultSlot()
+	testutil.FailErr(t, "resolve credential slot", err)
+	credentials, err := providercredentials.Open(slot)
 	testutil.FailErr(t, "open credential store", err)
 	testutil.FailErr(t, "save provider credential", credentials.Set("launch-provider", "launch-secret"))
 
@@ -73,7 +75,7 @@ func TestRemoveStorePreservesProviderConfiguration(t *testing.T) {
 	if !ok || provider.Label != "Launch Provider" {
 		t.Fatalf("provider after database wipe = %+v, found=%t", provider, ok)
 	}
-	reloadedCredentials, err := providercredentials.New()
+	reloadedCredentials, err := providercredentials.Open(slot)
 	testutil.FailErr(t, "reload credential store", err)
 	if key, ok := reloadedCredentials.Get("launch-provider"); !ok || key != "launch-secret" {
 		t.Fatalf("credential after database wipe = %q, found=%t", key, ok)

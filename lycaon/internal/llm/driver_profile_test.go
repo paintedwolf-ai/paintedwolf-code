@@ -2,10 +2,7 @@ package llm
 
 import (
 	"context"
-	"path/filepath"
-	"testing"
-
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
@@ -14,6 +11,8 @@ import (
 	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	vertexexpressprovider "github.com/lycaon/lycaon/internal/llm/providers/vertexexpress"
+	"path/filepath"
+	"testing"
 )
 
 func TestNewProviderForEntryDispatch(t *testing.T) {
@@ -55,7 +54,7 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 			}
 			reg, err := NewRegistry(t.Context(),
 				mustTestProviderCatalog(t, entry),
-				providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil,
+				credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil,
 			)
 			if err == nil {
 				reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))

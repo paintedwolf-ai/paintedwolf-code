@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func TestFileSecretHandoffFollowsSave(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			database := testdbfixture.Open(t, "store.db")
 			testdbseed.InsertSession(t, database, "root-1", testdbseed.DefaultProjectID)
-			values := credentialstore.NewEmpty(credentialstore.Slot{Path: filepath.Join(t.TempDir(), credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "file secret test"}, func(id string) bool { _, err := uuid.Parse(id); return err == nil })
+			values := credentialstoretest.Open(t, credentialstore.Slot{Path: filepath.Join(t.TempDir(), credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "file secret test"}, func(id string) bool { _, err := uuid.Parse(id); return err == nil })
 			service := secretcap.NewWithStore(database, values, nil)
 			owner := testdbseed.OwnerID(t, database)
 			secret, err := service.CreateSettingsSecret(t.Context(), secretcap.CreateSettingsSecretRequest{ProjectID: testdbseed.DefaultProjectID, PersonID: owner, OperationID: "create", Name: "File credential", Purpose: "save", Value: "person-held-file-value"})

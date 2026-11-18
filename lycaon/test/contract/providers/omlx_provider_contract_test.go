@@ -1,11 +1,11 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -38,7 +38,7 @@ func TestBundledProvidersIncludeOMLX(t *testing.T) {
 	t.Cleanup(llm.SetHostProductPlatformForTest(llm.PlatformmacOS))
 
 	catalog := liveCatalogForShipIDs(t, "omlx")
-	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
+	registry, err := llm.NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}
@@ -99,7 +99,7 @@ func TestBundledProvidersIncludeOMLX(t *testing.T) {
 			t.Fatal("KindTemplates must hide omlx on linux")
 		}
 	}
-	regLinux, err := llm.NewRegistry(t.Context(), catalogLinux, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
+	regLinux, err := llm.NewRegistry(t.Context(), catalogLinux, credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		regLinux.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}

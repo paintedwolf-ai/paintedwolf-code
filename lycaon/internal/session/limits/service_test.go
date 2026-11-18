@@ -3,6 +3,7 @@ package limits
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/modelfeed"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -177,7 +177,7 @@ func feedOnlyLimits(t *testing.T, model string, feedWindow int) (*Service, *api.
 	testutil.FailErr(t, "write providers", os.WriteFile(localPath, []byte(shipYAML), 0o600))
 	catalog, err := llm.NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "catalog", err)
-	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
+	creds := credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age"))
 	testutil.FailErr(t, "set key", creds.Set("hosted", "test-key"))
 	reg, err := llm.NewRegistry(t.Context(), catalog, creds, nil)
 	testutil.FailErr(t, "registry", err)

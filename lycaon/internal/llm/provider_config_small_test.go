@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
@@ -61,7 +61,7 @@ agent_pool:
 	testutil.FailErr(t, "open catalog", err)
 	_, err = NewPolicyStore()
 	testutil.FailErr(t, "open policy", err)
-	_, err = NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(configDir, "credential-vault.age")), nil)
+	_, err = NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(configDir, "credential-vault.age")), nil)
 	testutil.FailErr(t, "open registry", err)
 
 	afterLocal, err := os.ReadFile(localPath)
@@ -113,7 +113,7 @@ func TestCloudflarePlaceholderWithSavedKeyIsNotAssignable(t *testing.T) {
     models:
       - id: "@cf/meta/llama-3.1-8b-instruct"
 `+MinimalShipHTTPRetryYAML)
-	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
+	creds := credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age"))
 	testutil.FailErr(t, "save credential", creds.Set("cloudflare-workers-ai-1", "test-token"))
 	registry, err := NewRegistry(t.Context(), catalog, creds, nil)
 	if err == nil {

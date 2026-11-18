@@ -3,6 +3,7 @@ package httpaction
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -108,7 +109,7 @@ func registerCanaryMCP(t *testing.T, registry *tools.DefaultRegistry, matcher *s
 		StatePath:          filepath.Join(tempDir, "state"),
 		GlobalOverridePath: filepath.Join(tempDir, "mcp.yaml"),
 		Connector:          canaryEchoConnector{received: &received},
-		OAuthStore:         mcp.NewOAuthTokenStoreAt(filepath.Join(tempDir, "oauth.json")),
+		OAuthStore:         mcptest.OpenOAuthStore(t, filepath.Join(tempDir, "oauth.json")),
 	})
 	testutil.FailErr(t, "create canary MCP runtime", err)
 	runtime.Tools.SetToolRegistry(registry)

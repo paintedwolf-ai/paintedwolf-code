@@ -2,14 +2,13 @@ package llm
 
 import (
 	"context"
-	"path/filepath"
-	"testing"
-
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"path/filepath"
+	"testing"
 )
 
 func TestProviderUnconfiguredFailsWithoutMockEnv(t *testing.T) {
@@ -73,7 +72,7 @@ func TestRoutingClientRegistryUnconfiguredProvider(t *testing.T) {
 	writeProvidersLocal(t, localPath, []byte(shipYAML))
 	catalog, err := NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "NewProviderCatalogAt failed", err)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")), nil)
+	registry, err := NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(tmp, "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
@@ -176,7 +175,7 @@ func TestConfiguredProviderEmptyResponseFails(t *testing.T) {
 	writeProvidersLocal(t, localPath, []byte(shipYAML))
 	catalog, err := NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "NewProviderCatalogAt failed", err)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")), nil)
+	registry, err := NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(tmp, "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}

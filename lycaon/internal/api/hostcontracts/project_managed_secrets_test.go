@@ -2,6 +2,7 @@ package hostcontracts
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -27,7 +28,7 @@ func TestProjectManagedSecretsAPIListsMetadataAndRevokesWithoutRevealing(t *test
 
 	rootTaskID := uuid.NewString()
 	testdbseed.InsertSession(t, database, rootTaskID, testdbseed.DefaultProjectID)
-	values := credentialstore.NewEmpty(credentialstore.Slot{
+	values := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets,
 		Context:   "test managed secret",

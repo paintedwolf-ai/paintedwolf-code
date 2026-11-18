@@ -4,6 +4,7 @@ package toolexecution
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"net"
 	"path/filepath"
 	"reflect"
@@ -45,7 +46,7 @@ func TestNativeSocketNoRealizationRefusesAtCapabilitiesAndPreservesData(t *testi
 	database := testdbfixture.Open(t, "platform-secret.db")
 	testdbseed.InsertSessionWithRoot(t, database, "task", testdbseed.DefaultProjectID, root)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), database)
-	values := credentialstore.NewEmpty(credentialstore.Slot{Path: filepath.Join(t.TempDir(), credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "platform refusal fixture"}, func(string) bool { return true })
+	values := credentialstoretest.Open(t, credentialstore.Slot{Path: filepath.Join(t.TempDir(), credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "platform refusal fixture"}, func(string) bool { return true })
 	service := secretcap.NewWithStore(database, values, nil)
 	fingerprinter, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("h", 32)))
 	testutil.FailErr(t, "platform secret fingerprinter", err)

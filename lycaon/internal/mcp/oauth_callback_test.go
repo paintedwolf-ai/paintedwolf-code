@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"net/http"
 	"net/url"
 	"strings"
@@ -125,7 +126,8 @@ func TestCallbackListenerStopsAfterFirstRedirect(t *testing.T) {
 // authorization, and must not redeem a code. The loopback port is reachable by anything
 // on the machine, so this check lives at the handler, not only in Complete.
 func TestCallbackListenerRejectsStateMismatch(t *testing.T) {
-	store := NewOAuthTokenStoreAt(t.TempDir() + "/oauth.yaml")
+	store, err := OpenOAuthTokenStore(credentialstore.Slot{Path: t.TempDir() + "/oauth.yaml", Namespace: credentialstore.NamespaceMCPOAuth, Context: oauthRecordContext})
+	testutil.FailErr(t, "open OAuth credentials", err)
 	client := NewOAuthClient(store, "", nil)
 
 	var completed error
@@ -154,7 +156,8 @@ func TestCallbackListenerRejectsStateMismatch(t *testing.T) {
 // A pending authorization's PKCE verifier and state expire, so an abandoned sign-in
 // does not stay redeemable.
 func TestPendingOAuthExpires(t *testing.T) {
-	store := NewOAuthTokenStoreAt(t.TempDir() + "/oauth.yaml")
+	store, err := OpenOAuthTokenStore(credentialstore.Slot{Path: t.TempDir() + "/oauth.yaml", Namespace: credentialstore.NamespaceMCPOAuth, Context: oauthRecordContext})
+	testutil.FailErr(t, "open OAuth credentials", err)
 	client := NewOAuthClient(store, "http://127.0.0.1:1/callback", nil)
 
 	now := time.Now()

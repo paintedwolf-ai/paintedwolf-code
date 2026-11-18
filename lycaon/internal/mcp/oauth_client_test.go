@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -147,7 +148,7 @@ func (f *fakeAS) handleMCP(w http.ResponseWriter, r *http.Request) {
 
 func TestOAuthPKCEAndRefresh(t *testing.T) {
 	as := startFakeAS(t)
-	store := mcp.NewOAuthTokenStoreAt(t.TempDir() + "/oauth.yaml")
+	store := mcptest.OpenOAuthStore(t, t.TempDir()+"/oauth.yaml")
 	client := mcp.NewOAuthClient(store, "http://127.0.0.1:8766/mcp/oauth/callback", as.client)
 	entry := mcp.MCPProviderEntry{ID: "remote", URL: as.URL + "/mcp"}
 
@@ -219,7 +220,7 @@ func TestOAuthStartRequiresRegistration(t *testing.T) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 	})
 
-	store := mcp.NewOAuthTokenStoreAt(t.TempDir() + "/oauth.yaml")
+	store := mcptest.OpenOAuthStore(t, t.TempDir()+"/oauth.yaml")
 	client := mcp.NewOAuthClient(store, "http://127.0.0.1:8766/mcp/oauth/callback", srv.Client())
 	_, err := client.Start(t.Context(), mcp.MCPProviderEntry{ID: "remote", URL: srv.URL + "/mcp"}, "", nil)
 	if !errors.Is(err, mcp.ErrOAuthRegistrationRequired) {

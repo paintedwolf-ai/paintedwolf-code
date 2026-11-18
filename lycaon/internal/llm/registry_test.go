@@ -2,6 +2,11 @@ package llm
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,12 +15,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
-	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/llm/modelinfo"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // mustCatalogCloneShipToLocal stages shipYAML as the ship catalog and clones it
@@ -44,7 +43,7 @@ func TestRegistryKeyResolutionStoredOnly(t *testing.T) {
 ` + MinimalShipHTTPRetryYAML
 
 	credPath := filepath.Join(tmp, "credential-vault.age")
-	creds := providercredentials.NewAt(credPath)
+	creds := credentialstest.Open(t, credPath)
 
 	catalog := mustCatalogCloneShipToLocal(t, shipYAML)
 	registry, err := NewRegistry(t.Context(), catalog, creds, nil)
@@ -95,7 +94,7 @@ func TestRegistryRendersRequestsThroughTheConfiguredServingProvider(t *testing.T
 		entry("student-tiny", "ollama", "", "{id: student-e4b, context_length: 64}") +
 		entry("hosted", "fireworks", "", "{id: teacher}")
 	catalog := mustCatalogCloneShipToLocal(t, shipYAML)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
+	registry, err := NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
@@ -161,7 +160,7 @@ func TestRegistryOllamaConfiguredWithoutKey(t *testing.T) {
 ` + MinimalShipHTTPRetryYAML
 
 	catalog := mustCatalogCloneShipToLocal(t, shipYAML)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")), nil)
+	registry, err := NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(tmp, "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
@@ -180,7 +179,7 @@ func TestRegistryProviderMutationInvalidatesAuthenticationObservationAtomically(
     models: []
 ` + MinimalShipHTTPRetryYAML
 	catalog := mustCatalogCloneShipToLocal(t, shipYAML)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
+	registry, err := NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
@@ -204,7 +203,7 @@ func TestRegistryAnyConfigured(t *testing.T) {
     models:
       - id: model-a
 ` + MinimalShipHTTPRetryYAML
-	creds := providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age"))
+	creds := credentialstest.Open(t, filepath.Join(tmp, "credential-vault.age"))
 	catalog := mustCatalogCloneShipToLocal(t, shipYAML)
 	registry, err := NewRegistry(t.Context(), catalog, creds, nil)
 	if err == nil {
@@ -253,7 +252,7 @@ func TestRegistryKeepsMultipleProvidersForIndependentModelAssignments(t *testing
 		testutil.FailErr(t, "write file", err)
 	}
 	catalog := mustCatalogCloneShipToLocal(t, data)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")), nil)
+	registry, err := NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(tmp, "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
@@ -281,7 +280,7 @@ func TestRegistryListNeverIncludesSecrets(t *testing.T) {
       - id: model-a
 ` + MinimalShipHTTPRetryYAML
 
-	creds := providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age"))
+	creds := credentialstest.Open(t, filepath.Join(tmp, "credential-vault.age"))
 	catalog := mustCatalogCloneShipToLocal(t, shipYAML)
 	registry, err := NewRegistry(t.Context(), catalog, creds, nil)
 	if err == nil {
@@ -312,7 +311,7 @@ func TestRegistryListCacheIgnoresStaleRefreshAfterInvalidate(t *testing.T) {
     models:
       - id: model-a
 ` + MinimalShipHTTPRetryYAML
-	creds := providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age"))
+	creds := credentialstest.Open(t, filepath.Join(tmp, "credential-vault.age"))
 	catalog := mustCatalogCloneShipToLocal(t, shipYAML)
 	registry, err := NewRegistry(t.Context(), catalog, creds, nil)
 	if err == nil {
@@ -389,7 +388,7 @@ func TestRegistryListCacheReadDuringCredentialRebuildDoesNotPinStaleList(t *test
     models:
       - id: model-a
 ` + MinimalShipHTTPRetryYAML
-	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
+	creds := credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age"))
 	catalog := mustCatalogCloneShipToLocal(t, shipYAML)
 	registry, err := NewRegistry(t.Context(), catalog, creds, nil)
 	if err == nil {
@@ -614,7 +613,7 @@ func TestRegistryListIncludesCatalogWhenSnapshotNil(t *testing.T) {
       - id: glm
 ` + MinimalShipHTTPRetryYAML
 	catalog := mustCatalogCloneShipToLocal(t, shipYAML)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
+	registry, err := NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
@@ -646,7 +645,7 @@ func TestRegistryListIncludesCatalogWhenSnapshotOmitsInstance(t *testing.T) {
       - id: gemma4
 ` + MinimalShipHTTPRetryYAML
 	catalog := mustCatalogCloneShipToLocal(t, shipYAML)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
+	registry, err := NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}

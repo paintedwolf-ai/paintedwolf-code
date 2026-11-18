@@ -3,15 +3,14 @@ package llm
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"testing"
-
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/discovery"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 )
 
 func TestDiscoverFromProfileTogetherChatOnly(t *testing.T) {
@@ -175,7 +174,7 @@ func TestRegistryTestConnectivityDiscoversModels(t *testing.T) {
 
 	catalog, err := NewProviderCatalogAt(user)
 	testutil.FailErr(t, "NewProviderCatalogAt failed", err)
-	creds := providercredentials.NewAt(tmp + "/credential-vault.age")
+	creds := credentialstest.Open(t, tmp+"/credential-vault.age")
 	if err := creds.Set("together", wantAuth); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
@@ -206,7 +205,7 @@ func TestRegistryTestConnectivityFailsOnUnauthorized(t *testing.T) {
 	writeProvidersLocal(t, localPath, []byte(yaml))
 	catalog, err := NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "NewProviderCatalogAt failed", err)
-	creds := providercredentials.NewAt(tmp + "/credential-vault.age")
+	creds := credentialstest.Open(t, tmp+"/credential-vault.age")
 	if err := creds.Set("together", "bad-key"); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
@@ -248,7 +247,7 @@ func TestRegistryListDiscoversConfiguredTogetherProvider(t *testing.T) {
 
 	catalog, err := NewProviderCatalogAt(user)
 	testutil.FailErr(t, "NewProviderCatalogAt failed", err)
-	creds := providercredentials.NewAt(tmp + "/credential-vault.age")
+	creds := credentialstest.Open(t, tmp+"/credential-vault.age")
 	if err := creds.Set("together", wantAuth); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}

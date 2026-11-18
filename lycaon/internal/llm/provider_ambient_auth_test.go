@@ -1,12 +1,11 @@
 package llm
 
 import (
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"os"
 	"path/filepath"
 	"testing"
-
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // ambientShipYAML models the two ambient-capable shapes: a kind that takes a pasted
@@ -162,7 +161,7 @@ func TestRegistryConfiguredFollowsCredentialMode(t *testing.T) {
     requires_api_key: false
     models: []
 `)
-	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
+	creds := credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age"))
 	registry, err := NewRegistry(t.Context(), catalog, creds, nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))

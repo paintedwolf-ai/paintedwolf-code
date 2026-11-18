@@ -61,7 +61,11 @@ func NewRuntime(opts RuntimeOptions) (*Runtime, error) {
 	oauthStore := opts.OAuthStore
 	if oauthStore == nil {
 		var err error
-		oauthStore, err = NewOAuthTokenStore()
+		slot, slotErr := DefaultSlot()
+		if slotErr != nil {
+			return nil, fmt.Errorf("mcp oauth credentials: %w", slotErr)
+		}
+		oauthStore, err = OpenOAuthTokenStore(slot)
 		if err != nil {
 			return nil, fmt.Errorf("mcp oauth credentials: %w", err)
 		}

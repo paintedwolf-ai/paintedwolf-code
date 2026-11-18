@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -134,7 +135,7 @@ func TestHandlerPostCommitFinalizationDeferredReportsSuccessAtAPIBoundary(t *tes
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath:          stateDir,
 		GlobalOverridePath: filepath.Join(stateDir, "mcp.yaml"),
-		OAuthStore:         mcp.NewOAuthTokenStoreAt(filepath.Join(stateDir, "mcp-oauth.vault")),
+		OAuthStore:         mcptest.OpenOAuthStore(t, filepath.Join(stateDir, "mcp-oauth.vault")),
 		Connector:          &mcp.MockConnector{},
 		VerifyStaticCredentialWrite: func(slot credentialstore.Slot, key, want string) error {
 			if !failedFinalizationOnce && strings.Contains(want, `"tok-v2"`) && !strings.Contains(want, `"pending_commit"`) {

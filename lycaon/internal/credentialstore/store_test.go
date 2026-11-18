@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,7 +16,8 @@ import (
 func TestStoreRoundTripIsPrivateAndValidated(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "credential-vault.age")
 	slot := Slot{Path: path, Namespace: "test", Context: "test"}
-	store := NewEmpty(slot, func(id string) bool { return id == "known" })
+	store, err := Open(slot, func(id string) bool { return id == "known" })
+	testutil.FailErr(t, "open credential fixture", err)
 	if err := store.Set("unknown", "secret"); err == nil {
 		t.Fatal("Set accepted an unknown credential slot")
 	}
@@ -41,7 +43,8 @@ func TestStoreRoundTripIsPrivateAndValidated(t *testing.T) {
 func TestStorePreservesShortAndWhitespaceBearingValuesExactly(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "credential-vault.age")
 	slot := Slot{Path: path, Namespace: "test", Context: "test"}
-	store := NewEmpty(slot, nil)
+	store, err := Open(slot, nil)
+	testutil.FailErr(t, "open credential fixture", err)
 	for id, want := range map[string]string{
 		"short": "x",
 		"space": " \tcredential with edges\n ",
@@ -65,7 +68,10 @@ func TestStorePreservesShortAndWhitespaceBearingValuesExactly(t *testing.T) {
 }
 
 func TestStoreRollsBackMemoryWhenPersistenceFails(t *testing.T) {
-	store := NewEmpty(Slot{Path: t.TempDir(), Namespace: "test", Context: "test"}, nil)
+	path := filepath.Join(t.TempDir(), "credential-vault.age")
+	store, err := Open(Slot{Path: path, Namespace: "test", Context: "test"}, nil)
+	testutil.FailErr(t, "open empty credential slot", err)
+	testutil.FailErr(t, "obstruct vault publication", os.Mkdir(path, 0o700))
 	if err := store.Set("known", "secret"); err == nil {
 		t.Fatal("Set unexpectedly replaced a directory")
 	}
@@ -77,7 +83,8 @@ func TestStoreRollsBackMemoryWhenPersistenceFails(t *testing.T) {
 func TestOpenIgnoresCredentialsOutsideTheAcceptedCatalog(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "credential-vault.age")
 	slot := Slot{Path: path, Namespace: "test", Context: "test"}
-	seed := NewEmpty(slot, nil)
+	seed, err := Open(slot, nil)
+	testutil.FailErr(t, "open credential fixture", err)
 	if err := seed.Set("known", "yes"); err != nil {
 		t.Fatalf("seed known: %v", err)
 	}

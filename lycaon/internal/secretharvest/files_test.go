@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -56,7 +57,7 @@ func TestFileEvidenceSurvivesRestartAndExplicitProjectDeletion(t *testing.T) {
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{7}, 32))
 	testutil.FailErr(t, "fingerprinter", err)
 	slot := credentialstore.Slot{Path: filepath.Join(t.TempDir(), "credential-vault.age"), Namespace: credentialstore.NamespaceCredentialFiles, Context: "file evidence"}
-	store := credentialstore.NewEmpty(slot, nil)
+	store := credentialstoretest.Open(t, slot, nil)
 	first := NewRuntime(fp)
 	testutil.FailErr(t, "restore empty store", first.RestoreFiles(store))
 	file := FileContent{ProjectID: "project", RootID: "root", Path: ".env", Content: []byte("TOKEN=retained-value-4411")}
@@ -95,7 +96,7 @@ func TestFileEvidencePersistenceFailureDoesNotPublishBindings(t *testing.T) {
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{7}, 32))
 	testutil.FailErr(t, "fingerprinter", err)
 	harvest := NewRuntime(fp)
-	store := credentialstore.NewEmpty(credentialstore.Slot{Path: t.TempDir(), Namespace: credentialstore.NamespaceCredentialFiles, Context: "file evidence"}, nil)
+	store := credentialstoretest.Open(t, credentialstore.Slot{Path: t.TempDir(), Namespace: credentialstore.NamespaceCredentialFiles, Context: "file evidence"}, nil)
 	testutil.FailErr(t, "configure store", harvest.RestoreFiles(store))
 	if err := observeFile(harvest, FileContent{ProjectID: "project", RootID: "root", Path: ".env", Content: []byte("TOKEN=person-value-4411")}); err == nil {
 		t.Fatal("failed persistence admitted binding")
@@ -109,7 +110,7 @@ func TestFileEvidenceRefusesUnknownFormatWithoutMutation(t *testing.T) {
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{7}, 32))
 	testutil.FailErr(t, "fingerprinter", err)
 	slot := credentialstore.Slot{Path: filepath.Join(t.TempDir(), "credential-vault.age"), Namespace: credentialstore.NamespaceCredentialFiles, Context: "file evidence"}
-	store := credentialstore.NewEmpty(slot, nil)
+	store := credentialstoretest.Open(t, slot, nil)
 	for _, raw := range []string{`{"format":2,"values":[]}`, `{"format":1,"values":[],"unknown":true}`, `{"format":1,"values":[{"name":"TOKEN","container":".env","secret":""}]}`} {
 		testutil.FailErr(t, "seed unknown shape", store.Set("project", raw))
 		before, err := os.ReadFile(slot.Path)
@@ -144,7 +145,7 @@ func (c *countedFileStore) Set(id, value string) error { c.writes++; return c.St
 func TestFileEvidenceCapturePersistsOnceBeforePublication(t *testing.T) {
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{7}, 32))
 	testutil.FailErr(t, "fingerprinter", err)
-	store := &countedFileStore{Store: credentialstore.NewEmpty(credentialstore.Slot{Path: filepath.Join(t.TempDir(), "credential-vault.age"), Namespace: credentialstore.NamespaceCredentialFiles, Context: "file evidence"}, nil)}
+	store := &countedFileStore{Store: credentialstoretest.Open(t, credentialstore.Slot{Path: filepath.Join(t.TempDir(), "credential-vault.age"), Namespace: credentialstore.NamespaceCredentialFiles, Context: "file evidence"}, nil)}
 	harvest := NewRuntime(fp)
 	testutil.FailErr(t, "restore evidence", harvest.RestoreFiles(store))
 	capture := harvest.CaptureFiles("project")

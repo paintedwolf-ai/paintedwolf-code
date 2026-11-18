@@ -2,11 +2,11 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/contextpreparation"
@@ -23,7 +23,7 @@ func TestContextPreparationProjectsWithoutAdvancingChat(t *testing.T) {
 	testutil.FailErr(t, "create preparation catalog", err)
 	testutil.FailErr(t, "configure local preparation provider", catalog.Put(llm.ProviderEntry{ID: "preparation-test", Kind: "nativegen"}))
 	testutil.FailErr(t, "reload preparation catalog", catalog.Reload())
-	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(dir, "credentials.age")), &nativegen.Availability{
+	registry, err := llm.NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(dir, "credentials.age")), &nativegen.Availability{
 		Initial: nativegen.Readiness{State: "ready", ContextTokens: 65536},
 	})
 	testutil.FailErr(t, "create preparation registry", err)

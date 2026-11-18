@@ -5,6 +5,7 @@ package capabilityadmin
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/pkg/api"
 	"io"
 	"maps"
@@ -60,7 +61,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	database := testdbfixture.Open(t, "cookie-owner.db")
 	testdbseed.InsertSessionWithRoot(t, database, "chat", testdbseed.DefaultProjectID, workspace)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), database)
-	values := credentialstore.NewEmpty(credentialstore.Slot{Path: filepath.Join(root, credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "cookie owner fixture"}, func(string) bool { return true })
+	values := credentialstoretest.Open(t, credentialstore.Slot{Path: filepath.Join(root, credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "cookie owner fixture"}, func(string) bool { return true })
 	service := secretcap.NewWithStore(database, values, nil)
 	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 	testutil.FailErr(t, "cookie matcher", err)

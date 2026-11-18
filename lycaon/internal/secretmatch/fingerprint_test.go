@@ -1,6 +1,7 @@
 package secretmatch
 
 import (
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
@@ -33,7 +34,7 @@ func TestFingerprintKeyPersistsInPrivateCredentialStore(t *testing.T) {
 	slot := credentialstore.Slot{
 		Path: path, Namespace: credentialstore.NamespaceSecretFingerprint, Context: fingerprintKeyContext,
 	}
-	firstStore := credentialstore.NewEmpty(slot, validFingerprintKeyID)
+	firstStore := credentialstoretest.Open(t, slot, validFingerprintKeyID)
 	first, err := loadOrCreateFingerprinter(firstStore)
 	testutil.FailErr(t, "create fingerprint key", err)
 
