@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
-import { EditorState } from "@codemirror/state";
+import { EditorState, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { setShortcutPlatformForTests, TAURI_PLATFORMS } from "../../../shortcuts/platform.ts";
+import { installedEditingStyle } from "../editor/editor-editing-style-state.ts";
 import { applyPrettyConfig, createPrettyExtension } from "./pretty-layout.ts";
 import { PrettyBreakWidget, prettyLayoutActive, prettyLayoutDecorations, prettyVisualLineAt } from "./pretty-view.ts";
 
 const views: EditorView[] = [];
 afterEach(() => {
+  setShortcutPlatformForTests(null);
   for (const view of views.splice(0)) {
     view.dom.remove();
     view.destroy();
@@ -32,8 +35,8 @@ function breaks(state: EditorState): number[] {
   return out;
 }
 
-function press(view: EditorView, key: string, shiftKey = false): boolean {
-  const event = new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true });
+function press(view: EditorView, key: string, shiftKey = false, modifiers: KeyboardEventInit = {}): boolean {
+  const event = new KeyboardEvent("keydown", { key, shiftKey, ...modifiers, bubbles: true, cancelable: true });
   view.contentDOM.dispatchEvent(event);
   return event.defaultPrevented;
 }
@@ -95,6 +98,61 @@ describe("Pretty presentation", () => {
     press(view, "End", true);
     press(view, "End", true);
     expect(view.state.selection.main).toMatchObject({ anchor: inside, head: second });
+  });
+
+  it("keeps each line key on the same visual line from either selection direction", () => {
+    for (const platform of TAURI_PLATFORMS) {
+      setShortcutPlatformForTests(platform);
+      for (const style of ["standard", "emacs", "vim"] as const) {
+        const view = open(doc);
+        const [from, to] = breaks(view.state) as [number, number, ...number[]];
+        const inside = from + 2;
+        view.dispatch({ effects: StateEffect.appendConfig.of(installedEditingStyle.of(style)) });
+        const keys = [
+          { key: "Home", forward: false, active: true, modifiers: {} },
+          { key: "End", forward: true, active: true, modifiers: {} },
+          ...["ArrowLeft", "ArrowRight"].map((key) => ({
+            key, forward: key === "ArrowRight", active: platform === "macos", modifiers: { metaKey: true },
+          })),
+          ...["a", "e"].map((key) => ({
+            key, forward: key === "e", modifiers: { ctrlKey: true },
+            active: style === "emacs" || (platform === "macos" && style === "standard"),
+          })),
+        ];
+        for (const { key, forward, active, modifiers } of keys) {
+          for (const anchor of [0, inside, doc.length]) {
+            view.dispatch({ selection: { anchor, head: inside } });
+            for (let repeat = 0; repeat < 2; repeat++) {
+              expect(press(view, key, true, modifiers), `${platform} ${style} ${key}`).toBe(active);
+              const range = view.state.selection.main;
+              expect(range.head).toBe(active ? (forward ? to : from) : inside);
+              expect(range.anchor).toBe(anchor);
+              expect(prettyVisualLineAt(view.state, range.head, range.assoc)).toEqual({ from, to });
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it("stops trailing-edge lookup at a nested break", () => {
+    const widget = new PrettyBreakWidget();
+    const current = widget.toDOM();
+    expect(widget.coordsAt(current)).toBeNull();
+    const parent = document.createElement("span");
+    const nested = document.createElement("span");
+    const empty = document.createElement("span");
+    parent.append("previous line", nested, empty, current);
+    nested.append(widget.toDOM());
+    empty.append(document.createTextNode(""));
+    expect(widget.coordsAt(current)).toBeNull();
+    const text = document.createTextNode("x");
+    nested.append(text);
+    const range = document.createRange();
+    Object.defineProperty(range, "getClientRects", { value: () => [{ top: 2, right: 7, bottom: 14, height: 12 }] });
+    vi.spyOn(document, "createRange").mockReturnValueOnce(range);
+    expect(widget.coordsAt(current)).toEqual({ top: 2, left: 7, right: 7, bottom: 14 });
+    expect(range.startContainer).toBe(text);
   });
 
   it("leaves the editor's own line keys in place while layout is off", () => {
