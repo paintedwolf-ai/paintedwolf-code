@@ -319,3 +319,20 @@ func TestRemainingBoundTakesTheEarliestBound(t *testing.T) {
 	clock.advance(time.Minute)
 	want("an expired timeout has nothing left", outer, 0)
 }
+
+// A deadline that expires before the process attaches stops its launch; the
+// launch's own error still reports a timed-out command.
+func TestRunTimeoutExpiryBeforeLaunchReportsTimedOut(t *testing.T) {
+	clock := newManualClock()
+	launchErr := errors.New("process launch stopped")
+	done := startTimeout(clock, TimeoutPlan{Duration: time.Second, Signal: term}, nil,
+		func(ctx context.Context, _ *SignalRelay) (toolcontract.ProducerResult, error) {
+			<-ctx.Done()
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, EffectCertainty: toolcontract.NoEffect}, launchErr
+		})
+	clock.fireNext(t, time.Second)
+	got := <-done
+	if got.err != nil || got.result.Status != TimedOutStatus {
+		t.Fatalf("result = %+v, %v; want status %d", got.result, got.err, TimedOutStatus)
+	}
+}

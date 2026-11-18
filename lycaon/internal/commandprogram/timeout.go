@@ -154,7 +154,9 @@ func RunTimeout(ctx context.Context, clock Clock, plan TimeoutPlan, sent func(Si
 	if !fired || ctx.Err() != nil {
 		return result, err
 	}
-	if err != nil && !errors.Is(err, context.Canceled) {
+	// Expiry before the process attached cancels its launch; whatever error
+	// the launch reports, the command timed out.
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(context.Cause(inner), errTimedOut) {
 		return result, err
 	}
 	status := TimedOutStatus
