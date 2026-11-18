@@ -72,10 +72,7 @@ func (e ExecutionRevisions) captureDocument(ctx context.Context, tctx tools.Tool
 		release()
 		return nil, revision, nil, false, err
 	}
-	if drafts, ok := tools.ProgramDraftsFrom(ctx); ok {
-		unpin, releaseBytes := drafts.Pin(doc.ID, doc.Revision), release
-		release = func() { unpin(); releaseBytes() }
-	}
+	tools.PinDraft(ctx, doc.ID, doc.Revision)
 	return encoded, revision, release, true, nil
 }
 

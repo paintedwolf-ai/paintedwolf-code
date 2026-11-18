@@ -288,7 +288,9 @@ func TestProgramLaunchLeavesADraftItsOwnStageIsReading(t *testing.T) {
 	consume := `python3 -c 'import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())'`
 	result := callDocumentProgram(t, f, "cat piped.txt | "+consume)
 	if result.Status != 0 || result.StopCode != "" || result.Stdout != "typed and piped\n" || !reflect.DeepEqual(result.LaunchDrafts, toolcontract.LaunchDrafts{}) {
-		t.Fatalf("pipeline over a draft=%+v", result)
+		page, err := f.Recorder.ReadProgramPage(t.Context(), f.Session, result.ProgramID, "", 100)
+		testutil.FailErr(t, "program receipts", err)
+		t.Fatalf("pipeline over a draft: status=%d stop=%q stdout=%q stderr=%q unsaved=%+v executions=%+v", result.Status, result.StopCode, result.Stdout, result.Stderr, result.LaunchDrafts, page.Executions)
 	}
 	if live, err := service.CurrentSnapshot(t.Context(), p.ID, other.ID); err != nil || live.Dirty || readTreeFile(t, f, "other.txt") != "typed elsewhere\n" {
 		t.Fatalf("the launch did not save the other draft: %+v, %v", live, err)

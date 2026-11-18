@@ -76,6 +76,11 @@ func (d *DiskDrafts) SaveForAgentLaunch(_ context.Context, _ string, _ sourcebra
 	return unsaved, nil
 }
 
+// OpenDocument has no open document to serve: reads fall through to the tree.
+func (d *DiskDrafts) OpenDocument(context.Context, string, sourcebranch.ID, string, string) (tools.EditorDocumentText, bool, error) {
+	return tools.EditorDocumentText{}, false, nil
+}
+
 // VisitUnsavedDocuments offers the drafts no save has published.
 func (d *DiskDrafts) VisitUnsavedDocuments(_ context.Context, _ string, _ sourcebranch.ID, _, path string, descendants bool, visit func(tools.EditorDocumentState) error) error {
 	d.mu.Lock()

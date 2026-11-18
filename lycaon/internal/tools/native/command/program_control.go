@@ -156,6 +156,8 @@ func (d *ProgramDispatcher) runProducer(ctx context.Context, request commandprog
 		result.EffectCertainty, result.Evidence = toolcontract.NoEffect, toolcontract.OperationEvidence{}
 		return result, err
 	}
+	ctx, releasePins := tools.WithDraftPins(ctx)
+	defer releasePins()
 	tracker := d.run.beginOpTracker()
 	ctx = withOpTracker(ctx, tracker)
 	ctx = evidence.WithExchangeProvenanceObserver(ctx, tracker.addExchange)

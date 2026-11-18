@@ -53,11 +53,47 @@ func (d *ProgramDrafts) Holds(rootID, path string, load func() (map[string]bool,
 	return paths[path], nil
 }
 
-// Pin marks a document revision a native operation captured, so a launch
-// leaves that draft to the operation. A source capture releases it when its
-// bytes are done with; a destination's pin lapses when its write moves the
-// document on.
-func (d *ProgramDrafts) Pin(documentID string, revision int64) (release func()) {
+type draftPinsKey struct{}
+
+// draftPins collects the pins one program operation takes.
+type draftPins struct {
+	mu       sync.Mutex
+	releases []func()
+}
+
+// WithDraftPins scopes the document pins of one program operation: release
+// drops them once the operation has settled and verified what it captured.
+func WithDraftPins(ctx context.Context) (context.Context, func()) {
+	pins := &draftPins{}
+	return context.WithValue(ctx, draftPinsKey{}, pins), func() {
+		pins.mu.Lock()
+		releases := pins.releases
+		pins.releases = nil
+		pins.mu.Unlock()
+		for _, release := range releases {
+			release()
+		}
+	}
+}
+
+// PinDraft marks a document revision a native operation captured, so a launch
+// in the same program leaves that draft to the operation. The pin lasts until
+// the operation's scope releases it; outside one, a destination captured for a
+// redirect, it lapses when the write moves the document on.
+func PinDraft(ctx context.Context, documentID string, revision int64) {
+	drafts, ok := ProgramDraftsFrom(ctx)
+	if !ok {
+		return
+	}
+	release := drafts.pin(documentID, revision)
+	if pins, scoped := ctx.Value(draftPinsKey{}).(*draftPins); scoped {
+		pins.mu.Lock()
+		pins.releases = append(pins.releases, release)
+		pins.mu.Unlock()
+	}
+}
+
+func (d *ProgramDrafts) pin(documentID string, revision int64) (release func()) {
 	pin := EditorPinnedRevision{DocumentID: documentID, Revision: revision}
 	d.mu.Lock()
 	d.pinned[pin]++

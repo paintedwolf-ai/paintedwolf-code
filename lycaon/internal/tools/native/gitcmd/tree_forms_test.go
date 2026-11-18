@@ -17,7 +17,7 @@ import (
 
 // formInvocations is one runnable argv for every Git form, over the apply
 // harness's tree. A form the harness cannot bring to a launch (it has no
-// remote) is marked unlaunched.
+// remote, no bisect in progress) is marked unlaunched.
 var formInvocations = map[string]struct {
 	argv       []string
 	unlaunched bool
@@ -46,8 +46,8 @@ var formInvocations = map[string]struct {
 	"git bisect": {argv: []string{"git", "bisect", "good"}}, "git bisect start": {argv: []string{"git", "bisect", "start"}},
 	"git bisect skip": {argv: []string{"git", "bisect", "skip"}}, "git bisect run": {argv: []string{"git", "bisect", "run", "true"}},
 	"git bisect reset": {argv: []string{"git", "bisect", "reset"}}, "git bisect log": {argv: []string{"git", "bisect", "log"}},
-	"git bisect terms": {argv: []string{"git", "bisect", "terms"}}, "git bisect visualize": {argv: []string{"git", "bisect", "visualize"}},
-	"git bisect view": {argv: []string{"git", "bisect", "view"}}, "git init": {argv: []string{"git", "init", "fresh"}},
+	"git bisect terms": {argv: []string{"git", "bisect", "terms"}}, "git bisect visualize": {argv: []string{"git", "bisect", "visualize"}, unlaunched: true},
+	"git bisect view": {argv: []string{"git", "bisect", "view"}, unlaunched: true}, "git init": {argv: []string{"git", "init", "fresh"}},
 
 	"git pull": {argv: []string{"git", "pull"}, unlaunched: true}, "git fetch": {argv: []string{"git", "fetch"}, unlaunched: true},
 	"git push": {argv: []string{"git", "push"}, unlaunched: true}, "git ls-remote": {argv: []string{"git", "ls-remote"}, unlaunched: true},
