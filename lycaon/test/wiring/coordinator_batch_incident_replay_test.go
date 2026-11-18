@@ -2,12 +2,13 @@ package wiring
 
 import (
 	"context"
+	"errors"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
 	"slices"
 	"testing"
@@ -50,8 +51,9 @@ func TestInTurnLatchBlocksSecondSynthesis(t *testing.T) {
 func batchClosedRefusal(t *testing.T, h *Harness, ctx context.Context, sess *api.Session) string {
 	t.Helper()
 	_, _, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "pack_board", map[string]any{})
-	if reject := toolrejection.AsToolReject(err); reject != nil {
-		return reject.Code
+	var refusal *guidance.Refusal
+	if errors.As(err, &refusal) {
+		return refusal.Code()
 	}
 	return ""
 }

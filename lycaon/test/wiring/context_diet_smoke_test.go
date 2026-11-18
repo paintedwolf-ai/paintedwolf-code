@@ -33,6 +33,8 @@ func TestContextDietRoutingToTaskDispatch(t *testing.T) {
 	dir := t.TempDir()
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "Create session", err)
+	AttachDefaultAmbient(t, h, ctx, sess.ID)
+	h.SeedProgress(t, ctx, sess.ID)
 
 	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Map this codebase"); err != nil {
 		testutil.FailErr(t, "Prompt", err)

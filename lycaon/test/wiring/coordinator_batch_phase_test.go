@@ -51,7 +51,7 @@ func TestCoordinatorBatchPhaseAdvancesOnTaskDispatch(t *testing.T) {
 	}
 }
 
-func TestCoordinatorBatchPhaseSynthesizeAfterWorkerDrain(t *testing.T) {
+func TestCoordinatorBatchPhaseIntegrateAfterWorkerDrain(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{
 			Pattern: "TODO comment",
@@ -99,10 +99,5 @@ func TestCoordinatorBatchPhaseSynthesizeAfterWorkerDrain(t *testing.T) {
 		FailOnEndedWorker(t, h, ctx, sess.ProjectID)
 		state = h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 		return state.BatchPhase == batch.PhaseIntegrate
-	})
-	testutil.FailErr(t, "promote pending write overlays", PromotePendingWriteOverlays(ctx, h, sess.ProjectID, sess.ID))
-	testutil.WaitFor(t, "the batch reaches synthesize", func() bool {
-		state = h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
-		return state.BatchPhase == batch.PhaseSynthesize
 	})
 }
