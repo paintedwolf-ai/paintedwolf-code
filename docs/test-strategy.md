@@ -103,10 +103,7 @@ subtree views, cached snapshots, Go AST parsing with a shared token file set,
 and an explicit non-empty assertion. Contract tests share cached loaders in
 `lycaon/test/contract/internal/check/source_corpus.go` and `go_ast_corpus.go`;
 Den source contracts use the matching snapshot API in
-`lycaon-den/src/test/source-corpus.ts`; a contract that is an import or syntax
-ban is a row of `lycaon-den/eslint/source-contracts/`, enforced by the
-`den/source-contracts` rule in `den:lint`, whose canary runs every row against
-its seeded violation.
+`lycaon-den/src/test/source-corpus.ts`.
 
 Use the narrow fixture at the boundary being exercised:
 

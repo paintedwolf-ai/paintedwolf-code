@@ -22,7 +22,7 @@ var guardedMarkers = []string{
 
 // A marker is the host reading back its own writing, true only while both sides
 // spell it the same way. Go reads internal/hostmarker; Den reads the generated
-// module, and its source contract host-markers-one-spelling holds the same rule there.
+// module, and its lint invariant host-markers-one-spelling holds the same rule there.
 // A second literal elsewhere breaks a reader with nothing failing.
 //
 // The scan anchors on what precedes a marker rather than on quotes, so it sees
