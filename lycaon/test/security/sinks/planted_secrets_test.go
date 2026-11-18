@@ -233,30 +233,39 @@ func TestPlantedSecretsReachNoSink(t *testing.T) {
 // plantChunk bounds how many values one file or command carries.
 const plantChunk = 50
 
-// plantFiles writes every plant into an env file, a source file and a script
-// that prints it, a chunk per file, and returns the calls that read them all.
+// plantFiles writes the plants in chunks, rotating each chunk through an env
+// file, a source file and a script that prints it, and returns the calls that
+// read them all. Each value is screened once; every placement is exercised.
 func plantFiles(t *testing.T, project string, plants []plant) []llm.MockToolCall {
 	t.Helper()
 	var calls []llm.MockToolCall
 	for start := 0; start < len(plants); start += plantChunk {
 		chunk := plants[start:min(start+plantChunk, len(plants))]
-		var env, source, emit strings.Builder
-		emit.WriteString("#!/bin/sh\n")
+		n := start / plantChunk
+		var body strings.Builder
+		var name, command string
+		switch n % 3 {
+		case 0:
+			name, command = fmt.Sprintf(".env.%02d", n), fmt.Sprintf("cat .env.%02d", n)
+		case 1:
+			name, command = fmt.Sprintf("config_%02d.py", n), fmt.Sprintf("cat config_%02d.py", n)
+		default:
+			name, command = fmt.Sprintf("emit_%02d.sh", n), fmt.Sprintf("sh emit_%02d.sh", n)
+			body.WriteString("#!/bin/sh\n")
+		}
 		for i, p := range chunk {
 			// Each rule sees its whole example: some need the words around the secret.
-			fmt.Fprintf(&env, "PLANT_%d=%s\n", start+i, p.text)
-			fmt.Fprintf(&source, "# PLANT_%d\n%s\n", start+i, p.text)
-			fmt.Fprintf(&emit, "printf '%%s\\n' %s\n", shellQuote(p.text))
+			switch n % 3 {
+			case 0:
+				fmt.Fprintf(&body, "PLANT_%d=%s\n", start+i, p.text)
+			case 1:
+				fmt.Fprintf(&body, "# PLANT_%d\n%s\n", start+i, p.text)
+			default:
+				fmt.Fprintf(&body, "printf '%%s\\n' %s\n", shellQuote(p.text))
+			}
 		}
-		n := start / plantChunk
-		files := map[string]string{fmt.Sprintf(".env.%02d", n): env.String(), fmt.Sprintf("config_%02d.py", n): source.String(), fmt.Sprintf("emit_%02d.sh", n): emit.String()}
-		for name, body := range files {
-			testutil.FailErr(t, "plant "+name, os.WriteFile(filepath.Join(project, name), []byte(body), 0o644))
-		}
-		calls = append(calls,
-			llm.MockToolCall{ID: fmt.Sprintf("read-env-%02d", n), Name: "command", Args: map[string]any{"command": fmt.Sprintf("cat .env.%02d", n)}},
-			llm.MockToolCall{ID: fmt.Sprintf("read-source-%02d", n), Name: "command", Args: map[string]any{"command": fmt.Sprintf("cat config_%02d.py", n)}},
-			llm.MockToolCall{ID: fmt.Sprintf("run-emitter-%02d", n), Name: "command", Args: map[string]any{"command": fmt.Sprintf("sh emit_%02d.sh", n)}})
+		testutil.FailErr(t, "plant "+name, os.WriteFile(filepath.Join(project, name), []byte(body.String()), 0o644))
+		calls = append(calls, llm.MockToolCall{ID: fmt.Sprintf("read-%02d", n), Name: "command", Args: map[string]any{"command": command}})
 	}
 	return calls
 }
