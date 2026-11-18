@@ -72,7 +72,7 @@ func (f filesystemSynchronizer) stagePublishedReplica(ctx context.Context, d *Do
 	if d.EOL == d.BaseEOL && d.MixedEOL == d.BaseMixedEOL {
 		next.EOL, next.MixedEOL = eol, mixed
 	}
-	if _, err := textfile.EncodeBounded(serializeEOL(next.Draft, next.EOL), next.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes)); err != nil {
+	if _, err := textfile.EncodeBounded(textfile.SerializeEOL(next.Draft, next.EOL), next.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes)); err != nil {
 		s.replicas.evict(ctx, d.ID)
 		return nil, err
 	}

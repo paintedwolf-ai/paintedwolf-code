@@ -120,3 +120,19 @@ func encodeUTF16(content string, bigEndian, bom bool) []byte {
 	}
 	return out
 }
+
+// SerializeEOL writes LF-normalized text with its recorded line ending, "lf"
+// or "crlf".
+func SerializeEOL(content, eol string) string {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	if eol == "crlf" {
+		return strings.ReplaceAll(content, "\n", "\r\n")
+	}
+	return content
+}
+
+// EncodeDocument returns the bytes a save of LF-normalized text writes in its
+// recorded line ending and encoding.
+func EncodeDocument(content, eol, encoding string, limits Limits) ([]byte, error) {
+	return EncodeBounded(SerializeEOL(content, eol), encoding, limits)
+}

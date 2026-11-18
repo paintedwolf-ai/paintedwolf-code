@@ -203,18 +203,12 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	if strings.TrimSpace(tc.Host.SessionOutputDir) == "" {
 		return "", toolrejection.RejectInvalidArguments(tools.SessionOutputUnavailableCode, map[string]any{"path": "@output"})
 	}
-	documents, err := newProgramDocuments(ctx, tc, memory)
-	if err != nil {
-		return "", err
-	}
-	releaseDocuments := release
-	release = func() { documents.close(); releaseDocuments() }
-	ctx = context.WithValue(ctx, programDocumentsKey{}, documents)
 	run.windows = &tools.ProgramWindows{}
 	ctx = tools.WithProgramWindows(ctx, run.windows)
+	ctx = tools.WithUnsavedPaths(ctx)
 	ctx = tools.WithCommandReadObserver(ctx, func(ctx context.Context, root, path string) error {
 		run.observeProvenanceFileRead(ctx, root, path)
-		return documents.read(ctx, root, path)
+		return nil
 	})
 	failureAttempt, verification, err := beginProgramAttempt(ctx, r.FailureTracker, tc, args, paths.Cwd().Abs)
 	if err != nil {
@@ -290,7 +284,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	handedOff = true
 	return r.attend(callCtx, &programEvaluation{
 		ctx: ctx, run: run, call: call, park: park, plan: snapshot.Plan, ports: ports, dispatcher: dispatcher,
-		stdout: stdout, stderr: stderr, outputs: outputs, scope: scope, documents: documents,
+		stdout: stdout, stderr: stderr, outputs: outputs, scope: scope,
 		paths: paths, verification: verification, failureAttempt: failureAttempt, release: release, callTC: callTC,
 	})
 

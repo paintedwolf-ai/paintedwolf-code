@@ -28,7 +28,7 @@ func (m *mappedOutput) RecordSourceMapping(mapping toolcontract.StreamSourceMapp
 
 // Native owners capture disk even while an editor draft holds newer text.
 // Program entry owns publication and delivered content owns read evidence.
-func TestCommandCatCapturesDiskWhileEditorHasUnsavedChanges(t *testing.T) {
+func TestCommandCatServesThePersonsDraftAsASaveWouldWriteIt(t *testing.T) {
 	f := newRevisionFixture(t, map[string]string{"notes.txt": "disk line\r\nsecond\r\n"})
 	ctx := t.Context()
 	opened, err := f.service.Open(ctx, f.project, "notes.txt", f.rootID, "", "window", nil)
@@ -54,9 +54,10 @@ func TestCommandCatCapturesDiskWhileEditorHasUnsavedChanges(t *testing.T) {
 	}
 
 	stdout, result, mappings := run("cat", "notes.txt")
-	want := "disk line\r\nsecond\r\n"
+	// The draft is served in the file's recorded line endings.
+	want := "draft line\r\nsecond\r\nthird"
 	if stdout != want || result.Status != 0 || !result.PublicationEligible {
-		t.Fatalf("cat served %q (%+v), want the saved file", stdout, result)
+		t.Fatalf("cat served %q (%+v), want the draft", stdout, result)
 	}
 	if disk := f.disk(t, "notes.txt"); disk != "disk line\r\nsecond\r\n" {
 		t.Fatalf("native read published the draft: %q", disk)
@@ -67,20 +68,20 @@ func TestCommandCatCapturesDiskWhileEditorHasUnsavedChanges(t *testing.T) {
 		t.Fatalf("pins = %+v", pins)
 	}
 	pin := pins[0]
-	if pin.Mode != toolcontract.PublishedDiskRevision || pin.DocumentID != "" || pin.DocumentRevision != 0 ||
+	if pin.Mode != toolcontract.AcceptedDocumentRevision || pin.DocumentID != opened.ID || pin.DocumentRevision <= opened.Revision ||
 		pin.Representation != toolcontract.OriginalEncodedBytes || pin.ContentSHA256 != textfile.SHA256([]byte(want)) || pin.ContentBytes != int64(len(want)) ||
 		pin.DiskSHA256 != textfile.SHA256([]byte("disk line\r\nsecond\r\n")) || pin.Path != "notes.txt" {
-		t.Fatalf("disk revision pin = %+v", pin)
+		t.Fatalf("document revision pin = %+v", pin)
 	}
 	source, _ := pin.SourcePin()
 	if len(mappings) != 1 || mappings[0].Source != source || mappings[0].SourceStartByte != 0 || mappings[0].SourceEndByte != int64(len(want)) {
-		t.Fatalf("disk mappings = %+v", mappings)
+		t.Fatalf("document mappings = %+v", mappings)
 	}
 	f.noReadBases(t)
 
 	counted, _, _ := run("wc", "-l", "notes.txt")
 	if counted != "2 notes.txt\n" {
-		t.Fatalf("wc counted %q over the saved file", counted)
+		t.Fatalf("wc counted %q over the draft", counted)
 	}
 	digest, _, _ := run("sha256sum", "notes.txt")
 	if digest != textfile.SHA256([]byte(want))+"  notes.txt\n" {

@@ -89,9 +89,9 @@ ripgrep roles rather than copying grep aliases. PCRE-compatible grammar is an
 explicit bounded contract enforced by the native regex engine. File signatures name format-identification evidence,
 not archive/database trust.
 
-Native byte streams preserve the saved file representation, including its
-encoding, BOM and newline policy. Checksums and byte counts cover those saved
-bytes; decoded transforms retain explicit source mappings. Exact delivered literal source windows may
+Native byte streams preserve the file representation, including its encoding,
+BOM and newline policy; unsaved text the person has open streams as the bytes a
+save would write. Checksums and byte counts cover those bytes; decoded transforms retain explicit source mappings. Exact delivered literal source windows may
 qualify conversational edit evidence, while internal execution reads do not.
 Diff reuses the existing engine; complete stream bounds are independent from
 structured preview and context caps.
@@ -317,29 +317,33 @@ A source operation and the existing delivery boundary must still attribute the
 actual page before it qualifies as conversational evidence. These stream ports
 do not activate the later command-entry integration by themselves.
 
-Program operations pin execution revisions from published disk. Native utilities,
-input redirections, Git, and external programs all read the saved file. After a
-reached operation is admitted, accepted changes authored only by that chat can
-publish through separate write admission, current review and the editor save
-path. Each preparation write has its own receipt. Read-only profiles read saved
-bytes without publishing drafts. Human and other chats' drafts stay unsaved.
-Redirects contribute their mutation effects before admission; input opening and
-destination capture happen after accepted-draft preparation settles. Earlier
-admitted operations may already have published when a later operation is refused.
+Native utilities and input redirections read a path the person has open with
+unsaved text as that text, pinned at the document's revision; other paths pin
+published disk. Git and external programs read the saved file. After a reached
+operation is admitted, accepted changes authored only by that chat can publish
+through separate write admission, current review and the editor save path.
+Each preparation write has its own receipt. Read-only profiles read without
+publishing drafts. Redirects contribute their mutation effects before
+admission; input opening and destination capture happen after accepted-draft
+preparation settles. Earlier admitted operations may already have published
+when a later operation is refused.
 
-The initial response includes one note per affected path observed by native
-reads, stating that commands read the saved file. Notices first discovered by
-a background child reach its completion report; paths already reported in the
-initial response are not repeated. Native writes refuse dirty destinations with
-`COMMAND_REVISION_CONFLICT`. External programs retain ordinary sandbox write
-roots. Their outside saves merge with accepted and pending typing through the
+A native operation that changes, moves or removes a path first saves the
+person's unsaved text there, or anywhere beneath it, as an autosave would,
+naming its call; each contribution keeps its own author. A draft held over a
+file that changed outside the document is not saved and refuses with
+`COMMAND_REVISION_CONFLICT`, since saving would overwrite that change. External
+programs retain ordinary sandbox write roots. Their outside saves merge with accepted and pending typing through the
 editor's existing filesystem-replica transition against the saved checkpoint.
 The editor's typing stays in the document even when a program changes disk.
 
 Each destination's revision or absence is captured before preparing its change.
 A `WriteExecutionPinned` write rechecks the destination in the document owner or
-write door and rechecks sources after review. Movement refuses with
-`COMMAND_REVISION_CONFLICT`, without refreshing or rerunning the operation. If an
+write door and rechecks sources after review. In an open document the change is
+anchored in the captured revision, so typing that arrives meanwhile merges as it
+does for a conversational edit; review fences the revision it previewed. A file
+changed outside its document, or a moved source or disk destination, refuses
+with `COMMAND_REVISION_CONFLICT`, without refreshing or rerunning the operation. If an
 editor accepts a command's write but cannot save it, that exact write stops with
 `COMMAND_PUBLICATION_PENDING`. Its accepted revision and held recovery version
 remain in the receipt; later children do not run. There is no dependent-launch
@@ -900,14 +904,15 @@ Results count searched text files, binary skips, unreadable files, byte-capped f
 
 ## The open document is the file
 
-A file the person has open in the editor is its editor document, for the agent as for the person. Conversational structured reads of that path serve the document's draft, unsaved edits included; structured writes land in the document and save it. The `command` tool follows the saved-file rules above. There is one text per open file, and it is the one the person is looking at.
+A file the person has open in the editor is its editor document, for the agent as for the person. Agent reads of that path serve the document's draft, unsaved edits included; agent writes land in the document and save it. Inside `command` the native utilities follow the same rule; installed programs read disk. There is one text per open file, and it is the one the person is looking at.
 
 | Tool | With an open document |
 |------|-----------------------|
 | Structured `read`, `diff` | Serve the draft. The receipt's `source.editor` carries the document revision and `dirty`; an unsaved draft is `recorded: false` with a note, because the ledger records saves, not keystrokes |
 | Structured `grep`, `wc` | Search or count the unsaved text for open dirty files; `files_from_editor` and `in_editor` say how many were served that way |
 | `write`, `edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `restore_version` | Compute against the draft, land in the document, and save through the person's own journaled save door, recorded as the agent's write. One save publishes every contribution the draft holds, the person's unsaved typing included, and the ledger records each contributor, so such a publication reads as mixed authorship rather than the agent's alone. `EDITOR_DOCUMENT_CHANGING` rejects a document that kept moving under the write. A document diverged from disk, or a publication that fails after acceptance, holds the edit unsaved in the document: the receipt says the file was not written and why, that the disk still holds its earlier bytes for commands and tests, and names the retained state |
-| `command`, `verify`, processes | Read saved bytes. An accepted edit whose publication failed remains unsaved and does not change those inputs |
+| Native utilities inside `command` | Read the draft. An operation that changes, moves or removes the path saves the draft first, then acts on the file |
+| Installed programs, `verify`, processes | Read saved bytes. An accepted edit whose publication failed remains unsaved and does not change those inputs |
 
 A worker on its private branch never sees documents: its tree is a copy. The design and the Den side are in [files-live.md § The open document is the file](files-live.md#the-open-document-is-the-file).
 

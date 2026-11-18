@@ -55,7 +55,7 @@ func TestCommandSettlementRetainsReportAndWakesOnlySubscribedWait(t *testing.T) 
 	service := New(f, f, f, f)
 	service.SetLoop(f, f)
 	now := time.Now()
-	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: "session", Handle: "handle", OriginTool: "verify", RunID: "run", ToolCallID: "call", ExitCode: 1, FinishedAt: now, Tail: "failed check", UnsavedDocumentPaths: []string{"source.txt"}})
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: "session", Handle: "handle", OriginTool: "verify", RunID: "run", ToolCallID: "call", ExitCode: 1, FinishedAt: now, Tail: "failed check"})
 	report, ok := service.Report("session", "handle")
 	t.Logf("completion report for manual render inspection:\n%s", report)
 	if !ok || !strings.Contains(report, "failed check") || !strings.Contains(report, "policy guidance") {

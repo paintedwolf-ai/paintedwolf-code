@@ -387,7 +387,6 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"pattern", oarcore.TypeString, FactTierHost, ""},
 	{"patterns_list", oarcore.TypeString, FactTierHost, ""},
 	{"pending", oarcore.TypeString, FactTierHost, ""},
-	{"unsaved_draft", oarcore.TypeBool, FactTierHost, ""},
 	{"pending_count", oarcore.TypeString, FactTierHost, ""},
 	{"period", oarcore.TypeString, FactTierHost, ""},
 	{"progress", oarcore.TypeString, FactTierHost, ""},

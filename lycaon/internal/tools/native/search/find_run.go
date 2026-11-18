@@ -338,7 +338,7 @@ func (r *findRun) remove(e entry) (bool, error) {
 	}
 	target, err := inv.paths.Bind(inv.ctx, e.display, true)
 	if err == nil {
-		err = inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, target.Resolved.Abs, true)
+		err = inv.owners.Revisions.SaveDrafts(inv.ctx, inv.tc, target.Resolved.Abs, true)
 	}
 	if err == nil {
 		err = inv.owners.Remover.RemoveRecoverable(inv.ctx, inv.tc, target)
