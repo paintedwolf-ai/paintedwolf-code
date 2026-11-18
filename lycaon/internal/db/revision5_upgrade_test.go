@@ -45,6 +45,11 @@ func TestRevision5UpgradesEveryReleasedStore(t *testing.T) {
 			testutil.FailErr(t, "read immutable released store", err)
 			path := filepath.Join(t.TempDir(), "store.db")
 			testutil.FailErr(t, "copy released store", os.WriteFile(path, raw, 0o600))
+			released, err := sql.Open("sqlite", path)
+			testutil.FailErr(t, "open released store", err)
+			var roots int
+			testutil.FailErr(t, "count released roots", released.QueryRow(`SELECT count(*) FROM project_roots`).Scan(&roots))
+			testutil.FailErr(t, "close released store", released.Close())
 			testutil.FailErr(t, "upgrade complete registered route", UpgradeStaged(t.Context(), path))
 			testutil.FailErr(t, "reopen complete registered route", UpgradeStaged(t.Context(), path))
 			upgraded, err := sql.Open("sqlite", path)
@@ -64,6 +69,7 @@ func TestRevision5UpgradesEveryReleasedStore(t *testing.T) {
 			if count != 0 {
 				t.Fatal("upgrade fabricated host executions")
 			}
+			assertOutsideUpgrade(t, upgraded, roots)
 		})
 	}
 }

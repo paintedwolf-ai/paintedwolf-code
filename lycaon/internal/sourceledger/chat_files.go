@@ -18,8 +18,7 @@ const (
 	ChatFileOpened
 )
 
-// outsideRootID names the project's outside namespace, which never changes
-// once the project exists.
+// The outside root is stable for the project's lifetime.
 func (s *Store) outsideRootID(ctx context.Context, q *db.Queries, projectID string) (string, error) {
 	if id, ok := s.outsideRoots.Load(projectID); ok {
 		return id.(string), nil
@@ -45,8 +44,7 @@ func (s *Store) referenceMutationChatFile(ctx context.Context, q *db.Queries, in
 	return nil
 }
 
-// referenceChatFile records that the root chat of sessionID holds an outside
-// file. Files under attached roots need no reference.
+// A worker's outside file reference belongs to its root chat.
 func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID, rootID, sessionID, fileID string, relation ChatFileRelation, ts time.Time) error {
 	if sessionID == "" || fileID == "" {
 		return nil
@@ -75,8 +73,7 @@ func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID,
 	})
 }
 
-// OutsideFileHeld reports whether a chat of the project holds the outside
-// file currently at rel.
+// OutsideFileHeld checks chat references to the current file at rel.
 func (s *Store) OutsideFileHeld(ctx context.Context, projectID, rel string) (bool, error) {
 	outside, err := s.outsideRootID(ctx, s.queries, projectID)
 	if err != nil || outside == "" {

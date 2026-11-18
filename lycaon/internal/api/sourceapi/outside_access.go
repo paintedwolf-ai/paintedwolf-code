@@ -9,8 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
-// admitOutside lets one request read the outside file at rel when a chat of
-// the project holds it. Requests for any other root pass through unchanged.
+// Only a project chat's held file can expose the outside namespace to a read.
 func admitOutside(ctx context.Context, ledger *sourceledger.Store, p *project.Project, rootID, rel string) (*project.Project, error) {
 	if p == nil || rootID == "" || rootID != p.Outside.ID {
 		return p, nil
