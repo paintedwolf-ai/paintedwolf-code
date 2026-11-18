@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"slices"
 	"strconv"
@@ -76,7 +77,7 @@ func TestWaitVisibilityAtBatchBoundary(t *testing.T) {
 				Tools: ToolsDeps{BeforeToolRun: func(_ context.Context, sess *api.Session, history []api.Message, tool string, _ map[string]any) (string, bool, error) {
 					gc := oar.NewGuardContext()
 					guard.ObserveWaitVisibility(sess, history, tool, true, gc)
-					if guard.EvaluateObserveHasCode(gc, oar.AnchorCoordinatorPreInvoke, guard.WaitHiddenTextCode) {
+					if oartest.EvaluateHasCode(t, gc, oar.AnchorCoordinatorPreInvoke, guard.WaitHiddenTextCode) {
 						return "", false, guidance.NewRefusal(guard.WaitHiddenTextCode, "")
 					}
 					return "", false, nil

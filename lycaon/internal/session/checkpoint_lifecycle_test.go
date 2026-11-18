@@ -20,6 +20,7 @@ import (
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -233,7 +234,7 @@ func TestCoordinatorBatchPhaseToolGuard_packBoardInSynthesize(t *testing.T) {
 		guard.BatchTurnGuard{},
 		gc,
 	)
-	if !guard.EvaluateObserveHasCode(gc, oar.AnchorCoordinatorPreInvoke, guard.CoordinatorBatchWrongPhaseCode) {
+	if !oartest.EvaluateHasCode(t, gc, oar.AnchorCoordinatorPreInvoke, guard.CoordinatorBatchWrongPhaseCode) {
 		t.Fatalf("want %s Decision for pack_board in synthesize", guard.CoordinatorBatchWrongPhaseCode)
 	}
 }

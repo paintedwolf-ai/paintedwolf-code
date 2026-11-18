@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 )
 
 // formatObservationReject runs observe then EvaluateBlock + Format (unit tests).
@@ -12,6 +13,6 @@ func formatObservationReject(t *testing.T, rejectFmt *guidance.StaticRejectForma
 	t.Helper()
 	gc := oar.NewGuardContext()
 	observe(gc)
-	return formatFirstOARBlock(gc, rejectFmt,
+	return oartest.FormatFirstBlock(t, gc, rejectFmt,
 		oar.AnchorCoordinatorPreInvoke, oar.AnchorToolPreInvoke, oar.AnchorCoordinatorCloseoutCheck)
 }

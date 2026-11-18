@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/guardtest"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -43,7 +44,7 @@ func TestCoordinatorBatchTurn_oneSynthesisPerTurnLatch(t *testing.T) {
 	mgr.Runner.Settlement.Begin(sess.ID, "")
 	mgr.Coordinator.Batch.AcceptSynthesis(ctx, sess.ID)
 
-	reject, block := guard.FormatHostNoToolTurnReject(
+	reject, block := guardtest.FormatHostNoToolTurnReject(t,
 		sess,
 		[]api.Message{{Role: api.MessageRoleUser, Origin: api.MessageOriginHost, Visibility: api.MessageVisibilityInternal, Kind: api.MessageKindHostLoopWake}},
 		"Another report in the same turn.",

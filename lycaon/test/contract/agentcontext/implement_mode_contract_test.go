@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/surfacetest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"os"
@@ -77,7 +78,7 @@ func TestImplementBootResolvesSynthesisOrInvestigate(t *testing.T) {
 		CurrentPhase:    "boot",
 	}), &api.Session{
 		Posture: api.SessionPostureBuild,
-	}, coordinatorTurnHistory(WorkerCompletionHistory(orchestration.ProfileImplementer), surface.HostLoopWakeSentinel), surface.WithWrapupGates(surface.ImplementSessionState{}, true, false))
+	}, coordinatorTurnHistory(WorkerCompletionHistory(orchestration.ProfileImplementer), surface.HostLoopWakeSentinel), surfacetest.WithWrapupGates(surface.ImplementSessionState{}, true, false))
 	if profile.ModeRefs[0] != "implement-synthesis" {
 		t.Fatalf("mode refs = %v want implement-synthesis for implement boot loop wake", profile.ModeRefs)
 	}

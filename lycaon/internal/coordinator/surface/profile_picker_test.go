@@ -11,10 +11,13 @@ import (
 
 // batchReadySessionState is a wrapup-admitted idle snapshot for surface routing fixtures.
 func batchReadySessionState() ImplementSessionState {
-	return WithWrapupGates(ImplementSessionState{
-		WorkersInFlight:   0,
-		PendingOverlayIDs: []string{},
-	}, true, false)
+	return ImplementSessionState{
+		WorkersInFlight:           0,
+		PendingOverlayIDs:         []string{},
+		WrapupGatesLoaded:         true,
+		BatchReadyForSynthesis:    true,
+		OpenRepairSinceUserIntent: false,
+	}
 }
 
 func resolvePickerTurnProfile(

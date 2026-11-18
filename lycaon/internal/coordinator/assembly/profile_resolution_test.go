@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil/prompttest"
+	"github.com/lycaon/lycaon/internal/testutil/surfacetest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -73,7 +74,7 @@ func synthesisPromptStabilityEngine(t *testing.T) *AssemblyEngine {
 		PromptToolLister: prompttest.CoordinatorTools,
 		WorkspaceRoots:   prefixStabilityWorkspaceRoots(),
 		ImplementSessionState: func(_ context.Context, _ *api.Session) surface.ImplementSessionState {
-			return surface.WithWrapupGates(surface.ImplementSessionState{}, true, false)
+			return surfacetest.WithWrapupGates(surface.ImplementSessionState{}, true, false)
 		},
 	}
 	eng := &AssemblyEngine{}
