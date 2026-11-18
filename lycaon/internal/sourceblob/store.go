@@ -589,9 +589,6 @@ func sameFileVersion(left, right os.FileInfo) bool {
 }
 
 func syncDir(path string) error {
-	if fssync.Relaxed() {
-		return nil
-	}
 	dir, err := os.Open(path)
 	if err != nil {
 		return err

@@ -109,7 +109,7 @@ func runBoundedFlushPublishPass(t *testing.T, tmp, trunkDir, label string) (file
 		if err := msyncForTest(mappedSlice); err != nil {
 			return err
 		}
-		return fssync.Always(mf)
+		return fssync.File(mf)
 	}); err != nil {
 		t.Fatalf("SetBarrierHooks: %v", err)
 	}

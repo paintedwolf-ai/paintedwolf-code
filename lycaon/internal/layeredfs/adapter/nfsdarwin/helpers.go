@@ -117,7 +117,7 @@ func (a *Adapter) syncClientPath(ctx context.Context, path string) (isFile, isDi
 	if opened.Mode().IsRegular() {
 		mapErr = flushMappedPages(f, opened.Size())
 	}
-	syncErr := errors.Join(mapErr, fssync.Always(f))
+	syncErr := errors.Join(mapErr, fssync.File(f))
 	closeErr := f.Close()
 	if syncErr != nil {
 		return false, false, syncErr

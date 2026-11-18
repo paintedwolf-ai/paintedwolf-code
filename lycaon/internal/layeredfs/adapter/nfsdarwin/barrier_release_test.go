@@ -156,7 +156,7 @@ func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
 		if err := msyncForTest(mappedSlice); err != nil {
 			return err
 		}
-		return fssync.Always(mf)
+		return fssync.File(mf)
 	}); err != nil {
 		t.Fatalf("SetBarrierHooks with mmap sync: %v", err)
 	}
