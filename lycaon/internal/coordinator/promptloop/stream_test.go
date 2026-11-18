@@ -303,7 +303,7 @@ func TestPolicyBindingUsesTheFinalFittedRequest(t *testing.T) {
 	})
 	sess := &api.Session{ID: "policy-request", AgentType: prompts.CoordinatorProfileID, Posture: api.SessionPostureBuild}
 	state := &promptLoopTurnState{}
-	request, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, []api.Message{{Role: api.MessageRoleUser, Content: "inspect"}}, prompts.CoordinatorProfileID, "inspect", 0, 20, false, state)
+	request, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, []api.Message{{Role: api.MessageRoleUser, Content: "inspect"}}, prompts.CoordinatorProfileID, 0, 20, false, state)
 	testutil.FailErr(t, "build policy request", err)
 	if len(delivered) != 1 || delivered[0].ID != "fitted-policy" || delivered[0].Content != request.Req.Messages[0].Content || state.output.policyCheck == nil {
 		t.Fatalf("delivered policy = %+v", delivered)
@@ -493,7 +493,7 @@ func TestRequestPolicyRequiresStateOnlyForApplicableBinding(t *testing.T) {
 					state = &promptLoopTurnState{}
 				}
 				sess := &api.Session{ID: "policy-state", AgentType: prompts.CoordinatorProfileID}
-				_, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, nil, prompts.CoordinatorProfileID, "inspect", 0, 20, false, state)
+				_, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, nil, prompts.CoordinatorProfileID, 0, 20, false, state)
 				wantError := mode == "applicable policy" && !hasState
 				if (err != nil) != wantError || bound != (mode == "applicable policy" && hasState) {
 					t.Fatalf("policy state: err=%v bound=%t", err, bound)

@@ -92,7 +92,7 @@ func TestCloseoutCitationsRequiredHostAssemblesImmediately(t *testing.T) {
 			read := markdownRead("no citations here\n\n```json\n{\"headline\":\"Overview\",\"limits\":[\"Inspection only.\"]}\n```", true)
 			out, err := loop.Closeout.handleAcceptedCloseoutReport(
 				context.Background(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()},
-				"s1", "", tc.surface, st, history,
+				"s1", tc.surface, st, history,
 				api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "no citations here"},
 				read,
 			)
@@ -178,7 +178,7 @@ func TestCloseoutCitationRetryKeepsPinnedSynthesis(t *testing.T) {
 	}
 	out, err := loop.Closeout.handleAcceptedCloseoutReport(
 		context.Background(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()},
-		"s1", "", "implement_investigate", st, history,
+		"s1", "implement_investigate", st, history,
 		api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: rewrite},
 		guidance.ReadCloseoutReport(rewrite, retained, false, citationmd.Options{}),
 	)
@@ -232,7 +232,7 @@ func TestCloseoutCitationRepairPreservesReportOnCommit(t *testing.T) {
 				raw = "The merge failed."
 			}
 			st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnBatchState: turnBatchState{turnTools: []string{"command"}}, turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 1}}}
-			out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "", "implement_investigate", st,
+			out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "implement_investigate", st,
 				[]api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "merge"}, {ID: "t1", Role: api.MessageRoleTool, EvidenceHandles: []string{"command#1"}}, {ID: "slot-1", Role: api.MessageRoleAssistant}},
 				api.Message{ID: "slot-1", Role: api.MessageRoleAssistant}, guidance.ReadCloseoutReport(raw, retained, true, citationmd.Options{}))
 			testutil.FailErr(t, "commit citation repair", err)

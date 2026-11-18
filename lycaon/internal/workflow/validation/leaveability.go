@@ -59,7 +59,7 @@ func ValidateBlueprintWritePhases(m workflowdef.Manifest) []api.ComposeValidatio
 	mutation, _ := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
 	var out []api.ComposeValidationError
 	for _, phase := range writers {
-		binding, bindErr := workflowdef.ResolveSurfaceBinding(m, phase.ID, m.ID, "")
+		binding, bindErr := workflowdef.ResolveSurfaceBinding(m, phase.ID, m.ID)
 		if bindErr != nil {
 			continue
 		}
@@ -224,7 +224,7 @@ func ValidateRequiredCoordinatorSurface(m workflowdef.Manifest, p workflowdef.Ph
 		return nil
 	}
 	// surface_profile bindings leave CoordinatorSurface empty until resolve.
-	if binding, err := workflowdef.ResolveSurfaceBinding(m, p.ID, m.ID, ""); err == nil && strings.TrimSpace(binding.CoordinatorSurface) != "" {
+	if binding, err := workflowdef.ResolveSurfaceBinding(m, p.ID, m.ID); err == nil && strings.TrimSpace(binding.CoordinatorSurface) != "" {
 		return nil
 	}
 	return []api.ComposeValidationError{workflowdiag.EmitDefault(
@@ -239,7 +239,7 @@ func ValidateReportPhaseSurfaceExit(m workflowdef.Manifest, p workflowdef.PhaseD
 	if !workflowdef.PhaseHasGate(p, "topology_report_delivered") {
 		return nil
 	}
-	binding, err := workflowdef.ResolveSurfaceBinding(m, p.ID, m.ID, "")
+	binding, err := workflowdef.ResolveSurfaceBinding(m, p.ID, m.ID)
 	if err != nil {
 		return nil
 	}

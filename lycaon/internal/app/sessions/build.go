@@ -133,7 +133,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	mgr.SetDoomLoopGuard(loopguard.NewMemoryDoomLoopGuard())
 	mgr.SetRejectFormatter(deps.Execution.Rejections)
 	mgr.Coordinator.Guards.SetRuntimeRules(loadProfileRuntimeRules())
-	if err := progress.InitProgressGatedTools(deps.Catalog.ModuleRoot); err != nil {
+	if err := progress.InitProgressGatedTools(); err != nil {
 		return nil, fmt.Errorf("init progress-gated tools: %w", err)
 	}
 	mgr.Coordinator.Guards.SetToolMetadata(deps.Execution.Host.Executor.Metadata)

@@ -400,7 +400,7 @@ func mustCoordinatorToolsForTurn(
 ) ([]tools.ToolMeta, toolsurface.Plan) {
 	t.Helper()
 	metas, plan, _, err := loop.Context.coordinatorToolsForTurn(
-		context.Background(), sess, prompts.CoordinatorProfileID, nil, "do work", 0, 8, frame, nil,
+		context.Background(), sess, prompts.CoordinatorProfileID, nil, 0, 8, frame, nil,
 	)
 	testutil.FailErr(t, "compile coordinator tools", err)
 	return metas, plan

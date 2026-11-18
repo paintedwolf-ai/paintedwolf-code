@@ -2,7 +2,6 @@ package contract
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -61,8 +60,7 @@ func mergeCoordinatorTemplateVars(t *testing.T) map[string]any {
 	return merged
 }
 
-// mergeFixtureWorkspaceRoot attaches one real folder so the render matches a
-// post-milestone-9 single-root turn: the folder block carries a labeled row.
+// mergeFixtureWorkspaceRoot adds a labeled folder to the rendered context.
 func mergeFixtureWorkspaceRoot(t *testing.T, vars map[string]any, path string) {
 	t.Helper()
 	if strings.TrimSpace(path) == "" {
@@ -111,7 +109,7 @@ func mergeCoordinatorPromptVarsForTripartite(
 
 func renderCoordinatorTripartiteForRunContext(
 	t *testing.T,
-	root string,
+
 	runCtx api.CoordinatorRunContext,
 	sess *api.Session,
 	userPrompt string,
@@ -126,7 +124,7 @@ func renderCoordinatorTripartiteForRunContext(
 		implState = state[0]
 	}
 	var profile surface.TurnProfile
-	runCtx = surface.EnrichRunContextForWorkflow(runCtx, filepath.Join(root, "lycaon"))
+	runCtx = surface.EnrichRunContextForWorkflow(runCtx)
 	if strings.TrimSpace(forcedSurfaceID) != "" {
 		profile = surface.ResolveTurnProfileForSurface(forcedSurfaceID, runCtx, sess)
 	} else {

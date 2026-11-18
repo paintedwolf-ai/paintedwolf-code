@@ -53,7 +53,7 @@ func (l *turnCloseout) maxCitationGroundingRetries() int {
 func (l *turnCloseout) handleAcceptedCloseoutReport(
 	ctx context.Context,
 	sess *api.Session,
-	sessionID, userPrompt, surfaceID string,
+	sessionID, surfaceID string,
 	st *promptLoopTurnState,
 	history []api.Message,
 	assistantMsg api.Message,
@@ -99,7 +99,7 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 		if code == "" {
 			code = guidance.CloseoutCitationsRequiredCode(surfaceID)
 		}
-		return l.emitAssembledCloseout(ctx, sess, sessionID, userPrompt, surfaceID, draft, []string{code}, st, history)
+		return l.emitAssembledCloseout(ctx, sess, sessionID, surfaceID, draft, []string{code}, st, history)
 	}
 
 	presented := strings.TrimSpace(guidance.PresentCloseoutMarkdown(draft, observation.citations.Resolved))
@@ -126,7 +126,7 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	if st != nil && !tools.CallReach(ctx).Known() {
 		ctx = tools.WithCallReach(ctx, st.requestReach())
 	}
-	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, userPrompt, surfaceID, assistantMsg)
+	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, surfaceID, assistantMsg)
 	if err != nil {
 		return out, err
 	}

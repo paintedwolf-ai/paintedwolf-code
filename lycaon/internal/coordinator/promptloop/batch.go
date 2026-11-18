@@ -209,7 +209,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 			return nil
 		}
 		var err error
-		result.history, err = l.Projection.commitProvisionalAssistantInHistory(ctx, sess, sessionID, result.history, userPrompt, turnSurfaceID, assistantMessageID)
+		result.history, err = l.Projection.commitProvisionalAssistantInHistory(ctx, sess, sessionID, result.history, turnSurfaceID, assistantMessageID)
 		if err != nil {
 			return err
 		}

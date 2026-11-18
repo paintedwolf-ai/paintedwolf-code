@@ -49,7 +49,7 @@ func writeNativePromptFixtures(t *testing.T, root string, registry *PromptBudget
 		if row.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 			forced = row.SurfaceID
 		}
-		system := renderCoordinatorTripartiteForRunContext(t, root, row.RunCtx, row.Sess, row.UserPrompt, row.History, forced, row.State)
+		system := renderCoordinatorTripartiteForRunContext(t, row.RunCtx, row.Sess, row.UserPrompt, row.History, forced, row.State)
 		plan, ok := plans[row.SurfaceID]
 		if !ok || filepath.Base(row.Name) != row.Name || row.Name == "." || row.Name == ".." {
 			t.Fatalf("invalid native request fixture %q", row.Name)

@@ -34,7 +34,7 @@ func TestCompleteStreamVoidsReceiptWhenProviderRejectsBeforeStreaming(t *testing
 	})
 	sess := &api.Session{ID: "s1", ProjectID: "project-1"}
 
-	_, _, err := loop.Model.completeStream(t.Context(), sess, sess.ID, []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil)
+	_, _, err := loop.Model.completeStream(t.Context(), sess, sess.ID, []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", 0, 8, false, nil, nil)
 	if !errors.Is(err, providerErr) {
 		t.Fatalf("completeStream error = %v want provider rejection", err)
 	}
@@ -63,7 +63,7 @@ func TestCompleteStreamDoesNotFailWhenAccountingIsUnavailable(t *testing.T) {
 	})
 	sess := &api.Session{ID: "s1", ProjectID: "project-1"}
 
-	completion, _, err := loop.Model.completeStream(t.Context(), sess, sess.ID, []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil)
+	completion, _, err := loop.Model.completeStream(t.Context(), sess, sess.ID, []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", 0, 8, false, nil, nil)
 	testutil.FailErr(t, "completeStream", err)
 	if completion == nil || completion.Content != "ok" {
 		t.Fatalf("completion = %+v want successful model output", completion)
@@ -99,7 +99,7 @@ func TestCompleteStreamRecordsUsage(t *testing.T) {
 		},
 	})
 	sess := &api.Session{ID: "s1", ProjectID: projectID, WorkspacePath: t.TempDir()}
-	if _, _, err := loop.Model.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil); err != nil {
+	if _, _, err := loop.Model.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", 0, 8, false, nil, nil); err != nil {
 		testutil.FailErr(t, "modelTurn{loop}.completeStream failed", err)
 	}
 	summary, err := tracker.Summary(context.Background(), api.CostScopeSession, "s1", "")

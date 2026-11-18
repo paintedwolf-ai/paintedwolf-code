@@ -123,7 +123,7 @@ func (l *CoordinatorFrames) BuildCoordinatorTurnFrame(
 		}
 	}
 	out.SurfaceProfile = strings.TrimSpace(manifest.SurfaceProfile)
-	if binding, err := workflowdef.ResolveSurfaceBinding(manifest, active.CurrentPhase, active.WorkflowID, l.ConfigRoot); err == nil {
+	if binding, err := workflowdef.ResolveSurfaceBinding(manifest, active.CurrentPhase, active.WorkflowID); err == nil {
 		out.PhaseCoordinatorSurface = binding.CoordinatorSurface
 		out.PhaseSurfaceTemplate = binding.SurfaceTemplate
 		out.PhaseModeRefs = append([]string(nil), binding.ModeRefs...)

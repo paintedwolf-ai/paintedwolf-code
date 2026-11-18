@@ -166,7 +166,7 @@ func TestWorkerDecisionPauseAllowsHandoff(t *testing.T) {
 	decisions := decisionstest.New(t, decisionstest.Job{ID: task.ID, Child: child.ID})
 	mgr.SetDecisionStore(decisions)
 	testutil.FailErr(t, "record worker decision", decisions.Put(ctx, api.WorkerDecisionRequest{ChildSessionID: child.ID, WorkerID: task.ID, Question: "Choose the contract", Options: []string{"A", "B"}}))
-	reject, blocked := mgr.Coordinator.Guards.BeforeFinish(ctx, child, history, "", "Waiting for a decision", guidance.CloseoutDraft{}, "", true, []string{"request_decision"}, true)
+	reject, blocked := mgr.Coordinator.Guards.BeforeFinish(ctx, child, history, "Waiting for a decision", guidance.CloseoutDraft{}, "", true, []string{"request_decision"}, true)
 	if blocked || reject != nil {
 		t.Fatalf("accepted decision forced worker closeout: blocked=%v reject=%v", blocked, reject)
 	}

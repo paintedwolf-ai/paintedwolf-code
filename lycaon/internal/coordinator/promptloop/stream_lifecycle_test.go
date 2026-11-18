@@ -82,8 +82,8 @@ func TestAssistantStreamSuccessClearsActiveProjectionBeforeCommit(t *testing.T) 
 	})
 	sess := &api.Session{ID: "session-1", ProjectID: "project-1"}
 
-	_, _, _, err := loop.Model.runAssistantStreamTurn(
-		context.Background(), sess.ID, sess, nil, &promptLoopTurnState{}, "worker", "go", 0, 3, false,
+	_, _, err := loop.Model.runAssistantStreamTurn(
+		context.Background(), sess.ID, sess, nil, &promptLoopTurnState{}, "worker", 0, 3, false,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -143,8 +143,8 @@ func TestAssistantStreamFailureClearsActiveProjectionAfterPartialContent(t *test
 	})
 	sess := &api.Session{ID: "session-1", ProjectID: "project-1"}
 
-	_, _, _, err := loop.Model.runAssistantStreamTurn(
-		context.Background(), sess.ID, sess, nil, &promptLoopTurnState{}, "worker", "go", 0, 3, false,
+	_, _, err := loop.Model.runAssistantStreamTurn(
+		context.Background(), sess.ID, sess, nil, &promptLoopTurnState{}, "worker", 0, 3, false,
 	)
 	if !errors.Is(err, providerErr) {
 		t.Fatalf("error = %v, want provider disconnect", err)
@@ -200,8 +200,8 @@ func TestCoordinatorStreamFailureWithdrawsPartialDraftAfterLiveFlush(t *testing.
 	})
 	sess := &api.Session{ID: "session-1", ProjectID: "project-1"}
 
-	_, _, _, err := loop.Model.runAssistantStreamTurn(
-		context.Background(), sess.ID, sess, nil, &promptLoopTurnState{}, "coordinator", "go", 0, 3, false,
+	_, _, err := loop.Model.runAssistantStreamTurn(
+		context.Background(), sess.ID, sess, nil, &promptLoopTurnState{}, "coordinator", 0, 3, false,
 	)
 	if !errors.Is(err, providerErr) {
 		t.Fatalf("error = %v, want provider disconnect", err)
@@ -292,7 +292,7 @@ func TestOps8StreamDecisionPrecedesEveryContentDelivery(t *testing.T) {
 				},
 			})
 			sess := &api.Session{ID: "buffer-test", ParentSessionID: "parent"}
-			_, _, _, err := loop.Model.runAssistantStreamTurn(t.Context(), sess.ID, sess, nil, &promptLoopTurnState{}, "worker", "go", 0, 3, false)
+			_, _, err := loop.Model.runAssistantStreamTurn(t.Context(), sess.ID, sess, nil, &promptLoopTurnState{}, "worker", 0, 3, false)
 			if blocked {
 				if err == nil || updates != 0 || replays != 0 {
 					t.Fatalf("[OAR-OPS-6] blocked delivery: err=%v updates=%d replays=%d", err, updates, replays)
