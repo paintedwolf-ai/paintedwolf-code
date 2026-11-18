@@ -128,6 +128,11 @@ func (s *Starts) ActivateStart(ctx context.Context, operationID, inputDigest str
 	if err := s.transactions.createState(ctx, queries, replacement, mutation.ProjectDir, mutation.Vars); err != nil {
 		return nil, err
 	}
+	if mutation.ManifestYAML != "" {
+		if err := queries.SaveRunManifest(ctx, db.SaveRunManifestParams{RunID: replacement.ID, ManifestYaml: mutation.ManifestYAML}); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.transactions.enqueueRunTx(ctx, tx, replacement, api.WorkflowEventKindRunStarted, ""); err != nil {
 		return nil, err
 	}
@@ -202,6 +207,11 @@ func (s *Starts) StartChild(ctx context.Context, parent, child *api.WorkflowRun,
 	}
 	if err := s.transactions.createState(ctx, queries, child, mutation.ProjectDir, mutation.Vars); err != nil {
 		return err
+	}
+	if mutation.ManifestYAML != "" {
+		if err := queries.SaveRunManifest(ctx, db.SaveRunManifestParams{RunID: child.ID, ManifestYaml: mutation.ManifestYAML}); err != nil {
+			return err
+		}
 	}
 	parentNext := *parent
 	parentNext.Revision++

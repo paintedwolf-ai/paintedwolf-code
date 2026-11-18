@@ -14,6 +14,7 @@ import (
 
 // Resolver merges the pack, project, and session workflow tiers.
 type RunReader interface {
+	RunManifest(context.Context, string) (string, error)
 	Get(context.Context, string) (*api.WorkflowRun, error)
 }
 

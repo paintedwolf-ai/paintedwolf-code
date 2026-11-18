@@ -63,7 +63,7 @@ func loadManifestsRawWithSources(dir string, origin ManifestSourceOrigin) (map[s
 		}
 		m, err := LoadManifestFromFile(p)
 		if err != nil {
-			return nil,nil,predicateFileError(p,err)
+			return nil, nil, predicateFileError(p, err)
 		}
 		key := ManifestKey(m.ID, m.Version)
 		if _, dup := entries[key]; dup {
@@ -136,13 +136,6 @@ func RegistryFromDirsWithSources(projectDir string) (*Registry, map[string]Manif
 	resolved, err := ResolveAllManifests(mergedRaw)
 	if err != nil {
 		return nil, nil, err
-	}
-	for key, source := range sources {
-		if source.Origin == OriginOverlay {
-			if err := resolved[key].checkPredicates(true); err != nil {
- return nil,nil,predicateFileError(source.Path,err)
-			}
-		}
 	}
 	if ref, cfgErr := LoadRegistryConfig(extpacks.Bundled(config.PlatformFlows)); cfgErr == nil {
 		if err := ValidateAmbientAttachBijection(resolved, ref); err != nil {

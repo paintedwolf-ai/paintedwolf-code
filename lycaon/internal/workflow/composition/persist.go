@@ -97,7 +97,11 @@ func (p *Persister) Persist(ctx context.Context, req PersistRequest) (*PersistRe
 	if err := p.checkApproval(req); err != nil {
 		return nil, err
 	}
-	raw, err := workflowdef.ParseManifestYAML([]byte(rec.ManifestYAML))
+	source := rec.ManifestYAML
+	if rec.AuthoredYAML != "" {
+		source = rec.AuthoredYAML
+	}
+	raw, err := workflowdef.ParseManifestYAML([]byte(source))
 	if err != nil {
 		if issues := workflowvalidation.PredicateLoadErrors(err, ""); len(issues) > 0 {
 			return nil, &ComposeValidationFailed{Errors: issues}
@@ -140,7 +144,7 @@ func (p *Persister) Persist(ctx context.Context, req PersistRequest) (*PersistRe
 			return nil, collision
 		}
 	}
-	yamlOut, err := workflowdef.MarshalManifestYAML(effective)
+	yamlOut, err := projectManifestYAML(rec.AuthoredYAML, triggerOverride, effective)
 	if err != nil {
 		return nil, err
 	}

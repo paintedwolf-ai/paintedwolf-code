@@ -6,6 +6,7 @@ import (
 )
 
 type workflowFile struct {
+	WorkflowFormat     *int                             `yaml:"workflow_format,omitempty"`
 	ID                 string                           `yaml:"id"`
 	Version            string                           `yaml:"version"`
 	Attach             *attachYAML                      `yaml:"attach"`

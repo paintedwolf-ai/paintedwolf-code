@@ -1,0 +1,174 @@
+id: hotfix
+version: 1.0.0
+attach: null
+request:
+    cadence: once
+    question: What would you like to plan?
+extends: ""
+name: Plan
+description: Research, expand, approve, then build. Optional critique from approve.
+trigger: /hotfix-custom
+initial_posture: spec
+icon: route
+featured: true
+requires_repo: null
+coordinator_profile: ""
+surface_profile: plan
+agents:
+    - id: plan-writer
+      tools: profile
+    - id: implementer
+      tools: profile
+gates: []
+rules:
+    - config/packs/painted-wolf/platform/host/posture-rules/coordinator.yaml
+    - config/packs/painted-wolf/platform/host/posture-rules/spec.yaml
+topology: ""
+controls:
+    phase_advance: host
+    default_execution_mode: ""
+    on_decision_reject: null
+    on_pause:
+        hold_pending: true
+        cancel_running: false
+    on_stop:
+        cancel_workers: true
+        abort_delegation: true
+        session_abort: true
+    content_review: null
+    report: null
+phases:
+    - id: research
+      activity_label: Researching the project
+      complete_when: gates_satisfied
+      entry_when: ""
+      invoke_workflow: null
+      invoke_trigger: ""
+      next: build
+      child_next: ""
+      child_complete_when: ""
+      child_gates: []
+      on_enter: null
+      on_reenter: null
+      controls:
+        content_review: null
+        closeout: gated
+      gates:
+        - research_satisfied
+      bind_topology_stage: ""
+      bind_parallel_group: []
+      parallel_task: null
+      fanout: null
+      touch: null
+      terminal: false
+      coordinator_surface: ""
+      surface_template: ""
+      mode_refs: []
+      advance:
+        when_gate_met: coordinator
+      loop: null
+      intake: []
+      human_approval: null
+      review_loop: null
+      depth_param: research_depth
+      transitions: []
+      blueprint_write: false
+      explain: null
+    - id: done
+      activity_label: Done
+      complete_when: orchestration_complete
+      entry_when: ""
+      invoke_workflow: null
+      invoke_trigger: ""
+      next: ""
+      child_next: ""
+      child_complete_when: ""
+      child_gates: []
+      on_enter: null
+      on_reenter: null
+      controls: null
+      gates: []
+      bind_topology_stage: ""
+      bind_parallel_group: []
+      parallel_task: null
+      fanout: null
+      touch: null
+      terminal: true
+      coordinator_surface: ""
+      surface_template: ""
+      mode_refs: []
+      advance: null
+      loop: null
+      intake: []
+      human_approval: null
+      review_loop: null
+      depth_param: ""
+      transitions: []
+      blueprint_write: false
+      explain: null
+    - id: build
+      activity_label: Test phase
+      complete_when: gates_satisfied
+      entry_when: ""
+      invoke_workflow: null
+      invoke_trigger: ""
+      next: ""
+      child_next: ""
+      child_complete_when: ""
+      child_gates: []
+      on_enter:
+        set_posture: build
+        set_execution_mode: ""
+        prompt_coordinator: false
+        request_user_feedback: null
+        obligations: []
+      on_reenter: null
+      controls: null
+      gates:
+        - delegation_closeout_complete
+        - evidence_passed:verify
+      bind_topology_stage: ""
+      bind_parallel_group: []
+      parallel_task: null
+      fanout: null
+      touch: null
+      terminal: false
+      coordinator_surface: ""
+      surface_template: ""
+      mode_refs: []
+      advance: null
+      loop: null
+      intake: []
+      human_approval: null
+      review_loop: null
+      depth_param: ""
+      transitions: []
+      blueprint_write: false
+      explain: null
+parameters:
+    auto_approve:
+        type: boolean
+        default: "false"
+    research_depth:
+        type: depth
+        default: light
+    review_depth:
+        type: depth
+        default: light
+blueprint:
+    id: plan
+    file: ""
+    frontmatter:
+        - scope
+        - breaking
+        - research_depth
+presets: []
+injects:
+    - "on": phase.entered
+      selector:
+        surface: phase
+        phase: review
+        workflow: plan
+      effect: inform
+      render: coordinator-plan-critique
+      tier: workflow

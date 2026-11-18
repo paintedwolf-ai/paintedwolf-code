@@ -31,6 +31,9 @@ func ParseManifestYAML(data []byte) (Manifest, error) {
 	if err := decoder.Decode(&wf); err != nil {
 		return Manifest{}, err
 	}
+	if wf.WorkflowFormat != nil && *wf.WorkflowFormat != 2 {
+		return Manifest{}, fmt.Errorf("unsupported workflow_format %d", *wf.WorkflowFormat)
+	}
 	if err := validateWorkflowFileHeader(wf); err != nil {
 		return Manifest{}, err
 	}
@@ -104,6 +107,11 @@ func ParseManifestYAML(data []byte) (Manifest, error) {
 	}
 	if err := assignWorkflowInjects(&m, wf.Injects); err != nil {
 		return Manifest{}, err
+	}
+	if wf.WorkflowFormat != nil {
+		if err := m.checkPredicates(true); err != nil {
+			return Manifest{}, err
+		}
 	}
 	if err := validateManifestSchema(m); err != nil {
 		return Manifest{}, err

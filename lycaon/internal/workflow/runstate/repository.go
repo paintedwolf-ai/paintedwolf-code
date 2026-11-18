@@ -24,6 +24,7 @@ type Repository struct {
 }
 
 type RunsRepository interface {
+	RunManifest(context.Context, string) (string, error)
 	Get(ctx context.Context, id string) (*api.WorkflowRun, error)
 	ActiveBySession(ctx context.Context, sessionID string) (*api.WorkflowRun, error)
 	ActiveStateBySession(ctx context.Context, sessionID string) (*api.WorkflowRun, map[string]any, error)

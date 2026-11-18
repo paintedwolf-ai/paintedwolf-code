@@ -142,7 +142,7 @@ func (c *Composer) Compose(ctx context.Context, req ComposeRequest) (*ComposeRes
 		if !workflowdrafts.IsActor(req.CreatedBy) {
 			return nil, fmt.Errorf("invalid compose actor %q", req.CreatedBy)
 		}
-		if err := c.SessionStore.Upsert(ctx, sessionID, []byte(effectiveYAML), req.CreatedBy, &effSummary); err != nil {
+		if err := c.SessionStore.Upsert(ctx, sessionID, []byte(effectiveYAML), req.CreatedBy, &workflowdrafts.Composition{AuthoredYAML: string(req.ManifestYAML), Summary: effSummary}); err != nil {
 			return nil, err
 		}
 	}
