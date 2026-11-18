@@ -24,7 +24,7 @@ func TestProjectAgentContextUsesSessionWorktree(t *testing.T) {
 	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	root = p.Roots[0].Path
-	sess, err := srv.Sources.Workspace.SessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID}, p.ID)
+	sess, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID}, p.ID)
 	testutil.FailErr(t, "create session", err)
 
 	branch, err := git.NewManager().Branch(t.Context(), root)
@@ -34,7 +34,7 @@ func TestProjectAgentContextUsesSessionWorktree(t *testing.T) {
 	testutil.FailErr(t, "add worktree", git.NewManager().AddWorktree(
 		t.Context(), root, worktree, worktreeBranch, branch,
 	))
-	testutil.FailErr(t, "bind worktree", srv.Sources.Workspace.SessionStore.Sessions.PutWorktreeBinding(
+	testutil.FailErr(t, "bind worktree", srv.Admin.SessionAdmin.Lifecycle.SessionStore.PutWorktreeBinding(
 		t.Context(),
 		sessionstore.WorktreeBinding{
 			SessionID:    sess.ID,

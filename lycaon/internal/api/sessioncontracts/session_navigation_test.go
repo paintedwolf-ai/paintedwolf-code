@@ -33,7 +33,7 @@ func TestMessageNavigationEndpointResolvesStoredDestinations(t *testing.T) {
 	testutil.FailErr(t, "project", err)
 	content := "See [local](.local.txt)"
 	refs := []wire.NavigationReference{{Mention: ".local.txt", ProjectID: project.ID, RootID: project.Roots[0].ID, Path: ".local.txt", Explicit: true, ID: "ref-0", Syntax: "link", Status: wire.NavigationPending}}
-	testutil.FailErr(t, "assistant message", srv.Sources.Workspace.SessionStore.Transcript.AppendMessages(t.Context(), sess.ID, wire.Message{ID: "navigation-message", Role: wire.MessageRoleAssistant, Content: content, Visibility: wire.MessageVisibilityTranscript, NavigationRefs: refs}))
+	testutil.FailErr(t, "assistant message", srv.Admin.SessionAdmin.Transcript.TranscriptStore.AppendMessages(t.Context(), sess.ID, wire.Message{ID: "navigation-message", Role: wire.MessageRoleAssistant, Content: content, Visibility: wire.MessageVisibilityTranscript, NavigationRefs: refs}))
 	request := wire.ResolveMessageNavigationRequest{MessageID: "navigation-message", ContentSHA256: store.NavigationContentHash(content)}
 	raw, err := json.Marshal(request)
 	testutil.FailErr(t, "encode request", err)

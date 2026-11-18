@@ -28,7 +28,7 @@ func TestWorktreeReach_realProductWorkflow(t *testing.T) {
 	srv, mgr, projectID := contractfixture.NewWorktreeTestServer(t)
 	mgr.SetProjectRegistry(srv.Sources.Workspace.ProjectRegistry)
 	sess, baseRepoID, _ := contractfixture.CreateBoundSession(t, srv, projectID)
-	binding, bound, err := srv.Sources.Workspace.SessionStore.Sessions.GetWorktreeBinding(t.Context(), sess.ID)
+	binding, bound, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 	testutil.FailErr(t, "get binding", err)
 	if !bound {
 		t.Fatal("expected binding")
@@ -135,7 +135,7 @@ func TestWorktreeReach_tabAndBoardAgree(t *testing.T) {
 	mgr.SetProjectRegistry(srv.Sources.Workspace.ProjectRegistry)
 
 	sess, _, view := contractfixture.CreateBoundSession(t, srv, projectID)
-	binding, ok, err := srv.Sources.Workspace.SessionStore.Sessions.GetWorktreeBinding(t.Context(), sess.ID)
+	binding, ok, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 	testutil.FailErr(t, "binding", err)
 	if !ok {
 		t.Fatal("expected binding")
@@ -186,7 +186,7 @@ func TestWorktreeReach_tabWithoutSessionUnsubstituted(t *testing.T) {
 	srv, mgr, projectID := contractfixture.NewWorktreeTestServer(t)
 	mgr.SetProjectRegistry(srv.Sources.Workspace.ProjectRegistry)
 	sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
-	binding, ok, err := srv.Sources.Workspace.SessionStore.Sessions.GetWorktreeBinding(t.Context(), sess.ID)
+	binding, ok, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 	testutil.FailErr(t, "binding", err)
 	if !ok {
 		t.Fatal("expected binding")
@@ -216,7 +216,7 @@ func TestWorktreeReach_stalePromptHTTP409(t *testing.T) {
 	srv, mgr, projectID := contractfixture.NewWorktreeTestServer(t)
 	mgr.SetProjectRegistry(srv.Sources.Workspace.ProjectRegistry)
 	sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
-	binding, ok, err := srv.Sources.Workspace.SessionStore.Sessions.GetWorktreeBinding(t.Context(), sess.ID)
+	binding, ok, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 	testutil.FailErr(t, "binding", err)
 	if !ok {
 		t.Fatal("expected binding")
@@ -297,7 +297,7 @@ func TestWorktreeReachSourceHistoryCannotChangeGitRepositoryIdentity(t *testing.
 	sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
 	p, err := srv.Sources.Workspace.ProjectRegistry.Get(t.Context(), projectID)
 	testutil.FailErr(t, "load project", err)
-	scope, err := requestscope.ResolveSessionProject(srv.Sources.Workspace.SessionStore.Sessions, t.Context(), p, sess.ID)
+	scope, err := requestscope.ResolveSessionProject(srv.Admin.SessionAdmin.Lifecycle.SessionStore, t.Context(), p, sess.ID)
 	testutil.FailErr(t, "resolve worktree", err)
 	if scope.Binding == nil {
 		t.Fatal("expected worktree binding")

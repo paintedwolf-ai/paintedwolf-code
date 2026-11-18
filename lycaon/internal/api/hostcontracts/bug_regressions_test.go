@@ -261,9 +261,9 @@ func TestListWorkersFiltersBySessionID(t *testing.T) {
 	opened := contractfixture.CreateProjectForTest(t, srv, projectDir)
 
 	ctx := context.Background()
-	first, err := srv.Sources.Workspace.SessionStore.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, opened.ID)
+	first, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, opened.ID)
 	testutil.FailErr(t, "create first parent", err)
-	second, err := srv.Sources.Workspace.SessionStore.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, opened.ID)
+	second, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, opened.ID)
 	testutil.FailErr(t, "create second parent", err)
 	now := time.Now().UTC()
 	queue := srv.Admin.Project.Sandboxes.Workers.(*worker.SQLQueue)
