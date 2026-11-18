@@ -111,7 +111,7 @@ func (h *scriptedHarness) workers() *Workers {
 		body, err := os.ReadFile(filepath.Join(h.root, path))
 		return "read#1", string(body), err
 	}
-	controller, err := NewWorkers(h.data, h.sessions, h.queue, verify, read, h.decisions, h.fallback)
+	controller, err := NewWorkers(h.data, h.sessions, h.queue, h.queue.Branches, verify, read, h.decisions, h.fallback)
 	testutil.FailErr(h.t, "create workers", err)
 	return controller
 }
@@ -158,7 +158,7 @@ func TestScriptedContinuationResumesTheSeededChildAndSurvivesRestart(t *testing.
 	h := newScriptedHarness(t, map[string]string{"app.py": "baseline"})
 	setup := Setup{Overlays: []Overlay{{Label: "Change", ResultStatus: "partial", Files: map[string]string{"app.py": "partial"},
 		Script: &WorkerScript{Stages: []WorkerStage{{Kind: StageComplete, Files: map[string]string{"app.py": "complete"}, Verify: "checks"}}}}}}
-	evidence, err := Prepare(t.Context(), h.queue, h.sessions, h.parent, h.attached.Roots[0], setup, nil)
+	evidence, err := Prepare(t.Context(), h.queue, h.queue.Branches, h.sessions, h.parent, h.attached.Roots[0], setup, nil)
 	testutil.FailErr(t, "prepare partial return", err)
 	seed := evidence.Overlays[0]
 	testutil.FailErr(t, "install", h.workers().Install(h.parent.ID, setup, evidence))

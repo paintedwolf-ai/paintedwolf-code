@@ -565,3 +565,11 @@ func openEngineRecovery(t *testing.T, stateRoot string, privateGit *privategit.M
 	testutil.FailErr(t, "open coordinator", err)
 	return coordinator
 }
+
+func TestPromotionRequiresBranchProviderBeforeRecovery(t *testing.T) {
+	service := &MergeService{}
+	lease, err := service.holdBranch(t.Context(), "job")
+	if err == nil || lease != nil {
+		t.Fatalf("branch provider absence: lease=%v error=%v", lease, err)
+	}
+}

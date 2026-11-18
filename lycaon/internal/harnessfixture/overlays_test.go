@@ -39,7 +39,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 		{Label: "Filter", Files: map[string]string{"catalog.py": "value = 'filter'\n"}},
 		{Label: "Page", ResultStatus: "partial", Files: map[string]string{"catalog.py": "value = 'page'\n"}},
 	}, IntegrationFiles: map[string]string{"preferences.json": "violet"}}
-	evidence, err := Prepare(t.Context(), queue, sessions, parent, project.Roots[0], setup, nil)
+	evidence, err := Prepare(t.Context(), queue, queue.Branches, sessions, parent, project.Roots[0], setup, nil)
 	testutil.FailErr(t, "prepare overlays", err)
 	if queue.pendingOutcomes != 0 {
 		t.Fatal("fixture exposed outcomes to the automatic coordinator wake path")
@@ -95,7 +95,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 	if string(body) != "violet" {
 		t.Fatalf("user edit lost: %q", body)
 	}
-	if _, err := Prepare(t.Context(), queue, sessions, parent, project.Roots[0], setup, nil); err == nil {
+	if _, err := Prepare(t.Context(), queue, queue.Branches, sessions, parent, project.Roots[0], setup, nil); err == nil {
 		t.Fatal("fixture reused an existing project")
 	}
 }
