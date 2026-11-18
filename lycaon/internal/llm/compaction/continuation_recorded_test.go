@@ -107,7 +107,7 @@ func TestRecordedContinuationRenderMatrix(t *testing.T) {
 		{"references", "references", 2048, 0, 192, true, true},
 		{"zero recorded rows", "detailed", 32768, 0, 0, true, false},
 		{"one recorded row", "detailed", 32768, 2, 0, false, false},
-		{"over-budget", "references", 2048, 0, 115, false, false},
+		{"over-budget", "compact", 8192, 0, 512, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			record := messageview.CloneContinuation(baseline)
