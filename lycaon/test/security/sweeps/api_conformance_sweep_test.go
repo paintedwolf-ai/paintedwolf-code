@@ -212,8 +212,9 @@ type conformanceOutcomes struct {
 	lastAnswer map[string]string
 	// replayed counts keyed operations whose success was replayed.
 	replayed int
-	// paged counts lists walked one row at a time.
-	paged int
+	// paged counts lists walked one row at a time; multiStream counts lists
+	// left unwalked because the spec does not name the array limit bounds.
+	paged, multiStream int
 	// created holds the project and chat ids the host answered from a create.
 	created map[string]bool
 }

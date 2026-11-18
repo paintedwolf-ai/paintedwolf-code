@@ -39,6 +39,8 @@ type conformanceOp struct {
 	// IdempotentRelease marks a release whose unknown handle is already
 	// released (x-idempotent-release).
 	IdempotentRelease bool
+	// MultiStream marks a list answering several arrays (x-multi-stream-list).
+	MultiStream bool
 }
 
 var templateParamRE = regexp.MustCompile(`\{([^}]+)\}`)
@@ -55,6 +57,7 @@ func conformanceOperations(doc *openapi3.T) []*conformanceOp {
 			}
 			out.Authenticated = len(security) > 0
 			out.IdempotentRelease = op.Extensions["x-idempotent-release"] == true
+			out.MultiStream = op.Extensions["x-multi-stream-list"] == true
 			ops = append(ops, out)
 		}
 	}

@@ -95,7 +95,7 @@ func continuationField(param string) string {
 	return param + "_cursor"
 }
 
-// walkPages checks every paged list against its own rows: the declared
+// walkPages checks every single-stream paged list against its own rows: the declared
 // maximum is accepted, and pages of one row each, followed by their
 // continuation, visit every row exactly once. A list holding fewer than two
 // rows is seeded by its collection's create first.
@@ -104,6 +104,12 @@ func (s *conformanceSweep) walkPages(ctx context.Context) {
 		pages := op.pageParams()
 		limit := paramSchema(op.query("limit"))
 		if len(pages) == 0 || limit == nil || limit.Max == nil {
+			continue
+		}
+		// Each stream pages by its own cursor, and the spec does not say
+		// which array limit bounds, so one-row pages have no single list.
+		if op.MultiStream {
+			s.outcomes.multiStream++
 			continue
 		}
 		base, err := s.successRequest(ctx, op)

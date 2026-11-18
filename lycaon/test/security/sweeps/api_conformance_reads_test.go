@@ -148,6 +148,7 @@ type hostEffects struct {
 	conn   *sql.Conn
 	hub    *events.MemoryHub
 	events <-chan wire.EventEnvelope
+	pump   *eventPump
 	settle func(context.Context)
 	// projectDir is the watched fixture tree whose change pipeline must drain.
 	projectDir string
@@ -196,35 +197,75 @@ func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryH
 		_ = conn.Close()
 		_ = database.Close()
 	})
-	return &hostEffects{conn: conn, hub: hub, events: unboundedEvents(ch), settle: hostSettle(h), projectDir: projectDir, quietGrace: 2 * debounce}
+	pump := newEventPump(ch)
+	return &hostEffects{conn: conn, hub: hub, events: pump.out, pump: pump, settle: hostSettle(h), projectDir: projectDir, quietGrace: 2 * debounce}
 }
 
-// unboundedEvents keeps reading in so a burst between two reads never fills
-// the hub's buffer, which would drop the subscription.
-func unboundedEvents(in <-chan wire.EventEnvelope) <-chan wire.EventEnvelope {
-	out := make(chan wire.EventEnvelope)
-	go func() {
-		defer close(out)
-		var queue []wire.EventEnvelope
-		for in != nil || len(queue) > 0 {
-			var send chan wire.EventEnvelope
-			var next wire.EventEnvelope
-			if len(queue) > 0 {
-				send, next = out, queue[0]
-			}
-			select {
-			case env, ok := <-in:
-				if !ok {
-					in = nil
-					continue
-				}
-				queue = append(queue, env)
-			case send <- next:
-				queue = queue[1:]
-			}
+// eventPump keeps reading a subscription so a burst between two reads never
+// fills the hub's buffer, which would drop it. It is the only reader, so a
+// take collects every event the hub has delivered, including any still in
+// the subscription's buffer.
+type eventPump struct {
+	out  chan wire.EventEnvelope
+	take chan chan pumpTake
+}
+
+type pumpTake struct {
+	events  []wire.EventEnvelope
+	dropped bool
+}
+
+func newEventPump(in <-chan wire.EventEnvelope) *eventPump {
+	p := &eventPump{out: make(chan wire.EventEnvelope), take: make(chan chan pumpTake)}
+	go p.run(in)
+	return p
+}
+
+func (p *eventPump) run(in <-chan wire.EventEnvelope) {
+	var queue []wire.EventEnvelope
+	dropped, closed := false, false
+	receive := func(env wire.EventEnvelope, ok bool) {
+		if !ok {
+			in, dropped = nil, true
+			return
 		}
-	}()
-	return out
+		queue = append(queue, env)
+	}
+	for {
+		if dropped && len(queue) == 0 && !closed {
+			close(p.out)
+			closed = true
+		}
+		var send chan wire.EventEnvelope
+		var next wire.EventEnvelope
+		if len(queue) > 0 {
+			send, next = p.out, queue[0]
+		}
+		select {
+		case env, ok := <-in:
+			receive(env, ok)
+		case send <- next:
+			queue = queue[1:]
+		case reply := <-p.take:
+			for pending := true; pending && in != nil; {
+				select {
+				case env, ok := <-in:
+					receive(env, ok)
+				default:
+					pending = false
+				}
+			}
+			reply <- pumpTake{events: queue, dropped: dropped}
+			queue = nil
+		}
+	}
+}
+
+// collect takes every delivered event without waiting for more.
+func (p *eventPump) collect() pumpTake {
+	reply := make(chan pumpTake, 1)
+	p.take <- reply
+	return <-reply
 }
 
 func (e *hostEffects) mark(ctx context.Context) (int64, error) {
@@ -362,18 +403,15 @@ func (e *hostEffects) dataVersion(ctx context.Context) (int64, error) {
 
 // drain empties the subscription without blocking and names each event.
 func (e *hostEffects) drain() []string {
-	var published []string
-	for {
-		select {
-		case env, ok := <-e.events:
-			if !ok {
-				return append(published, "event stream dropped")
-			}
-			published = append(published, fmt.Sprintf("event %s", env.Topic))
-		default:
-			return published
-		}
+	taken := e.pump.collect()
+	published := make([]string, 0, len(taken.events)+1)
+	for _, env := range taken.events {
+		published = append(published, fmt.Sprintf("event %s", env.Topic))
 	}
+	if taken.dropped {
+		published = append(published, "event stream dropped")
+	}
+	return published
 }
 
 // settleSourceWatcher waits until the project's watcher has delivered every

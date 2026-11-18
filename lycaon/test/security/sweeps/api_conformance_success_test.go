@@ -270,5 +270,5 @@ func (s *conformanceSweep) checkCoverage() {
 	}
 	s.findings.note("success path: %d of %d operations answered a validated success", covered, len(s.ops))
 	s.findings.note("idempotency: %d of %d keyed operations replayed", s.outcomes.replayed, keyed)
-	s.findings.note("pagination: %d lists walked one row at a time", s.outcomes.paged)
+	s.findings.note("pagination: %d lists walked one row at a time; %d multi-stream lists not walked", s.outcomes.paged, s.outcomes.multiStream)
 }

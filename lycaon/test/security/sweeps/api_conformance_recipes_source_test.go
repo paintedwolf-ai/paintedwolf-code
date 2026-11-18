@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/mcp"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // sourceClientID is the editor and view client every source recipe acts as.
@@ -98,13 +99,13 @@ var sourceRecipes = map[string]successRecipe{
 
 // sourceState caches fixtures that are costly to build once per sweep.
 type sourceState struct {
-	names     int
-	versions  *sourceVersioned
-	git       *sourceGitFixture
-	briefing  map[string]any
-	recordID  string
-	chatSHA   string
-	chatQuery string
+	names       int
+	versions    *sourceVersioned
+	git         *sourceGitFixture
+	briefing    map[string]any
+	recordID    string
+	chatSHA     string
+	chatMessage string
 }
 
 var sourceStates sync.Map
@@ -1119,6 +1120,14 @@ func sourceGitHistory(ctx context.Context, s *conformanceSweep) (*sourceGitFixtu
 		}
 	}
 	fixture := &sourceGitFixture{files: [2]string{"conformance-git-a.txt", "conformance-git-b.txt"}}
+	// Files the host creates carry a ledger identity the commit restore names.
+	for _, name := range fixture.files {
+		if _, err := os.Stat(filepath.Join(s.fixture.projectDir, name)); errors.Is(err, os.ErrNotExist) {
+			if err := sourceCreateEntry(ctx, s, name); err != nil {
+				return nil, err
+			}
+		}
+	}
 	var err error
 	if fixture.parent, err = sourceGitCommit(ctx, s, fixture.files, "one\n", "conformance one"); err != nil {
 		return nil, err
@@ -1145,14 +1154,13 @@ func sourceRestoreCommitInputs(ctx context.Context, s *conformanceSweep, _ *conf
 		return successInputs{}, err
 	}
 	name := history.files[0]
-	// The walk carries the ledger identity a disk write earns once observed.
-	file, err := sourceWalkFile(ctx, s, name)
+	read, err := sourceRead(ctx, s, name)
 	if err != nil {
 		return successInputs{}, err
 	}
-	fileID := sourceString(file, "file_id")
+	fileID := sourceString(read, "file_id")
 	if fileID == "" {
-		return successInputs{}, fmt.Errorf("the walk names no file_id for %s", name)
+		return successInputs{}, fmt.Errorf("reading %s names no file_id", name)
 	}
 	current, err := sourceDiskSHA(s, name)
 	if err != nil {
@@ -1277,48 +1285,32 @@ func sourceBriefingRecordInputs(ctx context.Context, s *conformanceSweep, _ *con
 	return successInputs{params: map[string]string{"record_id": state.recordID}}, nil
 }
 
-// sourceChatContent names the bound message's content revision as the
-// transcript shows it, and a query it matches at least twice.
-func sourceChatContent(ctx context.Context, s *conformanceSweep) (string, string, error) {
+// sourceChatContent is an assistant message of its own whose lines each
+// match the search query, and the content's digest.
+func sourceChatContent(ctx context.Context, s *conformanceSweep) (map[string]string, string, error) {
 	state := sourceStateOf(s)
-	if state.chatSHA != "" {
-		return state.chatSHA, state.chatQuery, nil
-	}
-	messageID := s.values.byPrefix["/v1/sessions/{id}/messages/{message_id}"]
-	if messageID == "" {
-		return "", "", errors.New("no chat message is bound")
-	}
-	transcript, err := s.prerequisite(ctx, "listSessionMessages", successInputs{})
-	if err != nil {
-		return "", "", err
-	}
-	message := sourceFindObject(transcript, "id", messageID)
-	if message == nil {
-		return "", "", fmt.Errorf("the transcript does not show message %s", messageID)
-	}
-	content := sourceString(message, "content")
-	counts := map[rune]int{}
-	query := ""
-	for _, r := range content {
-		if counts[r]++; counts[r] >= 2 && (query == "" || counts[r] > counts[[]rune(query)[0]]) {
-			query = string(r)
+	if state.chatSHA == "" {
+		content := "conformance one\nconformance two\nconformance three"
+		id := uuid.NewString()
+		if err := s.host.Store.AppendMessages(ctx, s.fixture.session.ID, wire.Message{
+			ID: id, Role: wire.MessageRoleAssistant, Origin: wire.MessageOriginModel,
+			Content: content, Visibility: wire.MessageVisibilityTranscript,
+		}); err != nil {
+			return nil, "", err
 		}
+		state.chatMessage, state.chatSHA = id, sourceSHA([]byte(content))
 	}
-	if query == "" {
-		query = "conformance"
-	}
-	state.chatSHA, state.chatQuery = sourceSHA([]byte(content)), query
-	return state.chatSHA, state.chatQuery, nil
+	return map[string]string{"id": s.fixture.session.ID, "message_id": state.chatMessage}, state.chatSHA, nil
 }
 
 func sourceChatContentInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
-	sha, _, err := sourceChatContent(ctx, s)
-	return successInputs{query: map[string]string{"field": "content", "sha256": sha}}, err
+	params, sha, err := sourceChatContent(ctx, s)
+	return successInputs{params: params, query: map[string]string{"field": "content", "sha256": sha}}, err
 }
 
 func sourceSearchChatContentInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
-	sha, query, err := sourceChatContent(ctx, s)
-	return successInputs{query: map[string]string{"field": "content", "sha256": sha, "q": query}}, err
+	params, sha, err := sourceChatContent(ctx, s)
+	return successInputs{params: params, query: map[string]string{"field": "content", "sha256": sha, "q": "conformance"}}, err
 }
 
 // sourceHostResourceInputs sets the bound resource to follow its default.
