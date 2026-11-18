@@ -14,9 +14,17 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
-type ProgramProvenance interface {
-	CommitProgramHTTPProvenance(ctx context.Context, target evidence.ProgramProvenanceTarget, prov evidence.ProgramHTTPProvenance) (string, error)
+type programCustodyReader interface {
 	ExternalCustodyURLsForPaths(ctx context.Context, sessionID, projectDir string, paths []string) ([]string, error)
+}
+
+type ProgramProvenance interface {
+	BeginProgramPublication(ctx context.Context, sessionID, programID string) error
+	StageProgramPublication(ctx context.Context, target evidence.ProgramProvenanceTarget, prov evidence.ProgramHTTPProvenance) error
+	CommitProgramPublication(ctx context.Context, sessionID, programID string) error
+	MarkProgramPublicationMaterialized(ctx context.Context, sessionID, programID string) error
+	ListRecoverableProgramPublications(ctx context.Context, afterProgramID string, limit int) ([]evidence.ProgramPublicationKey, error)
+	programCustodyReader
 }
 
 type programProvenanceState struct {
@@ -383,15 +391,12 @@ func (r *programRun) custodyError() error {
 	return r.provenance.custodyErr
 }
 
-func (r *ProgramRuntime) commitProgramHTTPProvenance(ctx context.Context, run *programRun, hasModelVisibleOutput bool) error {
-	if r == nil || run == nil || r.Provenance == nil {
-		return nil
-	}
+func (r *ProgramRuntime) programHTTPProvenance(ctx context.Context, run *programRun, hasModelVisibleOutput bool) (evidence.ProgramHTTPProvenance, error) {
 	store := r.Provenance
 	run.provenance.mu.Lock()
 	if err := run.provenance.custodyErr; err != nil {
 		run.provenance.mu.Unlock()
-		return err
+		return evidence.ProgramHTTPProvenance{}, err
 	}
 	ingested := run.provenance.directExternalOutput || (run.provenance.pipedExternalOutput && hasModelVisibleOutput)
 	var observedURLs []string
@@ -399,20 +404,23 @@ func (r *ProgramRuntime) commitProgramHTTPProvenance(ctx context.Context, run *p
 		observedURLs = appendUniqueProvenanceStrings(observedURLs, run.provenance.externalURLs...)
 	}
 	var custodyPaths []string
-	for p, urls := range run.provenance.custodyFiles {
-		if len(urls) == 0 {
-			continue
+	for path, urls := range run.provenance.custodyFiles {
+		if len(urls) > 0 {
+			custodyPaths = append(custodyPaths, path)
 		}
-		custodyPaths = append(custodyPaths, p)
-		observedURLs = appendUniqueProvenanceStrings(observedURLs, urls...)
 	}
 	sort.Strings(custodyPaths)
+	for _, path := range custodyPaths {
+		observedURLs = appendUniqueProvenanceStrings(observedURLs, run.provenance.custodyFiles[path]...)
+	}
 	var custodyTrees []string
-	for p, urls := range run.provenance.custodyTrees {
-		custodyTrees = append(custodyTrees, p)
-		observedURLs = appendUniqueProvenanceStrings(observedURLs, urls...)
+	for path := range run.provenance.custodyTrees {
+		custodyTrees = append(custodyTrees, path)
 	}
 	sort.Strings(custodyTrees)
+	for _, path := range custodyTrees {
+		observedURLs = appendUniqueProvenanceStrings(observedURLs, run.provenance.custodyTrees[path]...)
+	}
 	var clearedCandidates []string
 	for p, cleared := range run.provenance.clearedFiles {
 		if cleared && p != "" {
@@ -433,7 +441,7 @@ func (r *ProgramRuntime) commitProgramHTTPProvenance(ctx context.Context, run *p
 		for _, sessionID := range sessions {
 			existing, err := store.ExternalCustodyURLsForPaths(commitCtx, sessionID, projDir, []string{path})
 			if err != nil {
-				return err
+				return evidence.ProgramHTTPProvenance{}, err
 			}
 			if len(existing) > 0 {
 				clearedPaths = append(clearedPaths, path)
@@ -442,20 +450,14 @@ func (r *ProgramRuntime) commitProgramHTTPProvenance(ctx context.Context, run *p
 		}
 	}
 
-	if !ingested && len(custodyPaths) == 0 && len(custodyTrees) == 0 && len(clearedPaths) == 0 {
-		return nil
-	}
-	prov := evidence.ProgramHTTPProvenance{
+	return evidence.ProgramHTTPProvenance{
 		ProgramID:        run.root.Identity.ProgramID,
 		UntrustedContent: ingested,
 		ObservedURLs:     observedURLs,
 		CustodyPaths:     custodyPaths,
 		CustodyTrees:     custodyTrees,
 		ClearedPaths:     clearedPaths,
-	}
-	target := evidence.ProgramProvenanceTarget{SessionID: run.tc.Identity.SessionID, ChatSessionID: run.tc.ChatSessionID(), ProjectDir: projDir}
-	_, err := store.CommitProgramHTTPProvenance(commitCtx, target, prov)
-	return err
+	}, nil
 }
 
 func appendUniqueProvenanceStrings(dst []string, values ...string) []string {

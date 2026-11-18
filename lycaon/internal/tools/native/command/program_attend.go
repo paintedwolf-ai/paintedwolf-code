@@ -247,10 +247,28 @@ func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID
 	if err != nil {
 		return "", err
 	}
+	if projection.Program.State == "completed" {
+		pending, err := r.Recorder.ProgramPublicationPending(ctx, sessionID, programID)
+		if err != nil {
+			return "", err
+		}
+		if pending {
+			return "", fmt.Errorf("command program %s output publication is pending", programID)
+		}
+	}
 	outcome := ProgramOutcome{
 		ProgramID: programID, State: projection.Program.State, Status: 130, StopCode: projection.Program.StopCode,
 		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects,
 		UncertainEffects: projection.UncertainEffects, NativeGaps: projection.NativeGaps,
+	}
+	outcome.Outputs = projection.Program.Outputs
+	for _, window := range outcome.Outputs {
+		if window.Stream == "stdout" {
+			outcome.StdoutRef = window.Ref
+		} else {
+			outcome.StderrRef = window.Ref
+		}
+		outcome.Truncated = outcome.Truncated || window.Truncated
 	}
 	if projection.ParentTool == "verify" {
 		outcome.ResultVersion = 2

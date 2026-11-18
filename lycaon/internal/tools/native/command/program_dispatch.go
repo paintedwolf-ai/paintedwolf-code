@@ -548,8 +548,8 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 				}
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 					streams.Error = markingWriter{w: nonNilWriter(streams.Error), tracker: tracker}
-					noteJobNative(ctx, request.Argv.Values())
 					return d.run.invokeWithFileCustody(ctx, spec.Name, actual.Review.PathTargets, func() (toolcontract.ProducerResult, error) {
+						noteJobNative(ctx, request.Argv.Values())
 						return actual.Invoke(ctx, tc, streams)
 					})
 				})
@@ -588,8 +588,8 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 		if err := d.checkPreparedPolicy(ctx, tc, spec, request.EffectMode, request, d.paths.Cwd(), prepared.Review); err != nil {
 			return ownerFailure(err), err
 		}
-		noteJobNative(ctx, request.Argv.Values())
 		return d.run.invokeWithFileCustody(ctx, spec.Name, prepared.Review.PathTargets, func() (toolcontract.ProducerResult, error) {
+			noteJobNative(ctx, request.Argv.Values())
 			return prepared.Invoke(ctx, tc, streams)
 		})
 	})

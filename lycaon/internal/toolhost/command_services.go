@@ -182,6 +182,14 @@ func (r *CommandServices) ProgramReceiptResult(ctx context.Context, sessionID, p
 	return programs.ReceiptResult(ctx, sessionID, programID)
 }
 
+// RecoverProgramPublications reconciles staged output across a host restart.
+func (r *CommandServices) RecoverProgramPublications(ctx context.Context, outputDir func(context.Context, string) (string, error)) error {
+	if programs := r.programs(); programs != nil {
+		return programs.RecoverProgramPublications(ctx, outputDir)
+	}
+	return nil
+}
+
 // setProgramExecutor binds the executor that admits each native child.
 func (r *CommandServices) setProgramExecutor(executor *toolexecution.Executor) {
 	if programs := r.programs(); programs != nil {

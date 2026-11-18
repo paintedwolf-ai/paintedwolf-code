@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lycaon/lycaon/internal/db"
-
 	"github.com/lycaon/lycaon/internal/bloblifecycle"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -47,12 +46,10 @@ func (ev *sqlEvidence) CommitProgramObservation(ctx context.Context, sessionID, 
 	return rec.Handle, nil
 }
 
-// programProvenanceRecords are the records one command program's network
-// reads produce, in custody order: what it received, the directories it
-// filled, and the external-custody paths it replaced locally.
+// Preserve custody order across the records from one program.
 func programProvenanceRecords(roots evidence.CitationRoots, prov evidence.ProgramHTTPProvenance) []evidence.Record {
 	var recs []evidence.Record
-	for _, rec := range []evidence.Record{
+	for _, rec := range [programCustodyRecordSlots]evidence.Record{
 		evidence.BuildProgramHTTPRecord(roots, prov),
 		evidence.BuildProgramTreeRecord(roots, prov),
 		evidence.BuildProgramCustodyReplacementRecord(roots, prov),
@@ -70,57 +67,66 @@ func (ev *sqlEvidence) CommitProgramHTTPProvenance(ctx context.Context, target e
 	if len(programProvenanceRecords(evidence.CitationRoots{ProjectDir: target.ProjectDir}, prov)) == 0 {
 		return "", nil
 	}
-	chat := target.ChatSessionID
-	sharesCustody := chat != "" && chat != target.SessionID && (len(prov.CustodyPaths)+len(prov.CustodyTrees)+len(prov.ClearedPaths) > 0)
-	s := ev.core
-	unlock := s.lockProvenanceTarget(target.SessionID, chat, sharesCustody)
+	intent := programPublicationIntent{Target: target, Provenance: prov}
+	unlock := intent.lock(ev.core)
 	defer unlock()
-	release := bloblifecycle.AcquirePublication(s.dataDir)
+	release := bloblifecycle.AcquirePublication(ev.core.dataDir)
 	defer release()
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := ev.core.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = tx.Rollback() }()
-	q := s.queries.WithTx(tx)
-	projectID, err := q.GetSessionProjectID(ctx, target.SessionID)
+	records, err := ev.writeProgramProvenanceTargets(ctx, ev.core.queries.WithTx(tx), intent, programCustodyReservation{})
 	if err != nil {
 		return "", err
-	}
-	primary, err := ev.writeProgramProvenance(ctx, q, target.SessionID, projectID, target.ProjectDir, prov)
-	if err != nil {
-		return "", err
-	}
-	var shared []evidence.Record
-	if sharesCustody {
-		chatProjectID, err := q.GetSessionProjectID(ctx, chat)
-		if err != nil {
-			return "", err
-		}
-		if chatProjectID != projectID {
-			return "", fmt.Errorf("program provenance spans different projects")
-		}
-		prov.UntrustedContent = false
-		shared, err = ev.writeProgramProvenance(ctx, q, chat, chatProjectID, target.ProjectDir, prov)
-		if err != nil {
-			return "", err
-		}
 	}
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
-	for _, rec := range primary {
+	records.applyTrust(ev.core, target)
+	if len(records.primary) == 0 {
+		return "", nil
+	}
+	return records.primary[0].Handle, nil
+}
+
+type programProvenanceWrites struct {
+	primary, shared []evidence.Record
+}
+
+func (w programProvenanceWrites) applyTrust(s *sqlCore, target evidence.ProgramProvenanceTarget) {
+	for _, rec := range w.primary {
 		bumpUntrusted(s, target.SessionID, rec)
 		bumpSecretExposure(s, target.SessionID, rec)
 	}
-	for _, rec := range shared {
-		bumpUntrusted(s, chat, rec)
-		bumpSecretExposure(s, chat, rec)
+	for _, rec := range w.shared {
+		bumpUntrusted(s, target.ChatSessionID, rec)
+		bumpSecretExposure(s, target.ChatSessionID, rec)
 	}
-	if len(primary) == 0 {
-		return "", nil
+}
+
+func (ev *sqlEvidence) writeProgramProvenanceTargets(ctx context.Context, q *db.Queries, intent programPublicationIntent, reservation programCustodyReservation) (programProvenanceWrites, error) {
+	target, prov := intent.Target, intent.Provenance
+	var writes programProvenanceWrites
+	projectID, err := q.GetSessionProjectID(ctx, target.SessionID)
+	if err != nil {
+		return writes, err
 	}
-	return primary[0].Handle, nil
+	writes.primary, err = ev.writeProgramProvenance(ctx, q, target.SessionID, projectID, target.ProjectDir, prov, reservation.primary)
+	if err != nil || !intent.sharesCustody() {
+		return writes, err
+	}
+	chatProjectID, err := q.GetSessionProjectID(ctx, target.ChatSessionID)
+	if err != nil {
+		return writes, err
+	}
+	if chatProjectID != projectID {
+		return writes, fmt.Errorf("program provenance spans different projects")
+	}
+	prov.UntrustedContent = false
+	writes.shared, err = ev.writeProgramProvenance(ctx, q, target.ChatSessionID, chatProjectID, target.ProjectDir, prov, reservation.shared)
+	return writes, err
 }
 
 func (s *sqlCore) lockProvenanceTarget(sessionID, chatID string, shared bool) func() {
@@ -143,13 +149,12 @@ func (s *sqlCore) lockProvenanceTarget(sessionID, chatID string, shared bool) fu
 	}
 }
 
-func (ev *sqlEvidence) writeProgramProvenance(ctx context.Context, q *db.Queries, sessionID, projectID, projectDir string, prov evidence.ProgramHTTPProvenance) ([]evidence.Record, error) {
+func (ev *sqlEvidence) writeProgramProvenance(ctx context.Context, q *db.Queries, sessionID, projectID, projectDir string, prov evidence.ProgramHTTPProvenance, nextSeq int) ([]evidence.Record, error) {
 	roots, err := sessionCitationRoots(ctx, q, sessionID, projectDir)
 	if err != nil {
 		return nil, err
 	}
 	recs := programProvenanceRecords(roots, prov)
-	nextSeq := 0
 	var inserted []evidence.Record
 	for i := range recs {
 		rec := &recs[i]
