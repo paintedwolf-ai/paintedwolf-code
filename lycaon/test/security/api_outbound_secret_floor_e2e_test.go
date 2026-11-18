@@ -236,7 +236,7 @@ func TestOutboundSecretFloorJ5HarvestedValueAsks(t *testing.T) {
 		toolStep("Searching.", call("ws1", "web_search", map[string]any{"query": "what is " + outboundHarvestCanary})),
 		textStep("Done."),
 	)
-	h := wiring.BuildForTest(t, wiring.WithLLMClient(script), wiring.WithSecretMatcher(secretmatch.NewInertMatcher()), wiring.WithoutCoordinatorLoop())
+	h := wiring.BuildForTest(t, wiring.WithLLMClient(script), wiring.WithSecretMatcher(&secretmatch.Matcher{}), wiring.WithoutCoordinatorLoop())
 	rec := installRecordingProviderHTTP(t)
 	enableBraveSearchOnly(t, h.Server)
 	setGlobalApprovalPosture(t, h.Server, "light")
@@ -278,7 +278,7 @@ func TestOutboundSecretFloorJ6InertMatcherParity(t *testing.T) {
 	)
 	h := wiring.BuildForTest(t,
 		wiring.WithLLMClient(script),
-		wiring.WithSecretMatcher(secretmatch.NewInertMatcher()),
+		wiring.WithSecretMatcher(&secretmatch.Matcher{}),
 		wiring.WithoutCoordinatorLoop(),
 	)
 	rec := installRecordingProviderHTTP(t)

@@ -194,10 +194,11 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	if err := webresearch.RegisterToolsWithFactory(r.deps.Execution.Host.Registry, deps, r.deps.Execution.Host.Web.DirectFactoryGetter()); err != nil {
 		return fmt.Errorf("web research tools: %w", err)
 	}
-	if err := r.deps.Execution.Host.RegisterHTTP(httpaction.Deps{
-		Boundary: r.deps.Execution.Host.Boundary, SecretMatcher: deps.SecretMatcher, SecretAsk: deps.SecretAsk,
-		Secrets: r.deps.Security.Capabilities,
-	}); err != nil {
+	httpDeps := httpaction.Deps{Boundary: r.deps.Execution.Host.Boundary, SecretMatcher: deps.SecretMatcher, SecretAsk: deps.SecretAsk}
+	if capabilities := r.deps.Security.Capabilities; capabilities != nil {
+		httpDeps.Secrets, httpDeps.Jars = capabilities, capabilities.Jars
+	}
+	if err := r.deps.Execution.Host.RegisterHTTP(httpDeps); err != nil {
 		return fmt.Errorf("http request tool: %w", err)
 	}
 

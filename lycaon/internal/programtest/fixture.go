@@ -144,7 +144,7 @@ func New(t testing.TB, options Options) *Fixture {
 	background := options.Background
 	if background == nil {
 		background = bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-		background.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+		background.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 		t.Cleanup(func() { _ = background.Lifecycle.Close(context.Background()) })
 	}
 	natives := map[string]command.NativeOperation{}
@@ -165,7 +165,7 @@ func New(t testing.TB, options Options) *Fixture {
 	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background, Boundary: boundary, progress: owner}
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
-		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
+		Projector: captureprojection.New(&secretmatch.Matcher{}, nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
 		Sessions: sessions{}, Ports: ports,
 		Provenance: store.NewSQL(database).Evidence, SourceObserver: sourceDeliveries{fixture: f},

@@ -196,7 +196,7 @@ func newRetainedDeliveryFixture(t *testing.T) retainedDeliveryFixture {
 	outputs, err := invocation.NewProgramOutputRetention(ctx, recorder, blobstore.Store{Root: dataDir}, session.ID, quota)
 	testutil.FailErr(t, "admit actual session output lifecycle", err)
 	testutil.FailErr(t, "restore actual retained refs", outputs.Restore(ctx))
-	projector := captureprojection.New(secretmatch.NewInertMatcher(), nil)
+	projector := captureprojection.New(&secretmatch.Matcher{}, nil)
 	scope := captureprojection.Scope{ProjectID: testdbseed.DefaultProjectID, RootSessionID: session.ID, SessionID: session.ID}
 	stream := captureprojection.StreamOptions{WorkingMemory: quota, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
 	retain := func(claim string, content []byte, preview int) *tooloutput.StreamSpill {

@@ -55,7 +55,8 @@ type Match struct {
 	vendor         bool
 }
 
-// Matcher holds a compiled detector and attribution metadata.
+// Matcher combines catalog detection with configured exact-match evidence.
+// Its zero value has no catalog or evidence sources.
 type Matcher struct {
 	detector *detect.Detector
 	// Metadata keys use bare upstream rule IDs.
@@ -65,7 +66,6 @@ type Matcher struct {
 	vendorIDs     map[string]struct{}
 	requirements  map[string]kingfisherRequirements
 	fingerprinter *Fingerprinter
-	inert         bool
 	// harvestSource adds container-evidence matches beside the shape rules.
 	harvestSource HarvestSource
 	// ignoredSource supplies active public-value exceptions.
@@ -124,14 +124,9 @@ func (m *Matcher) SetFingerprinter(f *Fingerprinter) {
 	}
 }
 
-// NewInertMatcher returns a matcher with no findings.
-func NewInertMatcher() *Matcher {
-	return &Matcher{inert: true}
-}
-
 // Inert reports whether Screen can produce findings.
 func (m *Matcher) Inert() bool {
-	return m == nil || (m.inert || m.detector == nil) && m.harvestSource == nil
+	return m == nil || m.detector == nil && m.harvestSource == nil
 }
 
 // Screen finds secret-pattern matches across the full input.

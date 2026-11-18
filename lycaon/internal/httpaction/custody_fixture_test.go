@@ -72,9 +72,9 @@ func TestHeldValueLeavesOnlyWhileItsChatIsUnlocked(t *testing.T) {
 					Authenticator: presence.AuthenticatorMacOS, WindowLabel: "main", VerifiedAt: time.Now(),
 				}))
 			}
-			resolved, err := service.Resolve(t.Context(), args, secretcap.ResolveContext{ProjectID: testdbseed.DefaultProjectID, ToolName: "http_request", ToolCallID: "held"})
+			service.SetUnlocks(unlocks)
+			resolved, err := service.Resolve(t.Context(), args, secretcap.ResolveContext{ChatSessionID: "chat-1", ProjectID: testdbseed.DefaultProjectID, ToolName: "http_request", ToolCallID: "held"})
 			testutil.FailErr(t, "resolve request", err)
-			resolved.InChatForTest("chat-1", unlocks)
 			ctx := secretcap.WithResolution(t.Context(), resolved)
 			_, runErr := registry.Run(ctx, "http_request", resolved.Arguments, tools.ToolContext{
 				Effects: tools.InvocationEffects{CanonicalArgs: args,

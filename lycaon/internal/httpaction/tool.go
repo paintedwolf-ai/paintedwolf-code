@@ -39,8 +39,14 @@ type Deps struct {
 	Boundary      *sandbox.Boundary
 	SecretMatcher *secretmatch.Matcher
 	SecretAsk     secretmatch.AskFunc
-	// Named cookie and token jars require the managed secret store.
-	Secrets *secretcap.Service
+	Secrets       SecretMetadata
+	Jars          *secretcap.Jars
+}
+
+// SecretMetadata supplies value-free identities for jar release review.
+type SecretMetadata interface {
+	Describe(context.Context, string, string, string) (secretcap.Metadata, error)
+	List(context.Context, string, string) ([]secretcap.Metadata, error)
 }
 
 type requestSpec struct {

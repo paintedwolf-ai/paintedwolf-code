@@ -84,7 +84,7 @@ func TestRetiredValueKeepsRedactingWithoutOfferingAReference(t *testing.T) {
 	testutil.FailErr(t, "replace value", err)
 
 	var got []secretmatch.Remembered
-	service.remember = func(_ string, items []secretmatch.Remembered) { got = append(got, items...) }
+	service.repository.remember = func(_ string, items []secretmatch.Remembered) { got = append(got, items...) }
 	testutil.FailErr(t, "prime screening", service.RememberProjectValues(
 		t.Context(), testdbseed.DefaultProjectID, "root-1",
 	))
@@ -194,7 +194,7 @@ func TestProjectRemovalAndReconcileCoverEveryVersion(t *testing.T) {
 func TestProjectScreeningEvidenceExpiresWithoutAChatOrMutation(t *testing.T) {
 	service, _, _ := testService(t)
 	now := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
-	service.now = func() time.Time { return now }
+	service.repository.now = func() time.Time { return now }
 	meta, err := service.CreateSettingsSecret(t.Context(), CreateSettingsSecretRequest{
 		ProjectID: testdbseed.DefaultProjectID, PersonID: testOwner(t, service), OperationID: "expiry-screen", Name: "Expiring token", Purpose: "Tests timed screening", Value: "expiry-fixture-token"})
 	testutil.FailErr(t, "create expiring secret", err)
@@ -322,10 +322,10 @@ func TestHoldRefusesValuesItCannotGovern(t *testing.T) {
 	service, _, _ := testService(t)
 	site, err := url.Parse("http://localhost:5555/login")
 	testutil.FailErr(t, "parse url", err)
-	jar, err := service.OpenCookieJar(t.Context(), jarRequest("jar-hold"))
+	jar, err := service.Jars.OpenCookieJar(t.Context(), jarRequest("jar-hold"))
 	testutil.FailErr(t, "open jar", err)
 	jar.Store.SetCookies(site, []*http.Cookie{{Name: "session", Value: "cookie-value-hold", Path: "/"}})
-	jarMeta, err := service.SaveCookieJar(t.Context(), jarRequest("jar-hold"), jar)
+	jarMeta, err := service.Jars.SaveCookieJar(t.Context(), jarRequest("jar-hold"), jar)
 	testutil.FailErr(t, "save jar", err)
 	if _, err := service.HoldValue(t.Context(), testdbseed.DefaultProjectID, jarMeta.Reference); !errors.Is(err, ErrInvalidUpdate) {
 		t.Fatalf("jar hold error = %v", err)
@@ -355,10 +355,10 @@ func TestReplaceValueRefusesAJar(t *testing.T) {
 	service, _, _ := testService(t)
 	site, err := url.Parse("http://localhost:5555/login")
 	testutil.FailErr(t, "parse url", err)
-	jar, err := service.OpenCookieJar(t.Context(), jarRequest("jar-replace"))
+	jar, err := service.Jars.OpenCookieJar(t.Context(), jarRequest("jar-replace"))
 	testutil.FailErr(t, "open jar", err)
 	jar.Store.SetCookies(site, []*http.Cookie{{Name: "session", Value: "cookie-value-replace", Path: "/"}})
-	meta, err := service.SaveCookieJar(t.Context(), jarRequest("jar-replace"), jar)
+	meta, err := service.Jars.SaveCookieJar(t.Context(), jarRequest("jar-replace"), jar)
 	testutil.FailErr(t, "save jar", err)
 	if meta.Custody != CustodyHost {
 		t.Fatalf("jar custody = %q", meta.Custody)

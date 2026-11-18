@@ -72,7 +72,7 @@ func screenOCRRaw(ctx context.Context, m *Matcher, s string) []Match {
 }
 
 func catalogMatchesOCR(ctx context.Context, m *Matcher, s string) []Match {
-	if m == nil || m.inert || m.ocr == nil {
+	if m == nil || m.ocr == nil {
 		return nil
 	}
 	d := m.ocr.detectorInstance()

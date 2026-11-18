@@ -21,7 +21,7 @@ const testSecret = "capture-secret-value"
 
 func testProjector(t *testing.T, primer ManagedSecretPrimer) *Projector {
 	t.Helper()
-	m := secretmatch.NewInertMatcher()
+	m := &secretmatch.Matcher{}
 	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{
 			Name: "token", Secret: testSecret,
@@ -288,7 +288,7 @@ func TestManagedSecretPrimerCachesPerTaskTreeAndRefreshesGeneration(t *testing.T
 // disclosableProjector keeps ordinary word-boundary matching active.
 func disclosableProjector(t *testing.T) *Projector {
 	t.Helper()
-	m := secretmatch.NewInertMatcher()
+	m := &secretmatch.Matcher{}
 	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{
 			Name: "token", Secret: testSecret,

@@ -19,7 +19,7 @@ import (
 func newTestRasterizer(t *testing.T) *Rasterizer {
 	t.Helper()
 	r := NewRasterizer("", testRenderBudgets(t))
-	r.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	r.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	return r
 }
 
