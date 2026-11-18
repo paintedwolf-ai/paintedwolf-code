@@ -3,7 +3,6 @@ package review_test
 import (
 	context "context"
 	json "encoding/json"
-	conditions "github.com/lycaon/lycaon/internal/conditions"
 	db "github.com/lycaon/lycaon/internal/db"
 	reviewcoverage "github.com/lycaon/lycaon/internal/reviewcoverage"
 	testutil "github.com/lycaon/lycaon/internal/testutil"
