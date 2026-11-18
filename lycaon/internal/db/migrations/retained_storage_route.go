@@ -22,8 +22,8 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// tree. The evidence root backfill, single-to-plural file edit rewrite,
 	// empty briefing tables, and worker records backfill bound their row
 	// rewrites and index sync through declared Writes estimates, adding no
-	// sorters or rebuilds. Discarding live_model_outputs drops a table without
-	// rewriting rows.
+	// sorters or rebuilds. Discarding live_model_outputs drops a table, and
+	// replacing the version reclaim trigger rewrites no rows.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "8e1afb6494bcc70516ccbb226a0128d9d2d566bac1d05a829ed98aa7daeb93ae"
+		p.steps[0].Checksum == revision5Checksum
 }
