@@ -68,7 +68,11 @@ func TestComposedCommandRefusalsFollowRecordedAdmission(t *testing.T) {
 			var started, refused int
 			err = f.Database.QueryRowContext(t.Context(), `SELECT COUNT(*) FILTER (WHERE owner_started=1), COUNT(*) FILTER (WHERE state='refused') FROM invocation_program_executions WHERE program_id=?`, result.ProgramID).Scan(&started, &refused)
 			testutil.FailErr(t, "read child receipts", err)
-			if (started > 0) != tc.wantAdmission || refused != 1 {
+			wantRefused := 1
+			if tc.needsChecklist {
+				wantRefused = 2
+			}
+			if (started > 0) != tc.wantAdmission || refused != wantRefused {
 				t.Fatalf("recorded %d starts and %d refusals", started, refused)
 			}
 			if (result.CompletedEffects > 0) != tc.wantEffects || result.UncertainEffects != 0 {

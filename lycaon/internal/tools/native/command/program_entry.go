@@ -405,7 +405,7 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	builtins["nohup"] = nohupBuiltin(run.commands["nohup"], dispatcher)
 	var publication commandprogram.OutputPublication
 	if owners.Publication != nil {
-		publication = dispatcher.wrapOutputPublication(owners.Publication(dispatcher.beginOutput), paths)
+		publication = dispatcher.wrapOutputPublication(owners.Publication(dispatcher.outputAdmission()), paths)
 	}
 	if r.Builtins != nil {
 		for name, builtin := range r.Builtins(tc, dispatcher, dispatcher) {

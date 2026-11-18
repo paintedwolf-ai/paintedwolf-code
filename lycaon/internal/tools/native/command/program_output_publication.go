@@ -14,15 +14,38 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// beginOutput checks the resolved destination before the producer can run.
+func (d *ProgramDispatcher) outputAdmission() tools.CommandOutputAdmission {
+	return tools.CommandOutputAdmission{Check: d.checkOutput, Begin: d.beginOutput}
+}
+
+func (d *ProgramDispatcher) checkOutput(ctx context.Context, destination commandprogram.OutputDestination, target tools.CommandOutputTarget) error {
+	definition, ok := d.run.registry.Operation("write")
+	if !ok {
+		return fmt.Errorf("output publication requires write owner")
+	}
+	if err := d.checkOutputProgress(ctx, definition.Operation, destination, target); err != nil {
+		_, err = d.prepareOutput(ctx, destination, target, err)
+		return err
+	}
+	return nil
+}
+
+func (d *ProgramDispatcher) checkOutputProgress(ctx context.Context, operation toolcontract.OperationDefinition, destination commandprogram.OutputDestination, target tools.CommandOutputTarget) error {
+	return toolexecution.CheckReachedMutationProgress(ctx, d.run.progress, operation, destination.Invocation, target.AttachedRootID, target.Path)
+}
+
 func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination commandprogram.OutputDestination, target tools.CommandOutputTarget) (tools.CommandOutputWrite, error) {
+	return d.prepareOutput(ctx, destination, target, nil)
+}
+
+func (d *ProgramDispatcher) prepareOutput(ctx context.Context, destination commandprogram.OutputDestination, target tools.CommandOutputTarget, refusal error) (tools.CommandOutputWrite, error) {
 	definition, ok := d.run.registry.Operation("write")
 	if !ok {
 		return tools.CommandOutputWrite{}, fmt.Errorf("output publication requires write owner")
 	}
 	operation := definition.Operation
 	checkProgress := func(ctx context.Context) error {
-		return toolexecution.CheckReachedMutationProgress(ctx, d.run.progress, operation, destination.Invocation, target.AttachedRootID, target.Path)
+		return d.checkOutputProgress(ctx, operation, destination, target)
 	}
 	path := target.Path
 	bound, err := toolcontract.BindPublication(operation, destination.Invocation, toolcontract.RedirectPublication, destination.Redirect.Operator)
@@ -34,10 +57,13 @@ func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination command
 	if err != nil {
 		return tools.CommandOutputWrite{}, err
 	}
-	if err := checkProgress(ctx); err != nil {
+	if refusal == nil {
+		refusal = checkProgress(ctx)
+	}
+	if refusal != nil {
 		defer child.release()
-		d.noteOutputRefusal(bound, err)
-		return tools.CommandOutputWrite{}, joinSettle(err, d.settle(ctx, child, ownerFailure(err), false, ""))
+		d.noteOutputRefusal(bound, refusal)
+		return tools.CommandOutputWrite{}, joinSettle(refusal, d.settle(ctx, child, ownerFailure(refusal), false, ""))
 	}
 	var once sync.Once
 	var published commandprogram.OutputPublished

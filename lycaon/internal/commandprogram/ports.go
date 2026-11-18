@@ -192,6 +192,7 @@ type RefusalWriter func(io.Writer, RefusalReport)
 // scoped to this one dispatch, sorted by name; it carries no ambient host state.
 type StreamPreparation interface {
 	RequiredEffects() toolcontract.CommandEffects
+	CheckOutputAdmission(context.Context) error
 	PrepareStreams(context.Context) (Streams, error)
 }
 
@@ -211,6 +212,14 @@ type OperationRequest struct {
 	Gap *toolcontract.NativeGap
 	// Process is what an external launch for this request starts with.
 	Process ChildProcess
+}
+
+// CheckOutputAdmission checks inherited output prerequisites without opening streams.
+func (r OperationRequest) CheckOutputAdmission(ctx context.Context) error {
+	if r.StreamPreparation == nil {
+		return nil
+	}
+	return r.StreamPreparation.CheckOutputAdmission(ctx)
 }
 
 // Validate binds the plan node to the child invocation it is dispatched as.
@@ -311,6 +320,11 @@ type OutputDestination struct {
 // staged and stay invisible until Publish; nothing is published implicitly.
 type OutputPublication interface {
 	Open(context.Context, OutputDestination) (StagedOutput, error)
+}
+
+// OutputPreflight checks an expanded destination before the producer starts.
+type OutputPreflight interface {
+	CheckOutput(context.Context, OutputDestination) error
 }
 
 // StagedOutput receives a stage's bytes. Publish rechecks the owner's revision

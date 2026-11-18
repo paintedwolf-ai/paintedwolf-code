@@ -45,11 +45,7 @@ func (d descriptorFrame) PrepareStreams(ctx context.Context) (Streams, error) {
 	if parentErr != nil {
 		return Streams{}, parentErr
 	}
-	needed := false
-	for fd, changed := range d.scope.changed {
-		needed = needed || changed && d.generations[fd] == d.scope.base.generations[fd]
-	}
-	if !needed {
+	if !d.inheritsScope() {
 		return streams.WithActivity(d.wait), nil
 	}
 	bound, err := d.scope.open(ctx)
@@ -67,6 +63,30 @@ func (d descriptorFrame) PrepareStreams(ctx context.Context) (Streams, error) {
 		}
 	}
 	return streams.WithActivity(d.wait), nil
+}
+
+func (d descriptorFrame) inheritsScope() bool {
+	for fd, changed := range d.scope.changed {
+		if changed && d.generations[fd] == d.scope.base.generations[fd] {
+			return true
+		}
+	}
+	return false
+}
+
+func (d descriptorFrame) CheckOutputAdmission(ctx context.Context) error {
+	if d.scope == nil {
+		return nil
+	}
+	parent := d
+	parent.scope = d.scope.base.scope
+	if err := parent.CheckOutputAdmission(ctx); err != nil {
+		return err
+	}
+	if !d.inheritsScope() {
+		return nil
+	}
+	return d.scope.checkOutputs(ctx)
 }
 
 // pending reports descriptor work that must cross admission before local state
@@ -160,6 +180,8 @@ type descriptorScope struct {
 	users          int
 	eligible       bool
 	once           sync.Once
+	admission      sync.Once
+	admissionErr   error
 	opened         atomic.Bool
 	prevented      bool
 	streams        Streams
@@ -265,6 +287,29 @@ func (s *descriptorScope) prepare(ctx context.Context, f *frame, statement comma
 	prepared = true
 	return false, nil
 }
+func (s *descriptorScope) checkOutputs(ctx context.Context) error {
+	checker, ok := s.output.(OutputPreflight)
+	if !ok {
+		return nil
+	}
+	s.admission.Do(func() {
+		for _, plan := range s.plans {
+			switch plan.redirect.Operator {
+			case ">", ">>", "&>", "&>>":
+				if plan.target.ProcessSubstitution() != nil || isNullRedirectTarget(plan.target.Value) {
+					continue
+				}
+				inv := NextExecution(s.frame.parent, string(plan.redirect.ID), plan.redirect.Span)
+				s.admissionErr = checker.CheckOutput(ctx, OutputDestination{Invocation: inv, Redirect: plan.redirect, Target: plan.target})
+				if s.admissionErr != nil {
+					return
+				}
+			}
+		}
+	})
+	return s.admissionErr
+}
+
 func (s *descriptorScope) open(ctx context.Context) (Streams, error) {
 	s.once.Do(func() {
 		s.opened.Store(true)

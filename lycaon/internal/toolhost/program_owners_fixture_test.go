@@ -25,7 +25,7 @@ func newComposedProgramFixture(t *testing.T) *programtest.Fixture {
 		return "", nil
 	}))
 	for _, form := range formTools {
-		tool := &native.FormTool{Programs: f.Runtime, Argv: form.argv}
+		tool := &native.FormTool{Name: form.name, Programs: f.Runtime, Argv: form.argv}
 		testutil.FailErr(t, "register form tool "+form.name, f.Runtime.Registry.Register(form.name, tool.Run))
 	}
 	b := f.Runtime.Boundary

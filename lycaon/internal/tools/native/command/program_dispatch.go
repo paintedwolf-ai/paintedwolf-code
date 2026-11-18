@@ -329,7 +329,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		return result, joinSettle(reject, d.settle(ctx, child, result, false, ""))
 	}
 	effect := toolexecution.NativeEffect{
-		Operation: bound, Streams: streams, Inspection: d.run.capture,
+		Operation: bound, Streams: streams, Inspection: d.run.capture, CheckOutputs: request.CheckOutputAdmission,
 		// The existing command review, detection and policy read these fields.
 		Arguments: arguments,
 		Stage:     toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: argv, CommandLine: line, PipelineCommandLine: line},
@@ -464,7 +464,8 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	}()
 	effect := toolexecution.NativeEffect{
 		Operation: bound, Streams: runStreams, Arguments: inputs, Argv: &review, Inspection: d.run.capture,
-		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: operationDef.Facts().Identity, Argv: request.Argv.Values()},
+		CheckOutputs: request.CheckOutputAdmission,
+		Stage:        toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: operationDef.Facts().Identity, Argv: request.Argv.Values()},
 		PrepareReviewed: func(ctx context.Context, _ map[string]any, admitted tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 			// The program's directory frame predates this child's approval. Bind
 			// the owner again with the admitted context so exact file access is

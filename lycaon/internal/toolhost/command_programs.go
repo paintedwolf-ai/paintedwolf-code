@@ -48,14 +48,14 @@ type programOwnerTools struct {
 }
 
 func directProgramOutputAdmission(current *tools.ToolContext) tools.CommandOutputAdmission {
-	return func(context.Context, commandprogram.OutputDestination, tools.CommandOutputTarget) (tools.CommandOutputWrite, error) {
+	return tools.CommandOutputAdmission{Begin: func(context.Context, commandprogram.OutputDestination, tools.CommandOutputTarget) (tools.CommandOutputWrite, error) {
 		return tools.CommandOutputWrite{
 			Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
 				return apply(ctx, *current)
 			},
 			Abandon: func(context.Context, error) error { return nil },
 		}, nil
-	}
+	}}
 }
 
 // compose builds the literal and mutation owners once and returns the

@@ -10,8 +10,11 @@ type CommandOutputTarget struct {
 	Path, DisplayPath, AttachedRootID string
 }
 
-// CommandOutputAdmission checks and records the redirect before the producer starts.
-type CommandOutputAdmission func(context.Context, commandprogram.OutputDestination, CommandOutputTarget) (CommandOutputWrite, error)
+// CommandOutputAdmission checks a destination and opens its receipt for staging.
+type CommandOutputAdmission struct {
+	Check func(context.Context, commandprogram.OutputDestination, CommandOutputTarget) error
+	Begin func(context.Context, commandprogram.OutputDestination, CommandOutputTarget) (CommandOutputWrite, error)
+}
 
 type CommandOutputWrite struct {
 	Publish func(context.Context, func(context.Context, ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error)

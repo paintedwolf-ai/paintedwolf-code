@@ -16,7 +16,7 @@ func TestPreparedChildPublishesOnlyAfterAdmissionOrApprovalWait(t *testing.T) {
 	for _, stage := range []string{"prepared", "refused"} {
 		if stage == "refused" {
 			result := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: "COMMAND_OPERAND_INVALID", EffectCertainty: toolcontract.NoEffect}
-			testutil.FailErr(t, "settle refusal", f.recorder.SettleChild(ctx, prepared.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: result}))
+			testutil.FailErr(t, "settle refusal", f.recorder.SettleChild(ctx, prepared.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: result, DetailReference: "output:refused"}))
 		}
 		summary, err := f.recorder.LiveActivitySummary(ctx, f.session, f.program)
 		testutil.FailErr(t, "read live activity", err)

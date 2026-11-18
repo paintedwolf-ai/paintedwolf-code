@@ -38,6 +38,28 @@ var (
 	_ commandprogram.SourceCapture     = (*Publication)(nil)
 )
 
+func (p *Publication) CheckOutput(ctx context.Context, destination commandprogram.OutputDestination) error {
+	if p.Admission.Check == nil {
+		return nil
+	}
+	bound, err := p.Program.Paths.Bind(ctx, destination.Target.Value, true)
+	if err != nil || bound.Null || bound.Resolved.External {
+		return nil
+	}
+	return p.Admission.Check(ctx, destination, outputTarget(destination, bound))
+}
+
+func outputTarget(destination commandprogram.OutputDestination, bound projectpaths.BoundPath) tools.CommandOutputTarget {
+	target := tools.CommandOutputTarget{Path: bound.Resolved.Abs, DisplayPath: bound.Resolved.DisplayPath}
+	if target.DisplayPath == "" {
+		target.DisplayPath = destination.Target.Value
+	}
+	if !bound.Resolved.External {
+		target.AttachedRootID = bound.Resolved.Root.ID
+	}
+	return target
+}
+
 // Open captures one output destination. The null device is a typed sink that
 // publishes nothing and touches no file.
 func (p *Publication) Open(ctx context.Context, destination commandprogram.OutputDestination) (commandprogram.StagedOutput, error) {
@@ -48,18 +70,10 @@ func (p *Publication) Open(ctx context.Context, destination commandprogram.Outpu
 	if bound.Null {
 		return &nullStage{}, nil
 	}
-	if p.Admission == nil {
+	if p.Admission.Begin == nil {
 		return nil, errors.New("redirect publication admission required")
 	}
-	display := bound.Resolved.DisplayPath
-	if display == "" {
-		display = destination.Target.Value
-	}
-	var attachedRootID string
-	if !bound.Resolved.External {
-		attachedRootID = bound.Resolved.Root.ID
-	}
-	admission, err := p.Admission(ctx, destination, tools.CommandOutputTarget{Path: bound.Resolved.Abs, DisplayPath: display, AttachedRootID: attachedRootID})
+	admission, err := p.Admission.Begin(ctx, destination, outputTarget(destination, bound))
 	if err != nil {
 		return nil, err
 	}

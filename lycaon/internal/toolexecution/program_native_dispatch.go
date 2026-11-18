@@ -68,6 +68,7 @@ type NativeEffect struct {
 	Arguments       map[string]any
 	Argv            *commandprogram.ArgvReview
 	Streams         commandprogram.Streams
+	CheckOutputs    func(context.Context) error
 	PrepareReviewed func(context.Context, map[string]any, tools.ToolContext) (PreparedNativeEffect, error)
 }
 
@@ -292,8 +293,11 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		return result, err
 	}
 	ctx = hitl.WithCheckpointWaitNotification(ctx, nil)
-	if prepared.CheckAdmission != nil {
-		if err := prepared.CheckAdmission(ctx); err != nil {
+	for _, check := range []func(context.Context) error{prepared.CheckAdmission, effect.CheckOutputs} {
+		if check == nil {
+			continue
+		}
+		if err := check(ctx); err != nil {
 			result.Producer = nativeAdmissionFailure(err, toolcontract.NoEffect)
 			return result, err
 		}

@@ -148,7 +148,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
 	runStreams.Error = tracker
-	effect := toolexecution.NativeEffect{Operation: bound, Arguments: arguments, Streams: runStreams, Inspection: d.run.capture, Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: request.Argv.Values()}, PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+	effect := toolexecution.NativeEffect{Operation: bound, Arguments: arguments, Streams: runStreams, Inspection: d.run.capture, CheckOutputs: request.CheckOutputAdmission, Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: request.Argv.Values()}, PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 		return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				streams.Error = markingWriter{w: nonNilWriter(streams.Error), tracker: tracker}
