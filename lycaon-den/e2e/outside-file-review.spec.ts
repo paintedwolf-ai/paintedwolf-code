@@ -5,7 +5,7 @@ import { expect } from "@playwright/test";
 import type { CheckpointListResponse, SourceComparison } from "../src/api/types.ts";
 import {
   apiJson, apiPostPrompt, bootstrapActiveProject, e2eTempDir, e2eUniqueLabel,
-  openNewChatSession, settledChatSessionId, waitForChatComposerReady, webE2e,
+  settledChatSessionId, waitForChatComposerReady, webE2e,
 } from "./helpers.ts";
 import { manualHarnessTools } from "./manual-harness-tools.ts";
 
@@ -49,7 +49,7 @@ webE2e("Review shows an outside edit and its retained versions in the chat that 
     }
     const openReview = async () => {
       await page.getByTestId("project-files-entry").click();
-      await expect(page.getByTestId("files-tree")).toBeVisible();
+      await expect(page.getByTestId("project-files-stage")).toBeVisible();
       await page.evaluate((projectId) => {
         const harness = (window as unknown as { __harness: { openReviewLens(id: string, scope: { kind: string }): void } }).__harness;
         harness.openReviewLens(projectId, { kind: "session" });
@@ -78,8 +78,9 @@ webE2e("Review shows an outside edit and its retained versions in the chat that 
     await expect(retained).toBeVisible();
     await expect(retained).not.toBeEditable();
 
-    await page.getByRole("button", { name: "Back to chat", exact: true }).click();
-    await openNewChatSession(page);
+    await page.getByTestId("new-chat-btn").click();
+    await waitForChatComposerReady(page);
+    expect(await settledChatSessionId(page)).not.toBe(sessionId);
     await openReview();
     await expect(page.getByTestId("review-lens-empty")).toBeVisible();
     await expect(row).toHaveCount(0);
