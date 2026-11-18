@@ -51,6 +51,14 @@ describe("Local model selection", () => {
     expect(client.selectLocalModel).toHaveBeenCalledWith("nativegen", { model: "medium", bundle_path: undefined });
   });
 
+  it("keeps setup open when installation finishes but the model cannot load", async () => {
+    const { client, done } = mount();
+    client.selectLocalModel.mockResolvedValue({ ...installed, state: "unavailable", detail: "The runtime could not load the model." });
+    fireEvent.click(screen.getByRole("button", { name: "Download and continue" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("The runtime could not load the model.");
+    expect(done).not.toHaveBeenCalled();
+  });
+
   it("cancels without opting out or advancing", async () => {
     const { client, done } = mount();
     client.selectLocalModel.mockResolvedValue(progress);
@@ -86,10 +94,15 @@ describe("Local model selection", () => {
     expect(screen.queryByText("Import offline bundle")).toBeNull();
   });
 
-  it("offers a user-initiated seed import", async () => {
-    const { client } = mount({ ...initial, seed_available: true });
-    fireEvent.click(screen.getByRole("button", { name: "Use packaged bundle" }));
-    await waitFor(() => expect(client.selectLocalModel).toHaveBeenCalledWith("nativegen", { model: "medium", bundle_path: ":seed:" }));
+  it("imports the packaged tier even when another tier is recommended", async () => {
+    const { client } = mount({ ...initial, seed_available: true, seed_model: "small" });
+    fireEvent.click(screen.getByRole("button", { name: "Install packaged Small" }));
+    await waitFor(() => expect(client.selectLocalModel).toHaveBeenCalledWith("nativegen", { model: "small", packaged_seed: true }));
+  });
+
+  it("disables a packaged model which this device cannot run", () => {
+    mount({ ...initial, seed_available: true, seed_model: "large" });
+    expect((screen.getByRole("button", {name: "Install packaged Large"}) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("offers opt-out without downloading and keeps errors actionable", async () => {

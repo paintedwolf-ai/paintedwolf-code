@@ -27,6 +27,7 @@ export function LocalModelSelector(props: Props) {
   const selected = () => choice() ?? status()?.selected_model
     ?? (status()?.state === "opted_out" ? NONE : tiers().find(t => t.eligible && t.recommended)?.id ?? NONE);
   const tier = () => tiers().find(t => t.id === selected());
+  const seedTier = () => status()?.seed_available ? tiers().find(t => t.id === status()?.seed_model) : undefined;
   const downloading = () => status()?.state === "downloading";
   const current = () => !!selected() && selected() === status()?.selected_model;
   const canApply = () => {
@@ -53,10 +54,11 @@ export function LocalModelSelector(props: Props) {
     await props.onRefresh();
     if (!alive) return;
     setSnapshot(undefined);
-    if (target !== undefined && (next.selected_model === target || (target === NONE && next.state === "opted_out"))) {
+    const selectedTarget = next.selected_model === target && (next.state === "ready" || next.state === "idle");
+    if (target !== undefined && (selectedTarget || (target === NONE && next.state === "opted_out"))) {
       props.onContinue?.();
-    } else if (target !== undefined && next.detail) {
-      setError(next.detail);
+    } else if (target !== undefined) {
+      setError(next.detail || "The requested model change did not finish.");
     }
   };
 
@@ -81,9 +83,11 @@ export function LocalModelSelector(props: Props) {
     onCleanup(() => { stopped = true; clearTimeout(timer); });
   });
 
-  const run = async (action: "apply" | "import" | "cancel", path?: string) => {
+  const run = async (action: "apply" | "import" | "seed" | "cancel", path?: string) => {
     if (working() || !alive) return;
-    const model = selected();
+    const seed = seedTier();
+    if (action === "seed" && !seed?.eligible) return;
+    const model = action === "seed" && seed ? seed.id : selected();
     version++;
     setWorking(true);
     setError("");
@@ -99,7 +103,7 @@ export function LocalModelSelector(props: Props) {
       }
       setPendingModel(model);
       const next = model
-        ? await props.client.selectLocalModel(props.provider.id, { model, bundle_path: path })
+        ? await props.client.selectLocalModel(props.provider.id, action === "seed" ? { model, packaged_seed: true } : { model, bundle_path: path })
         : await props.client.removeLocalModel(props.provider.id);
       await accept(next);
     } catch (err) {
@@ -143,11 +147,10 @@ export function LocalModelSelector(props: Props) {
             <OfflineModelImport busy={working()} onImport={path => run("import", path)} onFailure={setError} />
           </Show>
           <div class="den-settings-provider-actions">
-            <Show when={tier()?.eligible}>
-              <Show when={status()?.seed_available}>
-                <DenButton variant="secondary" disabled={working()} onClick={() => void run("import", ":seed:")}>Use packaged bundle</DenButton>
-              </Show>
-            </Show>
+            <Show when={seedTier()}>{seed => (
+              <DenButton variant="secondary" disabled={working() || !seed().eligible}
+                onClick={() => void run("seed")}>Install packaged {seed().display_name}</DenButton>
+            )}</Show>
             <DenButton variant="primary" disabled={!canApply()} onClick={() => void run("apply")}>
               {applyLabel()}
             </DenButton>
