@@ -11,14 +11,14 @@ import (
 
 func openJar(t *testing.T, service *Service, operation string) *CookieJar {
 	t.Helper()
-	jar, err := service.OpenCookieJar(t.Context(), jarRequest(operation))
+	jar, err := service.Jars.OpenCookieJar(t.Context(), jarRequest(operation))
 	testutil.FailErr(t, "open jar", err)
 	return jar
 }
 
 func saveJar(t *testing.T, service *Service, jar *CookieJar) *Metadata {
 	t.Helper()
-	meta, err := service.SaveCookieJar(t.Context(), jar.request, jar)
+	meta, err := service.Jars.SaveCookieJar(t.Context(), jar.request, jar)
 	testutil.FailErr(t, "save jar", err)
 	return meta
 }
@@ -50,7 +50,7 @@ func TestCookieJarConcurrentResponsesMergeIntoOneCapability(t *testing.T) {
 			for _, jar := range jars {
 				go func() {
 					<-start
-					_, err := service.SaveCookieJar(t.Context(), jar.request, jar)
+					_, err := service.Jars.SaveCookieJar(t.Context(), jar.request, jar)
 					results <- err
 				}()
 			}
@@ -140,7 +140,7 @@ func TestCookieJarResponseReplaysAreIdempotentAcrossServiceRestart(t *testing.T)
 			later.Store.SetCookies(site, []*http.Cookie{{Name: "sid", Value: "newer-value"}})
 			latest := saveJar(t, service, later)
 			saveJar(t, service, first)
-			restarted := NewWithStore(service.handle, values, nil)
+			restarted := NewWithStore(service.repository.handle, values, nil)
 			replayed := openJar(t, restarted, "replay")
 			replayed.Store.SetCookies(site, []*http.Cookie{incoming})
 			saveJar(t, restarted, replayed)
@@ -168,11 +168,11 @@ func TestCookieJarVersionAndReceiptRollbackTogether(t *testing.T) {
 				saveJar(t, service, seed)
 			}
 			before := len(values.IDs())
-			_, err := service.handle.ExecContext(t.Context(), `CREATE TRIGGER fail_cookie_save BEFORE INSERT ON managed_cookie_jar_saves BEGIN SELECT RAISE(ABORT, 'injected receipt failure'); END`)
+			_, err := service.repository.handle.ExecContext(t.Context(), `CREATE TRIGGER fail_cookie_save BEFORE INSERT ON managed_cookie_jar_saves BEGIN SELECT RAISE(ABORT, 'injected receipt failure'); END`)
 			testutil.FailErr(t, "inject receipt failure", err)
 			jar := openJar(t, service, "save")
 			jar.Store.SetCookies(site, []*http.Cookie{{Name: "sid", Value: "new-value"}})
-			if _, err := service.SaveCookieJar(t.Context(), jar.request, jar); err == nil {
+			if _, err := service.Jars.SaveCookieJar(t.Context(), jar.request, jar); err == nil {
 				t.Fatal("receipt failure was ignored")
 			}
 			if len(values.IDs()) != before {
@@ -191,7 +191,7 @@ func TestCookieJarVersionAndReceiptRollbackTogether(t *testing.T) {
 			if value, _ := loaded.Store.Lookup(site, "sid"); value == "new-value" {
 				t.Fatal("failed receipt committed its value")
 			}
-			_, err = service.handle.ExecContext(t.Context(), `DROP TRIGGER fail_cookie_save`)
+			_, err = service.repository.handle.ExecContext(t.Context(), `DROP TRIGGER fail_cookie_save`)
 			testutil.FailErr(t, "remove failure injection", err)
 			saveJar(t, service, jar)
 			if value, _ := openJar(t, service, "read-after-retry").Store.Lookup(site, "sid"); value != "new-value" {

@@ -222,7 +222,7 @@ func newProgramFixture(t *testing.T) *programFixture {
 	t.Cleanup(func() { _ = background.Lifecycle.Close(context.Background()) })
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
-		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
+		Projector: captureprojection.New(&secretmatch.Matcher{}, nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
 		Sessions: fixtureSessions{},
 		// The foreground budget never expires, so a program runs to its end inline however slow the host.

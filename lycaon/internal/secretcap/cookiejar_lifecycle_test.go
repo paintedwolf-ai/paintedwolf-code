@@ -29,7 +29,7 @@ func TestCookieJarSaveRemainsBoundToOpeningAuthority(t *testing.T) {
 		case "name":
 			req.Name = "other"
 		}
-		if _, err := service.SaveCookieJar(t.Context(), req, jar); !errors.Is(err, ErrInvalidCookieJar) {
+		if _, err := service.Jars.SaveCookieJar(t.Context(), req, jar); !errors.Is(err, ErrInvalidCookieJar) {
 			t.Fatalf("%s identity change accepted: %v", field, err)
 		}
 	}
@@ -38,7 +38,7 @@ func TestCookieJarSaveRemainsBoundToOpeningAuthority(t *testing.T) {
 	_, err := service.RevokeProject(t.Context(), jar.request.ProjectID, meta.Reference, testOwner(t, service))
 	testutil.FailErr(t, "revoke while request is in flight", err)
 	stale.Store.SetCookies(jarSite(t), []*http.Cookie{{Name: "sid", Value: "late-value"}})
-	if _, err := service.SaveCookieJar(t.Context(), stale.request, stale); !errors.Is(err, ErrRevoked) {
+	if _, err := service.Jars.SaveCookieJar(t.Context(), stale.request, stale); !errors.Is(err, ErrRevoked) {
 		t.Fatalf("revoked save = %v", err)
 	}
 	fresh := openJar(t, service, "fresh")
@@ -54,18 +54,18 @@ func TestCookieJarDeadlineRefusesOpenAndInflightSave(t *testing.T) {
 	jar.Store.SetCookies(jarSite(t), []*http.Cookie{{Name: "sid", Value: "session-value"}})
 	meta := saveJar(t, service, jar)
 	stale := openJar(t, service, "late")
-	deadline := service.now().Add(time.Minute)
+	deadline := service.repository.now().Add(time.Minute)
 	_, err := service.Update(t.Context(), UpdateRequest{
 		ProjectID: jar.request.ProjectID, Reference: meta.Reference,
 		AgentUseDeadline: &AgentUseDeadline{At: deadline.Format(time.RFC3339Nano)},
 	})
 	testutil.FailErr(t, "set deadline", err)
-	service.now = func() time.Time { return deadline }
+	service.repository.now = func() time.Time { return deadline }
 	stale.Store.SetCookies(jarSite(t), []*http.Cookie{{Name: "sid", Value: "late-value"}})
-	if _, err := service.SaveCookieJar(t.Context(), stale.request, stale); !errors.Is(err, ErrAgentUseExpired) {
+	if _, err := service.Jars.SaveCookieJar(t.Context(), stale.request, stale); !errors.Is(err, ErrAgentUseExpired) {
 		t.Fatalf("save past deadline = %v", err)
 	}
-	if _, err := service.OpenCookieJar(t.Context(), jarRequest("fresh")); !errors.Is(err, ErrAgentUseExpired) {
+	if _, err := service.Jars.OpenCookieJar(t.Context(), jarRequest("fresh")); !errors.Is(err, ErrAgentUseExpired) {
 		t.Fatalf("opening expired jar bypassed deadline: %v", err)
 	}
 }
@@ -80,7 +80,7 @@ func TestCookieJarProjectPromotionAndNameUniqueness(t *testing.T) {
 	testutil.FailErr(t, "promote project jar", err)
 	other := jarRequest("worker-other-root")
 	other.ChatSessionID, other.SessionID = "root-2", "root-2"
-	second, err := service.OpenCookieJar(t.Context(), other)
+	second, err := service.Jars.OpenCookieJar(t.Context(), other)
 	testutil.FailErr(t, "open project jar from other chat", err)
 	first := openJar(t, service, "worker-first-root")
 	first.Store.SetCookies(jarSite(t), []*http.Cookie{{Name: "first", Value: "first-value"}})
@@ -91,7 +91,7 @@ func TestCookieJarProjectPromotionAndNameUniqueness(t *testing.T) {
 		t.Fatal("project jar was not shared and merged across chats")
 	}
 	other.Name, other.OperationID = "alternate", "alternate"
-	alternate, err := service.OpenCookieJar(t.Context(), other)
+	alternate, err := service.Jars.OpenCookieJar(t.Context(), other)
 	testutil.FailErr(t, "open alternate", err)
 	alternate.Store.SetCookies(jarSite(t), []*http.Cookie{{Name: "sid", Value: "alternate-value"}})
 	altMeta := saveJar(t, service, alternate)
@@ -116,7 +116,7 @@ func TestCookieJarScreeningRestoresIndividualRetiredValues(t *testing.T) {
 	later.Store.SetCookies(jarSite(t), []*http.Cookie{{Name: "sid", Value: "new-session-value"}})
 	saveJar(t, service, later)
 	var restored []secretmatch.Remembered
-	service.remember = func(_ string, items []secretmatch.Remembered) { restored = append(restored, items...) }
+	service.repository.remember = func(_ string, items []secretmatch.Remembered) { restored = append(restored, items...) }
 	testutil.FailErr(t, "reload screening", service.RememberProjectValues(t.Context(), jar.request.ProjectID, "root-2"))
 	if len(restored) != 2 {
 		t.Fatalf("restored screening entries=%d", len(restored))
@@ -136,7 +136,7 @@ func TestCookieJarConcurrentProjectPromotionDoesNotWidenFreshChatJar(t *testing.
 	private := openJar(t, service, "private-exchange")
 	other := jarRequest("project-exchange")
 	other.ChatSessionID, other.SessionID = "root-2", "root-2"
-	shared, err := service.OpenCookieJar(t.Context(), other)
+	shared, err := service.Jars.OpenCookieJar(t.Context(), other)
 	testutil.FailErr(t, "open other chat jar", err)
 	shared.Store.SetCookies(jarSite(t), []*http.Cookie{{Name: "shared", Value: "shared-value"}})
 	sharedMeta := saveJar(t, service, shared)
@@ -149,7 +149,7 @@ func TestCookieJarConcurrentProjectPromotionDoesNotWidenFreshChatJar(t *testing.
 		t.Fatal("in-flight chat cookies were widened into a newly visible project jar")
 	}
 	other.OperationID = "read-shared"
-	readShared, err := service.OpenCookieJar(t.Context(), other)
+	readShared, err := service.Jars.OpenCookieJar(t.Context(), other)
 	testutil.FailErr(t, "read shared jar", err)
 	if _, leaked := readShared.Store.Lookup(jarSite(t), "private"); leaked {
 		t.Fatal("another chat received the private exchange's cookie")

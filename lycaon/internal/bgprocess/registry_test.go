@@ -22,7 +22,7 @@ import (
 const backgroundCaptureSecret = "capture-secret-value"
 
 func backgroundProjector() *captureprojection.Projector {
-	m := secretmatch.NewInertMatcher()
+	m := &secretmatch.Matcher{}
 	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{
 			Secret: backgroundCaptureSecret,

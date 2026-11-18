@@ -127,7 +127,7 @@ func openTokenJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args m
 	if name == "" {
 		return nil, secretcap.TokenJarRequest{}, invalid(fmt.Errorf("token_jar must be a name"))
 	}
-	if deps.Secrets == nil {
+	if deps.Jars == nil || deps.Secrets == nil {
 		return nil, secretcap.TokenJarRequest{}, &toolrejection.ToolReject{
 			Code: TokenJarFailedCode, Data: map[string]any{"jar": name, "token_jar_name": name, "reason": "managed secrets are unavailable"},
 		}
@@ -136,7 +136,7 @@ func openTokenJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args m
 		ProjectID: strings.TrimSpace(tctx.Identity.ProjectID), ChatSessionID: tctx.ChatSessionID(),
 		SessionID: strings.TrimSpace(tctx.Identity.SessionID), OperationID: strings.TrimSpace(tctx.Identity.ToolCallID), Name: name,
 	}
-	jar, err := deps.Secrets.OpenTokenJar(ctx, req)
+	jar, err := deps.Jars.OpenTokenJar(ctx, req)
 	if err != nil {
 		return nil, req, &toolrejection.ToolReject{
 			Code: TokenJarFailedCode, Data: map[string]any{"jar": name, "token_jar_name": name, "reason": err.Error()},
@@ -260,7 +260,7 @@ func saveTokenJar(ctx context.Context, deps Deps, req secretcap.TokenJarRequest,
 	receipt.Captured = capturedCount
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	meta, err := deps.Secrets.SaveTokenJar(saveCtx, req, jar)
+	meta, err := deps.Jars.SaveTokenJar(saveCtx, req, jar)
 	if err != nil {
 		receipt.Persisted, receipt.Error = false, err.Error()
 		return receipt

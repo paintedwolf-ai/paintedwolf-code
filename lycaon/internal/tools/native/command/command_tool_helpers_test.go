@@ -31,7 +31,7 @@ func newCommandTool(t *testing.T) (*command.CommandTool, *bgprocess.Registry) {
 	})
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	// Command output reads are screened, so a registry without a projector withholds them.
-	reg.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	reg.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	return &command.CommandTool{
 		Runner:     hostcmd.NewRunner(),
 		Boundary:   boundary,

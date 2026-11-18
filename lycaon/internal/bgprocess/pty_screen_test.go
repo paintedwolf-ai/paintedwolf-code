@@ -20,7 +20,7 @@ import (
 )
 
 func configurePTYCaptureProjection(reg *Registry) {
-	reg.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	reg.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 }
 
 func TestPTYScreenAltScreenSnapshot(t *testing.T) {

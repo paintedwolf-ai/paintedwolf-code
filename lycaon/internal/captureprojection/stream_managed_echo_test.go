@@ -16,7 +16,7 @@ func TestScreenStreamManagedEchoRechecksStandingOnLaterPublication(t *testing.T)
 	reference := secretmatch.ReferenceToken("12345678-1234-1234-1234-123456789abc")
 	generation := uint64(1)
 	retired := false
-	matcher := secretmatch.NewInertMatcher()
+	matcher := &secretmatch.Matcher{}
 	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		ref := reference
 		if retired {
@@ -55,7 +55,7 @@ func TestScreenStreamManagedEchoRechecksStandingOnLaterPublication(t *testing.T)
 func TestScreenStreamManagedEchoRefusesChangedOrCanceledPublication(t *testing.T) {
 	const value = "managed-capture-value-9917"
 	for _, cancel := range []bool{false, true} {
-		matcher := secretmatch.NewInertMatcher()
+		matcher := &secretmatch.Matcher{}
 		matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 			return []secretmatch.HarvestedValue{{Secret: value, RuleID: secretmatch.ManagedRuleID, NonDisclosable: true}}
 		})

@@ -152,7 +152,7 @@ func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
 	ctx := t.Context()
 
 	// Configure secret screening on background process command lines.
-	matcher := secretmatch.NewInertMatcher()
+	matcher := &secretmatch.Matcher{}
 	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{
 			Secret:         "super-secret-token-xyz",

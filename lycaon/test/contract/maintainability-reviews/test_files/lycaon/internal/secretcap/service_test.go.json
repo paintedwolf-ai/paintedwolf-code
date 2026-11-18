@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/secretcap/service_test.go",
+  "kind": "test_suite",
+  "workstream": "secret-capability-boundaries",
+  "disposition": "retain",
+  "reason": "Retain the capability lifecycle suite covering creation, scope, revocation, recovery, screening, and value-free metadata. Its shared durable fixture exercises the production service; focused jar, reveal, and resolution suites remain separate.",
+  "reviewed_commit": "05d2a79fb028573bc599fd368420cf8791ed13ea",
+  "ceiling": 456,
+  "boundaries": {
+    "lycaon/internal/secretcap/service_test.go": "a81e152b15a50ea08859b47522023c666257146610c18a709faa847b028b8c65"
+  }
+}

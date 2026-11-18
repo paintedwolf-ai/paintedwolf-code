@@ -71,7 +71,7 @@ func screenCacheKeyFor(s string) screenCacheKey {
 
 // catalogMatches returns cached or fresh catalog spans.
 func (m *Matcher) catalogMatches(ctx context.Context, s string) []Match {
-	if m == nil || m.inert || m.detector == nil {
+	if m == nil || m.detector == nil {
 		return nil
 	}
 	if s == "" {

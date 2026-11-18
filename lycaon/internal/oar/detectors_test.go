@@ -15,7 +15,7 @@ import (
 
 func TestSecretMatchDetectorRegistered(t *testing.T) {
 	reg := NewDetectorRegistry()
-	reg.Register(SecretMatchDetector{Matcher: secretmatch.NewInertMatcher()})
+	reg.Register(SecretMatchDetector{Matcher: &secretmatch.Matcher{}})
 	gc := NewGuardContext()
 	gc.Content.Content = "no secrets here"
 	findings, err := reg.Dispatch("detector://secretmatch", gc)
