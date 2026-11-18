@@ -75,6 +75,8 @@ type fakeDesktop struct {
 	base   string
 	socket string
 	launch desktopLaunch
+	// started runs before the start deadline begins.
+	started func()
 }
 
 func newFakeDesktop(t *testing.T, behaviour string) *fakeDesktop {
@@ -131,6 +133,9 @@ func (f *fakeDesktop) start(ctx context.Context, timeout time.Duration) (net.Con
 		if start != nil {
 			started = start.(*desktopStart)
 			f.t.Cleanup(started.Stop)
+			if f.started != nil {
+				f.started()
+			}
 		}
 		return start, err
 	}, timeout, 20*time.Millisecond)
@@ -192,12 +197,19 @@ func TestATimedOutStartStopsOnlyTheSessionItStarted(t *testing.T) {
 	}
 	defer func() { _ = bystander.Process.Kill(); _ = bystander.Wait() }()
 	fake := newFakeDesktop(t, "family")
+	childPID := filepath.Join(fake.base, "child.pid")
+	fake.started = func() {
+		testutil.WaitFor(t, "the launched descendant exists", func() bool {
+			_, err := os.Stat(childPID)
+			return err == nil
+		})
+	}
 	_, started, err := fake.start(context.Background(), 500*time.Millisecond)
 	if err == nil || !strings.Contains(err.Error(), "did not finish starting") {
 		t.Fatalf("timeout = %v", err)
 	}
 	groupGone(t, started.cmd.Process.Pid)
-	raw, err := os.ReadFile(filepath.Join(fake.base, "child.pid"))
+	raw, err := os.ReadFile(childPID)
 	testutil.FailErr(t, "read file", err)
 	child, _ := strconv.Atoi(string(raw))
 	if err := syscall.Kill(child, 0); !errors.Is(err, syscall.ESRCH) {
