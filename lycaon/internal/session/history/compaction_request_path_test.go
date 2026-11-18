@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -14,8 +15,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// countingSummarizer counts provider summaries; background passes call it from
-// another goroutine.
+// countingSummarizer records each provider summary and answers at once;
+// background passes call it from another goroutine.
 type countingSummarizer struct{ calls atomic.Int32 }
 
 func (s *countingSummarizer) Summarize(ctx context.Context, system, user string, maxTokens int) (string, error) {
@@ -50,7 +51,9 @@ func oversizedSession(t *testing.T, summarizer compaction.Summarizer) (*Service,
 }
 
 // holdCompaction admits a manual pass so no background pass for the session
-// runs until the returned release is called.
+// runs until release is called. Release is also a cleanup registered after the
+// service's own, so it runs first: the service's Wait joins the scheduled pass,
+// which waits for this one, and a test that stops early must not leave it held.
 func holdCompaction(t *testing.T, m *Service, sessionID string) func() {
 	t.Helper()
 	entered, released, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
@@ -62,10 +65,15 @@ func holdCompaction(t *testing.T, m *Service, sessionID string) func() {
 		})
 	}()
 	<-entered
-	return func() {
-		close(released)
-		testutil.FailErr(t, "held compaction pass", <-done)
+	var once sync.Once
+	release := func() {
+		once.Do(func() {
+			close(released)
+			testutil.FailErr(t, "held compaction pass", <-done)
+		})
 	}
+	t.Cleanup(release)
+	return release
 }
 
 func requirePublishedView(t *testing.T, st *store.Memory, sessionID string) {
@@ -88,7 +96,7 @@ func TestCompactionSyncPathAvoidsSummarizer(t *testing.T) {
 	_, _, err = m.Fit(t.Context(), sess, rows, "")
 	testutil.FailErr(t, "fit request", err)
 	if got := summarizer.calls.Load(); got != 0 {
-		t.Fatalf("request fit called the summarizer %d times", got)
+		t.Errorf("request fit called the summarizer %d times", got)
 	}
 	release()
 	m.Runner.Wait()
