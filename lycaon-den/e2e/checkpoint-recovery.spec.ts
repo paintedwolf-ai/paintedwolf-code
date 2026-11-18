@@ -57,37 +57,33 @@ async function openWaitingTask(page: Page, projectId: string, sessionId: string)
   await expect.poll(() => foregroundSession(page), { timeout: 30_000 }).toBe(sessionId);
 }
 
-const socketPath = harnessSocketPath(`approval-recovery-fixture-${process.pid}.sock`);
+let socketPath: string;
 let closeSocket: () => Promise<void>;
 
 webE2e.beforeAll(async () => {
+  socketPath = harnessSocketPath("recovery.sock");
   closeSocket = await listenHarnessSocket(socketPath);
 });
 webE2e.afterAll(() => closeSocket());
 
-const approvals = [
-  { name: "command", fields: {} },
-  {
-    name: "local service",
-    fields: {
-      approved_path: socketPath,
-      resolved_path: socketPath,
-    },
-  },
+// Fields are read when a test runs: the socket path exists only after beforeAll.
+const approvals: Array<{ name: string; fields: () => Record<string, unknown> }> = [
+  { name: "command", fields: () => ({}) },
+  { name: "local service", fields: () => ({ approved_path: socketPath, resolved_path: socketPath }) },
   {
     name: "direct IP",
-    fields: { direct_ip: true, declared_destinations: ["https://example.test/"] },
+    fields: () => ({ direct_ip: true, declared_destinations: ["https://example.test/"] }),
   },
   {
     name: "secret screen",
-    fields: {
+    fields: () => ({
       secret: {
         surface: "model",
         destination: "fixture-model",
         rule_title: "Fixture credential",
         shape: "fixture",
       },
-    },
+    }),
   },
 ];
 
@@ -103,7 +99,7 @@ for (const approval of approvals) {
     const headers = { Authorization: `Bearer ${token}` };
     const response = await request.post(`${apiUrl}/harness/checkpoints/tool_approval`, {
       headers,
-      data: { session_id: sessionId, command: "printf fixture", ...approval.fields },
+      data: { session_id: sessionId, command: "printf fixture", ...approval.fields() },
     });
     expect(response.ok(), await response.text()).toBeTruthy();
     const { checkpoint_id: checkpointId } = await response.json() as { checkpoint_id: string };

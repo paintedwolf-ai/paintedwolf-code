@@ -79,8 +79,10 @@ webE2e("settings budgets keep keyboard focus and persist every numeric field", a
   const endpoint = `${apiUrl}/v1/settings/limits`;
   const baselineResponse = await request.get(endpoint, { headers });
   expect(baselineResponse.ok()).toBeTruthy();
-  const baseline = await baselineResponse.json();
-  const { scope: _scope, merged_from: _merged, ...original } = baseline;
+  const baseline = await baselineResponse.json() as Record<string, unknown>;
+  const original = { ...baseline };
+  delete original.scope;
+  delete original.merged_from;
   await page.goto("/");
   await expectShellReady(page);
   await openSettings(page, "debug");

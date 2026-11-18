@@ -83,8 +83,7 @@ webE2e.describe("checkpoint tool approval parity", () => {
       const sessionId = await settledChatSessionId(page);
       expect(sessionId).toBeTruthy();
 
-      const socketPath =
-        harnessSocketPath(`a-very-long-local-development-environment-${process.pid}/docker.sock`);
+      const socketPath = harnessSocketPath("docker.sock");
       await listenHarnessSocket(socketPath);
       const inject = await request.post(
         `${apiUrl}/harness/checkpoints/tool_approval`,
