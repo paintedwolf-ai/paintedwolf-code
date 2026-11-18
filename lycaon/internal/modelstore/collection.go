@@ -81,25 +81,14 @@ func (s *Store) Collect() (removed []string, resultErr error) {
 		}
 	}
 
-	for _, m := range history.all {
-		rel := s.revisionRel(m)
-		if !keepRevisions[rel] {
-			root, err := s.openRoot()
-			if err != nil {
-				return nil, err
-			}
-			err = errors.Join(root.RemoveAll(rel), root.Close())
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
 	root, err := s.openRoot()
 	if err != nil {
 		return nil, err
 	}
 	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
+	if err := collectRevisionTrees(root, keepRevisions); err != nil {
+		return nil, err
+	}
 
 	artifactsDir := filepath.Join(s.root, "artifacts")
 	prefixEntries, err := os.ReadDir(artifactsDir)

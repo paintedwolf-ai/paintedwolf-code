@@ -128,6 +128,9 @@ func (s *Store) install(ctx context.Context, signed SignedManifest, resumable bo
 			resultErr = errors.Join(resultErr, f.Close())
 		}
 	}()
+	if err := s.cleanInterrupted(signed.Manifest, resumable); err != nil {
+		return err
+	}
 	if err := s.admitInstall(ctx, signed.Manifest, resumable, beforeEviction); err != nil {
 		return err
 	}
