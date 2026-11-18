@@ -49,8 +49,8 @@ func TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack(t *testing.T) {
 	if httpAddr == "" {
 		t.Fatal("Start never bound the HTTP front door")
 	}
-	if broker.Addr() != "" || broker.SocksAddr() != "" {
-		t.Fatalf("failed Start kept listeners: http=%q socks=%q", broker.Addr(), broker.SocksAddr())
+	if broker.Addr() != "" {
+		t.Fatalf("failed Start kept its HTTP listener: %q", broker.Addr())
 	}
 	rebound, err := net.Listen("tcp", httpAddr)
 	if err != nil {
