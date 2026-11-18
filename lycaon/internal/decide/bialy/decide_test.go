@@ -38,7 +38,7 @@ func TestDecideRetainsPriorityAcrossWholeQuestionBatches(t *testing.T) {
 				})
 				done <- result{value, err}
 			}()
-			testutil.WaitFor(t, func() bool { return device.Snapshot().Active != nil })
+			testutil.WaitFor(t, "the device admits the first batch", func() bool { return device.Snapshot().Active != nil })
 			generation := make(chan *inference.Permit, 1)
 			go func() {
 				permit, err := device.Acquire(t.Context(), inference.Work{Owner: "generation", Generation: 1, Priority: inference.Foreground})
@@ -46,7 +46,7 @@ func TestDecideRetainsPriorityAcrossWholeQuestionBatches(t *testing.T) {
 					generation <- permit
 				}
 			}()
-			testutil.WaitFor(t, func() bool { return device.Snapshot().Queued == 1 })
+			testutil.WaitFor(t, "the second batch queues", func() bool { return device.Snapshot().Queued == 1 })
 			if outcome == "cancel" {
 				cancel()
 			}

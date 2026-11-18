@@ -45,7 +45,7 @@ func TestComparisonRefreshesWithdrawnSecretException(t *testing.T) {
 	}
 	previous := view.ProjectionRevision
 	accepted.Store(false)
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the comparison refreshes", func() bool {
 		response := httptest.NewRecorder()
 		server.ServeHTTP(response, contractfixture.NewAuthedRequest(http.MethodGet, sourceapi.SourceViewURL(p.ID, initial.ID), nil))
 		view = *contractfixture.ReadSourceViewResponse(t, response, http.StatusOK).Comparison

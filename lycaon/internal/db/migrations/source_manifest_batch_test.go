@@ -92,8 +92,11 @@ func newManifestBatchDatabase(t *testing.T) (*sql.DB, *manifestInsertTrace) {
 	testutil.FailErr(t, "open actual SQLite migration writer", err)
 	database.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = database.Close() })
-	_, err = database.Exec(`PRAGMA foreign_keys=ON;
-CREATE TABLE source_snapshots(id TEXT PRIMARY KEY);
+	_, err = database.Exec(`PRAGMA foreign_keys=ON`)
+	testutil.FailErr(t, "enable foreign keys", err)
+	tx, err := database.Begin()
+	testutil.FailErr(t, "begin target schema", err)
+	_, err = tx.Exec(`CREATE TABLE source_snapshots(id TEXT PRIMARY KEY);
 CREATE TABLE history_storage_clock(id INTEGER PRIMARY KEY,generation INTEGER);
 INSERT INTO history_storage_clock VALUES(1,0);
 CREATE TABLE source_blob_objects(sha256 TEXT PRIMARY KEY);
@@ -105,8 +108,9 @@ CREATE TABLE source_blob_reclaim_queue(sha256 TEXT PRIMARY KEY);`)
 	if start < 0 {
 		t.Fatal("manifest target DDL not found")
 	}
-	_, err = database.Exec(string(manifestLayoutSchema[start:]))
+	_, err = tx.Exec(string(manifestLayoutSchema[start:]))
 	testutil.FailErr(t, "create actual manifest target", err)
+	testutil.FailErr(t, "commit target schema", tx.Commit())
 	return database, trace
 }
 

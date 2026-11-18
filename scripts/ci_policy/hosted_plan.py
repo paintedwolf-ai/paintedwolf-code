@@ -5,7 +5,7 @@ import re
 
 from ci_policy.hosted_schedule import order, PRIORITIES
 from ci_policy.timings import row_key
-from ci_policy.native_admission import runs_script_coverage
+from ci_policy.native_admission import runs_package_metadata, runs_script_coverage
 from verification_plan import catalog, expand
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -14,7 +14,7 @@ GATE = "check"
 FAST_GATE = "check-fast"
 # The static job runs these before any lane, so the fast tier omits them.
 STATIC_STAGES = {"comments:check", "test:fail-messages:check", "docs:links"}
-SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz", "e2e"}
+SUITES = {"all", "behavior", "race", "performance", "fuzz", "e2e"}
 SETUPS = {"verification", "shell", "harness", "frontend", "analysis"}
 # A platform lane runs a check that only its platform can run, so the cross-platform check gate,
 # which every development host runs, leaves it out; the merge queue runs it beside that gate.
@@ -32,7 +32,7 @@ USERLANDS_TARGET = "test:userlands"
 LAUNCH_PACKAGE = "./internal/launchguard"
 # Go runs that select their packages in their own scripts, outside the catalog's `go` recipes,
 # and reach the protected launch leg.
-LAUNCH_SCRIPT_TARGETS = {"test:confine:linux", "coverage:changes", "check:coverage"}
+LAUNCH_SCRIPT_TARGETS = {"test:confine:linux", "coverage:changes", "test:integration:changes"}
 
 
 def supplemental(lane):
@@ -40,8 +40,6 @@ def supplemental(lane):
 
 
 def lanes():
-    from ci_policy.quarantine import entries
-    entries()
     values = catalog()["ci"]
     taskfile = (ROOT / "Taskfile.yml").read_text()
     targets = set(re.findall(r"^  ([\w:-]+):$", taskfile, re.M))
@@ -87,8 +85,8 @@ def lanes():
                 "den:typecheck", "den:lint", "den:test", "den:coverage:changes", "den:knip:changes"}):
             raise ValueError(f"CI lane {name} requires toolchains outside frontend setup")
         if lane["setup"] == "analysis" and not set(lane["targets"]).issubset({
-                "lint:fast", "lint:full", "lint:vuln", "lint:vuln:fresh", "comments:check", "test:fail-messages:check",
-                "arch-lint:changes"}):
+                "lint:fast", "lint:full", "lint:deadcode", "lint:vuln", "lint:vuln:fresh", "comments:check",
+                "test:fail-messages:check", "arch-lint:changes"}):
             raise ValueError(f"CI lane {name} requires inputs outside Go analysis setup")
         # Only a platform lane runs on its platform's other runners.
         if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-24.04"} | PLATFORMS.get(lane.get("platform"), set()):
@@ -162,7 +160,7 @@ def selects_package(pattern, package):
 
 
 def analysis_set(targets):
-    lint = bool(set(targets) & {"lint:fast", "lint:full", "arch-lint:changes"})
+    lint = bool(set(targets) & {"lint:fast", "lint:full", "lint:deadcode", "arch-lint:changes"})
     vulnerabilities = bool(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
     return "all" if lint and vulnerabilities else "lint" if lint else "vulnerabilities" if vulnerabilities else "none"
 
@@ -175,9 +173,11 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
     selected = {name for name, lane in values.items() if supplemental(lane)} if platform else set(values)
     # A broad change runs the whole check gate and every platform lane of the merge queue.
     broad = profile == "integration" and scope is not None and scope["full"]
-    if profile == "integration" and scope is not None and not broad:
-        from ci_policy.impact import selected_lanes
-        selected &= selected_lanes(scope, values)
+    prose = False
+    if profile in {"fast", "integration"} and scope is not None:
+        from ci_policy.impact import docs_only, fast_lanes, selected_lanes
+        selected &= (fast_lanes if profile == "fast" else selected_lanes)(scope, values)
+        prose = profile == "fast" and docs_only(scope.get("paths", []))
     result = []
     for name, lane in values.items():
         if name not in selected:
@@ -203,12 +203,13 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "linux_launch": any(runs_protected_launch(target) for target in lane["targets"]),
                            "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"]
                            or "scripts:coverage:changes" in lane["targets"]
-                           or (name == "ready" and (scope is None or runs_script_coverage(scope))),
+                           or (name == "ready" and (runs_package_metadata(scope) or runs_script_coverage(scope))),
                            "nix": any(target.startswith("nix:") for target in lane["targets"])
                            or "nix" in lane.get("arguments", []),
                            "analysis": analysis_set(lane["targets"]),
                            "runner": lane.get("runner", "ubuntu-24.04")})
-    if not result:
+    # Only a pull request of prose alone has no lane: the static job verifies it.
+    if not result and not prose:
         raise ValueError("CI selection contains no verification")
     return {"include": order(result, values, timings)}
 

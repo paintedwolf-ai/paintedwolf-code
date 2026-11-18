@@ -43,9 +43,7 @@ func TestRetainedListenerSurvivesPathReplacement(t *testing.T) {
 					err = os.Mkdir(dir, 0700)
 				}
 			}
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "apply "+mutation+" to the socket path", err)
 			var decoy *net.UnixListener
 			if mutation == "replace" || mutation == "ancestor" {
 				decoy, err = net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
@@ -76,7 +74,7 @@ func TestRetainedListenerSurvivesPathReplacement(t *testing.T) {
 				if err := raw.Control(func(fd uintptr) {
 					ready, pollErr = unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 0)
 				}); err != nil {
-					t.Fatal(err)
+					testutil.FailErr(t, "raw.Control failed", err)
 				}
 				if pollErr != nil || ready != 0 {
 					t.Fatalf("decoy accept readiness = %d, error = %v", ready, pollErr)

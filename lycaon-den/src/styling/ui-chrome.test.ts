@@ -1,12 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  DEN_CHROME_ATTR,
-  DEN_PROSE_ATTR,
-  chromeProps,
-  proseProps,
-} from "./ui-chrome.ts";
+import { chromeProps, proseProps } from "./ui-chrome.ts";
 
 const denSrc = join(import.meta.dirname, "..");
 
@@ -16,7 +11,6 @@ function read(rel: string): string {
 
 describe("ui chrome mark", () => {
   it("exposes a single attribute mark and props helper", () => {
-    expect(DEN_CHROME_ATTR).toBe("data-den-chrome");
     expect(chromeProps()).toEqual({ "data-den-chrome": "" });
   });
 
@@ -30,7 +24,6 @@ describe("ui chrome mark", () => {
   });
 
   it("takes selection back on prose islands under a chrome root", () => {
-    expect(DEN_PROSE_ATTR).toBe("data-den-prose");
     expect(proseProps()).toEqual({ "data-den-prose": "" });
 
     const css = read("styling/ui-chrome.css");

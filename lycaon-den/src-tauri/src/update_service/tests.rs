@@ -177,17 +177,16 @@ fn maturity_selects_initial_channel_without_overriding_preferences() {
     );
 }
 #[test]
-fn feed_endpoints_derive_from_the_embedded_key_generation() {
-    let (generation, _) = feed::embedded_key();
-    assert_eq!(
-        UpdateChannel::Stable.endpoint(),
-        format!("{DOWNLOAD_ORIGIN}/updates/stable/key-{generation}/latest.json")
-    );
-    assert_eq!(
-        UpdateChannel::Preview.feed_name(),
-        format!("latest-preview-key-{generation}.json")
-    );
-    assert!(!feed::feed_key().is_empty());
+fn the_embedded_generation_carries_an_artifact_key_and_a_distinct_feed_key() {
+    let (generation, artifact_key) = feed::embedded_key();
+    let feed_key = feed::feed_key();
+    assert!(generation > 0);
+    verification::decode_key(&artifact_key).expect("artifact key decodes");
+    verification::decode_key(&feed_key).expect("feed key decodes");
+    assert_ne!(artifact_key, feed_key);
+    // Each channel reads the feed signed for this generation.
+    assert!(UpdateChannel::Stable.endpoint().contains(&format!("key-{generation}")));
+    assert!(UpdateChannel::Preview.feed_name().contains(&format!("key-{generation}")));
 }
 #[test]
 fn automatic_retry_is_bounded() {

@@ -31,7 +31,7 @@ func TestPromotionRefusesTargetParentSymlinkEscape(t *testing.T) {
 			testutil.FailErr(t, "create publisher", err)
 			_, err = publisher.Publish(t.Context(), PublishRequest{CheckpointID: "cp-confinement", Trigger: TriggerWorkerCompletion})
 			testutil.FailErr(t, "publish checkpoint", err)
-			promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": trunk}})
+			promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": trunk}, PrimaryRoot: "primary"})
 			testutil.FailErr(t, "create promoter", err)
 			var preview *PromotionPreview
 			if swapAfterPreview {

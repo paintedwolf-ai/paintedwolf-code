@@ -23,14 +23,14 @@ func TestWorkflowManifestTopologyFieldSync(t *testing.T) {
 		OpenAPISchema: "WorkflowSummary",
 		TSInterface:   "WorkflowSummary",
 	}); err != nil {
-		t.Fatal(err)
+		contractcheck.FailErr(t, "wirespec.SyncDTOFields failed", err)
 	}
 	if err := wirespec.SyncDTOFields(root, wirespec.DtoSyncSpec{
 		GoValue:       api.WorkflowPresetSummary{},
 		OpenAPISchema: "WorkflowPresetSummary",
 		TSInterface:   "WorkflowPresetSummary",
 	}); err != nil {
-		t.Fatal(err)
+		contractcheck.FailErr(t, "wirespec.SyncDTOFields failed", err)
 	}
 }
 

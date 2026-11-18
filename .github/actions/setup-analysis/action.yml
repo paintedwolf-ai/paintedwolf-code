@@ -15,6 +15,9 @@ runs:
         go-version-file: lycaon/go.mod
         cache: false
     - uses: ./.github/actions/cache-go
+    - uses: ./.github/actions/cache-modules
+      with:
+        cargo: 'false'
     - uses: ./.github/actions/cache-analysis-tools
       with:
         tools: ${{ inputs.analysis }}

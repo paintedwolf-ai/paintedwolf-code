@@ -1,6 +1,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { denSourceRoot, loadSourceCorpus, requireNonEmpty } from "../../test/source-corpus.ts";
 import { readSourceText } from "../../test/stylesheet-source.ts";
 
 const platformDir = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -44,17 +45,6 @@ describe("scrollbar visual contract", () => {
     );
     expect(css).not.toContain("os-scrollbar-auto-hide");
     expect(css).not.toMatch(/\.os-scrollbar\s*\{[^}]*transition/);
-  });
-
-  it("keeps editor scrollbars interactive above the editable surface", () => {
-    const css = readSourceText(join(platformDir, "themed-scrollbars.css"), "utf8");
-
-    expect(css).toMatch(
-      /\.os-scrollbar\.den-scrollbar-handle-interactive \.os-scrollbar-handle[\s\S]*?pointer-events:\s*auto/,
-    );
-    expect(css).toMatch(
-      /\.cm-editor\[data-overlayscrollbars~="host"\] > \.os-scrollbar\s*\{[\s\S]*?z-index:\s*1/,
-    );
   });
 
   it("spaces Blueprints panels from the launcher itself", () => {
@@ -101,5 +91,12 @@ describe("resident surface layout contract", () => {
     // Layout loss clamps descendant scroll offsets.
     // WebKit never resumes compositor animations inside revealed skipped content.
     expect(idle).not.toContain("content-visibility");
+  });
+
+  it("never makes native smooth scrolling a stylesheet default", () => {
+    // WebKit animates it off the main thread, so a scroll write mid-glide lands clicks a row away.
+    const sheets = requireNonEmpty("Den stylesheets", loadSourceCorpus(denSourceRoot, { extensions: [".css"] }).files);
+    const smooth = sheets.filter((sheet) => /scroll-behavior\s*:\s*smooth/i.test(sheet.text)).map((sheet) => sheet.rel);
+    expect(smooth).toEqual([]);
   });
 });

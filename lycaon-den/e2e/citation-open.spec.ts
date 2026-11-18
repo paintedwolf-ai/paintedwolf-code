@@ -75,26 +75,16 @@ webE2e.describe("citation source opens in-app", () => {
       const chicklet = page.locator(".den-chat-transcript-visual").getByTestId("citation-evidence-chicklet");
       await expect(chicklet).toBeVisible({ timeout: 30_000 });
       const summary = chicklet.locator(".den-transcript-disclosure-header");
-      await expect(summary.locator(".den-tool-chicklet-caret")).toBeAttached();
       const geometry = await chicklet.evaluate((element) => {
-        const stream = element.closest(".den-chat-transcript-visual")!;
         const header = element.querySelector(".den-transcript-disclosure-header")!;
-        const row = header.firstElementChild!;
-        const caret = header.querySelector(".den-tool-chicklet-caret")!;
         return {
           width: element.getBoundingClientRect().width,
-          expectedWidth: Math.min(
-            stream.getBoundingClientRect().width,
-            32 * parseFloat(getComputedStyle(document.documentElement).fontSize),
-          ),
-          rightGap: header.getBoundingClientRect().right - caret.getBoundingClientRect().right,
-          inset: parseFloat(getComputedStyle(row).paddingRight),
           headerWidth: header.getBoundingClientRect().width,
           headerHeight: header.getBoundingClientRect().height,
         };
       });
-      expect(geometry.width).toBeCloseTo(geometry.expectedWidth, 0);
-      expect(geometry.rightGap).toBeCloseTo(geometry.inset, 0);
+      // At rest the whole link is the hit target, to its last pixel.
+      expect(geometry.headerWidth).toBeCloseTo(geometry.width, 0);
       await summary.click({
         position: { x: geometry.headerWidth - 2, y: geometry.headerHeight / 2 },
       });

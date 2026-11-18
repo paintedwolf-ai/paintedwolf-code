@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -165,4 +166,43 @@ func TestPromoteRecoverySurvivesDeviceNumberChange(t *testing.T) {
 		testutil.FailErr(t, "chmod primary", os.Chmod(f.edited, 0o750))
 		f.assertSettlesAndRetries(t)
 	})
+}
+
+// cancelAfterRepair cancels the sweep's context once it releases a repaired
+// lease and keeps listing on its own, so a sweep that waited after repairing
+// would return the cancellation instead of finishing.
+type cancelAfterRepair struct {
+	MergeStore
+	cancel context.CancelFunc
+}
+
+func (s cancelAfterRepair) ReleaseMergeApply(ctx context.Context, jobID, claimToken string) error {
+	defer s.cancel()
+	return s.MergeStore.ReleaseMergeApply(ctx, jobID, claimToken)
+}
+
+func (s cancelAfterRepair) ListMergeApplying(ctx context.Context) ([]string, error) {
+	return s.MergeStore.ListMergeApplying(context.WithoutCancel(ctx))
+}
+
+// A sweep that repairs every expired promotion lists again at once and ends;
+// it waits a lease interval only while a remaining lease is live.
+func TestRecoverOrphanedMergeAppliesEndsWithoutWaitingAfterRepair(t *testing.T) {
+	sqlDB := testdbfixture.Open(t, "store.db")
+	queue := NewSQLQueue(sqlDB, 8)
+	root := t.TempDir()
+	testdbseed.InsertSessionWithRoot(t, sqlDB, "parent", testdbseed.DefaultProjectID, root)
+	id, err := queue.Enqueue(t.Context(), api.WorkerTask{ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: root, AgentType: "implementer", Prompt: "p", Brief: "b"})
+	testutil.FailErr(t, "enqueue", err)
+	_, err = sqlDB.ExecContext(t.Context(), `UPDATE worker_jobs SET merge_status = 'applying', merge_claim_token = 'crashed',
+		merge_lease_expires_at = '2000-01-01T00:00:00Z' WHERE id = ?`, id)
+	testutil.FailErr(t, "leave a crashed promotion", err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	svc := &MergeService{Queue: queue, Store: cancelAfterRepair{MergeStore: queue, cancel: cancel}, DataDir: t.TempDir()}
+	testutil.FailErr(t, "recover", svc.RecoverOrphanedMergeApplies(ctx))
+	if task, ok := queue.Get(id); !ok || task.MergeStatus == api.WorkerMergeStatusApplying {
+		t.Fatalf("crashed promotion left applying: %+v", task)
+	}
 }

@@ -741,6 +741,7 @@ describe("Crossbar", () => {
   });
 
   it("walks adjacent visible results with repeated arrow keys", () => {
+    const onNavigateTarget = vi.fn();
     render(() => (
       <Crossbar
         open
@@ -755,6 +756,7 @@ describe("Crossbar", () => {
         onClose={vi.fn()}
         onEscalate={vi.fn()}
         onNavigateHit={vi.fn()}
+        onNavigateTarget={onNavigateTarget}
       />
     ));
 
@@ -773,6 +775,9 @@ describe("Crossbar", () => {
     expect(
       rows[2]?.classList.contains("den-crossbar__row--active"),
     ).toBe(true);
+    // Enter opens the row the highlight is on.
+    fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
+    expect(onNavigateTarget).toHaveBeenLastCalledWith(expect.objectContaining({ projectId: "p3" }));
 
     fireEvent.keyDown(input, { key: "ArrowUp", code: "ArrowUp" });
     expect(

@@ -1,28 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render } from "@solidjs/testing-library";
 import {
-  MEDIATION_UNAVAILABLE_COPY,
-  SANDBOX_BYPASS_COPY,
   SessionProtectionBanners,
   sessionProtectionPresent,
 } from "./SessionProtectionBanners.tsx";
 
 describe("SessionProtectionBanners", () => {
-  it("keeps mediation unavailable and sandbox bypass as distinct banners", () => {
-    const { getByTestId } = render(() => (
-      <SessionProtectionBanners
-        protection={{
-          mediation_unavailable: true,
-          sandbox_bypass: true,
-        }}
-      />
-    ));
-    expect(getByTestId("protection-mediation-unavailable").textContent).toContain(
-      MEDIATION_UNAVAILABLE_COPY,
-    );
-    expect(getByTestId("protection-sandbox-bypass").textContent).toContain(
-      SANDBOX_BYPASS_COPY,
-    );
+  it("shows only the banner for the state the host reports", () => {
+    const states = [
+      { protection: { mediation_unavailable: true }, shown: "protection-mediation-unavailable", hidden: "protection-sandbox-bypass" },
+      { protection: { sandbox_bypass: true }, shown: "protection-sandbox-bypass", hidden: "protection-mediation-unavailable" },
+    ];
+    for (const state of states) {
+      const { getByTestId, queryByTestId, unmount } = render(() => (
+        <SessionProtectionBanners protection={state.protection} />
+      ));
+      expect(getByTestId(state.shown).textContent?.trim()).toBeTruthy();
+      expect(queryByTestId(state.hidden)).toBeNull();
+      unmount();
+    }
   });
 
   it("shows partial startup overrides without claiming full bypass", () => {

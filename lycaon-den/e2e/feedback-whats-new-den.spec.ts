@@ -137,6 +137,8 @@ webE2e.describe("feedback + what's new den", () => {
       await expect(page.locator('[data-notice-code="whats_new"]')).toContainText(
         `What’s new in ${RELEASED_VERSION}`,
       );
+      // One announcement, from the shared notice store.
+      await expect(page.getByText(`What’s new in ${RELEASED_VERSION}`)).toHaveCount(1);
       const announcement = page.locator('[data-notice-code="whats_new"]');
       await announcement.getByRole("button", { name: "Read more" }).click();
       await expect(page.getByTestId("whats-new-dialog")).toBeVisible();

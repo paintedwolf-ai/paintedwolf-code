@@ -28,7 +28,7 @@ func TestFailedProjectRetainsMeasurements(t *testing.T) {
 			script += "exit 2\n"
 			testutil.FailErr(t, "write controlled scanner", os.WriteFile(binary, []byte(script), 0o700))
 			project := projectCase{Name: name, Language: "javascript", Files: map[string]string{"app.js": "sink(source())\n"}}
-			measurement := measureProject(binary, []byte("rules: []\n"), project, opengrep.Intraprocedural, 1, projectBudget{Effective: defaultProjectTimeout})
+			measurement := measureProject(binary, []byte("rules: []\n"), project, opengrep.Intraprocedural, 1, projectBudget(defaultProjectTimeout))
 			if measurement.Failure == "" || (measurement.MemorySamples == 0 && measurement.MemoryFailure == "") {
 				t.Fatalf("failed run lost its resource evidence: %+v", measurement)
 			}

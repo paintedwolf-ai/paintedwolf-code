@@ -83,17 +83,13 @@ func TestBrowserProcessCancellationSettlesBeforeReturning(t *testing.T) {
 		}
 		done <- err
 	}()
-	deadline := time.Now().Add(testutil.Timeout(time.Minute))
-	for {
+	testutil.WaitFor(t, "the native fixture reaches its readiness wait", func() bool {
 		_, err := os.Stat(entry + ".ready")
-		if err == nil {
-			break
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("native fixture readiness: %v", err)
 		}
-		if !errors.Is(err, os.ErrNotExist) || time.Now().After(deadline) {
-			t.Fatalf("native fixture did not reach readiness wait: %v", err)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+		return err == nil
+	})
 	cancel()
 	select {
 	case err := <-done:

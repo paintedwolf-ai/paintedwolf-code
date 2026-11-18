@@ -508,6 +508,11 @@ values:
     status: 409
     comment: >-
       workspace .paintedwolf/overlay.yaml has a missing or invalid overlay_format
+  - id: project_settings_need_repair
+    status: 409
+    comment: >-
+      the project's .paintedwolf/limits.yaml, verify.yaml, or review.yaml could
+      not be read; saving would replace it, so the file must be fixed first
   - id: project_approvals_need_repair
     status: 409
     comment: >-

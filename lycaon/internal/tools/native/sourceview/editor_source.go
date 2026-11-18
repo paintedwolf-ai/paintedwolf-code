@@ -87,7 +87,7 @@ func observeWorkerSourceRead(ctx context.Context, tctx tools.ToolContext, resolv
 		rootID = root.ID
 		rel = locRel
 	}
-	if rootID == "" || rootID == "worker-branch" {
+	if rootID == "" || rootID == projectroot.WorkerBranchRootID {
 		rootID = "primary"
 	}
 	if rel == "" {

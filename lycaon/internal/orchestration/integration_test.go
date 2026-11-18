@@ -33,7 +33,7 @@ func TestMultiLegDelegationDependencyOrder(t *testing.T) {
 		Topology:  *spec,
 		Input:     map[string]any{"project_dir": projectDir, "project_id": testdbseed.DefaultProjectID},
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "orch.Run failed", err)
 	}
 	if len(rec.order) != 6 {
 		t.Fatalf("dispatch count = %d want 6", len(rec.order))
@@ -82,7 +82,7 @@ func TestParallelLegsStartConcurrently(t *testing.T) {
 		Topology:  *spec,
 		Input:     map[string]any{"project_dir": projectDir, "project_id": testdbseed.DefaultProjectID},
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "orch.Run failed", err)
 	}
 	if rec.barrierSeen != 2 {
 		t.Fatalf("parallel barrier seen = %d want 2", rec.barrierSeen)

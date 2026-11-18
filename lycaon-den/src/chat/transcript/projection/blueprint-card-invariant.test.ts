@@ -53,7 +53,7 @@ describe("plan card invariant", () => {
       const cards = items.filter((i) => i.kind === "blueprint_card");
       expect(cards).toHaveLength(1);
       expect(cards[0]!.key).toBe("m-plan");
-      const sorted = sortTranscriptItemsByOrd(items, [patch]);
+      const sorted = sortTranscriptItemsByOrd(messagesToTranscriptItems([patch]), [patch]);
       const cardIndex = sorted.findIndex((i) => i.kind === "blueprint_card");
       expect(cardIndex).toBeGreaterThanOrEqual(0);
       const ordById = new Map([[patch.id, patch.ord ?? 0]]);

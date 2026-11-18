@@ -90,10 +90,15 @@ impl External {
     /// The program's environment: the desktop's, less what only protected processes
     /// may hold, unless cleared, then the explicit entries.
     fn environment(&self) -> Vec<String> {
+        self.environment_from(std::env::vars_os())
+    }
+
+    /// `environment` over a given desktop environment.
+    fn environment_from(&self, desktop: impl Iterator<Item = (OsString, OsString)>) -> Vec<String> {
         let mut entries: Vec<(String, String)> = if self.clear_env {
             Vec::new()
         } else {
-            std::env::vars_os()
+            desktop
                 .map(|(key, value)| (key.to_string_lossy().into_owned(), value.to_string_lossy().into_owned()))
                 .filter(|(key, _)| !protected_only(key))
                 .collect()
@@ -352,11 +357,14 @@ mod tests {
 
     #[test]
     fn the_brokered_environment_keeps_protected_launch_state_inside() {
-        std::env::set_var("LYCAON_LAUNCH_BROKER_FD", "6");
+        let desktop = || {
+            [("LYCAON_LAUNCH_BROKER_FD", "6"), ("LD_PRELOAD", "/lib/inject.so"), ("PATH", "/bin"), ("HOME", "/home/person")]
+                .into_iter()
+                .map(|(key, value)| (OsString::from(key), OsString::from(value)))
+        };
         let program = External::new("xdg-open").env("PATH", "/usr/bin").env("LC_ALL", "C");
-        let environment = program.environment();
-        assert!(!environment.iter().any(|entry| entry.starts_with("LYCAON_") || entry.starts_with("LD_")));
-        assert_eq!(environment.iter().filter(|entry| entry.starts_with("PATH=")).collect::<Vec<_>>(), ["PATH=/usr/bin"]);
+        let environment = program.environment_from(desktop());
+        assert_eq!(environment, ["HOME=/home/person", "PATH=/usr/bin", "LC_ALL=C"]);
         let cleared = External::new("dpkg").clear_env().env("PATH", "/usr/bin").environment();
         assert_eq!(cleared, ["PATH=/usr/bin"]);
         assert_eq!(External::new("code").args(["-g", "a b:1"]).argv(), ["code", "-g", "a b:1"]);

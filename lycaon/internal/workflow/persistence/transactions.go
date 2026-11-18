@@ -22,6 +22,7 @@ import (
 type Transactions struct {
 	db       db.Handle
 	queries  *db.Queries
+	jobs     jobstate.Reader
 	outbox   *eventoutbox.Outbox
 	sessions runstate.SessionMutations
 	authz    authzledger.TransactionalRecorder
@@ -199,7 +200,7 @@ func (s *Transactions) insertTreeTeardownTx(ctx context.Context, tx *sql.Tx, run
 		}); err != nil {
 			return err
 		}
-		if err := jobstate.EnqueueRunJobEventsTx(ctx, tx, s.outbox, run.ID); err != nil {
+		if err := s.jobs.EnqueueRunJobEventsTx(ctx, tx, s.outbox, run.ID); err != nil {
 			return err
 		}
 	}

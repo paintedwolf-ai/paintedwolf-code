@@ -1,12 +1,15 @@
 """Student renderer selection and ordered training request contracts."""
+import hashlib
 import json
 from pathlib import Path
 import tempfile
 import types
 import unittest
 
-from data import encode
-from rendering import TEMPLATE, configure_training_renderer, ordered_messages
+from jinja2 import TemplateError
+
+from data import EncodingExclusion, encode
+from rendering import CASES, TEMPLATE, configure_training_renderer, template_sha256
 from test_contracts import Tokenizer
 
 
@@ -29,38 +32,23 @@ class RenderingTests(unittest.TestCase):
             self.assertEqual(configure_training_renderer(tokenizer, model), "checkpoint")
             self.assertEqual(tokenizer.chat_template, "different family")
 
-    def test_ordered_messages_name_results_by_their_call(self):
-        call = {"role": "assistant", "tool_calls": [{"id": "c1", "function": {"name": "read"}}]}
-        result = {"role": "tool", "tool_call_id": "c1", "content": "source"}
-        history = [call, {"role": "user", "content": "wait"}, result]
-        named = ordered_messages(history)
-        self.assertEqual([item["role"] for item in named], ["assistant", "user", "tool"])
-        self.assertEqual(named[2]["name"], "read")
-        self.assertNotIn("name", result)
-        self.assertEqual(ordered_messages([dict(result, name="read")])[0]["name"], "read")
-        for invalid in [[result], [call, call], [call, dict(result, name="write")]]:
-            with self.assertRaises(ValueError):
-                ordered_messages(invalid)
+    def test_template_identity_is_the_digest_of_its_file(self):
+        self.assertEqual(template_sha256(TEMPLATE.read_text()), hashlib.sha256(TEMPLATE.read_bytes()).hexdigest())
 
-    def test_encoding_names_results_without_changing_the_capture(self):
-        class CaptureTokenizer(Tokenizer):
-            init_kwargs = {"paintedwolf_conversation_format": "gemma4-code-v1"}
-            seen = []
+    def test_served_fixtures_carry_no_tool_names(self):
+        served = [case for case in json.loads(CASES.read_text()) if case.get("wire")]
+        self.assertTrue(any(message["role"] == "tool" for case in served for message in case["messages"]))
+        for case in served:
+            self.assertTrue(case["add_generation_prompt"])
+            self.assertFalse(any("name" in message for message in case["messages"]))
 
+    def test_a_conversation_the_template_refuses_is_excluded_whole(self):
+        class Refusing(Tokenizer):
             def apply_chat_template(self, messages, **kwargs):
-                self.seen.append(messages)
-                return super().apply_chat_template(messages, **kwargs)
+                raise TemplateError("tool result requires its tool name or its call")
 
-        tokenizer = CaptureTokenizer()
-        prompt = [
-            {"role": "assistant", "content": "", "tool_calls": [{"id": "c1", "function": {"name": "read", "arguments": {}}}]},
-            {"role": "user", "content": "wait"},
-            {"role": "tool", "tool_call_id": "c1", "content": "source"},
-        ]
-        row = {"prompt": prompt, "request_capture": {"tools": [], "controls": {"reasoning_effort": "none"}}}
-        sample = encode(tokenizer, row, {"text": "Done.", "tool_calls": []}, 4096)
-        self.assertTrue(sample["input_ids"])
-        for messages in tokenizer.seen:
-            self.assertEqual(messages[2]["name"], "read")
-            self.assertEqual(messages[1], prompt[1])
-        self.assertNotIn("name", prompt[2])
+        row = {"prompt": [{"role": "tool", "tool_call_id": "gone", "content": "source"}],
+               "request_capture": {"tools": [], "controls": {"reasoning_effort": "none"}}}
+        with self.assertRaises(EncodingExclusion) as refused:
+            encode(Refusing(), row, {"text": "Done.", "tool_calls": []}, 4096)
+        self.assertEqual(refused.exception.reason, "template_rejected")

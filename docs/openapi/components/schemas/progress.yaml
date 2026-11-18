@@ -154,7 +154,7 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      description: Aggregate progress update; the full checklist remains in ProgressDigest.
+      description: The plan's state after a progress update; the full checklist remains in ProgressDigest.
       properties:
         change_count:
           type: integer
@@ -178,7 +178,7 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      description: Incremental progress update with a plan, delta, or aggregate summary.
+      description: Incremental progress update. `summary` states the plan it leaves; `steps` or `changes` list its rows unless they are too many to show.
       properties:
         changes:
           type: array
