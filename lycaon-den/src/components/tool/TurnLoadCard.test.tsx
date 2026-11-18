@@ -12,7 +12,7 @@ const load: TurnLoad = {
   floor: ["grep", "read"],
   tools: [{ tool: "git_commit", source: "predicted", p: 0.88, carried: false }, { tool: "git_status", source: "predicted", p: 0.91, carried: false }],
 };
-const toolsRow: TurnLoadRow = { key: "turn-load:u1:turn::tools", role: "tools", load, assistantMessageId: "a1", anchorMessageId: "a1", sub: 8 };
+const toolsRow: TurnLoadRow = { key: "turn-load:u1:turn::tools", role: "tools", load, assistantMessageId: "a1", anchorMessageId: "a1" };
 
 describe("TurnLoadCard", () => {
   it("presents the decision as the engine's tool row", () => {

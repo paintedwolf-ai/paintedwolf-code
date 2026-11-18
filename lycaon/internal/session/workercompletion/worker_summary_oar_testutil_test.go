@@ -32,10 +32,12 @@ func workerTestOARPipeline(t *testing.T) *oar.GuardPipeline {
 			workerTestPipelineErr = err
 			return
 		}
-		if err := oar.InstallEngineDeclarationFile(profile); err != nil {
+		declaration, err := oar.LoadEngineDeclaration(profile)
+		if err != nil {
 			workerTestPipelineErr = err
 			return
 		}
+		oar.InstallEngineDeclaration(declaration)
 		schemaDir := filepath.Join(filepath.Dir(root), "schemas")
 		loader, err := oar.NewLoader(schemaDir)
 		if err != nil {

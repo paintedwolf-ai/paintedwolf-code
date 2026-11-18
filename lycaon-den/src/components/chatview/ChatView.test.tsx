@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { sendDraft, typeDraft } from "../../test/composer-view-fixture.tsx";
 import { ChatView } from "./ChatView.tsx";
 import { ChatTabChromeProvider } from "../../chat/composer/chat-tab-chrome.tsx";
-import { chatTabRailBindings } from "../../chat/composer/chat-tab-rail-bindings.ts";
+import { chatTabRailBindings, chatTabRailSessionId } from "../../chat/composer/chat-tab-rail-bindings.ts";
 import { CHAT_ATTACHMENT_DRAG_TYPE } from "../../chat/composer/chat-attachment-drag.ts";
 import { registerComposerAttachmentSink } from "../../chat/composer/add-to-chat.ts";
 import { createAppStore } from "../../store/app-state.ts";
@@ -76,7 +76,7 @@ function workflowRun(pendingFeedback?: PendingFeedback): WorkflowRun {
   };
 }
 
-function mountChat(options: { client?: ClientStubs; session?: Partial<Session> } = {}) {
+function mountChat(options: { client?: ClientStubs; session?: Partial<Session>; servesSessionTabs?: boolean } = {}) {
   setLycaonClientForTest(stubClient(options.client ?? {}));
   const appStore = createAppStore();
   appStore.actions.setSidecarStatus("connected");
@@ -105,6 +105,7 @@ function mountChat(options: { client?: ClientStubs; session?: Partial<Session> }
         sessionId={SESSION}
         hasInitialPrompt={false}
         surfaceActive={surfaceActive()}
+        servesSessionTabs={options.servesSessionTabs}
         onOpenWorker={() => {}}
         onOpenFiles={() => {}}
         onSend={onSend}
@@ -361,6 +362,15 @@ describe("ChatView surface", () => {
     expect(bindings?.cancellingWorkerId()).toBe("worker-1");
     setSurfaceActive(false);
     expect(chatTabRailBindings()).toBeNull();
+  });
+
+  it("keeps serving its session's tab actions from a hidden surface the stage title bar relies on", () => {
+    const cancelWorker = vi.fn(async () => undefined);
+    const { setSurfaceActive } = mountChat({ client: { cancelWorker }, servesSessionTabs: true });
+    setSurfaceActive(false);
+    expect(chatTabRailSessionId()).toBe(SESSION);
+    chatTabRailBindings()?.onCancelWorker("worker-1");
+    expect(cancelWorker).toHaveBeenCalledWith("worker-1");
   });
 
   it("attaches dropped files and in-app references to the composer", async () => {

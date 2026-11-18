@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm"
-	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
+	"github.com/lycaon/lycaon/internal/session/decisions/decisionstest"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/verification"
@@ -163,7 +163,7 @@ func TestWorkerDecisionPauseAllowsHandoff(t *testing.T) {
 	if _, blocked := mgr.Coordinator.Guards.SourceEvidence(ctx, child, history, nil, "", true); blocked {
 		t.Fatal("routine worker closeout must not require validation")
 	}
-	decisions := sessiondecisions.NewMemory()
+	decisions := decisionstest.New(t, decisionstest.Job{ID: task.ID, Child: child.ID})
 	mgr.SetDecisionStore(decisions)
 	testutil.FailErr(t, "record worker decision", decisions.Put(ctx, api.WorkerDecisionRequest{ChildSessionID: child.ID, WorkerID: task.ID, Question: "Choose the contract", Options: []string{"A", "B"}}))
 	reject, blocked := mgr.Coordinator.Guards.BeforeFinish(ctx, child, history, "", "Waiting for a decision", guidance.CloseoutDraft{}, "", true, []string{"request_decision"}, true)

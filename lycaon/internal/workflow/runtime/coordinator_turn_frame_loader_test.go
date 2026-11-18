@@ -89,7 +89,7 @@ phases:
 	if _, err := wfMgr.Starts.StartHuman(context.Background(), sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "hotfix-session", WorkflowVersion: "1.0.0",
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "wfMgr.Starts.StartHuman failed", err)
 	}
 	_ = result
 	loader := &workflowruntime.CoordinatorFrames{Runs: wfMgr.Store.Runs, Resolver: &wfMgr.Resolver, Snapshots: wfMgr.Snapshots, Policy: wfMgr.Policy, Obligations: wfMgr.Obligations, SessionStore: sessionWF}

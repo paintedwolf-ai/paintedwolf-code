@@ -29,7 +29,7 @@ func TestTransactionWithoutHardLinkSupport(t *testing.T) {
 		testutil.FailErr(t, "publisher", err)
 		_, err = publisher.Publish(t.Context(), PublishRequest{CheckpointID: checkpointID, Trigger: TriggerWorkerCompletion})
 		testutil.FailErr(t, "publish", err)
-		promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}})
+		promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}, PrimaryRoot: "primary"})
 		testutil.FailErr(t, "promoter", err)
 		preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: checkpointID})
 		testutil.FailErr(t, "preview", err)

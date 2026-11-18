@@ -2,6 +2,8 @@ package compaction
 
 import (
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestDerivedTokenBudgetsFromWindow(t *testing.T) {
@@ -22,9 +24,7 @@ func TestDerivedTokenBudgetsFromWindow(t *testing.T) {
 		MaxWorkerSummaryChars:            16000,
 		MaxCitationGroundingRetries:      25,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "normalize compaction config", err)
 	if cfg.HardCeilingTokens != 170000 {
 		t.Fatalf("HardCeilingTokens = %d want 170000 (85%% of 200K)", cfg.HardCeilingTokens)
 	}
@@ -51,9 +51,7 @@ func TestDerivedTokenBudgets128KWindow(t *testing.T) {
 		MaxWorkerSummaryChars:            16000,
 		MaxCitationGroundingRetries:      25,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "normalize compaction config", err)
 	if cfg.HardCeilingTokens != 111411 {
 		t.Fatalf("HardCeilingTokens = %d want 111411", cfg.HardCeilingTokens)
 	}
@@ -82,9 +80,7 @@ func TestExplicitTokenBudgetsOverrideDerived(t *testing.T) {
 		MaxWorkerSummaryChars:            16000,
 		MaxCitationGroundingRetries:      25,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "normalize compaction config", err)
 	if cfg.HardCeilingTokens != 120000 {
 		t.Fatalf("HardCeilingTokens = %d want explicit 120000", cfg.HardCeilingTokens)
 	}
@@ -144,9 +140,7 @@ func TestHardCeilingPctOverridesBudgetTriggerForDerivedCeiling(t *testing.T) {
 		MaxWorkerSummaryChars:            16000,
 		MaxCitationGroundingRetries:      25,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "normalize compaction config", err)
 	if cfg.HardCeilingTokens != 140000 {
 		t.Fatalf("HardCeilingTokens = %d want 140000 (60%% pct clamped up to 70%% trigger)", cfg.HardCeilingTokens)
 	}

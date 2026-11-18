@@ -237,14 +237,6 @@ func (b *Broker) Addr() string {
 	return b.httpLn.Addr().String()
 }
 
-// SocksAddr returns the SOCKS5 listener address.
-func (b *Broker) SocksAddr() string {
-	if b == nil || b.socksLn == nil {
-		return ""
-	}
-	return b.socksLn.Addr().String()
-}
-
 // Close stops both listeners and waits for active connections and serve loops.
 func (b *Broker) Close() error {
 	if b.cancel != nil {

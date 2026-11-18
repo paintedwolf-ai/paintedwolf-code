@@ -47,7 +47,7 @@ func TestPollerClaimsCommittedEnqueueWithoutWaitingForMaintenance(t *testing.T) 
 		ProjectID: testdbseed.DefaultProjectID, ExecutionTarget: api.ExecutionTargetLocal,
 	})
 	testutil.FailErr(t, "enqueue signaled worker", err)
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the task completes", func() bool {
 		task, ok := queue.Get(id)
 		return ok && task.Status == api.WorkerStatusComplete
 	})
@@ -211,11 +211,12 @@ func TestPollerRecoversExecutorPanic(t *testing.T) {
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
 
-	pollCtx, cancel := context.WithTimeout(ctx, testutil.Timeout(time.Minute))
-	defer cancel()
-	go poller.Run(pollCtx)
+	pollCtx, stopPolling := context.WithCancel(ctx)
+	polled := make(chan struct{})
+	go func() { poller.Run(pollCtx); close(polled) }()
+	t.Cleanup(func() { stopPolling(); <-polled })
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the task fails", func() bool {
 		got, ok := queue.Get(id)
 		return ok && got.Status == api.WorkerStatusFailed
 	})
@@ -390,7 +391,7 @@ func TestPollerKeepsRunningUntilDeferredOutcomeSucceeds(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
-	testutil.WaitFor(t, func() bool { return recorder.attempts.Load() >= 2 })
+	testutil.WaitFor(t, "the outcome is recorded twice", func() bool { return recorder.attempts.Load() >= 2 })
 	pending, err := queue.ListPendingOutcomes(t.Context())
 	testutil.FailErr(t, "list acknowledged outcomes", err)
 	if len(pending) != 0 {
@@ -443,11 +444,12 @@ func TestPollerTransitionsToRetryWhenCompletionCommitFailsWithAttemptsRemaining(
 
 	cfg := DefaultWorkersConfig()
 	poller := NewLocalWorkerPoller(queue, completeExecutor{}, cfg, discardOutcomeRecorder{})
+	poller.terminalRetryMin = time.Millisecond
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the task reaches its second attempt", func() bool {
 		task, ok := queue.Get(id)
 		return ok && task.Attempt >= 2
 	})
@@ -471,11 +473,12 @@ func TestPollerTransitionsToFailureWhenCompletionCommitFailsExhausted(t *testing
 
 	cfg := DefaultWorkersConfig()
 	poller := NewLocalWorkerPoller(queue, completeExecutor{}, cfg, discardOutcomeRecorder{})
+	poller.terminalRetryMin = time.Millisecond
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the task fails", func() bool {
 		task, ok := queue.Get(id)
 		return ok && task.Status == api.WorkerStatusFailed
 	})

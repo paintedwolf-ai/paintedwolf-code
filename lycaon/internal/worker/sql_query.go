@@ -9,7 +9,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
-	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -102,7 +101,7 @@ func (s *SQLStore) list(ctx context.Context, scope workerListScope, statuses ...
 		if (scope.projectID != "" && r.ProjectID != scope.projectID) || (scope.workflowRunID != "" && r.WorkflowRunID.String != scope.workflowRunID) {
 			continue
 		}
-		task, err := jobstate.FromRow(ctx, s.db, r)
+		task, err := s.jobs.FromRow(ctx, s.db, r)
 		if err != nil {
 			return nil, err
 		}
@@ -116,7 +115,7 @@ func (s *SQLStore) getTask(ctx context.Context, id string) (*api.WorkerTask, boo
 	if err != nil {
 		return nil, false
 	}
-	task, err := jobstate.FromRow(ctx, s.db, row)
+	task, err := s.jobs.FromRow(ctx, s.db, row)
 	if err != nil {
 		return nil, false
 	}
@@ -133,7 +132,7 @@ func (s *SQLStore) GetLatestByChildSessionID(ctx context.Context, childSessionID
 	if err != nil {
 		return nil, false
 	}
-	task, err := jobstate.FromRow(ctx, s.db, row)
+	task, err := s.jobs.FromRow(ctx, s.db, row)
 	if err != nil {
 		return nil, false
 	}

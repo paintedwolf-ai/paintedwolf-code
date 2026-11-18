@@ -7,7 +7,7 @@ import {
   estimateLineEmWidth,
   markdownHeightEstimate,
 } from "./markdown-height-estimate.ts";
-import { progressChangesToSteps, progressUpdateSummaryLabel } from "../../progress/progress-model.ts";
+import { progressAggregateSummary, progressUpdateSummaryLabel } from "../../progress/progress-model.ts";
 
 export type TranscriptRowMetrics = {
   widthPx: number;
@@ -120,15 +120,19 @@ export function transcriptRowContentEstimate(
     }
     case "progress_complete":
     case "progress_update": {
-      const labels = item.kind === "progress_update" && item.summary
-        ? [progressUpdateSummaryLabel(item.summary, item.initial)]
-        : (item.kind === "progress_update" && !item.initial
-          ? progressChangesToSteps(item.changes) : item.steps).map((step) => step.label);
+      // One label-size line with the link row's padding, inside the box border.
+      const header = remPx * 0.8929 * 1.5 + 8 + 2;
+      // Only the plan lists its steps while closed; later rows rest as their header line.
+      if (item.kind === "progress_complete" || !item.initial) return Math.round(header);
+      const aggregate = progressAggregateSummary(item);
+      const labels = aggregate
+        ? [progressUpdateSummaryLabel(aggregate, true)]
+        : item.steps.map((step) => step.label);
       const font = bodyPx * 0.9;
       const cardWidth = Math.min(widthPx, remPx * 32);
       const labelWidth = Math.max(font, cardWidth - remPx * 3);
       const body = labels.reduce((height, label) => height + markdownHeightEstimate(label, labelWidth, font, spacing), 0);
-      return Math.round(font * 1.35 + remPx * 1.25 + 3 + body + Math.max(0, labels.length - 1) * remPx * 0.3);
+      return Math.round(header + 1 + remPx * 0.75 + body + Math.max(0, labels.length - 1) * remPx * 0.3);
     }
     default:
       return undefined;

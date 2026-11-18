@@ -42,14 +42,14 @@ func TestRunnerConcurrencyCap(t *testing.T) {
 		}
 	}
 
-	runCtx, cancel := context.WithTimeout(ctx, testutil.Timeout(time.Minute))
+	runCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		_ = runner.Run(runCtx)
 	}()
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "every scan is done", func() bool {
 		list, err := store.ListByCanonicalPath(ctx, dir)
 		testutil.FailErr(t, "store.ListByCanonicalPath failed", err)
 		doneCount := 0

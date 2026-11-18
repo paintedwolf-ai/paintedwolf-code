@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/timelayout"
-	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -28,7 +27,7 @@ func (s *SQLStore) SetMergeStatus(ctx context.Context, jobID string, status api.
 		if n != 1 {
 			return fmt.Errorf("worker %s not found for merge status update", jobID)
 		}
-		return jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, jobID)
+		return s.jobs.EnqueueJobEventTx(ctx, tx, s.outbox, jobID)
 	})
 }
 
@@ -68,7 +67,7 @@ func (s *SQLStore) SetMergeStatuses(ctx context.Context, updates []MergeStatusUp
 					return err
 				}
 			}
-			if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, jobID); err != nil {
+			if err := s.jobs.EnqueueJobEventTx(ctx, tx, s.outbox, jobID); err != nil {
 				return err
 			}
 		}
@@ -189,7 +188,7 @@ func (s *SQLStore) CommitPromotion(ctx context.Context, jobID, claimToken string
 		if n != 1 {
 			return fmt.Errorf("child overlay %s missing during promotion", update.JobID)
 		}
-		if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, update.JobID); err != nil {
+		if err := s.jobs.EnqueueJobEventTx(ctx, tx, s.outbox, update.JobID); err != nil {
 			return err
 		}
 	}
@@ -215,11 +214,11 @@ func (s *SQLStore) CommitPromotion(ctx context.Context, jobID, claimToken string
 		if err := landAncestorRound(ctx, q, ancestor, plan.ID); err != nil {
 			return err
 		}
-		if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, ancestor); err != nil {
+		if err := s.jobs.EnqueueJobEventTx(ctx, tx, s.outbox, ancestor); err != nil {
 			return err
 		}
 	}
-	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, jobID); err != nil {
+	if err := s.jobs.EnqueueJobEventTx(ctx, tx, s.outbox, jobID); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

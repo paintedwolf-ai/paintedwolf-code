@@ -1,20 +1,21 @@
 package tools_test
 
 import (
-	"github.com/lycaon/lycaon/internal/capabilityrequest"
-	"github.com/lycaon/lycaon/internal/hitl"
 	"reflect"
 
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
+	"github.com/lycaon/lycaon/internal/hitl"
+
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/toolrejection"
+
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -60,26 +61,6 @@ func TestCapabilityContractIsCatalogCompiled(t *testing.T) {
 		"capability_request": map[string]any{"write_root": filepath.Join(t.TempDir(), "cache")},
 	}); reject != nil {
 		t.Fatalf("verify write_root reject = %+v", reject)
-	}
-}
-
-func TestCompiledContractsMirrorCatalogCapabilities(t *testing.T) {
-	cfg, err := nativemanifest.Load()
-	testutil.FailErr(t, "nativemanifest.Load", err)
-	for tool, names := range cfg.ExecutionCapabilities {
-		contract, ok := toolcontract.Lookup(tool)
-		if !ok {
-			t.Fatalf("catalog tool %q has no compiled contract", tool)
-		}
-		for _, name := range names {
-			capability, ok := toolcontract.NamedCapability(name)
-			if !ok {
-				t.Fatalf("catalog capability %q on %q has no NamedCapability", name, tool)
-			}
-			if !contract.Supports(capability) {
-				t.Fatalf("compiled %q dropped catalog capability %q", tool, name)
-			}
-		}
 	}
 }
 

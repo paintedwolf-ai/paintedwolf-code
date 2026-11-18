@@ -145,7 +145,7 @@ func TestProviderFailureMidRunIsRecoverable(t *testing.T) {
 
 func waitSessionIdle(t *testing.T, h *wiring.Harness, sessionID string) {
 	t.Helper()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the session is idle", func() bool {
 		return getSessionHTTP(t, h.Server, sessionID).Status == wire.SessionStatusIdle
 	})
 

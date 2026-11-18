@@ -185,7 +185,7 @@ func TestLoopPhaseAdvanceKeepsNewWorkflowWorkActionable(t *testing.T) {
 	engine.SetDeps(deps)
 
 	engine.Nudges.Nudge(context.Background(), "s1", anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
-	testutil.WaitFor(t, func() bool { return prompts.Load() == 1 })
+	testutil.WaitFor(t, "the first prompt runs", func() bool { return prompts.Load() == 1 })
 }
 
 func TestLoopPhaseAdvanceStartsEnteredPhaseBeforeCloseout(t *testing.T) {
@@ -222,7 +222,7 @@ func TestLoopPhaseAdvanceStartsEnteredPhaseBeforeCloseout(t *testing.T) {
 	engine.SetDeps(deps)
 
 	engine.Nudges.Nudge(context.Background(), "s1", anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
-	testutil.WaitFor(t, func() bool { return prompts.Load() == 1 })
+	testutil.WaitFor(t, "the first prompt runs", func() bool { return prompts.Load() == 1 })
 }
 
 func TestLoopDropStaleBatchSeqWake(t *testing.T) {

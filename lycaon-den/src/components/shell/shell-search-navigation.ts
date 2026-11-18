@@ -12,7 +12,6 @@ import { revealChicklet } from "../../chat/transcript/presentation/transcript-re
 import { clientNoticeError } from "../../notices/client-notices.ts";
 import { sessionScope } from "../../notices/notice-scope.ts";
 import { type SearchNavTarget } from "../../search/search-hit-nav.ts";
-import { requestOpenWorklog } from "../../search/search-nav.ts";
 import { stageSwitchKind } from "./session-creation.ts";
 import { type SessionNavigation } from "./session-navigation.ts";
 import { type ShellSearchState } from "./shell-search-state.ts";
@@ -31,12 +30,13 @@ type SearchNavigationDependencies = Pick<ShellScope, "shell" | "recents" | "show
   openConfiguration: () => void;
   goHome: () => void;
   openWorkers: (workerId?: string, options?: OpenWorkerOptions) => void;
+  openWorklog: () => void;
 };
 
 export type ShellSearchNavigation = ReturnType<typeof createShellSearchNavigation>;
 
 export function createShellSearchNavigation({ shell, recents, closeSearch, closeLauncher,
-  showProjects, openProject, resumeSession, openWorkers, projects, activeProject, setNav,
+  showProjects, openProject, resumeSession, openWorkers, openWorklog, projects, activeProject, setNav,
   attentionIndex, securityScannersFeatureOn, routeToStage, selectSettingsSection, openSettings,
   openStageWithPlacement, openConfiguration, goHome }: SearchNavigationDependencies) {
   const crossbarGotoTargets = createMemo(() => shellSearchTargets(
@@ -127,7 +127,7 @@ export function createShellSearchNavigation({ shell, recents, closeSearch, close
         { kind, stageSwitchDone: true },
       );
     }
-    if (target.openWorklog) requestOpenWorklog();
+    if (target.openWorklog) openWorklog();
     const reveal = target.reveal;
     const revealSessionId = target.sessionId;
     if (reveal && revealSessionId) {

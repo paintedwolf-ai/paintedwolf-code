@@ -97,7 +97,7 @@ func TestScanSummaryHTTPIntegration(t *testing.T) {
 	scanURL := "/v1/projects/" + proj.ID + "/scans/" + created.ID
 
 	var summary wire.CodeScan
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the scan summary is complete", func() bool {
 		sumReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, scanURL+"?view=summary", nil)
 		sumReq.Header.Set("Authorization", api.TestAuthHeader())
 		sumW := httptest.NewRecorder()

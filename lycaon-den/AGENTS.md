@@ -8,7 +8,6 @@ Package-specific rules for the Tauri + Solid.js desktop app (`lycaon-den/`). Uni
 
 ```bash
 ./task den:typecheck
-./task den:test:fast
 ./task den:test
 ./task den:test:digest -- src/**/*.test.ts
 ./task den:harness          # LLM-drivable UI stack — author e2e specs
@@ -33,7 +32,7 @@ Wire contract: [`../docs/host-contract.md`](../docs/host-contract.md). `src/api/
 
 ## Testing
 
-Frontend tests via `./task den:test` (full) or `./task den:test:fast` (handoff; representative model and DOM seam canaries). Styling invariants: `src/styling/styling-invariants.test.ts`. E2E: `lycaon-den/e2e/` with `e2e/helpers.ts`; prefer `./task den:harness:test` for local iteration.
+Frontend tests via `./task den:test`; `./task den:coverage:changes` runs the same suite with the changed-coverage floor, as a ready pull request does. Styling invariants: `src/styling/styling-invariants.test.ts`. Source laws (import and syntax bans the compiler cannot express) are lint, not tests: add a row with its seeded violation to `eslint/laws/`, or a rule with its cases to `eslint/rules/`; `./task den:lint` runs the canary that proves each one still fails. E2E: `lycaon-den/e2e/` with `e2e/helpers.ts`; prefer `./task den:harness:test` for local iteration.
 
 Den verification shares the host queue and worker budget with Go checks. Submit
 one request at a time and wait for its result using the
@@ -72,13 +71,13 @@ Components smaller than a region — cards, chip rows, chrome strips, forms — 
 
 ## Scrolling
 
-A themed scroll surface is `Scrollport` (`src/components/primitives/Scrollport.tsx`): a frame that carries the scrollbar, a viewport that scrolls, and a content box that is the extent. The frame class sizes and paints the box; the content class carries padding and the inner layout. HTML built outside Solid uses `wrapInScrollportFrame`. Scrollbar chrome never sits inside the element that scrolls — WebKit moves that element on its scrolling thread, so chrome inside it jumps whenever the main thread is busy. Surfaces with their own measure pass (chat, editor, files tree, rail) attach with `attachThemedViewportScrollbar` on the same frame shape. Never request a native smooth scroll (`behavior: "smooth"`, `scroll-behavior: smooth`): a write during WebKit's threaded animation leaves painting and hit testing a row apart. Glide with `ScrollportMotion.revealOffset` or `glideScrollLeft` ([`native-smooth-scroll.test.ts`](src/platform/scrolling/native-smooth-scroll.test.ts)). Proof: `src/platform/scrolling/themed-scrollbars.test.ts` (with its `.geometry`, `.measurement`, and `.discovery` siblings) and `src/platform/scrolling/scrollbar-visual-contract.test.ts`.
+A themed scroll surface is `Scrollport` (`src/components/primitives/Scrollport.tsx`): a frame that carries the scrollbar, a viewport that scrolls, and a content box that is the extent. The frame class sizes and paints the box; the content class carries padding and the inner layout. HTML built outside Solid uses `wrapInScrollportFrame`. Scrollbar chrome never sits inside the element that scrolls — WebKit moves that element on its scrolling thread, so chrome inside it jumps whenever the main thread is busy. Surfaces with their own measure pass (chat, editor, files tree, rail) attach with `attachThemedViewportScrollbar` on the same frame shape. Never request a native smooth scroll (`behavior: "smooth"`, `scroll-behavior: smooth`): a write during WebKit's threaded animation leaves painting and hit testing a row apart. Glide with `ScrollportMotion.revealOffset` or `glideScrollLeft`; the lint rule `den/no-native-smooth-scroll` refuses the request. Proof: `src/platform/scrolling/themed-scrollbars.test.ts` (with its `.geometry`, `.measurement`, and `.discovery` siblings) and `src/platform/scrolling/scrollbar-visual-contract.test.ts`.
 
 ## Accessibility
 
 macOS OS text size, VoiceOver, Spoken Content, hover tips, focus, and reduced-motion contract: [`../docs/accessibility.md`](../docs/accessibility.md). Keyboard chords stay in [`../docs/keyboard-shortcuts.md`](../docs/keyboard-shortcuts.md) — do not fork a11y keydown handlers.
 
-**Proof:** `src/platform/accessibility-macos-invariants.test.ts` (scale source, rem root, px-free type, selectable prose, dual live regions); `src/platform/accessibility-axe-smoke.test.tsx` (wcag2a/aa fixtures — not a full CI gate); the manual verification checklist in [`../docs/accessibility.md`](../docs/accessibility.md#manual-verification-checklist) via `./task den:harness` / `e2e/a11y-macos.spec.ts`.
+**Proof:** `src/platform/accessibility-macos-invariants.test.ts` (rem type ladder, selectable prose, registered modals); `src/platform/accessibility-axe-smoke.test.tsx` (wcag2a/aa fixtures — not a full CI gate); the manual verification checklist in [`../docs/accessibility.md`](../docs/accessibility.md#manual-verification-checklist) via `./task den:harness` / `e2e/a11y-macos.spec.ts`.
 
 ## Related
 

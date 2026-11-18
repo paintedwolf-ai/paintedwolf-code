@@ -7,11 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourceblob"
-	"github.com/lycaon/lycaon/internal/workerplacement"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -183,36 +181,6 @@ func destroyWorkspaceRoot(ctx context.Context, q *InMemoryQueue, jobID, root str
 	cleanupCtx, cancel := promoteCleanupContext(ctx)
 	defer cancel()
 	_ = ws.DestroyWorkerWorkspace(cleanupCtx, &workspace.Binding{ID: jobID, Root: root})
-}
-
-func workerWorkspaceIdentity(ctx context.Context, database db.DBTX, root, baseline string) (string, string, error) {
-	dataDir, err := db.Directory(ctx, database)
-	if err != nil {
-		return "", "", err
-	}
-	// A branch captured by checkpoint records no baseline.
-	id := ""
-	if strings.TrimSpace(baseline) != "" {
-		id, err = workspacebaseline.ID(baseline)
-		if err != nil {
-			return "", "", err
-		}
-		resolved, err := workspacebaseline.Path(dataDir, id)
-		if err != nil {
-			return "", "", err
-		}
-		if filepath.Clean(baseline) != resolved {
-			return "", "", fmt.Errorf("worker baseline is outside the active installation")
-		}
-	}
-	rel, ok, err := workerplacement.LogicalFromPhysical(dataDir, root)
-	if err != nil {
-		return "", "", err
-	}
-	if !ok {
-		return "", "", fmt.Errorf("worker branch is outside the active installation")
-	}
-	return id, rel, nil
 }
 
 // TaskRootRefs returns a worker's captured or attached roots.

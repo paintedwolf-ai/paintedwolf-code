@@ -15,7 +15,7 @@ const (
 	// MaxProgressCap is the hard ceiling on returned steps.
 	MaxProgressCap = 48
 	// MaxDetailedProgressUpdateRows is the largest transcript update that
-	// enumerates every changed row. Larger updates carry aggregate counts.
+	// enumerates every changed row. Larger updates carry only the plan's counts.
 	MaxDetailedProgressUpdateRows = 12
 
 	// MaxLabelRunes bounds each checklist label.
@@ -35,8 +35,8 @@ type ProgressResult struct {
 	More  int
 }
 
-// SummarizeUpdate returns aggregate state for a progress_update whose changed
-// rows are too numerous to render individually in the transcript.
+// SummarizeUpdate returns the plan's state after a progress_update that changed
+// changeCount rows.
 func SummarizeUpdate(steps []api.ProgressStep, changeCount int) api.ProgressUpdateSummary {
 	summary := api.ProgressUpdateSummary{
 		ChangeCount: changeCount,

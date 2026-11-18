@@ -30,7 +30,7 @@ func TestSourceViewWorkspaceMismatchReturnsExpired(t *testing.T) {
 		WorkspaceID: physical.WorkspaceID(),
 	}
 	created := readSourceViewResponse(t, callSourceViewHandler(t, server.Views.HandleCreateSourceView, proj.ID, "", request), http.StatusCreated).Tree
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the source view tree settles", func() bool {
 		state := readSourceViewResponse(t, callSourceViewHandler(t, server.Views.HandleGetSourceView, proj.ID, created.ID, nil), http.StatusOK).Tree
 		return state.State == "ready"
 	})

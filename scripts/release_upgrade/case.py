@@ -40,9 +40,10 @@ def sync_engine_token(config: Path, observation: dict):
                 return
 
 
-def verify_semantics(config: Path, fixture: Path, observation: dict, evidence: Path):
+def verify_semantics(config: Path, fixture: Path, observation: dict, evidence: Path, phase: str):
     sync_engine_token(config, observation)
-    with (evidence / "semantics.log").open("wb") as log:
+    # Exclusive creation keeps each phase's log for comparison with the others.
+    with (evidence / f"semantics-{phase}.log").open("xb") as log:
         subprocess.run([sys.executable, str(SCRIPTS / "upgrade-corpus-semantics.py"), "verify",
                         "--base", f"http://127.0.0.1:{observation['port']}", "--token-file", str(config / "api.token"),
                         "--fixture", str(fixture), "--config-dir", str(config)], stdout=log, stderr=log, check=True, timeout=120,
@@ -130,7 +131,7 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
         before = installation.healthy(case["source_version"])
         if before["health"].get("schema_version") != plan["schemas"][case["source_version"]]:
             raise ValueError("prior engine does not match its exact corpus schema")
-        verify_semantics(config, fixture, before, evidence)
+        verify_semantics(config, fixture, before, evidence, "prior")
         for step in case["steps"]:
             version = step["version"]
             ready = wait_for(f"{version} was not automatically staged", lambda: staged(records, diagnostics, diagnostic_offset), 600)
@@ -160,12 +161,12 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
                 raise ValueError("upgraded engine has an unexpected schema")
             (evidence / f"{version}-transaction.json").write_text(json.dumps(transaction, indent=2) + "\n")
             observations.append({"version": version, "health": after["health"], "transaction_id": transaction["id"]})
-        verify_semantics(config, fixture, after, evidence)
+        verify_semantics(config, fixture, after, evidence, "activated")
         installation.stop()
         installation.launch()
         restart = installation.healthy(plan["candidate"]["version"])
         verify_preferences(preferences, case["channel"])
-        verify_semantics(config, fixture, restart, evidence)
+        verify_semantics(config, fixture, restart, evidence, "restarted")
         return {"id": case["id"], "result": "passed", "activation_trigger": "startup_after_staging",
                 "steps": observations, "restart_health": restart["health"]}
     finally:
@@ -220,7 +221,7 @@ def probe_committed_recovery(case, plan, root, work, config, evidence):
         observation = installation.healthy(version)
         wait_for("next-launch recovery did not confirm the installed candidate",
                  lambda: confirmed(read_json(records / "transaction.json"), version, app))
-        verify_semantics(config, root / "fixtures" / case["source_version"], observation, evidence)
+        verify_semantics(config, root / "fixtures" / case["source_version"], observation, evidence, "recovery")
         return {"result": "passed", "trigger": "explicit_next_launch", "health": observation["health"]}
     except Exception as error:
         return {"result": "failed", "error": str(error)}

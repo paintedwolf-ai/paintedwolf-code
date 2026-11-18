@@ -355,6 +355,21 @@ describe("app connection events", () => {
     });
   });
 
+  it("retires a project deleted elsewhere", async () => {
+    const appStore = createFixtureApp();
+    const recents = createRecentsStore();
+    const mod = await loadModule();
+    const retire = testEntityRetire(recents);
+    const project = vi.spyOn(retire, "project");
+    bindFixtureServices(mod, { recents: recents });
+    bindFixtureServices(mod, { retire });
+    await mod.connectAppBackend(appStore);
+
+    lastSubscribeHandlers?.project?.({ id: "proj-remote", action: "deleted" }, { kind: "project", project_id: "proj-remote" });
+
+    expect(project).toHaveBeenCalledWith("proj-remote");
+  });
+
   it("resubscribes SSE when shell activeProjectId already matches a new project", async () => {
     const appStore = createFixtureApp();
     const client = { listProjects: vi.fn(async () => []) };

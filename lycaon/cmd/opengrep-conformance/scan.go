@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/runnerbudget"
 	"github.com/lycaon/lycaon/internal/scan/opengrep"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/scan/rules"
@@ -166,7 +165,7 @@ func scanTargets(ctx context.Context, binary, root string, bundle []byte, target
 	cmd.Env = append(os.Environ(), "SEMGREP_SEND_METRICS=off", "SEMGREP_SETTINGS_FILE="+filepath.Join(root, "settings.yaml"), "SEMGREP_LOG_FILE="+filepath.Join(root, "scan.log"))
 	var output diagnosticCapture
 	cmd.Stdout, cmd.Stderr = &output, &output
-	cmd.WaitDelay = 10 * time.Second * time.Duration(runnerbudget.TimeoutScale())
+	cmd.WaitDelay = 10 * time.Second
 	resources, runErr := runEvaluationProcess(cmd)
 	runErr = errors.Join(runErr, ctx.Err())
 	report := scanReport{PeakRSSBytes: resources.PeakRSSBytes, MemorySamples: resources.Samples, MemoryFailure: resources.Failure}

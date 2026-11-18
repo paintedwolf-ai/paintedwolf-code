@@ -17,6 +17,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/nativemanifest"
+
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/toolschema"
@@ -239,7 +241,9 @@ func TestNoneClassifiedPathArgsResolverCoverage(t *testing.T) {
 	// Enumerate every path-shaped argument on none-classified tools and
 	// operations straight from the schemas.
 	found := map[string]pathAddressingArg{}
-	for _, name := range toolcontract.MultiRootDeclaredNames() {
+	manifest, err := nativemanifest.Load()
+	contractcheck.FailErr(t, "load native manifest", err)
+	for name := range manifest.MultiRootTools() {
 		capability, ok := toolcontract.MultiRootOf(name)
 		if !ok || capability != toolcontract.MultiRootNone {
 			continue

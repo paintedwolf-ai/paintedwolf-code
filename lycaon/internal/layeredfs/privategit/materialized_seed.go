@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
 // InitRepo ensures the private Git repository for repoRel in viewID is initialized.
@@ -251,7 +252,7 @@ func (m *Manager) AdoptMaterializedView(ctx context.Context, b MaterializedViewB
 		return err
 	}
 	if b.RootID == "" {
-		b.RootID = "primary"
+		b.RootID = projectroot.SingleRootID
 	}
 	view := &managedView{
 		viewID: b.ViewID, workerID: b.WorkerID, rootID: b.RootID, coreViewID: b.CoreViewID,
@@ -459,7 +460,7 @@ func initializeMaterializedSeed(
 	view := &managedView{
 		viewID:            cfg.ViewID,
 		workerID:          cfg.WorkerID,
-		rootID:            "primary",
+		rootID:            projectroot.SingleRootID,
 		trunkDir:          absTrunk,
 		worktreeDir:       absTarget,
 		canonWorktreeDir:  canonicalCleanPath(absTarget),
@@ -473,10 +474,10 @@ func initializeMaterializedSeed(
 	registerManagedView(m, view)
 
 	if cfg.Core != nil {
-		_ = cfg.Core.RegisterLowerProvider("primary", &gitAwareLowerProvider{
+		_ = cfg.Core.RegisterLowerProvider(projectroot.SingleRootID, &gitAwareLowerProvider{
 			mgr:      m,
 			viewID:   cfg.ViewID,
-			rootID:   "primary",
+			rootID:   projectroot.SingleRootID,
 			trunkDir: absTarget,
 		})
 	}

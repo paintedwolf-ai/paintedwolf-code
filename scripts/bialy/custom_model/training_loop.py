@@ -1,4 +1,5 @@
 """Resumable optimizer loop with bounded pilots and resource measurements."""
+import math
 import random
 import resource
 import signal
@@ -8,6 +9,20 @@ import time
 
 from checkpoint import Checkpoints, atomic_json
 from common import digest
+
+
+def updates_per_epoch(rows, accumulation):
+    return math.ceil(rows / accumulation)
+
+
+def learning_rate(update, total, peak, warmup_ratio, final_ratio):
+    """The rate of one optimizer update: linear warmup to the peak, then cosine decay to
+    final_ratio of it. A function of the update index alone, so a resumed run continues it."""
+    warmup = math.ceil(total * warmup_ratio)
+    if update < warmup:
+        return peak * (update + 1) / warmup
+    progress = (update - warmup) / max(1, total - warmup - 1)
+    return peak * (final_ratio + (1 - final_ratio) * 0.5 * (1 + math.cos(math.pi * min(1.0, progress))))
 
 
 def run_loop(model, optimizer, training, validation, loss, args, manifest, started):
@@ -29,6 +44,7 @@ def run_loop(model, optimizer, training, validation, loss, args, manifest, start
     for sig in (signal.SIGINT, signal.SIGTERM):
         previous[sig] = signal.signal(sig, lambda signum, frame: stop.append(signum))
     invocation_steps, durations = 0, []
+    total_steps = args.epochs * updates_per_epoch(len(training), args.accumulation)
 
     def save():
         return checkpoints.save({"adapter":get_peft_model_state_dict(model),"optimizer":optimizer.state_dict(),
@@ -37,9 +53,9 @@ def run_loop(model, optimizer, training, validation, loss, args, manifest, start
 
     def report(status):
         per_step = statistics.median(durations) if durations else None
-        remaining = args.epochs * len(training) - cursor["step"]
+        remaining = total_steps - cursor["step"]
         rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        metrics = {"status":status,"step":cursor["step"],"total_steps":args.epochs*len(training),
+        metrics = {"status":status,"step":cursor["step"],"total_steps":total_steps,
                    "elapsed_seconds":time.monotonic()-started,"median_update_seconds":per_step,
                    "estimated_training_seconds_remaining":remaining*per_step if per_step is not None else None,
                    "observed_update_range_seconds":[min(durations),max(durations)] if durations else None,
@@ -62,15 +78,22 @@ def run_loop(model, optimizer, training, validation, loss, args, manifest, start
                     save()
                     return report("paused")
                 tick = time.monotonic()
+                # Gradients in flight are not checkpointed: an update takes its whole group
+                # of rows, and the run pauses only between updates.
+                group = order[cursor["position"]:cursor["position"] + args.accumulation]
+                for group_rate in optimizer.param_groups:
+                    group_rate["lr"] = learning_rate(cursor["step"], total_steps, args.learning_rate,
+                                                     args.warmup_ratio, args.final_learning_rate_ratio)
                 optimizer.zero_grad(set_to_none=True)
-                value = loss(training[order[cursor["position"]]])
-                if not torch.isfinite(value):
-                    raise ValueError("nonfinite training loss")
-                value.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0, error_if_nonfinite=True)
+                for index in group:
+                    value = loss(training[index])
+                    if not torch.isfinite(value):
+                        raise ValueError("nonfinite training loss")
+                    (value / len(group)).backward()
+                    cursor["total"] += float(value.detach())
+                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm, error_if_nonfinite=True)
                 optimizer.step()
-                cursor["total"] += float(value.detach())
-                cursor["position"] += 1
+                cursor["position"] += len(group)
                 cursor["step"] += 1
                 invocation_steps += 1
                 durations.append(time.monotonic()-tick)

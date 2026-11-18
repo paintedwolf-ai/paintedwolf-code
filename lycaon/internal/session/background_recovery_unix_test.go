@@ -33,7 +33,7 @@ func TestBackgroundRecoveryPreservesSessionOwnershipAndCompletedOutput(t *testin
 		},
 	})
 	testutil.FailErr(t, "start recoverable process", err)
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the background output is recorded", func() bool {
 		output, readErr := manager.Processes.GetBackgroundProcessOutput(t.Context(), "owner", handle)
 		return readErr == nil && len(output.Chunks) > 0
 	})
