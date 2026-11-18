@@ -1,8 +1,11 @@
 """A nightly run binds the one commit and tree every stage verifies."""
+import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 from ci_policy import nightly_evidence as evidence
@@ -77,6 +80,53 @@ class NightlyEvidenceTests(unittest.TestCase):
         with patch.object(evidence.subprocess, "check_output", side_effect=[CONTROLLER, TREE]), \
                 self.assertRaisesRegex(ValueError, "checkout differs"):
             evidence.write({"SOURCE_SHA": SOURCE, "SOURCE_TREE": TREE})
+
+    def test_nightly_receipt_records_the_verified_source_and_its_run(self):
+        environment = {"SOURCE_SHA": SOURCE, "SOURCE_TREE": TREE, "GITHUB_REPOSITORY": "owner/repo",
+                       "GITHUB_RUN_ID": "43", "GITHUB_RUN_ATTEMPT": "2", "GITHUB_SHA": CONTROLLER}
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(evidence.subprocess, "check_output", side_effect=[SOURCE + "\n", TREE + "\n"]), \
+                patch.object(evidence, "Path", side_effect=lambda name: Path(directory) / name):
+            evidence.write(environment)
+            record = json.loads((Path(directory) / "nightly-source.json").read_text())
+        self.assertEqual(record, evidence.identity("owner/repo", SOURCE, TREE, 43, 2, CONTROLLER))
+
+    def test_an_unreadable_nightly_record_is_passed_over_for_the_next_run(self):
+        qualification = {"repository": "owner/repo", "source_sha": SOURCE, "source_tree": TREE}
+        run = dict(id=43, run_attempt=1, head_sha=CONTROLLER, head_branch="main",
+                   display_title=f"Nightly {SOURCE}", event="schedule", conclusion="success")
+        later = {**run, "id": 44}
+        records = [zipfile.BadZipFile("truncated"), evidence.identity("owner/repo", SOURCE, TREE, 44, 1, CONTROLLER)]
+        with patch.object(evidence, "pages", return_value=[run, later]), \
+                patch.object(evidence, "from_run", side_effect=records):
+            self.assertEqual(evidence.matching_run(qualification), 44)
+
+    def test_selection_reports_reuse_only_for_a_matching_nightly(self):
+        qualification = {"version": 1, "repository": "owner/repo", "event": "workflow_dispatch", "run_id": 9,
+                         "run_attempt": 1, "source_sha": SOURCE, "source_tree": TREE, "controller_sha": CONTROLLER}
+        cases = (("match", {"return_value": 43}, "nightly-run-id=43\n", "Reusing full nightly run 43"),
+                 ("none", {"return_value": None}, "", "Verification runs on the candidate"),
+                 ("api down", {"side_effect": OSError("unreachable")}, "", "Verification runs on the candidate"))
+        for label, lookup, output, summary in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                files = Path(directory) / "output", Path(directory) / "summary"
+                environment = {"QUALIFICATION_RECORD": json.dumps(qualification),
+                               "GITHUB_OUTPUT": str(files[0]), "GITHUB_STEP_SUMMARY": str(files[1])}
+                with patch.object(evidence, "matching_run", **lookup):
+                    evidence.select(environment)
+                self.assertEqual(files[0].read_text() if files[0].exists() else "", output)
+                self.assertIn(summary, files[1].read_text())
+        unbound = {"QUALIFICATION_RECORD": json.dumps({**qualification, "source_sha": "main"})}
+        with self.assertRaisesRegex(ValueError, "bound qualification source"):
+            evidence.select(unbound)
+
+    def test_command_runs_the_named_operation(self):
+        for operation in ("write", "select"):
+            with self.subTest(operation=operation), patch.object(sys, "argv", ["nightly_evidence", operation]), \
+                    patch.object(evidence, operation) as chosen:
+                with patch.dict(evidence.os.environ, {"MARK": operation}):
+                    evidence.main()
+                    self.assertEqual(chosen.call_args.args[0]["MARK"], operation)
 
 
 if __name__ == "__main__":
