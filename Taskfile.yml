@@ -385,6 +385,11 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:seatbelt -- {{.CLI_ARGS}}
 
+  test:seatbelt:confine:
+    desc: 'Applied Seatbelt confinement suites alone (--full, darwin); the merge queue''s confinement-macos lane'
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:seatbelt:confine -- {{.CLI_ARGS}}
+
   test:linux:installed:
     desc: 'Admit an exact-artifact Linux installed campaign and retain its required-row checklist'
     cmds:

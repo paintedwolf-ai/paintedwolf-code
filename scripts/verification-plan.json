@@ -83,6 +83,9 @@
       "seatbelt:confine",
       "seatbelt:gated",
       "seatbelt:scanstress"
+    ],
+    "test:seatbelt:confine": [
+      "seatbelt:confine"
     ]
   },
   "go": {
@@ -1551,7 +1554,7 @@
     },
     "confinement-macos": {
       "targets": [
-        "test:seatbelt"
+        "test:seatbelt:confine"
       ],
       "minutes": 60,
       "profiles": [
