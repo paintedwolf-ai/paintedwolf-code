@@ -249,7 +249,7 @@ func captureDestinationRevision(ctx context.Context, tctx tools.ToolContext, res
 				return sourceview.Text{}, toolcontract.ExecutionRevision{}, &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: revision, Cause: err}
 			}
 		}
-		// A launch save that landed before the pin moved the document: capture it again.
+		// A launch save between the read above and this pin moved the document: capture it again.
 		if pinned, open, err := sourceview.OpenPinnedDocument(ctx, tctx, resolved); err != nil {
 			return sourceview.Text{}, toolcontract.ExecutionRevision{}, err
 		} else if !open || pinned.Revision != st.Editor.Revision {

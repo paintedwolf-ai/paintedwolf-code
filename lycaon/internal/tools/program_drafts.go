@@ -15,6 +15,10 @@ type programDraftsKey struct{}
 type ProgramDrafts struct {
 	tool string
 
+	// saving excludes a launch save from the program's own document reads:
+	// a read and its pin complete before a save starts, or begin after it.
+	saving sync.RWMutex
+
 	mu      sync.Mutex
 	roots   map[string]map[string]bool
 	pinned  map[draftPin]int
@@ -114,6 +118,18 @@ func (d *ProgramDrafts) pin(documentID string, revision int64) (release func()) 
 			}
 		})
 	}
+}
+
+// ReadingDrafts holds off the program's launch saves while one of its
+// operations reads a document; done ends the read. Outside a program it does
+// nothing.
+func ReadingDrafts(ctx context.Context) (done func()) {
+	drafts, ok := ProgramDraftsFrom(ctx)
+	if !ok {
+		return func() {}
+	}
+	drafts.saving.RLock()
+	return drafts.saving.RUnlock
 }
 
 // Pinned reports whether an operation of the program holds the document at

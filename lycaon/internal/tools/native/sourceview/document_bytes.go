@@ -13,6 +13,22 @@ import (
 // OpenDocument returns the accepted shared document for a project-tree path.
 // A failed lookup is an error, never a silent fall back to disk.
 func OpenDocument(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (tools.EditorDocumentText, bool, error) {
+	defer tools.ReadingDrafts(ctx)()
+	return openDocument(ctx, tctx, resolved)
+}
+
+// OpenPinnedDocument returns the document and pins the revision it read for
+// the program, as one step no launch save of the program can come between.
+func OpenPinnedDocument(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (tools.EditorDocumentText, bool, error) {
+	defer tools.ReadingDrafts(ctx)()
+	doc, open, err := openDocument(ctx, tctx, resolved)
+	if err == nil && open {
+		tools.PinDraft(ctx, doc.ID, doc.Revision)
+	}
+	return doc, open, err
+}
+
+func openDocument(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (tools.EditorDocumentText, bool, error) {
 	documents, ok := DocumentsFor(tctx, resolved)
 	if !ok {
 		return tools.EditorDocumentText{}, false, nil
@@ -29,21 +45,4 @@ func OpenDocument(ctx context.Context, tctx tools.ToolContext, resolved projectp
 		return tools.EditorDocumentText{}, false, fmt.Errorf("read collaborative document: %w", err)
 	}
 	return doc, open, nil
-}
-
-// OpenPinnedDocument returns the document at a revision it has pinned for the
-// program. It pins what it read and reads again until the two agree, so no
-// launch save can move the document between the read and its pin.
-func OpenPinnedDocument(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (tools.EditorDocumentText, bool, error) {
-	doc, open, err := OpenDocument(ctx, tctx, resolved)
-	for err == nil && open {
-		tools.PinDraft(ctx, doc.ID, doc.Revision)
-		var current tools.EditorDocumentText
-		current, open, err = OpenDocument(ctx, tctx, resolved)
-		if current.ID == doc.ID && current.Revision == doc.Revision {
-			break
-		}
-		doc = current
-	}
-	return doc, open, err
 }
