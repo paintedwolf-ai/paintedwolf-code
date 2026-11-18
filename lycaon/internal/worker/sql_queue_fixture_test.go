@@ -18,6 +18,10 @@ func newTestQueue(t testing.TB, maxRunning int, projectID string, sessionIDs ...
 	for _, id := range sessionIDs {
 		testdbseed.InsertSession(t, database, id, projectID)
 	}
+	return newTestQueueOnDatabase(database, maxRunning)
+}
+
+func newTestQueueOnDatabase(database db.Handle, maxRunning int) *SQLQueue {
 	queue := NewSQLServices(database, maxRunning).Queue
 	root := db.DataDir(database)
 	queue.Branches.SetBaselineStore(workspacebaseline.New(database, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "worker-baselines")))
