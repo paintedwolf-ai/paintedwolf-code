@@ -40,6 +40,9 @@ func (s *Store) cleanInterrupted(m Manifest, resumable bool) (resultErr error) {
 		return err
 	}
 	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
+	if err := removeAbandonedStages(root); err != nil {
+		return err
+	}
 	entries, err := fs.ReadDir(root.FS(), "partials")
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -61,4 +64,19 @@ func (s *Store) cleanInterrupted(m Manifest, resumable bool) (resultErr error) {
 		}
 	}
 	return nil
+}
+
+func removeAbandonedStages(root *os.Root) error {
+	return fs.WalkDir(root.FS(), "artifacts", func(path string, entry fs.DirEntry, err error) error {
+		if errors.Is(err, os.ErrNotExist) && path == "artifacts" {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), ".staging-") {
+			return root.Remove(filepath.FromSlash(path))
+		}
+		return nil
+	})
 }

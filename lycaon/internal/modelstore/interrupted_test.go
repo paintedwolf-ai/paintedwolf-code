@@ -11,13 +11,14 @@ import (
 func TestRestartCleansUncommittedRevisionsAndAbandonedDownloads(t *testing.T) {
 	s, dir, signed := bundleFixture(t)
 	abandoned := filepath.Join(s.Root(), "partials", "unused")
+	staged := filepath.Join(s.Root(), "artifacts", "01", ".staging-interrupted")
 	orphan := filepath.Join(s.Root(), "revisions", "dense", "mlx", "orphan", "model")
-	for _, p := range []string{abandoned, orphan} {
+	for _, p := range []string{abandoned, orphan, staged} {
 		testutil.FailErr(t, "create crash directory", os.MkdirAll(filepath.Dir(p), 0700))
 		testutil.FailErr(t, "create unpublished payload", os.WriteFile(p, []byte("abandoned"), 0600))
 	}
 	testutil.FailErr(t, "replace interrupted transfer", s.ImportFromBundlePath(t.Context(), dir, Slot{signed.Manifest.Model, signed.Manifest.Device}, nil))
-	for _, p := range []string{abandoned, orphan} {
+	for _, p := range []string{abandoned, orphan, staged} {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
 			t.Fatalf("abandoned file still present: %s (%v)", p, err)
 		}

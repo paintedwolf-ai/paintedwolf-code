@@ -11,7 +11,12 @@ import (
 )
 
 // Activate verifies manifest authority and appends the manifest to the activation journal under lock.
-func (s *Store) Activate(signed SignedManifest) error {
+func (s *Store) Activate(signed SignedManifest) (resultErr error) {
+	lock, err := s.provisioningLock()
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, lock.Close()) }()
 	return s.activate(signed, false)
 }
 
