@@ -39,7 +39,7 @@ async function allowOutsideCommand(request: APIRequestContext, sessionId: string
       const { tool_approval: approval } = checkpoint;
       if (approval?.tool_call_id !== callId || !approval.plan?.recommended_option_id) continue;
       expect(approval.plan.subject.kind).not.toBe("host_execution");
-      const response = await request.post(`${session}/checkpoints/${checkpoint.id}/resolve`, {
+      const response = await request.post(`${session}/checkpoints/${checkpoint.id}`, {
         headers, data: { kind: "tool_approval", action: "approve", option_id: approval.plan.recommended_option_id },
       });
       expect(response.ok(), await response.text()).toBeTruthy();
