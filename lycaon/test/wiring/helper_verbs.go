@@ -11,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/scan/scanworker"
-	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 )
 
 // Main dispatches re-executed helper verbs before starting the test suite.
@@ -31,7 +30,6 @@ func Main(m *testing.M) int {
 		}
 		return 0
 	}
-	gittestsetup.Enable()
 	return runHostTests(m)
 }
 
