@@ -9,28 +9,12 @@ package sandboxmark
 import (
 	"os"
 	"path/filepath"
-	"sync"
 )
 
 const (
 	ownName     = "own"
 	foreignName = "foreign"
 )
-
-var current struct {
-	mu  sync.Mutex
-	dir string
-}
-
-// OwnPath is the marker every profile admits, or empty while no mark is enabled.
-func OwnPath() string {
-	current.mu.Lock()
-	defer current.mu.Unlock()
-	if current.dir == "" {
-		return ""
-	}
-	return filepath.Join(current.dir, ownName)
-}
 
 // Remove deletes a mark's markers once nothing can run under them.
 func Remove(dir string) {

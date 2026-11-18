@@ -298,7 +298,6 @@ printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
         self.assertIn(b"package left child processes: fixture/pkg: sleep (pid ", result.stdout)
         self.assertEqual(event["exit_code"], 1)
 
-    @unittest.skipUnless(reuse.fork_observable(), "recording requires process fork observation")
     def test_a_process_gone_before_it_is_named_is_not_a_leak(self):
         spec = importlib.util.spec_from_file_location("go_test_exec", Path(__file__).resolve().parents[2] / "go-test-exec.py")
         wrapper = importlib.util.module_from_spec(spec)
@@ -315,6 +314,7 @@ printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
         self.assertEqual(leaked, {12: "sleep"})
         kill.assert_called_once_with(12, signal.SIGKILL)
 
+    @unittest.skipUnless(reuse.fork_observable(), "recording requires process fork observation")
     def test_a_recorded_pass_replays_until_an_observed_input_changes(self):
         first, event = self.run_wrapper()
         self.assertEqual(first.returncode, 0, first.stderr)

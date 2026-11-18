@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"unsafe"
 
 	"github.com/lycaon/lycaon/internal/configdir"
@@ -33,6 +34,21 @@ import (
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"golang.org/x/sys/unix"
 )
+
+var current struct {
+	mu  sync.Mutex
+	dir string
+}
+
+// OwnPath is the marker every profile admits, or empty while no mark is enabled.
+func OwnPath() string {
+	current.mu.Lock()
+	defer current.mu.Unlock()
+	if current.dir == "" {
+		return ""
+	}
+	return filepath.Join(current.dir, ownName)
+}
 
 // Enable creates a fresh mark that every later profile carries and returns its
 // directory, which the caller hands to whatever kills processes still running
