@@ -64,14 +64,14 @@ func TestRestoreProgressBoundsRepeatedFilesAndBytes(t *testing.T) {
 func TestRestoreReplaysUncheckpointedDurableFiles(t *testing.T) {
 	t.Parallel()
 	for _, prefix := range []int{restoreProgressFiles - 1, restoreProgressFiles + 1} {
-		t.Run(fmt.Sprint(prefix), func(t *testing.T) { testRestoreReplayPrefix(t, prefix, "") })
+		t.Run(fmt.Sprint(prefix), func(t *testing.T) { t.Parallel(); testRestoreReplayPrefix(t, prefix, "") })
 	}
 }
 
 func TestRestoreCompletesWithUnusableProgress(t *testing.T) {
 	t.Parallel()
 	for _, damage := range []string{"cursor", "destination", "directory", "destination-directory", "destination-loop"} {
-		t.Run(damage, func(t *testing.T) { testRestoreReplayPrefix(t, restoreProgressFiles+1, damage) })
+		t.Run(damage, func(t *testing.T) { t.Parallel(); testRestoreReplayPrefix(t, restoreProgressFiles+1, damage) })
 	}
 }
 
@@ -162,6 +162,7 @@ func TestRestoreProgressReplaysUnusableCursor(t *testing.T) {
 	t.Parallel()
 	for _, invalid := range []string{"identity", "count", "version", "absent", "json"} {
 		t.Run(invalid, func(t *testing.T) {
+			t.Parallel()
 			restore := &pendingRestore{marker: PendingMarker{StagingDir: t.TempDir(), Files: []PendingFile{{RelPath: "drafts/body"}}}, appliedSet: map[string]struct{}{}}
 			identity, err := restore.progressBinding()
 			testutil.FailErr(t, "bind decision", err)

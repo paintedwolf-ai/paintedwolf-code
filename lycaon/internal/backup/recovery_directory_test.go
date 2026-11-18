@@ -105,6 +105,7 @@ func TestRecoveryStreamingFallbackRefusesChangingSource(t *testing.T) {
 	t.Parallel()
 	for _, updated := range []string{"short", "changed body!", "longer than the original body"} {
 		t.Run(updated, func(t *testing.T) {
+			t.Parallel()
 			root := t.TempDir()
 			source, destination := filepath.Join(root, "source"), filepath.Join(root, "snapshot")
 			testutil.FailErr(t, "write mutable source", os.WriteFile(source, []byte("original body"), 0o600))

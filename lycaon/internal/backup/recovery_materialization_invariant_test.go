@@ -17,6 +17,7 @@ func TestRecoveryMaterializationRefusesIncompleteSourcesWithoutPublishing(t *tes
 	t.Parallel()
 	for _, failure := range []string{"canceled", "blocked parent", "missing source"} {
 		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
 			root := t.TempDir()
 			source := filepath.Join(root, "source")
 			testutil.FailErr(t, "seed original payload", os.WriteFile(source, []byte("original bytes"), 0o600))

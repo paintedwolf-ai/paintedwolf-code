@@ -28,6 +28,7 @@ func TestRetainedReleaseArchiveCanStage(t *testing.T) {
 	}
 	for _, fixture := range fixtures {
 		t.Run(fixture.version, func(t *testing.T) {
+			t.Parallel()
 			archive := filepath.Join("..", "..", "testdata", "upgrade-corpus", fixture.version, "backup.zip")
 			root := t.TempDir()
 			path := filepath.Join(root, "store.db")

@@ -189,6 +189,7 @@ func TestBackupValidatesPublishedWorkerCheckpointsAndGitObjects(t *testing.T) {
 func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 	t.Parallel()
 	t.Run("unrelated_valid_pack_and_index", func(t *testing.T) {
+		t.Parallel()
 		fx := setupCheckpointBackupFixture(t)
 		retainedObjectsDir := filepath.Join(fx.root, "worker-branches", ".adapter", "privategit", "retained-store", "objects")
 		testutil.FailErr(t, "clear retained objects", os.RemoveAll(retainedObjectsDir))
@@ -207,6 +208,7 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 	})
 
 	t.Run("mismatched_pack_and_index_basenames", func(t *testing.T) {
+		t.Parallel()
 		fx := setupCheckpointBackupFixture(t)
 		packDir := filepath.Join(fx.root, "worker-branches", ".adapter", "privategit", "retained-store", "objects", "pack")
 		testutil.FailErr(t, "mkdir packDir", os.MkdirAll(packDir, 0o700))
@@ -220,6 +222,7 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 	})
 
 	t.Run("mismatched_pack_and_index_contents", func(t *testing.T) {
+		t.Parallel()
 		fx := setupCheckpointBackupFixture(t)
 		retainedObjectsDir := filepath.Join(fx.root, "worker-branches", ".adapter", "privategit", "retained-store", "objects")
 		testutil.FailErr(t, "clear retained objects", os.RemoveAll(retainedObjectsDir))
@@ -252,6 +255,7 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 	})
 
 	t.Run("corrupt_loose_object", func(t *testing.T) {
+		t.Parallel()
 		fx := setupCheckpointBackupFixture(t)
 		looseBlob := filepath.Join(fx.root, "worker-branches", ".adapter", "privategit", "retained-store", "objects", fx.blobOID[:2], fx.blobOID[2:])
 		testutil.FailErr(t, "chmod loose blob", os.Chmod(looseBlob, 0o600))
@@ -264,6 +268,7 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 	})
 
 	t.Run("missing_reachable_blob", func(t *testing.T) {
+		t.Parallel()
 		fx := setupCheckpointBackupFixture(t)
 		// Only list commitOID in RetainedObjects while deleting the reachable blob object from disk.
 		writeCheckpointManifestAndMeta(t, fx, checkpoint.PrivateGitSnapshot{
@@ -282,6 +287,7 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 	})
 
 	t.Run("missing_packed_delta_base", func(t *testing.T) {
+		t.Parallel()
 		fx := setupCheckpointBackupFixture(t)
 		retainedObjectsDir := filepath.Join(fx.root, "worker-branches", ".adapter", "privategit", "retained-store", "objects")
 		testutil.FailErr(t, "clear retained objects", os.RemoveAll(retainedObjectsDir))
@@ -331,6 +337,7 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 	})
 
 	t.Run("invalid_oid_in_private_git_manifest", func(t *testing.T) {
+		t.Parallel()
 		fx := setupCheckpointBackupFixture(t)
 		writeCheckpointManifestAndMeta(t, fx, checkpoint.PrivateGitSnapshot{
 			HeadRef:         "refs/heads/main",
@@ -567,6 +574,7 @@ func writeBranchCheckpointMeta(t *testing.T, root, branchRel, storeDir, lastChec
 func TestBackupCheckpointSharedStoreScalingAndCycleDetection(t *testing.T) {
 	t.Parallel()
 	t.Run("shared_store_diamond_dag_scales_with_store_once", func(t *testing.T) {
+		t.Parallel()
 		fx := setupCheckpointBackupFixture(t)
 		retainedObjectsDir := filepath.Join(fx.root, "worker-branches", ".adapter", "privategit", "retained-store", "objects")
 		testutil.FailErr(t, "clear loose retained objects", os.RemoveAll(retainedObjectsDir))
@@ -649,6 +657,7 @@ func TestBackupCheckpointSharedStoreScalingAndCycleDetection(t *testing.T) {
 	})
 
 	t.Run("cyclic_checkpoint_ancestry_rejected_fail_closed", func(t *testing.T) {
+		t.Parallel()
 		fx := setupCheckpointBackupFixture(t)
 		pg := checkpoint.PrivateGitSnapshot{
 			HeadRef:         "refs/heads/main",
@@ -677,6 +686,7 @@ func TestBackupCheckpointSharedStoreScalingAndCycleDetection(t *testing.T) {
 	})
 
 	t.Run("conflicting_checkpoint_overlay_git_object_rejected", func(t *testing.T) {
+		t.Parallel()
 		fx := setupCheckpointBackupFixture(t)
 		// Write a conflicting corrupt copy of fx.blobOID into the checkpoint-specific git-objects overlay
 		// while the valid loose object remains in the shared retained-store/objects.

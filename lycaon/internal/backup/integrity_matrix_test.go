@@ -20,7 +20,6 @@ import (
 )
 
 func TestEveryArchivedFileRequiresCompleteIntegrityBeforeStaging(t *testing.T) {
-	t.Parallel()
 	testutil.SkipIfShort(t, "stages every corruption of every archived file; TestStageRejectsCorruptAndTooNew keeps the single-file rejection in short")
 	source := t.TempDir()
 	sourceDB := testdbfixture.OpenPath(t, filepath.Join(source, "store.db"))
