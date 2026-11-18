@@ -1,7 +1,12 @@
 package contract
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"path/filepath"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/logoutline"
@@ -26,17 +31,47 @@ func TestLogOutlineWireTypesRegistered(t *testing.T) {
 	}
 }
 
-// Every format the outline can report is a wire LogFormat value, and back.
+// Every LogFormat the outline declares has a parser and is a wire LogFormat
+// value, and every wire value is declared.
 func TestLogFormatInternalMatchesWire(t *testing.T) {
 	t.Parallel()
-	enums, err := wirespec.DiscoverAPIStringEnums(contractcheck.RepoRoot(t))
+	root := contractcheck.RepoRoot(t)
+	enums, err := wirespec.DiscoverAPIStringEnums(root)
 	contractcheck.FailErr(t, "discover API string enums", err)
 	if len(enums["LogFormat"]) == 0 {
 		t.Fatal("wire LogFormat enum not found")
 	}
+	corpus, err := contractcheck.LoadGoASTCorpusMode(filepath.Join(root, "lycaon", "internal", "logoutline"), parser.SkipObjectResolution)
+	contractcheck.FailErr(t, "load logoutline corpus", err)
 	var internal []string
-	for _, format := range logoutline.Formats() {
-		internal = append(internal, string(format))
+	for _, file := range corpus.Production() {
+		for _, decl := range file.AST.Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok || gen.Tok != token.CONST {
+				continue
+			}
+			for _, spec := range gen.Specs {
+				value := spec.(*ast.ValueSpec)
+				typ, ok := value.Type.(*ast.Ident)
+				if !ok || typ.Name != "LogFormat" {
+					continue
+				}
+				for _, v := range value.Values {
+					lit, ok := v.(*ast.BasicLit)
+					if !ok || lit.Kind != token.STRING {
+						continue
+					}
+					if format, err := strconv.Unquote(lit.Value); err == nil && format != "" {
+						internal = append(internal, format)
+					}
+				}
+			}
+		}
+	}
+	for _, format := range internal {
+		if _, ok := logoutline.ParserFor(logoutline.LogFormat(format)); !ok {
+			t.Errorf("declared log format %q has no parser", format)
+		}
 	}
 	contractcheck.FailSetEqual(t, "logoutline formats vs wire LogFormat", internal, enums["LogFormat"])
 }

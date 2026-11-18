@@ -68,17 +68,20 @@ func TestBuiltAppRegistersRunnersInServeOrder(t *testing.T) {
 	}
 }
 
-// Durable state closes after every resource that may still write to it.
+// Session runtime resources, which may still write durable state, close
+// before the database.
 func TestBuiltAppClosesDurableStateLast(t *testing.T) {
 	app := buildServeAppForTest(t)
 	order := app.resources.lifecycle.Tracked(resourcelifecycle.DeviceScope())
 	database := slices.Index(order, "database")
-	if database < 1 {
-		t.Fatalf("release order %v has no database after runtime resources", order)
+	if database < 0 {
+		t.Fatalf("release order %v has no database", order)
 	}
-	durableTail := map[string]bool{"instance-lock": true, "debug-captures": true, "secret-redactors": true}
-	for _, name := range order[database+1:] {
-		if !durableTail[name] {
+	for _, name := range []string{"session-host", "held-calls", "background-processes", "llm-service", "mcp", "event-outbox", "event-publisher"} {
+		index := slices.Index(order, name)
+		if index < 0 {
+			t.Errorf("release order has no %s (order %v)", name, order)
+		} else if index > database {
 			t.Errorf("%s releases after the database (order %v)", name, order)
 		}
 	}

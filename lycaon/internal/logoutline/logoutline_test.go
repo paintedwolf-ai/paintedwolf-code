@@ -3,7 +3,6 @@ package logoutline_test
 import (
 	"os"
 	"path/filepath"
-	"slices"
 	"testing"
 	"time"
 
@@ -262,20 +261,5 @@ func TestCombinedWinsOverCLF(t *testing.T) {
 	format, _ := logoutline.Classify(readTestdata(t, "combined.log"))
 	if format != logoutline.FormatCombined {
 		t.Fatalf("Classify = %q want combined", format)
-	}
-}
-
-func TestFormatsListsEveryRegisteredParser(t *testing.T) {
-	formats := logoutline.Formats()
-	if len(formats) == 0 {
-		t.Fatal("no registered log formats")
-	}
-	for _, format := range formats {
-		if _, ok := logoutline.ParserFor(format); !ok {
-			t.Fatalf("Formats lists %q with no parser", format)
-		}
-	}
-	if !slices.Contains(formats, logoutline.FormatCombined) {
-		t.Fatalf("Formats = %v, want the default parsers", formats)
 	}
 }
