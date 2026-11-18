@@ -15,19 +15,21 @@ pub struct KV {
 pub struct Cache {
     pub offset: i32,
     layers: Vec<Option<KV>>,
-    globals: [Option<Rc<RefCell<KV>>>; 4],
+    globals: Vec<Option<Rc<RefCell<KV>>>>,
+    profile: crate::profile::Profile,
     capacity: i32,
 }
 
 impl Cache {
-    pub fn new(capacity: usize) -> Result<Self> {
+    pub fn new(capacity: usize, profile: crate::profile::Profile) -> Result<Self> {
         if !(2..=65536).contains(&capacity) {
-            return Err("KV capacity exceeds E4B bounds".into());
+            return Err("KV capacity exceeds model bounds".into());
         }
         Ok(Self {
             offset: 0,
-            layers: (0..24).map(|_| None).collect(),
-            globals: std::array::from_fn(|_| None),
+            profile,
+            layers: (0..profile.kv_layers()).map(|_| None).collect(),
+            globals: vec![None; profile.kv_layers() / 6],
             capacity: capacity as i32,
         })
     }
@@ -42,20 +44,26 @@ impl Cache {
         let shape = keys.shape();
         let count = shape.get(2).copied().unwrap_or(0);
         let dimension = if layer % 6 == 5 { 512 } else { 256 };
-        if layer >= 24
+        if layer >= self.layers.len()
             || !(1..=256).contains(&count)
             || !(0..=self.capacity - count).contains(&self.offset)
-            || shape != [1, 2, count, dimension]
+            || shape
+                != [
+                    1,
+                    self.profile.kv_heads(layer % 6 != 5) as i32,
+                    count,
+                    dimension,
+                ]
             || values.shape() != shape
             || keys.dtype() != Dtype::Float16
             || values.dtype() != Dtype::Float16
         {
-            return Err("KV update exceeds E4B bounds".into());
+            return Err("KV update exceeds model bounds".into());
         }
         let sliding = layer % 6 != 5;
         if sliding {
             let kv = if let Some(previous) = self.layers[layer].take() {
-                let begin = (previous.keys.shape()[2] - 511).max(0);
+                let begin = (previous.keys.shape()[2] - (self.profile.window as i32 - 1)).max(0);
                 KV {
                     keys: ops::concatenate(&[previous.keys.index((.., .., begin.., ..)), keys], 2)?,
                     values: ops::concatenate(
@@ -71,8 +79,18 @@ impl Cache {
             let bank = match self.globals[layer / 6].take() {
                 Some(bank) => bank,
                 None => Rc::new(RefCell::new(KV {
-                    keys: Array::zeros::<half::f16>(&[1, 2, self.capacity, 512])?,
-                    values: Array::zeros::<half::f16>(&[1, 2, self.capacity, 512])?,
+                    keys: Array::zeros::<half::f16>(&[
+                        1,
+                        self.profile.global_heads as i32,
+                        self.capacity,
+                        512,
+                    ])?,
+                    values: Array::zeros::<half::f16>(&[
+                        1,
+                        self.profile.global_heads as i32,
+                        self.capacity,
+                        512,
+                    ])?,
                 })),
             };
             let mut storage = bank.borrow_mut();
@@ -90,11 +108,11 @@ impl Cache {
     }
 
     pub fn get(&self, layer: usize, count: i32) -> Result<KV> {
-        if layer >= 24
+        if layer >= self.layers.len()
             || !(1..=256).contains(&count)
             || !(0..=self.capacity - count).contains(&self.offset)
         {
-            return Err("KV read exceeds E4B bounds".into());
+            return Err("KV read exceeds model bounds".into());
         }
         let stored = if layer % 6 == 5 {
             self.globals[layer / 6]

@@ -15,7 +15,14 @@ struct Fake {
 
 impl Backend for Fake {
     fn plan(_: &std::path::Path, context: usize, chunk: usize) -> Result<crate::resources::Plan> {
-        crate::resources::Plan::e4b(3 << 30, 2 << 30, context, chunk, false)
+        crate::resources::Plan::for_model(
+            crate::profile::E4B,
+            3 << 30,
+            2 << 30,
+            context,
+            chunk,
+            false,
+        )
     }
     fn forward(&mut self, tokens: &[u32], sampling: Option<&mut Sampling>) -> Result<Option<u32>> {
         self.calls.push(tokens.to_vec());
@@ -87,7 +94,7 @@ fn request(id: u64) -> Begin {
 }
 
 fn executor() -> Executor<Fake> {
-    Executor::new(Fake::default(), 64, 2, vec![1, 106]).unwrap()
+    Executor::new(Fake::default(), 64, 2, vec![1, 106], vec![]).unwrap()
 }
 
 #[test]
@@ -198,7 +205,7 @@ fn failed_step_discards_partial_state_and_checkpoint() {
 
 #[test]
 fn full_admitted_prefix_reuses_only_identical_tokens() {
-    let mut runner = Executor::new(Fake::default(), 16384, 256, vec![1]).unwrap();
+    let mut runner = Executor::new(Fake::default(), 16384, 256, vec![1], vec![]).unwrap();
     let make = |id| {
         let mut request = request(id);
         request.prompt_tokens = vec![2; 8193];

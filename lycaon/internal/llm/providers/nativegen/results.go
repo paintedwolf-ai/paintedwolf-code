@@ -32,7 +32,7 @@ type resourceResult struct {
 }
 
 func (p resourcePlan) validate() error {
-	if p.ResidentWeightsBytes == 0 || p.MappedPLEBytes == 0 || p.KVCapacityBytes == 0 || p.WorkspaceBytes == 0 || p.HostReservationBytes == 0 {
+	if p.ResidentWeightsBytes == 0 || p.KVCapacityBytes == 0 || p.WorkspaceBytes == 0 || p.HostReservationBytes == 0 {
 		return errors.New("native generation: incomplete memory plan")
 	}
 	var total uint64

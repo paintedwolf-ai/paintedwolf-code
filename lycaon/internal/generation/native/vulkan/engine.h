@@ -15,6 +15,7 @@ struct pw_generation {
     uint32_t prefix_position = 0;
     uint32_t limit = 0;
     uint32_t chunk = 0;
+    uint32_t sliding_window = 0;
     uint32_t prefix_limit = 0;
     uint64_t budget = 0;
     std::unique_ptr<pw_checkpoint> checkpoint;
