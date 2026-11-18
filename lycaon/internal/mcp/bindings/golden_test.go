@@ -1,19 +1,17 @@
 package bindings_test
 
 import (
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/mcp/bindings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 )
 
 const goldenWidgetJSON = `{"status":"ready","count":2}`
 
 func TestGoldenFixtureWidgetApply(t *testing.T) {
-	list, err := bindings.LoadDir(goldenBindingsDir(t))
-	testutil.FailErr(t, "LoadDir", err)
+	list := extpackstest.MCPBindings(t)
 	matched, fields, err := bindings.Apply(list, "fixture", "widget", goldenWidgetJSON)
 	testutil.FailErr(t, "Apply", err)
 	if !matched {
@@ -31,20 +29,10 @@ func TestGoldenFixtureWidgetApply(t *testing.T) {
 }
 
 func TestGoldenFixtureWidgetWrongJSON(t *testing.T) {
-	list, err := bindings.LoadDir(goldenBindingsDir(t))
-	testutil.FailErr(t, "LoadDir", err)
+	list := extpackstest.MCPBindings(t)
 	matched, fields, err := bindings.Apply(list, "fixture", "widget", `{"status":"ready"}`)
 	testutil.FailErr(t, "Apply", err)
 	if matched || fields != nil {
 		t.Fatalf("schema should fail without count: matched=%v fields=%v", matched, fields)
 	}
-}
-
-func goldenBindingsDir(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	return filepath.Join(filepath.Dir(file), "testdata", "mcp_bindings")
 }
