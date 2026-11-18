@@ -1,5 +1,6 @@
 """Advisory queue observations: backlog, runtime history, and superseded source; completed-stage
-evidence separates admission wait from execution history."""
+evidence separates admission wait from execution history, which keeps only passing whole-target
+runs."""
 
 import contextlib
 from contextlib import nullcontext
@@ -13,6 +14,7 @@ from unittest.mock import patch
 import verification_advisories as advisories
 import verification_execute as execution
 import verification_history as history
+from verification_plan import expand
 from verification_state import read_state
 
 
@@ -40,7 +42,7 @@ class AdvisoryTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        self.queue = SimpleNamespace(root=self.root, locked=contextlib.nullcontext)
+        self.queue = SimpleNamespace(root=self.root, history=self.root, locked=contextlib.nullcontext)
         advisories._announced.clear()
 
     def status(self, runs=(), operations=(), **fields):
@@ -259,15 +261,19 @@ class AdvisoryTests(unittest.TestCase):
                                  "dev-engine, scanners and 3 workers for its whole run; other work continues")
 
 
+WHOLE = expand(["comments:check"])[0]
+SELECTED = expand(["test:runner"], ["-k", "fixture"])[0]
+
+
 class StageRuntimeTests(unittest.TestCase):
-    def publish(self, root, entry, code=0):
-        queue = SimpleNamespace(root=root, locked=nullcontext)
+    def publish(self, root, entry, code=0, stage=WHOLE):
+        queue = SimpleNamespace(root=root, history=root, locked=nullcontext)
         log = root / 'stage.log'
         log.write_text('')
         executor = SimpleNamespace(queue=queue, directory=root, running={'request': {0}},
                                    cache={}, finished=set(), stages=[])
-        job = {'first': {'kind': 'task'}, 'key': 'fixture', 'packages': [],
-               'result': {'stage_id': 'stage-001', 'names': ['fixture'], 'started_at': 100,
+        job = {'first': stage, 'key': 'fixture', 'packages': [],
+               'result': {'stage_id': 'stage-001', 'names': [stage['name']], 'started_at': 100,
                           'consumers': ['request'], 'log': str(log)},
                'result_path': root / 'stage.json', 'consumers': ['request'],
                'future': SimpleNamespace(result=lambda: code),
@@ -278,18 +284,17 @@ class StageRuntimeTests(unittest.TestCase):
         return json.loads((root / 'stages.json').read_text())[0], history.read_history(queue)
 
     def test_queue_wait_never_inflates_the_completed_runtime_sample(self):
-        for code in (0, 1):
-            with self.subTest(code=code), tempfile.TemporaryDirectory() as temporary:
-                result, measured = self.publish(Path(temporary), {'started_at': 200}, code)
-                self.assertEqual(result['queued_at'], 100)
-                self.assertEqual(result['started_at'], 200)
-                self.assertEqual(result['finished_at'], 204)
-                self.assertEqual(history.samples(measured, 'fixture'), [4])
+        with tempfile.TemporaryDirectory() as temporary:
+            result, measured = self.publish(Path(temporary), {'started_at': 200})
+        self.assertEqual((result['queued_at'], result['started_at'], result['finished_at']), (100, 200, 204))
+        self.assertEqual(history.samples(measured, WHOLE['name']), [4])
 
-    def test_unadmitted_and_canceled_stages_never_create_runtime_samples(self):
-        for entry, code in (({}, 130), ({}, 2), ({'started_at': 200}, 143)):
-            with self.subTest(entry=entry, code=code), tempfile.TemporaryDirectory() as temporary:
-                _, measured = self.publish(Path(temporary), entry, code)
+    def test_failed_selected_unadmitted_and_canceled_stages_never_create_runtime_samples(self):
+        admitted = {'started_at': 200}
+        for entry, code, stage in ((admitted, 1, WHOLE), (admitted, 0, SELECTED), ({}, 0, WHOLE),
+                                   ({}, 130, WHOLE), ({}, 2, WHOLE), (admitted, 143, WHOLE)):
+            with self.subTest(entry=entry, code=code, stage=stage['name']), tempfile.TemporaryDirectory() as temporary:
+                _, measured = self.publish(Path(temporary), entry, code, stage)
                 self.assertEqual(measured, {})
 
 

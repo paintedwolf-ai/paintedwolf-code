@@ -1,4 +1,5 @@
-"""Completed runtimes per operation name: the baseline for advisories, backfill, and stage priority."""
+"""Runtimes of passing whole-target runs per operation name: the baseline for advisories, backfill,
+and stage priority. A failed or scoped run measures something else, so it is never recorded."""
 
 import math
 import time
@@ -13,7 +14,7 @@ ESTIMATE_QUANTILE = 0.9
 
 
 def history_path(queue):
-    return queue.root / "durations.json"
+    return queue.history / "durations.json"
 
 
 def read_history(queue):

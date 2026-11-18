@@ -46,6 +46,7 @@ else:
             env = {**os.environ, "PATH": str(fixture) + os.pathsep + os.environ["PATH"],
                    # The script takes real admission; an isolated queue keeps it off the shared one.
                    "PW_TEST_ARTIFACT_ROOT": str(fixture), "PW_TEST_EXECUTION_ROOT": str(fixture / "queue"),
+                   "XDG_CACHE_HOME": str(fixture / "user-cache"),
                    "COVERAGE_CALLS": str(calls), "COVERAGE_MIN": "62",
                    "COVERAGE_PKG_MIN": "40", "COVERAGE_PKG_ENFORCE": "1"}
             result = subprocess.run(["bash", str(ROOT / "scripts/coverage-check.sh")],

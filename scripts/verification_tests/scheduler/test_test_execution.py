@@ -17,7 +17,8 @@ SCRIPT = Path(__file__).resolve().parents[2].joinpath("test-execution.py")
 spec = importlib.util.spec_from_file_location("test_execution", SCRIPT)
 execution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(execution)
-import verification_resources as resources  # importable once test-execution.py extends the path
+import verification_history as history  # importable once test-execution.py extends the path
+import verification_resources as resources
 
 
 class TaskAdmissionTests(unittest.TestCase):
@@ -282,9 +283,9 @@ class ExecutionLifecycleTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.queue = execution.Queue(self.root / "queue")
+        self.queue = execution.Queue(self.root / "queue", self.root / "user-cache/paintedwolf/verification")
         self.env = {**os.environ, "PW_TEST_EXECUTION_ROOT": str(self.queue.root), "PW_TEST_WORKERS": "1",
-                    "GOCACHE": str(self.root / "go-cache")}
+                    "GOCACHE": str(self.root / "go-cache"), "XDG_CACHE_HOME": str(self.root / "user-cache")}
         self.env.pop("PW_TEST_EXECUTION_TICKET", None)
 
     def start(self, name, body):
@@ -359,6 +360,22 @@ while True: time.sleep(.1)
                 except BlockingIOError:
                     return False
         self.await_state(released)
+
+    def test_only_a_passing_whole_target_invocation_records_its_duration(self):
+        task = self.root / "task.py"
+        task.write_text("import os, sys\n"
+                        "if '--dry' in sys.argv: print(' '.join(sys.argv)); sys.exit(0)\n"
+                        "sys.exit(int(os.environ['FIXTURE_STATUS']))\n")
+        for arguments, status in ((["build:lycaon-dev"], 1), (["lint:fast", "--", "--fix"], 0),
+                                  (["build:lycaon-dev"], 0)):
+            with self.subTest(arguments=arguments, status=status):
+                result = subprocess.run(
+                    [sys.executable, str(SCRIPT), "task", "--", sys.executable, str(task), *arguments],
+                    env={**self.env, "FIXTURE_STATUS": str(status)}, capture_output=True, text=True, timeout=60)
+                self.assertEqual(result.returncode, status, result.stderr)
+        recorded = history.read_history(self.queue)
+        self.assertEqual(list(recorded), ["build:lycaon-dev"])
+        self.assertEqual(len(history.samples(recorded, "build:lycaon-dev")), 1)
 
     def test_app_build_runs_while_queue_is_paused(self):
         self.queue.pause("fixture pause")
@@ -458,7 +475,7 @@ while True: time.sleep(.1)
         process = self.start("paused", "print('ran')")
         self.await_state(lambda: len(self.queue.status()["runs"]) == 1)
         self.assertIsNone(process.poll())
-        other = execution.Queue(self.queue.root)
+        other = execution.Queue(self.queue.root, self.queue.history)
         self.assertEqual(other.status()["paused"]["reason"], "fixture pause")
         other.resume()
         out, err = process.communicate(timeout=5)

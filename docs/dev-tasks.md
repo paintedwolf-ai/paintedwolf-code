@@ -963,7 +963,11 @@ the queue itself carries `queue_backlog`, or `paused_backlog` with the recorded
 pause reason. A run past three times the median of the last completed runs of
 the same target, and five minutes absolute, carries `runtime_exceeds_history`;
 medians come from up to 32 retained durations per target name, so a target with
-fewer than three completed runs has no baseline. A running batch whose checkout
+fewer than three such runs has no baseline. Only a run that passed and selected its
+whole target is retained, and a package's duration only when the package passed, so
+a failure, a selection or a package stopped by the backstop never shortens or
+lengthens a baseline. Both histories live once per host in the user cache's
+`verification/` directory, beside the per-checkout receipts under `artifacts/`. A running batch whose checkout
 has changed since it captured its source carries `source_superseded`, sampled at
 most once every thirty seconds for the whole host. Advisories reach a waiting
 command's notices as well as `test:status`; each condition is stated once and

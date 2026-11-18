@@ -188,10 +188,14 @@ class EventTests(unittest.TestCase):
 
     def test_package_durations_keep_recent_measurements_per_stage(self):
         with tempfile.TemporaryDirectory() as directory:
-            queue = type("Queue", (), {"root": Path(directory), "locked": lambda self: open(os.devnull)})()
+            queue = type("Queue", (), {"history": Path(directory), "locked": lambda self: open(os.devnull)})()
             for seconds in (10, 30, 20):
-                reuse.record_package_durations(queue, "stage", {"a": {"elapsed": seconds}, "b": {"elapsed": 1},
-                                                                "c": {"elapsed": 99, "reused": {"batch_id": "x"}}})
+                reuse.record_package_durations(queue, "stage", {
+                    "a": {"exit_code": 0, "elapsed": seconds}, "b": {"exit_code": 0, "elapsed": 1},
+                    "c": {"exit_code": 0, "elapsed": 99, "reused": {"batch_id": "x"}},
+                    # A failure or a backstop kill stopped part-way, so neither measured the package.
+                    "d": {"exit_code": 1, "elapsed": 5}, "e": {"exit_code": -3, "elapsed": 1800},
+                    "f": {"elapsed": 7}})
             self.assertEqual(reuse.package_durations(queue, "stage"), {"a": 20, "b": 1})
             self.assertEqual(reuse.package_durations(queue, "other"), {})
 

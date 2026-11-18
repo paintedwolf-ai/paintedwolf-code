@@ -448,12 +448,14 @@ def read_events(path):
 
 
 def durations_path(queue):
-    return queue.root / "package-durations.json"
+    return queue.history / "package-durations.json"
 
 
 def record_package_durations(queue, stage_key, outcomes):
+    # Only a package that ran to a pass measured its own runtime; a failure or a backstop kill did not.
     measured = {package: event["elapsed"] for package, event in outcomes.items()
-                if not event.get("reused") and type(event.get("elapsed")) in (int, float) and event["elapsed"] >= 0}
+                if event.get("exit_code") == 0 and not event.get("reused")
+                and type(event.get("elapsed")) in (int, float) and event["elapsed"] >= 0}
     if not measured:
         return
     with queue.locked():

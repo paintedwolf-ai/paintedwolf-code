@@ -127,7 +127,7 @@ class RecordTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        self.queue = SimpleNamespace(root=self.root, locked=contextlib.nullcontext)
+        self.queue = SimpleNamespace(root=self.root, history=self.root, locked=contextlib.nullcontext)
 
     def test_the_reason_reaches_both_the_batch_and_the_queue_log(self):
         directory = self.root / "batch"
@@ -159,9 +159,9 @@ class LifecycleTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        self.queue = execution.Queue(self.root / "queue")
+        self.queue = execution.Queue(self.root / "queue", self.root / "user-cache/paintedwolf/verification")
         self.env = {**os.environ, "PW_TEST_EXECUTION_ROOT": str(self.queue.root), "PW_TEST_WORKERS": "1",
-                    "GOCACHE": str(self.root / "go-cache")}
+                    "GOCACHE": str(self.root / "go-cache"), "XDG_CACHE_HOME": str(self.root / "user-cache")}
         self.env.pop("PW_TEST_EXECUTION_TICKET", None)
 
     def start(self, name, body):

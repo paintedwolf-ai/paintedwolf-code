@@ -124,7 +124,8 @@ sys.exit(code)
         self.git("init", "-q")
         self.git("add", ".")
         self.git("-c", "user.name=Verification fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "Fixture")
-        self.queue = execution.Queue(self.root / "queue")
+        # The executor's own subprocesses resolve the history under XDG_CACHE_HOME below.
+        self.queue = execution.Queue(self.root / "queue", self.root / "user-cache/paintedwolf/verification")
         self.artifacts = self.root / "artifacts"
         self.artifacts.mkdir(parents=True, exist_ok=True)
         self.env = {**os.environ, "PW_TEST_EXECUTION_ROOT": str(self.queue.root), "PW_TEST_WORKERS": "1",
