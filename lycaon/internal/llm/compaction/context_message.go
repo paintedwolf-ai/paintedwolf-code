@@ -97,9 +97,7 @@ func ContextMessageFromAPI(m api.Message) ContextMessage {
 			DietStampSource:      m.DietStampSource,
 		},
 	}
-	if m.Kind == api.MessageKindCompletionReport && m.Role == api.MessageRoleAssistant && m.CompactedChunk == nil {
-		out.CompletionOpening = continuationExcerpt(m.Content)
-	}
+	out.CompletionOpening = recordedCompletionOpening(m)
 	if m.ToolResult != nil {
 		out.CommandResult = transcript.CommandProvenance(m.ToolResult)
 		out.Execution = continuationExecution(m.ToolResult)

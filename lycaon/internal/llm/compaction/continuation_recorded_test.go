@@ -66,6 +66,23 @@ func TestBaselineRecordsCoveredCommandAndReport(t *testing.T) {
 	}
 }
 
+func TestPreviouslyProjectedReportSuppliesItsRecordedConclusion(t *testing.T) {
+	message := api.Message{Role: api.MessageRoleAssistant, Kind: api.MessageKindCompletionReport,
+		Content: "A generated projection", CompactedChunk: &api.CompactedChunkMeta{Strategy: "summarize"},
+		CompletionReport: &api.CompletionReportMeta{Headline: "Recorded headline", Summary: "Recorded assessment"}}
+	if converted := ContextMessageFromAPI(message); converted.CompletionOpening != message.CompletionReport.Headline {
+		t.Fatalf("opening = %q, want the recorded report headline", converted.CompletionOpening)
+	}
+	message.CompletionReport.Headline = ""
+	if converted := ContextMessageFromAPI(message); converted.CompletionOpening != message.CompletionReport.Summary {
+		t.Fatalf("opening = %q, want the recorded report assessment", converted.CompletionOpening)
+	}
+	message.CompletionReport = nil
+	if converted := ContextMessageFromAPI(message); converted.CompletionOpening != "" {
+		t.Fatalf("opening quoted a projection as the original report: %q", converted.CompletionOpening)
+	}
+}
+
 func TestRecordedContinuationRenderMatrix(t *testing.T) {
 	savingsCompactor(t, nil)
 	rows := recordedExchange("go test ./inventory", 1)
