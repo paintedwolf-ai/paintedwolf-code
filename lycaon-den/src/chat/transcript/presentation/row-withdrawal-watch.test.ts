@@ -1,10 +1,13 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import {
+  createActivitySpanRowWithdrawalWatch,
   visibleRowContinuity,
   withdrawnRows,
   type RowWithdrawal,
 } from "./row-withdrawal-watch.ts";
-import type { TranscriptItem } from "../projection/transcript-item-model.ts";
+import { resetStreamScrollDebugForTests } from "../../stream/den-scroll-debug.ts";
+import type { ActivitySpanEntry, TranscriptItem } from "../projection/transcript-item-model.ts";
 
 function draftRow(id: string): TranscriptItem {
   return { kind: "draft", key: id, text: "", live: true } as TranscriptItem;
@@ -85,4 +88,26 @@ describe("transcript row withdrawal", () => {
     ]);
     expect(withdrawnRows(before, after, retained("m1", "m2"))).toEqual([]);
   });
+});
+
+it("reports a missing activity row even while its sibling stays visible", () => {
+  const missing = {
+    kind: "tool",
+    part: {
+      id: "assistant:call:activity:step",
+      commandActivity: { calls: [{ id: "assistant:call" }] },
+    },
+  } as unknown as ActivitySpanEntry;
+  const call = { kind: "tool", part: { id: "assistant:call" } } as ActivitySpanEntry;
+  const observe = createActivitySpanRowWithdrawalWatch();
+  localStorage.setItem("den:scroll-debug", "2");
+  resetStreamScrollDebugForTests();
+  try {
+    expect(observe([call, missing], [call])).toEqual([]);
+    expect(observe([call], [call])).toEqual([{ kind: "tool", key: "assistant:call:activity:step" }]);
+    expect(observe([], [])).toEqual([]);
+  } finally {
+    resetStreamScrollDebugForTests();
+    localStorage.removeItem("den:scroll-debug");
+  }
 });

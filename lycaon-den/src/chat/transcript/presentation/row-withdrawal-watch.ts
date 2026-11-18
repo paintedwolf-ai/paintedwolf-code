@@ -83,3 +83,38 @@ export function noteTranscriptRowWithdrawals(
   }
   return gone;
 }
+
+/** Watches child rows while their owning calls stay in the span. */
+export function createActivitySpanRowWithdrawalWatch() {
+  let previous = new Map<string, readonly string[]>();
+  return (
+    entries: readonly ActivitySpanEntry[],
+    calls: readonly ActivitySpanEntry[],
+  ): RowWithdrawal[] => {
+    if (!isStreamScrollDebugEnabled()) {
+      previous.clear();
+      return [];
+    }
+    const retained = new Set(calls.flatMap((entry) => entry.kind === "tool" ? [entry.part.id] : []));
+    const current = new Map<string, readonly string[]>();
+    for (const entry of entries) {
+      if (entry.kind !== "tool") continue;
+      const part = entry.part;
+      const owners = part.commandActivity?.calls ?? [part, ...(part.foldMembers ?? [])];
+      current.set(part.id, owners.map((owner) => owner.id));
+    }
+    const gone: RowWithdrawal[] = [];
+    for (const [key, owners] of previous) {
+      if (current.has(key) || !owners.some((id) => retained.has(id))) continue;
+      gone.push({ key, kind: "tool" });
+      denScrollDebugLog("scroll", "row-withdrawn", {
+        surface: "activity-span",
+        row_key: key,
+        kind: "tool",
+        rows: entries.length,
+      });
+    }
+    previous = current;
+    return gone;
+  };
+}
