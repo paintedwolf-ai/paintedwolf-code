@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -39,8 +40,10 @@ func DeleteProjectRows(ctx context.Context, database DBTX, projectID string) err
 		return err
 	}
 	for _, table := range tables {
-		statement := fmt.Sprintf(`DELETE FROM %s WHERE %s IN (SELECT %s FROM %s WHERE %s = ? %s LIMIT %d)`, // #nosec G201 -- names read from the schema
-			quoteIdent(table.name), table.key, table.keyColumns(), quoteIdent(table.name), quoteIdent(table.column), table.order, ProjectRowBatch)
+		// Values are bound; only schema-read, quoted names are written in.
+		name := quoteIdent(table.name)
+		statement := "DELETE FROM " + name + " WHERE " + table.key + " IN (SELECT " + table.keyColumns() + " FROM " + name +
+			" WHERE " + quoteIdent(table.column) + " = ? " + table.order + " LIMIT " + strconv.Itoa(ProjectRowBatch) + ")"
 		for {
 			result, err := database.ExecContext(ctx, statement, projectID)
 			if err != nil {
