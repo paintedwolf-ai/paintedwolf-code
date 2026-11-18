@@ -1220,6 +1220,12 @@ The current command entry parses and admits ordinary bash programs, dispatches c
 | Guidance and workflow | The command schema, per-call prompt, OAR policies, and workflow consumers use the current tool surface. The final live request capture must confirm rendered wording and model selection on the rebuilt composition. |
 | Routine tools | `command` is on the routine floor. Routine file, search, query, Git inspection and HTTP operations have no callable registration or profile offer. Their contracts remain available for command admission, receipts, approvals and historical decoding. Domain tools and conversational edits keep their structured surfaces. |
 
+### Command output publication
+
+The host screens aggregate output and retained child diagnostics before storing them. It seals the custody facts for the program and commits both session and chat provenance in one transaction before publishing output. Source observations record the ranges actually delivered. A child can finish with visible effects while final output publication is still pending.
+
+If the host restarts after the publication is sealed, recovery uses the retained bytes and the recorded facts to finish publishing. It does not run the program again. Live background process streams follow the separate process observation contract.
+
 ### Source-index behavior
 
 A ready index accelerates the parts of a query it can prove current. The native `grep` and `rg` paths consult exact-revision Bloom filters per walked file; uncovered, changed, out-of-scope, still-indexing, symlink, and otherwise undecidable files are read live. The source-index coverage change in #1466 makes native survey and listing combine indexed covered entries with live directory reconciliation, including additions and deletions. `find` currently walks and stats live entries because its expression and traversal semantics require current filesystem facts beyond the safe index projection. Native search tests and #1466 exercise mixed indexed and live scopes through direct tools and the `command` entry. An index miss is never evidence that a live area is empty.
