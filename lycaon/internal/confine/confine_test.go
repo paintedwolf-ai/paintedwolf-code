@@ -947,11 +947,11 @@ func TestProxyOnlyRoutesThroughInAppProxy(t *testing.T) {
 			leasedPeer("cmd"), // attribution is covered in egressproxy's own tests
 		)
 		// Inject loopback dialing to isolate proxy policy.
-		p.SetDialEndpointForTest(func(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, error) {
+		dialEndpoint := func(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, error) {
 			var d net.Dialer
 			return d.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", ep.Host, ep.Port))
-		})
-		if _, err := p.Start(); err != nil {
+		}
+		if _, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint}); err != nil {
 			testutil.FailErr(t, "p.Start failed", err)
 		}
 		defer func() { _ = p.Close() }()

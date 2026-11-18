@@ -58,11 +58,11 @@ func TestSocksRefusesAfterTheLeaseEnds(t *testing.T) {
 		return true
 	}, leasedPeer("live"))
 	p.SetLeaseCheck(func(string) bool { return live.Load() })
-	p.SetDialEndpointForTest(func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
 		dialed = true
 		return nil, io.EOF
-	})
-	addrs, err := p.Start()
+	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
 	testutil.FailErr(t, "Start", err)
 	defer func() { _ = p.Close() }()
 
@@ -93,11 +93,11 @@ func TestSocksRechecksTheLeaseAfterAParkedDecision(t *testing.T) {
 		return true
 	}, leasedPeer("live"))
 	p.SetLeaseCheck(func(string) bool { return live.Load() })
-	p.SetDialEndpointForTest(func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
 		dialed = true
 		return nil, io.EOF
-	})
-	addrs, err := p.Start()
+	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
 	testutil.FailErr(t, "Start", err)
 	defer func() { _ = p.Close() }()
 
@@ -168,13 +168,13 @@ func TestSocksConnectDomainAfterAllow(t *testing.T) {
 		resolved.Store(true)
 		return true
 	}, leasedPeer("tok"))
-	p.SetDialEndpointForTest(func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
 		if !resolved.Load() {
 			t.Fatal("dial before allow decision")
 		}
 		return net.Dial("tcp", upstream.Addr().String())
-	})
-	addrs, err := p.Start()
+	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
 	testutil.FailErr(t, "Start", err)
 	defer func() { _ = p.Close() }()
 
@@ -197,11 +197,11 @@ func TestSocksConnectDomainAfterAllow(t *testing.T) {
 func TestSocksDenySkipsDial(t *testing.T) {
 	dialed := false
 	p := brokerWith(func(context.Context, string, egressproxy.Endpoint) bool { return false }, leasedPeer("tok"))
-	p.SetDialEndpointForTest(func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
 		dialed = true
 		return nil, io.EOF
-	})
-	addrs, err := p.Start()
+	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
 	testutil.FailErr(t, "Start", err)
 	defer func() { _ = p.Close() }()
 
@@ -220,11 +220,11 @@ func TestSocksRejectsBindAndUDPAssociate(t *testing.T) {
 		t.Fatal("policy must not run for unsupported commands")
 		return true
 	}, leasedPeer("tok"))
-	p.SetDialEndpointForTest(func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
 		t.Fatal("dial must not run for unsupported commands")
 		return nil, io.EOF
-	})
-	addrs, err := p.Start()
+	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
 	testutil.FailErr(t, "Start", err)
 	defer func() { _ = p.Close() }()
 

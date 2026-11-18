@@ -34,9 +34,7 @@ type brokerFailure struct {
 	err    error
 }
 
-// StartEgressBroker binds the host's single mediation front door. Its address is
-// the same for every project, action, and invocation, so a confined process's
-// environment follows its boundary rather than the call that produced it.
+// StartEgressBroker binds the shared HTTP and SOCKS listeners.
 func StartEgressBroker(stateRoot string, listen egressproxy.ListenFunc) (egressproxy.Addrs, error) {
 	broker.mu.Lock()
 	defer broker.mu.Unlock()
@@ -70,8 +68,7 @@ func StartEgressBroker(stateRoot string, listen egressproxy.ListenFunc) (egressp
 	return addrs, nil
 }
 
-// StopEgressBroker closes the front door. Running processes lose mediated
-// egress; their next dial reports an ended lease.
+// StopEgressBroker closes the shared listeners and active connections.
 func StopEgressBroker() error {
 	broker.mu.Lock()
 	live := broker.live
