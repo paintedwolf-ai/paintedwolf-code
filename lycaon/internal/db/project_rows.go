@@ -42,7 +42,7 @@ func DeleteProjectRows(ctx context.Context, database DBTX, projectID string) err
 	for _, table := range tables {
 		// Values are bound; only schema-read, quoted names are written in.
 		name := quoteIdent(table.name)
-		statement := "DELETE FROM " + name + " WHERE " + table.key + " IN (SELECT " + table.keyColumns() + " FROM " + name +
+		statement := "DELETE FROM " + name + " WHERE " + table.key + " IN (SELECT " + table.keyColumns() + " FROM " + name + // #nosec G202 -- names read from the schema
 			" WHERE " + quoteIdent(table.column) + " = ? " + table.order + " LIMIT " + strconv.Itoa(ProjectRowBatch) + ")"
 		for {
 			result, err := database.ExecContext(ctx, statement, projectID)

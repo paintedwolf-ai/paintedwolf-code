@@ -69,7 +69,7 @@ func TestDeleteProjectRowsClearsChainedHistoryInBoundedStatements(t *testing.T) 
 	for _, table := range tables {
 		var count int64
 		testutil.FailErr(t, "count rows", store.QueryRowContext(t.Context(),
-			"SELECT count(*) FROM "+quoteIdent(table.name)+" WHERE "+quoteIdent(table.column)+" = ?", "project-deleted").Scan(&count))
+			"SELECT count(*) FROM "+quoteIdent(table.name)+" WHERE "+quoteIdent(table.column)+" = ?", "project-deleted").Scan(&count)) // #nosec G202 -- names read from the schema
 		if count != 0 {
 			t.Fatalf("%s keeps %d rows of the deleted project", table.name, count)
 		}
