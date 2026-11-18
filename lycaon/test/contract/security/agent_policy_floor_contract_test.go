@@ -125,7 +125,8 @@ func TestAgentPolicyResolvesForReview(t *testing.T) {
 
 func TestAgentPolicySinkHasAnEffectiveWriteFloor(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	proj := t.TempDir()
+	proj, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve project", err)
 	c := confine.Confinement{Roots: []string{proj}}
 	specs, err := confine.HardDenyWriteSpecs(c)
 	testutil.FailErr(t, "build write floor", err)
@@ -133,7 +134,7 @@ func TestAgentPolicySinkHasAnEffectiveWriteFloor(t *testing.T) {
 	for _, spec := range specs {
 		if spec.Literal == path {
 			boundary := confine.BoundaryOf(&c)
-			if got := boundary.Filesystem.Verdict(confine.AccessWrite, path); !boundary.Applied || got.Allowed || got.Layer != confine.FloorControlPlane {
+			if got := boundary.Filesystem.Verdict(confine.AccessWrite, path); !boundary.Applied || got.Allowed || got.Layer != confine.FloorAgentPolicy {
 				t.Fatalf("approvals sink write verdict = %+v, boundary applied = %t", got, boundary.Applied)
 			}
 			return
