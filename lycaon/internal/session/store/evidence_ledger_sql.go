@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -200,7 +199,7 @@ func upsertEvidenceRecordSQL(ctx context.Context, s *sqlCore, sessionID string, 
 		return err
 	}
 	if inserted {
-		if err := projectUntrustedLedger(ctx, tx, projectID, sessionID, rec); err != nil {
+		if err := search.SyncUntrustedLedgerWriteThrough(ctx, tx, projectID, sessionID, rec); err != nil {
 			return err
 		}
 	}
@@ -212,14 +211,6 @@ func upsertEvidenceRecordSQL(ctx context.Context, s *sqlCore, sessionID string, 
 		bumpSecretExposure(s, sessionID, rec)
 	}
 	return nil
-}
-
-// projectUntrustedLedger records trust markers in the evidence transaction.
-func projectUntrustedLedger(ctx context.Context, tx *sql.Tx, projectID, sessionID string, rec evidence.Record) error {
-	if !evidence.RecordMarksUntrustedContent(rec) {
-		return nil
-	}
-	return search.SyncUntrustedLedgerWriteThrough(ctx, tx, projectID, sessionID, rec)
 }
 
 func markSuperseded(ctx context.Context, q *db.Queries, sessionID, oldHandle, byHandle string) error {

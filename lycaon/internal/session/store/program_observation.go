@@ -36,9 +36,6 @@ func (ev *sqlEvidence) CommitProgramObservation(ctx context.Context, sessionID, 
 	if _, err := writeEvidenceRecord(ctx, q, s.dataDir, sessionID, projectID, rec); err != nil {
 		return "", err
 	}
-	if err := projectUntrustedLedger(ctx, tx, projectID, sessionID, rec); err != nil {
-		return "", err
-	}
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
@@ -114,11 +111,6 @@ func (ev *sqlEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessionI
 		}
 		if ok {
 			inserted = append(inserted, *rec)
-		}
-	}
-	for _, rec := range inserted {
-		if err := projectUntrustedLedger(ctx, tx, projectID, sessionID, rec); err != nil {
-			return "", err
 		}
 	}
 	if err := tx.Commit(); err != nil {

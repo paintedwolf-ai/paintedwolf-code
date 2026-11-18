@@ -76,9 +76,6 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 	if _, err = writeEvidenceRecord(ctx, q, s.dataDir, sessionID, projectID, rec); err != nil {
 		return "", err
 	}
-	if err := projectUntrustedLedger(ctx, tx, projectID, sessionID, rec); err != nil {
-		return "", err
-	}
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
