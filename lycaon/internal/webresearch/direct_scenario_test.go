@@ -134,15 +134,11 @@ func TestDirectScenarioParallelSearches(t *testing.T) {
 	const n = 5
 	var wg sync.WaitGroup
 	results := make([]providerOutcome, n)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			time.Sleep(time.Duration(idx*10) * time.Millisecond)
-			results[idx] = searchDirect(ctx, makeDiscoverer(), fmt.Sprintf("parallel search test topic %d", idx), CurrentPeriod(), 3)
+			results[idx] = searchDirect(t.Context(), makeDiscoverer(), fmt.Sprintf("parallel search test topic %d", idx), CurrentPeriod(), 3)
 		}(i)
 	}
 	wg.Wait()

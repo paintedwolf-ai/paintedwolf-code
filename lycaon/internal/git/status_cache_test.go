@@ -300,10 +300,12 @@ type gatedLoader struct {
 	release chan struct{}
 }
 
+// coldGatedLoader holds each load until release and reports how the first one ends.
 type coldGatedLoader struct {
 	inner   *git.Manager
 	entered chan struct{}
 	release chan struct{}
+	loaded  chan error
 }
 
 type invalidationGatedLoader struct {
@@ -334,13 +336,22 @@ func (g *invalidationGatedLoader) Log(context.Context, string, git.GitLogOpts) (
 }
 
 func (g *coldGatedLoader) Status(ctx context.Context, projectDir string) (*git.GitStatus, error) {
-	g.entered <- struct{}{}
+	// Later loads find both channels full; only the first is awaited.
+	select {
+	case g.entered <- struct{}{}:
+	default:
+	}
 	select {
 	case <-g.release:
-		return g.inner.Status(ctx, projectDir)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+	status, err := g.inner.Status(ctx, projectDir)
+	select {
+	case g.loaded <- err:
+	default:
+	}
+	return status, err
 }
 
 func (g *coldGatedLoader) Log(ctx context.Context, projectDir string, opts git.GitLogOpts) ([]git.GitCommit, error) {
@@ -472,6 +483,7 @@ func TestStatusCache_PeekOrRevalidateColdWarmsInBackground(t *testing.T) {
 		inner:   git.NewManager(),
 		entered: make(chan struct{}, 1),
 		release: make(chan struct{}),
+		loaded:  make(chan error, 1),
 	}
 	cache := git.NewStatusCache(loader)
 
@@ -480,22 +492,14 @@ func TestStatusCache_PeekOrRevalidateColdWarmsInBackground(t *testing.T) {
 	if found || cached.Status != nil {
 		t.Fatalf("cold peek = %#v, found = %t", cached, found)
 	}
-	select {
-	case <-loader.entered:
-	case <-t.Context().Done():
-		t.Fatal("cold peek did not start a background status load")
-	}
+	testutil.Receive(t, "the cold peek starts a background load", loader.entered)
 	close(loader.release)
 
-	for {
+	// The cache drops a background load's error, so the loader is where a failed load shows.
+	testutil.FailErr(t, "background status load", testutil.Receive(t, "the background load ends", loader.loaded))
+	testutil.WaitFor(t, "the loaded status is cached", func() bool {
 		cached, found, err = cache.PeekOrRevalidate(t.Context(), dir)
 		testutil.FailErr(t, "peek warmed status", err)
-		if found && cached.Status != nil {
-			return
-		}
-		if t.Context().Err() != nil {
-			t.Fatal("background status load did not populate cache")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+		return found && cached.Status != nil
+	})
 }

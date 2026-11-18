@@ -146,15 +146,6 @@ func lookupManagerView(mgr *Manager, rootOrBranchDir, workerID string) (*managed
 	return nil, false, nil
 }
 
-// viewWorktreeDir returns the private worktree stage directory for viewID.
-func viewWorktreeDir(m *Manager, viewID string) string {
-	v, err := getManagedView(m, viewID)
-	if err != nil {
-		return ""
-	}
-	return v.worktreeDir
-}
-
 // PrepareViewGitOperation ensures private Git metadata is initialized on first use for an
 // active worker view, synchronizes layeredfs.Core overlay changes into the private worktree
 // stage before a Git operation, and returns a finish callback to sync worktree mutations back.

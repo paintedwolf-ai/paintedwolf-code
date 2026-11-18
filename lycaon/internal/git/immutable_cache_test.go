@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -51,17 +50,12 @@ func TestImmutableCacheCanceledWaiterDoesNotCancelSharedRead(t *testing.T) {
 
 func waitCacheWaiters(t *testing.T, cache *immutableCache[string], key string, want int) {
 	t.Helper()
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the shared readers join the flight", func() bool {
 		cache.mu.Lock()
+		defer cache.mu.Unlock()
 		flight := cache.flights[key]
-		ready := flight != nil && flight.waiters == want
-		cache.mu.Unlock()
-		if ready {
-			return
-		}
-		time.Sleep(time.Millisecond)
-	}
-	t.Fatal("shared readers did not join")
+		return flight != nil && flight.waiters == want
+	})
 }
 
 func TestImmutableCacheLastWaiterCancelsAndCannotPublish(t *testing.T) {

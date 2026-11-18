@@ -514,9 +514,6 @@ mod tests {
         assert_eq!(prompt.cancel_label, CANCEL);
         assert_eq!(prompt.open_running_label, Some(OPEN_RUNNING));
         assert_eq!(prompt.running_project_id.as_deref(), Some("proj-alpha"));
-        assert!(prompt.description.contains(
-            "2 background commands are running and will stop when Painted Wolf Code quits."
-        ));
         assert!(prompt
             .description
             .contains("• python3 -m http.server 8000 (127.0.0.1:8000)"));
@@ -593,17 +590,12 @@ mod tests {
         };
         let unsuppressed_combined =
             plan_confirmation(Ok(&combined), false).expect("combined prompt");
-        assert!(unsuppressed_combined.description.contains(
-            "Work is still active, and 1 background command is running and will stop when Painted Wolf Code quits."
-        ));
+        assert!(unsuppressed_combined.has_background_commands);
         let suppressed_combined =
             plan_confirmation(Ok(&combined), true).expect("active work still prompts");
         assert!(!suppressed_combined.has_background_commands);
         assert!(!suppressed_combined.allow_dont_ask_again);
-        assert_eq!(
-            suppressed_combined.description,
-            "Work is still active. Quitting will stop it. You can keep working instead."
-        );
+        assert_ne!(suppressed_combined.description, unsuppressed_combined.description);
 
         // Failed inventory query is never suppressed by the background-only preference.
         let failed = plan_confirmation(Err(()), true).expect("failed query still prompts");

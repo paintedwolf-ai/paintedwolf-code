@@ -350,6 +350,9 @@ func TestProgramEntryLargeLoopsKeepTheSessionUsable(t *testing.T) {
 
 func TestProgramEntryChildLimitKeepsPartialResultsAndSessionUsable(t *testing.T) {
 	f := newProgramFixture(t)
+	// Seeding 65,535 receipts takes as long as the host needs; a held clock keeps the
+	// program in the foreground until it ends, so each form reports its terminal state.
+	f.Runtime.Clock = programtest.NewManualClock()
 	seeded := 0
 	f.Runtime.Evaluate = func(ctx context.Context, plan commandsurface.ProgramSnapshot, ports commandprogram.EvaluationPorts) (commandprogram.ProgramOutcome, error) {
 		if seeded < 2 {

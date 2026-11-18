@@ -51,7 +51,7 @@ func ApprovalRulesFromDTO(rules []wire.ApprovalRule) []ApprovalRule {
 }
 
 // LimitsToDTO converts internal limits to API response.
-func LimitsToDTO(scope wire.SettingsScope, lim SessionLimits, mergedFrom []string) wire.SettingsLimitsResponse {
+func LimitsToDTO(scope wire.SettingsScope, lim SessionLimits, mergedFrom []string, rejected []ProjectRejection) wire.SettingsLimitsResponse {
 	nanoUSD, _ := cost.USDToNano(lim.SessionSpendCeilingUSD)
 	return wire.SettingsLimitsResponse{
 		Scope:                        scope,
@@ -69,6 +69,7 @@ func LimitsToDTO(scope wire.SettingsScope, lim SessionLimits, mergedFrom []strin
 		CoordinatorMaxSleepMs:        lim.CoordinatorMaxSleepSec * 1000,
 		AwaitParentWorkersTimeoutMs:  lim.AwaitParentWorkersTimeoutSec * 1000,
 		MergedFrom:                   mergedFrom,
+		Rejected:                     RejectedRows(rejected),
 	}
 }
 
@@ -91,7 +92,7 @@ func SecurityScannersToDTO(cfg SecurityScannersConfig, mergedFrom []string) wire
 }
 
 // ReviewToDTO converts internal review config to API response.
-func ReviewToDTO(scope wire.SettingsScope, cfg ReviewConfig, mergedFrom []string) wire.ReviewSettingsResponse {
+func ReviewToDTO(scope wire.SettingsScope, cfg ReviewConfig, mergedFrom []string, rejected []ProjectRejection) wire.ReviewSettingsResponse {
 	rules := make([]wire.ContentReviewRule, 0, len(cfg.ReviewPaths))
 	for _, r := range cfg.ReviewPaths {
 		rules = append(rules, wire.ContentReviewRule{
@@ -105,6 +106,7 @@ func ReviewToDTO(scope wire.SettingsScope, cfg ReviewConfig, mergedFrom []string
 		Scope:       scope,
 		ReviewPaths: rules,
 		MergedFrom:  mergedFrom,
+		Rejected:    RejectedRows(rejected),
 	}
 }
 
@@ -123,15 +125,17 @@ func ReviewFromDTO(req wire.UpdateReviewSettingsRequest) ReviewConfig {
 }
 
 // VerifyToDTO converts internal verify config to API response.
-func VerifyToDTO(scope wire.SettingsScope, projectDir string, cfg VerifyConfig, detect VerifyDetectCandidate, hasDetect bool) wire.VerifySettingsResponse {
+func VerifyToDTO(scope wire.SettingsScope, projectDir string, cfg VerifyConfig, detect VerifyDetectCandidate, hasDetect bool, rejected []ProjectRejection) wire.VerifySettingsResponse {
 	resp := wire.VerifySettingsResponse{
 		Scope:             scope,
 		Test:              cfg.Test,
 		VerifyPath:        settingsoverlay.Rel("verify.yaml"),
 		BackendConfigured: true,
+		Rejected:          RejectedRows(rejected),
 	}
 	// Suggestion semantics are per-project; global scope carries no nudge state.
-	if scope == wire.SettingsScopeProject && strings.TrimSpace(projectDir) != "" {
+	// Nothing is suggested over a verify.yaml that must be fixed first.
+	if scope == wire.SettingsScopeProject && strings.TrimSpace(projectDir) != "" && len(rejected) == 0 {
 		declared := strings.TrimSpace(cfg.Test) != ""
 		hasCommand := hasDetect && strings.TrimSpace(detect.Command) != ""
 		// Surface the detected command (for the nudge, and so Settings can show a
@@ -155,6 +159,18 @@ func VerifyToDTO(scope wire.SettingsScope, projectDir string, cfg VerifyConfig, 
 		}
 	}
 	return resp
+}
+
+// RejectedRows reports project settings files the host did not apply.
+func RejectedRows(rejected []ProjectRejection) []wire.ProjectSettingsRejectedRow {
+	if len(rejected) == 0 {
+		return nil
+	}
+	rows := make([]wire.ProjectSettingsRejectedRow, 0, len(rejected))
+	for _, r := range rejected {
+		rows = append(rows, wire.ProjectSettingsRejectedRow{Code: ProjectSettingsUnreadable, Detail: r.Detail})
+	}
+	return rows
 }
 
 // VerifyFromDTO converts API request to internal verify config.

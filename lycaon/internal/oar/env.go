@@ -142,20 +142,6 @@ func capabilityEnvironment(cap *EngineDeclaration) (*oarcore.Environment, error)
 	return cap.Environment()
 }
 
-func checkWhenAgainstSpec(when string, cap *EngineDeclaration) error {
-	if cap == nil {
-		cap = InstalledEngineDeclaration()
-	}
-	if strings.TrimSpace(when) == "" {
-		return nil
-	}
-	env, err := capabilityEnvironment(cap)
-	if err != nil {
-		return err
-	}
-	return oarcore.CheckCondition(when, env)
-}
-
 func evalRuleWhen(holder *evalHolder, r *Rule, gc *GuardContext) (bool, error) {
 	if r == nil {
 		return true, nil

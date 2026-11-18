@@ -9,6 +9,9 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/nativemanifest"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -112,7 +115,9 @@ var noneClassifiedPathArgs = map[string]bool{
 func TestNoneClassifiedPathArgsResolverCoverage(t *testing.T) {
 	schemas := contractToolSchemas(t)
 	found := map[string]bool{}
-	for _, name := range toolcontract.MultiRootDeclaredNames() {
+	manifest, err := nativemanifest.Load()
+	contractcheck.FailErr(t, "load native manifest", err)
+	for name := range manifest.MultiRootTools() {
 		capability, ok := toolcontract.MultiRootOf(name)
 		if !ok || capability != toolcontract.MultiRootNone {
 			continue

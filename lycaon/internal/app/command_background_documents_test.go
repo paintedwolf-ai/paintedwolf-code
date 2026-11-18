@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -83,12 +82,7 @@ func TestProgramBackgroundReadTransfersUndeliveredDraftNotice(t *testing.T) {
 				t.Fatalf("initial read=%+v", outcome)
 			}
 			release()
-			var completion bgprocess.Completion
-			select {
-			case completion = <-completed:
-			case <-time.After(testutil.Timeout(time.Minute)):
-				t.Fatal("background completion not delivered")
-			}
+			completion := testutil.Receive(t, "the background completion is delivered", completed)
 			if completion.ReleaseNotices != nil {
 				defer completion.ReleaseNotices()
 			}

@@ -1,7 +1,20 @@
 import { fireEvent, render, screen } from "@solidjs/testing-library";
-import { createSignal, onCleanup, onMount } from "solid-js";
+import { For, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { StageSplitHost } from "./StageSplitHost.tsx";
+import { WindowControls } from "./WindowControls.tsx";
+import { windowEdgeClaims, type WindowEdgeClaim, type WindowEdgeLayout } from "./window-edges.ts";
+
+// The desktop draws its buttons on the right.
+vi.mock("../../platform/windows/window-chrome-layout.ts", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../platform/windows/window-chrome-layout.ts")>(),
+  windowEdgeChrome: (side: "left" | "right") => (side === "right" ? "drawn" : null),
+}));
+const closeWindow = vi.fn(async () => undefined);
+vi.mock("../../platform/windows/current-window.ts", () => ({
+  currentWindow: async () => ({ close: closeWindow }),
+}));
+vi.mock("./AppMenuButton.tsx", () => ({ AppMenuButton: () => null }));
 
 function Host(props: {
   splitLive?: boolean;
@@ -9,6 +22,8 @@ function Host(props: {
   mirrored?: boolean;
   narrowSurvivor?: "conversation" | "stage";
   onWidth?: (width: number) => void;
+  drawerEdges?: readonly WindowEdgeClaim[];
+  chatColumn?: JSX.Element;
 }) {
   return (
     <StageSplitHost
@@ -26,8 +41,10 @@ function Host(props: {
       onStageEnter={vi.fn()}
       onChatEnter={vi.fn()}
       stageColumn={<input data-testid="stage-body" />}
-      chatColumn={<input data-testid="chat-body" />}
+      chatColumn={props.chatColumn ?? <input data-testid="chat-body" />}
       divider={<div data-testid="split-divider" />}
+      drawer={<div data-testid="drawer" />}
+      drawerEdges={props.drawerEdges ?? []}
     />
   );
 }
@@ -162,6 +179,8 @@ describe("StageSplitHost", () => {
         stageColumn={<p data-testid="stage-prose">stage</p>}
         chatColumn={<p data-testid="chat-prose">chat</p>}
         divider={<div data-testid="split-divider" />}
+        drawer={null}
+        drawerEdges={[]}
       />
     ));
 
@@ -201,6 +220,8 @@ describe("StageSplitHost", () => {
           </button>
         }
         divider={<div data-testid="split-divider" />}
+        drawer={null}
+        drawerEdges={[]}
       />
     ));
 
@@ -225,6 +246,8 @@ describe("StageSplitHost", () => {
         stageColumn={null}
         chatColumn={<div>chat</div>}
         divider={<div data-testid="split-divider" />}
+        drawer={null}
+        drawerEdges={[]}
       />
     ));
     const host = screen.getByTestId("shell-stage-host");
@@ -259,6 +282,8 @@ describe("StageSplitHost", () => {
         stageColumn={<div>stage</div>}
         chatColumn={<StatefulChat />}
         divider={<div data-testid="split-divider" />}
+        drawer={null}
+        drawerEdges={[]}
       />
     ));
 
@@ -308,6 +333,8 @@ describe("StageSplitHost", () => {
         stageColumn={<div>stage</div>}
         chatColumn={<StatefulChat />}
         divider={<div data-testid="split-divider" />}
+        drawer={null}
+        drawerEdges={[]}
       />
     ));
 
@@ -365,6 +392,8 @@ describe("StageSplitHost", () => {
         stageColumn={<div>stage</div>}
         chatColumn={<StatefulChat />}
         divider={<div data-testid="split-divider" />}
+        drawer={null}
+        drawerEdges={[]}
       />
     ));
     const host = screen.getByTestId("shell-stage-host");
@@ -429,11 +458,58 @@ describe("StageSplitHost", () => {
         stageColumn={<div>stage</div>}
         chatColumn={<div>chat</div>}
         divider={<div data-testid="split-divider" />}
+        drawer={null}
+        drawerEdges={[]}
       />
     ));
     expect(
       screen.getByTestId("shell-stage-host").hasAttribute("data-conversation-hidden"),
     ).toBe(false);
     expect(screen.getByTestId("split-col-chat").inert).toBeFalsy();
+  });
+
+  it("holds the drawer in its own layer, outside the columns a hidden pane makes inert", () => {
+    render(() => <Host contextHidden />);
+    const drawer = screen.getByTestId("drawer");
+    expect(screen.getByTestId("split-col-stage").inert).toBe(true);
+    expect(screen.getByTestId("split-col-stage").contains(drawer)).toBe(false);
+    expect(screen.getByTestId("split-col-chat").contains(drawer)).toBe(false);
+    expect(screen.getByTestId("shell-stage-host").contains(drawer)).toBe(true);
+  });
+
+  it("hands the edge's window buttons to an open drawer and back, drawing them once throughout", async () => {
+    const [open, setOpen] = createSignal(false);
+    const layout = (): WindowEdgeLayout => ({
+      navSide: null, split: true, stageOccupied: true, contextHidden: false, conversationHidden: false,
+      stageSide: "left", narrowSurvivor: "chat", drawerSide: open() ? "right" : null,
+    });
+    render(() => (
+      <Host
+        drawerEdges={windowEdgeClaims("drawer", layout())}
+        chatColumn={
+          <div data-testid="chat-body">
+            <For each={windowEdgeClaims("chat", layout())}>{(claim) => <WindowControls {...claim} />}</For>
+          </div>
+        }
+      />
+    ));
+    const layer = screen.getByTestId("drawer").parentElement!;
+    const closeButton = () => {
+      const buttons = screen.getAllByTestId("window-close");
+      expect(buttons).toHaveLength(1);
+      return buttons[0]!;
+    };
+    expect(screen.getByTestId("chat-body").contains(closeButton())).toBe(true);
+    expect(layer.hasAttribute("data-window-edge")).toBe(false);
+
+    setOpen(true);
+    expect(layer.contains(closeButton())).toBe(true);
+    expect(layer.getAttribute("data-window-edge")).toBe("right");
+    fireEvent.click(closeButton());
+    await vi.waitFor(() => expect(closeWindow).toHaveBeenCalledTimes(1));
+
+    setOpen(false);
+    expect(screen.getByTestId("chat-body").contains(closeButton())).toBe(true);
+    expect(layer.hasAttribute("data-window-edge")).toBe(false);
   });
 });

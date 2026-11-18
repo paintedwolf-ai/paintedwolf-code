@@ -11,8 +11,10 @@ const navigation = readSourceText(join(root, "styling/chrome/project-navigation.
 describe("project rail and dock wash", () => {
   it("keeps rows clear of the wash at the scroll end and when focus scrolls them into view", () => {
     // The wash paints over the rail's last rows above the dock.
-    expect(extractCssRuleBlock(navigation, ".den-shell-aside-main > .den-shell-nav-dock::after"))
-      .toMatch(/height:\s*var\(--den-nav-wash-height\)/);
+    const wash = extractCssRuleBlock(navigation, ".den-shell-aside-main > .den-shell-nav-dock::after");
+    expect(wash).toMatch(/height:\s*var\(--den-nav-wash-height\)/);
+    expect(wash).toMatch(/bottom:\s*100%/);
+    expect(wash).toMatch(/pointer-events:\s*none/);
     // Focus reveal (short windows, keyboard traversal) stops above the wash.
     expect(extractCssRuleBlock(utilities, ".den-shell-nav"))
       .toMatch(/scroll-padding-block-end:\s*var\(--den-nav-wash-height\)/);

@@ -175,7 +175,7 @@ bun "${ROOT}/scripts/licenses-assemble.ts" \
   --decide-crates-json "${TMP}/decide-crates.json" \
   --generation-crates-json "${TMP}/generation-crates.json" \
   --opengrep-artifact "${OPENGREP_ARTIFACT}" \
-  --out "${OUT}"
+  --out "${TMP}/THIRD-PARTY-NOTICES.md"
 assemble_rc=$?
 set -e
 
@@ -192,6 +192,6 @@ if [[ "${assemble_rc}" -ne 0 ]]; then
   exit "${assemble_rc}"
 fi
 
-cp -f "${OUT}" "${TAURI_COPY}"
+python3 "${ROOT}/scripts/stage-notices.py" "${TMP}/THIRD-PARTY-NOTICES.md" "${OUT}" "${TAURI_COPY}"
 echo "licenses:notices — wrote ${OUT}" >&2
 echo "licenses:notices — copied ${TAURI_COPY} (Tauri resources)" >&2

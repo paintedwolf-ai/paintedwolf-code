@@ -46,14 +46,16 @@ type LocalWorkerPoller struct {
 	// Quiet raises notices for working rounds without recent progress.
 	Quiet *QuietRounds
 	// Blocked raises notices for waiting jobs whose prerequisite cannot be met.
-	Blocked      *BlockedPrerequisites
-	sem          chan struct{}
-	capacityWake chan struct{}
-	inflight     sync.WaitGroup
-	outcomeLocks promptstate.MutexRegistry
-	cancelMu     sync.Mutex
-	cancels      map[string]*pollerExecution
-	abortReasons map[string]bgprocess.TerminationReason
+	Blocked *BlockedPrerequisites
+	// terminalRetryMin is the first wait before a terminal write retries.
+	terminalRetryMin time.Duration
+	sem              chan struct{}
+	capacityWake     chan struct{}
+	inflight         sync.WaitGroup
+	outcomeLocks     promptstate.MutexRegistry
+	cancelMu         sync.Mutex
+	cancels          map[string]*pollerExecution
+	abortReasons     map[string]bgprocess.TerminationReason
 }
 
 type pollerExecution struct {
@@ -147,6 +149,7 @@ func NewLocalWorkerPoller(queue WorkerQueue, executor WorkerExecutor, cfg Worker
 		Outcomes:            outcomes,
 		InstanceID:          ResolveInstanceID(cfg),
 		MaintenanceInterval: interval,
+		terminalRetryMin:    workerTerminalRetryMin,
 		sem:                 make(chan struct{}, n),
 		capacityWake:        make(chan struct{}, 1),
 		cancels:             make(map[string]*pollerExecution),
@@ -535,7 +538,7 @@ func (p *LocalWorkerPoller) commitTerminal(
 	action string,
 	commit func() (bool, error),
 ) (bool, error) {
-	delay := workerTerminalRetryMin
+	delay := p.terminalRetryMin
 	var lastErr error
 	for attempt := 1; attempt <= workerTerminalRetryAttempts; attempt++ {
 		won, err := commit()
