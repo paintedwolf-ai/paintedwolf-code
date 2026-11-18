@@ -167,7 +167,7 @@ func appendMessagesTx(ctx context.Context, s *sqlCore, tx *sql.Tx, id string, ms
 		if err := visual.WriteRefsTx(ctx, qtx, visual.MessageRefs(projectID, id, msgs[i])); err != nil {
 			return err
 		}
-		observerMessage := messageview.TranscriptMessage(msgs[i])
+		observerMessage := observedRow(msgs[i])
 		if err := s.outbox.EnqueueTx(ctx, tx, api.EventTopicMessage, events.PublishKey{Project: projectID, Session: id}, api.MessageEvent{
 			SessionID: id, Op: api.MessageChangeAppend, Seq: observerMessage.Seq, Message: observerMessage,
 		}); err != nil {
@@ -283,7 +283,7 @@ func updateMessageSQL(ctx context.Context, s *sqlCore, sessionID, messageID stri
 	}); err != nil {
 		return api.Message{}, err
 	}
-	observerMessage := messageview.TranscriptMessage(msg)
+	observerMessage := observedRow(msg)
 	if err := s.outbox.EnqueueTx(ctx, tx, api.EventTopicMessage, events.PublishKey{Project: projectID, Session: sessionID}, api.MessageEvent{
 		SessionID: sessionID, Op: api.MessageChangePatch, Seq: observerMessage.Seq, Message: observerMessage,
 	}); err != nil {
@@ -295,4 +295,11 @@ func updateMessageSQL(ctx context.Context, s *sqlCore, sessionID, messageID stri
 	reclaimUnreferencedSpills(ctx, s, oldSpillRefs)
 	s.outbox.Notify()
 	return msg, nil
+}
+
+// observedRow is the row as observers read it back: the transcript projection
+// of what was stored, so an event and a read of the same row agree.
+func observedRow(msg api.Message) api.Message {
+	msg.Visibility = api.MessageVisibility(messageVisibilityColumn(msg.Visibility))
+	return messageview.TranscriptMessage(msg)
 }
