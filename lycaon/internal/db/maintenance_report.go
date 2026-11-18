@@ -30,7 +30,8 @@ const maintenanceRebuildAction = "free pages return when an upgrade or backup re
 type maintenanceCounters struct {
 	wakes, drains, drainsDone, turns, busyTicks           int64
 	forcedAdmissions                                      int64
-	passes, rowRounds, rowsDeleted, peakPassPages         int64
+	passes, vacuumPasses, rowRounds, rowsDeleted          int64
+	peakPassPages                                         int64
 	vacuumSlices, pagesRequested, pagesReclaimed          int64
 	checkpoints, checkpointFrames, checkpointPinnedFrames int64
 	turnWait, rowAndVacuumWork, checkpointWork            time.Duration
@@ -73,6 +74,9 @@ func (m *maintenanceState) notePass(report RetentionReport, rowsRan bool, turnWa
 		c.pagesRequested += report.Vacuum.PagesRequested
 		c.pagesReclaimed += report.Vacuum.PagesReclaimed
 		c.peakPassPages = max(c.peakPassPages, report.Vacuum.FreelistTaken)
+		if report.IncrementalVacuumed {
+			c.vacuumPasses++
+		}
 		c.turnWait += turnWait
 		c.rowAndVacuumWork += work
 	})
@@ -94,7 +98,7 @@ func (s *Store) MaintenanceWork() map[string]int64 {
 	c := s.maintenanceState.counters
 	return map[string]int64{
 		"maintenance_drains": c.drains, "maintenance_drains_done": c.drainsDone,
-		"maintenance_turns": c.turns, "maintenance_passes": c.passes,
+		"maintenance_turns": c.turns, "maintenance_passes": c.passes, "maintenance_vacuum_passes": c.vacuumPasses,
 		"maintenance_vacuum_slices": c.vacuumSlices, "maintenance_pages_reclaimed": c.pagesReclaimed,
 		"maintenance_peak_pass_pages": c.peakPassPages,
 	}

@@ -132,6 +132,7 @@ func (f *scaleFixtureRun) bootAndVacuum(ctx context.Context) (err error) {
 	v.FreePagesBefore = f.measured.Fixture.FreePages
 	v.PassPages = db.VacuumPassPages(v.FreePagesBefore, f.measured.Fixture.PageSize)
 	v.Passes, v.Turns = gauges["store_maintenance_passes"], gauges["store_maintenance_turns"]
+	v.VacuumPasses = gauges["store_maintenance_vacuum_passes"]
 	v.PeakPassPages, v.PagesReclaimed = gauges["store_maintenance_peak_pass_pages"], gauges["store_maintenance_pages_reclaimed"]
 	if err := engine.stop(); err != nil {
 		return err

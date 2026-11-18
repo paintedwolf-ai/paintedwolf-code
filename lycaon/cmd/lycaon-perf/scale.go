@@ -36,7 +36,7 @@ type scaleReport struct {
 	StartedAt  time.Time          `json:"started_at"`
 	Sizes      []scaleMeasurement `json:"sizes"`
 	Bounds     map[string]float64 `json:"bounds"`
-	Violations []string           `json:"violations"`
+	Violations []scaleViolation   `json:"violations"`
 }
 
 type scaleMeasurement struct {
@@ -68,6 +68,7 @@ type scaleVacuum struct {
 	FreePagesAfter  int64 `json:"free_pages_after"`
 	PassPages       int64 `json:"pass_pages"`
 	Passes          int64 `json:"passes"`
+	VacuumPasses    int64 `json:"vacuum_passes"`
 	Turns           int64 `json:"turns"`
 	PeakPassPages   int64 `json:"peak_pass_pages"`
 	PagesReclaimed  int64 `json:"pages_reclaimed"`
@@ -174,7 +175,7 @@ func printScaleReport(w io.Writer, report scaleReport, path string) {
 	if len(report.Violations) > 0 {
 		fmt.Fprintln(w, "Bound violations:")
 		for _, violation := range report.Violations {
-			fmt.Fprintf(w, "  - %s\n", violation)
+			fmt.Fprintf(w, "  - %s\n", violation.String())
 		}
 	}
 	fmt.Fprintf(w, "Report: %s\n", path)

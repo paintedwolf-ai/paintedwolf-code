@@ -25,13 +25,20 @@ func watchOpens(root string) (*openWatch, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Walking opens each directory, so every watch is added after the walk.
+	var directories []string
 	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil || !entry.IsDir() {
-			return err
+		if err == nil && entry.IsDir() {
+			directories = append(directories, path)
 		}
-		_, err = unix.InotifyAddWatch(fd, path, unix.IN_OPEN)
 		return err
 	})
+	for _, directory := range directories {
+		if err != nil {
+			break
+		}
+		_, err = unix.InotifyAddWatch(fd, directory, unix.IN_OPEN)
+	}
 	if err != nil {
 		_ = unix.Close(fd)
 		return nil, err
