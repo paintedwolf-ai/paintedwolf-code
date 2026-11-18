@@ -612,15 +612,6 @@ func TestInvariant7_OutboundReadMasking(t *testing.T) {
 	}
 }
 
-// fingerprintFor is the screen identity m gives value.
-func fingerprintFor(m *secretmatch.Matcher, value string) secretmatch.SecretFingerprint {
-	match, err := m.ManagedValue(value, "", "")
-	if err != nil {
-		return ""
-	}
-	return match.Fingerprint
-}
-
 func (*invariantCheckpointMgr) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
 	return false, nil
 }
