@@ -153,3 +153,14 @@ func TestOfflineInstallerProvisionsOnlyAPristineStore(t *testing.T) {
 		t.Fatal("installer revoked opt-out")
 	}
 }
+
+func TestDiscreteRecommendationLeavesAdmissibleHigherTierSelectable(t *testing.T) {
+	host, _ := inference.NewMemoryBudget(32 << 30)
+	device, _ := inference.NewMemoryBudget(16646579098)
+	rt := NewRuntime(RuntimeConfig{Backend: "vulkan", PhysicalBytes: 20 << 30, DeviceMemory: device, HostMemory: host})
+	defer rt.Close()
+	options := rt.ModelTiers()
+	if !options[1].Recommended || !options[2].Eligible || options[2].Recommended {
+		t.Fatalf("discrete tier choices: %+v", options)
+	}
+}
