@@ -1,5 +1,5 @@
-"""Release credentials stay in their custody, and release jobs read only bytes their own run produced
-or that preparation produced and they verify against the source."""
+"""Release credentials stay in their custody, release jobs read only bytes their own run produced or that
+preparation produced and they verify against the source, and nothing public happens before every build and check."""
 import unittest
 
 from verification_tests.ci.workflows import invocation, render, workflow
@@ -18,6 +18,9 @@ REPLAY = "replay-bundle-upgrade"
 RELEASE_WORKFLOWS = ("release", "release-halt", "release-linux-delivery")
 PREPARED = {"needs": {"prepare": {"outputs": {"run_id": "prepared"}}}}
 PREPARATION = "scripts.release_preparation"
+# Builds, the closure check and the installed upgrade cases: every public side effect waits for all of them.
+RELEASE_GATES = {"prepare", "build-release", "verify-nix-closures", "bundle-upgrade"}
+COMPILERS = {("nix", "build"), ("cargo", "build"), ("go", "build")}
 
 
 def holders(spec, secret):
@@ -203,6 +206,49 @@ class ArtifactFlowLaws(unittest.TestCase):
 
 def holders_of(spec, secrets):
     return sorted(name for name, job in spec.jobs.items() if job.secrets() & secrets)
+
+
+def compiles(step):
+    """Whether a step builds the application or a closure; packaging a prepared archive builds nothing."""
+    for argv in step.commands():
+        if tuple(argv[:2]) in COMPILERS:
+            return True
+        if argv[0] in {"./task", "task"} and argv[1:2] == ["den:bundle"]:
+            if (argv[argv.index("--phase") + 1] if "--phase" in argv else "all") != "package":
+                return True
+    return False
+
+
+class ReleaseOrderLaws(unittest.TestCase):
+    def setUp(self):
+        self.release = workflow("release")
+        self.publishing = {name for name, job in self.release.jobs.items()
+                           if (job.secrets() & PUBLISHING and name != CHANNEL_SELECTION)
+                           or job.uses == "./.github/workflows/release-linux-delivery.yml"
+                           or (job.permissions or {}).get("contents") == "write"}
+
+    def test_every_public_side_effect_waits_for_every_build_check_and_upgrade_case(self):
+        self.assertLessEqual({"publish-artifacts", "publish-linux-repositories", "linux-delivery",
+                              "publish-immutable", "update-cask", "notify-website", "activate-updater",
+                              "publish-github-release"}, self.publishing)
+        for name in sorted(self.publishing):
+            self.assertLessEqual(RELEASE_GATES, self.release.jobs[name].ancestors(), name)
+
+    def test_no_build_check_or_upgrade_case_waits_for_a_publisher(self):
+        for name in sorted(RELEASE_GATES):
+            self.assertFalse(self.release.jobs[name].ancestors() & self.publishing, name)
+
+    def test_no_release_matrix_runs_one_job_at_a_time(self):
+        for name in ("release", "release-prepare", "release-linux-delivery"):
+            for job in workflow(name).jobs.values():
+                self.assertNotEqual((job.raw.get("strategy") or {}).get("max-parallel"), 1, f"{name} {job.name}")
+
+    def test_the_release_compiles_nothing_and_packages_the_prepared_application(self):
+        self.assertEqual(self.release.jobs["prepare"].uses, "./.github/workflows/release-prepare.yml")
+        for name in ("release", "release-linux-delivery"):
+            for job in workflow(name).jobs.values():
+                self.assertFalse(any(compiles(step) for step in job.steps), f"{name} {job.name}")
+        self.assertTrue(any("den:bundle" in step.tasks() for step in self.release.jobs["build-release"].steps))
 
 
 if __name__ == "__main__":
