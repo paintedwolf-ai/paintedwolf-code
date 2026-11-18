@@ -15,6 +15,11 @@ function documentText(document: EditorDocument): string {
   return text;
 }
 
+/** A settled command program's status and output, from its tool result. */
+function programResult(content: string): { status: number; stdout: string; stderr: string } {
+  return JSON.parse(content.slice(content.indexOf("{")));
+}
+
 webE2e("a process the agent launches reads the person's unsaved text", async ({ page, request }) => {
   const { project, root } = await openProjectFilesFixture(page, request, {
     prefix: "editor-launch", name: "Editor agent launch",
@@ -40,7 +45,14 @@ webE2e("a process the agent launches reads the person's unsaved text", async ({ 
     await driver.completed(await driver.invoke("update_progress", {
       content: "## Progress\n- [ ] Track shared.txt in Git\n- [ ] Report what changed\n",
     }));
-    await driver.completed(await driver.invoke("command", { command: "git init && git add shared.txt" }));
+    const run = async (command: string) => {
+      const content = await driver.completed(await driver.invoke("command", { command }));
+      const result = programResult(content);
+      expect(result.status, content).toBe(0);
+      return { content, ...result };
+    };
+    await run("git init && git add shared.txt");
+    expect((await run("git ls-files")).stdout).toContain("shared.txt");
 
     await editor.click();
     await page.keyboard.press("ControlOrMeta+Home");
@@ -48,14 +60,13 @@ webE2e("a process the agent launches reads the person's unsaved text", async ({ 
     await expect.poll(async () => documentText(await readDocument())).toContain("Unsaved person 🐺");
 
     // A native read serves the draft and leaves it unsaved.
-    const read = await driver.completed(await driver.invoke("command", { command: "cat shared.txt" }));
-    expect(read).toContain("Unsaved person 🐺");
+    expect((await run("cat shared.txt")).stdout).toContain("Unsaved person 🐺");
     expect(onDisk()).toBe("First line\nLast line\n");
 
     // Git reads the working tree from disk, so its launch saves the draft first.
-    const diff = await driver.completed(await driver.invoke("command", { command: "git diff -- shared.txt" }));
-    expect(diff).toContain("+Unsaved person 🐺");
-    expect(diff).not.toContain("unsaved_documents");
+    const diff = await run("git diff -- shared.txt");
+    expect(diff.stdout, diff.content).toContain("+Unsaved person 🐺");
+    expect(diff.content).not.toContain("unsaved_documents");
     expect(onDisk()).toBe("Unsaved person 🐺\nFirst line\nLast line\n");
     await expect(editor).toContainText("Unsaved person 🐺");
     expect(documentText(await readDocument())).toBe("Unsaved person 🐺\nFirst line\nLast line\n");
@@ -66,8 +77,7 @@ webE2e("a process the agent launches reads the person's unsaved text", async ({ 
     await page.keyboard.insertText("Typed after the launch 世界\n");
     await expect.poll(async () => documentText(await readDocument())).toContain("Typed after the launch 世界");
     expect(onDisk()).not.toContain("Typed after the launch");
-    const later = await driver.completed(await driver.invoke("command", { command: "git diff -- shared.txt" }));
-    expect(later).toContain("+Typed after the launch 世界");
+    expect((await run("git diff -- shared.txt")).stdout).toContain("+Typed after the launch 世界");
     expect(onDisk()).toBe("Unsaved person 🐺\nFirst line\nLast line\nTyped after the launch 世界\n");
     await expect(editor).toContainText("Typed after the launch 世界");
   } finally {
