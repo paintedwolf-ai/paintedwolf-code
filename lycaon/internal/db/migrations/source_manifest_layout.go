@@ -83,13 +83,11 @@ func convertLegacyRoots(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 	defer func() { _ = insert.Close() }()
-	readChunk, err := tx.PrepareContext(ctx, `SELECT root_path, path, sha256, git_oid, identity, size, mode, modified_ns
-FROM legacy_source_manifest_entries WHERE chunk_id = ?`)
+	converter, err := newLegacyManifestConverter(ctx, tx, insert)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = readChunk.Close() }()
-	converter := newLegacyManifestConverter(tx, insert, readChunk)
+	defer func() { _ = converter.close() }()
 	for _, root := range roots {
 		manifest, err := converter.convertRoot(ctx, root.path, snapshotChunks[root.snapshotID])
 		if err != nil {

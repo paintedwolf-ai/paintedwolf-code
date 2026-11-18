@@ -87,10 +87,10 @@ func (s *manifestMigrationTraceStmt) Query(args []driver.Value) (driver.Rows, er
 }
 
 func (s *manifestMigrationTraceStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
-	if strings.Contains(s.query, "FROM legacy_source_manifest_entries WHERE chunk_id = ?") && len(args) == 1 {
-		if chunkID, ok := args[0].Value.(string); ok {
-			s.trace.chunkReads = append(s.trace.chunkReads, chunkID)
-		}
+	if strings.Contains(s.query, "FROM legacy_source_manifest_entries WHERE chunk_id = ? AND root_path = ? AND path > ?") && len(args) == 4 {
+		chunkID, _ := args[0].Value.(string)
+		rootPath, _ := args[1].Value.(string)
+		s.trace.chunkReads = append(s.trace.chunkReads, rootPath+" "+chunkID)
 	}
 	return s.Stmt.(driver.StmtQueryContext).QueryContext(ctx, args)
 }
@@ -271,9 +271,11 @@ VALUES (?, 'rk', ?, ?, 0, 'exact', '2026-10-20T00:00:00Z')`, spec.id, spec.id, s
 
 	gotReads := append([]string(nil), trace.chunkReads...)
 	slices.Sort(gotReads)
-	wantReads := []string{"delta-a", "delta-b", "shared-0", "shared-1"}
+	gotReads = slices.Compact(gotReads)
+	// Roots read only the chunks that hold their entries.
+	wantReads := []string{"/work/a delta-a", "/work/a shared-0", "/work/a shared-1", "/work/b delta-b", "/work/b shared-0", "/work/b shared-1"}
 	if !reflect.DeepEqual(gotReads, wantReads) {
-		t.Fatalf("legacy chunk reads = %v, want each retained chunk read once %v", trace.chunkReads, wantReads)
+		t.Fatalf("legacy page reads = %v, want %v", trace.chunkReads, wantReads)
 	}
 	if trace.manifestInserts != 4 {
 		t.Fatalf("manifest inserts = %d, want 4 distinct root manifests across 7 snapshot roots", trace.manifestInserts)
