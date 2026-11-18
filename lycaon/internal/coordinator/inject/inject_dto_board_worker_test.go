@@ -68,7 +68,7 @@ func TestRenderWorkerLegInjectReservedPaths(t *testing.T) {
 	hold := ReservedPath{Path: "reserved/sentinel-path.go", Worker: "sentinel-worker", LegLabel: "sentinel-leg-label"}
 	legCtx := WorkerLegContext{LegID: "leg-b", LegTools: []string{"read"}, Checklist: []string{"work"}, ReservedPaths: []ReservedPath{hold}}
 	data := BuildWorkerLegInjectData(legCtx)
-	if len(data.ReservedPaths) != 1 || data.ReservedPaths[0] != (ReservedPathView{Path: hold.Path, Worker: hold.Worker, LegLabel: hold.LegLabel}) {
+	if len(data.ReservedPaths) != 1 || data.ReservedPaths[0] != ReservedPathView(hold) {
 		t.Fatalf("reserved paths = %+v", data.ReservedPaths)
 	}
 	renderer := testInjectRenderer(t)
