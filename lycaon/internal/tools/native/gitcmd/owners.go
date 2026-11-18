@@ -90,7 +90,7 @@ var targetForms = map[string]bool{"git init": true, "git worktree": true}
 func bindTargetLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, written ...string) (context.Context, func(failed bool), error) {
 	launchTC := tc
 	launchTC.Files.GrantedWriteRoots = append(slices.Clone(tc.Files.GrantedWriteRoots), written...)
-	plan, release, err := p.owners.Launch(ctx, launchTC, "git", p.commandLine(), nil)
+	plan, release, err := p.bindLaunch(ctx, launchTC, nil)
 	if err != nil {
 		return ctx, nil, err
 	}
@@ -287,7 +287,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	// target forms once the path they create is bound, so the confinement
 	// carries exactly those recipients and paths.
 	if !networkForms[p.command.spec.Name] && !targetForms[p.command.spec.Name] {
-		plan, release, launchErr := p.owners.Launch(ctx, tc, "git", p.commandLine(), nil)
+		plan, release, launchErr := p.bindLaunch(ctx, tc, nil)
 		if launchErr != nil {
 			return settle(0, launchErr, p.command.spec.Name)
 		}

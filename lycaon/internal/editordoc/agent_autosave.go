@@ -20,6 +20,49 @@ type AgentCall struct {
 	ToolName   string
 }
 
+// UnsavedCause says why a launch save left a draft unsaved.
+type UnsavedCause string
+
+const (
+	// UnsavedChangedOutside is a draft whose file changed outside its document.
+	UnsavedChangedOutside UnsavedCause = "changed_outside"
+	// UnsavedNotWritten is a draft whose publication failed.
+	UnsavedNotWritten UnsavedCause = "not_written"
+	// UnsavedAgentEditHeld is a draft holding an agent edit, which only the
+	// reviewed publication door may publish.
+	UnsavedAgentEditHeld UnsavedCause = "agent_edit_held"
+)
+
+// errAgentEditHeld stops a launch save at a draft holding unpublished agent text.
+var errAgentEditHeld = errors.New("document holds an unpublished agent edit")
+
+// draftScope selects which drafts an agent-caused save may publish.
+type draftScope int
+
+const (
+	// everyDraft is a mutation admitted at the path: it publishes what the
+	// document holds.
+	everyDraft draftScope = iota
+	// personDrafts is a launch: it publishes only the person's own text.
+	personDrafts
+)
+
+// UnsavedDocument is a draft a launch save could not publish.
+type UnsavedDocument struct {
+	RootID, Path string
+	Cause        UnsavedCause
+}
+
+// PublicationFailure is a draft the document still holds because its save failed.
+type PublicationFailure struct {
+	RootID, Path string
+	Err          error
+}
+
+func (e *PublicationFailure) Error() string { return "save " + e.Path + ": " + e.Err.Error() }
+
+func (e *PublicationFailure) Unwrap() error { return e.Err }
+
 // SaveForAgentOperation saves drafts before mutation, preserving authorship.
 // A draft whose disk base changed returns an ExecutionConflict.
 func (s *Service) SaveForAgentOperation(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string, descendants bool, call AgentCall) error {
@@ -31,11 +74,58 @@ func (s *Service) SaveForAgentOperation(ctx context.Context, projectID string, b
 		return err
 	}
 	return s.VisitUnsavedDocuments(ctx, p.ID, branch, rootID, path, descendants, func(state DocumentPathState) error {
-		return s.saveForAgent(ctx, p, state.ID, call)
+		return s.saveForAgent(ctx, p, state.ID, call, everyDraft)
 	})
 }
 
-func (s *Service) saveForAgent(ctx context.Context, p *project.Project, documentID string, call AgentCall) error {
+// SaveForAgentLaunch saves the person's drafts on the branch before a process
+// reads the tree from disk. A draft it cannot publish is returned, not
+// refused: the launch overwrites nothing.
+func (s *Service) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call AgentCall) ([]UnsavedDocument, error) {
+	if s == nil || s.store == nil {
+		return nil, nil
+	}
+	p, err := s.projectBranch(ctx, strings.TrimSpace(projectID), branch)
+	if err != nil {
+		return nil, err
+	}
+	var unsaved []UnsavedDocument
+	err = s.VisitUnsavedDocuments(ctx, p.ID, branch, "", "", true, func(state DocumentPathState) error {
+		cause, err := launchSaveCause(ctx, s.saveForAgent(ctx, p, state.ID, call, personDrafts))
+		if err != nil {
+			return err
+		}
+		if cause != "" {
+			unsaved = append(unsaved, UnsavedDocument{RootID: state.RootID, Path: state.Path, Cause: cause})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return unsaved, nil
+}
+
+// launchSaveCause separates a draft left unsaved from a save that could not run.
+func launchSaveCause(ctx context.Context, err error) (UnsavedCause, error) {
+	var conflict *ExecutionConflict
+	var failed *PublicationFailure
+	switch {
+	case err == nil:
+		return "", nil
+	case ctx.Err() != nil:
+		return "", err
+	case errors.As(err, &conflict):
+		return UnsavedChangedOutside, nil
+	case errors.As(err, &failed):
+		return UnsavedNotWritten, nil
+	case errors.Is(err, errAgentEditHeld):
+		return UnsavedAgentEditHeld, nil
+	}
+	return "", err
+}
+
+func (s *Service) saveForAgent(ctx context.Context, p *project.Project, documentID string, call AgentCall, scope draftScope) error {
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	unlock := s.docLocks.lock(documentLockKey(documentID))
@@ -46,6 +136,15 @@ func (s *Service) saveForAgent(ctx context.Context, p *project.Project, document
 	}
 	if !current.Dirty || current.BranchID != p.BranchForRoot(current.RootID) {
 		return nil
+	}
+	if scope == personDrafts {
+		held, err := s.holdsUnpublishedAgentText(ctx, current)
+		if err != nil {
+			return err
+		}
+		if held {
+			return errAgentEditHeld
+		}
 	}
 	if current.Diverged {
 		return s.fileChangedOutside(p, current)
@@ -61,12 +160,27 @@ func (s *Service) saveForAgent(ctx context.Context, p *project.Project, document
 		return s.fileChangedOutside(p, current)
 	}
 	if err != nil {
-		return err
+		return &PublicationFailure{RootID: current.RootID, Path: current.Path, Err: err}
 	}
 	if saved != nil {
 		s.agentReads.replaceRevision(p.ID, current.ID, current.Revision, saved.Revision)
 	}
 	return nil
+}
+
+// holdsUnpublishedAgentText reports agent text accepted since the document's
+// last publication.
+func (s *Service) holdsUnpublishedAgentText(ctx context.Context, d *Document) (bool, error) {
+	if d.HeldAgentVersionID != "" {
+		return true, nil
+	}
+	var agentChanges int
+	err := s.store.db.QueryRowContext(ctx,
+		`SELECT COUNT(1) FROM editor_document_changes c JOIN editor_replica_heads h ON h.document_id=c.document_id
+ WHERE c.document_id=? AND c.epoch=h.epoch AND c.revision>h.published_revision AND c.actor_kind='agent' AND COALESCE(c.reverted_by,'')=''`,
+		d.ID,
+	).Scan(&agentChanges)
+	return agentChanges > 0, err
 }
 
 func (s *Service) fileChangedOutside(p *project.Project, d *Document) error {

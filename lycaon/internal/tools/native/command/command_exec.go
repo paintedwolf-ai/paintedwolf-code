@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/indexwatch"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -59,6 +60,8 @@ type RunOutcome struct {
 	SnapshotCapture *SnapshotCaptureResult
 	// SourceWindow is the window ConfinedForeground observed this dispatch with.
 	SourceWindow *hostcmd.SourceWindow
+	// Drafts names the person's drafts the launch could not save.
+	Drafts toolcontract.LaunchDrafts
 }
 
 // CanonicalToolArgs returns reference-bearing arguments when available.
@@ -228,6 +231,11 @@ func runCommandForeground(
 		bound.close(ctx)
 		return RunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
 	}
+	drafts, err := tools.SaveLaunchDrafts(ctx, tctx)
+	if err != nil {
+		bound.close(ctx)
+		return RunOutcome{}, err
+	}
 	index := watchIndex(tctx, confinement)
 	handle, err := registry.StartPipeline(ctx, bgprocess.PipelineSpec{
 		IsCheck:        tctx.Execution.VerificationCheck,
@@ -271,6 +279,7 @@ func runCommandForeground(
 		Boundary: confine.BoundaryOf(confinement),
 		IO:       ioParams,
 		Cwd:      cwdDisplay,
+		Drafts:   drafts,
 	}
 	if confinement != nil {
 		out.NetworkPosture = commandNetworkPosture(tctx, toolName, cmdKey)

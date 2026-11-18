@@ -104,6 +104,12 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return externalLaunchFailure(err, refusedResult("COMMAND_EXEC_DENIED")), err
 	}
+	if _, err := tools.SaveLaunchDrafts(ctx, tctx); err != nil {
+		if ctx.Err() != nil {
+			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
+		}
+		return externalLaunchFailure(err, refusedResult("TOOL_OWNER_FAILED")), err
+	}
 	// Open before the process starts, so earlier drift is not attributed to it,
 	// and stay held until it has exited, on every path out of this launch.
 	release, err := l.window.enter(ctx)

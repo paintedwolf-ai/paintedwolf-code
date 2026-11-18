@@ -34,9 +34,7 @@ func SaveResolvedDrafts(ctx context.Context, tctx tools.ToolContext, resolved pr
 	if queryPath == "." {
 		queryPath = ""
 	}
-	err = documents.SaveForAgentOperation(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, queryPath, descendants, tools.EditorAgentCall{
-		SessionID: tctx.Identity.SessionID, Turn: tctx.Identity.UserTurn, ToolCallID: tctx.Identity.ToolCallID, ToolName: "command",
-	})
+	err = documents.SaveForAgentOperation(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, queryPath, descendants, tools.DraftSaveCall(ctx, tctx))
 	var changed *tools.EditorFileChanged
 	if errors.As(err, &changed) {
 		return fileChangedConflict(resolved, changed)

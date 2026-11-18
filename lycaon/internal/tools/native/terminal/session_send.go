@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/ptyinput"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
@@ -34,6 +35,7 @@ type SendResult struct {
 	Width    int                     `json:"width,omitempty"`
 	Height   int                     `json:"height,omitempty"`
 	confine.Report
+	toolcontract.LaunchDrafts
 	Receipt *surveyreceipt.Receipt `json:"receipt,omitempty"`
 }
 
@@ -59,11 +61,16 @@ func SendHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
 			return "", toolrejection.HeldHandOffReject("terminal_send", err)
 		}
+		// Input can start a command in the shell, which then reads the tree.
+		drafts, err := tools.SaveLaunchDrafts(ctx, tctx)
+		if err != nil {
+			return "", err
+		}
 		if err := bg.Terminal.WritePTY(tctx.Identity.SessionID, in.ID, payload); err != nil {
 			return "", mapTerminalLifecycleReject(err, in.ID)
 		}
 		running := bg.RequireRunning(tctx.Identity.SessionID, in.ID) == nil
-		outPayload := SendResult{ID: in.ID, Running: running, Observe: in.Observe}
+		outPayload := SendResult{ID: in.ID, Running: running, Observe: in.Observe, LaunchDrafts: drafts}
 		if report, reportErr := bg.Terminal.PTYReport(tctx.Identity.SessionID, in.ID); reportErr == nil {
 			outPayload.Report = report
 		}

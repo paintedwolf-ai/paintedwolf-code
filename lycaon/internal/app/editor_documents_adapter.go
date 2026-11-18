@@ -39,9 +39,24 @@ func (a editorDocumentsAdapter) RetainRevision(ctx context.Context, projectID, d
 	return documentEditError(err)
 }
 
+func agentCall(call tools.EditorAgentCall) editordoc.AgentCall {
+	return editordoc.AgentCall{SessionID: call.SessionID, Turn: call.Turn, ToolCallID: call.ToolCallID, ToolName: call.ToolName}
+}
+
 func (a editorDocumentsAdapter) SaveForAgentOperation(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string, descendants bool, call tools.EditorAgentCall) error {
-	return documentEditError(a.service.SaveForAgentOperation(ctx, projectID, branch, rootID, path, descendants,
-		editordoc.AgentCall{SessionID: call.SessionID, Turn: call.Turn, ToolCallID: call.ToolCallID, ToolName: call.ToolName}))
+	return documentEditError(a.service.SaveForAgentOperation(ctx, projectID, branch, rootID, path, descendants, agentCall(call)))
+}
+
+func (a editorDocumentsAdapter) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call tools.EditorAgentCall) ([]tools.EditorUnsavedDocument, error) {
+	left, err := a.service.SaveForAgentLaunch(ctx, projectID, branch, agentCall(call))
+	if err != nil {
+		return nil, documentEditError(err)
+	}
+	unsaved := make([]tools.EditorUnsavedDocument, 0, len(left))
+	for _, document := range left {
+		unsaved = append(unsaved, tools.EditorUnsavedDocument{RootID: document.RootID, Path: document.Path, Cause: string(document.Cause)})
+	}
+	return unsaved, nil
 }
 
 func (a editorDocumentsAdapter) DirtyDocuments(ctx context.Context, projectID string, branch sourcebranch.ID) ([]tools.EditorDocumentPath, error) {

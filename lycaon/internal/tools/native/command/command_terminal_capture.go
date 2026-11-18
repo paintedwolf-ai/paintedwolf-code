@@ -118,6 +118,14 @@ func runCommandTerminalCapture(
 		source := verificationSource()
 		sourceRevision, sourceRootDigest = source.Revision, source.Root
 	}
+	drafts, err := tools.SaveLaunchDrafts(ctx, tctx)
+	if err != nil {
+		bound.close(ctx)
+		if directIPApplied {
+			tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleCompleted)
+		}
+		return RunOutcome{}, err
+	}
 	captured, runErr := registry.Terminal.RunPTYCapture(
 		ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID, tctx.Identity.ProjectID, request, runner,
 		terminalCaptureWinSize(args), facts,
@@ -151,7 +159,7 @@ func runCommandTerminalCapture(
 		Finished: true,
 		Snapshot: TerminalCaptureSnapshot(captured, stages[0].EchoLine(), tail),
 		Boundary: captured.Boundary, Network: network, Refusals: refusals, IO: ioParams, Cwd: cwdDisplay,
-		Terminal: &captured,
+		Terminal: &captured, Drafts: drafts,
 	}, nil
 }
 

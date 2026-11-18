@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
@@ -43,6 +44,7 @@ type OpenResult struct {
 	Width    int                     `json:"width,omitempty"`
 	Height   int                     `json:"height,omitempty"`
 	confine.Report
+	toolcontract.LaunchDrafts
 	Receipt *surveyreceipt.Receipt `json:"receipt,omitempty"`
 }
 
@@ -142,6 +144,11 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 			egressLease.Close(ctx)
 			return "", toolrejection.HeldHandOffReject("terminal_open", err)
 		}
+		drafts, err := tools.SaveLaunchDrafts(ctx, tctx)
+		if err != nil {
+			egressLease.Close(ctx)
+			return "", err
+		}
 		handle, err := bg.Terminal.StartPTY(
 			ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID, tctx.Identity.ProjectID,
 			req, hostRunner, in.WinSize, facts,
@@ -157,7 +164,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		})
 		outPayload := OpenResult{
 			ID: handle, Command: canonicalCommandEcho(tctx), Running: true,
-			Observe: in.Observe, Report: report,
+			Observe: in.Observe, Report: report, LaunchDrafts: drafts,
 		}
 		switch in.Observe {
 		case terminalObserveAck:
