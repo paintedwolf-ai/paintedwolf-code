@@ -196,9 +196,7 @@ func TestRecoveryRefusesUnacknowledgedNativeMoves(t *testing.T) {
 func TestRecoveryProbeChangesNothingUntilTheMove(t *testing.T) {
 	root := t.TempDir()
 	abs := filepath.Join(root, "notes.txt")
-	if err := os.WriteFile(abs, []byte("note\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "write note", os.WriteFile(abs, []byte("note\n"), 0o644))
 	effects := &SourceEffects{}
 	if same, err := effects.canMoveAside(root, abs); err != nil || !same {
 		t.Fatalf("probe = %v, %v; want the same filesystem", same, err)
@@ -206,9 +204,7 @@ func TestRecoveryProbeChangesNothingUntilTheMove(t *testing.T) {
 	if _, err := os.Lstat(settingsoverlay.RecoveryDir(root)); !os.IsNotExist(err) {
 		t.Fatalf("probe created the recovery area: %v", err)
 	}
-	if err := prepareRecoveryArea(root); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "prepare recovery area", prepareRecoveryArea(root))
 	if info, err := os.Stat(settingsoverlay.RecoveryDir(root)); err != nil || !info.IsDir() {
 		t.Fatalf("approved move left no recovery area: %v", err)
 	}
