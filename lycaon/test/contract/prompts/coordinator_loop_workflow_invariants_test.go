@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -63,6 +64,13 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 	manifestRegistry := workflowdef.NewRegistry(entries)
 	wfStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
+	blueprintMgr := blueprint.NewManager(blueprint.NewFileStore(func(context.Context, string) (string, error) { return dir, nil }))
+	wfMgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(sqlDB)
+	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
+	wfMgr.Blueprints.Getter = blueprintMgr
+	wfMgr.Presentation.BlueprintGetter = blueprintMgr
+	wfMgr.Approvals.Getter = blueprintMgr
+
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 
