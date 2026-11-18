@@ -260,7 +260,9 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
           </span>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
           <Show when={props.sequence !== undefined}>
-            <span class="den-activity-span-hint" data-tip={props.sequence || undefined} data-tip-when-clipped="">{props.sequence}</span>
+            <span class="den-activity-span-hint" data-tip={props.sequence || undefined} data-tip-when-clipped="">
+              {props.sequence || <br aria-hidden="true" />}
+            </span>
           </Show>
         </span>
       </TranscriptDisclosureToggle>

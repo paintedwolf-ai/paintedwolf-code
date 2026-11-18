@@ -65,8 +65,7 @@ flex: 0 0 auto;
 
 
 @utility den-activity-span-hint {
-  min-block-size: 1lh;
-  grid-column: 1 / -1;
+grid-column: 1 / -1;
 width: 100%;
   min-width: 0;
   font-size: var(--text-den-compact);
