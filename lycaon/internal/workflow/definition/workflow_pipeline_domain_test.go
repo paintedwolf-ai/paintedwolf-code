@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
@@ -30,7 +31,7 @@ func TestBugbashManifestVocabularyRegistered(t *testing.T) {
 			if forbiddenStageComplete.MatchString(cw) {
 				t.Fatalf("phase %q uses forbidden stage_*_complete: %q", p.ID, cw)
 			}
-			if conditions.IsCatalogStub(cw) {
+			if vocabulary.IsCatalogOnly(cw) {
 				t.Fatalf("phase %q uses catalog-only id %q", p.ID, cw)
 			}
 		}

@@ -7,7 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/vocabulary"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 )
 
 func TestBundledSpecRulesLoad(t *testing.T) {
@@ -21,7 +21,7 @@ func TestBundledSpecRulesLoad(t *testing.T) {
 	if err := rules.RegisterRuleConditions(reg); err != nil {
 		testutil.FailErr(t, "register rule conditions", err)
 	}
-	if diags := vocabulary.ValidateBundled(reg, nil, []*rules.RulesConfig{cfg}); len(diags) > 0 {
-		t.Fatalf("vocabulary.ValidateBundled failed: %v", diags)
+	if diags := workflowvalidation.ValidateBundled(reg, nil, []*rules.RulesConfig{cfg}); len(diags) > 0 {
+		t.Fatalf("workflowvalidation.ValidateBundled failed: %v", diags)
 	}
 }

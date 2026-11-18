@@ -5,8 +5,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -106,7 +106,7 @@ func validatePhaseTransitions(m Manifest) error {
 				return fmt.Errorf("workflow manifest %s: phase %q transition %q: unknown to %q", m.ID, p.ID, t.ID, t.To)
 			}
 			if when := strings.TrimSpace(t.When); when != "" {
-				if conditions.IsCatalogStub(when) {
+				if vocabulary.IsCatalogOnly(when) {
 					return fmt.Errorf("workflow manifest %s: phase %q transition %q: when %q is catalog-only", m.ID, p.ID, t.ID, when)
 				}
 			}
@@ -141,7 +141,7 @@ func validateGatesSatisfiedPhases(m Manifest) error {
 
 func validatePhaseDef(p PhaseDef) error {
 	if ew := strings.TrimSpace(p.EntryWhen); ew != "" {
-		if conditions.IsCatalogStub(ew) {
+		if vocabulary.IsCatalogOnly(ew) {
 			return fmt.Errorf("phase %q entry_when %q is catalog-only", p.ID, ew)
 		}
 		if !IsKnownCompleteWhen(ew) {

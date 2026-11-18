@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -19,7 +20,7 @@ func TestDelegationCloseoutCompleteInCore(t *testing.T) {
 	if !coreReg.Has("delegation_closeout_complete") {
 		t.Fatal("delegation_closeout_complete must be core")
 	}
-	for _, id := range conditions.ShippedPlanDomainIDs() {
+	for _, id := range vocabulary.DomainIDs("plan", "shipped") {
 		if id == "delegation_closeout_complete" {
 			t.Fatal("delegation_closeout_complete must not remain in plan domain")
 		}

@@ -16,7 +16,7 @@ func TestScanDomainShippedInCatalog(t *testing.T) {
 			seen[row.ID] = row
 		}
 	}
-	for _, id := range conditions.ShippedScanDomainIDs() {
+	for _, id := range vocabulary.DomainIDs("scan", "shipped") {
 		row, ok := seen[id]
 		if !ok {
 			t.Fatalf("missing shipped scan domain catalog row for %q", id)
@@ -25,7 +25,7 @@ func TestScanDomainShippedInCatalog(t *testing.T) {
 			t.Fatalf("scan domain %q catalog = %+v", id, row)
 		}
 	}
-	for _, id := range conditions.ScanCatalogStubIDs() {
+	for _, id := range vocabulary.DomainIDs("scan", "catalog") {
 		row, ok := seen[id]
 		if !ok {
 			t.Fatalf("missing scan catalog stub row for %q", id)

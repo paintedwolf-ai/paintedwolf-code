@@ -94,10 +94,6 @@ func collectConditionIDs(exprs ...string) []string {
 		if expr == "" {
 			continue
 		}
-		if !NeedsExpressionParser(expr) {
-			seen[expr] = struct{}{}
-			continue
-		}
 		node, err := boolexpr.Parse(expr)
 		if err != nil {
 			continue

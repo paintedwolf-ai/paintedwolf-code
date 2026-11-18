@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
@@ -21,7 +22,7 @@ func TestBundledManifestCompleteWhenAndGatesKnown(t *testing.T) {
 			}
 		}
 		for _, g := range gateLeaves {
-			if !workflowdef.IsKnownGateLeaf(g) {
+			if !vocabulary.IsPredicate(g) {
 				t.Errorf("%s: unknown gate leaf %q", key, g)
 			}
 		}

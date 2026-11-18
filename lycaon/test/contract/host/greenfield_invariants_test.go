@@ -6,14 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
 )
 
 func TestBundledWorkflowsUseShippedCompleteWhenOnly(t *testing.T) {
@@ -42,7 +41,7 @@ func TestBundledWorkflowsUseShippedCompleteWhenOnly(t *testing.T) {
 			if cw == "" || cw == "gates_satisfied" {
 				continue
 			}
-			if conditions.IsCatalogStub(cw) {
+			if vocabulary.IsCatalogOnly(cw) {
 				t.Fatalf("%s phase %q uses catalog stub complete_when %q", e.Name(), p.ID, cw)
 			}
 		}

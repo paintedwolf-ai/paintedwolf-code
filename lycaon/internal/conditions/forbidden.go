@@ -136,17 +136,6 @@ func ForbiddenPredicateReplacementHint(id string) string {
 	return ReplacementHint(root)
 }
 
-// IsCatalogStub reports catalog-only scan predicates.
-func IsCatalogStub(name string) bool {
-	name = strings.TrimSpace(name)
-	for _, id := range scanCatalogStubIDs {
-		if id == name {
-			return true
-		}
-	}
-	return false
-}
-
 func checkForbiddenRegister(name string) error {
 	if IsForbidden(name) {
 		return fmt.Errorf("%w: %s", ErrForbiddenCondition, name)

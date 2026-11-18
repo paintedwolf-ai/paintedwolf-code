@@ -8,8 +8,8 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 )
@@ -53,7 +53,7 @@ func TestPersistedFixturePassesVocabularyLoad(t *testing.T) {
 	}
 	ruleConfigs, err := rules.LoadBundledRuleConfigs()
 	contractcheck.FailErr(t, "rules.LoadBundledRuleConfigs failed", err)
-	if diags := vocabulary.ValidateBundled(reg, manifests, ruleConfigs); len(diags) > 0 {
-		t.Fatalf("vocabulary.ValidateBundled failed: %v", diags)
+	if diags := workflowvalidation.ValidateBundled(reg, manifests, ruleConfigs); len(diags) > 0 {
+		t.Fatalf("workflowvalidation.ValidateBundled failed: %v", diags)
 	}
 }

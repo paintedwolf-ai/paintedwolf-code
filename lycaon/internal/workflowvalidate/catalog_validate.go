@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/rules"
-	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
@@ -109,7 +108,7 @@ func ValidateCatalog(ctx context.Context, opts CatalogValidateOptions) ([]api.Co
 		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("load_error"), "rules", //nolint:nilerr // the load error is returned as a api.ComposeValidationError, which is this API's error channel
 			map[string]any{"detail": err.Error()})}, nil
 	}
-	out = append(out, vocabulary.ValidateBundled(condReg, reg, ruleConfigs)...)
+	out = append(out, workflowvalidation.ValidateBundled(condReg, reg, ruleConfigs)...)
 
 	agents, err := loadAgents(ctx, opts.ConfigRoot)
 	if err != nil {

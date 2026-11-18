@@ -8,8 +8,8 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 )
 
 func TestBundledPlanManifestLoadValidation(t *testing.T) {
@@ -22,8 +22,8 @@ func TestBundledPlanManifestLoadValidation(t *testing.T) {
 	}
 	ruleConfigs, err := rules.LoadBundledRuleConfigs()
 	testutil.FailErr(t, "rules.LoadBundledRuleConfigs failed", err)
-	if diags := vocabulary.ValidateBundled(reg, manifests, ruleConfigs); len(diags) > 0 {
-		t.Fatalf("vocabulary.ValidateBundled failed: %v", diags)
+	if diags := workflowvalidation.ValidateBundled(reg, manifests, ruleConfigs); len(diags) > 0 {
+		t.Fatalf("workflowvalidation.ValidateBundled failed: %v", diags)
 	}
 	plan, err := manifests.Get("plan", "1.0.1")
 	testutil.FailErr(t, "manifests.Get failed", err)
@@ -45,8 +45,8 @@ func TestBundledOptionsManifestLoadValidation(t *testing.T) {
 	}
 	ruleConfigs, err := rules.LoadBundledRuleConfigs()
 	testutil.FailErr(t, "rules.LoadBundledRuleConfigs failed", err)
-	if diags := vocabulary.ValidateBundled(reg, manifests, ruleConfigs); len(diags) > 0 {
-		t.Fatalf("vocabulary.ValidateBundled failed: %v", diags)
+	if diags := workflowvalidation.ValidateBundled(reg, manifests, ruleConfigs); len(diags) > 0 {
+		t.Fatalf("workflowvalidation.ValidateBundled failed: %v", diags)
 	}
 	options, err := manifests.Get("options", "1.0.0")
 	testutil.FailErr(t, "manifests.Get options failed", err)
@@ -86,7 +86,7 @@ func TestManifestLoadValidationRejectsUnknownCompleteWhen(t *testing.T) {
 			},
 		}),
 	})
-	diags := vocabulary.ValidateBundled(reg, manifests, nil)
+	diags := workflowvalidation.ValidateBundled(reg, manifests, nil)
 	if len(diags) == 0 {
 		t.Fatal("expected boot-time validation error for unknown complete_when")
 	}

@@ -16,11 +16,11 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
-	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 )
 
@@ -102,7 +102,7 @@ func (r *Runtime) BuildConditions(ctx context.Context, deps ConditionDependencie
 	for _, cfg := range r.BundledRules {
 		ruleConfigs = append(ruleConfigs, cfg)
 	}
-	if diags := vocabulary.ValidateBundled(r.Conditions, r.Manifests, ruleConfigs); len(diags) > 0 {
+	if diags := workflowvalidation.ValidateBundled(r.Conditions, r.Manifests, ruleConfigs); len(diags) > 0 {
 		return fmt.Errorf("vocabulary validation: %s", workflowdiag.Summarize(diags))
 	}
 	r.Manager.SetConditionRegistry(r.Conditions)

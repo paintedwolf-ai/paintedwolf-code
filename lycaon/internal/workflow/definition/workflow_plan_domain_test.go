@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
@@ -63,7 +64,7 @@ func TestPlanDomainDoesNotDuplicateCore(t *testing.T) {
 	if err := conditions.RegisterCoreConditions(coreReg, conditions.CoreDeps{}); err != nil {
 		testutil.FailErr(t, "conditions.RegisterCoreConditions failed", err)
 	}
-	for _, id := range conditions.ShippedPlanDomainIDs() {
+	for _, id := range vocabulary.DomainIDs("plan", "shipped") {
 		if coreReg.Has(id) {
 			t.Fatalf("plan domain id %q is also registered in core", id)
 		}

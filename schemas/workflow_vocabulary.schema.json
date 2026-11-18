@@ -19,7 +19,8 @@
         "layer": { "type": "string", "enum": ["core", "domain"] },
         "domain": { "type": "string" },
         "status": { "type": "string", "enum": ["shipped", "stub", "catalog"] },
-        "parameterized": { "type": "boolean" }
+        "parameterized": { "type": "boolean" },
+        "overlay": { "type": "boolean" }
       },
       "additionalProperties": false
     }

@@ -2,11 +2,10 @@ package validation
 
 import (
 	"fmt"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/boolexpr"
 	"github.com/lycaon/lycaon/internal/conditions"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/theme"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
@@ -26,25 +25,7 @@ type ObligationSpecs map[string]ObligationSpec
 func ValidateComposeManifest(reg *conditions.ConditionRegistry, specs ObligationSpecs, m workflowdef.Manifest) []api.ComposeValidationError {
 	var out []api.ComposeValidationError
 	for _, p := range m.PhaseDefs {
-		cw := strings.TrimSpace(p.CompleteWhen)
-		if cw == "" || cw == workflowdef.CompleteWhenGatesSatisfied {
-			// gates[] validated below
-		} else if strings.HasPrefix(cw, workflowdef.CompleteWhenGateSatisfied) {
-			gate := strings.TrimPrefix(cw, workflowdef.CompleteWhenGateSatisfied)
-			out = append(out, validateComposeLeafDiag(reg, fmt.Sprintf("phases[%s].complete_when", p.ID), gate)...)
-		} else {
-			out = append(out, validateComposeExprLeavesDiag(reg, fmt.Sprintf("phases[%s].complete_when", p.ID), cw)...)
-		}
-		for i, g := range p.Gates {
-			g = strings.TrimSpace(g)
-			if g == "" {
-				continue
-			}
-			out = append(out, validateComposeLeafDiag(reg, fmt.Sprintf("phases[%s].gates[%d]", p.ID, i), g)...)
-		}
-		if ew := strings.TrimSpace(p.EntryWhen); ew != "" {
-			out = append(out, validateComposeExprLeavesDiag(reg, fmt.Sprintf("phases[%s].entry_when", p.ID), ew)...)
-		}
+		out = append(out, validatePhasePredicates(reg, fmt.Sprintf("phases[%s]", p.ID), p)...)
 		if fb := p.OnEnter.RequestUserFeedback; fb != nil {
 			if strings.TrimSpace(fb.Prompt) == "" {
 				out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("prompt_required"),
@@ -102,49 +83,4 @@ func ValidateComposeManifest(reg *conditions.ConditionRegistry, specs Obligation
 		}
 	}
 	return out
-}
-
-func validateComposeLeafDiag(reg *conditions.ConditionRegistry, field, id string) []api.ComposeValidationError {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return nil
-	}
-	if err := conditions.ForbiddenPredicateConfigError(id); err != nil {
-		hint := conditions.ForbiddenPredicateReplacementHint(id)
-		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("forbidden_predicate"), field,
-			map[string]any{"leaf": id, "replacement_hint": hint})}
-	}
-	if reg == nil || (!reg.Has(id) && !workflowdef.IsKnownGateLeaf(id)) {
-		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("unknown_predicate"), field,
-			map[string]any{"leaf": id})}
-	}
-	return nil
-}
-
-func validateComposeExprLeavesDiag(reg *conditions.ConditionRegistry, field, expr string) []api.ComposeValidationError {
-	expr = strings.TrimSpace(expr)
-	if expr == "" {
-		return nil
-	}
-	if !NeedsExpressionParser(expr) {
-		return validateComposeLeafDiag(reg, field, expr)
-	}
-	node, err := boolexpr.Parse(expr)
-	if err != nil {
-		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("boolexpr_parse"), field,
-			map[string]any{"detail": err.Error()})}
-	}
-	var out []api.ComposeValidationError
-	for _, id := range boolexpr.CollectIdents(node) {
-		out = append(out, validateComposeLeafDiag(reg, field, id)...)
-	}
-	return out
-}
-
-func NeedsExpressionParser(expr string) bool {
-	lower := strings.ToLower(expr)
-	return strings.Contains(lower, " and ") ||
-		strings.Contains(lower, " or ") ||
-		strings.Contains(lower, " not ") ||
-		strings.Contains(expr, "(")
 }
