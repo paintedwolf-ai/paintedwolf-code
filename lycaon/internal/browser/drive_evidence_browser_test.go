@@ -60,7 +60,7 @@ func TestPageEvidenceAndRouteFixturesDescribeWhatThePageRequested(t *testing.T) 
 	report, err := held.Act(t.Context(), []CaptureAction{
 		{Type: "route", Routes: []RouteRule{{URL: "/api/items", Fail: "connection_refused"}}},
 		{Type: "click", ActionLocator: ActionLocator{Selector: "#reload"}},
-		{Type: "wait_for", ActionLocator: ActionLocator{Text: "error:"}, TimeoutMS: 5000},
+		{Type: "wait_for", ActionLocator: ActionLocator{Text: "error:"}},
 	}, nil)
 	testutil.FailErr(t, "reload against a refused backend", err)
 	if report.RoutesActive != 1 || len(report.Evidence.Network) != 1 {

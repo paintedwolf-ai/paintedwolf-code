@@ -210,8 +210,12 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 			defer stopAfter()
 			result, err := run(ctx, handle, commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr})
 			if ctx.Err() != nil && (result.Terminal == "" || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
-				status := j.signalStatus(handle)
-				result = toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.EffectUnknown}
+				status, code := j.signalStatus(handle), toolrejection.ToolOwnerInterruptedCode
+				var expired *callDeadline
+				if errors.As(context.Cause(ctx), &expired) {
+					status, code = commandprogram.TimedOutStatus, "COMMAND_LIMIT_EXCEEDED"
+				}
+				result = toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerInterrupted, StopCode: code, EffectCertainty: toolcontract.EffectUnknown}
 			}
 			j.record(handle, result, err)
 			settled := bgprocess.ProgramJobResult{ExitCode: result.Status}
@@ -224,7 +228,14 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 		close(ready)
 		return commandprogram.StartedJob{}, err
 	}
-	setStop(func() { _, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle, bgprocess.TerminationStoppedByAgent) })
+	setStop(func(cause error) {
+		reason := bgprocess.TerminationStoppedByAgent
+		var expired *callDeadline
+		if errors.As(cause, &expired) {
+			reason = bgprocess.TerminationTimedOut
+		}
+		_, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle, reason)
+	})
 	if j.numbers == nil {
 		j.numbers = map[string]int{}
 	}

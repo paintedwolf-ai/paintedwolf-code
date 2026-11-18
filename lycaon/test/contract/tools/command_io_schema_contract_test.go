@@ -47,6 +47,7 @@ func TestCommandToolSchemaRejectsRetiredIOArguments(t *testing.T) {
 		"background":       true,
 		"wait_ms":          1000,
 		"allow_concurrent": true,
+		"timeout_ms":       1000,
 	}
 	for name, value := range retired {
 		args := map[string]any{name: value}

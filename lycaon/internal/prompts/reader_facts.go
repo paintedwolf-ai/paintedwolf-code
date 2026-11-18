@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -174,6 +175,9 @@ func buildReaderFacts(
 		ProgressUngatedLifecycleTools: progress.UngatedLifecycleTools(offeredSet),
 		RecallMayWiden:                isCoordinator,
 		RootCount:                     in.RootCount,
+		RunnerInlineWaitSeconds:       int(toolcontract.ProgramInlineWait / time.Second),
+		RunnerParkSeconds:             int(toolcontract.ProgramParkThreshold / time.Second),
+		RunnerProgramLifetimeMinutes:  programLifetimeMinutes(),
 		RunnerDirectIPTools:           runnerCapabilityTools(offered, toolcontract.CapabilityDirectIP, connects),
 		RunnerLocalListenTools:        runnerCapabilityTools(offered, toolcontract.CapabilityLocalListen, connects),
 		RunnerLoopbackConnectTools:    runnerCapabilityTools(offered, toolcontract.CapabilityLoopbackConnect, connects),
@@ -346,4 +350,18 @@ func fillWorkerReaderFacts(
 	}
 	fillVisualShowFacts(offered, requestable, f)
 	return nil
+}
+
+// programLifetimeMinutes is the catalog's bound on one command program.
+func programLifetimeMinutes() int {
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		return 0
+	}
+	for _, limit := range catalog.Language.Limits {
+		if limit.ID == "program_lifetime_ms" {
+			return int(limit.Maximum / 60000)
+		}
+	}
+	return 0
 }

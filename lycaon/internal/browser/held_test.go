@@ -91,7 +91,7 @@ func TestCanceledPageOperationPreservesPoolAndOtherPages(t *testing.T) {
 	}
 	waitCtx, cancelWait := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancelWait()
-	_, err = held.Act(waitCtx, []CaptureAction{{Type: "wait", Wait: "duration", TimeoutMS: 1000}}, nil)
+	_, err = held.Act(waitCtx, []CaptureAction{{Type: "wait"}}, nil)
 	if err == nil || waitCtx.Err() == nil {
 		t.Fatalf("delay action ignored cancellation: waitCtx.Err=%v err=%v", waitCtx.Err(), err)
 	}

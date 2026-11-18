@@ -198,7 +198,7 @@
       "branch_instruction": "Branch on Code CAPTURE_ACTION_FAILED; fix the failing action",
       "category": "recoverable",
       "emit": "guard:visual_capture",
-      "summary": "{% if paintedwolf.type %}actions[{{ paintedwolf.index }}] ({{ paintedwolf.type }}){% else %}An actions[] step{% endif %} failed{% if paintedwolf.error %} — {{ paintedwolf.error }}{% endif %}."
+      "summary": "{% if paintedwolf.type %}actions[{{ paintedwolf.index }}] ({{ paintedwolf.type }}){% else %}An actions[] step{% endif %} failed{% if paintedwolf.error %} — {{ paintedwolf.error }}{% endif %}.{% if paintedwolf.step_deadline_expired %} The step gave up after {{ paintedwolf.elapsed_ms }} ms, at its {{ paintedwolf.step_timeout_ms }} ms limit.{% endif %}"
     },
     "CAPTURE_ACTION_FIELDS_UNUSED": {
       "branch_instruction": "Branch on Code CAPTURE_ACTION_FIELDS_UNUSED; correct the step and retry the same call",
@@ -474,7 +474,7 @@
     "COMMAND_LIMIT_EXCEEDED": {
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "A command resource limit was reached{% if paintedwolf.limit_id %}: {{ paintedwolf.limit_id }}{% endif %}.{% if paintedwolf.limit_observation_known %} Observed {{ paintedwolf.observed }}{% if paintedwolf.resource_unit %} {{ paintedwolf.resource_unit }}{% endif %}; maximum {{ paintedwolf.maximum }}.{% endif %}"
+      "summary": "{% if paintedwolf.deadline_expired %}The program reached its {{ paintedwolf.limit_id }} of {{ paintedwolf.maximum }} ms and was ended after {{ paintedwolf.observed }} ms{% if paintedwolf.waiting_statement %}, while waiting in `{{ paintedwolf.waiting_statement }}`{% endif %}.{% if paintedwolf.children_started_known %}{% if paintedwolf.children_started %} Commands started before the end: {{ paintedwolf.children_started }}.{% else %} No command had started.{% endif %}{% endif %}{% if paintedwolf.jobs_stopped %} Background jobs ended with it: {{ paintedwolf.jobs_stopped }}.{% endif %}{% else %}{% if paintedwolf.wait_refused %}`{{ paintedwolf.waiting_statement }}` would end {{ paintedwolf.observed }} ms after the program started, past its {{ paintedwolf.limit_id }} of {{ paintedwolf.maximum }} ms, so it was refused before waiting.{% else %}A command resource limit was reached{% if paintedwolf.limit_id %}: {{ paintedwolf.limit_id }}{% endif %}.{% if paintedwolf.limit_observation_known %} Observed {{ paintedwolf.observed }}{% if paintedwolf.resource_unit %} {{ paintedwolf.resource_unit }}{% endif %}; maximum {{ paintedwolf.maximum }}.{% endif %}{% endif %}{% endif %}"
     },
     "COMMAND_NATIVE_FORM_UNSUPPORTED": {
       "category": "recoverable",
@@ -1565,6 +1565,12 @@
       "category": "recoverable",
       "emit": "guard:message_coordinator",
       "summary": "reply_to names no message in your history with the coordinator."
+    },
+    "METADATA_TARGET_HARD_LINKED": {
+      "branch_instruction": "Branch on Code; replace the link with a copy before changing metadata",
+      "category": "recoverable",
+      "emit": "guard:metadata",
+      "summary": "The metadata change to {{ paintedwolf.path }} was refused because the file has other hard links."
     },
     "MID_TURN_NOTE_ARTIFACT_UNKNOWN": {
       "branch_instruction": "Branch on Code MID_TURN_NOTE_ARTIFACT_UNKNOWN; continue from the tool results above and use an observed artifact id or omit the directive",

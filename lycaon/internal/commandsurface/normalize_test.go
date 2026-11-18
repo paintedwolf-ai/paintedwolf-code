@@ -41,7 +41,7 @@ func TestParsePlanMutuallyExclusive(t *testing.T) {
 }
 
 func TestParsePlanMissing(t *testing.T) {
-	_, err := stagesOf(map[string]any{"cwd": ".", "timeout_ms": 120000})
+	_, err := stagesOf(map[string]any{"cwd": "."})
 	if !errors.Is(err, commandsurface.ErrArgvRequired) {
 		t.Fatalf("err = %v want ErrArgvRequired", err)
 	}

@@ -17,6 +17,7 @@ func TestValidateActionsNamesFieldsAStepDoesNotRead(t *testing.T) {
 		{"hover value", CaptureAction{Type: "hover", ActionLocator: ActionLocator{Selector: "#b"}, Value: "x"}, "value"},
 		{"press target", CaptureAction{Type: "press", Key: "Enter", ActionLocator: ActionLocator{Selector: "#b"}}, "selector"},
 		{"fill drop target", CaptureAction{Type: "fill", ActionLocator: ActionLocator{Label: "Name"}, Value: "a", To: &ActionLocator{Selector: "#c"}}, "to"},
+		{"click gone", CaptureAction{Type: "click", ActionLocator: ActionLocator{Selector: "#b"}, Gone: true}, "gone"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -31,13 +32,14 @@ func TestValidateActionsNamesFieldsAStepDoesNotRead(t *testing.T) {
 
 func TestValidateActionsAcceptsEachStepsOwnFields(t *testing.T) {
 	err := validateActions([]CaptureAction{
-		{Type: "click", ActionLocator: ActionLocator{Role: "button", Label: "Go"}, Button: "right", Count: 2, Modifiers: []string{"Shift"}, TimeoutMS: 500, Wait: "idle"},
+		{Type: "click", ActionLocator: ActionLocator{Role: "button", Label: "Go"}, Button: "right", Count: 2, Modifiers: []string{"Shift"}, Wait: "idle"},
 		{Type: "drag", ActionLocator: ActionLocator{Selector: "#a"}, By: &ActionOffset{Y: 40}, HoldMS: 100},
 		{Type: "scroll", By: &ActionOffset{Y: 300}},
 		{Type: "type", Value: "hello"},
 		{Type: "press", Key: "Mod+K"},
 		{Type: "wait_for", ActionLocator: ActionLocator{Text: "Saved"}},
-		{Type: "wait", TimeoutMS: 100},
+		{Type: "wait_for", ActionLocator: ActionLocator{Selector: "#toast"}, Gone: true},
+		{Type: "wait"},
 	})
 	if err != nil {
 		t.Fatalf("validate = %v", err)

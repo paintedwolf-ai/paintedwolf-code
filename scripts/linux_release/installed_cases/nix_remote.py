@@ -168,7 +168,7 @@ def scenario(binding: dict) -> tuple[str, dict, dict]:
             for approved in (False, True):
                 nonce = uuid.uuid4().hex
                 args = {'command': shlex.join([str(Path(sys.executable).resolve()), str(script), nonce,
-                                               'approved' if approved else 'ordinary']), 'timeout_ms': 240000}
+                                               'approved' if approved else 'ordinary'])}
                 if approved:
                     args['capability_request'] = {'host_execution': True}
                 with ProviderFixture([{'name': 'command', 'arguments': args}]) as provider, ToolTurn(app, provider, project) as turn:

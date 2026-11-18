@@ -15,6 +15,10 @@ const (
 	DefaultWaitIdle   = "idle"
 	NavTimeout        = 30 * time.Second
 	ActionTimeout     = 15 * time.Second
+	// targetTimeoutMS bounds a step finding and reaching its target.
+	targetTimeoutMS = 10000
+	// waitForTimeoutMS bounds a wait_for step and the idle settle.
+	waitForTimeoutMS = 30000
 	// MaxTypedRunes bounds one type or fill value.
 	MaxTypedRunes = 4096
 	// MaxHoldMS bounds a hover dwell or drag hold.
@@ -59,7 +63,7 @@ type CaptureAction struct {
 	By        *ActionOffset  `json:"by,omitempty"`
 	HoldMS    int            `json:"hold_ms,omitempty"`
 	Routes    []RouteRule    `json:"routes,omitempty"`
-	TimeoutMS int            `json:"timeout_ms,omitempty"`
+	Gone      bool           `json:"gone,omitempty"`
 	Wait      string         `json:"wait,omitempty"`
 }
 
@@ -103,39 +107,38 @@ func dispatchAction(page *rod.Page, drive *pageDrive, act CaptureAction) (json.R
 	case "select":
 		opts := act.driverArgs()
 		opts["value"] = act.Value
-		return driverCall(page, "select", withTimeout(opts, act.TimeoutMS))
+		return driverCall(page, "select", withTimeout(opts, targetTimeoutMS))
 	case "press":
 		return pressAction(page, act)
 	case "route":
 		return routeAction(drive, act)
 	case "wait_for":
-		return driverCall(page, "waitFor", withTimeout(map[string]any{"selector": act.Selector, "text": act.Text}, act.TimeoutMS))
+		return driverCall(page, "waitFor", withTimeout(map[string]any{"selector": act.Selector, "text": act.Text, "gone": act.Gone}, waitForTimeoutMS))
 	case "wait":
-		return waitAction(page, act)
+		return waitAction(page)
 	default:
 		return nil, fmt.Errorf("unknown action type %q", act.Type)
 	}
 }
 
 func withTimeout(opts map[string]any, timeoutMS int) map[string]any {
-	if timeoutMS > 0 {
-		opts["timeout_ms"] = timeoutMS
-	}
+	opts["timeout_ms"] = timeoutMS
 	return opts
 }
 
-func waitAction(page *rod.Page, act CaptureAction) (json.RawMessage, error) {
-	wait := strings.TrimSpace(act.Wait)
-	if wait == "" || wait == DefaultWaitIdle {
-		return driverCall(page, "waitIdle", map[string]any{})
+// driverBudget outlasts the deadline the driver call runs under, so that
+// deadline, not the host's call budget, decides when the step gives up.
+func driverBudget(args map[string]any) time.Duration {
+	deadline, _ := args["timeout_ms"].(int)
+	if deadline <= 0 {
+		deadline = waitForTimeoutMS
 	}
-	if ms := act.TimeoutMS; ms > 0 {
-		if err := pause(page, time.Duration(ms)*time.Millisecond); err != nil {
-			return nil, err
-		}
-		return surveyjson.Marshal(map[string]any{"ok": true, "waited_ms": ms})
-	}
-	return nil, fmt.Errorf("wait action requires wait=idle or timeout_ms")
+	return ActionTimeout + time.Duration(deadline)*time.Millisecond
+}
+
+// waitAction settles until the page is network-quiet and DOM-stable.
+func waitAction(page *rod.Page) (json.RawMessage, error) {
+	return driverCall(page, "waitIdle", map[string]any{})
 }
 
 func pause(page *rod.Page, d time.Duration) error {

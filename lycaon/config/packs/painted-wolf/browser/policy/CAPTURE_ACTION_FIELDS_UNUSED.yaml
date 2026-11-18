@@ -21,4 +21,4 @@ x-paintedwolf-scenarios:
       index: '0'
       type: click
       unused_fields: by
-      step_fields: testid, selector, role, label, text, button, count, modifiers, timeout_ms, wait
+      step_fields: testid, selector, role, label, text, button, count, modifiers, wait

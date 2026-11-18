@@ -6,15 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
-
-// ProgramInlineWait bounds how long an unparked program holds the agent.
-const ProgramInlineWait = 30 * time.Second
 
 // RunningProgramResult identifies the original program; no statements are replayed.
 type RunningProgramResult struct {
@@ -31,7 +27,7 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 		ProjectID: run.tc.Identity.ProjectID, Cwd: e.paths.Cwd().DisplayPath,
 		CommandLine: run.source, OriginTool: run.tool, ToolCallID: run.tc.Identity.ToolCallID,
 		Run: func(jobCtx context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
-			stop := context.AfterFunc(jobCtx, func() { r.Supervisor.Interrupt(run.root.Identity.ProgramID) })
+			stop := context.AfterFunc(jobCtx, func() { r.Supervisor.StopProgram(run.root.Identity.ProgramID) })
 			defer stop()
 			attachErr := errors.Join(e.stdout.follow(stdout), e.stderr.follow(stderr))
 			attached <- attachErr
