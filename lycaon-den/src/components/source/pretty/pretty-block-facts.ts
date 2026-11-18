@@ -33,7 +33,7 @@ export class BlockFact extends RangeValue {
 
 /** Facts read from a set and new ones collected during one scan. */
 export class FactStore implements PrettyBlockFacts {
-  readonly added = new Map<number, { end: number; block: boolean }>();
+  private readonly added = new Map<number, { end: number; block: boolean }>();
   constructor(private readonly known: RangeSet<BlockFact>) {}
 
   get(open: number): boolean | undefined {
@@ -54,10 +54,18 @@ export class FactStore implements PrettyBlockFacts {
     if (!this.added.has(open)) this.added.set(open, { end, block });
   }
 
-  ranges(): Range<BlockFact>[] {
-    return [...this.added.entries()]
+  finish(): RangeSet<BlockFact> {
+    if (!this.added.size) return this.known;
+    const fresh = [...this.added.entries()]
       .sort((a, b) => a[0] - b[0])
       .map(([open, fact]) => new BlockFact(fact.block).range(open, Math.max(open + 1, fact.end)));
+    // An outer scan also reads nested groups whose prior facts survived.
+    return this.known.update({
+      add: fresh,
+      filterFrom: fresh[0]!.from,
+      filterTo: fresh[fresh.length - 1]!.from,
+      filter: open => !this.added.has(open),
+    });
   }
 }
 
@@ -87,7 +95,10 @@ export function invalidateBlockFacts(
     if (mapped === null) {
       changed(changes.mapPos(old.from, side));
     } else {
-      while (i < fresh.length && fresh[i]!.from < mapped) changed(fresh[i++]!.from);
+      while (i < fresh.length && fresh[i]!.from < mapped) {
+        changed(fresh[i]!.from);
+        i++;
+      }
       const next = fresh[i];
       if (next?.from === mapped && next.value === old.value) i++;
       else changed(mapped);

@@ -1,6 +1,6 @@
 import { EditorState, type ChangeSpec } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
-import { createPrettyExtension, prettyOutcomeOf, prettyWorkOf } from "./pretty-layout.ts";
+import { createPrettyExtension, prettyLayoutField, prettyOutcomeOf, prettyWorkOf } from "./pretty-layout.ts";
 import { PRETTY_CHECKPOINT_INTERVAL } from "./pretty-scan-state.ts";
 import { prettyLayoutDecorations } from "./pretty-view.ts";
 
@@ -33,6 +33,19 @@ describe("incremental block facts", () => {
     expect(layout(completed).ranges.filter(([from]) => from < at).length)
       .toBeGreaterThan(layout(state).ranges.filter(([from]) => from < at).length);
     compare(completed, { from: at, to: at + 2 });
+  });
+
+  it("stores one fact per opening after an enclosing group is replayed", () => {
+    const text = `function f(){const earlier={${fields}end:1}, result=retu /x;y/ / 1, z=2}`;
+    const pos = text.indexOf("retu") + 4;
+    let state = open(text);
+    const count = state.field(prettyLayoutField).facts.size;
+    expect(count).toBeGreaterThan(1);
+    for (let i = 0; i < 3; i++) {
+      state = compare(state, { from: pos, insert: "rn" });
+      state = compare(state, { from: pos, to: pos + 2 });
+      expect(state.field(prettyLayoutField).facts.size).toBe(count);
+    }
   });
 
   it("ends unfinished embedded groups at their closing tag", () => {

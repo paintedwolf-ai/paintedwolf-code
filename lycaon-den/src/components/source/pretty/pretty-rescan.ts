@@ -112,8 +112,8 @@ function emptyState(config: PrettyConfig, plan: PrettyPlan | null, outcome: Pret
   };
 }
 
-function limited(prev: PrettyLayoutState, reason: PrettyLimitReason, state: EditorState): PrettyLayoutState {
-  return emptyState(prev.config, prev.plan, { kind: "limit", reason, length: state.doc.length }, state);
+function limited(prev: PrettyLayoutState, reason: PrettyLimitReason, state: EditorState, work = NO_WORK): PrettyLayoutState {
+  return emptyState(prev.config, prev.plan, { kind: "limit", reason, length: state.doc.length }, state, work);
 }
 
 function visitLimit(doc: Text): number {
@@ -208,7 +208,7 @@ export function buildLayout(state: EditorState, config: PrettyConfig): PrettyLay
     outcome: ACTIVE,
     decorations: builder.finish(),
     checkpoints: checkpoints.finish(),
-    facts: RangeSet.of(facts.ranges()),
+    facts: facts.finish(),
     events: events.finish(),
     scannedTo: end,
     indentUnit,
@@ -267,7 +267,7 @@ interface Rescan {
   /** Where to start: the last saved state at or before here. */
   readonly restart: number;
   readonly edit?: Transaction;
-  readonly spent?: number;
+  readonly spent?: PrettyWork;
   /** Past here, a saved state that matches the new one ends the scan; null scans to the end. */
   readonly compareFrom: number | null;
 }
@@ -309,7 +309,7 @@ function rescan(prev: PrettyLayoutState, job: Rescan): PrettyLayoutState {
     const old = firstCheckpointFrom(checkpoints, Math.max(pos + 1, compareFrom));
     return old >= 0 ? Math.min(old, cadence) : cadence;
   };
-  const limit = visitLimit(doc) - (job.spent ?? 0);
+  const limit = visitLimit(doc) - (job.spent?.visits ?? 0);
   let reason: PrettyLimitReason | null = null;
   const reached = scanner.run(from, start ? nextStop(from) : 0, (pos) => {
     if (scanner.visits > limit) {
@@ -330,26 +330,31 @@ function rescan(prev: PrettyLayoutState, job: Rescan): PrettyLayoutState {
     return nextStop(pos);
   }, layoutTo);
   if (scanner.failure === "depth") reason = "depth";
-  if (reason) return limited(prev, reason, state);
-
   const end = converged;
-  let visits = scanner.visits + (job.spent ?? 0);
+  const work = {
+    visits: scanner.visits + (job.spent?.visits ?? 0),
+    from: Math.min(from, job.spent?.from ?? from),
+    to: Math.max(Math.min(end, reached, doc.length), job.spent?.to ?? 0),
+    added: added.length + (job.spent?.added ?? 0),
+  };
+  if (reason) return limited(prev, reason, state, work);
   if (job.edit && prev.facts.size) {
     const invalid = invalidateBlockFacts(job.facts, prev.events, events, job.edit.changes, from, Math.min(end, reached + 1));
-    visits += invalid.visits;
+    work.visits += invalid.visits;
+    if (work.visits > visitLimit(doc)) return limited(prev, "work", state, work);
     if (Number.isFinite(invalid.opening)) {
       // Checkpoints inside an invalid group already carry its block decision.
       return rescan(prev, {
         ...job,
         edit: undefined,
         facts: invalid.facts,
-        spent: visits,
+        spent: work,
         restart: Math.min(job.restart, invalid.opening),
         compareFrom: Math.max(compareFrom, invalid.through + 1),
       });
     }
   }
-  if (visits > visitLimit(doc)) return limited(prev, "work", state);
+  if (work.visits > visitLimit(doc)) return limited(prev, "work", state, work);
   const scannedTo = end <= doc.length ? Math.max(prev.scannedTo, reached) : Math.min(reached, layoutTo);
   const decorations = job.decorations.update({
     add: added,
@@ -368,7 +373,7 @@ function rescan(prev: PrettyLayoutState, job: Rescan): PrettyLayoutState {
   checkpoints = checkpoints.update(dropTo >= dropFrom
     ? { add: fresh, filterFrom: dropFrom, filterTo: dropTo, filter: () => false }
     : { add: fresh });
-  if (decorations.size > PRETTY_MAX_DECORATIONS) return limited(prev, "decorations", state);
+  if (decorations.size > PRETTY_MAX_DECORATIONS) return limited(prev, "decorations", state, work);
   return {
     ...prev,
     outcome: ACTIVE,
@@ -376,9 +381,9 @@ function rescan(prev: PrettyLayoutState, job: Rescan): PrettyLayoutState {
     checkpoints,
     events: job.events.update({ add: events, filterFrom: from, filterTo: Math.min(end, doc.length),
       filter: pos => pos < from || pos >= end }),
-    facts: store.added.size > 0 ? job.facts.update({ add: store.ranges() }) : job.facts,
+    facts: store.finish(),
     scannedTo: Math.min(scannedTo, doc.length),
-    work: { visits, from, to: Math.min(end, reached, doc.length), added: added.length },
+    work,
   };
 }
 
