@@ -9,10 +9,11 @@ import (
 
 // Declared work bounds. Every bound is a count; none is a duration.
 const (
-	// Boot does the same work on a small store and a large one, within these spreads.
-	bootPagesSpread      = 2_048
-	bootStatementsSpread = 64
-	bootRowsSpread       = 1_024
+	// Boot does the same work on a small store and a large one, within these
+	// spreads; a deeper B-tree may add a page to a lookup.
+	bootPagesSpread      = 256
+	bootStatementsSpread = 8
+	bootRowsSpread       = 64
 	// Boot opens the project root once and nothing else in the tree.
 	bootFilesOpened = 1
 
@@ -23,9 +24,10 @@ const (
 	deleteStepRows = 16_384
 
 	// An upgrade fetches at most a fixed base of pages, which validating the
-	// schema costs on any store, plus this many per page in the store.
+	// schema costs on any store, plus this many per page in the store. Index
+	// inserts descend a tree that deepens with size, so the rate grows slowly.
 	upgradeBasePages         = 65_536
-	upgradePagesPerStorePage = 32
+	upgradePagesPerStorePage = 64
 	// No upgrade statement returns more rows.
 	upgradeStepRows = 4_096
 	// An upgrade's peak resident memory differs between sizes by at most this.
@@ -80,7 +82,7 @@ func scaleBounds() map[string]float64 {
 		boundBootRowsSpread: bootRowsSpread, boundBootFilesOpened: bootFilesOpened,
 		boundDeleteRows: deleteRowsPerOwnedRow, boundDeleteStepRows: deleteStepRows,
 		boundUpgradeBasePages: upgradeBasePages, boundUpgradeRate: upgradePagesPerStorePage, boundUpgradeStepRows: upgradeStepRows,
-		boundUpgradeResident: upgradeResidentSpread, boundVacuumPassPages: db.VacuumPassPageLimit,
+		boundUpgradeResident: upgradeResidentSpread, boundVacuumPassPages: float64(db.VacuumPassShrinkLimit(4096)),
 		boundGrowth: scaleGrowth,
 	}
 }
@@ -114,10 +116,10 @@ func evaluateScale(small, large scaleMeasurement) []scaleViolation {
 		vs.check("", boundDeleteGrowth, largeRate <= smallRate*scaleGrowth,
 			"delete %s per owned row grew from %.3f to %.3f between sizes", counter, smallRate, largeRate)
 	}
-	// The base cancels between sizes, so the added pages show the rate alone.
-	added := perUnit(large.Upgrade.Work["pages_fetched"]-small.Upgrade.Work["pages_fetched"], large.Upgrade.StorePages-small.Upgrade.StorePages)
-	vs.check("", boundUpgradeRate, added <= upgradePagesPerStorePage,
-		"upgrade fetched %.3f pages per added store page between sizes, above %d", added, upgradePagesPerStorePage)
+	smallRate := perUnit(small.Upgrade.Work["pages_fetched"]-upgradeBasePages, small.Upgrade.StorePages)
+	largeRate := perUnit(large.Upgrade.Work["pages_fetched"]-upgradeBasePages, large.Upgrade.StorePages)
+	vs.check("", boundUpgradeRate, largeRate <= max(smallRate, 1)*scaleGrowth,
+		"upgrade pages fetched per store page, beyond the base, grew from %.3f to %.3f between sizes", smallRate, largeRate)
 	resident := large.Upgrade.Work["peak_resident_bytes"] - small.Upgrade.Work["peak_resident_bytes"]
 	vs.check("", boundUpgradeResident, resident <= upgradeResidentSpread,
 		"upgrade peak resident memory grew by %d bytes between sizes, above %d", resident, upgradeResidentSpread)
@@ -130,8 +132,8 @@ func evaluateSize(vs *violations, m scaleMeasurement) {
 		"boot opened %d project files, above %d", m.Boot.FilesOpened, bootFilesOpened)
 
 	v := m.Vacuum
-	vs.check(size, boundVacuumPassPages, v.PeakPassPages <= db.VacuumPassPageLimit,
-		"a vacuum pass freed %d pages, above %d", v.PeakPassPages, db.VacuumPassPageLimit)
+	vs.check(size, boundVacuumPassPages, v.PeakPassPages <= db.VacuumPassShrinkLimit(m.Fixture.PageSize),
+		"a vacuum pass removed %d pages from the file, above %d", v.PeakPassPages, db.VacuumPassShrinkLimit(m.Fixture.PageSize))
 	passLimit := ceilDiv(v.FreePagesBefore, v.PassPages) + 1
 	vs.check(size, boundVacuumPasses, v.PassPages > 0 && v.VacuumPasses <= passLimit,
 		"vacuum took %d passes for %d free pages, above %d", v.VacuumPasses, v.FreePagesBefore, passLimit)

@@ -73,7 +73,7 @@ func (m *maintenanceState) notePass(report RetentionReport, rowsRan bool, turnWa
 		c.vacuumSlices += report.Vacuum.Slices
 		c.pagesRequested += report.Vacuum.PagesRequested
 		c.pagesReclaimed += report.Vacuum.PagesReclaimed
-		c.peakPassPages = max(c.peakPassPages, report.Vacuum.FreelistTaken)
+		c.peakPassPages = max(c.peakPassPages, report.Vacuum.PagesReclaimed)
 		if report.IncrementalVacuumed {
 			c.vacuumPasses++
 		}

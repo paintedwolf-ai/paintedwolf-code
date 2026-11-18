@@ -24,11 +24,9 @@ type VacuumPass struct {
 	Slices         int64
 	PagesRequested int64
 	PagesReclaimed int64
-	// FreelistTaken counts pages slices removed from the freelist.
-	FreelistTaken int64
-	PageSize      int64
-	PageCount     int64
-	FreelistPages int64
+	PageSize       int64
+	PageCount      int64
+	FreelistPages  int64
 	// Progressed distinguishes a working pass from one that found nothing to do.
 	// Foreground frees can grow the freelist while the file still shrinks.
 	Progressed bool
@@ -86,7 +84,6 @@ func runIncrementalVacuum(ctx context.Context, database Handle, minFreelistPages
 		}
 		reclaimed := pass.PageCount - pageCount
 		shrank := freelist < pass.FreelistPages
-		pass.FreelistTaken += max(pass.FreelistPages-freelist, 0)
 		pass.PageCount, pass.FreelistPages = pageCount, freelist
 		if reclaimed <= 0 && !shrank {
 			return pass, nil
@@ -103,8 +100,15 @@ func freelistTrunks(freelistPages, pageSize int64) int64 {
 	return freelistPages/(leaves+1) + 1
 }
 
-// VacuumPassPageLimit is the most pages one pass frees.
+// VacuumPassPageLimit is the most free pages one pass releases.
 const VacuumPassPageLimit = vacuumSlicePages * vacuumSlicesPerPass
+
+// VacuumPassShrinkLimit is the most pages one pass removes from the file: its
+// free pages, plus the pointer-map pages, of usable/5 entries each, that
+// stop being needed when those pages go.
+func VacuumPassShrinkLimit(pageSize int64) int64 {
+	return VacuumPassPageLimit + VacuumPassPageLimit/max(pageSize/5, 1) + 1
+}
 
 // VacuumPassPages is what a full pass frees from a freelist this long. Slices
 // grow as the list shrinks, so no later pass of the same drain frees fewer.
