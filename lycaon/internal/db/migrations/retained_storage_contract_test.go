@@ -78,10 +78,9 @@ func assertRetainedStorageFallback(t *testing.T, plan Plan) {
 }
 
 func retainedStorageContractPlan() Plan {
-	target := Baseline{Revision: 6, Shape: "34f505e9c4c29dc855ac5dd78e48a4015914563f7cb3d053bea906ebf6baddb2"}
-	storage := WorkflowManifestStorage(target)
-	step := Revision5(storage.From)
-	return Plan{Source: step.From, Target: target, steps: []Step{step, storage}}
+	target := Baseline{Revision: 5, Shape: "34f505e9c4c29dc855ac5dd78e48a4015914563f7cb3d053bea906ebf6baddb2"}
+	step := Revision5(target)
+	return Plan{Source: step.From, Target: target, steps: []Step{step}}
 }
 
 func TestRetainedSorterBudgetCoversMergeFanoutBoundaries(t *testing.T) {

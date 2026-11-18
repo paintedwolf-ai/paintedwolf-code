@@ -39,9 +39,8 @@ func schemaRegistry(ctx context.Context) (*migrations.Registry, error) {
 		return nil, fmt.Errorf("decode released schemas: %w", err)
 	}
 	resultPaths := migrations.ToolResultPaths()
-	workflowStorage := migrations.WorkflowManifestStorage(current)
 	steps := []migrations.Step{
-		migrations.SourceNamespace(), migrations.PresenceAuthenticators(resultPaths.From), resultPaths, migrations.Revision5(workflowStorage.From), workflowStorage,
+		migrations.SourceNamespace(), migrations.PresenceAuthenticators(resultPaths.From), resultPaths, migrations.Revision5(current),
 	}
 	return migrations.New(current, released, steps)
 }
