@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/events"
@@ -78,7 +79,11 @@ func (s *Activity) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	flusher.Flush()
 
-	heartbeat := events.HeartbeatTicker()
+	interval := s.eventHeartbeatInterval
+	if interval <= 0 {
+		interval = 20 * time.Second
+	}
+	heartbeat := time.NewTicker(interval)
 	defer heartbeat.Stop()
 	burst := events.NewBurstEnd()
 	defer burst.Stop()
