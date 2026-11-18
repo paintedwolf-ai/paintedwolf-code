@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
 func TestTransactionRefUndoPreservesExternalRefs(t *testing.T) {
@@ -18,7 +19,7 @@ func TestTransactionRefUndoPreservesExternalRefs(t *testing.T) {
 			testutil.FailErr(t, "target repository", os.MkdirAll(filepath.Join(primary, ".git/objects"), 0750))
 			store, err := NewStore(t.TempDir())
 			testutil.FailErr(t, "store", err)
-			oid, err := WriteLooseGitObject(CheckpointGitObjectsDir(store.RootDir(), "checkpoint", ""), "blob", []byte("checkpoint object"))
+			oid, err := gittest.WriteLooseObject(CheckpointGitObjectsDir(store.RootDir(), "checkpoint", ""), "blob", []byte("checkpoint object"))
 			testutil.FailErr(t, "retained object", err)
 			core, err := layeredfs.New(layeredfs.Config{ViewID: "refs", BackingDir: t.TempDir(), Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}}})
 			testutil.FailErr(t, "view", err)
@@ -46,7 +47,7 @@ func TestTransactionRefUndoPreservesExternalRefs(t *testing.T) {
 			checkpointRef := "refs/lycaon/checkpoints/checkpoint/heads/feature"
 			externalOID := ""
 			if state == "diverged" {
-				externalOID, err = WriteLooseGitObject(filepath.Join(primary, ".git/objects"), "blob", []byte("external object"))
+				externalOID, err = gittest.WriteLooseObject(filepath.Join(primary, ".git/objects"), "blob", []byte("external object"))
 				testutil.FailErr(t, "external object", err)
 				testutil.FailErr(t, "external ref change", os.WriteFile(filepath.Join(primary, ".git", workerRef), []byte(externalOID+"\n"), 0600))
 			}
@@ -87,9 +88,9 @@ func TestTransactionImportsAndRestoresRefsPerRoot(t *testing.T) {
 	}
 	store, err := NewStore(t.TempDir())
 	testutil.FailErr(t, "store", err)
-	secondOID, err := WriteLooseGitObject(CheckpointGitObjectsDir(store.RootDir(), "checkpoint", "second"), "blob", []byte("second root object"))
+	secondOID, err := gittest.WriteLooseObject(CheckpointGitObjectsDir(store.RootDir(), "checkpoint", "second"), "blob", []byte("second root object"))
 	testutil.FailErr(t, "second object", err)
-	plainOID, err := WriteLooseGitObject(CheckpointGitObjectsDir(store.RootDir(), "checkpoint", "plain"), "blob", []byte("no repository here"))
+	plainOID, err := gittest.WriteLooseObject(CheckpointGitObjectsDir(store.RootDir(), "checkpoint", "plain"), "blob", []byte("no repository here"))
 	testutil.FailErr(t, "plain object", err)
 	core, err := layeredfs.New(layeredfs.Config{ViewID: "refs", BackingDir: t.TempDir(), Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: roots["primary"], IsPrimary: true}}})
 	testutil.FailErr(t, "view", err)
