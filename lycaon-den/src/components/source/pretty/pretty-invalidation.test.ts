@@ -16,15 +16,15 @@ function layout(state: EditorState) {
   return { ranges, outcome: prettyOutcomeOf(state) };
 }
 
-function compare(state: EditorState, changes: ChangeSpec, path = "bundle.js"): EditorState {
+function compare(state: EditorState, changes: ChangeSpec, path = "bundle.js", sample = path): EditorState {
   const next = state.update({ changes }).state;
-  expect(layout(next)).toEqual(layout(open(next.doc.toString(), path)));
+  expect(layout(next), sample).toEqual(layout(open(next.doc.toString(), path)));
   return next;
 }
 
 describe("incremental block facts", () => {
   const fields = Array.from({ length: 480 }, (_, i) => `key${i}:value${i},`).join("");
-  const source = `function outer(){ const obj={${fields}result:retu /x;y/ / 1, end:1} }`;
+  const source = `function outer(){ const obj={${fields}result:retu /x;y/ + 1, end:1} }`;
   const at = source.indexOf("retu") + 4;
 
   it("revises breaks before the checkpoint when keyword completion protects a semicolon", () => {
@@ -36,7 +36,7 @@ describe("incremental block facts", () => {
   });
 
   it("stores one fact per opening after an enclosing group is replayed", () => {
-    const text = `function f(){const earlier={${fields}end:1}, result=retu /x;y/ / 1, z=2}`;
+    const text = `function f(){const earlier={${fields}end:1}, result=retu /x;y/ + 1, z=2}`;
     const pos = text.indexOf("retu") + 4;
     let state = open(text);
     const count = state.field(prettyLayoutField).facts.size;
@@ -93,8 +93,14 @@ describe("incremental block facts", () => {
   it.each(["bundle.js", "bundle.ts", "bundle.tsx"])("matches a fresh build after each context edit in %s", path => {
     const words = ["retu", "rn", "typeof", "throw", "instanceof", "++", "!", "--", "/", "\\\n", "`", "${", "}", ";", "/*", "*/"];
     if (path.endsWith("tsx")) words.push("<Tag", "/>", "</", "{expr}");
-    const doc = `function f(){const table={${"k:12,".repeat(75)}v:retu /x;y/ / 1};return table}`;
-    let seed = path.length * 7919;
+    const prelude = {
+      "bundle.js": "function f(x){const h=x++ / 2;",
+      "bundle.ts": "function f(x?: number){const h=x! / 2;",
+      "bundle.tsx": "function f(x: number){const h=<Tag value={x! / 2}/>;",
+    }[path];
+    const doc = `${prelude}const table={${"k:12,".repeat(75)}v:retu /x;y/ + 1};return table}`;
+    let seed = 7919;
+    for (const char of path) seed = (Math.imul(seed, 31) + char.charCodeAt(0)) >>> 0;
     const random = (n: number) => {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
       return Math.floor(seed / 0x100000000 * n);
@@ -104,7 +110,7 @@ describe("incremental block facts", () => {
       if (i % 50 === 0) state = open(doc, path);
       const from = random(state.doc.length);
       const to = Math.min(state.doc.length, from + random(8));
-      state = compare(state, { from, to, insert: words[random(words.length)]! }, path);
+      state = compare(state, { from, to, insert: words[random(words.length)]! }, path, `${path} edit ${i}`);
     }
   });
 });
