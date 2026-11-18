@@ -160,12 +160,12 @@ export class ChatContentEditor {
     while (!signal.aborted && !this.abort.signal.aborted) {
       const { view, document } = this.reader;
       if (view.scrollDOM.clientHeight === 0) return undefined;
-      const rank = this.reader.viewportAnchor()?.rank;
-      if (rank === undefined) return undefined;
-      const gap = !document.rowAt(MAIN_SECTION, rank);
-      const anchor = gap ? undefined : topTextAnchor(view);
-      const entry = anchor && document.at(anchor.pos);
-      const index = entry?.row?.index ?? rank;
+      const hit = topTextAnchor(view);
+      const entry = hit && document.at(hit.pos);
+      // Measured text is more precise than the height estimate beside a gap.
+      const anchor = entry?.row ? hit : undefined;
+      const index = entry?.row?.index ?? this.reader.viewportAnchor()?.rank;
+      if (index === undefined) return undefined;
       const row = this.rows.get(index) ?? this.access.peek(index) ?? (loaded?.index === index ? loaded : undefined);
       if (row) {
         const column = anchor && entry?.row ? RuneOffsets.of(row.text).toRune(anchor.pos - entry.from) : 0;

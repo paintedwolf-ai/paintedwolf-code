@@ -1,6 +1,6 @@
 import type { Text } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
-import { topEdgePoint, type ScrollAnchor } from "../../components/source/editor/editor-settled-scroll.ts";
+import type { ScrollAnchor } from "../../components/source/editor/editor-settled-scroll.ts";
 import type { ChatContentMatch } from "../../chat/transcript/content/chat-content-reader.ts";
 import { RuneOffsets } from "../../chat/transcript/content/rune-offsets.ts";
 
@@ -10,7 +10,9 @@ export type ChatReadingPlace = Omit<ScrollAnchor, "pos"> & { target: ChatContent
 export function topTextAnchor(view: EditorView): ScrollAnchor | undefined {
   const port = view.scrollDOM.getBoundingClientRect();
   if (!view.dom.isConnected || port.height <= 0) return undefined;
-  const pos = view.posAtCoords(topEdgePoint(view), false);
+  const content = view.contentDOM.getBoundingClientRect();
+  const pos = view.posAtCoords({ x: Math.max(content.left, port.left) + 1, y: port.top + 1 });
+  if (pos === null) return undefined;
   const rect = view.coordsAtPos(pos);
   return rect ? { pos, offset: rect.top - port.top, left: rect.left - port.left } : undefined;
 }

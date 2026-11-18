@@ -63,3 +63,17 @@ it("resolves the visible rank inside a placeholder to its retained rune offset",
     expect(await pending).toEqual({ offset: 0, left: 0, target: { offset: 800, length: 0 } });
   } finally { Reflect.deleteProperty(f.editor.reader.view.scrollDOM, "clientHeight"); }
 });
+
+it("uses the measured character beside a gap whose estimated rank differs", async () => {
+  const f = fixture();
+  const { view } = f.editor.reader;
+  Object.defineProperty(view.scrollDOM, "clientHeight", { value: 200, configurable: true });
+  vi.spyOn(view.scrollDOM, "getBoundingClientRect").mockReturnValue(new DOMRect(10, 20, 300, 200));
+  vi.spyOn(view, "posAtCoords").mockReturnValue(18);
+  vi.spyOn(view, "coordsAtPos").mockReturnValue({ top: 19, left: 30, bottom: 35, right: 31 });
+  vi.spyOn(f.editor.reader, "viewportAnchor").mockReturnValue({ rank: 100, fraction: 0 });
+  expect(await f.editor.capturePlace(new AbortController().signal)).toEqual({
+    offset: -1, left: 20, target: { offset: 18, length: 0 },
+  });
+  expect(f.getRows).not.toHaveBeenCalled();
+});
