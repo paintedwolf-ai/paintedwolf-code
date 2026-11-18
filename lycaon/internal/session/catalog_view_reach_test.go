@@ -22,7 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -40,7 +40,7 @@ func writeProjectExtensions(t *testing.T, projectDir string, body string) {
 
 func newViewManager(t *testing.T, root string, surfaces *settings.TrustSurfacesStore) (*session.Host, *catalogview.Cache) {
 	t.Helper()
-	m := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	m := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	boot := extpacks.Resolve(t.Context(), extpacks.ResolveInput{
 		Packs: func() []extpacks.PackContent {
 			c, err := extpacks.DiscoverStockContent()

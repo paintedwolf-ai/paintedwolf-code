@@ -3,6 +3,7 @@ package sessioncontracts
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -105,7 +105,7 @@ func TestFixtureStoreOverrideKeepsHostAndAPIAligned(t *testing.T) {
 					d.Core.Projects = project.NewSQLRegistry(database)
 				})
 				if tc.supplied {
-					supplied = session.NewHost(sessions, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+					supplied = session.NewHost(sessions, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 					opts = append(opts, func(d *hostapi.Dependencies) { d.Core.Sessions = supplied })
 				}
 			}

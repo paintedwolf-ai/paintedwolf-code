@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
@@ -30,6 +31,7 @@ import (
 	"github.com/lycaon/lycaon/internal/scan"
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
+	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	scantoolapi "github.com/lycaon/lycaon/internal/scan/toolapi"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -78,7 +80,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal, Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls, Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: storetest.New(t, testdbseed.DefaultProjectID)}); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterStateTools failed", err)
 	}
-	blueprintMgr := blueprint.NewManager(blueprint.NewFileStoreForTest(t.TempDir()))
+	blueprintMgr := blueprint.NewManager(blueprinttest.NewFileStore(t.TempDir()))
 	if err := blueprint.RegisterPlanTools(reg, blueprintMgr); err != nil {
 		contractcheck.FailErr(t, "blueprint.RegisterPlanTools failed", err)
 	}
@@ -199,7 +201,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 
 	sqlDB := testdbfixture.Open(t, "scan-boot.db")
 	coord := scantest.Coordinator(t, scan.NewSQLStore(sqlDB), nil)
-	if err := scantoolapi.RegisterScanTools(rt.Registry, coord, &scan.MockRegistry{Scanner: &scan.MockScanner{}}, scancadence.New(scan.StoreFromCoordinator(coord), coord, &scan.MockRegistry{Scanner: &scan.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
+	if err := scantoolapi.RegisterScanTools(rt.Registry, coord, &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{}}, scancadence.New(scan.StoreFromCoordinator(coord), coord, &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
 		contractcheck.FailErr(t, "scan.RegisterScanTools failed", err)
 	}
 	secretValues := credentialstore.NewEmpty(credentialstore.Slot{

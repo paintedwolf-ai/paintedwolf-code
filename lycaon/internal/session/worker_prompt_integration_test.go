@@ -26,7 +26,7 @@ import (
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -46,7 +46,7 @@ func setupWorkerPromptFixture(t *testing.T) (*session.Host, *store.SQL, *llm.Rec
 		Text:    "ok",
 	}}}))
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	if err := orchestration.LoadRequiredAgentRegistry(context.Background(), agents); err != nil {
 		testutil.FailErr(t, "LoadRequiredAgentRegistry", err)

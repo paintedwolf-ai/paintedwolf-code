@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,7 +24,7 @@ import (
 // program's interrupted result, ahead of the user's message.
 func TestUserTurnOpensWithTheInterruptedParkedProgram(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	mgr := NewHost(sessionStore, Models{Client: llm.NewMockProvider(testMockConfig(t)), Limits: settings.DefaultSessionLimits()}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})

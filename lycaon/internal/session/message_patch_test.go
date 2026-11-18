@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/timelayout"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -62,7 +62,7 @@ func TestUpdateMessagePatchPublishesStoredRow(t *testing.T) {
 	store := store.NewSQL(sqlDB)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()
@@ -158,7 +158,7 @@ func TestUpdateMessagePatchPersistsCoordinatorGrounding(t *testing.T) {
 	store := store.NewSQL(sqlDB)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()
@@ -210,7 +210,7 @@ func TestUpdateMessagePatchPersistsRunCompletionReportScope(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "message-report.db")
 
 	messageStore := store.NewSQL(sqlDB)
-	mgr := NewHost(messageStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(messageStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	ctx := t.Context()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	sess, err := messageStore.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -307,7 +307,7 @@ func TestTranscriptUpdateStoresReasoningAndRecoveryRestoresIt(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "reasoning-patch.db")
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	st := store.NewSQL(sqlDB)
-	mgr := NewHost(st, Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	ctx := t.Context()
 	sess, err := st.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)

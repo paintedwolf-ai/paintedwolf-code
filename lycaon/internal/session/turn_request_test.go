@@ -29,6 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -344,7 +345,7 @@ func TestConsumedStartupWakeKeepsWaitingUserTurnBusy(t *testing.T) {
 	ctx := t.Context()
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	client := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "unexpected follow-up"}}}))
-	mgr := NewHost(sessionStore, Models{Client: client, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(sessionStore, Models{Client: client, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "start visible turn", sessionStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))

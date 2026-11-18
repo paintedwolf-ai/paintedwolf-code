@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/db"
@@ -28,6 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerplan"
@@ -74,7 +76,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 
 	store := store.NewSQL(sqlDB)
 	rt := newContextualToolsRuntime(t, configRoot)
-	mgr := session.NewHost(store, session.Models{Client: client, Provider: nil, Limits: cfg, Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: client, Provider: nil, Limits: cfg, Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
 	mgr.Coordinator.Guards.SetToolMetadata(rt.Executor.Metadata)
@@ -94,7 +96,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	workflowMgr.Resolver.SessionStore = sessionWF
 	workflowMgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(sqlDB)
 	projectDir := t.TempDir()
-	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
+	blueprintStore := blueprinttest.NewFileStore(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	workflowMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
 	workflowMgr.Blueprints.Getter = blueprintMgr

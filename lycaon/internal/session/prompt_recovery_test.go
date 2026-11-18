@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"reflect"
 	"slices"
 	"strings"
@@ -24,7 +25,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -91,7 +91,7 @@ func TestPromptRetryRestoresOriginalInputFromReceipt(t *testing.T) {
 	_, err = mgr.Runner.Instructions.Apply(ctx, sess.ID, originalInput)
 	testutil.FailErr(t, "append original", err)
 	testutil.FailErr(t, "interrupt original", st.FinishPromptSubmission(ctx, original.ID, claimed.ClaimToken, store.PromptSubmissionInterrupted, "", store.PromptSubmissionFailure{Message: "provider disconnected"}))
-	restarted := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	restarted := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	input := promptinput.Input{Text: "client text is not the retry authority", Recovery: &api.PromptRecovery{Action: "retry", AfterMessageID: original.ID}}
 	resumed, _, err := restarted.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), input, input)
 	testutil.FailErr(t, "retry after manager restart", err)

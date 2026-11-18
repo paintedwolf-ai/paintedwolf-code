@@ -16,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/worker/workertest"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -87,7 +87,7 @@ func NewWorkersServer(t *testing.T) *api.Server {
 	database := testdbfixture.Open(t, "workers.db")
 	store := store.NewSQL(database)
 	mock := llm.NewMockProvider(TestMockConfig(t))
-	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	workersCfg := worker.DefaultWorkersConfig()
 	queue := workertest.OnDatabase(t, database, workersCfg.Poller.MaxConcurrency)
 	queue.SetWorkersConfig(workersCfg)

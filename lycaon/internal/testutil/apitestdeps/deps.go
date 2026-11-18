@@ -5,6 +5,7 @@ package apitestdeps
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -56,7 +57,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -348,7 +348,7 @@ func fillSessions(t *testing.T, d *Deps) {
 	if d.Sessions != nil {
 		return
 	}
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	d.Sessions = session.NewHost(d.Store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	d.Sessions.SetDataDir(t.TempDir())
 	d.Sessions.SetProjectRegistry(d.Projects)

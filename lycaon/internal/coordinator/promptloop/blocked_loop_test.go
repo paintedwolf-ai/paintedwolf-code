@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strconv"
 	"strings"
 	"testing"
@@ -79,7 +80,7 @@ func TestBlockedLoopClosesOutInsteadOfSpinning(t *testing.T) {
 	client := &alwaysSameToolClient{args: args}
 	deps := promptloop.StoreDeps(msgStore)
 	deps.Model.LLM = client
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "ok", nil
 	}))
@@ -163,7 +164,7 @@ func TestBlockedLoopFinalTurnToolCallIsReportedAsTheModelsMiss(t *testing.T) {
 	client := &alwaysSameToolClient{args: args, ignoreCloseout: true}
 	deps := promptloop.StoreDeps(msgStore)
 	deps.Model.LLM = client
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "ok", nil
 	}))
@@ -221,7 +222,7 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 
 	deps := promptloop.StoreDeps(msgStore)
 	deps.Model.LLM = clientWithSynth
-	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Tools = toolstest.NewRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Nudges.DoomLoop = guard
 	deps.Closeout.RejectFmt = fmttr
@@ -321,7 +322,7 @@ func TestBlockedLoopStreakResetsOnProgress(t *testing.T) {
 	}}
 	deps := promptloop.StoreDeps(msgStore)
 	deps.Model.LLM = client
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "ok", nil
 	}))
@@ -353,7 +354,7 @@ func TestSchemaRejectsDoNotForceBlockedLoopCloseout(t *testing.T) {
 	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "ok", nil
 	}))
@@ -450,7 +451,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 	var escalateCalls int
 	deps := promptloop.StoreDeps(msgStore)
 	deps.Model.LLM = client
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "ok", nil
 	}))

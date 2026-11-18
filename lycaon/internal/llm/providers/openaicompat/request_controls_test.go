@@ -30,8 +30,9 @@ func TestResolveControlsOrchestrationTurn(t *testing.T) {
 }
 
 func TestResolveControlsStrictSessionBudget(t *testing.T) {
-	t.Cleanup(modelcall.ResetTurnBudgetForTest)
-	modelcall.MarkSessionReasoningRecovery("strict-session")
+	sessionID := t.Name()
+	t.Cleanup(func() { modelcall.ClearSessionReasoningRecovery(sessionID) })
+	modelcall.MarkSessionReasoningRecovery(sessionID)
 
 	provider := New("fireworks", "http://localhost", "key", []modelinfo.Entry{
 		{ID: "m", MaxTokens: 16384, ReasoningEffort: "medium"},
@@ -39,7 +40,7 @@ func TestResolveControlsStrictSessionBudget(t *testing.T) {
 	req := modelcall.CompletionRequest{
 		Model: "m",
 		Tools: []tools.ToolMeta{{Name: "task"}},
-		Debug: modelcall.RequestDebug{Surface: "implement_synthesis", SessionID: "strict-session"},
+		Debug: modelcall.RequestDebug{Surface: "implement_synthesis", SessionID: sessionID},
 	}
 	built := provider.resolveRequestControls(req, req.Model, controlOpts{})
 	if built.MaxTokens != 16384 {
@@ -51,7 +52,8 @@ func TestResolveControlsStrictSessionBudget(t *testing.T) {
 }
 
 func TestResolveControlsOrchestrationGivesThinkingRoom(t *testing.T) {
-	t.Cleanup(modelcall.ResetTurnBudgetForTest)
+	sessionID := t.Name()
+	t.Cleanup(func() { modelcall.ClearSessionReasoningRecovery(sessionID) })
 	const configured = 12288
 	provider := New("p", "http://localhost", "key", []modelinfo.Entry{
 		{ID: "m", MaxTokens: configured},
@@ -59,13 +61,13 @@ func TestResolveControlsOrchestrationGivesThinkingRoom(t *testing.T) {
 	req := modelcall.CompletionRequest{
 		Model: "m",
 		Tools: []tools.ToolMeta{{Name: "task"}},
-		Debug: modelcall.RequestDebug{Surface: toolcontract.SurfaceImplementDispatch, SessionID: "room"},
+		Debug: modelcall.RequestDebug{Surface: toolcontract.SurfaceImplementDispatch, SessionID: sessionID},
 	}
 	if built := provider.resolveRequestControls(req, req.Model, controlOpts{}); built.MaxTokens != configured {
 		t.Fatalf("orchestration max_tokens = %d, want configured %d (room preserved)", built.MaxTokens, configured)
 	}
 
-	modelcall.MarkSessionReasoningRecovery("room")
+	modelcall.MarkSessionReasoningRecovery(sessionID)
 	if built := provider.resolveRequestControls(req, req.Model, controlOpts{}); built.MaxTokens != configured {
 		t.Fatalf("strict max_tokens = %d, want configured cap %d", built.MaxTokens, configured)
 	}

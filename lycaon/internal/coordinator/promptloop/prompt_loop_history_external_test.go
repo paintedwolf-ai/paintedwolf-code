@@ -2,6 +2,7 @@ package promptloop_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 
@@ -27,7 +28,7 @@ func TestLoopProseFinishInputOmitsToolsOnFirstTurn(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	sess.ParentSessionID = "parent-1"
 	sess.AgentType = orchestration.ProfileImplementer
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("read", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		readCalls++
 		return "ok", nil

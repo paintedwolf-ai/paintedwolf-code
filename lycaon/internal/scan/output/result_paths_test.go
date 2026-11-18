@@ -1,10 +1,10 @@
 package output_test
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"path/filepath"
 	"testing"
 
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -13,10 +13,10 @@ func TestNormalizeResultPathsMakesSnapshotFindingsStable(t *testing.T) {
 	rootA := filepath.Join(t.TempDir(), "snapshot-a")
 	rootB := filepath.Join(t.TempDir(), "snapshot-b")
 	resultA := &scanoutput.Result{Findings: []api.SecurityFinding{
-		scanfindings.FixtureFinding("rule-1", api.FindingLevelHigh, "finding", filepath.Join(rootA, "src", "main.go"), 7),
+		findingstest.Finding("rule-1", api.FindingLevelHigh, "finding", filepath.Join(rootA, "src", "main.go"), 7),
 	}}
 	resultB := &scanoutput.Result{Findings: []api.SecurityFinding{
-		scanfindings.FixtureFinding("rule-1", api.FindingLevelHigh, "finding", filepath.Join(rootB, "src", "main.go"), 7),
+		findingstest.Finding("rule-1", api.FindingLevelHigh, "finding", filepath.Join(rootB, "src", "main.go"), 7),
 	}}
 
 	scanoutput.NormalizeResultPaths(resultA, rootA)
@@ -36,7 +36,7 @@ func TestNormalizeResultPathsNormalizesWarningsButPreservesExternalAbsolutePath(
 	external := filepath.Join(t.TempDir(), "external.go")
 	result := &scanoutput.Result{
 		Findings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("rule-1", api.FindingLevelHigh, "finding", external, 1),
+			findingstest.Finding("rule-1", api.FindingLevelHigh, "finding", external, 1),
 		},
 		Warnings: []api.ScanWarning{{File: filepath.Join(root, "pkg", "warning.go")}},
 	}
@@ -53,8 +53,8 @@ func TestNormalizeResultPathsNormalizesWarningsButPreservesExternalAbsolutePath(
 func TestNormalizeResultPathsHandlesFileURIAndPreservesNonFileURI(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "snapshot")
 	result := &scanoutput.Result{Findings: []api.SecurityFinding{
-		scanfindings.FixtureFinding("file-rule", api.FindingLevelHigh, "file", "file://"+filepath.ToSlash(filepath.Join(root, "src", "main.go")), 1),
-		scanfindings.FixtureFinding("web-rule", api.FindingLevelLow, "web", "https://scanner.example/rules/1", 1),
+		findingstest.Finding("file-rule", api.FindingLevelHigh, "file", "file://"+filepath.ToSlash(filepath.Join(root, "src", "main.go")), 1),
+		findingstest.Finding("web-rule", api.FindingLevelLow, "web", "https://scanner.example/rules/1", 1),
 	}}
 
 	scanoutput.NormalizeResultPaths(result, root)

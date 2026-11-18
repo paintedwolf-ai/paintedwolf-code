@@ -25,7 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -55,7 +55,7 @@ func (r *receiptRecorder) admitted() []string {
 func newReceiptTestManager(t *testing.T) (*Host, *receiptRecorder) {
 	t.Helper()
 	recorder := &receiptRecorder{SQL: storetest.New(t, testdbseed.DefaultProjectID)}
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	mgr := NewHost(recorder, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})

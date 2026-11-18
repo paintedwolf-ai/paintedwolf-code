@@ -14,7 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tokenest"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -44,7 +44,7 @@ func TestPrepareToolWireContentRetainsLargeFilesWithoutCompactor(t *testing.T) {
 
 func TestPrepareToolWirePreservesBoundedRecallBody(t *testing.T) {
 	st := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled: true, ChunkTokenThreshold: 50, ChunkTargetTokens: 20,
@@ -64,7 +64,7 @@ func TestPrepareToolWirePreservesBoundedRecallBody(t *testing.T) {
 
 func TestPrepareToolWireContentCompactsBeforeStore(t *testing.T) {
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,
@@ -96,7 +96,7 @@ func TestPrepareToolWireContentPreservesOutputBeyondSpillBound(t *testing.T) {
 	st := storetest.New(t, testdbseed.DefaultProjectID)
 	limits := settings.DefaultSessionLimits()
 	limits.MaxToolSpillBytes = 1024
-	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: limits, Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: limits, Cost: nil}, toolstest.NewRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled: true, ChunkTokenThreshold: 100, ChunkTargetTokens: 200,
@@ -112,7 +112,7 @@ func TestPrepareToolWireContentPreservesOutputBeyondSpillBound(t *testing.T) {
 
 func TestPrepareToolWireContentHandlePrefixedFind(t *testing.T) {
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,
@@ -154,7 +154,7 @@ func TestPrepareToolWireContentHandlePrefixedFind(t *testing.T) {
 
 func TestPrepareToolWireContentSummarizeSpillsFullPack(t *testing.T) {
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,
@@ -222,7 +222,7 @@ func TestPrepareToolWireContentSummarizeSpillsFullPack(t *testing.T) {
 
 func TestPrepareToolWireContentSummarizeWireFittedLandsInline(t *testing.T) {
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,

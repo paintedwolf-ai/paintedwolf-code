@@ -3,6 +3,7 @@ package sessioncontracts
 import (
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -33,7 +33,7 @@ func TestPromptHTTPReturnsSpendRejectionBeforeAcceptedReceipt(t *testing.T) {
 	limits.SessionSpendCeilingUSD = 5
 	srv := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) {
 		d.Core.Store, d.Core.Projects = fixture.Sources.Workspace.SessionStore, fixture.Sources.Workspace.ProjectRegistry
-		d.Core.Sessions = session.NewHost(d.Core.Store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: limits, Cost: tracker}, tools.NewStubRegistry())
+		d.Core.Sessions = session.NewHost(d.Core.Store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: limits, Cost: tracker}, toolstest.NewRegistry())
 	})
 
 	spent := int64(6_000_000_000)

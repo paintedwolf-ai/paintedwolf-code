@@ -2,6 +2,7 @@ package promptloop_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -31,7 +32,7 @@ func TestLoopRespectsMaxIterations(t *testing.T) {
 		return limits
 	}
 	deps.Model.LLM = client
-	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Tools = toolstest.NewRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()

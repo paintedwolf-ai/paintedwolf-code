@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"sync/atomic"
 	"testing"
 
@@ -13,7 +14,7 @@ import (
 )
 
 func TestReviewFeedbackCanReadReviseAndVerifyBeforeParking(t *testing.T) {
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	var observations []string
 	for _, name := range []string{"read", "edit"} {
 		testutil.FailErr(t, "register review tool", reg.Register(name, func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
@@ -57,7 +58,7 @@ func TestApprovalBoundaryAcrossSerialAndParallelBatches(t *testing.T) {
 		for _, initiallyAwaiting := range []bool{false, true} {
 			for _, hostHeld := range []bool{false, true} {
 				t.Run(fmt.Sprintf("shared=%v/existing=%v/host=%v", shared, initiallyAwaiting, hostHeld), func(t *testing.T) {
-					reg := tools.NewStubRegistry()
+					reg := toolstest.NewRegistry()
 					var awaiting atomic.Bool
 					awaiting.Store(initiallyAwaiting)
 					var callsRun atomic.Int32

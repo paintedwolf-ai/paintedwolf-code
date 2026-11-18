@@ -20,7 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -68,7 +68,7 @@ postures:
 	}
 
 	persistence := storetest.New(t)
-	mgr := NewHost(persistence, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(persistence, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.Profiles.SetPostureRegistry(reg)
 	if err := mgr.Profiles.WarmPostureOverlay(dir); err != nil {
 		testutil.FailErr(t, "mgr.Profiles.WarmPostureOverlay failed", err)
@@ -125,7 +125,7 @@ func (s *feedbackReadFailureStore) GetMessage(ctx context.Context, sessionID, me
 func TestPolicyFeedbackRetriesRenderingAndPersistenceWithoutLoss(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	storage := &feedbackReadFailureStore{Store: sessionStore}
-	mgr := NewHost(storage, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(storage, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	decision := &oar.Decision{Effect: oar.EffectNudge, Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "frozen observation"}}
@@ -188,7 +188,7 @@ func TestPolicyAdvisoryRoutingAtEveryHostBoundary(t *testing.T) {
 
 func TestPolicyAdvisoryPersistenceUsesScreenedBytesAndAcknowledgesOnce(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	renderer := advisoryTestManager(t).Coordinator.Feedback.Renderer()
 	mgr.SetOARPipeline(nil, renderer)
 	mgr.Runner.Transcript.SetRedactor(func(_ context.Context, msg api.Message) (api.Message, bool) {

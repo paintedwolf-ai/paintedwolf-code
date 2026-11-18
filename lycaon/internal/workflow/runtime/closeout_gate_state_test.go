@@ -2,6 +2,7 @@ package runtime_test
 
 import (
 	workflow "github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 
 	"context"
 	"errors"
@@ -35,7 +36,7 @@ func newCloseoutGateHarness(t *testing.T) (*workflow.RunManager, *api.Session, *
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	mgr := workflow.NewManager(workflowpersistence.New(sqlDB), sessionStore, manifestRegistry, nil)
-	workflow.WireBlueprintDepsForTest(mgr, dir)
+	workflowtest.WireBlueprintDeps(mgr, dir)
 
 	// plan@ research declares gated closeout with research_satisfied.
 	run, err := startRun(ctx, mgr, sess.ID, "plan", "1.0.1")

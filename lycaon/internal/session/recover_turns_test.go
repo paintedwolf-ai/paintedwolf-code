@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -201,7 +202,7 @@ func TestReviewGuidanceFollowsLiveVerdictGate(t *testing.T) {
 		for _, pending := range []bool{false, true} {
 			for _, staged := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/pending=%v/staged=%v", id, pending, staged), func(t *testing.T) {
-					mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+					mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 					mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 					kicks := mgr.Coordinator.Runtime.Kicks()
 					review := anchor.InformRender(id)

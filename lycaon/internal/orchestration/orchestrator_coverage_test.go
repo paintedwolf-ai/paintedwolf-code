@@ -69,12 +69,9 @@ func TestTopologyLookupEmpty(t *testing.T) {
 }
 
 func TestValidateAgentToolProfiles(t *testing.T) {
-	reg := NewMemoryAgentRegistryForTest()
-	profiles := []sandbox.ToolProfile{
-		{ID: "coordinator"},
-		{ID: "implement"},
-		{ID: "explore_readonly"},
-	}
+	reg := agentRegistryFixture(t)
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load shipped tool profiles", err)
 	if err := ValidateAgentToolProfiles(reg, profiles); err != nil {
 		testutil.FailErr(t, "ValidateAgentToolProfiles failed", err)
 	}
@@ -94,7 +91,7 @@ func TestOrchestratorStatusCancelAndRunErrors(t *testing.T) {
 		t.Fatal("expected nil orchestrator error")
 	}
 
-	reg := NewMemoryAgentRegistryForTest()
+	reg := agentRegistryFixture(t)
 	orch := NewOrchestratorImpl(OrchestratorDeps{Agents: reg})
 	if _, err := orch.Run(ctx, RunRequest{}); err == nil {
 		t.Fatal("expected missing topology/workflow error")
@@ -130,7 +127,7 @@ func TestOrchestratorStatusCancelAndRunErrors(t *testing.T) {
 }
 
 func TestValidateTopologyProfilesAllPatterns(t *testing.T) {
-	reg := NewMemoryAgentRegistryForTest()
+	reg := agentRegistryFixture(t)
 	orch := NewOrchestratorImpl(OrchestratorDeps{Agents: reg})
 
 	spec := &TopologySpec{
@@ -175,7 +172,7 @@ func TestSetupPipelineBatchBranches(t *testing.T) {
 	workers := NewMemoryTopologyWorkers()
 	orch := NewOrchestratorImpl(OrchestratorDeps{
 		Workers: workers,
-		Agents:  NewMemoryAgentRegistryForTest(),
+		Agents:  agentRegistryFixture(t),
 	})
 	allStages := loadDefaultPipelineStages(t)
 	stages := allStages[:1]
@@ -251,7 +248,7 @@ func TestValidateGateAgentsBundled(t *testing.T) {
 func TestLoadTopologyCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	orch := NewOrchestratorImpl(OrchestratorDeps{Agents: NewMemoryAgentRegistryForTest()})
+	orch := NewOrchestratorImpl(OrchestratorDeps{Agents: agentRegistryFixture(t)})
 	pipeline := extpacks.Bundled(config.PlatformFlows.Join("_topologies", "default-pipeline.yaml"))
 	if _, err := orch.LoadTopology(ctx, pipeline); err == nil {
 		t.Fatal("expected canceled context error")
