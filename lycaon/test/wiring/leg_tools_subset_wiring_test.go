@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -63,7 +64,7 @@ func TestExploreLegToolsMatchExploreProfile(t *testing.T) {
 			}
 			child, err := h.Store.Get(ctx, stored.ChildSessionID)
 			testutil.FailErr(t, "load child", err)
-			leg, err := h.Workers.ContextLoader.BuildWorkerPromptContext(ctx, child.ID, child)
+			leg, err := h.Workers.ContextLoader.BuildWorkerPromptContext(workercontext.WithJob(ctx, task.ID), child.ID, child)
 			testutil.FailErr(t, "BuildWorkerPromptContext", err)
 			got := append([]string(nil), leg.LegTools...)
 			sort.Strings(got)

@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -41,7 +42,7 @@ func TestWorkerLegToolsMatchListForPrompt(t *testing.T) {
 			prof, err := h.AgentRegistry.Get(agentType)
 			testutil.FailErr(t, "agents.Get", err)
 			schema := sortedToolNamesFromMeta(policy.ListForPrompt(ctx, child, prof.ToolProfile))
-			leg, err := builder.BuildWorkerPromptContext(t.Context(), child.ID, child)
+			leg, err := builder.BuildWorkerPromptContext(workercontext.WithJob(t.Context(), "leg-tools-"+agentType), child.ID, child)
 			testutil.FailErr(t, "BuildWorkerPromptContext", err)
 			got := append([]string(nil), leg.LegTools...)
 			sort.Strings(got)

@@ -98,7 +98,7 @@ func TestParallelWorkerRecordFindingSiblingInjectWiring(t *testing.T) {
 	if len(page.Notes) != 1 || page.Notes[0].Summary != summary || page.Notes[0].Ref != "internal/config/resolve.go:1" {
 		t.Fatalf("prepared sibling notes for B = %+v", page.Notes)
 	}
-	leg, err := h.Workers.ContextLoader.BuildWorkerPromptContext(ctx, childB.ID, childB)
+	leg, err := h.Workers.ContextLoader.BuildWorkerPromptContext(workercontext.WithJob(ctx, taskB.ID), childB.ID, childB)
 	testutil.FailErr(t, "build worker leg context", err)
 	leg.SiblingNotes = page.Notes
 	block, err := inject.RenderWorkerLegInject(ctx, prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})), childB.ID, leg)
