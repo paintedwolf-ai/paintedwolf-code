@@ -29,7 +29,6 @@ type CriteriaEvaluator func(
 // SQLQueue persists admitted worker rounds and their outcomes.
 type SQLQueue struct {
 	Branches          *BranchService
-	Promotions        *PromotionStore
 	maxRunning        int
 	defaultTarget     api.ExecutionTarget
 	onRunningCancel   func(context.Context, string) error
@@ -94,8 +93,14 @@ func (q *SQLQueue) SetRoundDeliveryHooks(
 	q.onRoundSettled = onSettled
 }
 
-// NewSQLQueue creates a persistent worker queue.
-func NewSQLQueue(database db.Handle, maxRunning int) *SQLQueue {
+// SQLServices binds queue transitions and promotion persistence to one installation.
+type SQLServices struct {
+	Queue      *SQLQueue
+	Promotions *PromotionStore
+}
+
+// NewSQLServices constructs components sharing persistence and committed notifications.
+func NewSQLServices(database db.Handle, maxRunning int) SQLServices {
 	if maxRunning <= 0 {
 		maxRunning = MaxWorkers
 	}
@@ -105,11 +110,10 @@ func NewSQLQueue(database db.Handle, maxRunning int) *SQLQueue {
 	q := &SQLQueue{
 		db: database, store: store, changes: changes, runnable: runnable,
 		maxRunning: maxRunning, defaultTarget: api.ExecutionTargetLocal,
-		Branches:   &BranchService{store: store, changes: changes, preparations: make(map[string]*api.WorkspacePreparation)},
-		Promotions: &PromotionStore{store: store, changes: changes, runnable: runnable},
+		Branches: &BranchService{store: store, changes: changes, preparations: make(map[string]*api.WorkspacePreparation)},
 	}
 
-	return q
+	return SQLServices{Queue: q, Promotions: &PromotionStore{store: store, changes: changes, runnable: runnable}}
 }
 
 func (q *SQLQueue) NotifyRunnable() {

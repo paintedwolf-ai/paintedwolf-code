@@ -127,7 +127,8 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	})
 	testutil.FailErr(t, "open recovery coordinator", err)
 	manager := workspace.NewManager(branches, selector, nil).WithPrivateGit(gitManager).WithRecovery(coordinator)
-	queue := NewSQLQueue(database, 4)
+	queueServices := NewSQLServices(database, 4)
+	queue := queueServices.Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(root, "source-content")).Baselines)
 	queue.Branches.SetWorkerWorkspaceManager(manager)
 	fixture := &layeredWorkerFixture{db: database, queue: queue, manager: manager, source: source, branches: branches}
@@ -188,7 +189,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	if string(base) != "package main\n" {
 		t.Fatalf("retained base = %q", base)
 	}
-	service := &MergeService{Queue: queue, Branches: queue.Branches, Store: queue.Promotions, DataDir: testbaseline.DataDir(t, database), Workspace: manager}
+	service := &MergeService{Queue: queue, Branches: queue.Branches, Store: queueServices.Promotions, DataDir: testbaseline.DataDir(t, database), Workspace: manager}
 	testutil.FailErr(t, "recover merge transactions", service.RecoverOrphanedMergeApplies(t.Context()))
 	if sourceConflict {
 		assertRecoveredSourceConflict(t, service, task, source, manifest.CheckpointID, fields[1])

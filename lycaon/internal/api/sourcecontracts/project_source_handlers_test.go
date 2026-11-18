@@ -100,7 +100,7 @@ func TestWorkerBranchRoot(t *testing.T) {
 	contractfixture.CompleteBranchMeta(t, branch)
 	testdbseed.InsertProject(t, database, projectID)
 	testdbseed.InsertProject(t, database, "22222222-2222-4222-8222-222222222222")
-	q := worker.NewSQLQueue(database, 1)
+	q := worker.NewSQLServices(database, 1).Queue
 	workerID := contractfixture.EnqueueBranchJob(t, q, database, projectID, branch)
 	otherBranch := workertest.NewBranch(t, database)
 	contractfixture.CompleteBranchMeta(t, otherBranch)

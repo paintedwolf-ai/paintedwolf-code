@@ -278,7 +278,7 @@ func fillHost(t *testing.T, d *Deps) {
 func fillWorkers(t *testing.T, d *Deps) {
 	t.Helper()
 	if d.Workers == nil {
-		queue := worker.NewSQLQueue(d.Database, 2)
+		queue := worker.NewSQLServices(d.Database, 2).Queue
 		d.Workers, d.Branches = queue, queue.Branches
 	}
 	if queue, ok := d.Workers.(*worker.SQLQueue); ok && d.Branches == nil {

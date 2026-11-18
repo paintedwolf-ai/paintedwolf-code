@@ -30,14 +30,14 @@ var _ CanceledWorkRetainer = (*workspace.Manager)(nil)
 
 // retryOnFullDisk gives a cancellation write one more try with the reserve freed. A worker that
 // filled the volume the database shares must still be cancelable, or nothing can free the space.
-func (q *BranchService) retryOnFullDisk(write func() error) error {
+func (b *BranchService) retryOnFullDisk(write func() error) error {
 	err := write()
 	if !db.IsDiskFull(err) {
 		return err
 	}
-	q.mu.Lock()
-	ws := q.workerWorkspace
-	q.mu.Unlock()
+	b.mu.Lock()
+	ws := b.workerWorkspace
+	b.mu.Unlock()
 	if releaser, ok := ws.(SpaceReserveReleaser); ok && releaser.ReleaseSpaceReserve() {
 		return write()
 	}
@@ -46,14 +46,14 @@ func (q *BranchService) retryOnFullDisk(write func() error) error {
 
 // settleCanceledRuntime runs on every cancellation path because each one finishes here. On
 // failure the job stays cancel-requested, so maintenance retries it and its data stays put.
-func (q *BranchService) settleCanceledRuntime(ctx context.Context, jobID string) error {
-	task, ok := q.store.getTask(ctx, jobID) //nolint:contextcheck // Get has internal sqlQueueGetTimeout
+func (b *BranchService) settleCanceledRuntime(ctx context.Context, jobID string) error {
+	task, ok := b.store.getTask(ctx, jobID)
 	if !ok || task.Status.IsTerminal() || strings.TrimSpace(task.WorkspaceRoot) == "" {
 		return nil
 	}
-	q.mu.Lock()
-	ws := q.workerWorkspace
-	q.mu.Unlock()
+	b.mu.Lock()
+	ws := b.workerWorkspace
+	b.mu.Unlock()
 	if settler, ok := ws.(WorkerRuntimeSettler); ok {
 		if err := settler.SettleBranchRuntime(ctx, jobID, task.WorkspaceRoot); err != nil {
 			return err

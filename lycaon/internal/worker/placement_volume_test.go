@@ -36,7 +36,7 @@ func TestPlacedWorkerSurvivesEjectAndRelocatesThroughBackup(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", project)
 	dataDir := testbaseline.DataDir(t, database)
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
 	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(enginepaths.WorkerBranchesRootUnder(dataDir), platform.NewSelector(platform.Config{}), testvolume.CopyAsClone))
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})

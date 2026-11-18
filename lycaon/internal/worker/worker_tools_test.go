@@ -30,15 +30,16 @@ import (
 )
 
 type workerToolsFixture struct {
-	db        *db.Store
-	queue     *SQLQueue
-	records   *workerrecords.Store
-	decisions sessiondecisions.Store
-	reg       *tools.DefaultRegistry
-	coord     workerrecords.Actor
-	workerID  string
-	root      string
-	ops       *workerops.Service
+	db         *db.Store
+	queue      *SQLQueue
+	promotions *PromotionStore
+	records    *workerrecords.Store
+	decisions  sessiondecisions.Store
+	reg        *tools.DefaultRegistry
+	coord      workerrecords.Actor
+	workerID   string
+	root       string
+	ops        *workerops.Service
 }
 
 func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
@@ -49,8 +50,9 @@ func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
 	_, err := database.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
 		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
 	testutil.FailErr(t, "insert child", err)
+	services := NewSQLServices(database, 1)
 	f := &workerToolsFixture{
-		db: database, queue: NewSQLQueue(database, 1), records: workerrecords.New(database),
+		db: database, queue: services.Queue, promotions: services.Promotions, records: workerrecords.New(database),
 		decisions: sessiondecisions.NewSQL(database), reg: tools.NewDefaultRegistry(),
 		coord: workerrecords.Actor{SessionID: "coord", Role: workerrecords.RoleCoordinator, PrincipalID: "coord"},
 		root:  t.TempDir(),

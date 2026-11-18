@@ -133,7 +133,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	}
 	b.workerRuntime.Queue.Branches.SetWorkerLanes(lanes)
 	workerMergeSvc := &worker.MergeService{
-		Lanes: lanes, Queue: b.workerRuntime.Queue, Branches: b.workerRuntime.Queue.Branches, Store: b.workerRuntime.Queue.Promotions, Workspace: b.workerRuntime.Workspace,
+		Lanes: lanes, Queue: b.workerRuntime.Queue, Branches: b.workerRuntime.Queue.Branches, Store: b.workerRuntime.Promotions, Workspace: b.workerRuntime.Workspace,
 		Reject: b.execution.Rejections, Names: b.boards.WorkerRecords, Sessions: b.workerRuntime.Queue,
 		Reconcile: b.sessions.Manager.Promotion, Captures: b.sessions.Manager.Chats.Captures,
 		Coord:      b.sessions.Manager.Workers.Workspaces,

@@ -27,7 +27,7 @@ func TestClaimNextDoesNotProvisionBranch(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRootWithID(t, sqlDB, testdbseed.DefaultProjectID, "root-id", dir)
 
-	q := NewSQLQueue(sqlDB, 4)
+	q := NewSQLServices(sqlDB, 4).Queue
 	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
 	q.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), platform.NewSelector(platform.Config{}), nil))
 
@@ -114,7 +114,7 @@ func TestClaimWorkerBranchMountedViewSkipsBaselineTreeWalkAndExposesWorkspaceSta
 	sel.Confinement = fixtureConfinement{}
 	wsMgr := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), sel, nil)
 
-	q := NewSQLQueue(sqlDB, 4)
+	q := NewSQLServices(sqlDB, 4).Queue
 	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
 	q.Branches.SetWorkerWorkspaceManager(wsMgr)
 

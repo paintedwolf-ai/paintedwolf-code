@@ -33,7 +33,7 @@ func TestWorkerRoundsShareTheirLaneThroughTheClaimPath(t *testing.T) {
 		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'implementer', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
 	testutil.FailErr(t, "insert child", err)
 
-	q := NewSQLQueue(sqlDB, 4)
+	q := NewSQLServices(sqlDB, 4).Queue
 	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
 	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), platform.NewSelector(platform.Config{}), nil)
 	q.Branches.SetWorkerWorkspaceManager(manager)

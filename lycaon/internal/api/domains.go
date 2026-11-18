@@ -103,6 +103,7 @@ type HarnessControl struct {
 }
 
 type HarnessPreparation struct {
+	branches        *worker.BranchService
 	Workflow        *workflow.RunManager
 	dataDir         string
 	database        db.Handle
@@ -161,7 +162,7 @@ func composeDomains(s *Server, deps Dependencies) {
 	s.Routes.Conversation = &Conversation{ShuttingDown: s.ShuttingDown, preview: deps.Host.Preview, progressStore: deps.Source.ProgressStore, responses: &s.responses, sessionStore: s.sessionStore, sessions: s.sessions}
 	s.Routes.Findings = &Findings{Scan: &s.Admin.Scan, projectRegistry: deps.Core.Projects, responses: &s.responses, scanCadence: deps.Scans.ScanCadence}
 	s.Routes.HarnessControl = &HarnessControl{Workflow: deps.Workflow.Workflows, checkpoints: deps.Approvals.Checkpoints, eventPublisher: s.eventPublisher, harness: &s.harness, manualLLM: deps.Harness.ManualLLM, requireClientAuth: s.requireClientAuth, responses: &s.responses, router: s.router, sessionStore: s.sessionStore, sessions: s.sessions, visualStore: deps.Source.VisualStore}
-	s.Routes.HarnessPreparation = &HarnessPreparation{Workflow: deps.Workflow.Workflows, dataDir: s.dataDir, database: deps.Core.Database, harness: &s.harness, harnessWorkers: deps.Harness.HarnessWorkers, llmSvc: deps.Providers.LLM, projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: s.sessionStore, sessions: s.sessions, workers: deps.Workflow.Workers}
+	s.Routes.HarnessPreparation = &HarnessPreparation{branches: deps.Workflow.Branches, Workflow: deps.Workflow.Workflows, dataDir: s.dataDir, database: deps.Core.Database, harness: &s.harness, harnessWorkers: deps.Harness.HarnessWorkers, llmSvc: deps.Providers.LLM, projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: s.sessionStore, sessions: s.sessions, workers: deps.Workflow.Workers}
 	s.Routes.HarnessProviders = &HarnessProviders{costTracker: deps.Providers.CostTracker, llmSvc: deps.Providers.LLM, responses: &s.responses}
 	s.Routes.LocalData = &LocalData{branches: deps.Workflow.Branches, extensionOwner: s.Admin.Extensions.Mutations.Owner, dataDir: s.dataDir, responses: &s.responses, sessions: s.sessions, sourceLedger: s.Sources.Workspace.SourceLedger, webIndex: deps.External.WebIndex, workerBranchRoot: s.workerBranchRoot, workers: deps.Workflow.Workers}
 	s.Routes.Storage = &Storage{dataDir: s.dataDir, database: deps.Core.Database, markRestorePending: s.markRestorePending, recovery: s.recovery, responses: &s.responses, storePath: s.storePath}

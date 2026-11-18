@@ -72,7 +72,7 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 	child, err := store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "build"})
 	testutil.FailErr(t, "store.CreateChild failed", err)
-	jobID, err := worker.NewSQLQueue(sqlDB, 1).EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, wire.WorkerTask{
+	jobID, err := worker.NewSQLServices(sqlDB, 1).Queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, wire.WorkerTask{
 		Prompt: "build", Brief: "build", ParentSessionID: sess.ID, ChildSessionID: child.ID,
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir, WorkspaceRoot: dir,
 		AgentType: "implementer",

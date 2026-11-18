@@ -24,7 +24,7 @@ func TestEveryReaderReportsTheWorkspacePathsThatWereBound(t *testing.T) {
 	testutil.FailErr(t, "link state folder", os.Symlink(t.TempDir(), state))
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(state, "store.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	queue := NewSQLQueue(sqlDB, 1)
+	queue := NewSQLServices(sqlDB, 1).Queue
 	queue.SetEventOutbox(eventoutbox.New(sqlDB, nil))
 	testutil.FailErr(t, "insert", queue.store.InsertTask(t.Context(), api.WorkerTask{
 		ID: "job-1", ProjectID: testdbseed.DefaultProjectID, AgentType: "implement",
@@ -81,7 +81,7 @@ func TestEveryReaderReportsTheWorkspacePathsThatWereBound(t *testing.T) {
 func TestWorkspaceOutsideTheInstallationIsNotBound(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	queue := NewSQLQueue(sqlDB, 1)
+	queue := NewSQLServices(sqlDB, 1).Queue
 	testutil.FailErr(t, "insert", queue.store.InsertTask(t.Context(), api.WorkerTask{
 		ID: "job-1", ProjectID: testdbseed.DefaultProjectID, AgentType: "implement",
 		Prompt: "fixture", Brief: "fixture", ExecutionTarget: api.ExecutionTargetLocal, Status: api.WorkerStatusPending,

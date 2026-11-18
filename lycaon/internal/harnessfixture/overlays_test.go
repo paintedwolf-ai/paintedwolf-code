@@ -29,7 +29,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 	sessions := store.NewSQL(database)
 	parent, err := sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: project.Roots[0].ID}, project.ID)
 	testutil.FailErr(t, "create parent", err)
-	queue := &fixtureQueue{SQLQueue: worker.NewSQLQueue(database, 2)}
+	queue := &fixtureQueue{SQLQueue: worker.NewSQLServices(database, 2).Queue}
 	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}), nil)
 	ledger := sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
 	queue.Branches.SetBaselineStore(ledger.Baselines)
@@ -39,7 +39,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 		{Label: "Filter", Files: map[string]string{"catalog.py": "value = 'filter'\n"}},
 		{Label: "Page", ResultStatus: "partial", Files: map[string]string{"catalog.py": "value = 'page'\n"}},
 	}, IntegrationFiles: map[string]string{"preferences.json": "violet"}}
-	evidence, err := Prepare(t.Context(), queue, sessions, parent, project.Roots[0], setup, nil)
+	evidence, err := Prepare(t.Context(), queue, queue.Branches, sessions, parent, project.Roots[0], setup, nil)
 	testutil.FailErr(t, "prepare overlays", err)
 	if queue.pendingOutcomes != 0 {
 		t.Fatal("fixture exposed outcomes to the automatic coordinator wake path")
@@ -95,7 +95,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 	if string(body) != "violet" {
 		t.Fatalf("user edit lost: %q", body)
 	}
-	if _, err := Prepare(t.Context(), queue, sessions, parent, project.Roots[0], setup, nil); err == nil {
+	if _, err := Prepare(t.Context(), queue, queue.Branches, sessions, parent, project.Roots[0], setup, nil); err == nil {
 		t.Fatal("fixture reused an existing project")
 	}
 }

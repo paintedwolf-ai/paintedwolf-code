@@ -25,7 +25,8 @@ func TestEmptyCheckpointPromotionRollsBackRefsOnCommitFailure(t *testing.T) {
 	ctx := t.Context()
 	sqlDB := testdbfixture.Open(t, "store.db")
 	store := NewSQLStore(sqlDB)
-	queue := NewSQLQueue(sqlDB, 8)
+	queueServices := NewSQLServices(sqlDB, 8)
+	queue := queueServices.Queue
 	primary := t.TempDir()
 	testdbseed.InsertSessionWithRoot(t, sqlDB, "parent", testdbseed.DefaultProjectID, primary)
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ID: "refs-only", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, AgentType: "implementer", Prompt: "checkpoint", Brief: "retain refs", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}})
@@ -47,8 +48,8 @@ func TestEmptyCheckpointPromotionRollsBackRefsOnCommitFailure(t *testing.T) {
 	bindRecoveryCheckpoint(t, overlay, primary, cpStore, "refs-only")
 	_, err = store.SetWorkerWorkspace(ctx, id, overlay, baseline)
 	testutil.FailErr(t, "bind worker", err)
-	testutil.FailErr(t, "pending worker", queue.Promotions.SetMergeStatus(ctx, id, api.WorkerMergeStatusPending))
-	svc := &MergeService{Queue: queue, Branches: queue.Branches, Store: queue.Promotions, DataDir: t.TempDir()}
+	testutil.FailErr(t, "pending worker", queueServices.Promotions.SetMergeStatus(ctx, id, api.WorkerMergeStatusPending))
+	svc := &MergeService{Queue: queue, Branches: queue.Branches, Store: queueServices.Promotions, DataDir: t.TempDir()}
 	_, err = sqlDB.ExecContext(ctx, `CREATE TRIGGER reject_refs_completion BEFORE UPDATE OF merge_status ON worker_jobs WHEN NEW.merge_status='merged' BEGIN SELECT RAISE(ABORT,'reject refs completion'); END`)
 	testutil.FailErr(t, "completion fault", err)
 	if _, err = svc.PromoteOverlay(ctx, "parent", id, api.PromoteOverlayInput{}); err == nil {
@@ -90,7 +91,8 @@ func TestCheckpointPromotionSingleStageCleanAndStage1Resolutions(t *testing.T) {
 	ctx := t.Context()
 	sqlDB := testdbfixture.Open(t, "store.db")
 	store := NewSQLStore(sqlDB)
-	queue := NewSQLQueue(sqlDB, 8)
+	queueServices := NewSQLServices(sqlDB, 8)
+	queue := queueServices.Queue
 	primary := t.TempDir()
 	secondary := t.TempDir()
 	testdbseed.InsertSessionWithRoot(t, sqlDB, "parent-dedup", testdbseed.DefaultProjectID, primary)
@@ -159,13 +161,13 @@ func TestCheckpointPromotionSingleStageCleanAndStage1Resolutions(t *testing.T) {
 	testutil.FailErr(t, "write job meta", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(filepath.Clean(overlay)), meta))
 	_, err = store.SetWorkerWorkspace(ctx, jobID, overlay, baseline)
 	testutil.FailErr(t, "bind worker", err)
-	testutil.FailErr(t, "pending worker", queue.Promotions.SetMergeStatus(ctx, jobID, api.WorkerMergeStatusPending))
+	testutil.FailErr(t, "pending worker", queueServices.Promotions.SetMergeStatus(ctx, jobID, api.WorkerMergeStatusPending))
 
 	// Advance trunk on app.go (clean 3-way merge) and conflict.txt (overlapping conflict).
 	testutil.FailErr(t, "trunk app.go", os.WriteFile(filepath.Join(primary, "app.go"), []byte("package app\n\nfunc A() int { return 10 }\n\nfunc B() int { return 2 }\n"), 0o644))
 	testutil.FailErr(t, "trunk conflict.txt", os.WriteFile(filepath.Join(primary, "conflict.txt"), []byte("trunk-v2\n"), 0o644))
 
-	svc := &MergeService{Queue: queue, Branches: queue.Branches, Store: queue.Promotions, DataDir: t.TempDir()}
+	svc := &MergeService{Queue: queue, Branches: queue.Branches, Store: queueServices.Promotions, DataDir: t.TempDir()}
 	_, err = svc.PreviewForSession(ctx, "parent-dedup", jobID, "summary", nil)
 	testutil.FailErr(t, "PreviewForSession", err)
 

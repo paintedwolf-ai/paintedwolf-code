@@ -81,7 +81,7 @@ func TestDelegationCloseoutWithoutSecurityEvidenceGatePending(t *testing.T) {
 	testutil.FailErr(t, "SetChange landed", err)
 
 	planDeps := plantest.Deps(records)
-	planDeps.Jobs = worker.NewSQLQueue(sqlDB, 1)
+	planDeps.Jobs = worker.NewSQLServices(sqlDB, 1).Queue
 	planDeps.Security = checker
 	planDeps.HostDataDir = func(context.Context, string) (string, error) { return projectDir, nil }
 	planSvc := plantest.New(t, planDeps)

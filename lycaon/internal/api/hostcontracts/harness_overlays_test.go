@@ -37,7 +37,7 @@ func TestHarnessPreparesOverlaysThroughAuthenticatedApplicationRoute(t *testing.
 	sessions := store.NewSQL(database)
 	parent, err := sessions.Create(t.Context(), wire.CreateSessionRequest{WorkspaceRootID: attached.Roots[0].ID}, attached.ID)
 	testutil.FailErr(t, "create session", err)
-	queue := worker.NewSQLQueue(database, 2)
+	queue := worker.NewSQLServices(database, 2).Queue
 	ledger := sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
 	queue.Branches.SetBaselineStore(ledger.Baselines)
 	queue.Branches.SetProjectStore(projects)

@@ -56,7 +56,8 @@ func testCompletedOverlaySurvivesTreeEviction(t *testing.T, relocate bool) {
 
 	branches := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches")
 	mgr := workspace.NewManager(branches, platform.NewSelector(platform.Config{}), nil)
-	q := NewSQLQueue(sqlDB, 4)
+	qServices := NewSQLServices(sqlDB, 4)
+	q := qServices.Queue
 	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
 	q.Branches.SetWorkerWorkspaceManager(earlierFormatBranches{mgr})
 
@@ -143,7 +144,7 @@ func testCompletedOverlaySurvivesTreeEviction(t *testing.T, relocate bool) {
 	lease.Release()
 	testutil.FailErr(t, "evict again", workspace.EvictJobTree(ctx, root))
 
-	svc := &MergeService{Queue: q, Branches: q.Branches, Store: q.Promotions, Workspace: mgr, DataDir: t.TempDir()}
+	svc := &MergeService{Queue: q, Branches: q.Branches, Store: qServices.Promotions, Workspace: mgr, DataDir: t.TempDir()}
 	out, err := svc.PromoteOverlay(ctx, "", id, api.PromoteOverlayInput{})
 	testutil.FailErr(t, "promote after eviction", err)
 	if out.Status != api.WorkerMergeStatusMerged {
@@ -186,7 +187,7 @@ func relocateWorkerInstallation(t *testing.T, original db.Handle, jobID string) 
 	if filepath.IsAbs(baselineID.String) || filepath.IsAbs(overlayID.String) || !filepath.IsLocal(branchRel) {
 		t.Fatal("worker persisted installation paths")
 	}
-	queue := NewSQLQueue(restored, 4)
+	queue := NewSQLServices(restored, 4).Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(restored, filepath.Join(newRoot, "source-content")).Baselines)
 	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"), platform.NewSelector(platform.Config{}), nil)
 	queue.Branches.SetWorkerWorkspaceManager(earlierFormatBranches{manager})
@@ -200,7 +201,7 @@ func TestUnsealedWorkerEditsSurviveRelocatedArchive(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", project)
 	dataDir := testbaseline.DataDir(t, database)
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
 	queue.Branches.SetWorkerWorkspaceManager(earlierFormatBranches{workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}), nil)})
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
@@ -306,7 +307,7 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 	testutil.FailErr(t, "open initial private Git", err)
 	initialManager := workspace.NewManager(initialBranches, platform.NewSelector(platform.Config{}), nil).WithPrivateGit(initialGit).
 		WithRecovery(openEngineRecovery(t, dataDir, initialGit))
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
 	queue.Branches.SetWorkerWorkspaceManager(initialManager)
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
@@ -387,7 +388,8 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 	testutil.FailErr(t, "apply relocated worker archive", backup.ApplyPending(ctx, newRoot))
 
 	restoredDB := testdbfixture.OpenPath(t, filepath.Join(newRoot, "store.db"))
-	restored := NewSQLQueue(restoredDB, 4)
+	restoredServices := NewSQLServices(restoredDB, 4)
+	restored := restoredServices.Queue
 	restored.Branches.SetBaselineStore(sourceledger.New(restoredDB, filepath.Join(newRoot, "source-content")).Baselines)
 	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"), platform.NewSelector(platform.Config{}), nil)
 	restoredGit, err := workspace.OpenPrivateGit(manager.BranchBase())
@@ -429,7 +431,7 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 	}
 
 	// Recreate the integration target at project and promote the restored checkpoint (files + Git refs/objects).
-	svc := &MergeService{Queue: restored, Branches: restored.Branches, Store: restored.Promotions, Workspace: manager, DataDir: newRoot}
+	svc := &MergeService{Queue: restored, Branches: restored.Branches, Store: restoredServices.Promotions, Workspace: manager, DataDir: newRoot}
 	promoteRestoredCheckpoint(t, svc, project, id, origCheckpointID, workerCommit)
 	testutil.FailErr(t, "destroy", manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: id, Root: task.WorkspaceRoot}))
 }
@@ -481,7 +483,7 @@ func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunk
 	initialBranches := filepath.Join(dataDir, "worker-branches")
 	initialGit, err := workspace.OpenPrivateGit(initialBranches)
 	testutil.FailErr(t, "open initial private Git", err)
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
 	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(initialBranches, platform.NewSelector(platform.Config{}), nil).WithPrivateGit(initialGit))
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
@@ -514,7 +516,8 @@ func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunk
 	testutil.FailErr(t, "apply unfinished worker archive", backup.ApplyPending(ctx, newRoot))
 
 	restoredDB := testdbfixture.OpenPath(t, filepath.Join(newRoot, "store.db"))
-	restored := NewSQLQueue(restoredDB, 4)
+	restoredServices := NewSQLServices(restoredDB, 4)
+	restored := restoredServices.Queue
 	restored.Branches.SetBaselineStore(sourceledger.New(restoredDB, filepath.Join(newRoot, "source-content")).Baselines)
 	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"), platform.NewSelector(platform.Config{}), nil)
 	restoredGit, err := workspace.OpenPrivateGit(manager.BranchBase())
@@ -564,4 +567,12 @@ func openEngineRecovery(t *testing.T, stateRoot string, privateGit *privategit.M
 	})
 	testutil.FailErr(t, "open coordinator", err)
 	return coordinator
+}
+
+func TestPromotionRequiresBranchProviderBeforeRecovery(t *testing.T) {
+	service := &MergeService{}
+	lease, err := service.holdBranch(t.Context(), "job")
+	if err == nil || lease != nil {
+		t.Fatalf("branch provider absence: lease=%v error=%v", lease, err)
+	}
 }

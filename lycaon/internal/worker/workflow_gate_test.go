@@ -58,7 +58,7 @@ func TestQueueWorkflowAdmissionContract(t *testing.T) {
 			var prepare func(context.Context, string, *api.WorkerTask) error
 			var lookup func(string) (*api.WorkerTask, bool)
 
-			q := NewSQLQueue(testdbfixture.Open(t, "store.db"), 1)
+			q := NewSQLServices(testdbfixture.Open(t, "store.db"), 1).Queue
 			q.SetWorkflowDomains(domains)
 			prepare, lookup = q.PrepareEnqueue, q.Get
 

@@ -24,6 +24,7 @@ import (
 // Runtime manages worker queues, records, executors, cancellations, and workspaces.
 type Runtime struct {
 	Queue           *worker.SQLQueue
+	Promotions      *worker.PromotionStore
 	Executor        *worker.LocalWorkerExecutor
 	Cancel          *worker.CancelService
 	Workspace       *workspace.Manager
@@ -55,16 +56,18 @@ func (r *Runtime) SetDependencies(deps Dependencies) {
 
 // New initializes the worker queue, worker records, and topology services.
 func New(database *db.Store, outbox *eventoutbox.Outbox, workersCfg worker.WorkersConfig) *Runtime {
-	queue := worker.NewSQLQueue(database, workersCfg.Poller.MaxConcurrency)
+	services := worker.NewSQLServices(database, workersCfg.Poller.MaxConcurrency)
+	queue := services.Queue
 	if outbox != nil {
 		queue.SetEventOutbox(outbox)
 	}
 	queue.SetWorkersConfig(workersCfg)
 	records := workerrecords.New(database)
 	return &Runtime{
-		Queue:    queue,
-		Records:  records,
-		Topology: workertopology.New(records, queue),
+		Queue:      queue,
+		Promotions: services.Promotions,
+		Records:    records,
+		Topology:   workertopology.New(records, queue),
 	}
 }
 
