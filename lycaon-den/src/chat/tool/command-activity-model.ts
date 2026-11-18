@@ -220,13 +220,15 @@ function projectOutputRead(
   rows: ReadonlyMap<string, ToolPartView>,
   jobs: ReadonlyMap<string, ToolPartView>,
 ): ToolPartView | null | undefined {
-  const handle = part.process?.handle ?? (typeof part.args?.process_id === "string" ? part.args.process_id : undefined);
+  const handle = part.process?.handle
+    ?? (typeof part.args?.process_id === "string" ? part.args.process_id : state.output?.handle);
   if (!handle) return undefined;
-  const target = state.outputTarget ? rows.get(state.outputTarget) : !hasOwnRow ? jobs.get(handle) : undefined;
+  const remembered = state.output?.handle === handle ? state.output : undefined;
+  const target = remembered ? rows.get(remembered.rowKey) : !hasOwnRow ? jobs.get(handle) : undefined;
   const activity = target?.commandActivity;
   const scopes = part.commandProgram ? [receiptScope(part.commandProgram.id)] : [];
   if (target && activity) {
-    state.outputTarget = target.id;
+    state.output = { handle, rowKey: target.id };
     activity.calls.push(part);
     for (const scope of scopes) addReceiptScope(activity.receiptScopes, scope);
     activity.outputReads = (activity.outputReads ?? 0) + 1;
@@ -235,7 +237,7 @@ function projectOutputRead(
     return null;
   }
 
-  state.outputTarget = part.id;
+  state.output = { handle, rowKey: part.id };
   const fact: CommandActivity = {
     id: part.id, group: "Following a running program", label: "Read process output",
     subject: handle, job_handle: handle, phase: "execute",

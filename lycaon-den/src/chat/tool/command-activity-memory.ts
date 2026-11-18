@@ -6,7 +6,7 @@ const MAX_CALLS = 2048;
 const MAX_BOOKKEEPING_ENTRIES = 2048;
 
 type RowAnchor = { key: string; order: number };
-type RowPlacement = { order: number; after?: RowAnchor };
+type RowPlacement = { order: number; after?: RowAnchor; predecessor?: RowAnchor };
 
 export type ActivityMembership = {
   folded: boolean;
@@ -17,7 +17,7 @@ export type ActivityMembership = {
 export type ActivityCallMemory = {
   program?: CommandProgramReceipt;
   primaryActivity?: string;
-  outputTarget?: string;
+  output?: { handle: string; rowKey: string };
   activities: Map<string, ActivityMembership>;
   decisions: Set<string>;
   rows: Set<string>;
@@ -90,20 +90,21 @@ export class CommandActivityMemory {
         unseen.push(row);
       }
     }
-    const lastKey = seen.at(-1)?.key;
-    let after = lastKey === undefined ? undefined : { key: lastKey, order: this.rows.get(lastKey)!.order };
     const result = late ? [...seen, ...unseen] : ordered;
 
+    let previous: RowAnchor | undefined;
     for (const row of result) {
       if (row.entry.kind !== "tool") this.touchBookkeepingRow(row.key);
-    }
-    for (const row of unseen) {
-      const call = row.entry.kind === "tool" ? this.calls.get(row.sourceKey) : undefined;
-      if (!call && !this.bookkeepingRows.has(row.key)) continue;
-      const order = this.nextRowOrder++;
-      this.rows.set(row.key, { order, after: late ? after : undefined });
-      call?.rows.add(row.key);
-      after = { key: row.key, order };
+      let placement = this.rows.get(row.key);
+      if (!placement) {
+        const call = row.entry.kind === "tool" ? this.calls.get(row.sourceKey) : undefined;
+        if (!call && !this.bookkeepingRows.has(row.key)) continue;
+        placement = { order: this.nextRowOrder++, after: late ? previous : undefined };
+        this.rows.set(row.key, placement);
+        call?.rows.add(row.key);
+      }
+      if (previous) placement.predecessor = previous;
+      previous = { key: row.key, order: placement.order };
     }
     return result.map(row => row.entry);
   }
@@ -126,7 +127,7 @@ function orderPinnedRows(projected: readonly ProjectedRow[], placements: Readonl
 
   for (const row of projected) {
     const placement = placements.get(row.key);
-    const anchor = visibleAnchor(placement?.after, visible, placements);
+    const anchor = visibleAnchor(row.key, placement?.after, visible, placements);
     if (placement && anchor !== undefined) {
       let siblings = children.get(anchor);
       if (!siblings) children.set(anchor, siblings = []);
@@ -151,17 +152,20 @@ function orderPinnedRows(projected: readonly ProjectedRow[], placements: Readonl
 }
 
 function visibleAnchor(
+  key: string,
   pin: RowAnchor | undefined,
   visible: ReadonlySet<string>,
   placements: ReadonlyMap<string, RowPlacement>,
 ): string | undefined {
-  // A pin survives regrouping, but expires with the anchor's remembered position.
+  // A split can move the anchor away while keeping its predecessor visible.
+  const visited = new Set([key]);
   let anchor = pin;
-  while (anchor) {
+  while (anchor && !visited.has(anchor.key)) {
     const placement = placements.get(anchor.key);
     if (placement?.order !== anchor.order) return undefined;
     if (visible.has(anchor.key)) return anchor.key;
-    anchor = placement.after;
+    visited.add(anchor.key);
+    anchor = placement.predecessor;
   }
   return undefined;
 }
