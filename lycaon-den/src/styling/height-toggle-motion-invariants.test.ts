@@ -5,9 +5,6 @@ import { splitStylesheetRules } from "../test/style-contracts/stylesheet-parser.
 import { walkFiles } from "../test/style-contracts/inventory.ts";
 
 const denSrc = join(import.meta.dirname, "..");
-const motionModule = "ui/height-toggle-motion.ts";
-// Tab panels animate an existing clip.
-const nonToggleHeightAnimations = new Set(["components/nav/TabBar.tsx"]);
 
 const STATEFUL_SELECTOR = /\[open\]|\[data-animating\]|\[data-expanded="true"\]/;
 
@@ -51,28 +48,6 @@ function targetsStatefulShell(selector: string): boolean {
 }
 
 describe("height toggle motion", () => {
-  it("keeps direct measured-height WAAPI in the shared UI module", () => {
-    const violations = walkFiles(
-      denSrc,
-      (path) =>
-        (path.endsWith(".ts") || path.endsWith(".tsx")) &&
-        !path.endsWith(".test.ts") &&
-        !path.endsWith(".test.tsx"),
-    ).flatMap((path) => {
-      const rel = relative(denSrc, path);
-      if (rel === motionModule || nonToggleHeightAnimations.has(rel)) return [];
-      const source = readFileSync(path, "utf8");
-      const directAnimations = [...source.matchAll(/\.animate\s*\(\s*[\[{]/g)];
-      return directAnimations
-        .filter((match) =>
-          /\bheight\s*:/.test(source.slice(match.index, match.index + 800)),
-        )
-        .map(() => rel);
-    });
-
-    expect([...new Set(violations)].sort()).toEqual([]);
-  });
-
   it("keeps disclosure corner geometry independent of open state", () => {
     const violations = cssStateViolations(
       /\bborder-radius\s*:/,

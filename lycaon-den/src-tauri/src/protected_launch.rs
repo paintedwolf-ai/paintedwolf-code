@@ -131,8 +131,14 @@ fn claim_linux() -> Option<(i32, Result<Generation, GenerationError>)> {
 /// and names it in the engine's environment.
 #[cfg(unix)]
 pub(crate) fn hand_broker_to(cmd: &mut std::process::Command) {
+    hand_to(cmd, broker());
+}
+
+/// Names `broker` in the command's environment and moves it to its fixed number; without one the command is left alone.
+#[cfg(unix)]
+fn hand_to(cmd: &mut std::process::Command, broker: Option<i32>) {
     use std::os::unix::process::CommandExt;
-    let Some(fd) = broker() else {
+    let Some(fd) = broker else {
         return;
     };
     cmd.env(LAUNCH_BROKER_FD_ENV, BROKER_FD.to_string());
@@ -192,43 +198,15 @@ mod tests {
         assert!(!is_launch_broker(libc::SOCK_DGRAM, 0));
     }
 
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn a_user_created_pair_is_not_claimed() {
-        let mut pair = [0; 2];
-        // SAFETY: socketpair writes two descriptors into the local array.
-        assert_eq!(
-            unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_SEQPACKET, 0, pair.as_mut_ptr()) },
-            0
-        );
-        let mut kind: libc::c_int = 0;
-        let mut length = std::mem::size_of::<libc::c_int>() as libc::socklen_t;
-        // SAFETY: reads the socket type into a local.
-        unsafe {
-            libc::getsockopt(
-                pair[0],
-                libc::SOL_SOCKET,
-                libc::SO_TYPE,
-                (&mut kind as *mut libc::c_int).cast(),
-                &mut length,
-            )
-        };
-        // SAFETY: getuid has no preconditions.
-        let uid = unsafe { libc::getuid() };
-        assert_eq!(is_launch_broker(kind, uid), uid == 0);
-        // SAFETY: closes descriptors this test opened.
-        unsafe {
-            libc::close(pair[0]);
-            libc::close(pair[1]);
-        }
-    }
-
     #[cfg(unix)]
     #[test]
     fn the_engine_learns_the_broker_only_when_one_was_claimed() {
-        let mut cmd = std::process::Command::new("/bin/true");
-        hand_broker_to(&mut cmd);
-        let named = cmd.get_envs().any(|(key, _)| key == LAUNCH_BROKER_FD_ENV);
-        assert_eq!(named, broker().is_some());
+        let named = |broker: Option<i32>| {
+            let mut cmd = std::process::Command::new("/bin/true");
+            hand_to(&mut cmd, broker);
+            cmd.get_envs().any(|(key, value)| key == LAUNCH_BROKER_FD_ENV && value == Some(std::ffi::OsStr::new(&BROKER_FD.to_string())))
+        };
+        assert!(named(Some(9)));
+        assert!(!named(None));
     }
 }

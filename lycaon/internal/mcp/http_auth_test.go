@@ -1,7 +1,6 @@
 package mcp_test
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -99,8 +97,7 @@ func TestConnectHTTPInjectsHeaders(t *testing.T) {
 		Token:   "pat-never-on-get",
 		Headers: map[string]string{"X-Api-Key": "hdr-never-on-get"},
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	_, _ = conn.Connect(ctx, entry, mcp.ConnectOpts{})
 	if sawAuth != "Bearer pat-never-on-get" {
 		t.Fatalf("Authorization=%q", sawAuth)

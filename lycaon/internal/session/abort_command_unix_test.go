@@ -69,7 +69,7 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 	if !errors.Is(turn.err, context.Canceled) {
 		t.Fatalf("turn result = %q, %v; want the cancelled command", turn.output, turn.err)
 	}
-	testutil.WaitFor(t, func() bool { return !osprocess.Alive(job) })
+	testutil.WaitFor(t, "the job exits", func() bool { return !osprocess.Alive(job) })
 	got, err := st.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session", err)
 	if got.Status != api.SessionStatusIdle {
@@ -99,7 +99,7 @@ func TestAbortStopsWithoutATurnThatNeverReleases(t *testing.T) {
 	}
 	stuck.Unlock()
 	// The abandoned acquisition releases the lock once the turn does.
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the prompt execution lock is free", func() bool {
 		probe := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 		if !probe.TryLock() {
 			return false
@@ -112,7 +112,7 @@ func TestAbortStopsWithoutATurnThatNeverReleases(t *testing.T) {
 func waitForJobPID(t *testing.T, sessionID, path string) int {
 	t.Helper()
 	var pid int
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the job writes its pid", func() bool {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			return false

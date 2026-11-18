@@ -348,11 +348,7 @@ describe("WebResearchSettingsPanel", () => {
     expect(getByTestId("web-research-key-status-github").textContent).toBe(
       WEB_RESEARCH_SETTINGS_COPY.apiKeyOptionalStatus,
     );
-    expect(
-      getByTestId("web-research-key-status-github").classList.contains(
-        "den-settings-warn",
-      ),
-    ).toBe(false);
+    expect(getByTestId("web-research-key-status-github").getAttribute("data-configured")).toBe("true");
   });
 
   it("puts Guess domains on Direct detail and Warming on Local index", async () => {

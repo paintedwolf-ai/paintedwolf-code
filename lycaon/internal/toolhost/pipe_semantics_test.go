@@ -42,23 +42,7 @@ func newPipeSemanticsEnv(t *testing.T) *pipeSemanticsEnv {
 			return "", errors.New("structured tool is not exercised")
 		}))
 	}
-	ops := mutation.Operations{
-		Write:   &native.WriteTool{Boundary: f.Runtime.Boundary},
-		Delete:  &native.DeleteTool{Boundary: f.Runtime.Boundary},
-		Move:    &native.MoveTool{Boundary: f.Runtime.Boundary},
-		Copy:    &native.CopyTool{Boundary: f.Runtime.Boundary},
-		Mkdir:   &native.MkdirTool{Boundary: f.Runtime.Boundary},
-		Chmod:   &native.ChmodTool{Boundary: f.Runtime.Boundary},
-		Chown:   &native.ChownTool{Boundary: f.Runtime.Boundary},
-		Times:   &native.TimesTool{Boundary: f.Runtime.Boundary},
-		Extract: &native.ExtractArchiveTool{Boundary: f.Runtime.Boundary},
-	}
-	owners, err := (programOwnerTools{
-		boundary:   f.Runtime.Boundary,
-		operations: ops,
-		git:        &git.Manager{},
-		registry:   f.Runtime.Registry,
-	}).compose(f.Recorder)
+	owners, err := pipeSemanticsOwnerTools(f).compose(f.Recorder)
 	testutil.FailErr(t, "compose program owners", err)
 	f.Runtime.Owners = owners
 	// Program time stands still, so the outcome of heavy work never depends on
@@ -70,6 +54,26 @@ func newPipeSemanticsEnv(t *testing.T) *pipeSemanticsEnv {
 		tc.Host.SessionScratchDir = scratchDir
 	}
 	return &pipeSemanticsEnv{Fixture: f, scratchDir: scratchDir}
+}
+
+// pipeSemanticsOwnerTools are the owner tools the fixture composes from.
+func pipeSemanticsOwnerTools(f *programtest.Fixture) programOwnerTools {
+	return programOwnerTools{
+		boundary: f.Runtime.Boundary,
+		operations: mutation.Operations{
+			Write:   &native.WriteTool{Boundary: f.Runtime.Boundary},
+			Delete:  &native.DeleteTool{Boundary: f.Runtime.Boundary},
+			Move:    &native.MoveTool{Boundary: f.Runtime.Boundary},
+			Copy:    &native.CopyTool{Boundary: f.Runtime.Boundary},
+			Mkdir:   &native.MkdirTool{Boundary: f.Runtime.Boundary},
+			Chmod:   &native.ChmodTool{Boundary: f.Runtime.Boundary},
+			Chown:   &native.ChownTool{Boundary: f.Runtime.Boundary},
+			Times:   &native.TimesTool{Boundary: f.Runtime.Boundary},
+			Extract: &native.ExtractArchiveTool{Boundary: f.Runtime.Boundary},
+		},
+		git:      &git.Manager{},
+		registry: f.Runtime.Registry,
+	}
 }
 
 func decodePipeOutcome(t *testing.T, out string) command.ProgramOutcome {
@@ -211,8 +215,7 @@ func TestPipeSemanticsStreamingAndEarlyTerminationWithBoundedMemory(t *testing.T
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-			defer cancel()
+			ctx := t.Context()
 			out, err := env.Call(t, ctx, tc.program)
 			testutil.FailErr(t, tc.name, err)
 			outcome := decodePipeOutcome(t, out)

@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, type Page } from "@playwright/test";
-import { liveChatStage, openProjectFilesFixture, webE2e } from "./helpers.ts";
+import { bootstrapChatSession, liveChatStage, openProjectFilesFixture, webE2e } from "./helpers.ts";
 
 async function openSplit(page: Page) {
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -139,6 +139,12 @@ webE2e.describe("independent split order", () => {
         await chat.getByTestId("conversation-collapse-btn").click();
         await expect(chat).toBeHidden();
         expect((await page.getByTestId("files-tree").boundingBox())!.y).toBeCloseTo(y, 0);
+        // Crossing the narrow band leaves an explicitly hidden pane hidden.
+        const viewport = page.viewportSize()!;
+        await page.setViewportSize({ width: 800, height: 900 });
+        await expect(stage).toBeVisible();
+        await expect(chat).toBeHidden();
+        await page.setViewportSize(viewport);
         await stage.getByTestId("conversation-expand-btn").click();
         await expect(chat).toBeVisible();
         expect((await page.getByTestId("files-tree").boundingBox())!.y).toBeCloseTo(y, 0);
@@ -221,4 +227,135 @@ webE2e.describe("independent split order", () => {
       await expect(stage.getByTestId("split-fit-restore-conversation")).toBeHidden();
     });
   }
+});
+
+const stageTabs = (page: Page) => page.getByTestId("stage-tabs");
+const stageTab = (page: Page, id: string) => page.getByTestId(`stage-tab-${id}`);
+const stagePanel = (page: Page) => page.getByTestId("stage-tabs-panel");
+const conversationTabs = (page: Page) => page.getByTestId("tab-progress");
+
+async function openFiles(page: Page) {
+  await page
+    .getByTestId("focused-project-nav")
+    .getByRole("button", { name: "Files", exact: true })
+    .click();
+  await expect(page.getByTestId("files-tree")).toBeVisible();
+}
+
+async function switchToSplit(page: Page) {
+  await page.getByTestId("layout-dock-btn").click();
+  await page.getByTestId("layout-tile-split").click();
+  await page.getByTestId("layout-dock-btn").click();
+  await expect(page.getByTestId("split-divider")).toBeVisible();
+}
+
+webE2e.describe("session tabs in the stage title bar", () => {
+  webE2e("single view carries the tabs on another stage and returns them with the chat", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await bootstrapChatSession(page);
+    await expect(conversationTabs(page)).toBeVisible();
+    await expect(stageTabs(page)).toHaveCount(0);
+
+    await openFiles(page);
+    await expect(conversationTabs(page)).toBeHidden();
+    for (const id of ["progress", "workflows", "git", "workers"]) {
+      await expect(stageTab(page, id)).toBeVisible();
+    }
+
+    // The icons end the title bar, at the stage's right edge.
+    const stage = await page.getByTestId("split-col-stage").boundingBox();
+    const last = await stageTab(page, "workers").boundingBox();
+    expect(stage!.x + stage!.width - (last!.x + last!.width)).toBeLessThan(40);
+
+    await page
+      .locator('[data-testid="focused-session-list"] [data-session-id][aria-current="true"]')
+      .click();
+    await expect(conversationTabs(page)).toBeVisible();
+    await expect(stageTabs(page)).toHaveCount(0);
+  });
+
+  webE2e("a tab opens its panel over the stage and Escape closes it", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await bootstrapChatSession(page);
+    await openFiles(page);
+
+    await stageTab(page, "workers").click();
+    await expect(stagePanel(page)).toBeVisible();
+    await expect(stagePanel(page)).toContainText("No workers");
+    await expect(stageTab(page, "workers")).toHaveAttribute("aria-expanded", "true");
+    // The stage keeps its place under the panel.
+    await expect(page.getByTestId("files-tree")).toBeVisible();
+
+    await stageTab(page, "progress").click();
+    await expect(stagePanel(page)).toHaveAttribute("data-tab", "progress");
+
+    await page.keyboard.press("Escape");
+    await expect(stagePanel(page)).toHaveCount(0);
+    await expect(stageTab(page, "progress")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  webE2e("the worklog drawer opens over the stage with the conversation closed", async ({ page }) => {
+    await page.setViewportSize({ width: 1500, height: 900 });
+    await bootstrapChatSession(page);
+    await openFiles(page);
+
+    await stageTab(page, "progress").click();
+    await stagePanel(page).getByTestId("worklog-open").click();
+    const drawer = page.getByTestId("worklog-panel");
+    await expect(drawer).toBeVisible();
+    await expect(page.getByTestId("chat-view")).toBeHidden();
+    await expect(page.getByTestId("files-tree")).toBeVisible();
+    await expect(stageTab(page, "progress")).toBeVisible();
+
+    // The drawer lies over the stage's trailing edge and the stage keeps its width.
+    const stage = await page.getByTestId("split-col-stage").boundingBox();
+    const box = await drawer.boundingBox();
+    expect(Math.abs(stage!.x + stage!.width - (box!.x + box!.width))).toBeLessThanOrEqual(1);
+    expect(box!.y).toBe(stage!.y);
+
+    await page.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
+    await expect(page.getByTestId("files-tree")).toBeVisible();
+  });
+
+  webE2e("arming a workflow shows it on the composer it arms", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await bootstrapChatSession(page);
+    await openFiles(page);
+
+    await stageTab(page, "workflows").click();
+    await stagePanel(page).getByTestId("pick-workflow-button").click();
+    await stagePanel(page).locator('[data-testid^="workflow-picker-row-"]').first().click();
+    await expect(liveChatStage(page).getByTestId("workflow-arm-chip")).toBeVisible();
+    await expect(stageTabs(page)).toHaveCount(0);
+  });
+
+  webE2e("split view carries the tabs while the conversation is closed", async ({ page }) => {
+    await page.setViewportSize({ width: 1500, height: 900 });
+    await bootstrapChatSession(page);
+    await openFiles(page);
+    await switchToSplit(page);
+    await expect(conversationTabs(page)).toBeVisible();
+    await expect(stageTabs(page)).toHaveCount(0);
+
+    await page.getByTestId("conversation-collapse-btn").click();
+    await expect(stageTab(page, "git")).toBeVisible();
+    // The control that brings the conversation back leads the icons.
+    const reopen = await page.getByTestId("conversation-expand-btn").boundingBox();
+    const first = await stageTab(page, "progress").boundingBox();
+    expect(first!.x - (reopen!.x + reopen!.width)).toBeGreaterThanOrEqual(0);
+    expect(first!.x - (reopen!.x + reopen!.width)).toBeLessThan(16);
+
+    await stageTab(page, "git").click();
+    await expect(stagePanel(page)).toBeVisible();
+
+    await page.getByTestId("conversation-expand-btn").click();
+    await expect(conversationTabs(page)).toBeVisible();
+    await expect(stageTabs(page)).toHaveCount(0);
+
+    // A panel opened over the stage does not come back with the next close.
+    await page.getByTestId("conversation-collapse-btn").click();
+    await expect(stageTab(page, "git")).toBeVisible();
+    await expect(stagePanel(page)).toHaveCount(0);
+  });
 });

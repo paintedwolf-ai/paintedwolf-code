@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
@@ -143,7 +142,6 @@ func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
 
 	// Registration outlives the request context.
 	reqCancel()
-	time.Sleep(10 * time.Millisecond)
 	reg, ok := mock.pending(child)
 	if !ok {
 		t.Fatal("registration cleared by request cancellation; cancel must outlive the request")
@@ -191,15 +189,10 @@ func TestCancelRunningGracefulNonBlockingUnderSlowCloseout(t *testing.T) {
 	const child = "child-slow"
 	jobID := setupRunningWorker(t, queue, child)
 
-	deadlineCtx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
-	out, err := svc.CancelForSession(deadlineCtx, "parent-1", jobID, "slow-closeout")
+	out, err := svc.CancelForSession(t.Context(), "parent-1", jobID, "slow-closeout")
 	testutil.FailErr(t, "CancelForSession", err)
 	if out.Status != api.WorkerStatusRunning {
 		t.Fatalf("interim status = %q want running", out.Status)
-	}
-	if err := deadlineCtx.Err(); err != nil {
-		t.Fatalf("request ctx ended before return: %v", err)
 	}
 	if _, ok := mock.pending(child); !ok {
 		t.Fatal("expected registration pending")

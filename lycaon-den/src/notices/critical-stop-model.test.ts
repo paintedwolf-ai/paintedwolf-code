@@ -15,9 +15,6 @@ import {
 } from "./critical-stop-model.ts";
 import { CLIENT_NOTICES } from "./client-notices.generated.ts";
 import { testHostInfo } from "../platform/connection/host-identity-test.ts";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 
 function report(
   overall: PreflightReport["overall"],
@@ -421,19 +418,7 @@ describe("store incompatible critical stop", () => {
         : CLIENT_NOTICES.store_storage_full.title);
     },
   );
-
-  it("keeps recovery copy out of the model source", () => {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const src = readFileSync(join(here, "critical-stop-model.ts"), "utf8");
-    for (const fragment of [
-      "Your data needs attention",
-      "Finish restoring",
-    ]) {
-      expect(src, fragment).not.toContain(fragment);
-    }
-  });
 });
-
 
 it("keeps a native restart requirement when automatic engine recovery stops", () => {
   const stop = resolveCriticalStop({

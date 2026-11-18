@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
 type gitAwareLowerProvider struct {
@@ -208,7 +209,7 @@ func registerSeedBaseIfCore(
 		return nil
 	}
 	return core.RegisterSeedBase(layeredfs.BaseCapture{
-		Path:       layeredfs.QualifiedPath{RootID: "primary", Rel: rel},
+		Path:       layeredfs.QualifiedPath{RootID: projectroot.SingleRootID, Rel: rel},
 		Layer:      layeredfs.LayerTrunk,
 		Kind:       kind,
 		Mode:       mode,

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { ScannersSettingsPanel } from "./ScannersSettingsPanel.tsx";
 import { PROJECT_SETTINGS_OVERLAY_COPY } from "../../../settings/security/project-settings-overlay-copy.ts";
 import { SCANNERS_SETTINGS_COPY } from "../../../settings/extensions/scanners-settings-copy.ts";
+import { SCANNER_SLOTS } from "../../../settings/extensions/scanners-catalog-model.ts";
 import { SECURITY_SCANNERS_SECTION_LABEL } from "../../../settings/settings-nav-model.ts";
 
 const product = {
@@ -144,9 +145,13 @@ describe("ScannersSettingsPanel", () => {
     );
     expect(getByTestId("scanners-main")).toBeTruthy();
 
-    // Every job remains visible.
-    for (const slot of ["sast", "sca", "secret"]) {
-      expect(getByTestId(`scanners-slot-${slot}`)).toBeTruthy();
+    // Every job remains visible, named and explained rather than shown by its id.
+    for (const slot of SCANNER_SLOTS) {
+      const row = getByTestId(`scanners-slot-${slot}`);
+      const label = row.querySelector(".den-settings-pref-label")?.textContent?.trim() ?? "";
+      expect(label).not.toBe("");
+      expect(label).not.toBe(slot);
+      expect(row.querySelector(".den-settings-hint")?.textContent?.trim()).toBeTruthy();
       expect(getByTestId(`scanners-change-${slot}`)).toBeTruthy();
     }
 

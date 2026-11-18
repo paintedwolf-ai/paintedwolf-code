@@ -49,9 +49,11 @@ type Service struct {
 	deadline  time.Duration
 	served    servedProcess
 	bound     chan struct{}
-	bindOnce  sync.Once
-	wg        sync.WaitGroup
-	once      sync.Once
+	// accepted observes each connection before it waits for the bind.
+	accepted func()
+	bindOnce sync.Once
+	wg       sync.WaitGroup
+	once     sync.Once
 }
 
 // servedProcess is the started invocation, by process id and start time so a
@@ -63,6 +65,11 @@ type servedProcess struct {
 
 // Serve starts a service bound to ctx; Close releases its socket.
 func Serve(ctx context.Context, options ServeOptions) (*Service, error) {
+	return serve(ctx, options, nil)
+}
+
+// serve applies configure, when set, before the service accepts a connection.
+func serve(ctx context.Context, options ServeOptions, configure func(*Service)) (*Service, error) {
 	if strings.TrimSpace(options.GitBinary) == "" {
 		return nil, errors.New("git credential service requires the served git binary")
 	}
@@ -93,6 +100,9 @@ func Serve(ctx context.Context, options ServeOptions) (*Service, error) {
 	service := &Service{
 		listener: listener, directory: directory, store: store, gitBinary: gitBinary, helper: helper,
 		deadline: requestDeadline, bound: make(chan struct{}),
+	}
+	if configure != nil {
+		configure(service)
 	}
 	service.wg.Add(1)
 	go service.accept()
@@ -140,6 +150,9 @@ func (s *Service) accept() {
 		conn, err := s.listener.AcceptUnix()
 		if err != nil {
 			return
+		}
+		if s.accepted != nil {
+			s.accepted()
 		}
 		s.wg.Add(1)
 		go func() {

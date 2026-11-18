@@ -1,6 +1,7 @@
 package webindex
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,14 +10,21 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// fillOverBudget returns a budget below the generated index size.
+// fillOverBudget writes a corpus through the store's writer and returns a
+// budget below its size. The writer owns the store's one connection, so the
+// pages it applies between BEGIN and COMMIT land in one transaction; fewer
+// pages than evictEvery keep the writer's own eviction pass out of it.
 func fillOverBudget(t *testing.T, s *Store) int64 {
 	t.Helper()
-	big := strings.Repeat("steam machine coverage text ", 40)
-	for i := 0; i < 400; i++ {
+	big := strings.Repeat("steam machine coverage text ", 80)
+	s.enqueue(func(db *sql.DB) error { _, err := db.ExecContext(t.Context(), "BEGIN"); return err })
+	for i := range 200 {
 		s.QueuePage(t.Context(), Page{URL: fmt.Sprintf("https://a.example/p%d", i), Title: big})
 	}
+	committed := make(chan error, 1)
+	s.enqueue(func(db *sql.DB) error { _, err := db.ExecContext(t.Context(), "COMMIT"); committed <- err; return err })
 	s.Flush()
+	testutil.FailErr(t, "commit corpus", testutil.Receive(t, "corpus committed", committed))
 	size, err := fileBytes(t.Context(), s.db)
 	testutil.FailErr(t, "file bytes", err)
 	if size < 64<<10 {

@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // The screen runs ahead of every model request over every message in it, and a
@@ -84,7 +86,7 @@ func benchMatcher(b *testing.B) *Matcher {
 	b.Helper()
 	m, err := BuildMatcher(Bundled())
 	if err != nil {
-		b.Fatal(err)
+		testutil.FailErr(b, "BuildMatcher failed", err)
 	}
 	return m
 }

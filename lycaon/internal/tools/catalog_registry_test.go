@@ -52,7 +52,7 @@ func TestValidateBootToolClaimsHonest(t *testing.T) {
 		if err := reg.Register(name, func(_ context.Context, _ map[string]any, _ ToolContext) (string, error) {
 			return "ok", nil
 		}); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "reg.Register failed", err)
 		}
 	}
 	if err := ValidateBootToolClaimsHonest(reg); err != nil {

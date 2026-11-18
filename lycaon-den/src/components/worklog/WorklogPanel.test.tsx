@@ -213,7 +213,11 @@ describe("WorklogPanel", () => {
       <WorklogPanel open findings={loaded(findings)} onClose={() => undefined} />
     ));
     const panel = screen.getByTestId("worklog-panel");
-    expect(panel.classList.contains("den-context-drawer")).toBe(true);
+    // A named dialog in its pane, never modal: the sibling split pane stays reachable.
+    expect(panel.getAttribute("role")).toBe("dialog");
+    expect(panel.getAttribute("aria-modal")).toBeNull();
+    expect(panel.getAttribute("aria-labelledby")).toBe("worklog-drawer-title");
+    expect(panel.querySelector("#worklog-drawer-title")).not.toBeNull();
     expect(screen.queryByTestId("worklog-panel-backdrop")).toBeNull();
     expect(panel.querySelector(".den-context-drawer-scroll")).toBeTruthy();
     expect(panel.querySelector(".den-worker-transcript-pane")).toBeTruthy();

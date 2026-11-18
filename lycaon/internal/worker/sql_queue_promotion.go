@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -255,5 +254,5 @@ func (q *sqlQueueCore) TaskReceipt(ctx context.Context, sessionID, callID string
 	if err != nil {
 		return nil, err
 	}
-	return jobstate.FromRow(ctx, q.store.db, row)
+	return q.store.jobs.FromRow(ctx, q.store.db, row)
 }

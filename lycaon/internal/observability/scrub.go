@@ -2,7 +2,6 @@ package observability
 
 import (
 	"encoding/json"
-	"sort"
 	"strings"
 )
 
@@ -41,13 +40,6 @@ func IsSecretFieldName(name string) bool {
 		}
 	}
 	return false
-}
-
-// SecretFieldNames returns the sorted field-name needles.
-func SecretFieldNames() []string {
-	out := append([]string(nil), secretFieldNames...)
-	sort.Strings(out)
-	return out
 }
 
 // ScrubValue redacts fields and embedded patterns in a decoded value tree.

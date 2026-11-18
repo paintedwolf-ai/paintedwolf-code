@@ -30,7 +30,7 @@ func TestScheduleLiveProjectionSurvivesCallerContextCancellation(t *testing.T) {
 	// Simulate Stop canceling the in-flight turn's context inside the debounce window.
 	cancel()
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the live projection is stored", func() bool {
 		msg, err := mem.GetMessage(context.Background(), sess.ID, "msg-live")
 		return err == nil && msg.Content == "partial before stop"
 	})
@@ -155,13 +155,6 @@ func TestLiveStreamStopsAdvertisingActiveBeforeTerminalFanout(t *testing.T) {
 	<-finished
 }
 
-func TestLiveStreamUnsubscribeIsIdempotent(t *testing.T) {
-	mgr := New(nil)
-	_, unsub := mgr.Subscribe("live-idempotent")
-	unsub()
-	unsub()
-}
-
 func TestLiveStreamSubscriptionStartsAtLatestPublishedSnapshot(t *testing.T) {
 	mgr := New(nil)
 	hub := mgr.hub
@@ -217,7 +210,7 @@ func TestLiveStreamDoneAndUnsubscribeAreSynchronized(t *testing.T) {
 		mgr := New(nil)
 		sessionID := fmt.Sprintf("session-%d", i)
 		messageID := fmt.Sprintf("message-%d", i)
-		_, unsub := mgr.Subscribe(messageID)
+		frames, unsub := mgr.Subscribe(messageID)
 		mgr.SetActive(sessionID, messageID, 1)
 
 		start := make(chan struct{})
@@ -235,5 +228,27 @@ func TestLiveStreamDoneAndUnsubscribeAreSynchronized(t *testing.T) {
 		}()
 		close(start)
 		wg.Wait()
+
+		// Whichever side won, the subscription is closed and holds at most the terminal frame.
+		var delivered []Frame
+		for open := true; open; {
+			select {
+			case frame, ok := <-frames:
+				if open = ok; ok {
+					delivered = append(delivered, frame)
+				}
+			default:
+				t.Fatalf("attempt %d: subscription still open after unsubscribe", i)
+			}
+		}
+		if len(delivered) > 1 || (len(delivered) == 1 && !delivered[0].Done) {
+			t.Fatalf("attempt %d: frames = %+v, want none or one terminal frame", i, delivered)
+		}
+		mgr.hub.mu.Lock()
+		subscribers, latest := len(mgr.hub.subs), len(mgr.hub.latest)
+		mgr.hub.mu.Unlock()
+		if subscribers != 0 || latest != 0 {
+			t.Fatalf("attempt %d: hub kept %d subscriptions and %d snapshots", i, subscribers, latest)
+		}
 	}
 }

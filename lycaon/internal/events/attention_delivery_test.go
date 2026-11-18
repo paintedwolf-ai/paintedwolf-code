@@ -3,7 +3,6 @@ package events
 import (
 	"context"
 	"encoding/json"
-	"runtime"
 	"sync/atomic"
 	"testing"
 
@@ -54,15 +53,16 @@ func TestAttentionDeliveryCannotReorderAcceptedViews(t *testing.T) {
 		defer close(secondDone)
 		pub.FlushAttention(t.Context())
 	}()
-	for t.Context().Err() == nil {
-		if seq.calls.Load() == 2 {
-			if !pub.attentionDeliveryMu.TryLock() {
-				break
-			}
-			pub.attentionDeliveryMu.Unlock()
+	testutil.WaitFor(t, "the second flush holds delivery behind the pending publication", func() bool {
+		if seq.calls.Load() != 2 {
+			return false
 		}
-		runtime.Gosched()
-	}
+		if !pub.attentionDeliveryMu.TryLock() {
+			return true
+		}
+		pub.attentionDeliveryMu.Unlock()
+		return false
+	})
 	select {
 	case <-secondDone:
 		t.Error("newer attention bypassed a pending publication")

@@ -13,7 +13,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -206,7 +205,7 @@ func createSmokeSession(t *testing.T, baseURL, apiToken, projectID string) strin
 	if session.ID == "" {
 		t.Fatal("create session missing id")
 	}
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the session is idle", func() bool {
 		return smokeSessionStatus(t, baseURL, apiToken, session.ID) == "idle"
 	})
 	return session.ID
@@ -214,16 +213,12 @@ func createSmokeSession(t *testing.T, baseURL, apiToken, projectID string) strin
 
 func waitSmokePromptComplete(t *testing.T, baseURL, token, sessionID, messageID, text string) {
 	t.Helper()
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, fmt.Sprintf("session %s completes prompt %q", sessionID, text), func() bool {
 		pre := smokeSessionStatus(t, baseURL, token, sessionID)
 		msgs := smokeListMessages(t, baseURL, token, sessionID)
 		post := smokeSessionStatus(t, baseURL, token, sessionID)
-		if pre == "idle" && post == "idle" && smokePromptStored(msgs, messageID, text) {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("session %s prompt %q did not complete", sessionID, text)
+		return pre == "idle" && post == "idle" && smokePromptStored(msgs, messageID, text)
+	})
 }
 
 func smokeSessionStatus(t *testing.T, baseURL, token, sessionID string) string {
@@ -287,7 +282,8 @@ func smokePromptStored(msgs []api.Message, messageID, text string) bool {
 
 func waitSmokeAssistantMessage(t *testing.T, baseURL, token, sessionID string) string {
 	t.Helper()
-	for t.Context().Err() == nil {
+	var messageID string
+	testutil.WaitFor(t, "session "+sessionID+" produces an assistant message", func() bool {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/sessions/"+sessionID+"/messages", nil)
 		if err != nil {
 			t.Fatalf("messages request: %v", err)
@@ -295,23 +291,21 @@ func waitSmokeAssistantMessage(t *testing.T, baseURL, token, sessionID string) s
 		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			time.Sleep(50 * time.Millisecond)
-			continue
+			return false
 		}
 		var page api.SessionTranscriptPage
 		decodeErr := json.NewDecoder(resp.Body).Decode(&page)
 		resp.Body.Close()
 		if decodeErr != nil {
-			time.Sleep(50 * time.Millisecond)
-			continue
+			return false
 		}
 		for _, msg := range page.Messages {
 			if msg.Role == "assistant" && msg.Kind != "workflow_boundary" && strings.TrimSpace(msg.Content) != "" {
-				return msg.ID
+				messageID = msg.ID
+				return true
 			}
 		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatalf("session %s did not produce assistant message", sessionID)
-	return ""
+		return false
+	})
+	return messageID
 }

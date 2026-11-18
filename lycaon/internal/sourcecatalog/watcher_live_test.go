@@ -40,7 +40,7 @@ func TestLiveWatcherRefreshesCatalogForExternalFileLifecycle(t *testing.T) {
 	assertPaths := func(want []string) {
 		t.Helper()
 		var got []string
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "the catalog shows the expected files", func() bool {
 			snapshot, err := catalog.Snapshot(t.Context(), "project", []Root{{ID: "root", Path: root}})
 			testutil.FailErr(t, "read live catalog", err)
 			got = got[:0]
@@ -87,7 +87,7 @@ func TestLiveCatalogKeepsChangedContentAsCandidateWithUnchangedMetadata(t *testi
 	}
 	writeLiteralFixture(t, root, "source.txt", "OmegaNeedle")
 	testutil.FailErr(t, "preserve external timestamp", os.Chtimes(filepath.Join(root, "source.txt"), info.ModTime(), info.ModTime()))
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the catalog holds the changed content as a candidate", func() bool {
 		current, err := catalog.Snapshot(t.Context(), "project", []Root{{ID: "root", Path: root}})
 		testutil.FailErr(t, "refresh catalog", err)
 		return len(current.Entries) == 1 && !catalog.Literals.CanPrune(root, require, current.Entries[0])
