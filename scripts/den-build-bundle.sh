@@ -1,18 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# macOS splits into an unsigned compile and a signing package phase; the
+# archive carries the compiled tree from one to the other.
 PACKAGE_ARGS=()
-for argument in "$@"; do
-  case "${argument}" in
-    --pacman) PACKAGE_ARGS+=(--pacman) ;;
-    --pacman-container) PACKAGE_ARGS+=(--pacman-container) ;;
-    *) echo "error: unsupported bundle argument ${argument}" >&2; exit 2 ;;
+PHASE="all"
+ARCHIVE=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --pacman) PACKAGE_ARGS+=(--pacman); shift ;;
+    --pacman-container) PACKAGE_ARGS+=(--pacman-container); shift ;;
+    --phase) PHASE="${2:-}"; shift 2 ;;
+    --archive) ARCHIVE="${2:-}"; shift 2 ;;
+    *) echo "error: unsupported bundle argument $1" >&2; exit 2 ;;
   esac
 done
 if (( ${#PACKAGE_ARGS[@]} > 0 )) && [[ "$(uname -s)" != "Linux" ]]; then
   echo "error: --pacman requires a native Linux build host" >&2
   exit 2
 fi
+case "${PHASE}" in
+  all) [[ -z "${ARCHIVE}" ]] || { echo "error: --archive requires --phase" >&2; exit 2; } ;;
+  compile|package)
+    [[ "$(uname -s)" == Darwin && "${ARCHIVE}" == /* ]] || {
+      echo "error: --phase compile|package requires macOS and an absolute --archive" >&2
+      exit 2
+    }
+    ;;
+  *) echo "error: --phase must be compile or package" >&2; exit 2 ;;
+esac
 
 if [[ -n "${LYCAON_OPENGREP_CANDIDATE:-}" ]]; then
   echo "error: local Opengrep candidates cannot be used in release packaging" >&2
@@ -58,16 +74,25 @@ LOG_VIEWER_BIN="${BINARIES_DIR}/pw-logs-${TARGET}${EXE_SUFFIX}"
 DECIDE_BIN="${BINARIES_DIR}/bialy-${TARGET}${EXE_SUFFIX}"
 DOCUMENT_CORE_BIN="${BINARIES_DIR}/pw-document-core-${TARGET}${EXE_SUFFIX}"
 
+APP_BINARY="${TAURI_DIR}/target/${TARGET}/release/painted-wolf-code"
+COMPILED=(THIRD-PARTY-NOTICES.md lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md lycaon-den/src-tauri/binaries
+  lycaon-den/src-tauri/engine-root "${APP_BINARY#"${ROOT}/"}")
+BUILD_CONFIG=(--config "$(python3 "${ROOT}/scripts/update_keys.py")")
+
 bash "${ROOT}/scripts/sync-den-versions.sh"
 
-bash "${ROOT}/scripts/stage-engine.sh" --release
-BUNDLED_OPENGREP="$(bash "${ROOT}/scripts/stage-bundled-opengrep.sh" --verify "${ENGINE_ROOT}" "${TARGET}" "${SIDECAR_BIN}")"
-
-if [[ ! -f "${ROOT}/THIRD-PARTY-NOTICES.md" ]]; then
-  echo "den:bundle — generating THIRD-PARTY-NOTICES.md" >&2
-  bash "${ROOT}/scripts/licenses-notices.sh"
+if [[ "${PHASE}" == package ]]; then
+  tar -xf "${ARCHIVE}" -C "${ROOT}"
+  [[ -x "${APP_BINARY}" && -x "${SIDECAR_BIN}" ]] || { echo "error: ${ARCHIVE} holds no compiled application" >&2; exit 1; }
+else
+  bash "${ROOT}/scripts/stage-engine.sh" --release
+  BUNDLED_OPENGREP="$(bash "${ROOT}/scripts/stage-bundled-opengrep.sh" --verify "${ENGINE_ROOT}" "${TARGET}" "${SIDECAR_BIN}")"
+  if [[ ! -f "${ROOT}/THIRD-PARTY-NOTICES.md" ]]; then
+    echo "den:bundle — generating THIRD-PARTY-NOTICES.md" >&2
+    bash "${ROOT}/scripts/licenses-notices.sh"
+  fi
+  python3 "${ROOT}/scripts/stage-notices.py" "${ROOT}/THIRD-PARTY-NOTICES.md" "${TAURI_DIR}/THIRD-PARTY-NOTICES.md"
 fi
-python3 "${ROOT}/scripts/stage-notices.py" "${ROOT}/THIRD-PARTY-NOTICES.md" "${TAURI_DIR}/THIRD-PARTY-NOTICES.md"
 
 MACOS_FLOOR_FILE="${GO_DIR}/internal/platformfloor/macos_floor.txt"
 if [[ ! -f "${MACOS_FLOOR_FILE}" ]]; then
@@ -77,6 +102,20 @@ fi
 MACOS_FLOOR="$(tr -d '[:space:]' < "${MACOS_FLOOR_FILE}")"
 if [[ "${HOST_KIND}" == "darwin" ]]; then
   export MACOSX_DEPLOYMENT_TARGET="${MACOS_FLOOR}"
+  # A fresh asset compiler process avoids shared service state.
+  export IBToolNeverDeque=1
+  export PATH="${ROOT}/scripts/macos-build-tools:${PATH}"
+fi
+
+export CI=false
+if [[ "${HOST_KIND}" == "darwin" && "${PHASE}" != package ]]; then
+  echo "den:bundle — compiling the unsigned application for ${TARGET}" >&2
+  (cd "${DEN_DIR}" && bun run tauri build --no-bundle --target "${TARGET}" "${BUILD_CONFIG[@]}")
+  if [[ "${PHASE}" == compile ]]; then
+    tar -cf "${ARCHIVE}" -C "${ROOT}" "${COMPILED[@]}"
+    echo "den:bundle — unsigned compile archived at ${ARCHIVE}" >&2
+    exit 0
+  fi
 fi
 
 # Nested executables and libraries require individual signatures.
@@ -92,6 +131,8 @@ macho_files() {
 }
 
 if [[ "${HOST_KIND}" == "darwin" ]]; then
+  python3 "${ROOT}/scripts/stage-macos-host.py" --binary "${SIDECAR_BIN}" --output "${TAURI_DIR}/host-bundle" \
+    --version "${PRODUCT_VERSION}" --release
   GITENGINE_ROOT="${ENGINE_ROOT}/gitengine"
   # The staged credential helper already carries its signature and profile.
   if [[ -d "${GITENGINE_ROOT}" ]]; then
@@ -135,7 +176,6 @@ fi
 
 chmod +x "${SIDECAR_BIN}"
 
-export CI=false
 if [[ "${HOST_KIND}" == "darwin" ]]; then
   if [[ -n "${APPLE_API_ISSUER:-}" && -n "${APPLE_API_KEY:-}" && -n "${APPLE_API_KEY_PATH:-}" ]]; then
     echo "den:bundle — notarizing via App Store Connect API key" >&2
@@ -150,7 +190,6 @@ if [[ "${HOST_KIND}" == "darwin" ]]; then
 fi
 
 BUNDLE_KIND="dmg"
-BUILD_CONFIG=(--config "$(python3 "${ROOT}/scripts/update_keys.py")")
 if [[ "${HOST_KIND}" == "linux" ]]; then
   # Tauri stages the package tree through its .deb target; linux-package-assemble.py
   # finishes the .deb and .rpm from that tree. No updater artifact.
@@ -227,11 +266,8 @@ echo "den:bundle — tauri build (--bundles ${BUNDLE_KIND}, target ${TARGET})" >
 (
   cd "${DEN_DIR}"
   if [[ "${HOST_KIND}" == "darwin" ]]; then
-    # A fresh asset compiler process avoids shared service state.
-    export IBToolNeverDeque=1
-    export PATH="${ROOT}/scripts/macos-build-tools:${PATH}"
-  fi
-  if [[ "${HOST_KIND}" == "linux" ]]; then
+    bun run tauri bundle --bundles "${BUNDLE_KIND}" --target "${TARGET}" "${BUILD_CONFIG[@]}"
+  elif [[ "${HOST_KIND}" == "linux" ]]; then
     # Package files keep the staged modes, so every helper must be world-readable.
     chmod 0755 "${BINARIES_DIR}"/*-"${TARGET}"
     # The package manifest digests the compiled shell, so compile first and bundle second.
@@ -244,10 +280,8 @@ echo "den:bundle — tauri build (--bundles ${BUNDLE_KIND}, target ${TARGET})" >
     bun run tauri bundle --bundles "${BUNDLE_KIND}" --target "${TARGET}" "${BUILD_CONFIG[@]}" --config "${LINUX_CONFIG}"
     python3 "${ROOT}/scripts/linux-package-assemble.py" assemble --root "${ROOT}" \
       --bundle-dir "${TAURI_DIR}/target/${TARGET}/release/bundle" --arch "${TARGET%%-*}" --version "${LINUX_PACKAGE_VERSION}" "${PACKAGE_ARGS[@]}"
-  elif (( ${#BUILD_CONFIG[@]} > 0 )); then
-    bun run tauri build --bundles "${BUNDLE_KIND}" --target "${TARGET}" "${BUILD_CONFIG[@]}"
   else
-    bun run tauri build --bundles "${BUNDLE_KIND}" --target "${TARGET}"
+    bun run tauri build --bundles "${BUNDLE_KIND}" --target "${TARGET}" "${BUILD_CONFIG[@]}"
   fi
 )
 

@@ -20,8 +20,9 @@ let
       # go-licenses resolves local replacement roots from go.mod, while the
       # offline build resolves packages from vendor. Keep both attributions on
       # the same reviewed vendored copy for this inventory only.
-      substituteInPlace go.mod vendor/modules.txt \
-        --replace-fail '../third_party/gotreesitter' './vendor/github.com/odvcencio/gotreesitter'
+      while read -r module root; do
+        substituteInPlace go.mod vendor/modules.txt --replace-fail "=> $root" "=> ./vendor/$module"
+      done < <(sed -n 's|^replace \([^ ]*\) => \(\.\./third_party/[^ ]*\)$|\1 \2|p' go.mod)
       packages=(./cmd/lycaon ./cmd/pw-logs ./cmd/pw-vault-identity)
       ignored=(--ignore=github.com/lycaon/lycaon --ignore=github.com/deitch/magic
         --ignore=github.com/alecthomas/chroma/v2)
