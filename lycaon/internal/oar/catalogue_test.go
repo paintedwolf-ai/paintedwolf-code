@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/oarcopy"
@@ -206,4 +207,19 @@ func TestFactCatalogue_PortableFactsMatchOARCopy(t *testing.T) {
 			t.Errorf("fact %q (tier %q): oarcopy.IsPortableFact = %v, want %v", d.name, d.tier, got, wantPortable)
 		}
 	})
+}
+
+// Facts are observations; the verdict belongs to the rule that reads them.
+var verdictFactName = regexp.MustCompile(`(?i)(_violation|_is_ungrounded|_verdict|_decision_code|reject_code)$`)
+
+func TestFactCatalogueHoldsNoVerdictFacts(t *testing.T) {
+	facts := FactCatalogue()
+	if len(facts) == 0 {
+		t.Fatal("fact catalogue is empty")
+	}
+	for _, f := range facts {
+		if verdictFactName.MatchString(f.Name) {
+			t.Errorf("catalogue declares verdict-shaped fact %q", f.Name)
+		}
+	}
 }
