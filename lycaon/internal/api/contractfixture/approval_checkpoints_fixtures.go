@@ -25,7 +25,7 @@ func AssertCheckpointReadSurfaces(t *testing.T, server http.Handler, sessionID, 
 	t.Helper()
 	for _, suffix := range []string{"/checkpoints?include_children=true", "/bootstrap"} {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sessionID+suffix, nil)
-		api.WithTestAuth(req)
+		req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 		response := httptest.NewRecorder()
 		server.ServeHTTP(response, req)
 		if response.Code != http.StatusOK {

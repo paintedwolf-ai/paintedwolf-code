@@ -43,7 +43,7 @@ func TestEventStreamEndsBurstWithComment(t *testing.T) {
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, fmt.Sprintf("http://%s/v1/events?project_id=%s", ln.Addr().String(), p.ID), nil)
 	testutil.FailErr(t, "http.NewRequestWithContext failed", err)
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 	resp, err := http.DefaultClient.Do(req)
 	testutil.FailErr(t, "http.DefaultClient.Do failed", err)
 	defer resp.Body.Close()

@@ -23,7 +23,7 @@ func TestThinkingOnlyPolicyPatchRoundTrip(t *testing.T) {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch, base+"/v1/settings/model-policy", strings.NewReader(body))
 		testutil.FailErr(t, "create thinking patch", err)
 		req.Header.Set("Content-Type", "application/json")
-		hostapi.WithTestAuth(req)
+		req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 		resp, err := http.DefaultClient.Do(req)
 		testutil.FailErr(t, "save thinking patch", err)
 		if resp.StatusCode != http.StatusOK {

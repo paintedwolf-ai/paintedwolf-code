@@ -52,7 +52,7 @@ func TestRealServerRouteCoverage(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 		}
 		if route.Path != "/health" {
-			api.WithTestAuth(req)
+			req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 		}
 		rec := &responseRecorder{header: make(http.Header)}
 		srv.ServeHTTP(rec, req)
@@ -89,7 +89,7 @@ func TestRealServerPromptRoutes(t *testing.T) {
 		strings.NewReader(`{"operation_id":"00000000-0000-4000-8000-000000000003","text":"hello"}`))
 	contractcheck.FailErr(t, "http.NewRequest failed", err)
 	promptReq.Header.Set("Content-Type", "application/json")
-	api.WithTestAuth(promptReq)
+	promptReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	promptRec := &responseRecorder{header: make(http.Header)}
 	srv.ServeHTTP(promptRec, promptReq)
 	if promptRec.code != http.StatusAccepted {
@@ -100,7 +100,7 @@ func TestRealServerPromptRoutes(t *testing.T) {
 	testutil.WaitFor(t, "the prompt turn ends with an assistant message", func() bool {
 		getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sessionID, nil)
 		contractcheck.FailErr(t, "http.NewRequest failed", err)
-		api.WithTestAuth(getReq)
+		getReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 		getRec := &responseRecorder{header: make(http.Header)}
 		srv.ServeHTTP(getRec, getReq)
 		if getRec.code != http.StatusOK {
@@ -113,7 +113,7 @@ func TestRealServerPromptRoutes(t *testing.T) {
 
 		msgsReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sessionID+"/messages", nil)
 		contractcheck.FailErr(t, "http.NewRequest failed", err)
-		api.WithTestAuth(msgsReq)
+		msgsReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 		msgsRec := &responseRecorder{header: make(http.Header)}
 		srv.ServeHTTP(msgsRec, msgsReq)
 		if msgsRec.code != http.StatusOK {
@@ -136,7 +136,7 @@ func TestRealServerPromptRoutes(t *testing.T) {
 
 	streamReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, streamPath, nil)
 	contractcheck.FailErr(t, "http.NewRequest failed", err)
-	api.WithTestAuth(streamReq)
+	streamReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	streamRec := &responseRecorder{header: make(http.Header)}
 	srv.ServeHTTP(streamRec, streamReq)
 	if streamRec.code != http.StatusOK {

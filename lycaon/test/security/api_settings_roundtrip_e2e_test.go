@@ -210,7 +210,7 @@ func settingsGetRaw(t *testing.T, base, path string) string {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, base+path, nil)
 	testutil.FailErr(t, "http.NewRequest failed", err)
-	req.Header.Set("Authorization", api.TestAuthHeader())
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)

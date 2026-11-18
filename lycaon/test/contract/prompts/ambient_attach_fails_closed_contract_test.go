@@ -74,7 +74,7 @@ func (f ambientAttachFixture) createSession(t *testing.T, posture wire.SessionPo
 	body, err := json.Marshal(wire.CreateSessionRequest{ProjectID: f.projectID, Posture: posture})
 	contractcheck.FailErr(t, "marshal create session", err)
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions", bytes.NewReader(body))
-	req.Header.Set("Authorization", api.TestAuthHeader())
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	f.srv.ServeHTTP(w, req)
@@ -92,7 +92,7 @@ func (f ambientAttachFixture) awaitPrepared(t *testing.T, sessionID string) wire
 	var last wire.Session
 	testutil.WaitFor(t, "the session is prepared", func() bool {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sessionID, nil)
-		req.Header.Set("Authorization", api.TestAuthHeader())
+		req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 		w := httptest.NewRecorder()
 		f.srv.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {

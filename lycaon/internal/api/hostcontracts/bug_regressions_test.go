@@ -222,7 +222,7 @@ func TestCreateProviderRejectsInvalidBaseURL(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			req, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, base+"/v1/providers", strings.NewReader(tc.body))
 			req.Header.Set("Content-Type", "application/json")
-			hostapi.WithTestAuth(req)
+			req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 			resp, err := http.DefaultClient.Do(req)
 			testutil.FailErr(t, "http.DefaultClient.Do failed", err)
 			defer resp.Body.Close()

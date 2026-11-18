@@ -59,7 +59,7 @@ func NewPresenceServer(t *testing.T) (*hostapi.Server, *agentpresence.Tracker, *
 func PresenceRequest(t *testing.T, srv *hostapi.Server, method, path string) {
 	t.Helper()
 	req := httptest.NewRequestWithContext(t.Context(), method, path, nil)
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code == http.StatusUnauthorized {
