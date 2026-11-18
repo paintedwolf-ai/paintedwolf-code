@@ -38,6 +38,7 @@ class StageEngineFloorTests(unittest.TestCase):
             for name in STUBBED_SCRIPTS:
                 (fixture / "scripts" / name).write_text("")
             (fixture / "scripts" / "resolve-opengrep.sh").write_text(f"echo {work / 'opengrep'}\n")
+            (fixture / "scripts" / "stage-decide-heads.sh").write_text('mkdir -p "$1/decide/heads"\n')
             (fixture / "schemas").mkdir()
             (fixture / "VERSION").write_text("1.2.3\n")
             floor = fixture / "lycaon" / "internal" / "platformfloor" / "macos_floor.txt"
