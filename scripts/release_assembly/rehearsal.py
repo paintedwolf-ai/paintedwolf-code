@@ -25,11 +25,11 @@ import tarfile
 import tempfile
 import threading
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import feed_signing  # noqa: E402
-from release_artifact_limits import check as check_limits  # noqa: E402
+from release_assembly.artifact_limits import check as check_limits  # noqa: E402
 from release_distribution_contract.platforms import detached_signatures, load_platforms  # noqa: E402
 
 CATALOG = ROOT / "packaging/release-platforms.json"
@@ -151,7 +151,7 @@ def check_limits_and_assembly(work: Path, key) -> dict:
         "an updater archive over the download limit", lambda: check_limits(oversized, release, "darwin-aarch64"))}}
 
     def aggregate(artifacts: Path, output: Path):
-        run(["bash", str(ROOT / "scripts/release-aggregate.sh"), "--artifacts", str(artifacts), "--output", str(output / "aggregate"),
+        run(["bash", str(ROOT / "scripts/release_assembly/aggregate.sh"), "--artifacts", str(artifacts), "--output", str(output / "aggregate"),
              "--public", str(output / "public"), "--version", release, "--channel", "stable", "--cask-token", "painted-wolf-code"],
             cwd=ROOT, env={**os.environ, "DOWNLOAD_BASE_URL": ORIGIN})
 
@@ -220,7 +220,7 @@ def install_cask(dmg: Path, release: str, work: Path) -> dict:
         try:
             directory = Path(run(["brew", "--repository", tap], env=environment).stdout.strip()) / "Casks"
             directory.mkdir(exist_ok=True)
-            run(["bash", str(ROOT / "scripts/release-render-cask.sh"), "--token", token, "--channel", "preview",
+            run(["bash", str(ROOT / "scripts/release_assembly/render-cask.sh"), "--token", token, "--channel", "preview",
                  "--version", release, "--sha256", hashlib.sha256(dmg.read_bytes()).hexdigest(),
                  "--base-url", base, "--output", str(directory / f"{token}.rb")])
             run(["brew", "install", "--cask", f"{tap}/{token}"], env=environment)

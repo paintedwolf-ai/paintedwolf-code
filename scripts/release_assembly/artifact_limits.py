@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import tarfile
 
-LIMITS = Path(__file__).resolve().parent.parent / "packaging/update-limits.json"
+LIMITS = Path(__file__).resolve().parents[2] / "packaging/update-limits.json"
 
 
 def inside_bundle(path: str, link: str) -> bool:

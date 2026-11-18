@@ -178,7 +178,7 @@ func TestUpdaterNoClientIDInTree(t *testing.T) {
 		t.Fatal("Homebrew cask must write the explicit package-manager receipt")
 	}
 	// Stable and preview casks install the same app bundle.
-	render := contractcheck.ReadRepoFile(t, root, "scripts/release-render-cask.sh")
+	render := contractcheck.ReadRepoFile(t, root, "scripts/release_assembly/render-cask.sh")
 	if !strings.Contains(cask, `conflicts_with cask: "@@CONFLICTS@@"`) ||
 		!strings.Contains(render, `-e "s|@@CONFLICTS@@|${CONFLICTS}|g"`) ||
 		!strings.Contains(render, "painted-wolf-code/stable) CONFLICTS=painted-wolf-code@preview") ||

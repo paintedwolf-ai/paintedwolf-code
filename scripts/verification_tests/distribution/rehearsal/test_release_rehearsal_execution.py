@@ -13,8 +13,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import release_artifact_limits as limits
-import release_rehearsal as rehearsal
+from release_assembly import artifact_limits as limits
+from release_assembly import rehearsal
 from updater_signature import rehearsal_signature, signed_version
 
 
@@ -80,7 +80,7 @@ class LimitTests(unittest.TestCase):
         artifact = self.root / "Product.app.tar.gz"
         with artifact.open("wb") as sparse:
             sparse.truncate(json.loads(limits.LIMITS.read_text())["max_download_bytes"] + 1)
-        result = subprocess.run([sys.executable, str(limits.LIMITS.parents[1] / "scripts/release_artifact_limits.py"),
+        result = subprocess.run([sys.executable, str(limits.LIMITS.parents[1] / "scripts/release_assembly/artifact_limits.py"),
                                  "--artifact", str(artifact), "--version", "1.1.0", "--platform", "darwin-aarch64"],
                                 capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 1)
@@ -155,7 +155,7 @@ class MacosTests(unittest.TestCase):
                 self.taps.mkdir()
             if arguments[:2] == ["brew", "--repository"]:
                 return subprocess.CompletedProcess(arguments, 0, str(self.taps) + "\n")
-            if arguments[:2] == ["bash", str(rehearsal.ROOT / "scripts/release-render-cask.sh")]:
+            if arguments[:2] == ["bash", str(rehearsal.ROOT / "scripts/release_assembly/render-cask.sh")]:
                 return subprocess.run(arguments, check=True, capture_output=True, text=True, timeout=60)
             if arguments[:3] == ["brew", "install", "--cask"]:
                 cask = (self.taps / "Casks/painted-wolf-code@preview.rb").read_text()
