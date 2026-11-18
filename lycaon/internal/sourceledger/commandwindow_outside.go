@@ -309,7 +309,7 @@ func (s *Inventory) recordOutsideChanges(ctx context.Context, w *openCommandWind
 		if err != nil {
 			return err
 		}
-		return s.reconcileOutsideHead(ctx, w.projectID, head, change.After, cause)
+		return s.recordOutsideHead(ctx, w.projectID, head, change, cause)
 	})
 	if err != nil {
 		return err
@@ -318,29 +318,33 @@ func (s *Inventory) recordOutsideChanges(ctx context.Context, w *openCommandWind
 	return err
 }
 
-// reconcileOutsideHead records a tracked outside file's drift from its head.
-func (s *Inventory) reconcileOutsideHead(ctx context.Context, projectID string, head db.SourceBranchHeads, after *sourcesnapshot.Entry, cause observationCause) error {
+// The command's baseline can be newer than the last retained head.
+func (s *Inventory) recordOutsideHead(ctx context.Context, projectID string, head db.SourceBranchHeads, change sourcesnapshot.Change, cause observationCause) error {
 	if head.State == "directory" {
 		return nil
 	}
-	var observed *observedFile
-	if after == nil {
+	if change.After == nil {
 		if head.State == "absent" {
 			return nil
 		}
 	} else {
-		same, err := s.headHoldsEntry(ctx, head, *after)
+		same, err := s.headHoldsEntry(ctx, head, *change.After)
 		if err != nil || same {
 			return err
 		}
-		observed, err = s.observedVersion(ctx, head.RootID, *after)
-		if errors.Is(err, errVersionMovedOn) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
 	}
-	_, err := s.recordObservation(ctx, projectID, head, observed, newID(), cause)
+	input := cause.apply(RecordInput{
+		RecordLocation: RecordLocation{RootID: head.RootID, Path: head.Path, EntryKind: EntryKindFile},
+		ProjectID: projectID, BranchID: sourcebranch.ID(head.BranchID), FileID: head.FileID, OperationID: newID(),
+	})
+	input, err := s.admissionInput(ctx, input, change.Before, change.After)
+	if err != nil || (change.After != nil && input.AfterSHA256 == "") {
+		return err
+	}
+	recording, err := s.writer.prepare(ctx, []RecordInput{input})
+	if err != nil {
+		return err
+	}
+	_, err = s.commitObservation(ctx, &preparedObservation{projectID: projectID, head: head, recording: recording})
 	return err
 }

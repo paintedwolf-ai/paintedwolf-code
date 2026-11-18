@@ -8,9 +8,48 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/sourceblob"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func TestTrackedOutsideChangeKeepsItsActualPreimageACFL18(t *testing.T) {
+	for _, capture := range []struct{ state, reason string }{
+		{state: "stored"},
+		{state: "metadata_only", reason: "content_not_captured"},
+	} {
+		t.Run(capture.state, func(t *testing.T) {
+			store, ctx, root := openLedgerOnDisk(t)
+			insertChat(t, store, ctx, "s1", "")
+			dir := outsideDir(t)
+			const file = "tracked.txt"
+			outside := outsideRoot(t, store, ctx)
+			rel := outsideRel(t, filepath.Join(dir, file))
+			recordOutside(t, store, ctx, outside, "s1", rel, "last retained head\n")
+			head, err := store.History.ResolveHead(ctx, "p1", sourcebranch.Trunk, outside, rel)
+			testutil.FailErr(t, "resolve the existing file", err)
+			const before = "unobserved edit before launch\n"
+			writeRootFile(t, dir, file, before)
+			if capture.reason != "" {
+				store.Commands.retention.files = 0
+			}
+			window := openOutsideWindow(t, store, ctx, root, dir)
+			writeRootFile(t, dir, file, "command result\n")
+			closeAndSettle(t, ctx, window)
+
+			var fileID, sha, state, reason string
+			err = store.sqlDB.QueryRowContext(ctx, `SELECT e.file_id, v.content_sha256, v.capture_state, v.capture_reason
+				FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+				JOIN source_versions v ON v.id = e.before_version_id WHERE o.command_window_id = ?`, window.ID).
+				Scan(&fileID, &sha, &state, &reason)
+			testutil.FailErr(t, "read the observed preimage", err)
+			if fileID != head.FileID || sha != sourceblob.ContentSHA([]byte(before)) || state != capture.state || reason != capture.reason {
+				t.Fatalf("observed preimage = %s %s %s/%s", fileID, sha, state, reason)
+			}
+		})
+	}
+}
 
 func TestOutsideComparisonKeepsUncoveredPathsOutOfHistory(t *testing.T) {
 	for _, phase := range []string{"baseline", "settlement"} {
