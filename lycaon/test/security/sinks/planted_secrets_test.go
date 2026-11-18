@@ -29,9 +29,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// plant is one recognised secret and the catalog rule it stands for.
+// plant is one recognised secret, the text it was recognised in, and the
+// catalog rule it stands for.
 type plant struct {
-	rule, value string
+	rule, text, value string
 }
 
 // sinkExclusions are the places a planted value may be found, each with why.
@@ -87,8 +88,8 @@ func catalogPlants(t *testing.T) []plant {
 			if len(rule.Examples) == 0 || manifest.Inventory.ExcludedRules[rule.ID] != "" {
 				continue
 			}
-			if value, ok := recognisedExample(matcher, rule.Examples); ok {
-				plants = append(plants, plant{rule: rule.ID, value: value})
+			if text, value, ok := recognisedExample(matcher, rule.Examples); ok {
+				plants = append(plants, plant{rule: rule.ID, text: text, value: value})
 			} else {
 				unrecognised = append(unrecognised, rule.ID)
 			}
@@ -106,7 +107,7 @@ func catalogPlants(t *testing.T) []plant {
 // recognisedExample returns the longest value the matcher recognises in the
 // rule's first recognised example. Overlapping rules may claim the span; any
 // recognised value must stay out of every sink.
-func recognisedExample(matcher *secretmatch.Matcher, examples []string) (string, bool) {
+func recognisedExample(matcher *secretmatch.Matcher, examples []string) (string, string, bool) {
 	for _, example := range examples {
 		runes := []rune(example)
 		best := ""
@@ -116,10 +117,10 @@ func recognisedExample(matcher *secretmatch.Matcher, examples []string) (string,
 			}
 		}
 		if best != "" {
-			return best, true
+			return example, best, true
 		}
 	}
-	return "", false
+	return "", "", false
 }
 
 // spellings are the forms a value may take in a sink.
@@ -142,7 +143,7 @@ func TestPlantedSecretsReachNoSink(t *testing.T) {
 	t.Setenv("LYCAON_LLM_DEBUG", "1")
 	plants := catalogPlants(t)
 	managed := "pw-canary-managed-7f3c19e2b84d5a60"
-	plants = append(plants, plant{rule: "managed secret", value: managed})
+	plants = append(plants, plant{rule: "managed secret", text: managed, value: managed})
 
 	project := t.TempDir()
 	calls := plantFiles(t, project, plants)
@@ -244,10 +245,10 @@ func plantFiles(t *testing.T, project string, plants []plant) []llm.MockToolCall
 		var env, source, emit strings.Builder
 		emit.WriteString("#!/bin/sh\n")
 		for i, p := range chunk {
-			fmt.Fprintf(&env, "PLANT_%d=%s\n", start+i, p.value)
-			quoted, _ := json.Marshal(p.value)
-			fmt.Fprintf(&source, "PLANT_%d = %s\n", start+i, quoted)
-			fmt.Fprintf(&emit, "printf '%%s\\n' %s\n", shellQuote(p.value))
+			// Each rule sees its whole example: some need the words around the secret.
+			fmt.Fprintf(&env, "PLANT_%d=%s\n", start+i, p.text)
+			fmt.Fprintf(&source, "# PLANT_%d\n%s\n", start+i, p.text)
+			fmt.Fprintf(&emit, "printf '%%s\\n' %s\n", shellQuote(p.text))
 		}
 		n := start / plantChunk
 		files := map[string]string{fmt.Sprintf(".env.%02d", n): env.String(), fmt.Sprintf("config_%02d.py", n): source.String(), fmt.Sprintf("emit_%02d.sh", n): emit.String()}
