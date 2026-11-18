@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -23,12 +22,6 @@ func TestResolvePrefersStructuredEngineRoot(t *testing.T) {
 	bin := filepath.Join(engineRoot, "gitengine", gitRel)
 	testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Dir(bin), 0o755))
 	writeStubGit(t, bin, pinnedReportedVersion(t))
-	versionOfFn = func(path string) (string, error) {
-		if path != bin {
-			t.Fatalf("unexpected version probe path %s", path)
-		}
-		return pinnedReportedVersion(t), nil
-	}
 
 	got, err := BinaryPath()
 	testutil.FailErr(t, "BinaryPath", err)
@@ -109,7 +102,6 @@ func TestTestSeamRequiresTestEnv(t *testing.T) {
 	writeStubGit(t, seam, pinnedReportedVersion(t))
 
 	t.Setenv("LYCAON_ENGINE_ROOT", "")
-	versionOfFn = func(path string) (string, error) { return pinnedReportedVersion(t), nil }
 
 	t.Setenv(EnvGitBinary, seam)
 	t.Setenv(EnvTest, "")
@@ -120,12 +112,6 @@ func TestTestSeamRequiresTestEnv(t *testing.T) {
 	}
 
 	resetForTest()
-	versionOfFn = func(path string) (string, error) {
-		if path != seam {
-			return "", fmt.Errorf("unexpected path %s", path)
-		}
-		return pinnedReportedVersion(t), nil
-	}
 	t.Setenv(EnvGitBinary, seam)
 	t.Setenv(EnvTest, "1")
 	got, err := BinaryPath()
@@ -141,7 +127,6 @@ func TestVersionMismatchIsError(t *testing.T) {
 	t.Setenv(EnvTest, "")
 
 	stageEngineGit(t, "0.0.1")
-	versionOfFn = versionOf
 
 	_, err := BinaryPath()
 	var ue *UnavailableError
@@ -166,21 +151,16 @@ func TestVersionAssertedOnce(t *testing.T) {
 
 	_, bin := stageEngineGit(t, pinnedReportedVersion(t))
 
-	var probes atomic.Int32
-	versionOfFn = func(path string) (string, error) {
-		probes.Add(1)
-		return pinnedReportedVersion(t), nil
+	got, err := BinaryPath()
+	testutil.FailErr(t, "BinaryPath", err)
+	if got != bin {
+		t.Fatalf("BinaryPath = %q, want %q", got, bin)
 	}
-
-	for i := 0; i < 2; i++ {
-		got, err := BinaryPath()
-		testutil.FailErr(t, "BinaryPath", err)
-		if got != bin {
-			t.Fatalf("call %d: BinaryPath = %q", i, got)
-		}
-	}
-	if n := probes.Load(); n != 1 {
-		t.Fatalf("--version probed %d times, want 1", n)
+	writeStubGit(t, bin, "0.0.1")
+	got, err = BinaryPath()
+	testutil.FailErr(t, "cached BinaryPath", err)
+	if got != bin {
+		t.Fatalf("cached BinaryPath = %q, want %q", got, bin)
 	}
 }
 

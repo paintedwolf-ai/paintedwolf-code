@@ -16,7 +16,7 @@ import (
 // remote address is tunnelled through the configured proxy, not dialed
 // directly past it.
 func TestLoopbackNamePinnedElsewhereUsesTheProxy(t *testing.T) {
-	directDesktop(t)
+	policy := directDesktop(t)
 	remote := netip.MustParseAddrPort("[2001:db8::7]:443")
 	connects := make(chan string, 1)
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +34,7 @@ func TestLoopbackNamePinnedElsewhereUsesTheProxy(t *testing.T) {
 	testutil.FailErr(t, "parse proxy", err)
 	t.Setenv("HTTPS_PROXY", endpoint.String())
 
-	connection, err := DialPinned(t.Context(), mustURL(t, "https://localhost/x"), "tcp", remote)
+	connection, err := policy.dialPinned(t.Context(), mustURL(t, "https://localhost/x"), "tcp", remote)
 	testutil.FailErr(t, "dial pinned remote", err)
 	_ = connection.Close()
 	if got := <-connects; got != "CONNECT "+net.JoinHostPort("2001:db8::7", "443") {
