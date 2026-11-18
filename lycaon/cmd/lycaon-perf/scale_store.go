@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -130,53 +129,66 @@ func countOwnedRows(ctx context.Context, path, projectID string) (int64, error) 
 }
 
 func cascadeKeys(ctx context.Context, database *sql.DB) (map[string][]foreignKey, error) {
-	rows, err := database.QueryContext(ctx, `SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	tables, err := tableNames(ctx, database)
 	if err != nil {
-		return nil, err
-	}
-	var tables []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			_ = rows.Close()
-			return nil, err
-		}
-		tables = append(tables, name)
-	}
-	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
 		return nil, err
 	}
 	keys := make(map[string][]foreignKey, len(tables))
 	for _, table := range tables {
-		keys[table] = nil
-		list, err := database.QueryContext(ctx, `SELECT id, "table", "from", coalesce("to", ''), on_delete FROM pragma_foreign_key_list(?) ORDER BY id, seq`, table)
-		if err != nil {
+		if keys[table], err = cascadingKeys(ctx, database, table); err != nil {
 			return nil, err
 		}
-		byID := map[int]*foreignKey{}
-		var order []int
-		for list.Next() {
-			var id int
-			var parent, from, to, onDelete string
-			if err := list.Scan(&id, &parent, &from, &to, &onDelete); err != nil {
-				_ = list.Close()
-				return nil, err
-			}
-			key, ok := byID[id]
-			if !ok {
-				key = &foreignKey{parent: parent, cascades: strings.EqualFold(onDelete, "CASCADE")}
-				byID[id] = key
-				order = append(order, id)
-			}
-			key.from, key.to = append(key.from, from), append(key.to, to)
-		}
-		if err := errors.Join(list.Err(), list.Close()); err != nil {
+	}
+	return keys, nil
+}
+
+func tableNames(ctx context.Context, database *sql.DB) ([]string, error) {
+	rows, err := database.QueryContext(ctx, `SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
 			return nil, err
 		}
-		for _, id := range order {
-			if byID[id].cascades {
-				keys[table] = append(keys[table], *byID[id])
-			}
+		tables = append(tables, name)
+	}
+	return tables, rows.Err()
+}
+
+// cascadingKeys is table's foreign keys that delete with their parent row.
+func cascadingKeys(ctx context.Context, database *sql.DB, table string) ([]foreignKey, error) {
+	rows, err := database.QueryContext(ctx, `SELECT id, "table", "from", coalesce("to", ''), on_delete FROM pragma_foreign_key_list(?) ORDER BY id, seq`, table)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	byID := map[int]*foreignKey{}
+	var order []int
+	for rows.Next() {
+		var id int
+		var parent, from, to, onDelete string
+		if err := rows.Scan(&id, &parent, &from, &to, &onDelete); err != nil {
+			return nil, err
+		}
+		key, ok := byID[id]
+		if !ok {
+			key = &foreignKey{parent: parent, cascades: strings.EqualFold(onDelete, "CASCADE")}
+			byID[id] = key
+			order = append(order, id)
+		}
+		key.from, key.to = append(key.from, from), append(key.to, to)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	var keys []foreignKey
+	for _, id := range order {
+		if byID[id].cascades {
+			keys = append(keys, *byID[id])
 		}
 	}
 	return keys, nil
