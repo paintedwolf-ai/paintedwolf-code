@@ -10,52 +10,16 @@ The hard gate a new install shows before the home stage, and how a missing provi
 
 ## The gate
 
-`OnboardingGate` is the only blocking first-run surface: four pages in one chrome. It shows when prefs are loaded and the latch is unset. It does **not** wait on the sidecar or the model list, so someone who cleared their config can reach the setup page and leave it with the engine offline or slow.
+Fresh installations open on local model selection. Normal application downloads contain no generation weights. The host detects available hardware locally and recommends a tier. Setup preselects that tier, and the user can choose another eligible model, import a signed offline bundle, or continue without a local model. A transfer begins only after an explicit choice.
 
-Because it blocks, it carries the matching semantics: `role="dialog"` + `aria-modal` on the gate, labelled by the current page's title, a `main` landmark inside it, and first focus moved onto the gate on mount and on every page change. The providers card names its region with a heading so the page title is not followed straight by the provider group subheads.
+| Page | Choice |
+|------|--------|
+| **Local model** | Choose a model for this device. The page shows transfer progress and offers cancellation. |
+| **Summarizer** | Optionally select a summarizer from the available models. |
+| **Starting layout** | Open to the conversation alone or with a context view beside it. |
+| **Welcome** | Find additional providers in Settings → AI providers and enter the workspace. |
 
-While unlatched, the splash renders the brand chrome and the shell paints a blank pending stage, so the home surface never appears underneath.
-
-The entry page depends on `needsConfig`, which is `readyProviderCount === 0 || !hasDefaultModel`: Setup when true, otherwise Summarizer (a mid-flow resume never repeats Setup).
-
-```mermaid
-stateDiagram-v2
-    state "Setup (1/4)" as setup
-    state "Summarizer (2/4)" as summarizer
-    state "Starting layout (3/4)" as layout
-    state "Welcome (4/4)" as welcome
-    state "Latched (firstRunSetupCompleted)" as latched
-    [*] --> setup: needsConfig
-    [*] --> summarizer: mid-flow resume
-    setup --> summarizer: Continue / Continue anyway
-    setup --> latched: Skip
-    summarizer --> setup: Back
-    summarizer --> layout: Continue
-    layout --> summarizer: Back
-    layout --> welcome: Continue
-    welcome --> layout: Back
-    welcome --> latched: Dismiss
-    latched --> [*]
-```
-
----
-
-## Pages
-
-| Page | Asks for | Leaving it |
-|------|----------|------------|
-| **Setup** | One provider and a default model, in the same visual language as Settings → AI providers | **Continue** unlocks once a ready provider and default model exist. Validation on a dead network is bounded but not instant, so a slow check offers **Stop check**, and a check that does not succeed offers **Continue anyway** rather than trapping the page. **Skip** exits the whole gate and latches |
-| **Summarizer** | An optional summarizer model, mirroring the Settings → AI providers summarizer block; **Add another provider** opens the real providers panel | **Continue** persists and advances; **Back** returns to Setup. No Skip |
-| **Starting layout** | Whether the app opens to the conversation alone or with a context view beside it | **Continue** advances; **Back** returns to Summarizer. No Skip |
-| **Welcome** | Nothing: a Settings → AI providers teach and a closing beat | **Dismiss** latches; **Back** returns to Starting layout. No Skip |
-
-Page order is one list, `ONBOARDING_GATE_PAGES`; Back, Continue, and the progress cue all read it. Chrome is a quiet `N / 4` cue, not a carousel. Product copy carries no engine codenames ([naming.md](naming.md)).
-
-**Escape** is Skip on Setup and Dismiss on Welcome. On the pages between, it steps forward without latching (`onboardingEscapeTarget`).
-
-**A withheld Continue says what it is waiting for.** `onboardingSetupBlocker` returns which half is missing, `provider` or `default_model`, in the order they are fixed. Setup renders that sentence above the actions, points the button at it with `aria-describedby`, and repeats it as the button's tooltip. Continue is `aria-disabled` rather than natively disabled while blocked, so it stays in the tab order and announces the reason; the native `disabled` attribute is reserved for the in-flight check.
-
-**The latch is written on dismissal, not on readiness**: when Welcome is dismissed, or when Setup's Skip exits the gate. Once set, the hard gate never returns, including after providers are cleared later.
+An installation that has completed first run sees just the local model page once. Returning users keep their existing provider configuration. Settings → AI providers remains available for later model downloads, offline imports, replacement, and removal.
 
 ### Starting layout
 
