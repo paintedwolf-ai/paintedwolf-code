@@ -148,7 +148,7 @@ func TestReleaseGatesPrecedePublication(t *testing.T) {
 	requireHostedGate(t, jobs, "ship-gates", []string{"classify", "compatibility"})
 	for name, dependencies := range map[string][]string{
 		"compatibility": {"classify", "credentials"},
-		"build-release": {"classify", "compatibility"},
+		"build-release": {"classify", "compatibility", "prepare"},
 	} {
 		if !slices.Equal(hostedNeeds(t, jobs[name]), dependencies) || jobs[name].If != "" {
 			t.Errorf("%s must require successful %v before running", name, dependencies)

@@ -1483,7 +1483,7 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Qualification | `qualification.yml` | `qualification` | the nightly cap when it runs the lane set, beside the unsigned preparation; otherwise the static job and the preparation |
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
 | Nightly | `nightly.yml` | `nightly` | 20 (7): the `nightly` profile capped at six, beside the two platform jobs, two browser shards with the desktop journey, the store upgrade rehearsal, the five release rehearsal jobs, and the installed upgrade's preparation and two cases |
-| Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
+| Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 4 (2): the macOS signing job beside a Linux signing or import job, then installed upgrade cases two at a time beside repository assembly; a source without a retained preparation adds its five unsigned builds |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
 | Queue batching | `queue-batching.yml` | `queue-batching` | 1 |

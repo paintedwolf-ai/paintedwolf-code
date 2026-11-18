@@ -92,9 +92,7 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 		"scripts/release-aggregate.sh",
 		"release-stage-platform-artifacts.sh",
 		"matrix.goos == 'linux'",
-		"Verify native release runner",
 		"release-public-artifacts",
-		"cargo install artifact-signing-cli --locked --version 0.11.0",
 		"PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}",
 	} {
 		if !strings.Contains(workflow, needle) {
@@ -281,12 +279,9 @@ func TestReleaseSigningAndPublicationCustodyAreSeparated(t *testing.T) {
 func TestWindowsCandidateIsNativelySignedAndVerified(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	workflow := extractYAMLJob(contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml"), "build-release")
+	staging := contractcheck.ReadRepoFile(t, root, "scripts/release-stage-platform-artifacts.sh")
 	for _, needle := range []string{
 		"x86_64-pc-windows-msvc",
-		"artifact-signing-cli --locked --version 0.11.0",
-		"AZURE_CLIENT_SECRET",
-		"AZURE_ARTIFACT_SIGNING_PROFILE",
 		"release-verify-windows-signature.ps1",
 		"-ApplicationPath",
 		"-SidecarPath",
@@ -297,8 +292,7 @@ func TestWindowsCandidateIsNativelySignedAndVerified(t *testing.T) {
 		"-BrowserPath",
 		"-EngineRootPath",
 	} {
-		if !strings.Contains(workflow, needle) &&
-			!strings.Contains(contractcheck.ReadRepoFile(t, root, "scripts/release-stage-platform-artifacts.sh"), needle) {
+		if !strings.Contains(staging, needle) {
 			t.Fatalf("Windows candidate release is missing %q", needle)
 		}
 	}

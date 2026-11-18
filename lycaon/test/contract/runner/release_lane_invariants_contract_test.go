@@ -285,7 +285,8 @@ func TestReleaseWorkflowsReadOnlyTheirOwnRunEvidence(t *testing.T) {
 				}
 			}
 			for _, step := range job.Steps {
-				if step.With["run-id"] != "" && name != "replay-bundle-upgrade" {
+				// The release reads only its source's verified preparation and the replay's named fixtures.
+				if runID := step.With["run-id"]; runID != "" && runID != "${{ needs.prepare.outputs.run_id }}" && name != "replay-bundle-upgrade" {
 					t.Errorf("%s %s downloads another run's artifacts", path, name)
 				}
 			}
