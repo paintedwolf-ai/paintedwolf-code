@@ -6,7 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/skills"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/laws/promptrender"
+	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 )
 
 // forEachStockSkillRender calls check for every stock skill rendered for

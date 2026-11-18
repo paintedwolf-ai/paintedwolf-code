@@ -22,7 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/laws/promptrender"
+	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 	"gopkg.in/yaml.v3"
 )
 

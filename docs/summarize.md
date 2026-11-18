@@ -104,7 +104,7 @@ Shipped defaults allow `gather.max_files_read` 32 source files and `gather.max_b
 
 For a ready directory index, a fixed metadata budget bounds child materialization independently of descendant count. Child pages use indexed keyset seeks, task candidates use indexed term/path ranges, and totals and representative paths are direct record lookups. Initial discovery and opt-in reference searches still do work proportional to their observed content, and each pattern invocation bounds both indexed rows and source observation; neither becomes free because the returned pack is small.
 
-[`closure/summarize-caps-are-read`](../lycaon/test/contract/laws/closure/family.go) reflects over `summarize.Caps` and fails if production code outside `caps.go` never reads a field: a cap nobody reads must be wired or deleted.
+[`closure/summarize-caps-are-read`](../lycaon/test/contract/invariants/closure/family.go) reflects over `summarize.Caps` and fails if production code outside `caps.go` never reads a field: a cap nobody reads must be wired or deleted.
 
 Tests compare work at different repository sizes (rows returned by indexed seeks, files and bytes read, directories opened, response bytes) as portable cost invariants, not host latency thresholds; late-page fixtures and indexed query plans guard against offset scans, and the stress tier exercises the same seeks at millions of metadata rows.
 
