@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 )
 
 // ChatFileRelation is how a chat came to hold an outside file.
@@ -86,12 +87,46 @@ func (s *Store) OutsideFileHeld(ctx context.Context, projectID, rel string) (boo
 		return false, err
 	}
 	head, err := s.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{ProjectID: projectID, BranchID: "", RootID: outside, Path: rel})
+	fileID := head.FileID
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+		deleted, deleteErr := s.History.ResolveDeletedPath(ctx, projectID, sourcebranch.Trunk, outside, rel)
+		if errors.Is(deleteErr, ErrHistoryNotFound) {
+			return false, nil
+		}
+		fileID, err = deleted.FileID, deleteErr
 	}
 	if err != nil {
 		return false, err
 	}
-	referenced, err := s.queries.SourceFileReferencedInProject(ctx, db.SourceFileReferencedInProjectParams{FileID: head.FileID, ProjectID: projectID})
+	return s.outsideFileReferenced(ctx, projectID, head.FileID)
+}
+
+// HeldFileAddress follows an outside file through address changes.
+func (s *Store) HeldFileAddress(ctx context.Context, projectID, fileID string) (rootID, path string, err error) {
+	head, err := s.queries.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{ProjectID: projectID, FileID: fileID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", ErrHistoryNotFound
+	}
+	if err != nil {
+		return "", "", err
+	}
+	outside, err := s.outsideRootID(ctx, s.queries, projectID)
+	if err != nil {
+		return "", "", err
+	}
+	if head.RootID == outside {
+		held, err := s.outsideFileReferenced(ctx, projectID, fileID)
+		if err != nil {
+			return "", "", err
+		}
+		if !held {
+			return "", "", ErrHistoryNotFound
+		}
+	}
+	return head.RootID, head.Path, nil
+}
+
+func (s *Store) outsideFileReferenced(ctx context.Context, projectID, fileID string) (bool, error) {
+	referenced, err := s.queries.SourceFileReferencedInProject(ctx, db.SourceFileReferencedInProjectParams{FileID: fileID, ProjectID: projectID})
 	return referenced != 0, err
 }

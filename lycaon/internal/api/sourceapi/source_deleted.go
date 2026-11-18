@@ -13,27 +13,53 @@ import (
 )
 
 func (s *Workspace) ResolveNavigationPaths(ctx context.Context, p *project.Project, branch sourcebranch.ID, refs []wire.NavigationReference) []wire.NavigationReference {
-	out := project.ResolveNavigation(ctx, p, refs)
-	for i := range out {
-		ref := &out[i]
-		ref.Deleted = false
-		if ref.Status != wire.NavigationMissing {
-			continue
-		}
-		path, err := projectsource.ResolveAbsentSourcePath(p, ref.RootID, ref.Path)
-		if err != nil {
-			ref.Status = wire.NavigationUnavailable
-			continue
-		}
-		_, err = s.SourceLedger.History.ResolveDeletedPath(ctx, p.ID, branch, ref.RootID, path)
-		switch {
-		case err == nil:
-			ref.Status, ref.EntryKind, ref.Deleted = wire.NavigationResolved, wire.NavigationEntryKind("file"), true
-		case !errors.Is(err, sourceledger.ErrHistoryNotFound):
-			ref.Status = wire.NavigationUnavailable
-		}
+	out := make([]wire.NavigationReference, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, s.resolveNavigationPath(ctx, p, branch, ref))
 	}
 	return out
+}
+
+func (s *Workspace) resolveNavigationPath(ctx context.Context, p *project.Project, branch sourcebranch.ID, ref wire.NavigationReference) wire.NavigationReference {
+	ref.Deleted = false
+	var file sourceledger.BranchHead
+	if ref.FileID != "" {
+		ref.Status = wire.NavigationUnavailable
+		if s.SourceLedger == nil || p == nil || ref.ProjectID != p.ID || branch.IsWorker() {
+			return ref
+		}
+		head, err := s.SourceLedger.History.ResolveHeadByFile(ctx, p.ID, sourcebranch.Trunk, ref.FileID)
+		if err != nil {
+			return ref
+		}
+		file = head
+		ref.RootID, ref.Path = file.RootID, file.Path
+	}
+	scoped, err := admitOutside(ctx, s.SourceLedger, p, ref.RootID, ref.Path)
+	if err != nil {
+		ref.Status = wire.NavigationUnavailable
+		return ref
+	}
+	ref = project.ResolveNavigation(ctx, scoped, []wire.NavigationReference{ref})[0]
+	if ref.Status == wire.NavigationResolved && file.FileID != "" && (file.State == "absent" || ref.RootID != file.RootID || ref.Path != file.Path) {
+		ref.Status = wire.NavigationUnavailable
+	}
+	if ref.Status != wire.NavigationMissing || s.SourceLedger == nil {
+		return ref
+	}
+	rel, err := projectsource.ResolveAbsentSourcePath(scoped, ref.RootID, ref.Path)
+	if err != nil {
+		ref.Status = wire.NavigationUnavailable
+		return ref
+	}
+	deleted, err := s.SourceLedger.History.ResolveDeletedPath(ctx, p.ID, branch, ref.RootID, rel)
+	switch {
+	case err == nil && (ref.FileID == "" || ref.FileID == deleted.FileID):
+		ref.Status, ref.EntryKind, ref.Deleted = wire.NavigationResolved, wire.NavigationEntryKindFile, true
+	case !errors.Is(err, sourceledger.ErrHistoryNotFound):
+		ref.Status = wire.NavigationUnavailable
+	}
+	return ref
 }
 
 // readDeletedSource serves retained content only while the exact address is absent.

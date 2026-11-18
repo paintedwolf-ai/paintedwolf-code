@@ -16,7 +16,7 @@ export const projectNotices = (store: ReturnType<typeof createNoticeStore>, proj
 
 export function installFilesTreeCleanup() { afterEach(() => { cleanup(); resetEditorPrefsForTests(); resetFilesTreeViewStateForTests(); vi.useRealTimers(); }); }
 export const echoPath = async (_kind: string, _root: string, path: string) => path;
-export const queryButton = (path: string) => document.querySelector<HTMLButtonElement>(`.den-files-tree__label[data-path="${path}"]`);
+export const queryButton = (path: string) => document.querySelector<HTMLButtonElement>(`.den-files-tree .den-files-tree__label[data-path="${path}"]`);
 export function button(path: string): HTMLButtonElement {
   const result = queryButton(path);
   if (!result) throw new Error(`Missing tree button: ${path}`);

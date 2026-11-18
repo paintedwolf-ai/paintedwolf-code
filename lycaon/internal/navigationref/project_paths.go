@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourceref"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/yuin/goldmark"
@@ -42,10 +43,11 @@ func BuildProjectPathReferences(p *project.Project, prose string, context *api.S
 		if !ok {
 			return
 		}
-		if !explicit {
+		outside := p.Outside.ID != "" && ref.RootID == p.Outside.ID
+		if !explicit || outside {
 			if bound, ok := index.bind(ref); ok {
 				ref = bound
-			} else if ref.RootID == "" {
+			} else if ref.RootID == "" || outside {
 				return
 			}
 		}
@@ -163,7 +165,11 @@ func parseReference(p *project.Project, raw string, explicit, standalone bool, a
 			}
 		}
 		if !matched {
-			return ref, false
+			rel, ok := projectroot.OutsideRel(value)
+			if !ok || p.Outside.ID == "" {
+				return ref, false
+			}
+			ref.RootID, ref.Path, anchored = p.Outside.ID, rel, true
 		}
 		value = ref.Path
 	}

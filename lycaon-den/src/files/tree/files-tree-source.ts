@@ -169,12 +169,15 @@ export function createFilesTreeSource(props: SourceProps, deps: {
       const epoch = chatLocationsEpoch(props.projectId);
       if (!view || !live) return;
       const earlier = previous;
+      const reopening = earlier?.view !== view && !!view.state();
       previous = { view, chat, epoch };
       const abort = new AbortController();
       onCleanup(() => abort.abort());
       untrack(() => {
         void view.open().then(current => {
-          if (abort.signal.aborted || current.intent.chat_id === chat && (earlier?.view !== view || earlier.epoch === epoch || !chat)) return;
+          if (abort.signal.aborted) return;
+          const refresh = reopening || earlier?.view === view && earlier.epoch !== epoch;
+          if (current.intent.chat_id === chat && (!refresh || !chat)) return;
           return view.command({ kind: "select_chat", chat_id: chat }, undefined, abort.signal);
         }).catch(error => {
           if (!abort.signal.aborted) reportTreeError(error);
@@ -247,9 +250,7 @@ export function createFilesTreeSource(props: SourceProps, deps: {
           follow).then(completed => {
           if (completed && !abort.signal.aborted) preparedTreePath = { view, key };
         }).catch(error => {
-          // Following the reader's file is best effort when the tree does not list it.
           if (abort.signal.aborted || error instanceof FilesTreePathAbsentError) return;
-          console.error("Files tree reveal failed", { projectId: props.projectId, target, activity: view.activity() }, error);
           reportTreeError(error);
         });
       });

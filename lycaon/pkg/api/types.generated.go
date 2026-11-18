@@ -4788,15 +4788,17 @@ type NavigationReference struct {
 	// Markdown occurrence kind (link, code, fence, or text).
 	Syntax string `json:"syntax"`
 	// Exact Markdown destination or standalone path token; independent of display label.
-	Mention   string              `json:"mention"`
-	ProjectID string              `json:"project_id"`
-	RootID    string              `json:"root_id,omitempty"`
-	Path      string              `json:"path"`
+	Mention   string `json:"mention"`
+	ProjectID string `json:"project_id"`
+	RootID    string `json:"root_id,omitempty"`
+	Path      string `json:"path"`
+	// Host-recorded logical identity for a file outside the project folders.
+	FileID    string              `json:"file_id,omitempty"`
 	EntryKind NavigationEntryKind `json:"entry_kind,omitempty"`
 	Status    NavigationStatus    `json:"status"`
 	// True only for an authored Markdown destination, rather than an inferred prose path.
 	Explicit bool `json:"explicit"`
-	// The exact path is absent and has retained deletion history. Availability is rechecked when opening; this never pins the link to a file or version.
+	// The current address is absent and has retained deletion history. Availability is rechecked when opening.
 	Deleted    bool               `json:"deleted,omitempty"`
 	WorkerID   string             `json:"worker_id,omitempty"`
 	Line       int                `json:"line,omitempty"`
@@ -4806,9 +4808,11 @@ type NavigationReference struct {
 
 // NavigationTarget
 type NavigationTarget struct {
-	ProjectID string              `json:"project_id"`
-	RootID    string              `json:"root_id"`
-	Path      string              `json:"path"`
+	ProjectID string `json:"project_id"`
+	RootID    string `json:"root_id"`
+	Path      string `json:"path"`
+	// Host-recorded logical identity for a file outside the project folders.
+	FileID    string              `json:"file_id,omitempty"`
 	EntryKind NavigationEntryKind `json:"entry_kind"`
 	WorkerID  string              `json:"worker_id,omitempty"`
 }
@@ -4841,12 +4845,14 @@ type OpenChatLocationFileRequest struct {
 	Path string `json:"path"`
 }
 
-// OpenEditorDocumentRequest
+// OpenEditorDocumentRequest Address a project file by root and path, or an outside file by its recorded file ID.
 type OpenEditorDocumentRequest struct {
+	// Recorded project file identity for an outside tab.
+	FileID string `json:"file_id,omitempty"`
 	// Root-relative, slash-separated file path.
-	Path string `json:"path"`
+	Path string `json:"path,omitempty"`
 	// Attached root that contains the file.
-	RootID string `json:"root_id"`
+	RootID string `json:"root_id,omitempty"`
 	// Stable id for the client view opening the document.
 	ClientID string `json:"client_id"`
 	// Explicit decoding for BOM-less UTF-16 text.

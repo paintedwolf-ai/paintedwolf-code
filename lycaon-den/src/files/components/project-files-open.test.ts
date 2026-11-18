@@ -85,6 +85,29 @@ describe("openSourceInFilesStage", () => {
     expect(projectFilesState(projectId).order).toHaveLength(1);
   });
 
+  it("uses the same dirty tab when a file reference resolves to its new address", () => {
+    const open = (rootId: string, path: string) => openSourceInFilesStage({
+      request: { projectId, rootId, path, absolutePath: `/${path}`, fileId: "file-a", intent: "permanent" },
+      rootLabelFor: (id) => id, navigate: () => {},
+    });
+    open("outside-root", "original.txt");
+    const [key] = projectFilesState(projectId).order;
+    applyFilesBufferLoad(projectId, key!, {
+      workspace_id: "w", workspace_kind: "project", file_id: "file-a", version_id: "v1",
+      path: "original.txt", content: "loaded", sha256: "sha", encoding: "utf-8",
+      size_bytes: 6, writable: true, binary: false, over_limit: false,
+    });
+    applyFilesBufferDraft(projectId, key!, "unsaved");
+
+    open("attached-root", "moved.txt");
+
+    const state = projectFilesState(projectId);
+    expect(state.order).toEqual([key]);
+    const buffer = required(state.byKey[key!]);
+    expect(buffer).toMatchObject({ rootId: "attached-root", rootLabel: "attached-root", path: "moved.txt", dirty: true });
+    expect(filesBufferText(buffer)).toBe("unsaved");
+  });
+
   it("records the jump so the reveal survives the load", () => {
     const open = (path: string, line: number) =>
       openSourceInFilesStage({

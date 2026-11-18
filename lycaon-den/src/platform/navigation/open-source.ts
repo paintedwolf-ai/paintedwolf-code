@@ -22,6 +22,7 @@ export type OpenSourceLocationArgs = {
   activeRootId?: string;
   /** Absolute, root-relative, or root-qualified path. */
   path?: string;
+  fileId?: string;
   line?: number;
   /** 1-based caret column. */
   column?: number;
@@ -40,6 +41,7 @@ export type OpenSourceRequest = {
   path: string;
   absolutePath: string;
   rootId: string;
+  fileId?: string;
   line?: number;
   column?: number;
   endLine?: number;
@@ -165,6 +167,7 @@ export function resolveSourceRequest(
     request: {
       ...resolved.target,
       intent: args.intent,
+      ...(args.fileId ? { fileId: args.fileId } : {}),
       ...(args.line != null ? { line: args.line } : {}),
       ...(args.column != null ? { column: args.column } : {}),
       ...(args.endLine != null ? { endLine: args.endLine } : {}),

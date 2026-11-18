@@ -55,7 +55,7 @@ func (m *Service) ResolveNavigation(ctx context.Context, sessionID string, req a
 			return api.MessageNavigationResponse{}, ErrNavigationCandidateInvalid
 		}
 		ref.ProjectID, ref.RootID, ref.Path, ref.EntryKind, ref.WorkerID = target.ProjectID, target.RootID, target.Path, target.EntryKind, target.WorkerID
-		ref.Status, ref.Candidates = api.NavigationResolved, nil
+		ref.FileID, ref.Status, ref.Candidates = target.FileID, api.NavigationResolved, nil
 		refs = []api.NavigationReference{ref}
 	}
 	scopedRoots, err := m.Workspace.Roots(ctx, sess)

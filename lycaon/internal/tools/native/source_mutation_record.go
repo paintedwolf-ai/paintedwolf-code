@@ -69,7 +69,8 @@ func finishAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation a
 	}
 	if journal != nil {
 		err := journal.Finish(ctx, effectErr)
-		if effectErr == nil {
+		committed := recordCommittedOutsideMutation(context.WithoutCancel(ctx), tctx, mutation, journal.ID())
+		if !committed && effectErr == nil {
 			recordAgentMutationPaths(tctx, mutation)
 		}
 		return err
@@ -314,4 +315,38 @@ func recordAgentMutationPaths(tctx tools.ToolContext, m agentMutation) {
 	if m.FromAbsPath != "" {
 		tctx.RecordSourcePath(m.FromAbsPath, kind)
 	}
+}
+
+func recordCommittedOutsideMutation(ctx context.Context, tc tools.ToolContext, mutation agentMutation, operationID string) bool {
+	outsideID := tc.Source.OutsideRoot.ID
+	if tc.Effects.Out == nil || outsideID == "" || mutation.IsDir || mutation.IsLink || operationID == "" {
+		return false
+	}
+	_, _, inside := tc.SourceLocation(mutation.AbsPath)
+	if inside {
+		_, _, fromInside := tc.SourceLocation(mutation.FromAbsPath)
+		if mutation.FromAbsPath == "" || fromInside {
+			return false
+		}
+	}
+	database := agentLedgerDB(tc.Source.SourceLedger)
+	if database == nil {
+		return false
+	}
+	effect, err := sourceledger.FindOutsideFileEffect(ctx, database, tc.Identity.ProjectID, outsideID, operationID)
+	if err != nil {
+		return false
+	}
+	record := func(rootID, path string) {
+		if path == "" || rootID == "" {
+			return
+		}
+		tc.RecordSourceLocation(api.NavigationTarget{
+			ProjectID: tc.Identity.ProjectID, RootID: rootID, Path: path,
+			FileID: effect.FileID, EntryKind: api.NavigationEntryKindFile,
+		})
+	}
+	record(effect.RootID, effect.Path)
+	record(effect.FromRootID, effect.FromPath)
+	return true
 }

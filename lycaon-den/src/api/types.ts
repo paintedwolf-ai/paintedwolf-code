@@ -11820,6 +11820,11 @@ export interface components {
             /** Format: uuid */
             root_id: string;
             path: string;
+            /**
+             * Format: uuid
+             * @description Host-recorded logical identity for a file outside the project folders.
+             */
+            file_id?: string;
             entry_kind: components["schemas"]["NavigationEntryKind"];
             /** Format: uuid */
             worker_id?: string;
@@ -11844,11 +11849,16 @@ export interface components {
             /** Format: uuid */
             root_id?: string;
             path: string;
+            /**
+             * Format: uuid
+             * @description Host-recorded logical identity for a file outside the project folders.
+             */
+            file_id?: string;
             entry_kind?: components["schemas"]["NavigationEntryKind"];
             status: components["schemas"]["NavigationStatus"];
             /** @description True only for an authored Markdown destination, rather than an inferred prose path. */
             explicit: boolean;
-            /** @description The exact path is absent and has retained deletion history. Availability is rechecked when opening; this never pins the link to a file or version. */
+            /** @description The current address is absent and has retained deletion history. Availability is rechecked when opening. */
             deleted?: boolean;
             /** Format: uuid */
             worker_id?: string;
@@ -13597,14 +13607,20 @@ export interface components {
             state_vector: string;
             base_sha256: string;
         };
+        /** @description Address a project file by root and path, or an outside file by its recorded file ID. */
         OpenEditorDocumentRequest: {
+            /**
+             * Format: uuid
+             * @description Recorded project file identity for an outside tab.
+             */
+            file_id?: string;
             /** @description Root-relative, slash-separated file path. */
-            path: string;
+            path?: string;
             /**
              * Format: uuid
              * @description Attached root that contains the file.
              */
-            root_id: string;
+            root_id?: string;
             /** @description Stable id for the client view opening the document. */
             client_id: string;
             /**
@@ -13613,7 +13629,7 @@ export interface components {
              */
             decode_as?: "utf-16le" | "utf-16be";
             replica?: components["schemas"]["RetainedReplica"];
-        };
+        } | unknown | unknown;
         /** @description Exact text transition of an explicit editor command, replayable independently of later shared edits. */
         EditorCommandHistory: {
             /** Format: uuid */
