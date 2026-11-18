@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -17,7 +18,7 @@ func TestRuleApprovalGateTierReadAutoApproves(t *testing.T) {
 	stageBundledApprovals(t, nil)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "read",
@@ -36,7 +37,7 @@ func TestRuleApprovalGateTierGitCommitBalancedAutoApproves(t *testing.T) {
 	}})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "git_commit",
@@ -66,7 +67,7 @@ func TestRuleApprovalGateMCPByPosture(t *testing.T) {
 	stageBundledApprovalsPosture(t, gate.PostureBalanced)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt balanced failed", err)
-	res, err := settings.NewRuleApprovalGate(store, settings.NoSources()).Evaluate(context.Background(), action)
+	res, err := settings.NewRuleApprovalGate(store, settingstest.EmptySources()).Evaluate(context.Background(), action)
 	testutil.FailErr(t, "gate.Evaluate balanced failed", err)
 	if !res.AutoApproved() || res.Required() {
 		t.Fatalf("MCP tool should run silently at Balanced: %+v", res)
@@ -75,7 +76,7 @@ func TestRuleApprovalGateMCPByPosture(t *testing.T) {
 	stageBundledApprovalsPosture(t, gate.PostureStrict)
 	store, err = settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt strict failed", err)
-	res, err = settings.NewRuleApprovalGate(store, settings.NoSources()).Evaluate(context.Background(), action)
+	res, err = settings.NewRuleApprovalGate(store, settingstest.EmptySources()).Evaluate(context.Background(), action)
 	testutil.FailErr(t, "gate.Evaluate strict failed", err)
 	if !res.Required() {
 		t.Fatalf("MCP tool should ask at Strict: %+v", res)
@@ -90,7 +91,7 @@ func TestRuleApprovalGateSessionGrantNeverClearsSubstrate(t *testing.T) {
 	}})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	proj := filepath.Join(tmp, "project")
 
 	// This leased command has no confinement boundary.
@@ -121,7 +122,7 @@ func TestRuleApprovalGateSessionGrantCoversWorker(t *testing.T) {
 	}})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	proj := filepath.Join(tmp, "project")
 	cmd := map[string]any{"command": "git push origin main"}
 
@@ -191,7 +192,7 @@ func TestRuleApprovalGateOffSubstrateOnly(t *testing.T) {
 	stageBundledApprovalsPosture(t, gate.PostureLight)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	project := filepath.Join(tmp, "project")
 
 	push, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
@@ -258,7 +259,7 @@ func TestLightHonorsExplicitAskAndDenyRules(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "store.PutGlobal failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	project := filepath.Join(tmp, "project")
 
 	asked, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
@@ -296,7 +297,7 @@ func TestRuleApprovalGateTierChownRecoverableInProjectEscapeAsks(t *testing.T) {
 	stageBundledApprovals(t, nil)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	proj := filepath.Join(tmp, "project")
 
 	inProject, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
@@ -337,7 +338,7 @@ func TestRuleApprovalGateExplicitLeaseShortCircuitsTier(t *testing.T) {
 	}})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "chown",

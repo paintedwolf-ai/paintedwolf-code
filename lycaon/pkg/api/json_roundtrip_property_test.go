@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"reflect"
 	"testing"
 	"time"
@@ -102,7 +103,7 @@ func drawMessageRole(t *rapid.T) wire.MessageRole {
 }
 
 func drawMessageKind(t *rapid.T) wire.MessageKind {
-	kinds := append([]wire.MessageKind{""}, wire.AllMessageKinds()...)
+	kinds := append([]wire.MessageKind{""}, apitest.AllMessageKinds()...)
 	return rapid.SampledFrom(kinds).Draw(t, "kind")
 }
 

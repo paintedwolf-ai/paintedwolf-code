@@ -3,6 +3,8 @@ package property
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"strconv"
 	"testing"
 
@@ -14,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/pkg/api"
 	"pgregory.net/rapid"
 )
 
@@ -38,7 +39,7 @@ func TestOneCanonicalWorkerCardAndSupersedeInPlace(t *testing.T) {
 		}))
 		canonicalOrd := mustFindMessage(t, ctx, store, sess.ID, canonicalID).Ord
 
-		statusGen := rapid.SampledFrom(api.AllWorkerSummaryStatuses())
+		statusGen := rapid.SampledFrom(apitest.AllWorkerSummaryStatuses())
 		stepCount := rapid.IntRange(1, 6).Draw(t, "steps")
 		var lastStatus api.WorkerSummaryStatus
 		var lastEnvelope string

@@ -68,7 +68,7 @@ var phaseSet = func() map[Phase]struct{} {
 	return set
 }()
 
-// Phases returns the complete protocol vocabulary in lifecycle order.
+// Phases lists the wire vocabulary in startup order.
 func Phases() []Phase {
 	return append([]Phase(nil), phases...)
 }

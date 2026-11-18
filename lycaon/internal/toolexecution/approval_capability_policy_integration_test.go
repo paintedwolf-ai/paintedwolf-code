@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
@@ -29,7 +30,7 @@ func TestTaskCapabilityPreservesLivePolicyAndScope(t *testing.T) {
 			root := t.TempDir()
 			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 			testutil.FailErr(t, "create policy store", err)
-			approvals := settings.NewRuleApprovalGate(store, settings.NoSources())
+			approvals := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 			_, err = approvals.ApplyGrant(hitl.ApprovalGrant{
 				ID: "task-host-permission", Scope: hitl.ApprovalGrantScopeChat,
 				ProjectID: "project", ChatSessionID: "task",
@@ -91,7 +92,7 @@ func TestCurrentReviewTracksDetectionEffectsRatherThanCorrelation(t *testing.T) 
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "create review policy store", err)
 	match := hitl.DetectionMatch{PackID: "fixture", RuleID: "same-rule", RuleTitle: "Declared local effect", Level: "high", Local: true, Tagged: true, CorrelationID: "first"}
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.Detections = func() settings.DetectionSource { return reviewDetectionSource{match: match} }
 	approvals := settings.NewRuleApprovalGate(store, sources)
 	args := map[string]any{"command": "printf fixture"}
@@ -148,7 +149,7 @@ func TestCurrentReviewCannotReplaceExecutionPermit(t *testing.T) {
 			root := t.TempDir()
 			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 			testutil.FailErr(t, "create capability review store", err)
-			approvals := settings.NewRuleApprovalGate(store, settings.NoSources())
+			approvals := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 			args := map[string]any{"command": "printf fixture"}
 			req := confine.Request{Roots: []string{root}, HostExecution: capability == "host_execution", ProcessControl: capability == "process_control", CredentialStore: capability == "credential_store"}
 			tc := tools.ToolContext{

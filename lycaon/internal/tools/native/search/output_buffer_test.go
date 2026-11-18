@@ -32,7 +32,7 @@ func (c *countingOutput) Write(p []byte) (int, error) {
 func (h *harness) grepInput(input io.ReadCloser, stdout, stderr io.Writer, argv ...string) error {
 	h.t.Helper()
 	streams := commandprogram.Streams{Input: input, Output: stdout, Error: stderr}
-	_, err := h.owners.Invoke(h.t.Context(), h.tc, mustPaths(h.t, h), h.dispatch, requestFor(h, argv...), streams)
+	_, err := invokeSearch(h.owners, h.t.Context(), h.tc, mustPaths(h.t, h), h.dispatch, requestFor(h, argv...), streams)
 	return err
 }
 

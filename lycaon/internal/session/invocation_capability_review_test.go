@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -117,7 +118,7 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 	read := filepath.Join(t.TempDir(), "protected-config")
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "create fixture approval store", err)
-	authority := settings.NewRuleApprovalGate(store, settings.NoSources())
+	authority := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	c := &capabilityReviewCheckpoints{
 		cannedWriteRootCheckpoints: cannedWriteRootCheckpoints{approve: approve},
 		write:                      approvalstate.NewSandboxPathGrantRuntime(), read: approvalstate.NewSandboxPathGrantRuntime(), sockets: approvalstate.NewSocketCapabilityRuntime(),

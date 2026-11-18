@@ -31,6 +31,7 @@ import (
 	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -72,7 +73,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	})
 	approvalStore, err := settings.NewApprovalStoreAt(filepath.Join(approvalDir, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	gate := settings.NewRuleApprovalGate(approvalStore, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(approvalStore, settingstest.EmptySources())
 
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
@@ -190,7 +191,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	})
 	approvalStore, err := settings.NewApprovalStoreAt(filepath.Join(approvalDir, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	gate := settings.NewRuleApprovalGate(approvalStore, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(approvalStore, settingstest.EmptySources())
 
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {

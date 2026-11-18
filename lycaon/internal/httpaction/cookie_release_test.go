@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolexecution"
@@ -338,7 +339,7 @@ func testStandingGrantRevokedAcrossWaitAndRedirect(t *testing.T) {
 	var targetGrantID string
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "open approval store", err)
-	authority := settings.NewRuleApprovalGate(store, settings.NoSources())
+	authority := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	review := &cookieGrantReview{t: t, authority: authority}
 
 	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

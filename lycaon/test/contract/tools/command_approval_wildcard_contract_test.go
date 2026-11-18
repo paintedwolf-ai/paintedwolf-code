@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -33,7 +34,7 @@ func TestCommandApprovalWildcardContractFixtures(t *testing.T) {
 	configtest.Overlay(t, map[config.Rel]string{config.SecurityApprovals: body})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	contractcheck.FailErr(t, "NewApprovalStoreAt", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	project := t.TempDir()
 	contained := hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{project}}
 

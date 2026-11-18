@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -26,7 +27,7 @@ func neverAskGate(t *testing.T, neverAsk bool) (hitl.ApprovalGate, string) {
 	stageBundledApprovalsYAML(t, body)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "approval store", err)
-	return settings.NewRuleApprovalGate(store, settings.NoSources()), filepath.Join(tmp, "project")
+	return settings.NewRuleApprovalGate(store, settingstest.EmptySources()), filepath.Join(tmp, "project")
 }
 
 // The switch buys silence: everything the gate would have asked about auto-approves,

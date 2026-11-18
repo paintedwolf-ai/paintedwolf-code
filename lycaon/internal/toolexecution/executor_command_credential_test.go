@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
@@ -37,7 +38,7 @@ func TestCommandJqCredentialDestinationWaitsForApproval(t *testing.T) {
 	testutil.FailErr(t, "seed query source", os.WriteFile(filepath.Join(project, "config.json"), []byte(original), 0600))
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "create approval store", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	boundary := f.Boundary
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvalGate), f.Runtime.Registry, "fixture")
 	f.Runtime.Executor = executor
