@@ -214,8 +214,8 @@ def changed_packages(scope):
 
 
 def confinement_source(path):
-    """The sandbox, its helper, and the command supervisor's Linux process handling."""
-    if path.startswith("lycaon/internal/confine/"):
+    """The sandbox, its helper and sandbox marks, and the command supervisor's Linux process handling."""
+    if path.startswith(("lycaon/internal/confine/", "lycaon/internal/sandboxmark/")):
         return True
     name = path.removeprefix("lycaon/internal/exec/")
     return name != path and "/" not in name and (name.startswith("supervisor") or "_linux" in name)
