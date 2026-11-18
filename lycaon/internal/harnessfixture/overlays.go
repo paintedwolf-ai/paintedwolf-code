@@ -293,7 +293,7 @@ func replaceFiles(root string, files map[string]string) error {
 	return nil
 }
 
-func enqueueFixtureWorker(ctx context.Context, queue worker.WorkerQueue, branches *worker.BranchService, sessions sessionstore.SessionRepository, parent *api.Session, root project.Root, overlay Overlay, id string, paths []string) (*api.Session, error) {
+func enqueueFixtureWorker(ctx context.Context, queue worker.WorkerQueue, sessions sessionstore.SessionRepository, parent *api.Session, root project.Root, overlay Overlay, id string, paths []string) (*api.Session, error) {
 	_, err := queue.Enqueue(ctx, api.WorkerTask{
 		ID: id, ProjectID: parent.ProjectID, ParentSessionID: parent.ID,
 		WorkspaceRootID: root.ID, WorkspacePath: root.Path, AgentType: "implementer",
