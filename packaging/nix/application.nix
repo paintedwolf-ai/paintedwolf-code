@@ -57,9 +57,10 @@ stdenvNoCC.mkDerivation {
       makeShellWrapper "$root/bin/$executable" "$out/bin/$executable" --run "$graphics"
     done
     install -m644 ${source}/lycaon-den/src-tauri/icons/128x128.png "$out/share/icons/hicolor/128x128/apps/painted-wolf-code.png"
+    # The packaged entry starts the setuid launch bootstrap, which a store path cannot carry.
     substitute ${source}/packaging/linux/dev.paintedwolf.code.desktop \
       "$out/share/applications/dev.paintedwolf.code.desktop" \
-      --replace-fail /opt/painted-wolf-code/bin/painted-wolf-code "$out/bin/painted-wolf-code"
+      --replace-fail /usr/libexec/painted-wolf-code/pw-launch "$out/bin/painted-wolf-code"
     install -m644 ${source}/packaging/linux/polkit/dev.paintedwolf.code.policy \
       "$out/share/polkit-1/actions/dev.paintedwolf.code.policy"
     runHook postInstall
