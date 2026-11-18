@@ -7,6 +7,7 @@ import {
   transcriptMessages,
   webE2e,
 } from "./helpers.ts";
+import { settleTranscriptLayout } from "./fixtures/settle.ts";
 
 /**
  * Measures what one arriving row costs the main thread once a transcript is long: every
@@ -122,7 +123,7 @@ webE2e("streaming rows into a long transcript: main-thread cost and request coun
   await expect(page.getByTestId("file-edit-diff")).toBeAttached({ timeout: 20_000 });
   await expect(page.getByTestId("file-edit-diff-writes")).toHaveText("2 edits", { timeout: 20_000 });
   await expect(page.getByTestId("file-edit-diff-stat")).toBeAttached({ timeout: 20_000 });
-  await page.waitForTimeout(1_000);
+  await settleTranscriptLayout(page);
 
   await installProbe(page);
   await page.evaluate(() => (window as unknown as { __streamingCost: { start(): void } }).__streamingCost.start());
@@ -135,10 +136,10 @@ webE2e("streaming rows into a long transcript: main-thread cost and request coun
         created_at: "2026-09-30T10:02:00Z", seq: base + step, ord: base + step,
       },
     ]));
-    await page.waitForTimeout(100);
+    await expect(page.getByTestId("message-stream").getByText(`Streamed reply ${step}:`, { exact: false }).first()).toBeAttached({ timeout: 20_000 });
   }
-  await expect(page.getByTestId("message-stream").getByText(`Streamed reply ${STREAMED_ROWS}:`, { exact: false }).first()).toBeAttached({ timeout: 20_000 });
-  await page.waitForTimeout(500);
+  // A late refetch would follow the last row's layout.
+  await settleTranscriptLayout(page);
   const report = await page.evaluate(() => (window as unknown as { __streamingCost: { stop(): Report } }).__streamingCost.stop());
 
   const out = process.env.PW_STREAMING_COST_REPORT;

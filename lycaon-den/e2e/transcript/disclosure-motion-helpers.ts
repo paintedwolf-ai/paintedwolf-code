@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import { LIVE_CHAT_STAGE_SELECTOR } from "../../shared/stage-selectors.ts";
+import { scrollSettled } from "../fixtures/settle.ts";
 
 export async function disclosureViewportState(summary: Locator) {
   return summary.evaluate((control) => {
@@ -179,11 +180,11 @@ export async function positionDisclosure(
     );
     if (Math.abs(delta) <= 2) break;
     await page.mouse.wheel(0, delta);
-    await page.waitForTimeout(180);
+    await scrollSettled(viewport);
   }
   // Reader scrolling pauses follow before the disclosure click.
   await page.mouse.wheel(0, -4);
-  await page.waitForTimeout(180);
+  await scrollSettled(viewport);
   await control.evaluate(
     () =>
       new Promise<void>((resolve) =>

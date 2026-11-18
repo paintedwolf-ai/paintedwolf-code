@@ -21,7 +21,7 @@ export default tseslint.config(
   },
   {
     // Specs are held to the source laws only.
-    files: ["e2e/**/*.ts"],
+    files: ["e2e/**/*.{ts,tsx}"],
     languageOptions: { parser: tseslint.parser },
   },
   {
@@ -110,7 +110,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/**/*.{ts,tsx}", "shared/**/*.ts", "e2e/**/*.ts"],
+    files: ["src/**/*.{ts,tsx}", "shared/**/*.ts", "e2e/**/*.{ts,tsx}"],
     plugins: { den },
     rules: {
       "den/source-laws": ["error", laws],

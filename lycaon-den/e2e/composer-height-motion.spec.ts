@@ -179,7 +179,7 @@ webE2e.describe("composer height motion", () => {
     // A keystroke that keeps the line count moves nothing.
     await startComposerTrace(stage);
     await page.keyboard.insertText(" more");
-    await page.waitForTimeout(200);
+    await expect(composer).toHaveValue(/ more$/);
     const steady = await stopComposerTrace(page);
     expect(steady.motions).toEqual([]);
     expect(new Set(steady.samples.map((sample) => Math.round(sample.height))).size).toBe(1);

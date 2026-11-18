@@ -600,7 +600,7 @@ tasks:
     sources:
       - 'src/**/*.{ts,tsx}'
       - 'shared/**/*.ts'
-      - 'e2e/**/*.ts'
+      - 'e2e/**/*.{ts,tsx}'
       - 'eslint/**/*.js'
       - eslint.config.js
       - package.json

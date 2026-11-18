@@ -8,6 +8,7 @@ import {
   transcriptMessages,
   webE2e,
 } from "../helpers.ts";
+import { scrollSettled } from "../fixtures/settle.ts";
 import {
   startTailBoundaryTrace,
   stopTailBoundaryTrace,
@@ -368,10 +369,10 @@ webE2e("delayed transcript content cannot publish scroll space past its end", as
     delayed.style.height = "720px";
     row.append(delayed);
   });
-  await page.waitForTimeout(100);
   const stream = stage
     .locator(".den-chat-stream")
     .first();
+  await scrollSettled(stream);
   const box = await stream.boundingBox();
   if (!box) throw new Error("chat viewport is missing");
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);

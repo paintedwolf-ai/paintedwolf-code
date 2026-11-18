@@ -9,7 +9,7 @@ import {
   waitHarnessConnected,
   webE2e,
 } from "./helpers.ts";
-import { listenHarnessSocket } from "./fixtures/harness-socket.ts";
+import { harnessSocketPath, listenHarnessSocket } from "./fixtures/harness-socket.ts";
 import type { CheckpointListResponse } from "../src/api/types.ts";
 
 /**
@@ -32,8 +32,8 @@ webE2e(
     const sessionId = await openNewChatSession(page);
 
     // The card shows both paths, so the approved one must resolve elsewhere.
-    const target = `/tmp/lyc-harness-svc-target-${process.pid}.sock`;
-    const approved = `/tmp/lyc-harness-svc-${process.pid}.sock`;
+    const target = harnessSocketPath("svc-target.sock");
+    const approved = harnessSocketPath("svc.sock");
     await listenHarnessSocket(target);
     rmSync(approved, { force: true });
     symlinkSync(target, approved);
@@ -43,7 +43,7 @@ webE2e(
       data: {
         session_id: sessionId,
         command: "true",
-        title: "Allow local service: lyc-harness-svc.sock",
+        title: "Allow local service: svc.sock",
         approved_path: approved,
         resolved_path: resolved,
       },
