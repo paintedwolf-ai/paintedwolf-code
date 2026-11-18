@@ -23,7 +23,7 @@ func releaseFixture(t *testing.T) (*EagerCopyAdapter, *PreparedView, *eagerViewS
 	view, err := adp.Prepare(t.Context(), PrepareRequest{ViewID: t.Name(), RuntimeDir: t.TempDir(), Grants: []RootGrant{{RootID: "root", SourcePath: source, IsPrimary: true}, {RootID: "secondary", SourcePath: secondary}}})
 	testutil.FailErr(t, "prepare materialized view", err)
 	t.Cleanup(func() { _, _ = adp.Release(context.Background(), view.ViewID) })
-	state, ok := adp.lookupViewState(view.ViewID)
+	state, ok := lookupEagerViewState(view.ViewID)
 	if !ok || state.gitStore == nil || len(state.gitLeases) == 0 {
 		t.Fatal("prepared view has no retained Git lease")
 	}

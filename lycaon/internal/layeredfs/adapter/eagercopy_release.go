@@ -12,7 +12,7 @@ func (st *eagerViewState) checkAdmission(op string) error {
 // Release retains retry state until durability and resource cleanup settle.
 func (a *EagerCopyAdapter) Release(ctx context.Context, viewID string) (ReleaseReceipt, error) {
 	receipt := ReleaseReceipt{ViewID: viewID, AdapterID: AdapterEagerCopy}
-	st, ok := a.lookupViewState(viewID)
+	st, ok := lookupEagerViewState(viewID)
 	if !ok {
 		receipt.ReasonCode = ReasonViewNotFound
 		return receipt, &AdapterError{AdapterID: AdapterEagerCopy, Op: "release", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}

@@ -204,7 +204,7 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 	}
 	// A materialized view's workers never reach its core, so its backing stays closed until used.
 	core.ParkBacking()
-	a.adopt(view, &eagerViewState{
+	sharedEagerViews.Store(view.ViewID, &eagerViewState{
 		view:            view,
 		capture:         capture,
 		denySourcePaths: outcome.denyPaths,
@@ -214,10 +214,6 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		flushHook:       req.FlushClientHook,
 	})
 	return view, nil
-}
-
-func (a *EagerCopyAdapter) adopt(view *PreparedView, st *eagerViewState) {
-	sharedEagerViews.Store(view.ViewID, st)
 }
 
 func manifestRootsOf(roots []PreparedRoot) []manifestRoot {
@@ -297,13 +293,13 @@ func (a *EagerCopyAdapter) Reopen(ctx context.Context, req ReopenRequest) (*Prep
 		PrimaryWorkPath: primaryPath, BackingDir: backingDir, RuntimeViewDir: runtimeViewDir, Core: core,
 	}
 	core.ParkBacking()
-	a.adopt(view, &eagerViewState{view: view, capture: capture, denySourcePaths: deny})
+	sharedEagerViews.Store(view.ViewID, &eagerViewState{view: view, capture: capture, denySourcePaths: deny})
 	return view, nil
 }
 
 // LoadedView returns a view this process already holds.
 func (a *EagerCopyAdapter) LoadedView(viewID string) (*PreparedView, bool) {
-	st, ok := a.lookupViewState(viewID)
+	st, ok := lookupEagerViewState(viewID)
 	if !ok {
 		return nil, false
 	}
@@ -312,7 +308,7 @@ func (a *EagerCopyAdapter) LoadedView(viewID string) (*PreparedView, bool) {
 
 // ChangedPaths lists what differs from the exact base now, reading only files whose stat differs.
 func (a *EagerCopyAdapter) ChangedPaths(ctx context.Context, viewID string) ([]layeredfs.QualifiedPath, CaptureStats, error) {
-	st, ok := a.lookupViewState(viewID)
+	st, ok := lookupEagerViewState(viewID)
 	if !ok {
 		return nil, CaptureStats{}, &AdapterError{AdapterID: AdapterEagerCopy, Op: "changed_paths", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
 	}
@@ -328,7 +324,7 @@ func (a *EagerCopyAdapter) ChangedPaths(ctx context.Context, viewID string) ([]l
 
 // IsDirectoryBase reports that the view's manifest names path as a directory.
 func (a *EagerCopyAdapter) IsDirectoryBase(viewID string, path layeredfs.QualifiedPath) bool {
-	st, ok := a.lookupViewState(viewID)
+	st, ok := lookupEagerViewState(viewID)
 	if !ok {
 		return false
 	}
@@ -340,7 +336,7 @@ func (a *EagerCopyAdapter) IsDirectoryBase(viewID string, path layeredfs.Qualifi
 
 // LastCaptureStats reports what the view's most recent capture or change listing did.
 func (a *EagerCopyAdapter) LastCaptureStats(viewID string) (CaptureStats, bool) {
-	st, ok := a.lookupViewState(viewID)
+	st, ok := lookupEagerViewState(viewID)
 	if !ok {
 		return CaptureStats{}, false
 	}
@@ -349,7 +345,7 @@ func (a *EagerCopyAdapter) LastCaptureStats(viewID string) (CaptureStats, bool) 
 	return st.capture.stats, true
 }
 
-func (a *EagerCopyAdapter) lookupViewState(viewID string) (*eagerViewState, bool) {
+func lookupEagerViewState(viewID string) (*eagerViewState, bool) {
 	if v, ok := sharedEagerViews.Load(viewID); ok {
 		return v.(*eagerViewState), true
 	}
@@ -358,7 +354,7 @@ func (a *EagerCopyAdapter) lookupViewState(viewID string) (*eagerViewState, bool
 
 // CommandAccess returns the seeded private paths and confinement facts without re-copying.
 func (a *EagerCopyAdapter) CommandAccess(viewID string) (CommandAccessSpec, error) {
-	st, ok := a.lookupViewState(viewID)
+	st, ok := lookupEagerViewState(viewID)
 	if !ok {
 		return CommandAccessSpec{}, &AdapterError{AdapterID: AdapterEagerCopy, Op: "command_access", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
 	}
@@ -385,7 +381,7 @@ func (a *EagerCopyAdapter) CommandAccess(viewID string) (CommandAccessSpec, erro
 
 // CheckpointBarrier quiesces writers, captures the tree by stat, and acquires the Core barrier.
 func (a *EagerCopyAdapter) CheckpointBarrier(ctx context.Context, viewID string) (BarrierReceipt, func() error, error) {
-	st, ok := a.lookupViewState(viewID)
+	st, ok := lookupEagerViewState(viewID)
 	if !ok {
 		return BarrierReceipt{}, nil, &AdapterError{AdapterID: AdapterEagerCopy, Op: "checkpoint_barrier", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
 	}
