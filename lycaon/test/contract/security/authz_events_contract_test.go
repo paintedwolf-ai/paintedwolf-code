@@ -1,47 +1,49 @@
 package contract
 
 import (
+	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/authzcontext"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestAuthzEventEnumVocabulary(t *testing.T) {
 	t.Parallel()
-	wantActions := map[authzcontext.EventAction]bool{
-		authzcontext.EventActionApprovalDecision:           true,
-		authzcontext.EventActionToolDenied:                 true,
-		authzcontext.EventActionCapabilityRequested:        true,
-		authzcontext.EventActionCapabilityGranted:          true,
-		authzcontext.EventActionCapabilityDenied:           true,
-		authzcontext.EventActionCapabilityRevoked:          true,
-		authzcontext.EventActionCapabilityApplied:          true,
-		authzcontext.EventActionDirectIPLeaseReused:        true,
-		authzcontext.EventActionDirectIPStarted:            true,
-		authzcontext.EventActionDirectIPCompleted:          true,
-		authzcontext.EventActionDirectIPReconstructed:      true,
-		authzcontext.EventActionMediatedEndpoint:           true,
-		authzcontext.EventActionDetectionResolved:          true,
-		authzcontext.EventActionAskSuppressed:              true,
-		authzcontext.EventActionSecretPermissionUsed:       true,
-		authzcontext.EventActionSecretReceipt:              true,
-		authzcontext.EventActionSecretContest:              true,
-		authzcontext.EventActionSecretDestinationTrusted:   true,
-		authzcontext.EventActionSecretHostComposedRedacted: true,
-		authzcontext.EventActionSecretChatLocalRelease:     true,
-		authzcontext.EventActionContentApplyResolved:       true,
-		authzcontext.EventActionBlueprintApproved:          true,
-		authzcontext.EventActionBlueprintSuperseded:        true,
-		authzcontext.EventActionBlueprintRevoked:           true,
+	wantActions := map[string]bool{
+		"approval_decision":             true,
+		"tool_denied":                   true,
+		"capability_requested":          true,
+		"capability_granted":            true,
+		"capability_denied":             true,
+		"capability_revoked":            true,
+		"capability_applied":            true,
+		"direct_ip_lease_reused":        true,
+		"direct_ip_started":             true,
+		"direct_ip_completed":           true,
+		"direct_ip_reconstructed":       true,
+		"mediated_endpoint":             true,
+		"detection_resolved":            true,
+		"ask_suppressed":                true,
+		"secret_permission_used":        true,
+		"secret_receipt":                true,
+		"secret_contest":                true,
+		"secret_destination_trusted":    true,
+		"secret_host_composed_redacted": true,
+		"secret_chat_local_release":     true,
+		"content_apply_resolved":        true,
+		"blueprint_approved":            true,
+		"blueprint_superseded":          true,
+		"blueprint_revoked":             true,
 	}
-	for _, a := range authzcontext.AllEventActions() {
+	for _, a := range authzVocabulary(t, "EventAction") {
 		if !wantActions[a] {
 			t.Fatalf("unexpected action %q", a)
 		}
@@ -51,11 +53,11 @@ func TestAuthzEventEnumVocabulary(t *testing.T) {
 		t.Fatalf("missing actions: %v", wantActions)
 	}
 
-	wantOutcomes := map[authzcontext.EventOutcome]bool{
-		authzcontext.EventOutcomeAllowed: true,
-		authzcontext.EventOutcomeDenied:  true,
+	wantOutcomes := map[string]bool{
+		"allowed": true,
+		"denied":  true,
 	}
-	for _, o := range authzcontext.AllEventOutcomes() {
+	for _, o := range authzVocabulary(t, "EventOutcome") {
 		if !wantOutcomes[o] {
 			t.Fatalf("unexpected outcome %q", o)
 		}
@@ -65,15 +67,15 @@ func TestAuthzEventEnumVocabulary(t *testing.T) {
 		t.Fatalf("missing outcomes: %v", wantOutcomes)
 	}
 
-	wantResolved := map[authzcontext.ResolvedBy]bool{
-		authzcontext.ResolvedByHuman:      true,
-		authzcontext.ResolvedByExpiry:     true,
-		authzcontext.ResolvedBySystemDeny: true,
-		authzcontext.ResolvedByUserStop:   true,
-		authzcontext.ResolvedByHostStop:   true,
-		authzcontext.ResolvedByPolicy:     true,
+	wantResolved := map[string]bool{
+		"human":       true,
+		"expiry":      true,
+		"system_deny": true,
+		"user_stop":   true,
+		"host_stop":   true,
+		"policy":      true,
 	}
-	for _, r := range authzcontext.AllResolvedBy() {
+	for _, r := range authzVocabulary(t, "ResolvedBy") {
 		if !wantResolved[r] {
 			t.Fatalf("unexpected resolved_by %q", r)
 		}
@@ -82,6 +84,63 @@ func TestAuthzEventEnumVocabulary(t *testing.T) {
 	if len(wantResolved) != 0 {
 		t.Fatalf("missing resolved_by: %v", wantResolved)
 	}
+}
+
+type authzVocabularyImporter struct{ ledger *types.Package }
+
+func (i authzVocabularyImporter) Import(path string) (*types.Package, error) {
+	if path != "github.com/lycaon/lycaon/internal/authzledger" {
+		return nil, fmt.Errorf("unexpected vocabulary dependency %q", path)
+	}
+	return i.ledger, nil
+}
+
+func authzVocabulary(t *testing.T, typeName string) []string {
+	t.Helper()
+	root := contractcheck.RepoRoot(t)
+	fset := token.NewFileSet()
+	ledger, err := parser.ParseFile(fset, filepath.Join(root, "lycaon/internal/authzledger/recorder.go"), nil, 0)
+	contractcheck.FailErr(t, "parse ledger vocabulary", err)
+	// Evaluate the declarations without importing runtime recording dependencies.
+	var declarations []ast.Decl
+	for _, declaration := range ledger.Decls {
+		if gen, ok := declaration.(*ast.GenDecl); ok && gen.Tok == token.CONST {
+			declarations = append(declarations, gen)
+		}
+	}
+	ledger.Decls, ledger.Imports = declarations, nil
+	ledgerPackage, err := new(types.Config).Check("github.com/lycaon/lycaon/internal/authzledger", fset, []*ast.File{ledger}, nil)
+	contractcheck.FailErr(t, "evaluate ledger constants", err)
+	source, err := parser.ParseFile(fset, filepath.Join(root, "lycaon/internal/authzcontext/event_types.go"), nil, 0)
+	contractcheck.FailErr(t, "parse event vocabulary", err)
+	config := types.Config{Importer: authzVocabularyImporter{ledger: ledgerPackage}}
+	vocabulary, err := config.Check("github.com/lycaon/lycaon/internal/authzcontext", fset, []*ast.File{source}, nil)
+	contractcheck.FailErr(t, "evaluate event constants", err)
+	var values []string
+	seen := map[string]bool{}
+	for _, name := range vocabulary.Scope().Names() {
+		value, ok := vocabulary.Scope().Lookup(name).(*types.Const)
+		if !ok {
+			continue
+		}
+		named, ok := value.Type().(*types.Named)
+		if !ok || named.Obj().Name() != typeName {
+			continue
+		}
+		if value.Val().Kind() != constant.String {
+			t.Fatalf("%s is not a string constant", name)
+		}
+		text := constant.StringVal(value.Val())
+		if seen[text] {
+			t.Fatalf("duplicate %s value %q", typeName, text)
+		}
+		seen[text] = true
+		values = append(values, text)
+	}
+	if len(values) == 0 {
+		t.Fatalf("no %s declarations", typeName)
+	}
+	return values
 }
 
 // Silent auto-allows append no ledger rows; only HITL resolution and executor policy blocks do.

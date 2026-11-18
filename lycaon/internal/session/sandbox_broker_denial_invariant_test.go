@@ -74,7 +74,7 @@ func newDenialInvariantStores(t *testing.T) *denialInvariantStores {
 	database := testdbfixture.Open(t, "denial-lifecycle.db")
 	testdbseed.InsertSessionWithRoot(t, database, denialInvariantChat, testdbseed.DefaultProjectID, t.TempDir())
 	ctx := testdbseed.OwnerCaller(t, t.Context(), database)
-	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
+	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	checkpoints.SetCheckpointExpiry(func() time.Duration { return 0 })
 	return &denialInvariantStores{
 		listen: approvalstate.NewSandboxPortGrantRuntime(), loopback: approvalstate.NewSandboxPortGrantRuntime(),

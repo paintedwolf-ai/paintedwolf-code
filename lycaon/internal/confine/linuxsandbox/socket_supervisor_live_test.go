@@ -175,7 +175,7 @@ func approveSupervisorSocket(t *testing.T, ctx context.Context, workspace, path 
 	database := testdbfixture.Open(t, "supervisor-approval.db")
 	testdbseed.InsertSessionWithRoot(t, database, "root-1", testdbseed.DefaultProjectID, workspace)
 	human := testdbseed.OwnerCaller(t, t.Context(), database)
-	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
+	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	t.Cleanup(func() {
 		testutil.FailErr(t, "stop supervisor checkpoints", checkpoints.StopExpiryTimers(context.Background()))
 	})

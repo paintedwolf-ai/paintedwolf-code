@@ -71,11 +71,11 @@ func newWorkflowOrchestrator(t *testing.T, rec *recordingWorkers, spy *spyWorkfl
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
 	runStore := workflowpersistence.New(sqlDB)
-	runStore.Transactions.SetAuthzRecorder(authzcontext.SQLRecorder(sqlDB))
+	runStore.Transactions.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	wfMgr := workflow.NewManager(runStore, sessStore, manifests, nil)
 	projectDir := t.TempDir()
 	blueprintMgr := workflowtest.WireBlueprintDeps(wfMgr, projectDir)
-	blueprintMgr.Approvals = blueprint.NewApprovalStore(sqlDB, authzcontext.SQLRecorder(sqlDB))
+	blueprintMgr.Approvals = blueprint.NewApprovalStore(sqlDB, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	deps := conditionstest.Dependencies()
 	deps.BlueprintContent = func(_ context.Context, projectDir, relPath string) (string, error) {
 		return workflowblueprintfiles.ReadBlueprintFile(projectDir, relPath)

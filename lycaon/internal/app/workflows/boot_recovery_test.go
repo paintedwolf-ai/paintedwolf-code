@@ -19,7 +19,7 @@ func TestBuildOrdersReviewRepairsAfterVerdictRecovery(t *testing.T) {
 	entries := make(map[string]bootrecovery.Entry)
 	_, err := Build(t.Context(), Dependencies{
 		Database: database, DataDir: t.TempDir(), Sessions: store.NewSQL(database),
-		AuthzRecorder: authzcontext.SQLRecorder(database),
+		AuthzRecorder: authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}},
 	}, func(entry bootrecovery.Entry) error {
 		if _, duplicate := entries[entry.Name]; duplicate {
 			t.Fatalf("duplicate recovery owner %q", entry.Name)

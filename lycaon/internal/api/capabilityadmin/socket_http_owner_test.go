@@ -151,7 +151,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 	authority := settings.NewRuleApprovalGate(approvals, settingstest.EmptySources())
 	runtime := approvalstate.NewSocketCapabilityRuntime()
 	defer runtime.Close()
-	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
+	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	defer func() {
 		testutil.FailErr(t, "stop socket checkpoint owners", checkpoints.StopExpiryTimers(context.Background()))
 	}()
@@ -161,7 +161,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 	registry := tools.NewDefaultRegistry()
 	executor := toolexecution.NewExecutor(nil, registry, "implement")
 	executor.Approvals.SetCheckpointManager(ctx, review, authority)
-	executor.Approvals.SetAuthzRecorder(authzcontext.SQLRecorder(database))
+	executor.Approvals.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	defer confine.SetEgressResolver(nil)
 	executor.Network.SetEgressPostureSource(func(string) gate.Posture { return gate.PostureStrict })
 	executor.Capabilities.SetSocketCapabilityRuntime(runtime)
@@ -248,7 +248,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 		testutil.FailErr(t, "stop old checkpoint owners", checkpoints.StopExpiryTimers(context.Background()))
 		restartedRuntime := approvalstate.NewSocketCapabilityRuntime()
 		defer restartedRuntime.Close()
-		restarted := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
+		restarted := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 		defer func() {
 			testutil.FailErr(t, "stop restarted token checkpoint owners", restarted.StopExpiryTimers(context.Background()))
 		}()

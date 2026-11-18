@@ -41,7 +41,7 @@ func buildEvidenceFixture(t *testing.T) evidenceBindingFixture {
 	testutil.FailErr(t, "insert workflow run", seedErr)
 	deps := Dependencies{
 		Database: database, DataDir: t.TempDir(), Sessions: store.NewSQL(database),
-		AuthzRecorder: authzcontext.SQLRecorder(database),
+		AuthzRecorder: authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}},
 	}
 	runtime, err := Build(t.Context(), deps, nil)
 	testutil.FailErr(t, "build evidence runtime", err)

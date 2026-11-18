@@ -26,7 +26,7 @@ import (
 func testRunStore(t *testing.T, sqlDB db.Handle) *runstate.Repository {
 	t.Helper()
 	s := workflowpersistence.New(sqlDB)
-	s.Transactions.SetAuthzRecorder(authzcontext.SQLRecorder(sqlDB))
+	s.Transactions.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	return s
 }
 
@@ -42,7 +42,7 @@ func testManager(t *testing.T) (*workflow.RunManager, *store.Repositories, *blue
 	testutil.FailErr(t, "RegistryFromDirs failed", err)
 	blueprintStore := blueprinttest.NewFileStore(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
-	blueprintMgr.Approvals = blueprint.NewApprovalStore(sqlDB, authzcontext.SQLRecorder(sqlDB))
+	blueprintMgr.Approvals = blueprint.NewApprovalStore(sqlDB, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	mgr := workflow.NewManager(testRunStore(t, sqlDB), sessStore, manifestRegistry, nil)
 	mgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(sqlDB)
 	blueprintMgr.AfterRetarget = mgr.Blueprints.RebindBlueprintPath
