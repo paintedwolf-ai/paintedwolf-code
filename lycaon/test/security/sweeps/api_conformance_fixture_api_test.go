@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -163,6 +164,7 @@ type widgetFaults struct {
 	numbersLabel     bool // getWidget answers its label as a number
 	unguardedRoute   bool // getPart is registered without the bearer check
 	writesPastEffect bool // getPart also writes widgets, beyond its declared index
+	racesFirstUse    bool // renameWidget requests racing on a new key each store a row
 }
 
 // widgetAPI serves widgetSpec through the production responder.
@@ -176,6 +178,8 @@ type widgetAPI struct {
 	token   string
 	// renames holds one row per operation_id: the label it applied.
 	renames []widgetRename
+	// racing holds the requests on a key after the first that found it unstored.
+	racing map[string]*widgetRace
 }
 
 type widgetRename struct{ key, label string }
@@ -314,6 +318,13 @@ func (a *widgetAPI) renameWidget(w http.ResponseWriter, r *http.Request) {
 		a.responses.FailDetails(w, wire.ApiErrorCodeInvalidRequest, map[string]any{"field": "label"}, "")
 		return
 	}
+	if a.faults.racesFirstUse && a.raceFirstUse(in.OperationID) {
+		a.mu.Lock()
+		a.renames = append(a.renames, widgetRename{key: in.OperationID, label: in.Label})
+		a.mu.Unlock()
+		httpio.WriteJSON(w, http.StatusOK, map[string]any{"id": fixtureWidgetID, "label": in.Label})
+		return
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for _, done := range a.renames {
@@ -329,6 +340,38 @@ func (a *widgetAPI) renameWidget(w http.ResponseWriter, r *http.Request) {
 	}
 	a.renames = append(a.renames, widgetRename{key: in.OperationID, label: in.Label})
 	httpio.WriteJSON(w, http.StatusOK, map[string]any{"id": fixtureWidgetID, "label": in.Label})
+}
+
+// widgetRace gathers the requests that found one key unstored.
+type widgetRace struct {
+	arrived int
+	all     chan struct{}
+}
+
+// raceFirstUse reports whether a request on key races: a key other than the
+// first one stored is checked by every racing request before any stores it,
+// so each request waits for the others and then stores its own row.
+func (a *widgetAPI) raceFirstUse(key string) bool {
+	a.mu.Lock()
+	if len(a.renames) == 0 || slices.ContainsFunc(a.renames, func(done widgetRename) bool { return done.key == key }) {
+		a.mu.Unlock()
+		return false
+	}
+	if a.racing == nil {
+		a.racing = map[string]*widgetRace{}
+	}
+	race := a.racing[key]
+	if race == nil {
+		race = &widgetRace{all: make(chan struct{})}
+		a.racing[key] = race
+	}
+	race.arrived++
+	if race.arrived == idempotentReplays {
+		close(race.all)
+	}
+	a.mu.Unlock()
+	<-race.all
+	return true
 }
 
 // keyRows counts the renames stored under key.
@@ -432,6 +475,8 @@ func newWidgetSweep(t *testing.T, faults widgetFaults) *conformanceSweep {
 	sweep := newConformanceSweep(doc, validator, api.routes(), notices)
 	sweep.effects = counterEffects{writes: &api.writes, indexed: &api.indexed}
 	sweep.readEffects = map[string]readEffect{"widget_index": {tables: []string{"widget_index"}}}
+	sweep.firstUseOp = "renameWidget"
+	sweep.corpus = newCorpusRecorder("getWidget")
 	sweep.keyRows = api
 	sweep.eventSchemas = openapi.NewEventSchemas(widgetEventSchemaDir(t))
 	sweep.values.bind("/v1/widgets/{id}/parts/{part_id}", "part_id", fixturePartID)

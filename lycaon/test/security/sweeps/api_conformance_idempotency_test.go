@@ -18,7 +18,8 @@ import (
 // idempotencyKey is the body property that makes an operation replayable.
 const idempotencyKey = "operation_id"
 
-// idempotentReplays is how many copies of one keyed request race each other.
+// idempotentReplays is how many copies of one keyed request race each other
+// on its first use.
 const idempotentReplays = 8
 
 // conformanceKeyRows counts, per table, the stored rows that name a key.
@@ -31,11 +32,11 @@ func (op *conformanceOp) keyed() bool {
 	return op.JSONBody != nil && refValue(op.JSONBody.Properties[idempotencyKey]) != nil
 }
 
-// checkIdempotent replays a keyed request that succeeded: twice in turn, then
-// from idempotentReplays goroutines at once. Every replay answers the first
-// answer's status and names the same resource, and stores nothing more; the
-// same key with a different body answers 409 idempotency_conflict. A replay
-// may report the resource's current state, so only identifiers must match.
+// checkIdempotent replays a keyed request that succeeded, twice in turn.
+// Every replay answers the first answer's status and names the same resource,
+// and stores nothing more; the same key with a different body answers 409
+// idempotency_conflict. A replay may report the resource's current state, so
+// only identifiers must match.
 func (s *conformanceSweep) checkIdempotent(ctx context.Context, first conformanceExchange) {
 	op := first.req.op
 	key := bodyKey(first.req.body)
@@ -52,16 +53,6 @@ func (s *conformanceSweep) checkIdempotent(ctx context.Context, first conformanc
 	replay.probe = "replay"
 	for range 2 {
 		s.compareReplay(first, s.send(ctx, replay))
-	}
-	replay.probe = "concurrent replay"
-	answers := make([]conformanceExchange, idempotentReplays)
-	var wg sync.WaitGroup
-	for i := range answers {
-		wg.Go(func() { answers[i] = s.send(ctx, replay) })
-	}
-	wg.Wait()
-	for _, ex := range answers {
-		s.compareReplay(first, ex)
 	}
 	if after, err := s.rowsNaming(ctx, key); err != nil {
 		s.findings.add(ruleKeyedOperationsAreIdempotent, op.ID, "replay", "could not count stored rows: %v", err)
@@ -172,4 +163,48 @@ func changedBodies(schema *openapi3.Schema, body []byte) map[string][]byte {
 		}
 	}
 	return out
+}
+
+// checkConcurrentFirstUse sends idempotentReplays copies of a fresh keyed
+// request at once, the key's first use. They answer one success naming one
+// resource, and the key names the rows one use stores, as first's key does.
+func (s *conformanceSweep) checkConcurrentFirstUse(ctx context.Context, first conformanceExchange) {
+	op := first.req.op
+	settled, err := s.rowsNaming(ctx, bodyKey(first.req.body))
+	if err != nil {
+		s.findings.add(ruleKeyedOperationsAreIdempotent, op.ID, "concurrent first use", "could not count stored rows: %v", err)
+		return
+	}
+	req, err := s.successRequest(ctx, op)
+	if err != nil {
+		s.findings.add(ruleKeyedOperationsAreIdempotent, op.ID, "concurrent first use", "could not prepare: %v", err)
+		return
+	}
+	var body map[string]any
+	if json.Unmarshal(req.body, &body) != nil {
+		s.findings.add(ruleKeyedOperationsAreIdempotent, op.ID, "concurrent first use", "the success request has no JSON body")
+		return
+	}
+	key := uuid.NewString()
+	body[idempotencyKey] = key
+	req.body, _ = json.Marshal(body)
+	req.probe = "concurrent first use"
+	answers := make([]conformanceExchange, idempotentReplays)
+	var wg sync.WaitGroup
+	for i := range answers {
+		wg.Go(func() { answers[i] = s.send(ctx, req) })
+	}
+	wg.Wait()
+	if answers[0].status/100 != 2 {
+		s.findings.add(ruleKeyedOperationsAreIdempotent, op.ID, "concurrent first use", "answered %s, want a success", answers[0].outcome())
+		return
+	}
+	for _, ex := range answers[1:] {
+		s.compareReplay(answers[0], ex)
+	}
+	if stored, err := s.rowsNaming(ctx, key); err != nil {
+		s.findings.add(ruleKeyedOperationsAreIdempotent, op.ID, "concurrent first use", "could not count stored rows: %v", err)
+	} else if !maps.Equal(stored, settled) {
+		s.findings.add(ruleKeyedOperationsAreIdempotent, op.ID, "concurrent first use", "%d racing first uses stored %v; one use stores %v", idempotentReplays, stored, settled)
+	}
 }

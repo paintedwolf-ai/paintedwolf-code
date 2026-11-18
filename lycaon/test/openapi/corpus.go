@@ -16,18 +16,16 @@ const HostCorpusPath = "lycaon-den/src/api/testdata/host-corpus.json"
 // HostCorpusRefresh is the command that rewrites the corpus.
 const HostCorpusRefresh = "UPDATE_HOST_CORPUS=1 ./task test:digest -- ./test/security/sweeps -run TestAPIConformance"
 
-// CorpusBodyBound is the largest JSON answer the corpus keeps whole.
-const CorpusBodyBound = 64 << 10
-
 // HostCorpus is what the conformance sweep observed the host answer and
 // publish.
 type HostCorpus struct {
 	Generated string `json:"generated"`
-	// Exchanges holds each operation's first validated success, followed for
-	// a read by its last when that differs, then the first answer of each
-	// error code.
+	// Exchanges holds one chat's bootstrap before and after the events that
+	// change it.
 	Exchanges []CorpusExchange `json:"exchanges"`
-	// Events is every envelope the host published, in delivery order.
+	// Events holds, in delivery order, the bootstraps' cursor boundaries, the
+	// chat's message events between them, and the first envelope of each topic
+	// and payload shape.
 	Events []wire.EventEnvelope `json:"events"`
 }
 
@@ -40,15 +38,10 @@ type CorpusExchange struct {
 	Query     map[string][]string `json:"query,omitempty"`
 	Request   json.RawMessage     `json:"request,omitempty"`
 	Status    int                 `json:"status"`
-	// ContentType is the answer's media type, recorded for every answer
-	// whose body the corpus keeps or leaves out.
+	// ContentType is the answer's media type.
 	ContentType string `json:"content_type,omitempty"`
-	// Body is the JSON answer; Text is any other text answer.
+	// Body is the JSON answer.
 	Body json.RawMessage `json:"body,omitempty"`
-	Text string          `json:"text,omitempty"`
-	// BodyShape stands in for a JSON answer larger than CorpusBodyBound: each
-	// JSON path and the kinds of value found there.
-	BodyShape map[string]string `json:"body_shape,omitempty"`
 }
 
 // ReadHostCorpus loads the committed corpus.

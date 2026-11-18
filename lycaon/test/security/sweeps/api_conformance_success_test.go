@@ -141,6 +141,9 @@ func (s *conformanceSweep) probeSuccessPaths(ctx context.Context, stages ...succ
 		}
 		if op.keyed() {
 			s.checkIdempotent(ctx, ex)
+			if op.ID == s.firstUseOp {
+				s.checkConcurrentFirstUse(ctx, ex)
+			}
 			s.outcomes.replayed++
 		}
 		s.bindCreated(op, ex)
