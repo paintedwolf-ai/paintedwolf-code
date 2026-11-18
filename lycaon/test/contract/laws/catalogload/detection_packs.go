@@ -146,7 +146,7 @@ var detectionPacks = []laws.Rule{{
 		})
 	},
 }, {
-	// High and critical rules are unrecoverable; medium ones are not.
+	// High and critical rules are unrecoverable; lower levels are not.
 	Name:    "detection-pack-level-matches-effect-class",
 	Anchors: []laws.Anchor{laws.Decl("internal/detectionpack", "TagEffectUnrecoverable")},
 	Check: func(r *laws.Run) {
@@ -160,9 +160,9 @@ var detectionPacks = []laws.Rule{{
 				if !effect.Unrecoverable {
 					r.Report("%s/%s is %s but not unrecoverable", p.ID, rule.Slug, rule.Level)
 				}
-			case detectionpack.LevelMedium:
+			case detectionpack.LevelMedium, detectionpack.LevelLow, detectionpack.LevelInformational:
 				if effect.Unrecoverable {
-					r.Report("%s/%s is medium but unrecoverable; it belongs at high or critical", p.ID, rule.Slug)
+					r.Report("%s/%s is %s but unrecoverable; it belongs at high or critical", p.ID, rule.Slug, rule.Level)
 				}
 			}
 		})
