@@ -17,7 +17,9 @@ import (
 )
 
 // sourceAlways serves tests whose subject is not address provenance.
-func sourceAlways(context.Context, string, string) confine.AddressOrigin { return confine.AddressSource }
+func sourceAlways(context.Context, string, string) confine.AddressOrigin {
+	return confine.AddressSource
+}
 
 // gateRecorder captures every dial the confinement hands to the approval gate.
 type gateRecorder struct {
