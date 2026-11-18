@@ -118,3 +118,38 @@ webE2e(
     }
   },
 );
+
+webE2e("an outside edit path opens its retained comparison", async ({ page, request }, testInfo) => {
+  await bootstrapChatSession(page, request);
+  const sessionId = await settledChatSessionId(page);
+  const path = "/external/report.txt";
+  const assistantId = crypto.randomUUID();
+  const callId = "outside-edit";
+  await apiSeedSessionTranscript(request, sessionId, transcriptMessages([
+    { id: crypto.randomUUID(), role: "user", content: "Update the report", seq: 1, ord: 1 },
+    {
+      id: assistantId, role: "assistant", content: "", seq: 2, ord: 2,
+      tool_calls: [{ id: callId, name: "write", args: { path, content: "new report\n" } }],
+    },
+    {
+      id: crypto.randomUUID(), role: "tool", content: "Report updated", seq: 3, ord: 3,
+      tool_result: {
+        content: "Report updated", tool: "write", tool_call_id: callId,
+        assistant_message_id: assistantId,
+        file_edits: [{ path, before: "old report\n", after: "new report\n" }],
+      },
+    },
+  ]));
+  const group = liveChatStage(page).getByTestId("diff-group");
+  await group.getByTestId("diff-group-files").click();
+  const card = group.getByTestId("file-edit-diff").filter({ hasText: path });
+  const label = card.getByText(path, { exact: true });
+  await expect(card).toHaveAttribute("data-expanded", "true");
+  await expect(card.getByTestId("source-path-link")).toHaveCount(0);
+  await label.click();
+  await expect(card).toHaveAttribute("data-expanded", "false");
+  await label.click();
+  await expect(card).toHaveAttribute("data-expanded", "true");
+  await expect(card.getByText("new report", { exact: true })).toBeVisible();
+  await testInfo.attach("Outside path with its retained diff", { body: await card.screenshot(), contentType: "image/png" });
+});
