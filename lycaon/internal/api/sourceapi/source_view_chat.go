@@ -2,7 +2,7 @@ package sourceapi
 
 import (
 	"context"
-	"slices"
+	"reflect"
 
 	"github.com/lycaon/lycaon/internal/sourcetree"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -26,7 +26,7 @@ func (s *Trees) selectTreeChat(ctx context.Context, view *sourceView, chatID str
 	}
 	view.mu.Lock()
 	defer view.mu.Unlock()
-	if slices.Equal(view.navigation.outside, locations.details) {
+	if reflect.DeepEqual(view.navigation.outside, locations.details) {
 		view.navigation.treeIntent.ChatID = chatID
 		return nil, nil
 	}

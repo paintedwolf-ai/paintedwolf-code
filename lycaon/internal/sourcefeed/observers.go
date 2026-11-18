@@ -24,7 +24,11 @@ func changeNotice(event api.SourceChangesEvent) Notice {
 		writes = writes && change.Op == api.SourceChangeOpWrite && change.IsDir != nil && !*change.IsDir
 		changed = append(changed, Address{RootID: change.RootID, Path: change.Path})
 		if change.FromPath != "" {
-			changed = append(changed, Address{RootID: change.RootID, Path: change.FromPath})
+			root := change.FromRootID
+			if root == "" {
+				root = change.RootID
+			}
+			changed = append(changed, Address{RootID: root, Path: change.FromPath})
 		}
 	}
 	return Notice{FileWritesOnly: writes, Changed: changed}

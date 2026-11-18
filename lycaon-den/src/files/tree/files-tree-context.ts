@@ -13,6 +13,8 @@ export type FilesTreeSelection = {
   rootId: string;
   rootLabel: string;
   path: string;
+  fileId?: string;
+  locationId?: string;
 };
 
 export type FilesTreeEntrySelection = {
@@ -57,6 +59,7 @@ export type FilesTreeProps = {
   sessionId?: string;
   /** The chat whose locations outside the project the tree lists after the roots. */
   chatId?: string;
+  approvalsRevision?: number;
   reviewScope?: SourceTreeReviewScope;
   activeFile: ActiveFile;
   navigationRevision?: number;

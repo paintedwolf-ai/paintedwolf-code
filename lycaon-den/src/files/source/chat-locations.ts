@@ -1,11 +1,7 @@
 import { createSignal } from "solid-js";
 import type { SourceChatLocation } from "../../api/types.ts";
 
-/**
- * The selected chat's locations outside the project, as its Files tree view
- * lists them. A location is a tree root whose id is the location id; source
- * history addresses its files by the outside root and their outside path.
- */
+// Tree addresses use location IDs. History uses the outside namespace.
 const [locationsByProject, setLocationsByProject] = createSignal<ReadonlyMap<string, readonly SourceChatLocation[]>>(new Map());
 const [epochs, setEpochs] = createSignal<ReadonlyMap<string, number>>(new Map());
 
@@ -25,7 +21,6 @@ export function chatLocation(projectId: string, rootId: string): SourceChatLocat
   return chatLocations(projectId).find((location) => location.id === rootId);
 }
 
-/** Changes whenever the chat's set of locations may have changed, so its tree is listed again. */
 export function chatLocationsEpoch(projectId: string): number {
   return epochs().get(projectId) ?? 0;
 }
@@ -45,7 +40,7 @@ function baseName(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);
 }
 
-/** The outside-namespace path a location row names. A file location's root is its folder. */
+// An exact-file root displays the containing folder.
 export function locationLedgerPath(location: SourceChatLocation, path: string): string {
   if (location.kind === "file") return path === "." ? parentPath(location.anchor) : location.anchor;
   return path === "." ? location.anchor : `${location.anchor}/${path}`;

@@ -74,6 +74,9 @@ func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID,
 	}); err != nil {
 		return err
 	}
+	if rel == "" {
+		return nil
+	}
 	return placeChatLocation(ctx, q, chat, rel, ts)
 }
 

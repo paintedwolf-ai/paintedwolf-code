@@ -225,6 +225,7 @@ export const API_OPERATIONS = {
   markEditorSecret: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/secret-spans/mark" },
   markSessionSeen: { method: "POST", path: "/v1/sessions/{id}/seen" },
   observeEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/observe" },
+  openChatLocationFile: { method: "POST", path: "/v1/projects/{id}/source/outside-locations/{location_id}/files" },
   openEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents" },
   openOutsideFile: { method: "POST", path: "/v1/projects/{id}/source/outside-files" },
   openProjectTrustReview: { method: "POST", path: "/v1/projects/{id}/trust/review" },
@@ -574,6 +575,7 @@ export type OperationPathParameters = {
   markEditorSecret: { id: string | number; document_id: string | number; };
   markSessionSeen: { id: string | number; };
   observeEditorDocument: { id: string | number; document_id: string | number; };
+  openChatLocationFile: { id: string | number; location_id: string | number; };
   openEditorDocument: { id: string | number; };
   openOutsideFile: { id: string | number; };
   openProjectTrustReview: { id: string | number; };

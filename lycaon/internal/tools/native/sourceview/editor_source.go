@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -88,7 +89,7 @@ func LoadText(ctx context.Context, tool string, access Access, tctx tools.ToolCo
 		st := Text{Content: doc.Text, Editor: &doc, Stat: FileStatFacts{Size: int64(len(doc.Text))}}
 		if access == AccessRead {
 			observeWorkerSourceRead(ctx, tctx, resolved, st)
-			recordOutsideRead(ctx, tctx, resolved, st)
+			RecordOutsideRead(ctx, tctx, resolved, st.SHA256(), st.Stat.Size)
 		}
 		return st, nil
 	}
@@ -99,7 +100,7 @@ func LoadText(ctx context.Context, tool string, access Access, tctx tools.ToolCo
 	st := Text{Content: disk.Text(), Disk: &disk, Stat: stat}
 	if access == AccessRead {
 		observeWorkerSourceRead(ctx, tctx, resolved, st)
-		recordOutsideRead(ctx, tctx, resolved, st)
+		RecordOutsideRead(ctx, tctx, resolved, st.SHA256(), st.Stat.Size)
 	}
 	return st, nil
 }
@@ -108,9 +109,8 @@ type outsideReadRecorder interface {
 	TrackChatFile(context.Context, sourceledger.TrackInput, string, sourceledger.ChatFileRelation) (sourceledger.TrackedFile, error)
 }
 
-// recordOutsideRead records that the chat read a file outside the project,
-// which places the file's folder in the chat's locations.
-func recordOutsideRead(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, st Text) {
+// RecordOutsideRead places a read file in the chat's locations.
+func RecordOutsideRead(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, sha256 string, size int64) {
 	if !resolved.External || resolved.ToolOutput || resolved.Compressed || tctx.Identity.ProjectID == "" || tctx.Identity.SessionID == "" {
 		return
 	}
@@ -123,9 +123,13 @@ func recordOutsideRead(ctx context.Context, tctx tools.ToolContext, resolved pro
 		return
 	}
 	if _, err := recorder.TrackChatFile(ctx, sourceledger.TrackInput{
-		ProjectID: tctx.Identity.ProjectID, RootID: root.ID, Path: rel, SHA256: st.SHA256(), Size: st.Stat.Size,
+		ProjectID: tctx.Identity.ProjectID, RootID: root.ID, Path: rel, SHA256: sha256, Size: size,
 	}, tctx.Identity.SessionID, sourceledger.ChatFileRead); err != nil {
 		slog.Debug("Outside read was not recorded", "path", resolved.DisplayPath, "error", err)
+		return
+	}
+	if err := sourcefeed.EmitProjectSignal(ctx, tctx.Identity.ProjectID, tctx.Source.Roots); err != nil {
+		slog.Debug("Outside read event was not published", "project", tctx.Identity.ProjectID, "error", err)
 	}
 }
 

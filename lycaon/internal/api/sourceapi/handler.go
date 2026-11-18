@@ -28,6 +28,7 @@ import (
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workscope"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type Deps struct {
@@ -161,6 +162,7 @@ type Review struct {
 }
 
 type Trees struct {
+	LocationAccess  func(chat, project, anchor string, exact bool) *api.SourceLocationAccess
 	Presentation    *Presentation
 	ProjectRegistry project.Registry
 	Review          *Review

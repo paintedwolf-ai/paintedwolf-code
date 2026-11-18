@@ -3819,6 +3819,58 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         default:
           $ref: '#/components/responses/Error'
+  /v1/projects/{id}/source/outside-locations/{location_id}/files:
+    post:
+      tags:
+        - projects
+      operationId: openChatLocationFile
+      x-person-action: record
+      summary: Open a file from a chat's outside location
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: location_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenChatLocationFileRequest'
+      responses:
+        '200':
+          description: The opened file and its identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenedOutsideFile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Project, location, or file not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: The request or file is too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/projects/{id}/agent-presence:
     get:
       tags:
@@ -33771,6 +33823,36 @@ components:
           type: string
           minLength: 1
           description: Absolute host path the person chose in the native file picker.
+    SourceLocationAccess:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - path
+        - mode
+        - tree
+        - scope
+      description: The strongest active saved approval covering this location or a path within it.
+      properties:
+        path:
+          type: string
+        mode:
+          type: string
+          enum:
+            - read
+            - write
+        tree:
+          type: boolean
+        scope:
+          type: string
+          enum:
+            - chat
+            - project
+            - device
+        expires_at:
+          type: string
+          format: date-time
+          x-go-pointer: true
     SourceChatLocation:
       x-go-generate: true
       type: object
@@ -33825,6 +33907,9 @@ components:
         available:
           type: boolean
           description: Whether the host can still address the observed location.
+        access:
+          $ref: '#/components/schemas/SourceLocationAccess'
+          x-go-pointer: true
     OpenedOutsideFile:
       x-go-generate: true
       type: object
@@ -33857,6 +33942,17 @@ components:
           type: boolean
           x-go-pointer: true
           description: Whether the chat's Files section hides the location; omitted keeps it.
+    OpenChatLocationFileRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - path
+      properties:
+        path:
+          type: string
+          minLength: 1
+          description: File row path under the location root.
     AgentActivityKind:
       type: string
       enum:

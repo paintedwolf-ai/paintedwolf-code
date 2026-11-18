@@ -235,6 +235,7 @@ var (
 	operationMarkEditorSecret                   = generatedOperation{ID: "markEditorSecret", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/secret-spans/mark", Params: []string{"id", "document_id"}, RecordsPersonAction: true}
 	operationMarkSessionSeen                    = generatedOperation{ID: "markSessionSeen", Method: "POST", Path: "/v1/sessions/{id}/seen", Params: []string{"id"}}
 	operationObserveEditorDocument              = generatedOperation{ID: "observeEditorDocument", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/observe", Params: []string{"id", "document_id"}}
+	operationOpenChatLocationFile               = generatedOperation{ID: "openChatLocationFile", Method: "POST", Path: "/v1/projects/{id}/source/outside-locations/{location_id}/files", Params: []string{"id", "location_id"}, RecordsPersonAction: true}
 	operationOpenEditorDocument                 = generatedOperation{ID: "openEditorDocument", Method: "POST", Path: "/v1/projects/{id}/editor-documents", Params: []string{"id"}}
 	operationOpenOutsideFile                    = generatedOperation{ID: "openOutsideFile", Method: "POST", Path: "/v1/projects/{id}/source/outside-files", Params: []string{"id"}, RecordsPersonAction: true}
 	operationOpenProjectTrustReview             = generatedOperation{ID: "openProjectTrustReview", Method: "POST", Path: "/v1/projects/{id}/trust/review", Params: []string{"id"}}
@@ -577,6 +578,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationMarkEditorSecret,
 	operationMarkSessionSeen,
 	operationObserveEditorDocument,
+	operationOpenChatLocationFile,
 	operationOpenEditorDocument,
 	operationOpenOutsideFile,
 	operationOpenProjectTrustReview,

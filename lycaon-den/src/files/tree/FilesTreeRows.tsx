@@ -129,6 +129,14 @@ function DirEntryRow(props: {
   const isRoot = () => row().isRoot;
   const location = () => chatLocation(ctx.props.projectId, row().rootId);
   const firstLocation = () => isRoot() && location()?.id === chatLocations(ctx.props.projectId)[0]?.id && !!location();
+  const access = () => location()?.access;
+  const accessDetails = () => {
+    const grant = access();
+    if (!grant) return "No saved agent access";
+    const scope = grant.scope === "chat" ? "This chat" : grant.scope === "project" ? "Project" : "Device";
+    const expiry = grant.expires_at ? ` · Expires ${new Date(grant.expires_at).toLocaleString()}` : "";
+    return `${scope} · ${grant.tree ? "Folder" : "Exact file"} · ${grant.path}${expiry}`;
+  };
   const isRenamingSelf = createMemo(
     () => !sticky() && ctx.props.renaming?.rootId === row().rootId && ctx.props.renaming?.path === row().path,
   );
@@ -265,8 +273,10 @@ function DirEntryRow(props: {
           <Show when={firstLocation()}>
             <span class="den-files-tree__outside-tag" data-testid="files-tree-outside-tag">Outside project</span>
           </Show>
-          <Show when={isRoot() && location()?.available === false}>
-            <span class="den-files-tree__outside-tag">Unavailable</span>
+          <Show when={isRoot() && location()}>
+            <span class="den-files-tree__outside-tag" data-tip={accessDetails()}>
+              {location()?.available === false ? "Unavailable" : access()?.mode === "write" ? "Agent write" : access()?.mode === "read" ? "Agent read" : "No saved access"}
+            </span>
           </Show>
           <Show when={row().deleted}>
             <FilesScopeChangeMark change={{ kind: "deleted", subject: "view" }} surface="tree" />

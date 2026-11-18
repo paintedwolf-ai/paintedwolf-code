@@ -32,8 +32,6 @@ type Props = Omit<ComponentProps<typeof FilesTreePane>, "tree" | "review"> &
     };
 
 export function FilesNavigationPane(props: Props) {
-  // The tree addresses a chat location's rows by the location; everything else
-  // in Files uses the outside root and the file's outside path.
   const toLedger = (rootId: string, path: string) => ledgerAddress(props.projectId, outsideRootId(props.projectId), rootId, path);
   const toTree = <T extends { rootId: string; path: string }>(value: T | null | undefined): T | null => {
     if (!value) return null;
@@ -106,6 +104,7 @@ export function FilesNavigationPane(props: Props) {
             client={props.client}
             sessionId={props.sessionId}
             chatId={props.chatId}
+            approvalsRevision={props.appStore.state.approvalsRevision}
             reviewScope={reviewScope()}
             retainPresentation={props.retainPresentation}
             autoReveal={editorRevealInTreePref()}
@@ -131,7 +130,7 @@ export function FilesNavigationPane(props: Props) {
             }}
             onOpenFile={(selection, intent) => {
               const outside = chatLocation(props.projectId, selection.rootId);
-              props.onOpenFile({ ...selection, ...toLedger(selection.rootId, selection.path), ...(outside ? { rootLabel: OUTSIDE_ROOT_LABEL } : {}) }, intent);
+              props.onOpenFile({ ...selection, ...toLedger(selection.rootId, selection.path), ...(outside ? { rootLabel: OUTSIDE_ROOT_LABEL, locationId: outside.id } : {}) }, intent);
             }}
             onRevertFile={props.onRevertFile ? (rootId, path) => {
               const address = toLedger(rootId, path);

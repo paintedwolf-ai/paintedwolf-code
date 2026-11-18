@@ -241,6 +241,8 @@ paths:
     $ref: paths/projects/source-outside.yaml#/paths/~1v1~1projects~1{id}~1source~1outside-files
   /v1/projects/{id}/source/outside-locations/{location_id}:
     $ref: paths/projects/source-outside.yaml#/paths/~1v1~1projects~1{id}~1source~1outside-locations~1{location_id}
+  /v1/projects/{id}/source/outside-locations/{location_id}/files:
+    $ref: "paths/projects/source-outside.yaml#/paths/~1v1~1projects~1{id}~1source~1outside-locations~1{location_id}~1files"
   /v1/projects/{id}/agent-presence:
     $ref: paths/projects/source-workspace.yaml#/paths/~1v1~1projects~1{id}~1agent-presence
   /v1/projects/{id}/editor-documents:

@@ -46,6 +46,30 @@ components:
         available:
           type: boolean
           description: Whether the host can still address the observed location.
+        access:
+          $ref: "#/components/schemas/SourceLocationAccess"
+          x-go-pointer: true
+    SourceLocationAccess:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [path, mode, tree, scope]
+      description: The strongest active saved approval covering this location or a path within it.
+      properties:
+        path:
+          type: string
+        mode:
+          type: string
+          enum: [read, write]
+        tree:
+          type: boolean
+        scope:
+          type: string
+          enum: [chat, project, device]
+        expires_at:
+          type: string
+          format: date-time
+          x-go-pointer: true
     UpdateSourceChatLocationRequest:
       x-go-generate: true
       type: object
@@ -69,6 +93,16 @@ components:
           type: string
           minLength: 1
           description: Absolute host path the person chose in the native file picker.
+    OpenChatLocationFileRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [path]
+      properties:
+        path:
+          type: string
+          minLength: 1
+          description: File row path under the location root.
     OpenedOutsideFile:
       x-go-generate: true
       type: object

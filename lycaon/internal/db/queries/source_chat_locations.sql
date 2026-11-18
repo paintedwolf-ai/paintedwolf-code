@@ -11,13 +11,6 @@ FROM source_chat_locations l
 WHERE l.session_id = sqlc.arg(session_id)
 ORDER BY l.anchor;
 
--- name: ListProjectChatLocations :many
-SELECT l.id, l.session_id, l.anchor, l.anchor_identity, l.kind, l.hidden, l.created_ts
-FROM source_chat_locations l
-JOIN sessions s ON s.id = l.session_id
-WHERE s.project_id = sqlc.arg(project_id)
-ORDER BY l.anchor, l.id;
-
 -- name: GetSourceChatLocation :one
 SELECT l.id, l.session_id, l.anchor, l.anchor_identity, l.kind, l.hidden, l.created_ts
 FROM source_chat_locations l

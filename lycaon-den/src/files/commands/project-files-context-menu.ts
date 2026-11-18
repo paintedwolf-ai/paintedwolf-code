@@ -80,6 +80,7 @@ export type FilesContextMenuActions = {
   explainFile?: (rootId: string, path: string) => void;
   openInTarget?: (target: FilesContextTarget) => LocalPathTarget | null;
   /** Hides a chat location from the chat's Files section; it revokes nothing. */
+  manageLocationAccess?: () => void;
   hideChatLocation?: (locationId: string) => void;
   collapseAllFolders: (scope?: { rootId: string; dir: string }) => void;
   expandAllFolders: (scope?: { rootId: string; dir: string }) => void;
@@ -619,7 +620,6 @@ export function filesContextMenuItems(
   }
 }
 
-/** A chat location's rows browse and edit; files outside the project are never reorganized or restored from here. */
 function outsideRowMenuItems(
   target: Extract<FilesContextTarget, { surface: "tree-row" }>,
   actions: FilesContextMenuActions,
@@ -641,6 +641,9 @@ function outsideRowMenuItems(
     absoluteTestId: "files-ctx-copy-path",
     relativeTestId: "files-ctx-copy-relative-path",
   }));
+  if (target.isRoot && actions.manageLocationAccess) {
+    items.push({ label: "Manage agent access", testId: "files-ctx-manage-location-access", onSelect: actions.manageLocationAccess });
+  }
   const hideChatLocation = actions.hideChatLocation;
   if (target.isRoot && target.outsideLocation && hideChatLocation) {
     const location = target.outsideLocation;

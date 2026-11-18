@@ -1,4 +1,5 @@
 import type { createFilesTabCommands } from "../tabs/files-tab-commands.ts";
+import { navigateFromStatusChip, statusChipNavigationAvailable } from "../../chat/status/status-navigation-sink.ts";
 import { refreshChatLocations } from "../source/chat-locations.ts";
 import { reportSurfaceFailure } from "../../notices/surface-failure.ts";
 import { isOutsideRoot, outsideHostPath, outsideRootId } from "../source/outside-namespace.ts";
@@ -93,6 +94,9 @@ export function createFileContextActions(options: FileContextDependencies) {
     duplicate: (rootId, path, isDir) =>
       void options.duplicateEntry(rootId, path, isDir),
     moveToTrash,
+    ...(statusChipNavigationAvailable() ? {
+      manageLocationAccess: () => navigateFromStatusChip({ kind: "project-configuration", section: "approvals" }),
+    } : {}),
     hideChatLocation: (locationId) => {
       const client = options.client();
       const projectId = options.projectId();

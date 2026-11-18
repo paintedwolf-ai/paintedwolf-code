@@ -11,9 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
-// Admit lets one request reach the outside path rel when a chat of the
-// project holds the file there or a chat location covers it. Requests for any
-// other root pass through unchanged.
+// Admit resolves an outside address held by a chat or open document.
 func Admit(ctx context.Context, ledger *sourceledger.Store, p *project.Project, rootID, rel string) (*project.Project, error) {
 	if p == nil || rootID == "" || rootID != p.Outside.ID {
 		return p, nil
@@ -21,7 +19,7 @@ func Admit(ctx context.Context, ledger *sourceledger.Store, p *project.Project, 
 	if ledger == nil || rel == "" || path.Clean(rel) != rel || path.IsAbs(rel) {
 		return nil, projectsource.ErrSourcePathDenied
 	}
-	admitted, err := ledger.OutsidePathAdmitted(ctx, p.ID, rel)
+	admitted, err := ledger.OutsideFileHeld(ctx, p.ID, rel)
 	if err != nil {
 		return nil, err
 	}

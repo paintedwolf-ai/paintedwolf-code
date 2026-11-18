@@ -41,7 +41,7 @@ export function applySourceChangesEvent(event: SourceChangesEvent): void {
   if (!projectWorkspace) return;
   // A change no listed location covers places the chat somewhere new.
   const outside = outsideRootId(pid);
-  if (outside && event.changes.some((change) => change.root_id === outside && !treeAddress(pid, outside, outside, change.path))) {
+  if (outside && (event.changes.length === 0 || event.changes.some((change) => change.from_root_id === outside || change.root_id === outside && !treeAddress(pid, outside, outside, change.path)))) {
     refreshChatLocations(pid);
   }
   requestSourceRefresh(pid, { watchCoverage: event.resync });

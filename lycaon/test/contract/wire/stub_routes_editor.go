@@ -35,6 +35,12 @@ func registerStubEditorRoutes(mux *http.ServeMux, writeJSON stubJSONWriter) {
 			Location: fixtureChatLocation(),
 		})
 	})
+	mux.HandleFunc("POST /v1/projects/{id}/source/outside-locations/{location_id}/files", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.OpenedOutsideFile{
+			RootID: fixtureOutsideRootID, Path: "Users/me/notes.txt", FileID: "33333333-3333-4333-8333-333333333333",
+			Location: fixtureChatLocation(),
+		})
+	})
 	mux.HandleFunc("PATCH /v1/projects/{id}/source/outside-locations/{location_id}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, fixtureChatLocation())
 	})

@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 const adoptSourceDirectoryAsRoot = `-- name: AdoptSourceDirectoryAsRoot :exec
@@ -250,6 +251,9 @@ SELECT EXISTS (
     SELECT 1 FROM source_chat_files c
     JOIN sessions s ON s.id = c.session_id
     WHERE c.file_id = ?1 AND s.project_id = ?2
+) OR EXISTS (
+    SELECT 1 FROM editor_documents d
+    WHERE d.file_id = ?1 AND d.project_id = ?2
 ) AS referenced
 `
 
@@ -258,9 +262,9 @@ type SourceFileReferencedInProjectParams struct {
 	ProjectID string `json:"project_id"`
 }
 
-func (q *Queries) SourceFileReferencedInProject(ctx context.Context, arg SourceFileReferencedInProjectParams) (int64, error) {
+func (q *Queries) SourceFileReferencedInProject(ctx context.Context, arg SourceFileReferencedInProjectParams) (sql.NullBool, error) {
 	row := q.db.QueryRowContext(ctx, sourceFileReferencedInProject, arg.FileID, arg.ProjectID)
-	var referenced int64
+	var referenced sql.NullBool
 	err := row.Scan(&referenced)
 	return referenced, err
 }

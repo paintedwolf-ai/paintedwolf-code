@@ -50,16 +50,6 @@ func TestLocationsAnchorAtRepositoryOrFolder(t *testing.T) {
 	if byAnchor[rel+"/site"].Kind != ChatLocationRepository || byAnchor[rel+"/notes"].Kind != ChatLocationFolder {
 		t.Fatalf("anchors = %+v", byAnchor)
 	}
-	admitted, err := store.OutsidePathAdmitted(ctx, "p1", rel+"/site/untouched.go")
-	testutil.FailErr(t, "admit an untouched sibling", err)
-	if !admitted {
-		t.Fatal("a file the location covers was not admitted")
-	}
-	admitted, err = store.OutsidePathAdmitted(ctx, "p1", rel+"/elsewhere.txt")
-	testutil.FailErr(t, "refuse an uncovered path", err)
-	if admitted {
-		t.Fatal("a path no location covers was admitted")
-	}
 }
 
 func TestHiddenLocationReturnsWithANewChange(t *testing.T) {
@@ -78,11 +68,6 @@ func TestHiddenLocationReturnsWithANewChange(t *testing.T) {
 	testutil.FailErr(t, "read the hidden location", err)
 	if !hidden.Hidden {
 		t.Fatal("hiding did not hide the location")
-	}
-	admitted, err := store.OutsidePathAdmitted(ctx, "p1", rel+"/a.txt")
-	testutil.FailErr(t, "admit a hidden location's file", err)
-	if !admitted {
-		t.Fatal("hiding revoked the person's access")
 	}
 	recordOutside(t, store, ctx, outside, "chat", rel+"/b.txt", "b\n")
 	shown, err := store.ChatLocation(ctx, "p1", locations[0].ID)
@@ -145,11 +130,6 @@ func TestLocationRetainsItsObservedDirectory(t *testing.T) {
 	testutil.FailErr(t, "make replacement at the same path", os.Mkdir(anchor, 0o700))
 	if location.Available() {
 		t.Fatal("the replacement inherited the recorded directory identity")
-	}
-	admitted, err := store.OutsidePathAdmitted(ctx, "p1", rel+"/notes/new.txt")
-	testutil.FailErr(t, "check the replacement directory", err)
-	if admitted {
-		t.Fatal("the replacement granted access to unobserved files")
 	}
 	recordOutside(t, store, ctx, outside, "chat", rel+"/notes/new.txt", "second")
 	replacement, found, err := store.ChatLocationCovering(ctx, "chat", rel+"/notes/new.txt")

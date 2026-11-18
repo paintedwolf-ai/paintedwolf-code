@@ -65,45 +65,6 @@ func (q *Queries) InsertSourceChatLocation(ctx context.Context, arg InsertSource
 	return err
 }
 
-const listProjectChatLocations = `-- name: ListProjectChatLocations :many
-SELECT l.id, l.session_id, l.anchor, l.anchor_identity, l.kind, l.hidden, l.created_ts
-FROM source_chat_locations l
-JOIN sessions s ON s.id = l.session_id
-WHERE s.project_id = ?1
-ORDER BY l.anchor, l.id
-`
-
-func (q *Queries) ListProjectChatLocations(ctx context.Context, projectID string) ([]SourceChatLocations, error) {
-	rows, err := q.db.QueryContext(ctx, listProjectChatLocations, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []SourceChatLocations
-	for rows.Next() {
-		var i SourceChatLocations
-		if err := rows.Scan(
-			&i.ID,
-			&i.SessionID,
-			&i.Anchor,
-			&i.AnchorIdentity,
-			&i.Kind,
-			&i.Hidden,
-			&i.CreatedTs,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listSourceChatLocations = `-- name: ListSourceChatLocations :many
 SELECT l.id, l.session_id, l.anchor, l.anchor_identity, l.kind, l.hidden, l.created_ts
 FROM source_chat_locations l

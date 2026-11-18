@@ -332,11 +332,7 @@ func (s *Workspace) HandleBrowseProjectSource(w http.ResponseWriter, r *http.Req
 	}
 	q := r.URL.Query()
 	workspaceID := p.WorkspaceID()
-	p, err := outsideaccess.Admit(r.Context(), s.SourceLedger, p, q.Get("root_id"), q.Get("dir"))
-	if err != nil {
-		s.writeSourceReadError(w, r, err)
-		return
-	}
+
 	listing, err := projectsource.BrowseProjectSource(p, q.Get("root_id"), q.Get("dir"))
 	if err != nil {
 		s.writeSourceReadError(w, r, err)

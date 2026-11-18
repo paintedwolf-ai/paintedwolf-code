@@ -1520,6 +1520,23 @@ export interface paths {
         patch: operations["updateSourceChatLocation"];
         trace?: never;
     };
+    "/v1/projects/{id}/source/outside-locations/{location_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open a file from a chat's outside location */
+        post: operations["openChatLocationFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{id}/agent-presence": {
         parameters: {
             query?: never;
@@ -13331,6 +13348,17 @@ export interface components {
             /** @description Absolute host path the person chose in the native file picker. */
             path: string;
         };
+        /** @description The strongest active saved approval covering this location or a path within it. */
+        SourceLocationAccess: {
+            path: string;
+            /** @enum {string} */
+            mode: "read" | "write";
+            tree: boolean;
+            /** @enum {string} */
+            scope: "chat" | "project" | "device";
+            /** Format: date-time */
+            expires_at?: string;
+        };
         /** @description A place outside the project where a root chat has worked. A Files tree view for the chat lists each visible location as a root whose id is the location id; its rows address files by the location and their path under the anchor. */
         SourceChatLocation: {
             /** Format: uuid */
@@ -13360,6 +13388,7 @@ export interface components {
             hidden: boolean;
             /** @description Whether the host can still address the observed location. */
             available: boolean;
+            access?: components["schemas"]["SourceLocationAccess"];
         };
         OpenedOutsideFile: {
             /**
@@ -13376,6 +13405,10 @@ export interface components {
         UpdateSourceChatLocationRequest: {
             /** @description Whether the chat's Files section hides the location; omitted keeps it. */
             hidden?: boolean;
+        };
+        OpenChatLocationFileRequest: {
+            /** @description File row path under the location root. */
+            path: string;
         };
         /**
          * @description What a running tool call is doing to its file target. `reading` is a read-family tool; `editing` is a write-family tool. Derived from the tool's catalog identity, never from arguments or prose.
@@ -21556,6 +21589,57 @@ export interface operations {
                 };
             };
             /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    openChatLocationFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                location_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenChatLocationFileRequest"];
+            };
+        };
+        responses: {
+            /** @description The opened file and its identity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenedOutsideFile"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Project, location, or file not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request or file is too large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -31650,9 +31734,11 @@ export type SourceWorkspaceRoot = components["schemas"]["SourceWorkspaceRoot"];
 export type SourceInventoryState = components["schemas"]["SourceInventoryState"];
 export type SourceWorkspace = components["schemas"]["SourceWorkspace"];
 export type OpenOutsideFileRequest = components["schemas"]["OpenOutsideFileRequest"];
+export type SourceLocationAccess = components["schemas"]["SourceLocationAccess"];
 export type SourceChatLocation = components["schemas"]["SourceChatLocation"];
 export type OpenedOutsideFile = components["schemas"]["OpenedOutsideFile"];
 export type UpdateSourceChatLocationRequest = components["schemas"]["UpdateSourceChatLocationRequest"];
+export type OpenChatLocationFileRequest = components["schemas"]["OpenChatLocationFileRequest"];
 export type AgentActivityKind = components["schemas"]["AgentActivityKind"];
 export type AgentActivity = components["schemas"]["AgentActivity"];
 export type AgentPresenceExtent = components["schemas"]["AgentPresenceExtent"];

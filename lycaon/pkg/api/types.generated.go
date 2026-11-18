@@ -4823,6 +4823,12 @@ type ObserveEditorDocumentRequest struct {
 	ClientID string `json:"client_id"`
 }
 
+// OpenChatLocationFileRequest
+type OpenChatLocationFileRequest struct {
+	// File row path under the location root.
+	Path string `json:"path"`
+}
+
 // OpenEditorDocumentRequest
 type OpenEditorDocumentRequest struct {
 	// Root-relative, slash-separated file path.
@@ -7159,7 +7165,8 @@ type SourceChatLocation struct {
 	// Hidden from the chat's Files section. Hiding revokes and deletes nothing.
 	Hidden bool `json:"hidden"`
 	// Whether the host can still address the observed location.
-	Available bool `json:"available"`
+	Available bool                  `json:"available"`
+	Access    *SourceLocationAccess `json:"access,omitempty"`
 }
 
 // SourceCommandWindow One host-run command's observation window: the span of a command or
@@ -7784,6 +7791,15 @@ type SourceInventoryState struct {
 	WorktreeEpoch string     `json:"worktree_epoch,omitempty"`
 	StartedAt     *time.Time `json:"started_at,omitempty"`
 	CompletedAt   *time.Time `json:"completed_at,omitempty"`
+}
+
+// SourceLocationAccess The strongest active saved approval covering this location or a path within it.
+type SourceLocationAccess struct {
+	Path      string     `json:"path"`
+	Mode      string     `json:"mode"`
+	Tree      bool       `json:"tree"`
+	Scope     string     `json:"scope"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // SourceOperationEvent A file operation's status after a persisted transition or progress save; the same shape the operation list returns.

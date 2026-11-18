@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -68,6 +67,7 @@ func locationAnchor(rel string) (string, ChatLocationKind) {
 	return anchor, ChatLocationFolder
 }
 
+// Directory is the folder whose identity the location holds.
 func (l ChatLocation) Directory() string {
 	host := projectroot.OutsideAbs(l.Anchor)
 	if l.Kind == ChatLocationFile {
@@ -76,6 +76,7 @@ func (l ChatLocation) Directory() string {
 	return host
 }
 
+// Available checks that the location still holds its recorded folder.
 func (l ChatLocation) Available() bool {
 	if l.AnchorIdentity == "" {
 		return false
@@ -189,33 +190,28 @@ func (s *Store) HideChatLocation(ctx context.Context, projectID, id string, hidd
 	return s.queries.SetSourceChatLocationHidden(ctx, db.SetSourceChatLocationHiddenParams{Hidden: value, ID: id})
 }
 
-// OutsidePathAdmitted reports whether a person may reach the outside path rel:
-// a chat of the project holds the file there, or a location covers it.
-func (s *Store) OutsidePathAdmitted(ctx context.Context, projectID, rel string) (bool, error) {
-	if rel == "" || path.Clean(rel) != rel || path.IsAbs(rel) {
-		return false, nil
-	}
-	held, err := s.OutsideFileHeld(ctx, projectID, rel)
-	if err != nil || held {
-		return held, err
-	}
-	rows, err := s.queries.ListProjectChatLocations(ctx, projectID)
-	if err != nil {
-		return false, err
-	}
-	for _, row := range rows {
-		location := chatLocationFromRow(row)
-		if location.Covers(rel) && location.Available() {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 // TrackChatFile tracks an outside file and records the chat's relation to it
 // in the same transaction.
 func (s *Store) TrackChatFile(ctx context.Context, raw TrackInput, sessionID string, relation ChatFileRelation) (TrackedFile, error) {
 	return s.trackFile(ctx, raw, func(ctx context.Context, q *db.Queries, in TrackInput, tracked TrackedFile) error {
 		return s.referenceChatFile(ctx, q, in.ProjectID, in.RootID, in.Path, sessionID, tracked.FileID, relation, in.TS)
+	})
+}
+
+// TrackChatLocationFile opens an existing location without rebinding its anchor.
+func (s *Store) TrackChatLocationFile(ctx context.Context, raw TrackInput, location ChatLocation) (TrackedFile, error) {
+	return s.trackFile(ctx, raw, func(ctx context.Context, q *db.Queries, in TrackInput, tracked TrackedFile) error {
+		row, err := q.GetSourceChatLocation(ctx, db.GetSourceChatLocationParams{ProjectID: in.ProjectID, ID: location.ID})
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrHistoryNotFound
+		}
+		if err != nil {
+			return err
+		}
+		current := chatLocationFromRow(row)
+		if current.AnchorIdentity != location.AnchorIdentity || !current.Covers(in.Path) || !current.Available() {
+			return ErrHistoryNotFound
+		}
+		return s.referenceChatFile(ctx, q, in.ProjectID, in.RootID, "", current.SessionID, tracked.FileID, ChatFileOpened, in.TS)
 	})
 }

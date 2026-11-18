@@ -11,7 +11,7 @@ import { scrollportMotionForHost } from "../../platform/scrolling/scrollport-mot
 import { FILES_TREE_ROW_HEIGHT_PX } from "./project-files-tree-flat.ts";
 import { getFilesTreeScrollTop } from "./files-tree-view-state.ts";
 import { workspaceMismatchId } from "../source/source-workspace-identity.ts";
-import { chatLocationsEpoch, recordChatLocations } from "../source/chat-locations.ts";
+import { chatLocationsEpoch, recordChatLocations, refreshChatLocations } from "../source/chat-locations.ts";
 import { type FilesTreeProps, type ActiveFile } from "./files-tree-context.ts";
 
 function activeFileRevealKey(file: ActiveFile): string | null {
@@ -19,7 +19,7 @@ function activeFileRevealKey(file: ActiveFile): string | null {
 }
 
 
-type SourceProps = Pick<FilesTreeProps, "projectId" | "workspaceId" | "client" | "sessionId" | "chatId" |
+type SourceProps = Pick<FilesTreeProps, "projectId" | "workspaceId" | "client" | "sessionId" | "chatId" | "approvalsRevision" |
   "filterQuery" | "reviewScope" | "activeFile" | "navigationRevision" | "autoReveal" |
   "onWorkspaceMismatch" | "onInitialLoadSettled" | "onSelectEntry">;
 
@@ -140,6 +140,26 @@ export function createFilesTreeSource(props: SourceProps, deps: {
       }).catch(reportTreeError).finally(() => {
         if (!abort.signal.aborted) props.onInitialLoadSettled?.(workspace);
       }).catch(() => undefined);
+    });
+    let approvalsRevision: number | undefined;
+    createEffect(() => {
+      const revision = props.approvalsRevision;
+      const project = props.projectId;
+      const changed = approvalsRevision !== undefined && revision !== approvalsRevision;
+      approvalsRevision = revision;
+      if (changed) untrack(() => refreshChatLocations(project));
+    });
+    createEffect(() => {
+      const current = state();
+      const project = props.projectId;
+      const now = Date.now();
+      const expires = Math.min(...(current?.outside_locations ?? []).flatMap(location => {
+        const value = location.access?.expires_at ? Date.parse(location.access.expires_at) : NaN;
+        return Number.isFinite(value) && value >= now ? [value] : [];
+      }));
+      if (!Number.isFinite(expires)) return;
+      const timeout = setTimeout(() => refreshChatLocations(project), Math.min(2_147_483_647, Math.max(25, expires - now + 25)));
+      onCleanup(() => clearTimeout(timeout));
     });
     let previous: { view: FilesTreeSession; chat?: string; epoch: number } | undefined;
     createEffect(() => {

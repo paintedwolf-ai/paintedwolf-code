@@ -129,6 +129,7 @@ func (e ExecutionRevisions) CaptureSource(ctx context.Context, tctx tools.ToolCo
 		retained()
 		return ExecutionSource{}, err
 	}
+	sourceview.RecordOutsideRead(ctx, tctx, resolved, revision.DiskSHA256, int64(len(raw)))
 	return ExecutionSource{Path: resolved.DisplayPath, Content: content, Encoding: detection.Encoding, Revision: revision, release: retained}, nil
 }
 
