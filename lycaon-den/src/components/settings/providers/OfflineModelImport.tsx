@@ -26,10 +26,12 @@ export function OfflineModelImport(props: Props) {
       <summary><span class="den-disclosure-caret" aria-hidden="true" />Import offline bundle</summary>
       <div class="den-settings-provider-actions">
         <Show when={isTauriRuntime()} fallback={
-          <label>Bundle file or folder
-            <input value={path()} onInput={event => setPath(event.currentTarget.value)} />
-            <DenButton disabled={props.busy || !path().trim()} onClick={() => void props.onImport(path().trim())}>Import bundle</DenButton>
-          </label>
+          <>
+            <label>Bundle file or folder
+              <input value={path()} onInput={event => setPath(event.currentTarget.value)} />
+            </label>
+            <DenButton variant="secondary" disabled={props.busy || !path().trim()} onClick={() => void props.onImport(path().trim())}>Import bundle</DenButton>
+          </>
         }>
           <DenButton variant="secondary" disabled={props.busy} onClick={() => void pick(false)}>Choose archive…</DenButton>
           <DenButton variant="secondary" disabled={props.busy} onClick={() => void pick(true)}>Choose folder…</DenButton>

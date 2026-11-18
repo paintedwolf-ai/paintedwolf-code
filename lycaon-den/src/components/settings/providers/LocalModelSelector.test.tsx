@@ -1,14 +1,16 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LocalGenerationStatus, LocalModelTier } from "../../../api/types.ts";
+import { isTauriRuntime } from "../../../platform/runtime.ts";
+import { hostSharesDevice } from "../../../platform/connection/host-identity.ts";
 import { nativePathDialog } from "../../../platform/files/native-path-dialog.ts";
 import { includedProvider } from "../../../test/local-generation-fixture.ts";
 import { LocalModelSelector } from "./LocalModelSelector.tsx";
 
-vi.mock("../../../platform/runtime.ts", () => ({isTauriRuntime: () => true}));
-vi.mock("../../../platform/connection/host-identity.ts", () => ({hostSharesDevice: () => true}));
+vi.mock("../../../platform/runtime.ts", () => ({isTauriRuntime: vi.fn(() => true)}));
+vi.mock("../../../platform/connection/host-identity.ts", () => ({hostSharesDevice: vi.fn(() => true)}));
 vi.mock("../../../platform/files/native-path-dialog.ts", () => ({ nativePathDialog: vi.fn() }));
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.mocked(hostSharesDevice).mockReturnValue(true); vi.mocked(isTauriRuntime).mockReturnValue(true); });
 
 const tiers: LocalModelTier[] = ["Small", "Medium", "Large"].map((display_name, i) => ({
   id: display_name.toLowerCase(), display_name, eligible: i < 2, recommended: i === 1,
@@ -67,6 +69,21 @@ describe("Local model selection", () => {
     fireEvent.click(screen.getByRole("button", { name: "Choose archive…" }));
     await waitFor(() => expect(done).toHaveBeenCalledOnce());
     expect(client.selectLocalModel).toHaveBeenCalledWith("nativegen", { model: "medium", bundle_path: "/models/test.pwmodel" });
+  });
+
+  it("accepts a bundle folder on a shared device in a browser", async () => {
+    vi.mocked(isTauriRuntime).mockReturnValue(false);
+    const { client } = mount();
+    fireEvent.click(screen.getByText("Import offline bundle"));
+    fireEvent.input(screen.getByLabelText("Bundle file or folder"), {target: {value: "/models/medium"}});
+    fireEvent.click(screen.getByRole("button", {name: "Import bundle"}));
+    await waitFor(() => expect(client.selectLocalModel).toHaveBeenCalledWith("nativegen", { model: "medium", bundle_path: "/models/medium" }));
+  });
+
+  it("keeps client-side paths off a remote host", () => {
+    vi.mocked(hostSharesDevice).mockReturnValue(false);
+    mount();
+    expect(screen.queryByText("Import offline bundle")).toBeNull();
   });
 
   it("offers a user-initiated seed import", async () => {
