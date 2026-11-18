@@ -79,23 +79,12 @@ var toolOutput = []invariants.Invariant{{
 		}
 	},
 }, {
-	// Tool visuals are stored and stamped with their artifact id in one step,
-	// AttachToolResult, whose returned content the tool result carries.
-	Name:    "visual-tool-results-stamp-the-artifact-id",
+	// Tool visuals attach in one place, promptloop, through AttachToolResult,
+	// whose returned content the tool result carries.
+	Name:    "tool-visuals-attach-only-in-promptloop",
 	Anchors: append(goPaths(visualProducers), invariants.Func("internal/visual", "AttachToolResult")),
 	Exempt:  []invariants.Exemption{{Key: "internal/coordinator/promptloop/tools.go", Reason: "the one tool-result path that attaches visuals"}},
 	Check: func(r *invariants.Run) {
-		_, attach := r.FuncNamed("internal/visual", "AttachToolResult")
-		stamps := false
-		ast.Inspect(attach.Body, func(n ast.Node) bool {
-			if call, ok := n.(*ast.CallExpr); ok && invariants.CalleeName(call) == "StampArtifactID" {
-				stamps = true
-			}
-			return !stamps
-		})
-		if !stamps {
-			r.ReportAt(attach.Pos(), "AttachToolResult must call StampArtifactID so storing and stamping stay atomic")
-		}
 		producers := map[string]bool{}
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
 			ast.Inspect(f.AST, func(n ast.Node) bool {
