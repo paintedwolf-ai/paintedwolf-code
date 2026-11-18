@@ -34,12 +34,8 @@ func TestPlanManifestVocabularyRegistered(t *testing.T) {
 	testutil.FailErr(t, "load rules config YAML", err)
 	for _, cfg := range []*rules.RulesConfig{specCfg, buildCfg} {
 		for _, rule := range cfg.Rules {
-			whenStr, err := rules.CanonicalWhenString(rule.When)
-			if err != nil {
+			if err := rules.ValidateWhen(reg, rule.When); err != nil {
 				t.Fatalf("rule %q: %v", rule.ID, err)
-			}
-			if _, err := rules.MatchWhenExpr(reg, whenStr, rules.EvalContext{}); err != nil {
-				t.Fatalf("rule %q when %q: %v", rule.ID, whenStr, err)
 			}
 		}
 	}

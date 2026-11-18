@@ -6,9 +6,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
+	"github.com/lycaon/lycaon/internal/rules/rulestest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -19,7 +19,7 @@ func TestSpecPostureBlocksStateWhenStubInvalid(t *testing.T) {
 	if err := rules.RegisterRuleConditions(reg); err != nil {
 		testutil.FailErr(t, "register rule conditions", err)
 	}
-	engine := rules.NewSimpleEngine(loadSpecRules(t), reg)
+	engine := rulestest.BundledEngine(t, reg)
 	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "state_create"}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if out.Allowed {
@@ -36,7 +36,7 @@ func TestSpecPostureBlocksDelegateWithStubInvalid(t *testing.T) {
 	if err := rules.RegisterRuleConditions(reg); err != nil {
 		testutil.FailErr(t, "register rule conditions", err)
 	}
-	engine := rules.NewSimpleEngine(loadSpecRules(t), reg)
+	engine := rulestest.BundledEngine(t, reg)
 	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint", PlanContent: ""}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if out.Allowed {
@@ -56,19 +56,10 @@ func TestBuildPostureAllowsImplementerTask(t *testing.T) {
 	if err := rules.RegisterRuleConditions(reg); err != nil {
 		testutil.FailErr(t, "register rule conditions", err)
 	}
-	buildCfg, err := rules.LoadRulesConfig(config.PostureRulesDir.Join("build.yaml"))
-	testutil.FailErr(t, "load rules config YAML", err)
-	engine := rules.NewSimpleEngine(buildCfg, reg)
+	engine := rulestest.BundledEngine(t, reg)
 	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureBuild, ToolName: "task", ToolArgs: map[string]any{"agent_type": "implementer"}, AllowedAgents: []string{"implementer"}}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if !out.Allowed {
 		t.Fatalf("expected allow, code=%s msg=%s", out.Code, out.Message)
 	}
-}
-
-func loadSpecRules(t *testing.T) *rules.RulesConfig {
-	t.Helper()
-	cfg, err := rules.LoadRulesConfig(config.PostureRulesDir.Join("spec.yaml"))
-	testutil.FailErr(t, "load rules config YAML", err)
-	return cfg
 }

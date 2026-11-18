@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"context"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -83,10 +82,11 @@ func TestMapWhenMatchesHintDSLAcrossContexts(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing rule %q", pair.ruleID)
 		}
-		canon, err := CanonicalWhenString(rule.When)
+		leaves, err := CanonicalWhenLeaves(rule.When)
 		if err != nil {
 			t.Fatalf("%s: %v", pair.ruleID, err)
 		}
+		canon := renderLeaves(leaves)
 		for _, ctx := range contexts {
 			mapMatch, err := MatchWhen(reg, rule.When, ctx.eval)
 			testutil.FailErr(t, "MatchWhen", err)
@@ -110,8 +110,7 @@ func TestMatchWhenRequiresRegistry(t *testing.T) {
 }
 
 func TestEngineOrderingFirstMatchWins(t *testing.T) {
-	engine := NewSimpleEngine(loadSpecRules(t), ruleTestRegistry(t))
-	out, err := engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{
+	out, err := evaluateOrderedRules(ruleTestRegistry(t), loadSpecRules(t).Rules, EvalContext{EvalContext: conditions.EvalContext{
 		SessionPosture: api.SessionPostureSpec,
 		ToolName:       "plan_from_blueprint",
 	}})
