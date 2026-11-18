@@ -22,7 +22,7 @@ func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination command
 	}
 	operation := definition.Operation
 	checkProgress := func(ctx context.Context) error {
-		return toolexecution.CheckReachedMutationProgress(ctx, d.run.progress, operation, destination.Invocation, target.RootID, target.Path)
+		return toolexecution.CheckReachedMutationProgress(ctx, d.run.progress, operation, destination.Invocation, target.AttachedRootID, target.Path)
 	}
 	path := target.Path
 	bound, err := toolcontract.BindPublication(operation, destination.Invocation, toolcontract.RedirectPublication, destination.Redirect.Operator)

@@ -7,7 +7,7 @@ import (
 
 // CommandOutputTarget identifies the resolved redirect destination.
 type CommandOutputTarget struct {
-	Path, DisplayPath, RootID string
+	Path, DisplayPath, AttachedRootID string
 }
 
 // CommandOutputAdmission checks and records the redirect before the producer starts.

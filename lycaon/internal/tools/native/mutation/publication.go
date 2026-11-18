@@ -55,7 +55,11 @@ func (p *Publication) Open(ctx context.Context, destination commandprogram.Outpu
 	if display == "" {
 		display = destination.Target.Value
 	}
-	admission, err := p.Admission(ctx, destination, tools.CommandOutputTarget{Path: bound.Resolved.Abs, DisplayPath: display, RootID: bound.Resolved.Root.ID})
+	var attachedRootID string
+	if !bound.Resolved.External {
+		attachedRootID = bound.Resolved.Root.ID
+	}
+	admission, err := p.Admission(ctx, destination, tools.CommandOutputTarget{Path: bound.Resolved.Abs, DisplayPath: display, AttachedRootID: attachedRootID})
 	if err != nil {
 		return nil, err
 	}

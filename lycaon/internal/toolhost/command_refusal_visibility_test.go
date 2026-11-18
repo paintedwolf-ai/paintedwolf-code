@@ -86,3 +86,17 @@ func TestComposedCommandRefusalsFollowRecordedAdmission(t *testing.T) {
 		})
 	}
 }
+
+func TestScratchRedirectDoesNotRequireProjectChecklist(t *testing.T) {
+	f := newComposedProgramFixture(t)
+	testutil.FailErr(t, "clear progress", f.SetProgress(""))
+	outcome := callComposedProgram(t, f, "printf '%s' fixture > @scratch/target")
+	if outcome.Status != 0 || outcome.Refusal != nil {
+		t.Fatalf("scratch redirect = %+v, refusal=%+v", outcome, outcome.Refusal)
+	}
+	data, err := os.ReadFile(filepath.Join(f.ScratchDir, "target"))
+	testutil.FailErr(t, "read scratch redirect", err)
+	if string(data) != "fixture" {
+		t.Fatalf("scratch redirect = %q", data)
+	}
+}
