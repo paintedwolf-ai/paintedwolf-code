@@ -123,11 +123,11 @@ func TestWebResearchProviderMembershipFollowsCatalogE2E(t *testing.T) {
 	const settingsPath = "/v1/settings/web-research"
 	readProviders := func() wire.WebResearchProvidersResponse {
 		t.Helper()
-		return openAPIGetJSON[wire.WebResearchProvidersResponse](t, base, providersPath, nil, http.StatusOK)
+		return OpenAPIGetJSON[wire.WebResearchProvidersResponse](t, base, providersPath, nil, http.StatusOK)
 	}
 	readEnabled := func() []string {
 		t.Helper()
-		return openAPIGetJSON[wire.WebResearchSettings](t, base, settingsPath, nil, http.StatusOK).EnabledProviders
+		return OpenAPIGetJSON[wire.WebResearchSettings](t, base, settingsPath, nil, http.StatusOK).EnabledProviders
 	}
 	setEnabled := func(enabled []string) {
 		t.Helper()

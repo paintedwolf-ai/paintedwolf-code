@@ -319,7 +319,7 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 	t.Cleanup(h.StartBackgroundWorkers(t, ctx))
 	dir := t.TempDir()
 	writeTestProjectApprovalsAllowWrite(t, dir)
-	_ = writeImplementFixture(t, dir)
+	_ = WriteImplementFixture(t, dir)
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)

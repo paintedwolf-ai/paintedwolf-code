@@ -1,6 +1,7 @@
 package catalogload
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
@@ -81,7 +82,7 @@ var noticeClosure = []laws.Rule{{
 	Name:    "user-notice-worker-failure-closure",
 	Anchors: []laws.Anchor{laws.Func("internal/worker", "ExecuteFailureCode")},
 	Check: func(r *laws.Run) {
-		surfaceClosure(r, "worker_failure", errorCodeInventory(r).workerFailures, usernotice.WorkerFailureCodes(notices(r)), func(string) bool { return false })
+		surfaceClosure(r, "worker_failure", errorCodeInventory(r).workerFailures, noticeSurfaceCodes(notices(r), "worker_failure"), func(string) bool { return false })
 	},
 }, {
 	// HTTP notices are raised by handlers or handed to them as typed values;
@@ -96,7 +97,7 @@ var noticeClosure = []laws.Rule{{
 	},
 	Check: func(r *laws.Run) {
 		inv := errorCodeInventory(r)
-		surfaceClosure(r, "http", inv.handlers, usernotice.HTTPCodes(notices(r)), func(code string) bool { return inv.typed[code] || r.Exempt(code) })
+		surfaceClosure(r, "http", inv.handlers, noticeSurfaceCodes(notices(r), "http"), func(code string) bool { return inv.typed[code] || r.Exempt(code) })
 	},
 }, {
 	// The ledger and the notice catalog list the same codes, beyond the
@@ -151,7 +152,7 @@ var noticeClosure = []laws.Rule{{
 	Anchors: []laws.Anchor{laws.Func("internal/usernotice", "PreflightCodes")},
 	Check: func(r *laws.Run) {
 		cfg := notices(r)
-		for _, code := range usernotice.PreflightCodes(cfg) {
+		for _, code := range noticeSurfaceCodes(cfg, "preflight") {
 			if !contains(preflightProbeCodes, code) {
 				r.Report("notice %s claims surfaces: [preflight], which no probe raises", code)
 			}
@@ -208,4 +209,16 @@ func preflightNoticeExemptions() []laws.Exemption {
 		out = append(out, laws.Exemption{Key: code, Reason: "a preflight probe raises it outside writeError"})
 	}
 	return out
+}
+
+// noticeSurfaceCodes lists, sorted, the user-visible notice codes registered for surface.
+func noticeSurfaceCodes(cfg *usernotice.Config, surface string) []string {
+	var codes []string
+	for code, entry := range cfg.UserNotices {
+		if entry.IsUserVisible() && entry.HasSurface(surface) {
+			codes = append(codes, code)
+		}
+	}
+	sort.Strings(codes)
+	return codes
 }

@@ -187,9 +187,9 @@ func TestRenderedPhaseKicksNeverNameFullyRetiredTools(t *testing.T) {
 
 func TestRenderedSkillsAndHintsNeverNameFullyRetiredTools(t *testing.T) {
 	retired := retiredToolMention(t)
-	forEachStockSkillRender(t, func(t *testing.T, _ skills.Skill, reader string, _ prompts.Reader, _ map[string]any, parts []renderedText) {
+	forEachStockSkillRender(t, func(t *testing.T, _ skills.Skill, reader string, _ prompts.Reader, _ map[string]any, parts []promptrender.Text) {
 		for _, part := range parts {
-			checkBannedMention(t, retired, fmt.Sprintf("skill %s for %s", part.label, reader), part.text)
+			checkBannedMention(t, retired, fmt.Sprintf("skill %s for %s", part.Label, reader), part.Text)
 		}
 	})
 	hints, err := guidance.LoadHintConfigStock()

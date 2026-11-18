@@ -27,7 +27,7 @@ func (s *countingSummarizer) Summarize(ctx context.Context, system, user string,
 // oversizedSession holds history above the hard ceiling, so a request fit
 // schedules compaction, a background pass publishes a view and its synthesis
 // calls the summarizer.
-func oversizedSession(t *testing.T, summarizer compaction.Summarizer) (*Service, *store.Memory, *api.Session) {
+func oversizedSession(t *testing.T, summarizer compaction.Summarizer) (*Service, *store.SQL, *api.Session) {
 	t.Helper()
 	m, st := newCompactionManager(t, compaction.DefaultCompactionConfig())
 	m.SetCompactor(compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), summarizer))
@@ -76,7 +76,7 @@ func holdCompaction(t *testing.T, m *Service, sessionID string) func() {
 	return release
 }
 
-func requirePublishedView(t *testing.T, st *store.Memory, sessionID string) {
+func requirePublishedView(t *testing.T, st *store.SQL, sessionID string) {
 	t.Helper()
 	_, ok, err := st.GetCompactionView(t.Context(), sessionID)
 	testutil.FailErr(t, "read compaction view", err)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // Detached goroutines need their own panic recovery.

@@ -268,7 +268,7 @@ func TestProviderSettingsSurvivePartialUpdatesE2E(t *testing.T) {
 
 	const azureID, bedrockID = "settings-azure-fixture", "settings-bedrock-fixture"
 	models := []wire.ProviderModelConfig{{ID: "fixture-deployment", PricedAs: "fixture-model"}}
-	openAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil, mustJSON(t, wire.CreateProviderRequest{
+	OpenAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil, mustJSON(t, wire.CreateProviderRequest{
 		ID: azureID, Kind: "azure", Label: "Deployment fixture", BaseURL: "https://fixture.openai.azure.com", Models: models,
 	}), http.StatusCreated)
 	azure := update(azureID, wire.UpdateProviderRequest{Label: new("Renamed deployment fixture")})
@@ -277,7 +277,7 @@ func TestProviderSettingsSurvivePartialUpdatesE2E(t *testing.T) {
 		t.Fatalf("label update lost deployment rows: configured_models = %+v, want %+v", azure.ConfiguredModels, models)
 	}
 
-	openAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil, mustJSON(t, wire.CreateProviderRequest{
+	OpenAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil, mustJSON(t, wire.CreateProviderRequest{
 		ID: bedrockID, Kind: "bedrock", Label: "Credential mode fixture", BaseURL: "us-east-1", RequiresAPIKey: new(true),
 	}), http.StatusCreated)
 	for _, required := range []bool{false, true} {
@@ -292,7 +292,7 @@ func TestProviderSettingsSurvivePartialUpdatesE2E(t *testing.T) {
 	}
 
 	for _, id := range []string{azureID, bedrockID} {
-		openAPIDo(t, base, http.MethodDelete, providerPath, map[string]string{"provider_id": id}, "", http.StatusNoContent)
+		OpenAPIDo(t, base, http.MethodDelete, providerPath, map[string]string{"provider_id": id}, "", http.StatusNoContent)
 	}
 }
 
@@ -300,7 +300,7 @@ func TestDetectionPackEnableSettingRetainedE2E(t *testing.T) {
 	base := settingsControlsBase(t)
 	read := func() wire.DetectionPackList {
 		t.Helper()
-		return openAPIGetJSON[wire.DetectionPackList](t, base, "/v1/detection-packs", nil, http.StatusOK)
+		return OpenAPIGetJSON[wire.DetectionPackList](t, base, "/v1/detection-packs", nil, http.StatusOK)
 	}
 	original := read()
 	if len(original.Packs) == 0 {
@@ -309,7 +309,7 @@ func TestDetectionPackEnableSettingRetainedE2E(t *testing.T) {
 	for _, pack := range original.Packs {
 		path := map[string]string{"pack_id": pack.ID}
 		for _, enabled := range []bool{false, true, pack.Enabled} {
-			openAPIDo(t, base, http.MethodPatch, "/v1/detection-packs/{pack_id}", path,
+			OpenAPIDo(t, base, http.MethodPatch, "/v1/detection-packs/{pack_id}", path,
 				mustJSON(t, wire.UpdateDetectionPackRequest{Enabled: new(enabled)}), http.StatusOK)
 			packs := read().Packs
 			i := slices.IndexFunc(packs, func(p wire.DetectionPack) bool { return p.ID == pack.ID })

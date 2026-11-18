@@ -109,7 +109,7 @@ func TestStaleBatchSeqWakeDroppedAfterNewUserMessage(t *testing.T) {
 
 // batchClosedRefusal runs the coordinator pre-invoke guard for a board report
 // and returns its typed refusal code, empty when admitted.
-func batchClosedRefusal(t *testing.T, h *Harness, ctx context.Context, sess *api.Session) string {
+func batchClosedRefusal(t *testing.T, h *wiring.Harness, ctx context.Context, sess *api.Session) string {
 	t.Helper()
 	_, _, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "pack_board", map[string]any{})
 	var refusal *guidance.Refusal

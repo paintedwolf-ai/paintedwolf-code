@@ -60,6 +60,7 @@ class ReleaseGateLaws(unittest.TestCase):
         activation = self.jobs["activate-updater"].ancestors()
         self.assertLessEqual({"publish-immutable", "update-cask", "notify-website"}, activation)
         self.assertNotIn("publish-github-release", activation)
+        self.assertIn("activate-updater", self.jobs["publish-github-release"].ancestors())
         deposit = self.jobs["publish-artifacts"].steps
         advance = next(index for index, step in enumerate(deposit)
                        if step.invokes("scripts/release_distribution.py", "advance"))

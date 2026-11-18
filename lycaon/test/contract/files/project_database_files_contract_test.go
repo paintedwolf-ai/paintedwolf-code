@@ -2,7 +2,6 @@ package contract
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/projectroot"

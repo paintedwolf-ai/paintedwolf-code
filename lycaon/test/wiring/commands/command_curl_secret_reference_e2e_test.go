@@ -98,7 +98,7 @@ func TestCommandCurlDeliversAReferenceInBasicCredentials(t *testing.T) {
 	run, sess := newSecretSinkRun(t)
 	reference := run.generatedReference(t, sess, secretcap.ScopeChat)
 	server, seen := requestRecorder(t, run)
-	run.script.Steps = []wiring.CitableStep{{command: "curl -sS -u 'user:" + reference + "' " + server.URL}}
+	run.script.Steps = []wiring.CitableStep{{Command: "curl -sS -u 'user:" + reference + "' " + server.URL}}
 	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "call the service")
 	testutil.FailErr(t, "prompt", err)
 	outcomes := run.outcomes(t)

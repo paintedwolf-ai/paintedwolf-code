@@ -19,7 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/vocabulary"
+	"github.com/lycaon/lycaon/internal/vocabulary/vocabularytest"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/laws"
@@ -128,7 +128,7 @@ func workflowVocabularyValidates(r *laws.Run) {
 	must(r, "add schema", compiler.AddResource(hostSchemaBase+"workflow_vocabulary.schema.json", schemaDoc))
 	sch, err := compiler.Compile(hostSchemaBase + "workflow_vocabulary.schema.json")
 	must(r, "compile "+vocabularySchemaPath, err)
-	entries := vocabulary.ExportCatalog()
+	entries := vocabularytest.ExportCatalog()
 	r.Expect(len(entries), "vocabulary export entries")
 	live, err := json.Marshal(map[string]any{"entries": entries})
 	must(r, "marshal the export", err)
@@ -141,7 +141,7 @@ func workflowVocabularyValidates(r *laws.Run) {
 		}
 	}
 	var snapshot struct {
-		Entries []vocabulary.CatalogEntry `json:"entries"`
+		Entries []vocabularytest.CatalogEntry `json:"entries"`
 	}
 	must(r, "decode "+vocabularyCatalogPath, json.Unmarshal(committed, &snapshot))
 	if len(snapshot.Entries) != len(entries) {

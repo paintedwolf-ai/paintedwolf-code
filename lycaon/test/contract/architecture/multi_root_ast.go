@@ -3,7 +3,6 @@ package contract
 import (
 	"go/ast"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"

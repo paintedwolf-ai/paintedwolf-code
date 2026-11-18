@@ -5,7 +5,6 @@ import (
 
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 )
 
 func TestDefaultRegistrySummariesExposeValidPostures(t *testing.T) {
