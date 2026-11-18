@@ -441,7 +441,12 @@ func (r *ProviderCatalog) projectView(ctx context.Context, projectDir string) pr
 		return view
 	}
 	view.catalog = catalog
-	view.rejected = append(append([]RejectedRow(nil), deviceRejected...), rejected...)
+	// The merge re-reports device-layer rejections; only the project layer's are new.
+	for _, row := range rejected {
+		if row.Layer == CatalogLayerProject {
+			view.rejected = append(view.rejected, row)
+		}
+	}
 	view.overrides = OverrideIDs(project)
 	return view
 }

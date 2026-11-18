@@ -829,7 +829,7 @@ func sessionPrepareReceiptSearch(ctx context.Context, s *conformanceSweep, _ *co
 	}}, nil
 }
 
-// sessionPrepareInvocations lists a chat of its own with two answered readme
+// sessionPrepareInvocations lists a chat of its own with two answered
 // prompts, each a command invocation.
 func sessionPrepareInvocations(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 	chat, err := sessionOnce(s, "invocations-chat", func() (string, error) {
@@ -837,8 +837,10 @@ func sessionPrepareInvocations(ctx context.Context, s *conformanceSweep, _ *conf
 		if err != nil {
 			return "", err
 		}
-		for range 2 {
-			if _, err := sessionPrompt(ctx, s, chat, "read the readme"); err != nil {
+		// The mock model names each pattern's tool call once, and a chat's
+		// call ids are unique, so the two prompts use different patterns.
+		for _, prompt := range []string{"read the readme", "corpus seed"} {
+			if _, err := sessionPrompt(ctx, s, chat, prompt); err != nil {
 				return "", err
 			}
 		}
@@ -847,7 +849,7 @@ func sessionPrepareInvocations(ctx context.Context, s *conformanceSweep, _ *conf
 			return "", err
 		}
 		if receipts < 2 {
-			return "", fmt.Errorf("two readme prompts left %d receipts; %s", receipts, sessionTurnState(ctx, s, chat))
+			return "", fmt.Errorf("two command prompts left %d receipts; %s", receipts, sessionTurnState(ctx, s, chat))
 		}
 		return chat, nil
 	})
