@@ -93,6 +93,8 @@ type ToolInvocationOut struct {
 	Verdict *api.VerdictOutcome
 	// CommandProgram is the settled command program receipt for a portable command call.
 	CommandProgram *api.CommandProgramReceipt
+	// CommandStarted records whether any operation started in the program.
+	CommandStarted bool
 	// SourceDeliveries lists the source deliveries confirmed during the call.
 	SourceDeliveries []SourceDeliveryTag
 	// Listener is Den UI and wire metadata for loopback listener attribution on http_request.

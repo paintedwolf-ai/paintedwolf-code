@@ -28,6 +28,7 @@ type ProgramProjection struct {
 	CompletedEffects  int
 	UncertainEffects  int
 	ExecutedChildren  int
+	StartedChildren   int
 	// NativeGaps counts native names this program ran as installed programs.
 	NativeGaps                int
 	ExecutedReads             int
@@ -84,8 +85,8 @@ func projectProgram(ctx context.Context, tx *sql.Tx, sessionID, programID string
 	if err := tx.QueryRowContext(ctx, `SELECT r.tool_call_id,r.tool_name,r.session_id,p.source_unit_id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND r.session_id=?`, programID, sessionID).Scan(&out.ParentToolCallID, &out.ParentTool, &out.ParentSessionID, &out.RootSourceUnitID); err != nil {
 		return out, err
 	}
-	var reached, unsettled int
-	err = tx.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE effect_certainty='completed'),count(*) FILTER (WHERE effect_certainty IN ('unknown','attempted')),count(*) FILTER (WHERE owner_invoked=1),count(*) FILTER (WHERE owner_invoked=1 AND lifecycle='read_only'),count(*) FILTER (WHERE owner_started=1 OR owner_invoked=1),count(*) FILTER (WHERE state IN ('prepared','waiting','running')),count(*) FILTER (WHERE native_gap_json != ''),count(*) FILTER (WHERE status_code <> 0) FROM invocation_program_executions WHERE program_id=?`, programID).Scan(&out.CompletedEffects, &out.UncertainEffects, &out.ExecutedChildren, &out.ExecutedReads, &reached, &unsettled, &out.NativeGaps, &out.NonzeroExecutions)
+	var unsettled int
+	err = tx.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE effect_certainty='completed'),count(*) FILTER (WHERE effect_certainty IN ('unknown','attempted')),count(*) FILTER (WHERE owner_invoked=1),count(*) FILTER (WHERE owner_invoked=1 AND lifecycle='read_only'),count(*) FILTER (WHERE owner_started=1 OR owner_invoked=1),count(*) FILTER (WHERE state IN ('prepared','waiting','running')),count(*) FILTER (WHERE native_gap_json != ''),count(*) FILTER (WHERE status_code <> 0) FROM invocation_program_executions WHERE program_id=?`, programID).Scan(&out.CompletedEffects, &out.UncertainEffects, &out.ExecutedChildren, &out.ExecutedReads, &out.StartedChildren, &unsettled, &out.NativeGaps, &out.NonzeroExecutions)
 	if err != nil {
 		return out, err
 	}
@@ -120,7 +121,7 @@ func projectProgram(ctx context.Context, tx *sql.Tx, sessionID, programID string
 		return out, err
 	}
 	switch {
-	case reached > 0:
+	case out.StartedChildren > 0:
 		out.FreshInvocationLimitation = "reached_execution_requires_specific_remaining_action"
 	case unsettled > 0 || out.UncertainEffects > 0 || out.CompletedEffects > 0:
 		out.FreshInvocationLimitation = "outcome_requires_owner_reconciliation"

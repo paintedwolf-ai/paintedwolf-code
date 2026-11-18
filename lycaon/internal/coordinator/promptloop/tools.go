@@ -50,6 +50,7 @@ type toolCaptures struct {
 	process          *api.ToolProcessHandle
 	verdict          *api.VerdictOutcome
 	commandProgram   *api.CommandProgramReceipt
+	commandStarted   bool
 	sourceDeliveries []tools.SourceDeliveryTag
 	sourceRun        *tools.SourceRunCapture
 	listener         *api.LoopbackListenerFact
@@ -78,7 +79,7 @@ func (p toolResultProjection) withCode(code string) toolResultProjection {
 }
 
 // toolInvocation holds one settled call and its side outputs.
-// invoked is true only after reaching the subsystem owner.
+// invoked records whether the action started.
 type toolInvocation struct {
 	content string
 	facts   guidance.ToolResultFacts
@@ -379,7 +380,8 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 			out.invoked = ownerInvoked
 			out.captures = captures
 			out.receipt, out.contract = run.receipt, run.contract
-			if toolrejection.AsToolReject(run.runErr) != nil {
+			if typed := toolrejection.AsToolReject(run.runErr); typed != nil {
+				out.invoked = ownerInvoked && !typed.BeforeEffect
 				out.failure = ownerFailureFromError(run.runErr, run.call.Name, run.contract, captures)
 				out.failure.Code = reject.Code()
 			} else {
@@ -428,7 +430,7 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 		ownerRef:         out.OwnerRef, fileEdits: out.FileEdits, fileEditsOmitted: out.FileEditsOmitted, visual: out.Visual,
 		externalAccess: out.ExternalAccess,
 		skill:          out.Skill, process: out.Process, verdict: out.Verdict,
-		commandProgram:   out.CommandProgram,
+		commandProgram: out.CommandProgram, commandStarted: out.CommandStarted,
 		sourceDeliveries: append([]tools.SourceDeliveryTag(nil), out.SourceDeliveries...),
 		sourceRun:        out.SourceRun, dispatch: out.Dispatch, completion: out.Completion,
 		listener:      out.Listener,

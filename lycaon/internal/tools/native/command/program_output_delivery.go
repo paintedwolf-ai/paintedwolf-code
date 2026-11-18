@@ -60,6 +60,7 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 			receipt = projection.Program
 		}
 		run.tc.Effects.Out.CommandProgram = &receipt
+		run.tc.Effects.Out.CommandStarted = projection.StartedChildren > 0
 	}
 	programID := run.root.Identity.ProgramID
 	out := ProgramOutcome{

@@ -26,6 +26,7 @@ const (
 type ToolReject struct {
 	CapabilityContract *toolcontract.ToolCapabilitySnapshot `json:"-"`
 	ArgumentValidation bool                                 `json:"-"`
+	BeforeEffect       bool                                 `json:"-"`
 	Code               string
 	Observation        string // snake_case observation token (≠ Decision hint id)
 	Data               map[string]any
@@ -214,5 +215,5 @@ func AsToolReject(err error) *ToolReject {
 
 // RejectInvalidArguments records argument validation independently of diagnostics.
 func RejectInvalidArguments(code string, data map[string]any) *ToolReject {
-	return &ToolReject{Code: code, Data: data, ArgumentValidation: true}
+	return &ToolReject{Code: code, Data: data, ArgumentValidation: true, BeforeEffect: true}
 }
