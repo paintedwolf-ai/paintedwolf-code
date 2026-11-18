@@ -23,7 +23,7 @@ var historyNamespace = uuid.MustParse("7f3c2a6e-5d1b-4f0e-9a8c-25b1e7d40c19")
 // an agent leaves by creating every file of the project: what a project owns
 // after use, and what deleting it removes.
 func recordProjectHistory(ctx context.Context, configDir, projectID, sessionID string, files int) (err error) {
-	store, err := db.Open(filepath.Join(configDir, "store.db"))
+	store, err := db.OpenWithOptions(ctx, filepath.Join(configDir, "store.db"), db.UpgradeHooks{}, db.StoreOptions{})
 	if err != nil {
 		return err
 	}

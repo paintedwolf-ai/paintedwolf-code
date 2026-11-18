@@ -1,6 +1,8 @@
 package db
 
 import (
+	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 
@@ -41,14 +43,7 @@ CREATE TRIGGER child_audit AFTER DELETE ON child BEGIN INSERT INTO audit VALUES 
 	// One parent row cascades three child rows, each auditing one row.
 	_, err = database.ExecContext(removing, `DELETE FROM parent WHERE id = 1`)
 	testutil.FailErr(t, "delete parent", err)
-	rows, err := database.QueryContext(removing, `SELECT n FROM audit`)
-	testutil.FailErr(t, "read audit", err)
-	audited := 0
-	for rows.Next() {
-		audited++
-	}
-	testutil.FailErr(t, "close audit", rows.Close())
-	if audited != 3 {
+	if audited := countAuditRows(t, removing, database); audited != 3 {
 		t.Fatalf("audit rows = %d, want 3", audited)
 	}
 	got := remove.Work()
@@ -64,6 +59,20 @@ CREATE TRIGGER child_audit AFTER DELETE ON child BEGIN INSERT INTO audit VALUES 
 	if process := ProcessWork(); process.Statements < 5 || process.RowsChanged < 13 {
 		t.Fatalf("process work = %+v", process)
 	}
+}
+
+// countAuditRows reads every audit row, so the read settles when it returns.
+func countAuditRows(t *testing.T, ctx context.Context, database *sql.DB) int {
+	t.Helper()
+	rows, err := database.QueryContext(ctx, `SELECT n FROM audit`)
+	testutil.FailErr(t, "read audit", err)
+	defer func() { _ = rows.Close() }()
+	audited := 0
+	for rows.Next() {
+		audited++
+	}
+	testutil.FailErr(t, "scan audit", rows.Err())
+	return audited
 }
 
 func TestVacuumPassPagesNeverExceedsThePassLimit(t *testing.T) {

@@ -35,7 +35,8 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/db/store_schema.go": "SQLite VACUUM INTO writes the staged snapshot; the door uses its staging file",
 
 	// Developer tooling writes user-named export files outside any managed tree.
-	"lycaon/cmd/lycaon-debug/decide.go": "offline training exports to a path the developer names; nothing durable in the config tree",
+	"lycaon/cmd/lycaon-debug/decide.go":    "offline training exports to a path the developer names; nothing durable in the config tree",
+	"lycaon/internal/scalefixture/tree.go": "disposable scale and benchmark fixture trees in a directory the caller owns; half a million files need no per-file durability",
 
 	// The door stages a whole replacement; it cannot express an append.
 	"lycaon/internal/blueprint/manager_impl.go": "append-only critic evidence log",

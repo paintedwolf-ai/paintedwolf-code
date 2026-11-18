@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/debugpaths"
+	"github.com/lycaon/lycaon/internal/debugretention"
 	"github.com/lycaon/lycaon/internal/observability"
 )
 
@@ -50,13 +51,15 @@ func startScaleEngine(ctx context.Context, binary, configDir, logs string) (*sca
 	if err != nil {
 		return nil, err
 	}
-	stderr, err := os.Create(filepath.Join(logs, "engine.stderr.log"))
+	stderr, err := debugretention.OpenFile(filepath.Join(logs, "engine.stderr.log"), debugretention.DefaultConfig().MaxFileBytes)
 	if err != nil {
 		return nil, err
 	}
 	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 	capturePath := filepath.Join(logs, performance.Name)
-	process := exec.Command(binary, "serve", "--db", filepath.Join(configDir, "store.db")) //nolint:gosec // Explicit benchmark binary; exec performs no shell parsing.
+	process := exec.CommandContext(ctx, binary, "serve", "--db", filepath.Join(configDir, "store.db")) //nolint:gosec // Explicit benchmark binary; exec performs no shell parsing.
+	// An ended run interrupts the engine, which shuts down in order.
+	process.Cancel = func() error { return process.Process.Signal(os.Interrupt) }
 	process.Env = append(os.Environ(),
 		"LYCAON_ADDR="+addr, "LYCAON_API_TOKEN="+token, "LYCAON_CONFIG_DIR="+configDir, "LYCAON_LLM_MOCK=1",
 		"LYCAON_PERF_DEBUG=1", "LYCAON_PERF_DEBUG_FILE="+capturePath, "LYCAON_LOG_LEVEL=info")
@@ -95,7 +98,7 @@ func (e *scaleEngine) waitStep(ctx context.Context, interval time.Duration) erro
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-e.exited:
-		return fmt.Errorf("engine exited: %v\n%s", e.exitErr, tailFile(filepath.Join(e.logs, "engine.stderr.log"), 30))
+		return fmt.Errorf("engine exited: %w\n%s", e.exitErr, tailFile(filepath.Join(e.logs, "engine.stderr.log"), 30))
 	case <-timer.C:
 		return nil
 	}

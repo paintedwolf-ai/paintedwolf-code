@@ -60,6 +60,9 @@ type corpusManifest struct {
 // materializeCorpus lays out a released corpus as that release left its data
 // directory: the archive's retained files, then the store and app state.
 func materializeCorpus(corpus, configDir string) error {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		return err
+	}
 	archive, err := zip.OpenReader(filepath.Join(corpus, "backup.zip"))
 	if err != nil {
 		return err
@@ -93,7 +96,7 @@ func materializeCorpus(corpus, configDir string) error {
 		if item.Kind == "symlink" {
 			err = os.Symlink(string(body), target)
 		} else {
-			err = os.WriteFile(target, body, item.Mode.Perm())
+			err = replaceFile(target, body, item.Mode.Perm())
 		}
 		if err != nil {
 			return err
@@ -145,9 +148,9 @@ func readZipJSON(archive *zip.Reader, name string, into any) error {
 }
 
 func copyFile(source, target string) error {
-	body, err := os.ReadFile(source)
+	body, err := os.ReadFile(source) // #nosec G304 -- a file of the corpus the run names
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(target, body, 0o600)
+	return replaceFile(target, body, 0o600)
 }
