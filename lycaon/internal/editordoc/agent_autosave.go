@@ -39,17 +39,12 @@ var errAgentEditHeld = errors.New("document holds an unpublished agent edit")
 // errChangedOutside stops a launch save at a draft whose file changed outside it.
 var errChangedOutside = errors.New("file changed outside its open document")
 
-// PinnedRevision is a document revision a program's native operation captured.
-type PinnedRevision struct {
-	DocumentID string
-	Revision   int64
-}
-
 // launchSave is a launch's rule for one draft: it publishes only the person's
 // own text, and leaves a revision the launching program has pinned to the
-// operation that pinned it.
+// operation that pinned it. pinned is asked under the document's lock, so a
+// pin taken before the save reaches the document always holds.
 type launchSave struct {
-	pinned map[PinnedRevision]bool
+	pinned func(documentID string, revision int64) bool
 }
 
 // UnsavedDocument is a draft a launch save could not publish.
@@ -87,7 +82,7 @@ func (s *Service) SaveForAgentOperation(ctx context.Context, projectID string, b
 // reads the tree from disk. A draft it cannot publish is returned, not
 // refused: the launch overwrites nothing. A pinned revision is skipped: saving
 // it would move the document under the operation that captured it.
-func (s *Service) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call AgentCall, pinned []PinnedRevision) ([]UnsavedDocument, error) {
+func (s *Service) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call AgentCall, pinned func(documentID string, revision int64) bool) ([]UnsavedDocument, error) {
 	if s == nil || s.store == nil {
 		return nil, nil
 	}
@@ -95,10 +90,10 @@ func (s *Service) SaveForAgentLaunch(ctx context.Context, projectID string, bran
 	if err != nil {
 		return nil, err
 	}
-	launch := &launchSave{pinned: make(map[PinnedRevision]bool, len(pinned))}
-	for _, pin := range pinned {
-		launch.pinned[pin] = true
+	if pinned == nil {
+		pinned = func(string, int64) bool { return false }
 	}
+	launch := &launchSave{pinned: pinned}
 	var unsaved []UnsavedDocument
 	err = s.VisitUnsavedDocuments(ctx, p.ID, branch, "", "", true, func(state DocumentPathState) error {
 		cause, err := launchSaveCause(ctx, s.saveForAgent(ctx, p, state.ID, call, launch))
@@ -150,7 +145,7 @@ func (s *Service) saveForAgent(ctx context.Context, p *project.Project, document
 		return nil
 	}
 	if launch != nil {
-		if launch.pinned[PinnedRevision{DocumentID: current.ID, Revision: current.Revision}] {
+		if launch.pinned(current.ID, current.Revision) {
 			return nil
 		}
 		held, err := s.holdsUnpublishedAgentText(ctx, current)

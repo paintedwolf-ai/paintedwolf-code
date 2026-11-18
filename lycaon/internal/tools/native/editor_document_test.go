@@ -147,7 +147,7 @@ func (f *fakeEditorDocuments) SaveForAgentOperation(ctx context.Context, project
 }
 
 // SaveForAgentLaunch saves every draft as its base and returns the diverged ones.
-func (f *fakeEditorDocuments) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, _ tools.EditorAgentCall, _ []tools.EditorPinnedRevision) ([]tools.EditorUnsavedDocument, error) {
+func (f *fakeEditorDocuments) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, _ tools.EditorAgentCall, _ func(string, int64) bool) ([]tools.EditorUnsavedDocument, error) {
 	var unsaved []tools.EditorUnsavedDocument
 	err := f.VisitUnsavedDocuments(ctx, projectID, branch, "", "", true, func(state tools.EditorDocumentState) error {
 		doc := f.docs[state.RootID+"/"+state.Path]

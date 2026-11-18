@@ -388,11 +388,11 @@ func TestSaveForAgentLaunchLeavesPinnedRevisionsAlone(t *testing.T) {
 	pinned := f.typeDraft(t, f.open(t, "pinned.txt"), "captured by a native stage\n")
 	free := f.typeDraft(t, f.open(t, "free.txt"), "typed and free\n")
 	stale := f.typeDraft(t, f.open(t, "stale-pin.txt"), "typed\n")
-	pins := []PinnedRevision{
-		{DocumentID: pinned.ID, Revision: pinned.Revision},
+	asked := map[string]bool{}
+	pins := func(documentID string, revision int64) bool {
+		asked[documentID] = true
 		// A pin on a revision the document has left pins nothing.
-		{DocumentID: stale.ID, Revision: stale.Revision - 1},
-		{DocumentID: "no-such-document", Revision: 1},
+		return documentID == pinned.ID && revision == pinned.Revision || documentID == stale.ID && revision == stale.Revision-1
 	}
 	for range 2 {
 		unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"), pins)
@@ -408,6 +408,9 @@ func TestSaveForAgentLaunchLeavesPinnedRevisionsAlone(t *testing.T) {
 				t.Fatalf("%s was not saved beside a pinned draft: %+v", name, now)
 			}
 		}
+	}
+	if !asked[pinned.ID] || !asked[free.ID] || !asked[stale.ID] {
+		t.Fatalf("the pin rule was not asked about every draft: %v", asked)
 	}
 	moved := f.typeDraft(t, pinned, "captured by a native stage\nthen typed on\n")
 	unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"), pins)

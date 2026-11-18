@@ -52,7 +52,7 @@ func (d *DiskDrafts) ForgetCalls() {
 	d.calls = nil
 }
 
-func (d *DiskDrafts) SaveForAgentLaunch(_ context.Context, _ string, _ sourcebranch.ID, call tools.EditorAgentCall, _ []tools.EditorPinnedRevision) ([]tools.EditorUnsavedDocument, error) {
+func (d *DiskDrafts) SaveForAgentLaunch(_ context.Context, _ string, _ sourcebranch.ID, call tools.EditorAgentCall, _ func(string, int64) bool) ([]tools.EditorUnsavedDocument, error) {
 	if d.OnSave != nil {
 		d.OnSave()
 	}

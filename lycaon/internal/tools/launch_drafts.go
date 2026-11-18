@@ -17,7 +17,7 @@ func SaveLaunchDrafts(ctx context.Context, tc ToolContext) (toolcontract.LaunchD
 		return toolcontract.LaunchDrafts{}, nil
 	}
 	program, inProgram := ProgramDraftsFrom(ctx)
-	left, err := documents.SaveForAgentLaunch(ctx, tc.Identity.ProjectID, tc.Source.ProjectSourceBranch, DraftSaveCall(ctx, tc), program.pinnedRevisions())
+	left, err := documents.SaveForAgentLaunch(ctx, tc.Identity.ProjectID, tc.Source.ProjectSourceBranch, DraftSaveCall(ctx, tc), program.Pinned)
 	if err != nil {
 		return toolcontract.LaunchDrafts{}, err
 	}

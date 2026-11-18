@@ -23,17 +23,14 @@ type launchDocuments struct {
 	err    error
 	calls  []EditorAgentCall
 	branch []sourcebranch.ID
-	// pinned is what each call was told to leave alone.
-	pinned [][]EditorPinnedRevision
+	// pinned is the rule the latest call was given for drafts to leave alone.
+	pinned func(documentID string, revision int64) bool
 }
 
-func (d *launchDocuments) SaveForAgentLaunch(_ context.Context, _ string, branch sourcebranch.ID, call EditorAgentCall, pinned []EditorPinnedRevision) ([]EditorUnsavedDocument, error) {
+func (d *launchDocuments) SaveForAgentLaunch(_ context.Context, _ string, branch sourcebranch.ID, call EditorAgentCall, pinned func(string, int64) bool) ([]EditorUnsavedDocument, error) {
 	d.calls = append(d.calls, call)
 	d.branch = append(d.branch, branch)
-	sort.Slice(pinned, func(i, j int) bool {
-		return pinned[i].DocumentID < pinned[j].DocumentID || pinned[i].DocumentID == pinned[j].DocumentID && pinned[i].Revision < pinned[j].Revision
-	})
-	d.pinned = append(d.pinned, pinned)
+	d.pinned = pinned
 	return d.left, d.err
 }
 
@@ -202,24 +199,40 @@ func TestSaveLaunchDraftsFailsWhenTheSaveCannotRun(t *testing.T) {
 	}
 }
 
-// A launch leaves alone exactly the revisions the program's operations hold at
-// that moment: a pin counts once however many operations take it, lapses when
-// the last operation holding it settles, outlives every operation when taken
-// outside one, and outside a program nothing is pinned.
-func TestSaveLaunchDraftsPassesTheProgramsLivePins(t *testing.T) {
+// revisionOf is a document revision a test asks a launch's pin rule about.
+type revisionOf struct {
+	document string
+	revision int64
+}
+
+// A launch leaves alone exactly the revisions the program's operations hold as
+// the save reaches each document: a pin counts once however many operations
+// take it, lapses when the last operation holding it settles, outlives every
+// operation when taken outside one, holds when taken after the save began,
+// and outside a program nothing is pinned.
+func TestSaveLaunchDraftsLeavesTheProgramsLivePins(t *testing.T) {
 	documents := &launchDocuments{}
 	drafts := NewProgramDrafts("command")
 	ctx := WithProgramDrafts(t.Context(), drafts)
 	tc := launchContext(documents)
-	launch := func(ctx context.Context) []EditorPinnedRevision {
+	a2, a3, b7, c1 := revisionOf{"doc-a", 2}, revisionOf{"doc-a", 3}, revisionOf{"doc-b", 7}, revisionOf{"doc-c", 1}
+	all := []revisionOf{a2, a3, b7, c1}
+	// held asks the rule the launch gave the document owner, now.
+	held := func() []revisionOf {
+		var out []revisionOf
+		for _, candidate := range all {
+			if documents.pinned(candidate.document, candidate.revision) {
+				out = append(out, candidate)
+			}
+		}
+		return out
+	}
+	launch := func(ctx context.Context) []revisionOf {
 		t.Helper()
 		_, err := SaveLaunchDrafts(ctx, tc)
 		testutil.FailErr(t, "launch save", err)
-		return documents.pinned[len(documents.pinned)-1]
+		return held()
 	}
-	a2, b7 := EditorPinnedRevision{DocumentID: "doc-a", Revision: 2}, EditorPinnedRevision{DocumentID: "doc-b", Revision: 7}
-	a3, c1 := EditorPinnedRevision{DocumentID: "doc-a", Revision: 3}, EditorPinnedRevision{DocumentID: "doc-c", Revision: 1}
-
 	if got := launch(ctx); len(got) != 0 {
 		t.Fatalf("a program with no captures pinned %+v", got)
 	}
@@ -229,19 +242,18 @@ func TestSaveLaunchDraftsPassesTheProgramsLivePins(t *testing.T) {
 	steps := []struct {
 		name string
 		act  func()
-		want []EditorPinnedRevision
+		want []revisionOf
 	}{
 		{"two operations capture one revision, twice in one of them", func() {
-			PinDraft(first, a2.DocumentID, a2.Revision)
-			PinDraft(first, a2.DocumentID, a2.Revision)
-			PinDraft(second, a2.DocumentID, a2.Revision)
-			PinDraft(second, b7.DocumentID, b7.Revision)
-		}, []EditorPinnedRevision{a2, b7}},
-		{"one operation settles, and settles again", func() { settleFirst(); settleFirst() }, []EditorPinnedRevision{a2, b7}},
-		{"a redirect destination is captured outside any operation", func() { PinDraft(ctx, c1.DocumentID, c1.Revision) }, []EditorPinnedRevision{a2, b7, c1}},
-		{"the other operation settles", settleSecond, []EditorPinnedRevision{c1}},
-		{"the document moved on and a third operation captures it", func() { PinDraft(third, a3.DocumentID, a3.Revision) }, []EditorPinnedRevision{a3, c1}},
-		{"the third operation settles", settleThird, []EditorPinnedRevision{c1}},
+			PinDraft(first, a2.document, a2.revision)
+			PinDraft(first, a2.document, a2.revision)
+			PinDraft(second, a2.document, a2.revision)
+			PinDraft(second, b7.document, b7.revision)
+		}, []revisionOf{a2, b7}},
+		{"one operation settles, and settles again", func() { settleFirst(); settleFirst() }, []revisionOf{a2, b7}},
+		{"a redirect destination is captured outside any operation", func() { PinDraft(ctx, c1.document, c1.revision) }, []revisionOf{a2, b7, c1}},
+		{"the other operation settles", settleSecond, []revisionOf{c1}},
+		{"the document moved on and a third operation captures it", func() { PinDraft(third, a3.document, a3.revision) }, []revisionOf{a3, c1}},
 	}
 	for _, step := range steps {
 		step.act()
@@ -249,8 +261,20 @@ func TestSaveLaunchDraftsPassesTheProgramsLivePins(t *testing.T) {
 			t.Fatalf("%s: pinned = %+v, want %+v", step.name, got, step.want)
 		}
 	}
+	// The rule is live: a settle after the save began is seen by that save.
+	settleThird()
+	if got := held(); !reflect.DeepEqual(got, []revisionOf{c1}) {
+		t.Fatalf("the rule a save holds did not follow a settled operation: %+v", got)
+	}
+	fourth, settleFourth := WithDraftPins(ctx)
+	PinDraft(fourth, b7.document, b7.revision)
+	if got := held(); !reflect.DeepEqual(got, []revisionOf{b7, c1}) {
+		t.Fatalf("the rule a save holds did not follow a new capture: %+v", got)
+	}
+	settleFourth()
+
 	scoped, settle := WithDraftPins(t.Context())
-	PinDraft(scoped, a2.DocumentID, a2.Revision)
+	PinDraft(scoped, a2.document, a2.revision)
 	if got := launch(scoped); len(got) != 0 {
 		t.Fatalf("a launch outside a program was given pins: %+v", got)
 	}

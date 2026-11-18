@@ -17,13 +17,13 @@ type ProgramDrafts struct {
 
 	mu      sync.Mutex
 	roots   map[string]map[string]bool
-	pinned  map[EditorPinnedRevision]int
+	pinned  map[draftPin]int
 	unsaved map[string]toolcontract.UnsavedDocument
 }
 
 // NewProgramDrafts starts the view for a program run by tool.
 func NewProgramDrafts(tool string) *ProgramDrafts {
-	return &ProgramDrafts{tool: tool, roots: map[string]map[string]bool{}, pinned: map[EditorPinnedRevision]int{}, unsaved: map[string]toolcontract.UnsavedDocument{}}
+	return &ProgramDrafts{tool: tool, roots: map[string]map[string]bool{}, pinned: map[draftPin]int{}, unsaved: map[string]toolcontract.UnsavedDocument{}}
 }
 
 // WithProgramDrafts binds a program's draft view to its evaluation.
@@ -51,6 +51,12 @@ func (d *ProgramDrafts) Holds(rootID, path string, load func() (map[string]bool,
 		d.roots[rootID] = paths
 	}
 	return paths[path], nil
+}
+
+// draftPin is a document revision an operation captured.
+type draftPin struct {
+	documentID string
+	revision   int64
 }
 
 type draftPinsKey struct{}
@@ -94,7 +100,7 @@ func PinDraft(ctx context.Context, documentID string, revision int64) {
 }
 
 func (d *ProgramDrafts) pin(documentID string, revision int64) (release func()) {
-	pin := EditorPinnedRevision{DocumentID: documentID, Revision: revision}
+	pin := draftPin{documentID, revision}
 	d.mu.Lock()
 	d.pinned[pin]++
 	d.mu.Unlock()
@@ -110,17 +116,15 @@ func (d *ProgramDrafts) pin(documentID string, revision int64) (release func()) 
 	}
 }
 
-func (d *ProgramDrafts) pinnedRevisions() []EditorPinnedRevision {
+// Pinned reports whether an operation of the program holds the document at
+// this revision. No program pins nothing.
+func (d *ProgramDrafts) Pinned(documentID string, revision int64) bool {
 	if d == nil {
-		return nil
+		return false
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	pins := make([]EditorPinnedRevision, 0, len(d.pinned))
-	for pin := range d.pinned {
-		pins = append(pins, pin)
-	}
-	return pins
+	return d.pinned[draftPin{documentID, revision}] > 0
 }
 
 // launchSaved records a launch save: every root's inventory is stale, and the
