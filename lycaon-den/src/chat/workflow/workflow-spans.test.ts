@@ -168,7 +168,6 @@ describe("workflow-spans", () => {
         id: "a2",
         role: "assistant" as const, origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const,
         content: "planning",
-        visibility: "internal" as const,
         workflow_run_id: "run-b",
         tool_calls: [{ name: "task", id: "call_b", args: { brief: { goal: "plan", done_when: ["Return results."] } } }],
         created_at: "t6",

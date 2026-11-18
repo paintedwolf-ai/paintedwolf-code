@@ -12,6 +12,9 @@ import { findFileRow, getFileRow } from "../../test/files-tree-queries.ts";
 import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
 
 import { installFilesTreeCleanup, mount, button, echoPath, projectNotices } from "./files-tree-test-fixture.tsx";
+import { useElapsableClock } from "../../test/elapse.ts";
+
+const elapse = useElapsableClock();
 installFilesTreeCleanup();
 
 describe("paged Files tree", () => {
@@ -44,7 +47,7 @@ describe("paged Files tree", () => {
       const [notice] = projectNotices(notices, "p1");
       expect(notice).toMatchObject({ code: "files_tree_unavailable", title: "Files unavailable", message: "The workspace could not be indexed." });
       fixture.notify();
-      await new Promise(resolve => setTimeout(resolve, 40));
+      await elapse(40);
       expect(projectNotices(notices, "p1")).toHaveLength(1);
     } finally { registerNoticePublisher(null); }
   });

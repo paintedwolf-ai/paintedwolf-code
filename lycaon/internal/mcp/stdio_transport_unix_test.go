@@ -37,7 +37,7 @@ func TestStdioSessionCloseTerminatesSurvivingSessionDescendants(t *testing.T) {
 	testutil.FailErr(t, "connect", err)
 
 	var descendant int
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the descendant writes its pid", func() bool {
 		raw, readErr := os.ReadFile(pidFile)
 		if readErr != nil {
 			return false
@@ -52,7 +52,7 @@ func TestStdioSessionCloseTerminatesSurvivingSessionDescendants(t *testing.T) {
 	t.Cleanup(func() { _ = syscall.Kill(descendant, syscall.SIGKILL) })
 
 	testutil.FailErr(t, "close session", sess.Close())
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the descendant exits", func() bool {
 		return !osprocess.Alive(descendant)
 	})
 }

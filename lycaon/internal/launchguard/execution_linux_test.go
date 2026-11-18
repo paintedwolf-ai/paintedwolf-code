@@ -22,9 +22,7 @@ import (
 func TestExecutionRestrictionPreservesDataReparenting(t *testing.T) {
 	const childEnv = "PW_LAUNCH_EXECUTION_TEST"
 	if os.Getenv(childEnv) != "1" {
-		blobFixture := filepath.Join(t.TempDir(), "blob-commit")
-		goBuild(t, blobFixture, "./testdata/blobcommit", "")
-		testutil.FailErr(t, "make blob fixture readable", os.Chmod(filepath.Dir(blobFixture), 0o755))
+		blobFixture := fixtureBinary(t, "blobcommit")
 		out, err := exec.Command("sudo", "-n", "env", childEnv+"=1", "PW_BLOB_FIXTURE="+blobFixture, os.Args[0],
 			"-test.run=^TestExecutionRestrictionPreservesDataReparenting$", "-test.v").CombinedOutput()
 		if err != nil {

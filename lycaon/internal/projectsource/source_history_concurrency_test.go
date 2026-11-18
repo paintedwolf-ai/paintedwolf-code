@@ -31,11 +31,7 @@ func TestNativeRemovalOrdersAfterAnInFlightUndo(t *testing.T) {
 		_, err := service.Undo(undoCtx, uuid.NewString(), project, SourceHistoryMutationRequest{ExpectedEntryID: first})
 		undone <- err
 	}()
-	select {
-	case <-reached:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("Undo did not reach publication boundary")
-	}
+	testutil.AwaitClosed(t, "the undo reaches its publication boundary", reached)
 	removed := make(chan error, 1)
 	go func() {
 		_, err := service.RemoveEntry(t.Context(), agentRemoval(t, project, "b", textfile.SHA256([]byte("b"))))
@@ -85,11 +81,7 @@ func TestMemoryRecoveryQuotaKeepsOtherProjectsActiveCapture(t *testing.T) {
 		runs = append(runs, removalRun{project: project, root: root, body: body, reached: reached, release: release, unblock: unblock, done: done})
 	}
 	for _, run := range runs {
-		select {
-		case <-run.reached:
-		case <-time.After(testutil.Timeout(time.Minute)):
-			t.Fatal("project did not reach removal effect boundary")
-		}
+		testutil.AwaitClosed(t, "the project removal reaches its effect boundary", run.reached)
 	}
 	runs[0].unblock()
 	testutil.FailErr(t, "settle first project while another removes", <-runs[0].done)

@@ -15,6 +15,14 @@ ENVIRONMENT = {"endpoint_url": "RELEASE_TEST_R2_ENDPOINT_URL", "bucket": "RELEAS
                "download_base_url": "RELEASE_TEST_DOWNLOAD_BASE_URL", "session_token": "RELEASE_TEST_R2_SESSION_TOKEN"}
 
 
+class MissingFields(ValueError):
+    """Required settings that neither the file nor the environment supplied."""
+
+    def __init__(self, fields):
+        self.fields = tuple(sorted(fields))
+        super().__init__("configuration lacks " + ", ".join(f"{field} ({ENVIRONMENT[field]})" for field in self.fields))
+
+
 def unique_object(pairs):
     result = {}
     for key, value in pairs:
@@ -44,9 +52,10 @@ def load_file(path):
 
 def validate(config):
     if (not isinstance(config, dict) or set(config) - (FIELDS | {"schema_version", "session_token"})
-            or not FIELDS <= set(config) or type(config.get("schema_version")) is not int
-            or config["schema_version"] != 1):
-        raise ValueError("configuration requires schema_version 1 and the documented S3 fields")
+            or type(config.get("schema_version")) is not int or config["schema_version"] != 1):
+        raise ValueError("configuration requires schema_version 1 and only the documented S3 fields")
+    if not FIELDS <= set(config):
+        raise MissingFields(FIELDS - set(config))
     for field in FIELDS | ({"session_token"} if "session_token" in config else set()):
         value = config[field]
         if not isinstance(value, str) or not value or any(character.isspace() for character in value):

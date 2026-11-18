@@ -112,6 +112,14 @@ func CheckRuleFiles(ctx context.Context, paths []string, opts RuleCheckOptions) 
 			}
 			checked[rule.ID] = true
 			res := RuleCheckResult{RuleID: rule.ID, Path: ruleSourcePath(rule, dir.label)}
+			// A literal outside a fact's declared values never matches, so the
+			// rule would load and silently never fire.
+			if err := ValidateConditionFactValues(rule.When, nil); err != nil {
+				res.Code = RuleCheckConditionInvalid
+				res.Detail = err.Error()
+				out = append(out, res)
+				continue
+			}
 			for _, fx := range fixturesByRule[rule.ID] {
 				res.Scenarios++
 				if err := runner.RunFixture(ctx, fx); err != nil {

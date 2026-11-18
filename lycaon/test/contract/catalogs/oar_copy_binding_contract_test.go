@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/oarcopy"
 	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -76,33 +77,44 @@ func copyTexts(doc map[string]any) []string {
 	return out
 }
 
-// groundingRepairRecallCodes are the grounding and citation repairs that
-// recover a recorded observation. Their copy must stand alone: the
-// native-recall-tool instruction unit may be omitted from the turn.
-var groundingRepairRecallCodes = []string{
-	"AMBIENT_GROUNDING_ESCALATED",
-	"AMBIENT_UNGROUNDED_COMPLETION",
-	"FINDING_UNGROUNDED",
-	"INVEST_CITATION_UNVERIFIABLE",
-	"PAGE_MEASURE_UNGROUNDED",
-	"SUBMIT_VERDICT_CITATION_UNGROUNDED",
-	"SUBMIT_VERDICT_CITATIONS_REQUIRED",
-	"SURFACE_CLAIM_UNGROUNDED",
-	"SYNTH_CITATION_UNVERIFIABLE",
+// recallTool is the native tool grounding repairs point at to recover a
+// recorded observation.
+const recallTool = "recall"
+
+func stepsCall(steps []oar.NextStep, tool string) bool {
+	for _, step := range steps {
+		if step.Tool == tool || stepsCall(step.Or, tool) {
+			return true
+		}
+	}
+	return false
 }
 
+// TestGroundingRepairCopyDeclaresCanRecall requires every stock rule whose next
+// steps call recall to declare the can_recall fact, so the frozen request
+// answers whether the call is reachable on the turn.
 func TestGroundingRepairCopyDeclaresCanRecall(t *testing.T) {
 	t.Parallel()
-	cfg, err := guidance.LoadHintConfigStock()
+	root := contractcheck.RepoRoot(t)
+	contractcheck.FailErr(t, "install catalog", anchorcatalog.InstallFile(filepath.Join(root,
+		"lycaon", "config", "packs", "painted-wolf", "platform", "host", "anchors", "catalog.yaml")))
+	loader, err := oar.NewLoader(filepath.Join(root, "schemas"))
+	contractcheck.FailErr(t, "oar loader", err)
+	rules, err := loader.LoadEffectivePolicyWithCatalog(contractcheck.StockCatalog(t))
 	contractcheck.FailErr(t, "load stock policy", err)
-	for _, code := range groundingRepairRecallCodes {
-		entry, ok := cfg.HintCodes[code]
-		if !ok {
-			t.Fatalf("%s missing from stock policy", code)
+	canRecall := oarcopy.HostFactNamespace + ".can_" + recallTool
+	var callers int
+	for _, rule := range rules.All() {
+		if rule.NextSteps == nil || !stepsCall(rule.NextSteps.Steps, recallTool) {
+			continue
 		}
-		if !slices.Contains(entry.RequiresFacts, "paintedwolf.can_recall") {
-			t.Errorf("%s does not require paintedwolf.can_recall", code)
+		callers++
+		if !slices.Contains(rule.RequiresFacts, canRecall) {
+			t.Errorf("%s calls %s in its next steps but does not require %s", rule.ID, recallTool, canRecall)
 		}
+	}
+	if callers == 0 {
+		t.Fatalf("no stock rule calls %s in its next steps", recallTool)
 	}
 }
 

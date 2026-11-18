@@ -121,7 +121,7 @@ func TestSnapshotBuilderBuild_IncludesWorkers(t *testing.T) {
 		Brief:           "fixture",
 		ExecutionTarget: api.ExecutionTargetLocal,
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "queue.EnqueueWithProjectID failed", err)
 	}
 	if _, err := queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		ParentSessionID: "sess-2",
@@ -132,7 +132,7 @@ func TestSnapshotBuilderBuild_IncludesWorkers(t *testing.T) {
 		Brief:           "fixture",
 		ExecutionTarget: api.ExecutionTargetLocal,
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "queue.EnqueueWithProjectID failed", err)
 	}
 
 	snap, err := b.Build(ctx, testdbseed.DefaultProjectID, dir, "sess-1", api.BoardDetailLevelFull, nil)
@@ -168,7 +168,7 @@ func TestSnapshotBuilderBuild_WorkersScopedToSession(t *testing.T) {
 		Brief:           "fixture",
 		ExecutionTarget: api.ExecutionTargetLocal,
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "queue.EnqueueWithProjectID failed", err)
 	}
 	if _, err := queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		ParentSessionID: "sess-b",
@@ -179,7 +179,7 @@ func TestSnapshotBuilderBuild_WorkersScopedToSession(t *testing.T) {
 		Brief:           "fixture",
 		ExecutionTarget: api.ExecutionTargetLocal,
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "queue.EnqueueWithProjectID failed", err)
 	}
 
 	snapA, err := b.Build(ctx, testdbseed.DefaultProjectID, dir, "sess-a", api.BoardDetailLevelCompact, nil)

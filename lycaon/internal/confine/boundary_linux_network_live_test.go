@@ -471,11 +471,14 @@ func TestLinuxSupervisorLossEndsTheSandbox(t *testing.T) {
 	c, lease := boundConfinement(t, confine.Confinement{
 		Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
 	})
-	cmd, cleanup, err := confine.Command(t.Context(), helperBinary(t, self), "/bin/sh", []string{"-c", "sleep 30 & sleep 30"}, *c)
+	cmd, cleanup, err := confine.Command(t.Context(), helperBinary(t, self), "/bin/sh", []string{"-c", "sleep 30 & echo ready; sleep 30"}, *c)
 	testutil.FailErr(t, "confine.Command", err)
+	var out terminalWatch
+	cmd.Stdout, cmd.Stderr = &out, &out
 	testutil.FailErr(t, "start", cmd.Start())
 	cleanup()
-	time.Sleep(time.Second)
+	// Both sleeps run inside the sandbox before its supervisor is killed.
+	out.await(t, "ready")
 	testutil.FailErr(t, "kill outer helper", cmd.Process.Kill())
 	_ = cmd.Wait()
 	for {

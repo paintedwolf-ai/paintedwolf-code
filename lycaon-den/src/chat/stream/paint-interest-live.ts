@@ -11,7 +11,7 @@ import {
 export type PaintInterestOpts = {
   appStore: AppStore;
   client: () => LycaonClient | null;
-  sessionId: () => string | undefined;
+  sessionId?: () => string | undefined;
   /** Paint-only subscriptions sleep with their resident surface. */
   active?: () => boolean;
   paintedWorker?: () =>
@@ -53,7 +53,7 @@ function paintedLiveTargets(opts: PaintInterestOpts): PaintedLiveTarget[] {
   if (opts.active?.() === false) return [];
   if (opts.hydrationLock?.()?.trim()) return [];
   const targets: PaintedLiveTarget[] = [];
-  const parentSessionId = opts.sessionId()?.trim();
+  const parentSessionId = opts.sessionId?.()?.trim();
   if (parentSessionId) {
     const busy =
       opts.appStore.state.currentSession?.id === parentSessionId &&

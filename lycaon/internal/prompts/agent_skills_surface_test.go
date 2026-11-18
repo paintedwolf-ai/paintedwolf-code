@@ -2,9 +2,10 @@ package prompts_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/configlayout"
 
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"

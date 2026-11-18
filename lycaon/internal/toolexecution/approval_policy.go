@@ -261,6 +261,7 @@ func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
 		Invocation: hitl.ActionInvocation{
 			NativeInputs:        eval.NativeInputs,
 			Tool:                eval.ToolName,
+			EntryTool:           eval.EntryTool,
 			BoundStages:         toolcontract.CloneExecutionStages(eval.BoundStages),
 			Args:                eval.ToolArgs,
 			Files:               append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),

@@ -477,30 +477,33 @@ type profiledProvider struct {
 func (p *profiledProvider) Profile() providerprofile.Profile { return p.profile }
 
 func TestUtilityLaneQualityWaitsForRelease(t *testing.T) {
-	lanes := newUtilityLanes()
-	ctx := context.Background()
-	release, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassQuality)
-	testutil.FailErr(t, "hold", err)
+	synctest.Test(t, func(t *testing.T) {
+		lanes := newUtilityLanes()
+		ctx := context.Background()
+		release, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassQuality)
+		testutil.FailErr(t, "hold", err)
 
-	var waited atomic.Bool
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		rel, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassQuality)
-		testutil.FailErr(t, "wait acquire", err)
-		waited.Store(true)
-		rel()
-	}()
-	time.Sleep(20 * time.Millisecond)
-	if waited.Load() {
-		t.Fatal("quality acquired while the lane was held")
-	}
-	release()
-	wg.Wait()
-	if !waited.Load() {
-		t.Fatal("quality did not acquire after release")
-	}
+		var waited atomic.Bool
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rel, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassQuality)
+			testutil.FailErr(t, "wait acquire", err)
+			waited.Store(true)
+			rel()
+		}()
+		// The waiter is blocked on the held lane, not merely not yet scheduled.
+		synctest.Wait()
+		if waited.Load() {
+			t.Fatal("quality acquired while the lane was held")
+		}
+		release()
+		wg.Wait()
+		if !waited.Load() {
+			t.Fatal("quality did not acquire after release")
+		}
+	})
 }
 
 // Tests narrow the lane wait per instance; a zero field still means the

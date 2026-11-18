@@ -352,7 +352,8 @@ func matchHostResourceRules(rules []ApprovalRule, ids, families []string) (Appro
 func ruleMatches(r ApprovalRule, action hitl.ProposedAction) bool {
 	switch r.Category {
 	case ApprovalCategoryTool:
-		return matchToolPattern(r.Pattern, action.Invocation.Tool)
+		entry := action.Invocation.EntryTool
+		return matchToolPattern(r.Pattern, action.Invocation.Tool) || entry != "" && matchToolPattern(r.Pattern, entry)
 	case ApprovalCategoryMCP:
 		if !ingestion.IsMCPToolName(strings.TrimSpace(action.Invocation.Tool)) {
 			return false

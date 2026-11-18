@@ -17,8 +17,14 @@ THRESHOLDS = {"turn.tools.load_at": 0.55, "turn.skills.preload_at": 2.6, "turn.s
               "tool_event.read_at": 2.8, "tool_event.pointer_at": 2.4, "tool_event.margin": 0.3}
 
 
-def head(path, label):
-    header = json.dumps({"__metadata__": {"format": "pw-decide-head/1", "label": label}}).encode()
+PRELOAD = {"catalog_revision": "c0ffee", "encoding": "independent", "option_words": 60, "max_len": 1024, "head_tokens": 512,
+           "options": {"command": "Run a command", "page_open": "Open a page in the browser"}}
+BACKBONE = {"model": "convaiinnovations/laya-multilingual", "revision": "e4e9ddf21a7b1903b7acffd8814ad4307bf63a67"}
+TRAINED = {"corpus": "c0ffee", "tool_encoding": "independent", "tool_option_words": "60", "max_len": "1024", "head_max_len": "512"}
+
+
+def head(path, label, **trained):
+    header = json.dumps({"__metadata__": {"format": "pw-decide-head/1", "label": label, **trained}}).encode()
     path.write_bytes(struct.pack("<Q", len(header)) + header + label.encode())
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -39,8 +45,9 @@ class Adoption(unittest.TestCase):
             name for name in names if name not in ("decisions.yaml", "decision-release.json")])
         self.heads = self.root / "heads"
         self.heads.mkdir()
-        self.policy = {"decision_contract": 3, "thresholds": THRESHOLDS,
-                       "heads": {name: {"sha256": head(self.heads / (name + ".safetensors"), "p0-" + name)} for name in adopt_heads.HEADS}}
+        self.policy = {"decision_contract": 3, "thresholds": THRESHOLDS, "preload": PRELOAD, "backbone": {**BACKBONE, "sha256": "f" * 64},
+                       "heads": {name: {"sha256": head(self.heads / (name + ".safetensors"), "p0-" + name, **TRAINED)}
+                                 for name in adopt_heads.HEADS}}
 
     def test_the_policys_pins_and_thresholds_land_exactly_and_comments_survive(self):
         before = (self.host / "decisions.yaml").read_text()
@@ -54,6 +61,30 @@ class Adoption(unittest.TestCase):
         self.assertIn("  max_loads: 3", after)
         self.assertEqual([line for line in before.split("\n") if line.lstrip().startswith("#")],
                          [line for line in after.split("\n") if line.lstrip().startswith("#")])
+
+    def test_the_release_serves_the_vocabulary_the_policy_froze(self):
+        before = json.loads((self.host / "decision-release.json").read_text())
+        self.assertNotEqual(before["preload"], PRELOAD)
+        result = adopt_heads.adopt(self.policy, self.heads, arguments(), self.host)
+        release = json.loads((self.host / "decision-release.json").read_text())
+        self.assertEqual(release["preload"], PRELOAD)
+        self.assertEqual(release["backbone"], before["backbone"])
+        self.assertEqual(result["preload"]["options"], 2)
+
+    def test_a_vocabulary_the_host_or_the_head_does_not_encode_is_refused(self):
+        for change in ({"head_tokens": 256}, {"option_words": 40}, {"encoding": "joint"}, {"options": {}}, {"max_len": 0}):
+            with self.subTest(change=change), self.assertRaises(adopt_heads.AdoptionError):
+                adopt_heads.adopt(dict(self.policy, preload={**PRELOAD, **change}), self.heads, arguments(), self.host)
+        with self.assertRaises(adopt_heads.AdoptionError):
+            adopt_heads.adopt({key: value for key, value in self.policy.items() if key != "preload"}, self.heads, arguments(), self.host)
+        for change in ({"catalog_revision": "another"}, {"max_len": 512}):
+            with self.subTest(change=change), self.assertRaisesRegex(adopt_heads.AdoptionError, "turn-load head was trained"):
+                adopt_heads.adopt(dict(self.policy, preload={**PRELOAD, **change}), self.heads, arguments(), self.host)
+        self.assertNotEqual(json.loads((self.host / "decision-release.json").read_text())["preload"], PRELOAD)
+
+    def test_a_policy_over_another_backbone_is_refused(self):
+        with self.assertRaisesRegex(adopt_heads.AdoptionError, "backbone"):
+            adopt_heads.adopt(dict(self.policy, backbone={**BACKBONE, "revision": "0" * 40}), self.heads, arguments(), self.host)
 
     def test_a_head_file_unlike_the_policy_is_refused(self):
         head(self.heads / "code-rank.safetensors", "retrained")

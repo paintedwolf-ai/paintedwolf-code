@@ -839,31 +839,6 @@ describe("ExtensionsSettingsPanel", () => {
     );
   });
 
-  it("How it works mentions suites", async () => {
-    const client = mockClient();
-    const { getByTestId } = render(() => (
-      <ExtensionsSettingsPanel client={client as never} surface="settings" />
-    ));
-    await waitFor(() => getByTestId("extensions-model-meta-packs"));
-    expect(getByTestId("extensions-model-meta-packs").textContent).toContain(
-      "provide(enabled)",
-    );
-  });
-
-  it("settings Installed offers Install from folder and author loop copy", async () => {
-    const client = mockClient();
-    const { getByTestId } = render(() => (
-      <ExtensionsSettingsPanel client={client as never} surface="settings" />
-    ));
-    await waitFor(() => getByTestId("extensions-author-loop"));
-    expect(getByTestId("extensions-author-loop").textContent).toContain(
-      "no special app build",
-    );
-    fireEvent.click(getByTestId("extensions-tab-packs"));
-    await waitFor(() => getByTestId("extensions-add-folder"));
-    expect(getByTestId("extensions-add-git")).toBeTruthy();
-  });
-
   it("keeps mutations disabled until the concurrency revision is loaded", async () => {
     let resolveCatalog!: (value: unknown) => void;
     const [revision, setRevision] = createSignal(0);

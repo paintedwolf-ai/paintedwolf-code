@@ -1,7 +1,6 @@
 package jobstate
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -13,11 +12,11 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func resolveWorkerWorkspace(ctx context.Context, database db.DBTX, row db.WorkerJobs, task *api.WorkerTask) error {
+func (reader Reader) resolveWorkerWorkspace(row db.WorkerJobs, task *api.WorkerTask) error {
 	if !row.WorkspaceBaselineID.Valid && !row.WorkspaceOverlayID.Valid && !row.WorkspaceRelpath.Valid {
 		return nil
 	}
-	dataDir, err := db.Directory(ctx, database)
+	dataDir, err := reader.DataDir()
 	if err != nil {
 		return err
 	}

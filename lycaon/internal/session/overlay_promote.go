@@ -323,7 +323,7 @@ func QualifyCheckpointPath(qpath layeredfs.QualifiedPath, roots []projectroot.Ro
 	}
 	if len(roots) > 1 {
 		for _, r := range roots {
-			if r.ID == qpath.RootID || ((qpath.RootID == "primary" || qpath.RootID == "root-0" || qpath.RootID == "") && r.IsPrimary) {
+			if r.ID == qpath.RootID {
 				return projectroot.BaselineDisplayPath(roots, r.ID, rel)
 			}
 		}

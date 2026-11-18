@@ -103,7 +103,7 @@ export function WorkflowExplainChicklet(props: Props) {
         setHostEl(el);
         bindTranscriptEntry(el);
       }}
-      class="den-tool-part-card den-transcript-disclosure-card den-tool-part"
+      class="den-tool-part-card den-transcript-card den-transcript-disclosure-card den-tool-part"
       data-testid="workflow-explain-chicklet"
       data-status={status()}
       data-phase-id={props.meta.phase_id}
