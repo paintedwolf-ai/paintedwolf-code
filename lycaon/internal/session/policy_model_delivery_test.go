@@ -26,6 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
@@ -46,7 +47,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 				response.ToolCalls = []llm.MockToolCall{{ID: "call-directory", Name: "command", Args: map[string]any{"command": "ls " + root}}}
 				response.FollowUpText = "complete"
 			}
-			recorder := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{response}}))
+			recorder := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{response}}))
 			registry := toolstest.NewRegistry()
 			testutil.FailErr(t, "register command tool", registry.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				return "", nil
@@ -156,7 +157,7 @@ func TestCompleteStreamInjectsAgentSystemPrompt(t *testing.T) {
 		Pattern: ".",
 		Text:    "ok",
 	}}})
-	rec := llm.NewRecordingClient(inner)
+	rec := llmtest.NewRecordingClient(inner)
 	mgr, store := newPromptTestManager(t, rec)
 
 	coord, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -201,7 +202,7 @@ func TestCoordinatorPromptIncludesPackBoardInject(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module coordboard\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -235,7 +236,7 @@ func TestCoordinatorPromptIncludesPackBoardInject(t *testing.T) {
 
 func TestCompleteStreamCoordinatorDefault(t *testing.T) {
 	ctx := context.Background()
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: ".",
 		Text:    "ok",
 	}}}))

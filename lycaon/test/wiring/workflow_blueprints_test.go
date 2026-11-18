@@ -12,13 +12,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/blueprint"
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -51,9 +51,9 @@ func (q *queuedWorkerScripts) push(agentType string, script ...api.ToolCall) {
 	q.queues[agentType] = append(q.queues[agentType], script)
 }
 
-func (q *queuedWorkerScripts) mock(h **Harness) *llm.KickDrivenMock {
-	return llm.NewKickDrivenMock(llm.KickDrivenConfig{
-		Fallback: func(ctx context.Context, _ llm.Snapshot) modelcall.Completion {
+func (q *queuedWorkerScripts) mock(h **Harness) *llmtest.KickDrivenMock {
+	return llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{
+		Fallback: func(ctx context.Context, _ llmtest.Snapshot) modelcall.Completion {
 			jobID := workercontext.Job(ctx)
 			if jobID == "" {
 				q.mu.Lock()

@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -152,7 +153,7 @@ func TestEstimateMessagesTokensWithVision_chargesOnlyTheWindow(t *testing.T) {
 
 func TestRecordingClientCapturesPerceiveMessages(t *testing.T) {
 	stub := &stubVisionLLM{}
-	rec := llm.NewRecordingClient(stub)
+	rec := llmtest.NewRecordingClient(stub)
 	provider := openaicompat.New("openai", "https://api.openai.com/v1", "key", []modelinfo.Entry{
 		{ID: "gpt-4o", Capabilities: modelinfo.ModelCapabilities{
 			Vision: modelinfo.CapabilityEvidence{State: modelinfo.CapabilitySupported},

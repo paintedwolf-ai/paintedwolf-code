@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,7 +27,7 @@ func TestSynthesisKeepsRecoveryAddressesOutsideItsCapturedPage(t *testing.T) {
 			{MessageID: "original-result", Ord: 1, Tool: "read", Handles: []string{"read#1"}, Disposition: "summary_and_reference"},
 			{MessageID: "new-observation", Ord: 11, Disposition: "reference"},
 		}}
-	sc := compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), compaction.MockSummarizer{Text: "New observation"})
+	sc := compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "New observation"})
 	enriched, err := sc.EnrichContinuation(t.Context(), compaction.SessionInfo{PriorContinuation: record},
 		[]api.Message{{ID: "new-observation", Ord: 11, Role: api.MessageRoleAssistant, Content: "New observation"}}, record)
 	testutil.FailErr(t, "enrich captured page", err)
@@ -216,7 +217,7 @@ func TestContextScaledCanonicalPagingAndTokenBounds(t *testing.T) {
 	tightCfg.ModelContextWindow = 16384
 	tightCfg.HardCeilingTokens = 600
 	tightCfg.TargetTokens = 400
-	svc.SetCompactor(compaction.NewSimpleCompactor(tightCfg, compaction.MockSummarizer{Text: "summary"}))
+	svc.SetCompactor(compaction.NewSimpleCompactor(tightCfg, llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "summary"}))
 	bounded, err := svc.Load(t.Context(), sess)
 	testutil.FailErr(t, "load token-bounded tail on small receiver", err)
 	if len(bounded) >= 320 || len(bounded) == 0 || bounded[0].ID != "host-history-coverage" {
@@ -280,7 +281,7 @@ func TestSmallToLargeReceiverRestoresCanonicalHistory(t *testing.T) {
 	midCfg.ModelContextWindow = 32000
 	midCfg.HardCeilingTokens = 16000
 	midCfg.TargetTokens = 1800
-	svc.SetCompactor(compaction.NewSimpleCompactor(midCfg, compaction.MockSummarizer{Text: "summary"}))
+	svc.SetCompactor(compaction.NewSimpleCompactor(midCfg, llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "summary"}))
 	midLoaded, err := svc.Load(t.Context(), sess)
 	testutil.FailErr(t, "load on medium receiver", err)
 	midView := svc.ApplyView(t.Context(), sess, midLoaded)
@@ -293,7 +294,7 @@ func TestSmallToLargeReceiverRestoresCanonicalHistory(t *testing.T) {
 	largeCfg.ModelContextWindow = 200000
 	largeCfg.HardCeilingTokens = 150000
 	largeCfg.TargetTokens = 50000
-	svc.SetCompactor(compaction.NewSimpleCompactor(largeCfg, compaction.MockSummarizer{Text: "summary"}))
+	svc.SetCompactor(compaction.NewSimpleCompactor(largeCfg, llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "summary"}))
 	largeLoaded, err := svc.Load(t.Context(), sess)
 	testutil.FailErr(t, "load on large receiver", err)
 	largeView := svc.ApplyView(t.Context(), sess, largeLoaded)

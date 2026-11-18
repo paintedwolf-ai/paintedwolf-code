@@ -10,19 +10,19 @@ import (
 
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 	var stage atomic.Int32
-	mock := llm.NewKickDrivenMock(llm.KickDrivenConfig{
-		Fallback: func(_ context.Context, snap llm.Snapshot) modelcall.Completion {
+	mock := llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{
+		Fallback: func(_ context.Context, snap llmtest.Snapshot) modelcall.Completion {
 			if !strings.Contains(snap.LastUserMessage, "fix auth") {
 				return modelcall.Completion{Content: "No action."}
 			}

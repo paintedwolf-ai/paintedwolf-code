@@ -365,26 +365,6 @@ func (UnavailableSummarizer) Summarize(context.Context, string, string, int) (st
 	return "", ErrNoLiteProvider
 }
 
-// MockSummarizer returns fixed summary text for tests.
-type MockSummarizer struct {
-	Text string
-	Err  error
-}
-
-// Summarize returns configured mock text.
-func (m MockSummarizer) Summarize(ctx context.Context, _, _ string, _ int) (string, error) {
-	if m.Err != nil {
-		return "", m.Err
-	}
-	if SummaryFormatRequested(ctx) {
-		return mockCompactionSummary(m.Text)
-	}
-	if m.Text != "" {
-		return m.Text, nil
-	}
-	return "Continue coordinator work from compacted context.", nil
-}
-
 // compactedTrustFloor preserves the least-trusted tier of absorbed content.
 func compactedTrustFloor(before, tail []ContextMessage) api.ContentTrustTier {
 	kept := make(map[string]struct{}, len(tail))

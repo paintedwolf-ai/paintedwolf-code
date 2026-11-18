@@ -2,14 +2,15 @@ package llm
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -82,7 +83,7 @@ func TestCompactionPromptPlacesCoveredSourceBeforeInstructions(t *testing.T) {
 
 func TestSimpleCompactorKeepsSourceOutOfLiveHistory(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	summaryJSON, err := (compaction.MockSummarizer{Text: "Compacted session state."}).Summarize(
+	summaryJSON, err := (llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "Compacted session state."}).Summarize(
 		compaction.WithSummaryFormat(t.Context()), "", "", 0,
 	)
 	testutil.FailErr(t, "encode mock summary", err)

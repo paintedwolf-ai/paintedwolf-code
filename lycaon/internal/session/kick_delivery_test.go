@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -47,7 +48,7 @@ func (j fixedJobs) Get(jobID string) (*api.WorkerTask, bool) {
 func TestTurnDeliversEveryQueuedKickAndDropsNoticesForFinishedRounds(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	st := storetest.New(t, testdbseed.DefaultProjectID)
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(st, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
@@ -242,7 +243,7 @@ func TestAppendWorkerSummaryProjectsEnvelopeToModel(t *testing.T) {
 func TestTwoUserStoppedBackgroundCommandsBetweenTurnsDeliverBothToNextTurn(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	st := storetest.New(t, testdbseed.DefaultProjectID)
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(st, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
@@ -299,7 +300,7 @@ func TestTwoUserStoppedBackgroundCommandsBetweenTurnsDeliverBothToNextTurn(t *te
 func TestAbortPreservesUnconsumedProcessFinishedKickWithoutAutoStartingTurn(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	st := storetest.New(t, testdbseed.DefaultProjectID)
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(st, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)

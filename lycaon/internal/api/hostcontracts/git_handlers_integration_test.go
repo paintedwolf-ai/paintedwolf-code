@@ -24,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -116,7 +117,7 @@ func TestGitCommitMessageDraftsFromUntrackedOnly(t *testing.T) {
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open", err)
 	srv := contractfixture.NewGitServer(t, sessions, reg, func(d *hostapi.Dependencies) {
-		d.Providers.CommitDrafter = compaction.MockSummarizer{Text: "feat: add new file"}
+		d.Providers.CommitDrafter = llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "feat: add new file"}
 	})
 
 	repoID := contractfixture.ActiveRepoID(t, srv, p.ID)
@@ -128,7 +129,7 @@ func TestGitCommitMessageDraftsFromUntrackedOnly(t *testing.T) {
 
 func TestGitCommitMessageReportsDraftFailure(t *testing.T) {
 	srv, projectID := contractfixture.NewGitTestServer(t, func(d *hostapi.Dependencies) {
-		d.Providers.CommitDrafter = compaction.MockSummarizer{Err: errors.New("lite model unreachable")}
+		d.Providers.CommitDrafter = llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Err: errors.New("lite model unreachable")}
 	})
 	repoID := contractfixture.ActiveRepoID(t, srv, projectID)
 	w := contractfixture.PostGitJSON(t, srv, contractfixture.GitRepoURL(projectID, repoID, "commit-message"), `{}`)

@@ -34,6 +34,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -53,7 +54,7 @@ func stageFakeMCPDistro(t *testing.T) {
 // Harness holds a production-wired ServeApp for E2E tests.
 type Harness struct {
 	*app.ServeApp
-	Recording       *llm.RecordingClient
+	Recording       *llmtest.RecordingClient
 	Store           *store.Repositories
 	testDir         string
 	dbPath          string
@@ -134,12 +135,12 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	if o.autoCompleteLegs {
 		cfg.TestOrchestrator = autoCompleteOrchestrator
 	}
-	var recording *llm.RecordingClient
+	var recording *llmtest.RecordingClient
 	switch {
 	case o.llmClient != nil:
 		cfg.TestLLMClient = o.llmClient
 	case o.recording:
-		recording = llm.NewRecordingClient(llm.NewMockProvider(loadMockConfig(t)))
+		recording = llmtest.NewRecordingClient(llm.NewMockProvider(loadMockConfig(t)))
 		cfg.TestLLMClient = recording
 	default:
 		cfg.TestLLMClient = llm.NewMockProvider(loadMockConfig(t))

@@ -26,6 +26,7 @@ import (
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -38,10 +39,10 @@ func (s *stubWorkerContext) BuildWorkerPromptContext(_ context.Context, _ string
 	return s.ctx, nil
 }
 
-func setupWorkerPromptFixture(t *testing.T) (*session.Host, *store.Repositories, *llm.RecordingClient) {
+func setupWorkerPromptFixture(t *testing.T) (*session.Host, *store.Repositories, *llmtest.RecordingClient) {
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: ".",
 		Text:    "ok",
 	}}}))

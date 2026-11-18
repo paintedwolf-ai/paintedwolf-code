@@ -1,119 +1,12 @@
-package llm
+package llmtest
 
 import (
 	"context"
 	"strings"
-	"sync"
 
-	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// MockConfig is the on-disk mock_llm.yaml shape.
-type MockConfig struct {
-	Responses    []MockResponseEntry `yaml:"responses"`
-	VisionModels []string            `yaml:"vision_models,omitempty"`
-}
-
-// MockResponseEntry is one pattern-based mock completion rule.
-type MockResponseEntry struct {
-	Pattern      string         `yaml:"pattern"`
-	Text         string         `yaml:"text,omitempty"`
-	FollowUpText string         `yaml:"follow_up_text,omitempty"`
-	AlwaysTool   bool           `yaml:"always_tool,omitempty"`
-	ToolCalls    []MockToolCall `yaml:"tool_calls,omitempty"`
-}
-
-// MockToolCall is a tool call stub in mock config.
-type MockToolCall struct {
-	ID   string         `yaml:"id"`
-	Name string         `yaml:"name"`
-	Args map[string]any `yaml:"args"`
-}
-
-// LoadMockConfig reads the shipped mock LLM responses.
-func LoadMockConfig() (*MockConfig, error) {
-	data, err := config.Read(config.MockLLM)
-	if err != nil {
-		return nil, err
-	}
-	var cfg MockConfig
-	if err := config.DecodeYAML(data, &cfg); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
-}
-
-// MockEnabled reports whether the runtime may use the mock LLM client.
-// Mock is test-only: explicit LYCAON_LLM_MOCK=1 or an injected test client.
-func MockEnabled(testClient modelcall.LLMClient) bool {
-	if testClient != nil {
-		return true
-	}
-	return MockOnlyFromEnv()
-}
-
-// ProviderUtilityCallsEnabled keeps background utility work off configured providers in test modes.
-func ProviderUtilityCallsEnabled() bool {
-	return !MockOnlyFromEnv() && !ManualOnlyFromEnv()
-}
-
-// RecordingClient wraps an LLMClient and captures completion requests for tests.
-type RecordingClient struct {
-	Inner modelcall.LLMClient
-	mu    sync.Mutex
-	last  modelcall.CompletionRequest
-	all   []modelcall.CompletionRequest
-}
-
-// NewRecordingClient wraps inner for test observability.
-func NewRecordingClient(inner modelcall.LLMClient) *RecordingClient {
-	return &RecordingClient{Inner: inner}
-}
-
-// Complete records req and delegates to Inner.
-func (c *RecordingClient) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
-	c.record(req)
-	if c.Inner == nil {
-		return &modelcall.Completion{}, nil
-	}
-	return c.Inner.Complete(ctx, req)
-}
-
-// Stream records req and delegates to Inner.
-func (c *RecordingClient) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
-	c.record(req)
-	if c.Inner == nil {
-		ch := make(chan modelcall.StreamChunk)
-		close(ch)
-		return ch, nil
-	}
-	return c.Inner.Stream(ctx, req)
-}
-
-// LastRequest returns the most recent completion request.
-func (c *RecordingClient) LastRequest() modelcall.CompletionRequest {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.last
-}
-
-// AllRequests returns every recorded completion request in order.
-func (c *RecordingClient) AllRequests() []modelcall.CompletionRequest {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	out := make([]modelcall.CompletionRequest, len(c.all))
-	copy(out, c.all)
-	return out
-}
-
-func (c *RecordingClient) record(req modelcall.CompletionRequest) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.last = req
-	c.all = append(c.all, req)
-}
 
 // KickDrivenMock selects responses from the latest host kick.
 type KickDrivenMock struct {
@@ -143,7 +36,7 @@ type Snapshot struct {
 	LastWorkerSummary string
 	// Durable identity lets fixtures consume each worker outcome once across wake types.
 	LastWorkerJobID string
-	// KickID is the detected kick id (e.g. "leg-finished", "phase-advanced").
+	// KickID identifies the latest rendered fixture kick.
 	KickID string
 }
 
@@ -166,7 +59,7 @@ func (m *KickDrivenMock) Complete(ctx context.Context, req modelcall.CompletionR
 	return &out, nil
 }
 
-// Stream re-uses Complete and streams tokens (single-shot for tests).
+// Stream emits one terminal chunk.
 func (m *KickDrivenMock) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
 	ch := make(chan modelcall.StreamChunk)
 	go func() {
