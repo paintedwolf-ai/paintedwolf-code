@@ -15,13 +15,11 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// Runtime implements orchestration.TopologyWorkers, orchestration.TopologyDirectSettler,
-// and orchestration.RunWorkerStore over durable worker records and the worker queue.
+// Runtime binds topology units to worker records and the queue.
 type Runtime struct {
 	Records *workerrecords.Store
 	Queue   worker.WorkerQueue
 
-	settleMu      sync.Mutex
 	mu            sync.Mutex
 	batches       map[string]*orchestration.TopologyBatch
 	units         map[string][]orchestration.TopologyUnit

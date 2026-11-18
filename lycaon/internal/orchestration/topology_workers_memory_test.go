@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// MemoryTopologyWorkers implements TopologyWorkers, TopologyDirectSettler, and RunWorkerStore in memory.
+// MemoryTopologyWorkers implements TopologyWorkers and RunWorkerStore in memory.
 type MemoryTopologyWorkers struct {
 	mu            sync.Mutex
 	batches       map[string]*TopologyBatch
@@ -167,17 +167,6 @@ func (m *MemoryTopologyWorkers) DispatchUnit(ctx context.Context, batchID, unitI
 		}
 	}
 	return nil, fmt.Errorf("topology unit %q not found in batch %q", unitID, batchID)
-}
-
-func (m *MemoryTopologyWorkers) DispatchSettled(
-	ctx context.Context,
-	batchID, unitID string,
-	result api.WorkerResult,
-) (*TopologyUnit, error) {
-	if _, err := m.DispatchUnit(ctx, batchID, unitID); err != nil {
-		return nil, err
-	}
-	return m.SettleUnit(batchID, unitID, result)
 }
 
 // SettleUnit records a terminal worker outcome on an in-memory topology unit.

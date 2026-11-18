@@ -37,6 +37,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workertopology"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -53,10 +54,11 @@ func stageFakeMCPDistro(t *testing.T) {
 // Harness holds a production-wired ServeApp for E2E tests.
 type Harness struct {
 	*app.ServeApp
-	Recording *llm.RecordingClient
-	Store     session.Store
-	testDir   string
-	dbPath    string
+	Recording       *llm.RecordingClient
+	Store           session.Store
+	testDir         string
+	dbPath          string
+	settlesTopology bool
 }
 
 // BuildForTest constructs a production-parity server via app.Build with test defaults.
@@ -161,11 +163,12 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	// Seeded and runtime evidence share the same content directory.
 	harnessStore.SetDataDir(testDir)
 	h := &Harness{
-		ServeApp:  sa,
-		Recording: recording,
-		Store:     harnessStore,
-		testDir:   testDir,
-		dbPath:    dbPath,
+		ServeApp:        sa,
+		Recording:       recording,
+		Store:           harnessStore,
+		testDir:         testDir,
+		dbPath:          dbPath,
+		settlesTopology: o.autoCompleteLegs,
 	}
 	return h
 }
@@ -307,6 +310,9 @@ func (h *Harness) StartBackgroundWorkers(t *testing.T, ctx context.Context) cont
 	if h == nil || h.ServeApp == nil {
 		t.Fatal("harness serve app missing")
 	}
+	if h.settlesTopology {
+		t.Fatal("topology settlement fixture requires an isolated queue claimant")
+	}
 	cancel, err := h.ServeApp.StartBackgroundWorkers(ctx)
 	testutil.FailErr(t, "start background workers", err)
 	return cancel
@@ -366,7 +372,8 @@ func (testCostPricer) EstimateCost(_, _ string, usage cost.TokenUsage) (cost.Cos
 
 // autoCompleteOrchestrator dispatches legs that complete immediately in mock workspaces.
 func autoCompleteOrchestrator(deps orchestration.OrchestratorDeps) orchestration.Orchestrator {
-	deps.Workers = &autoCompleteTopologyWorkers{TopologyWorkers: deps.Workers}
+	runtime := deps.Workers.(*workertopology.Runtime)
+	deps.Workers = &autoCompleteTopologyWorkers{TopologyWorkers: runtime, queue: runtime.Queue}
 	deps.Workspaces = &mockWorkspaceBinder{}
 	return orchestration.NewOrchestratorImpl(deps)
 }

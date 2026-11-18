@@ -2,6 +2,7 @@ package orchestration_test
 
 import (
 	"context"
+	"fmt"
 	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"slices"
@@ -246,18 +247,20 @@ func TestPipelineFullDefaultPipelineMockRun(t *testing.T) {
 
 type recordingWorkers struct {
 	orchestration.TopologyWorkers
-	mu           sync.Mutex
-	units        map[string]orchestration.TopologyUnit
-	order        []string
-	failStage    string
-	failStages   map[string]bool
-	dispatched   chan<- struct{}
-	holdOutcomes <-chan struct{}
-	settled      chan<- struct{}
-	holdReturns  <-chan struct{}
-	barrierSet   map[string]bool
-	barrierReady chan struct{}
-	barrierSeen  int
+	claimMu           sync.Mutex
+	dispatchAndSettle func(context.Context, string, string, api.WorkerResult) (*orchestration.TopologyUnit, error)
+	mu                sync.Mutex
+	units             map[string]orchestration.TopologyUnit
+	order             []string
+	failStage         string
+	failStages        map[string]bool
+	dispatched        chan<- struct{}
+	holdOutcomes      <-chan struct{}
+	settled           chan<- struct{}
+	holdReturns       <-chan struct{}
+	barrierSet        map[string]bool
+	barrierReady      chan struct{}
+	barrierSeen       int
 }
 
 func (r *recordingWorkers) DispatchUnit(ctx context.Context, batchID, unitID string) (*orchestration.TopologyUnit, error) {
@@ -294,43 +297,35 @@ func (r *recordingWorkers) DispatchUnit(ctx context.Context, batchID, unitID str
 			return nil, ctx.Err()
 		}
 	}
-	if r.holdOutcomes != nil {
-		if _, err := r.TopologyWorkers.DispatchUnit(ctx, batchID, unitID); err != nil {
+	status := "complete"
+	if r.shouldFail(unit.WorkID) {
+		status = "failed"
+	}
+	result := api.WorkerResult{Status: status, Summary: unit.WorkID + " done"}
+	if r.dispatchAndSettle != nil {
+		r.claimMu.Lock()
+		updated, err := r.dispatchAndSettle(ctx, batchID, unitID, result)
+		r.claimMu.Unlock()
+		if err != nil {
 			return nil, err
 		}
+		return r.afterSettle(ctx, updated)
+	}
+	fixture, ok := r.TopologyWorkers.(*orchestration.MemoryTopologyWorkers)
+	if !ok {
+		return nil, fmt.Errorf("topology fixture cannot settle outcomes")
+	}
+	if _, err := fixture.DispatchUnit(ctx, batchID, unitID); err != nil {
+		return nil, err
+	}
+	if r.holdOutcomes != nil {
 		select {
 		case <-r.holdOutcomes:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
-		if setter, ok := r.TopologyWorkers.(interface {
-			SettleUnit(string, string, api.WorkerResult) (*orchestration.TopologyUnit, error)
-		}); ok {
-			status := "complete"
-			if r.shouldFail(unit.WorkID) {
-				status = "failed"
-			}
-			settled, sErr := setter.SettleUnit(batchID, unitID, api.WorkerResult{Status: status, Summary: unit.WorkID + " done"})
-			if sErr != nil {
-				return nil, sErr
-			}
-			return r.afterSettle(ctx, settled)
-		}
-		return r.GetUnit(ctx, batchID, unitID)
 	}
-
-	settler, ok := r.TopologyWorkers.(orchestration.TopologyDirectSettler)
-	if !ok {
-		return r.TopologyWorkers.DispatchUnit(ctx, batchID, unitID)
-	}
-	status := "complete"
-	if r.shouldFail(unit.WorkID) {
-		status = "failed"
-	}
-	updated, err := settler.DispatchSettled(ctx, batchID, unitID, api.WorkerResult{
-		Status:  status,
-		Summary: unit.WorkID + " done",
-	})
+	updated, err := fixture.SettleUnit(batchID, unitID, result)
 	if err != nil {
 		return nil, err
 	}
