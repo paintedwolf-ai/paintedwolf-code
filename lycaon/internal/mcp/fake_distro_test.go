@@ -6,7 +6,6 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
-	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 )
 
 // stageDistro makes body the bundled distro MCP catalog for one test. The distro
