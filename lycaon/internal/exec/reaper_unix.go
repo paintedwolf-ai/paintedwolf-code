@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/osprocess"
 )
@@ -79,6 +80,12 @@ func startReaperLocked(name string, args ...string) error {
 	previousCmd := reaper.cmd
 	reaper.pipe = write
 	reaper.cmd = cmd
+	// The mark lives exactly as long as the companion that sweeps and removes it.
+	if dir, err := confine.EnableSandboxMark(); err != nil {
+		slog.Warn("sandbox mark unavailable; a detached command descendant can outlive the engine", "err", err)
+	} else if dir != "" {
+		_, _ = write.WriteString(string([]byte{'+', reaperMark}) + dir + "\n")
+	}
 	if previous != nil {
 		_ = previous.Close()
 		if previousCmd != nil {
@@ -143,11 +150,18 @@ func reap(in io.Reader) {
 func reapWithOps(in io.Reader, ops reaperOps) {
 	entries := readReaperEntriesWithOps(in, ops)
 	var killed []osprocess.Incarnation
-	var dirs []string
+	var dirs, marks []string
 	for _, entry := range entries {
 		switch entry.kind {
 		case reaperDir:
 			dirs = append(dirs, entry.path)
+		case reaperMark:
+			marks = append(marks, entry.path)
+			for _, inc := range ops.markedProcesses(entry.path) {
+				if ops.signalProcess(inc, syscall.SIGKILL) == nil {
+					killed = appendIncarnation(killed, inc)
+				}
+			}
 		case reaperSupervisor:
 			if ops.incarnationAlive(entry.leader) && signalSupervisor(entry.leader.PID, entry.leader.Start, true) {
 				killed = appendIncarnation(killed, entry.leader)
@@ -160,12 +174,15 @@ func reapWithOps(in io.Reader, ops reaperOps) {
 			killed = reapGroupEntry(entry, ops, killed)
 		}
 	}
-	if len(dirs) == 0 {
+	if len(dirs) == 0 && len(marks) == 0 {
 		return
 	}
 	awaitSignalledGone(killed, ops.incarnationAlive, reaperDrainTimeout)
 	for _, dir := range dirs {
 		_ = os.RemoveAll(dir)
+	}
+	for _, mark := range marks {
+		confine.RemoveSandboxMark(mark)
 	}
 }
 

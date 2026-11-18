@@ -152,6 +152,36 @@ func TestReaperRemovesTrackedDirAfterKillingItsGroup(t *testing.T) {
 	}
 }
 
+func TestReaperKillsWhatRunsUnderTheSandboxMarkAndRemovesIt(t *testing.T) {
+	leader, descendant := startGroup(t)
+	marked, ok := osprocess.IncarnationOf(descendant)
+	if !ok {
+		t.Fatal("read the marked process incarnation")
+	}
+	mark := filepath.Join(t.TempDir(), "mark")
+	testutil.FailErr(t, "create mark", os.Mkdir(mark, 0o700))
+	for _, name := range []string{"own", "foreign"} {
+		testutil.FailErr(t, "write marker", os.WriteFile(filepath.Join(mark, name), nil, 0o400))
+	}
+	var asked []string
+	ops := defaultReaperOps()
+	ops.markedProcesses = func(dir string) []osprocess.Incarnation {
+		asked = append(asked, dir)
+		return []osprocess.Incarnation{marked}
+	}
+	reapWithOps(strings.NewReader("+b"+mark+"\n+b"+mark+"\n+brelative/mark\n"), ops)
+	waitForProcessGone(t, descendant)
+	if len(asked) != 1 || asked[0] != mark {
+		t.Fatalf("reaper asked for marked processes under %q, want only %q", asked, mark)
+	}
+	if !osprocess.Alive(leader) {
+		t.Fatal("the sandbox sweep killed a process the mark did not name")
+	}
+	if _, err := os.Stat(mark); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("sandbox mark survived the engine: stat err=%v", err)
+	}
+}
+
 func TestReaperSparesForgottenAndUnanchoredDirs(t *testing.T) {
 	root := t.TempDir()
 	forgotten := filepath.Join(root, "forgotten")

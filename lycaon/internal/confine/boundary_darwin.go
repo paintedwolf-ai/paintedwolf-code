@@ -7,8 +7,15 @@ import (
 	"syscall"
 )
 
-// renderProfile is the Seatbelt profile on this platform.
-func renderProfile(c Confinement) (string, error) { return renderSeatbeltProfile(c) }
+// renderProfile is the Seatbelt profile on this platform, ending with the
+// engine's ownership mark.
+func renderProfile(c Confinement) (string, error) {
+	profile, err := renderSeatbeltProfile(c)
+	if err != nil {
+		return "", err
+	}
+	return profile + sandboxMarkRule(), nil
+}
 
 // applyAndExec applies the profile to this process, confirms kernel membership,
 // and replaces the process with the target.
