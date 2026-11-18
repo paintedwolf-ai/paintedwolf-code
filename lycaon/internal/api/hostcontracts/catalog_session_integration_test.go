@@ -29,7 +29,7 @@ func TestListWorkflowsIncludesSessionScope(t *testing.T) {
 	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID}, p.ID)
 	testutil.FailErr(t, "create session in store", err)
 
-	sessionStore := workflowdrafts.NewMemory()
+	sessionStore := workflowdrafts.NewSQL(sessionFixture.DB())
 	manifestYAML := `id: hotfix-session
 version: 1.0.0
 request:
