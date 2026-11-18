@@ -20,7 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	scanmock "github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/session"
@@ -59,8 +59,8 @@ func TestScanCompletedByRunnerReadsThroughServer(t *testing.T) {
 	mock := &scanmock.MockScanner{Result: &scanoutput.Result{
 		FindingsCount: 2,
 		Findings: []wire.SecurityFinding{
-			scanfindings.FixtureFinding("mock:first", wire.FindingLevelHigh, "first finding", "main.go", 1),
-			scanfindings.FixtureFinding("mock:second", wire.FindingLevelMedium, "second finding", "main.go", 1),
+			findingstest.Finding("mock:first", wire.FindingLevelHigh, "first finding", "main.go", 1),
+			findingstest.Finding("mock:second", wire.FindingLevelMedium, "second finding", "main.go", 1),
 		},
 	}}
 	reg := &scanmock.MockRegistry{Scanner: mock}
