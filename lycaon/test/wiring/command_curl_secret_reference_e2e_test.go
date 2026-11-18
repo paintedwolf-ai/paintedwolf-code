@@ -10,8 +10,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/testutil"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // requestRecorder is a loopback service the session holds a port grant for;
@@ -81,48 +83,82 @@ func TestCommandCurlUnsupportedFormDoesNotLaunchInstalledCurl(t *testing.T) {
 	}
 }
 
-// Basic credentials carry a reference in their password, a placement curl
-// declares, and the service receives the resolved value, with or without a
-// declared service and a loopback capability.
+// Basic credentials carry a chat value in their password, a placement curl
+// declares, and the service receives the resolved value.
 func TestCommandCurlDeliversAReferenceInBasicCredentials(t *testing.T) {
-	for _, declared := range []bool{false, true} {
-		name := "plain"
-		if declared {
-			name = "declared service"
-		}
-		t.Run(name, func(t *testing.T) {
-			run, sess := newSecretSinkRun(t)
-			scope := secretcap.ScopeChat
-			if declared {
-				scope = secretcap.ScopeProject
+	run, sess := newSecretSinkRun(t)
+	reference := run.generatedReference(t, sess, secretcap.ScopeChat)
+	server, seen := requestRecorder(t, run)
+	run.script.steps = []citableStep{{command: "curl -sS -u 'user:" + reference + "' " + server.URL}}
+	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "call the service")
+	testutil.FailErr(t, "prompt", err)
+	outcomes := run.outcomes(t)
+	if len(outcomes) != 1 || outcomes[0].state != "completed" || outcomes[0].stopCode != "" {
+		run.logResults(t)
+		t.Fatalf("outcomes = %+v", outcomes)
+	}
+	want := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:"+sinkSentinel))
+	if got := seen(); len(got) != 1 || got[0] != want {
+		t.Fatalf("service saw %q", got)
+	}
+}
+
+// A person who allows a project value for a declared service in this chat,
+// while setting the service up, has curl send it there in basic credentials
+// without being asked again.
+func TestCommandCurlUsesTheChatApprovalForItsDeclaredService(t *testing.T) {
+	run, sess := newSecretSinkRun(t)
+	reference := run.generatedReference(t, sess, secretcap.ScopeProject)
+	server, seen := requestRecorder(t, run)
+	parsed, err := url.Parse(server.URL)
+	testutil.FailErr(t, "parse server", err)
+	port, err := strconv.Atoi(parsed.Port())
+	testutil.FailErr(t, "parse port", err)
+	declared := func(command string) citableStep {
+		return citableStep{tool: "command", args: map[string]any{
+			"command": command, "secret_use": map[string]any{"services": []any{server.URL}},
+			"capability_request": map[string]any{"loopback_connect": map[string]any{"ports": []any{port}}},
+		}}
+	}
+	run.script.steps = []citableStep{
+		declared("SERVICE_PASSWORD='" + reference + "' /bin/true"),
+		declared("curl -sS -u 'user:" + reference + "' " + server.URL),
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "set up and call the service")
+		done <- err
+	}()
+	owner := run.h.OwnerCtx(t, t.Context())
+	kind := wire.CheckpointKindToolApproval
+	var answered []string
+	for finished := false; !finished; {
+		testutil.WaitFor(t, "a card or the end of the turn", func() bool {
+			select {
+			case err := <-done:
+				testutil.FailErr(t, "prompt", err)
+				finished = true
+				return true
+			default:
 			}
-			reference := run.generatedReference(t, sess, scope)
-			server, seen := requestRecorder(t, run)
-			command := "curl -sS -u 'user:" + reference + "' " + server.URL
-			step := citableStep{command: command}
-			if declared {
-				parsed, err := url.Parse(server.URL)
-				testutil.FailErr(t, "parse server", err)
-				port, err := strconv.Atoi(parsed.Port())
-				testutil.FailErr(t, "parse port", err)
-				step = citableStep{tool: "command", args: map[string]any{
-					"command": command, "secret_use": map[string]any{"services": []any{server.URL}},
-					"capability_request": map[string]any{"loopback_connect": map[string]any{"ports": []any{port}}},
-				}}
+			pending, err := run.h.Sessions.Checkpoints.ListPending(t.Context(), run.session, &kind)
+			if err != nil || len(pending) == 0 {
+				return false
 			}
-			run.script.steps = []citableStep{step}
-			_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "call the service")
-			testutil.FailErr(t, "prompt", err)
-			outcomes := run.outcomes(t)
-			if len(outcomes) != 1 || outcomes[0].state != "completed" || outcomes[0].stopCode != "" {
-				run.logResults(t)
-				t.Fatalf("outcomes = %+v", outcomes)
-			}
-			want := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:"+sinkSentinel))
-			if got := seen(); len(got) != 1 || got[0] != want {
-				run.logResults(t)
-				t.Fatalf("service saw %q", got)
-			}
+			card := pending[0]
+			answered = append(answered, card.ToolApproval.ToolCallID+" "+string(card.ToolApproval.Plan.Stage))
+			_, err = run.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(owner, run.session, card.ID, card.ToolApproval.Plan.RecommendedOptionID)
+			testutil.FailErr(t, "approve card", err)
+			return true
 		})
+	}
+	outcomes := run.outcomes(t)
+	if len(outcomes) != 2 || outcomes[1].state != "completed" || outcomes[1].stopCode != "" {
+		run.logResults(t)
+		t.Fatalf("outcomes = %+v; answered %q", outcomes, answered)
+	}
+	want := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:"+sinkSentinel))
+	if got := seen(); len(got) != 1 || got[0] != want {
+		t.Fatalf("service saw %q; answered %q", got, answered)
 	}
 }
