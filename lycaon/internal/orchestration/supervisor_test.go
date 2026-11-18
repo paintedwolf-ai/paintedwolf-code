@@ -2,6 +2,7 @@ package orchestration_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
@@ -24,7 +25,7 @@ func newSupervisorTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orches
 		rec = &recordingWorkers{}
 	}
 	rec.TopologyWorkers = mem
-	reg := orchestration.NewMemoryAgentRegistryForTest()
+	reg := orchestrationtest.Registry(t)
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
 		Workers: rec,
 		Agents:  reg,

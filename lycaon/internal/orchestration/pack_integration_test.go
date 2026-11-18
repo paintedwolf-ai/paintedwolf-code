@@ -4,6 +4,7 @@ package orchestration_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
@@ -41,7 +42,7 @@ func newPackTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestratio
 	if rec.order == nil {
 		rec.order = make([]string, 0, 8)
 	}
-	reg := orchestration.NewMemoryAgentRegistryForTest()
+	reg := orchestrationtest.Registry(t)
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
 		Workers: rec,
 		Agents:  reg,

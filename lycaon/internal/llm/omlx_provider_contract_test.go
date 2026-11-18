@@ -1,4 +1,4 @@
-package contract
+package llm_test
 
 import (
 	"path/filepath"
@@ -6,14 +6,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // oMLX is a keyless local provider with typed model discovery.
 func TestBundledProvidersIncludeOMLX(t *testing.T) {
 
 	cfg, err := llm.LoadProviderConfig()
-	contractcheck.FailErr(t, "llm.LoadProviderConfig failed", err)
+	testutil.FailErr(t, "llm.LoadProviderConfig failed", err)
 	var omlx *llm.ProviderEntry
 	for i := range cfg.Providers {
 		if cfg.Providers[i].ID == "omlx" {
@@ -37,12 +37,14 @@ func TestBundledProvidersIncludeOMLX(t *testing.T) {
 	t.Setenv("LYCAON_TEST", "1")
 	t.Cleanup(llm.SetHostProductPlatformForTest(llm.PlatformmacOS))
 
-	catalog := liveCatalogForShipIDs(t, "omlx")
+	catalog, err := llm.NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
+	testutil.FailErr(t, "create provider catalog", err)
+	testutil.FailErr(t, "add omlx provider", catalog.Put(*omlx))
 	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}
-	contractcheck.FailErr(t, "llm.NewRegistry failed", err)
+	testutil.FailErr(t, "llm.NewRegistry failed", err)
 
 	if !registry.IsConfigured("omlx") {
 		t.Fatal("expected keyless omlx to be configured without a key")
@@ -93,7 +95,7 @@ func TestBundledProvidersIncludeOMLX(t *testing.T) {
 
 	t.Cleanup(llm.SetHostProductPlatformForTest(llm.PlatformLinux))
 	catalogLinux, err := llm.NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
-	contractcheck.FailErr(t, "linux catalog", err)
+	testutil.FailErr(t, "linux catalog", err)
 	for _, k := range catalogLinux.KindTemplates() {
 		if k.Kind == "omlx" {
 			t.Fatal("KindTemplates must hide omlx on linux")
@@ -103,7 +105,7 @@ func TestBundledProvidersIncludeOMLX(t *testing.T) {
 	if err == nil {
 		regLinux.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}
-	contractcheck.FailErr(t, "linux registry", err)
+	testutil.FailErr(t, "linux registry", err)
 	for _, p := range regLinux.List(t.Context()) {
 		if p.ID == "omlx" {
 			t.Fatal("List must hide omlx on linux")

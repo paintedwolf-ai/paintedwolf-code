@@ -4,6 +4,7 @@ package orchestration_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
@@ -50,7 +51,7 @@ func TestPackIsolatedLegsNoCrossWrite(t *testing.T) {
 	sessStore := store.NewMemory()
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	rec := &recordingWorkers{TopologyWorkers: mem, order: make([]string, 0, 4)}
-	reg := orchestration.NewMemoryAgentRegistryForTest()
+	reg := orchestrationtest.Registry(t)
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
 		Workers:    rec,
 		Agents:     reg,

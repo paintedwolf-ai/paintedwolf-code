@@ -5,6 +5,7 @@ package orchestration_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"sync"
 	"testing"
@@ -44,7 +45,7 @@ func newFanOutTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestrat
 	if rec.order == nil {
 		rec.order = make([]string, 0, 8)
 	}
-	reg := orchestration.NewMemoryAgentRegistryForTest()
+	reg := orchestrationtest.Registry(t)
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
 		Workers: rec,
 		Agents:  reg,
@@ -293,7 +294,7 @@ func TestFanOutCancellationDuringSetupAbortsBeforeDispatch(t *testing.T) {
 	var once sync.Once
 	release := func() { once.Do(func() { close(blocked.release) }) }
 	defer release()
-	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{Workers: blocked, Agents: orchestration.NewMemoryAgentRegistryForTest()})
+	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{Workers: blocked, Agents: orchestrationtest.Registry(t)})
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "create session", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)

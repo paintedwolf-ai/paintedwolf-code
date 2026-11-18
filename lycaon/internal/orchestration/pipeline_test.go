@@ -2,6 +2,7 @@ package orchestration_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"slices"
 	"sync"
@@ -43,7 +44,7 @@ func TestPipelineTopologyLegAgentTypes(t *testing.T) {
 	sessStore := store.NewMemory()
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 
-	reg := orchestration.NewMemoryAgentRegistryForTest()
+	reg := orchestrationtest.Registry(t)
 	rec := &recordingWorkers{TopologyWorkers: orchestration.NewMemoryTopologyWorkers()}
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
 		Workers: rec,
@@ -97,7 +98,7 @@ func TestPipelineUnknownProfileFailsRun(t *testing.T) {
 	sessStore := store.NewMemory()
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 
-	reg := orchestration.NewMemoryAgentRegistryForTest()
+	reg := orchestrationtest.Registry(t)
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
 		Workers: orchestration.NewMemoryTopologyWorkers(),
 		Agents:  reg,
