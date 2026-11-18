@@ -977,7 +977,7 @@ jobs:
 
   # Reuses the unsigned artifacts prepared for this exact source, or builds them without secrets.
   prepare:
-    needs: classify
+    needs: [classify, credentials]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     uses: ./.github/workflows/release-prepare.yml
     permissions:

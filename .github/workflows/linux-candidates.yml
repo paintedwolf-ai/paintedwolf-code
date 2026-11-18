@@ -22,7 +22,7 @@ on:
       - 'scripts/*linux*'
       - 'scripts/linux_release/**'
       - 'scripts/release_distribution_contract/**'
-      - 'scripts/release_preparation.py'
+      - 'scripts/release_preparation/**'
       - 'scripts/*engine*'
       - 'scripts/*bundle*'
       - 'scripts/release-stage-platform-artifacts.sh'
