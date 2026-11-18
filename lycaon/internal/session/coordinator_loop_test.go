@@ -48,7 +48,7 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Host, wfMgr *workf
 	wfMgr.SetConditionRegistry(reg)
 	wfMgr.Phases.PhaseReenterHook = func(ctx context.Context, rc *workflowphases.RunContext, def workflowdef.PhaseDef) {
 		if rc == nil {
-			return nil
+			return
 		}
 		kickID := strings.TrimSpace(def.OnReenter.InjectKick)
 		if kickID == "" {
@@ -84,7 +84,6 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Host, wfMgr *workf
 			Phase:    rc.Phase,
 			Workflow: rc.WorkflowID,
 		})
-
 		return nil
 	}
 }

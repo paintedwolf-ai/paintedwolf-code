@@ -2,7 +2,6 @@ package invocation_test
 
 import (
 	"context"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"path/filepath"
 	"testing"
 
@@ -10,6 +9,9 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/progress"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
@@ -40,7 +42,9 @@ func TestProgramActualParserProgressStoreAndReceiptRemainIndependent(t *testing.
 			if mode == "invalid-update" {
 				submitted["progress_update"].(map[string]any)["unknown_field"] = true
 			}
-			f := newProgramReceiptFixtureWithArgs(t, submitted)
+			database := testdbfixture.Open(t, "programs.db")
+			testdbseed.InsertSession(t, database, "session-1", testdbseed.DefaultProjectID)
+			f := programReceiptFixtureOn(t, database, "session-1", "actual-model-call", submitted)
 			memory := progressMemory(t)
 			plan, err := commandsurface.ParseAdmitted(t.Context(), memory, []byte("${op} arg"), commandsurface.ParseOptions{})
 			testutil.FailErr(t, "validate whole actual program", err)
@@ -64,9 +68,9 @@ func TestProgramActualParserProgressStoreAndReceiptRemainIndependent(t *testing.
 				return "", nil
 			}))
 			executor := toolexecution.NewExecutor(nil, registry, "fixture")
-			_, err = f.database.ExecContext(t.Context(), `INSERT INTO workflow_runs (id,session_id,project_id,workflow_id,workflow_version,status,current_phase,created_at,updated_at) SELECT 'progress-run',id,project_id,'test','1','running','work',created_at,updated_at FROM sessions WHERE id=?`, f.session)
+			_, err = database.ExecContext(t.Context(), `INSERT INTO workflow_runs (id,session_id,project_id,workflow_id,workflow_version,status,current_phase,created_at,updated_at) SELECT 'progress-run',id,project_id,'test','1','running','work',created_at,updated_at FROM sessions WHERE id=?`, f.session)
 			testutil.FailErr(t, "seed progress workflow", err)
-			store := progress.NewSQLStore(f.database, sessionstore.NewSQL(f.database))
+			store := progress.NewSQLStore(database, sessionstore.NewSQL(database))
 			inputs := f.capture(t)
 			observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: inputs}
 			update := &toolexecution.ProgramProgressUpdate{ExecutionID: uuid.NewString(), Arguments: map[string]any{"content": "- [ ] Create fixture"}}

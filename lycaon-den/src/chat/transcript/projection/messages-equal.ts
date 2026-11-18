@@ -152,10 +152,7 @@ function progressCompleteEqual(
 ): boolean {
   if (left === right) return true;
   if (!left || !right) return !left && !right;
-  return (
-    left.seq === right.seq &&
-    JSON.stringify(left.steps) === JSON.stringify(right.steps)
-  );
+  return JSON.stringify(left.steps) === JSON.stringify(right.steps);
 }
 
 function progressUpdateEqual(
@@ -165,7 +162,6 @@ function progressUpdateEqual(
   if (left === right) return true;
   if (!left || !right) return !left && !right;
   return (
-    left.seq === right.seq &&
     left.initial === right.initial &&
     JSON.stringify(left.steps) === JSON.stringify(right.steps) &&
     JSON.stringify(left.changes) === JSON.stringify(right.changes) &&
