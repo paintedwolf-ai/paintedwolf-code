@@ -10,26 +10,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestHostTurnMayFinishWithProse(t *testing.T) {
-	t.Parallel()
-	// Always-prose surfaces: idle finish allowed; busy or pending overlay blocks.
-	for _, surfaceID := range []string{"implement_synthesis", "implement_routing", "implement_investigate"} {
-		if !guard.HostTurnMayFinishWithProse(surfaceID, true, false) {
-			t.Fatalf("expected %s + idle to allow prose finish", surfaceID)
-		}
-		if guard.HostTurnMayFinishWithProse(surfaceID, false, false) {
-			t.Fatalf("expected in-flight workers to block prose finish on %s", surfaceID)
-		}
-		if guard.HostTurnMayFinishWithProse(surfaceID, true, true) {
-			t.Fatalf("expected pending overlay promote to block prose finish on %s", surfaceID)
-		}
-	}
-	// Dispatch surface: always tool terminal — a prose-only finish is premature.
-	if guard.HostTurnMayFinishWithProse(surface.SurfaceImplementDispatch, true, false) {
-		t.Fatal("expected dispatch surface to require a tool terminal")
-	}
-}
-
 func TestObserveHostTurnRequiresWaitLedgerOverridesStaleEnvelope(t *testing.T) {
 	t.Parallel()
 	fmt := coordinatorRejectFmt(t)

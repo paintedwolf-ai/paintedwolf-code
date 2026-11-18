@@ -46,7 +46,7 @@ var hostProseFinishContract = map[string]bool{
 
 // TestCoordinatorHostFinish_surfaceClassificationExhaustive: every configured surface is
 // classified, every classified surface exists in coordinator-surfaces.yaml, and the
-// classification matches HostTurnMayFinishWithProse.
+// classification matches the runtime surface catalog.
 func TestCoordinatorHostFinish_surfaceClassificationExhaustive(t *testing.T) {
 	t.Parallel()
 	surfaces := loadImplementSurfaces(t)
@@ -55,8 +55,8 @@ func TestCoordinatorHostFinish_surfaceClassificationExhaustive(t *testing.T) {
 		if !ok {
 			t.Fatalf("surface %q is unclassified — add it to hostProseFinishContract (true if a host cycle turn may close it with user prose once idle, false if it requires a tool terminal)", id)
 		}
-		if got := guard.HostTurnMayFinishWithProse(id, true, false); got != want {
-			t.Fatalf("surface %q: HostTurnMayFinishWithProse(idle, nothing pending) = %v, want %v", id, got, want)
+		if got := guard.SurfaceFinishesWithUserProse(id); got != want {
+			t.Fatalf("surface %q: SurfaceFinishesWithUserProse = %v, want %v", id, got, want)
 		}
 	}
 	for id := range hostProseFinishContract {
@@ -79,7 +79,7 @@ func TestCoordinatorHostFinish_readScoutFanoutCanReportToUser(t *testing.T) {
 	if profile.SurfaceID != "implement_synthesis" {
 		t.Fatalf("path-explorer loop wake resolved to surface %q, want implement_synthesis", profile.SurfaceID)
 	}
-	if !guard.HostTurnMayFinishWithProse(profile.SurfaceID, true, false) {
+	if !guard.SurfaceFinishesWithUserProse(profile.SurfaceID) {
 		t.Fatalf("read-scout fan-out resolved to %q, which cannot finish with user prose — the coordinator would livelock re-emitting its summary", profile.SurfaceID)
 	}
 }
@@ -98,7 +98,7 @@ func TestCoordinatorHostFinish_readScoutSynthesisCanReportToUser(t *testing.T) {
 	if profile.SurfaceID != "implement_synthesis" {
 		t.Fatalf("repo-researcher loop wake resolved to surface %q, want implement_synthesis", profile.SurfaceID)
 	}
-	if !guard.HostTurnMayFinishWithProse(profile.SurfaceID, true, false) {
+	if !guard.SurfaceFinishesWithUserProse(profile.SurfaceID) {
 		t.Fatalf("read-scout synthesis on %q must finish with a grounded user answer — else research fan-out livelocks", profile.SurfaceID)
 	}
 }

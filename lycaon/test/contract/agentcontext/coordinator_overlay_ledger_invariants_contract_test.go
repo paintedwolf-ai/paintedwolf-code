@@ -7,6 +7,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -191,11 +193,13 @@ func TestCoordinatorOverlayLedgerInvariants_hostTurnGuardAgreesWithLedger(t *tes
 
 	state := ledgerResolvedEmpty()
 
-	if !guard.HostTurnMayFinishWithProse(
-		"implement_synthesis",
-		true,
-		len(state.PendingOverlayIDs) > 0,
-	) {
-		t.Fatal("expected synthesis prose allowed when ledger reports zero pending overlays despite stale envelope")
+	gc := &oar.GuardContext{}
+	guard.ObserveCoordinatorHostNoToolTurn(
+		&api.Session{Posture: api.SessionPostureBuild}, stalePendingEnvelopeHistory("job-1"),
+		"Answer", guidance.CloseoutDraft{}, nil, "implement_synthesis", true, state, guard.BatchTurnGuard{}, gc,
+	)
+	if gc.Workers.PendingOverlayPromote || !gc.Session.SurfaceMayFinish {
+		t.Fatal("host facts must use the empty durable overlay state")
 	}
+
 }
