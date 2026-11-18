@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"os"
@@ -22,7 +23,7 @@ func TestDecisionBranchStaysAttachedButCannotBePromoted(t *testing.T) {
 	queue := newTestQueue(t, 1, p.ID, "parent")
 	testdbseed.InsertProjectRootWithID(t, queue.db, p.ID, p.Roots[0].ID, canonical)
 	queue.SetProjectStore(projects)
-	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{})))
+	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(db.DataDir(queue.db), "worker-branches"), platform.NewSelector(platform.Config{})))
 	id, err := queue.Enqueue(t.Context(), api.WorkerTask{
 		ProjectID: p.ID, ParentSessionID: "parent", WorkspaceRootID: p.Roots[0].ID, WorkspacePath: canonical,
 		AgentType: "implementer", Prompt: "choose", Brief: "choose",

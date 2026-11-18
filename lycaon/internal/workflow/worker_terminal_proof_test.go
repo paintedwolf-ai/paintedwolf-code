@@ -29,7 +29,7 @@ func TestRecordWorkerTerminalProofReentersBuildPhase(t *testing.T) {
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfStore := workflowpersistence.New(sqlDB)
 	mgr := NewManager(wfStore, store, reg, nil)
-	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
+	q := workertest.OnDatabase(t, sqlDB, 4)
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		WorkerCycleIdle: func(projectID, sessionID, completingJobID string) (bool, error) {
 			return workeroutcomes.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, sessionID, completingJobID)

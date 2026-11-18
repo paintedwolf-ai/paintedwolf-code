@@ -2,6 +2,7 @@ package worker
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
@@ -115,7 +116,7 @@ func TestConsumerCapturesPrimaryAfterProducerPromotion(t *testing.T) {
 	q := newTestQueue(t, 2, p.ID, "parent")
 	testdbseed.InsertProjectRootWithID(t, q.db, p.ID, p.Roots[0].ID, canonical)
 	q.SetProjectStore(projects)
-	q.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{})))
+	q.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(db.DataDir(q.db), "worker-branches"), platform.NewSelector(platform.Config{})))
 	producer := api.WorkerTask{ProjectID: p.ID, WorkspaceRootID: p.Roots[0].ID, WorkspacePath: canonical, ParentSessionID: "parent", AgentType: "implementer", Prompt: "produce", Brief: "produce", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}
 	id, err := q.Enqueue(t.Context(), producer)
 	testutil.FailErr(t, "enqueue producer", err)

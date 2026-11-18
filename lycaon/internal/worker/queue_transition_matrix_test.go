@@ -13,12 +13,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type allowAllRuns struct{}
-
-func (allowAllRuns) AssertRunnable(context.Context, string) error { return nil }
-
-func (allowAllRuns) AssertWorkerTask(context.Context, *api.WorkerTask) error { return nil }
-
 func newMatrixQueue(t *testing.T) *worker.SQLQueue {
 	database := testdbfixture.Open(t, "matrix.db")
 	testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)

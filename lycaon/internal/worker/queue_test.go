@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func localClaim(ctx context.Context, q *SQLQueue, projectDir string) (*api.WorkerTask, error) {
+func localClaim(ctx context.Context, q *SQLQueue) (*api.WorkerTask, error) {
 	return q.ClaimNext(ctx, ClaimRequest{
 		ProjectID:       testdbseed.DefaultProjectID,
 		ExecutionTarget: api.ExecutionTargetLocal,
@@ -54,7 +54,7 @@ func TestQueueLifecycle(t *testing.T) {
 	})
 	testutil.FailErr(t, "q.EnqueueWithProjectID failed", err)
 
-	claimed, err := localClaim(ctx, q, "/tmp/proj")
+	claimed, err := localClaim(ctx, q)
 	testutil.FailErr(t, "localClaim failed", err)
 	if claimed.ID != id {
 		t.Fatalf("id = %q want %q", claimed.ID, id)
@@ -102,13 +102,13 @@ func TestQueueMaxWorkers(t *testing.T) {
 		testutil.FailErr(t, "q.EnqueueWithProjectID failed", err)
 	}
 
-	if _, err := localClaim(ctx, q, ""); err != nil {
+	if _, err := localClaim(ctx, q); err != nil {
 		testutil.FailErr(t, "localClaim failed", err)
 	}
-	if _, err := localClaim(ctx, q, ""); err != nil {
+	if _, err := localClaim(ctx, q); err != nil {
 		testutil.FailErr(t, "localClaim failed", err)
 	}
-	if _, err := localClaim(ctx, q, ""); !errors.Is(err, ErrMaxWorkers) {
+	if _, err := localClaim(ctx, q); !errors.Is(err, ErrMaxWorkers) {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -124,7 +124,7 @@ func TestQueueCancel(t *testing.T) {
 		ProjectID:       testdbseed.DefaultProjectID,
 		ExecutionTarget: api.ExecutionTargetLocal,
 	})
-	_, _ = localClaim(ctx, q, "")
+	_, _ = localClaim(ctx, q)
 
 	if err := q.Cancel(ctx, id, nil); err != nil {
 		testutil.FailErr(t, "q.Cancel failed", err)
@@ -155,7 +155,7 @@ func TestConcurrentWorkerCap(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			task, err := localClaim(ctx, q, "")
+			task, err := localClaim(ctx, q)
 			if err == nil {
 				claimed <- task.ID
 			}
@@ -187,7 +187,7 @@ func TestRunnerTargetNotClaimedLocally(t *testing.T) {
 	})
 	testutil.FailErr(t, "q.EnqueueWithProjectID failed", err)
 
-	if _, err := localClaim(ctx, q, ""); !errors.Is(err, ErrNoPendingJobs) {
+	if _, err := localClaim(ctx, q); !errors.Is(err, ErrNoPendingJobs) {
 		t.Fatalf("err = %v", err)
 	}
 }

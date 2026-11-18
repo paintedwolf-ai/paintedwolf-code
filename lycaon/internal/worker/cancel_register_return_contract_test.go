@@ -2,7 +2,9 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,7 +29,15 @@ func (h *recordingHub) Publish(_ context.Context, topic api.EventTopic, _ events
 	if topic != api.EventTopicWorker {
 		return nil
 	}
-	if we, ok := data.(api.WorkerEvent); ok {
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	var we api.WorkerEvent
+	if err := json.Unmarshal(raw, &we); err != nil {
+		return err
+	}
+	{
 		h.mu.Lock()
 		h.events = append(h.events, we)
 		h.mu.Unlock()
@@ -120,8 +130,7 @@ func setupRunningWorker(t *testing.T, queue *SQLQueue, childSessionID string) st
 
 func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
 	queue := newTestQueue(t, 2, testdbseed.DefaultProjectID)
-	hub := &recordingHub{}
-	queue.SetEventPublisher(&events.Publisher{Hub: hub})
+	hub := recordWorkerEvents(t, queue)
 	mock := newMockGracefulCancelSession()
 	svc := &CancelService{Queue: queue, Events: mock, Cancellations: mock, Graceful: mock}
 
@@ -155,6 +164,7 @@ func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
 	// Simulate poller finalization.
 	result := api.WorkerResult{Status: "canceled", Response: "canceled", Summary: "canceled"}
 	testutil.FailErr(t, "FinishCanceled (poller)", queue.FinishCanceled(context.Background(), jobID, &result))
+	waitWorkerEvents(t, queue)
 	if task, ok := queue.Get(jobID); !ok || task.Status != api.WorkerStatusCanceled {
 		t.Fatalf("task status = %v want canceled", task)
 	}
@@ -163,6 +173,7 @@ func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
 	}
 	// Repeated finalization is inert.
 	testutil.FailErr(t, "FinishCanceled (repeat)", queue.FinishCanceled(context.Background(), jobID, &result))
+	waitWorkerEvents(t, queue)
 	if n := hub.terminalCount(); n != 1 {
 		t.Fatalf("terminal SSE = %d after repeat finalize; idempotency guard must prevent double SSE", n)
 	}
@@ -211,8 +222,7 @@ func TestCancelPendingAndHeldWorkersFinalizeSynchronously(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FailErr(t, "write file", os.WriteFile(filepath.Join(dir, "README.md"), []byte("base\n"), 0o644))
 	gittest.InitCommit(t, dir, "init")
-	hub := &recordingHub{}
-	queue.SetEventPublisher(&events.Publisher{Hub: hub})
+	hub := recordWorkerEvents(t, queue)
 
 	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "Create parent", err)
@@ -247,8 +257,28 @@ func TestCancelPendingAndHeldWorkersFinalizeSynchronously(t *testing.T) {
 		if task, ok := queue.Get(jobID); !ok || task.Status != api.WorkerStatusCanceled {
 			t.Fatalf("status=%s: task not canceled", status)
 		}
+		waitWorkerEvents(t, queue)
 		if got := hub.terminalCount() - before; got != 1 {
 			t.Fatalf("status=%s: terminal SSE = %d want 1", status, got)
 		}
 	}
+}
+
+func recordWorkerEvents(t *testing.T, queue *SQLQueue) *recordingHub {
+	t.Helper()
+	hub := &recordingHub{}
+	outbox := eventoutbox.New(queue.db, hub)
+	queue.SetEventOutbox(outbox)
+	outbox.Start(t.Context())
+	t.Cleanup(func() { testutil.FailErr(t, "close worker event delivery", outbox.Close()) })
+	return hub
+}
+
+func waitWorkerEvents(t *testing.T, queue *SQLQueue) {
+	t.Helper()
+	testutil.WaitFor(t, "committed worker events reach the hub", func() bool {
+		var pending int
+		testutil.FailErr(t, "count queued events", queue.db.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM event_outbox").Scan(&pending))
+		return pending == 0
+	})
 }
