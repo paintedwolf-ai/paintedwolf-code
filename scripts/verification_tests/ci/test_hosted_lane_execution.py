@@ -228,6 +228,8 @@ class HostedExecutionTests(unittest.TestCase):
             ci.run_lane("ready-tests", "1/4", clock=lambda: next(readings))
         budgets = [call.kwargs["env"]["PW_GO_TEST_TIMEOUT_SECONDS"] for call in run.call_args_list]
         self.assertEqual(budgets, [str(seconds - 100), "1"])
+        self.assertEqual([call.kwargs["env"]["PW_TEST_WATCHDOG_DEADLINE"] for call in run.call_args_list],
+                         [str(seconds), str(seconds)])
 
     def test_interrupted_invocation_leaves_an_unfinished_record(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -37,7 +37,6 @@ The guard is structural, not a name list. `user_text_behavior_closure_ast.go` wa
 | `maybeQueue*Kick` on the prompt path | Every hook is registered with a trigger class, and no trigger class is NL intent | `TestPromptPathKickHooksRegistered` · `TestKickContractTriggerClassesNotUserText` |
 | `strings.Contains(err.Error(), …)` | Typed errors and `errors.Is` instead of parsing error prose | `TestNoErrErrorStringParsingInCoordinatorPackages` |
 | Coordinator prompt gates | Pongo gate vars are registered or banned; no ad-hoc boolean derived from user text | `TestCoordinatorPromptBooleanGatesRegistered` |
-| Inform timing | No `Kick*` consts and no `"coordinator-"+id` dispatch | `TestNoKickConstOrCoordinatorConcatDispatch` ([`kick_constants_sync_contract_test.go`](../lycaon/test/contract/catalogs/kick_constants_sync_contract_test.go)) |
 
 Because the scan matches the shape, a newly written classifier fails it under any name. A user message that discusses build policy (“we do not allow compatibility steps here”) must not queue a kick, set a prompt gate, or dispatch implementers; only an explicit coordinator tool call does that.
 

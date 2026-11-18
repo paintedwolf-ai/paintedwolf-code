@@ -91,7 +91,7 @@ else
     echo "den:bundle — generating THIRD-PARTY-NOTICES.md" >&2
     bash "${ROOT}/scripts/licenses-notices.sh"
   fi
-  cp -f "${ROOT}/THIRD-PARTY-NOTICES.md" "${TAURI_DIR}/THIRD-PARTY-NOTICES.md"
+  python3 "${ROOT}/scripts/stage-notices.py" "${ROOT}/THIRD-PARTY-NOTICES.md" "${TAURI_DIR}/THIRD-PARTY-NOTICES.md"
 fi
 
 MACOS_FLOOR_FILE="${GO_DIR}/internal/platformfloor/macos_floor.txt"
