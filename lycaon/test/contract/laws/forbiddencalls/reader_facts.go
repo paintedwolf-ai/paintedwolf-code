@@ -10,12 +10,12 @@ import (
 const promptsPkg = "github.com/lycaon/lycaon/internal/prompts"
 
 // readerFactsDoors are the one place each way into a reader's raw facts may
-// appear: Vars merges them with occurrence data, NewReader builds them, and
-// the reader projects them.
+// appear: buildReaderFacts builds and projects them, and Vars merges them
+// with occurrence data.
 var readerFactsDoors = map[string]string{
 	"(" + promptsPkg + ".Reader).Facts":    "internal/prompts/reader_facts_vocab.go:Vars",
-	"(" + promptsPkg + ".ReaderFacts).Map": "internal/prompts/reader.go",
-	promptsPkg + ".ReaderFacts{}":          "internal/prompts/reader_facts.go",
+	"(" + promptsPkg + ".ReaderFacts).Map": "internal/prompts/reader_facts.go:buildReaderFacts",
+	promptsPkg + ".ReaderFacts{}":          "internal/prompts/reader_facts.go:buildReaderFacts",
 }
 
 var readerFacts = []laws.Rule{{
