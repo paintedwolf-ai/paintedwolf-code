@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/nativemanifest"
+
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
@@ -50,7 +52,9 @@ func TestMultiRootCapabilityDeclaredNamesAreBootTools(t *testing.T) {
 	reg := toolfixture.ContractServeBootRegistry(t)
 	registered := toolfixture.BootRegisteredToolSet(t, reg)
 	schemas := contractToolSchemas(t)
-	for _, name := range toolcontract.MultiRootDeclaredNames() {
+	manifest, err := nativemanifest.Load()
+	contractcheck.FailErr(t, "load native manifest", err)
+	for name := range manifest.MultiRootTools() {
 		if registered[name] || toolcontract.IsCommandOperation(name) {
 			continue
 		}

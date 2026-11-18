@@ -1,4 +1,5 @@
 import { createEffect } from "solid-js";
+import { chatTabRailSessionId } from "../../chat/composer/chat-tab-rail-bindings.ts";
 import { setCurrentWorkspaceContexts, workspaceContextEqual, workspaceContextIsOpen, type WorkspaceContext } from "../../platform/windows/workspace-view-registry.ts";
 import { type ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { clearSourceReturn, returnToSource, sourceReturn } from "../../files/source/source-return.ts";
@@ -8,12 +9,14 @@ import { isHomePresentation, type ProjectPresentation } from "../../shell/projec
 import { routedReturnOffer, type RoutedOrigin } from "../../shell/routed-return.ts";
 import { type ActiveChat } from "../../shell/stage-scope.ts";
 import { type SplitColumnsOnScreen } from "../../shell/stage-placement.ts";
+import { createStageTabRail } from "../../shell/stage-tab-rail.ts";
+import { type TabId } from "../chatview/tabs.ts";
 import { stageDefinition, stageLabelFor } from "../stage/stage-registry.tsx";
 import { type StageBack } from "./StageBackChip.tsx";
 import { type Nav, type ShellNav, type ShellNavigation } from "./shell-navigation-state.ts";
 import { type ShellPaneVisibility } from "./shell-pane-visibility.ts";
 import { type ShellScope } from "./shell-scope.ts";
-import { type ShellWorkerDrawer } from "./shell-worker-drawer.ts";
+import { type ShellSessionDrawer } from "./shell-session-drawer.ts";
 
 /** Full-stage panels outside the stage registry, as workspace contexts. */
 const SHELL_PANEL_CONTEXTS: Record<
@@ -35,12 +38,14 @@ const SHELL_PANEL_CONTEXTS: Record<
 
 type WorkspaceContextDependencies = Pick<ShellScope, "activeProjectId" | "activeChat" | "nav" | "setNav" | "splitLive">
   & Pick<ShellNavigation, "routedReturn"> & Pick<ShellPaneVisibility, "showConversation">
-  & Pick<ShellWorkerDrawer, "closeWorkers"> & {
+  & Pick<ShellSessionDrawer, "closeDrawer"> & {
   presentedChat: () => ActiveChat | null;
   projectPresentation: () => ProjectPresentation;
   conversationShown: () => boolean;
   splitColumns: () => SplitColumnsOnScreen;
   stageColumnStageId: () => ContextNavItemId | null;
+  /** The stage column's surface is published, not still opening over the chat. */
+  stageSurfaceShown: () => boolean;
   splitFitClaim: Pick<ShellPaneVisibility["splitFitClaim"], "claim">;
   /** The stage handing off into the stage column, whose titlebar carries its back chip. */
   stageHandoff: () => ContextNavItemId | null;
@@ -51,8 +56,8 @@ type WorkspaceContextDependencies = Pick<ShellScope, "activeProjectId" | "active
 /** What this window shows as workspace contexts, and the back chips that return to routed origins. */
 export function createShellWorkspaceContext({ activeProjectId, presentedChat,
   activeChat, projectPresentation, conversationShown, splitColumns,
-  stageColumnStageId, nav, setNav, routedReturn, splitLive,
-  showConversation, splitFitClaim, stageHandoff, closeWorkers, reopenFiles }: WorkspaceContextDependencies) {
+  stageColumnStageId, stageSurfaceShown, nav, setNav, routedReturn, splitLive,
+  showConversation, splitFitClaim, stageHandoff, closeDrawer, reopenFiles }: WorkspaceContextDependencies) {
   const stageWorkspaceContext = (stageId: ContextNavItemId): WorkspaceContext => {
     const projectId = activeProjectId();
     return { kind: "stage", ...(projectId ? { projectId } : {}), stageId };
@@ -119,12 +124,37 @@ export function createShellWorkspaceContext({ activeProjectId, presentedChat,
     return shown;
   };
 
-  /** Returns to a routed origin; a conversation the split keeps off screen is brought back. */
+  /** Brings back a conversation the split keeps off screen. */
+  const revealSplitConversation = () => {
+    if (hiddenSplitPanePref() === "conversation") void showConversation();
+    else if (!splitColumns().conversation) splitFitClaim.claim();
+  };
+
+  /** Returns to a routed origin. */
   const returnFrom = (from: Nav) => {
     setNav(from);
-    if (from !== "projects" || !splitLive()) return;
-    if ((hiddenSplitPanePref() === "conversation")) void showConversation();
-    else if (!splitColumns().conversation) splitFitClaim.claim();
+    if (from === "projects" && splitLive()) revealSplitConversation();
+  };
+
+  /** Project stages; Settings and Home present no session. */
+  const projectStageShown = () =>
+    stageSurfaceShown() && splitColumns().stage &&
+    (stageColumnStageId() != null || nav() === "context" || nav() === "chats");
+  const stageTabs = {
+    ...createStageTabRail<TabId>(
+      () => ({
+        presentedSessionId: presentedChat()?.sessionId ?? null,
+        boundSessionId: chatTabRailSessionId(),
+        conversationShown: conversationShown(),
+        projectStageShown: projectStageShown(),
+      }),
+      () => stageColumnStageId() ?? nav(),
+    ),
+    /** A tab action whose result appears in the conversation puts it on screen. */
+    showConversation: () => {
+      if (splitLive()) revealSplitConversation();
+      else setNav("projects");
+    },
   };
 
   /** Back chip for `stage`, or null when the visit was direct or its origin is already visible. */
@@ -143,7 +173,7 @@ export function createShellWorkspaceContext({ activeProjectId, presentedChat,
     const entry = sourceReturn();
     if (!entry || entry.projectId !== activeProjectId()) return null;
     return { label: `Back to ${entry.path}:${entry.line}`, onBack: () => {
-      closeWorkers();
+      closeDrawer();
       void returnToSource().then(opened => { if (opened) reopenFiles(); });
     }, testId: "line-facts-back" };
   };
@@ -171,5 +201,5 @@ export function createShellWorkspaceContext({ activeProjectId, presentedChat,
 
   createEffect(() => setCurrentWorkspaceContexts(shownWorkspaceContexts()));
 
-  return { shownWorkspaceContexts, backFor, sourceBack, titlebarBack, stageBack };
+  return { shownWorkspaceContexts, backFor, sourceBack, titlebarBack, stageBack, stageTabs };
 }

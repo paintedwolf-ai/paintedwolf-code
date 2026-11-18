@@ -239,7 +239,7 @@ func TestSocksRejectsBindAndUDPAssociate(t *testing.T) {
 		req := []byte{0x05, cmd, 0x00, 0x01, 127, 0, 0, 1, 0, 80}
 		if _, err := conn.Write(req); err != nil {
 			_ = conn.Close()
-			t.Fatal(err)
+			testutil.FailErr(t, "conn.Write failed", err)
 		}
 		hdr := make([]byte, 10) // VER REP RSV ATYP + IPv4 + PORT
 		if _, err := io.ReadFull(conn, hdr); err != nil {

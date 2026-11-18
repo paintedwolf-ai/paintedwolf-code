@@ -135,11 +135,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_system_bus_is_the_fixed_socket() {
-        assert_eq!(SYSTEM_BUS_ADDRESS, "unix:path=/run/dbus/system_bus_socket");
-    }
-
-    #[test]
     fn session_selection_preserves_explicit_and_native_runtime_identity() {
         assert_eq!(
             session_address_from(

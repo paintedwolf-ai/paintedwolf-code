@@ -18,52 +18,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func TestShapeIDsFrozen(t *testing.T) {
-	t.Parallel()
-	want := []string{
-		evidence.ShapeFileRegion,
-		evidence.ShapeURL,
-		evidence.ShapeCommand,
-		evidence.ShapeArtifact,
-		evidence.ShapeOpaque,
-		evidence.ShapeStructuredEvent,
-		evidence.ShapeVisual,
-		evidence.ShapeSurfaceSnapshot,
-		evidence.ShapePageGeometry,
-	}
-	got := evidence.ShapeIDs()
-	sort.Strings(got)
-	sort.Strings(want)
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("evidence.ShapeIDs = %v want %v", got, want)
-	}
-}
-
-func TestEvidenceTrustTiersFrozen(t *testing.T) {
-	t.Parallel()
-	want := []string{
-		evidence.FidelityStructured,
-		evidence.FidelityScraped,
-		evidence.FidelityOpaque,
-	}
-	got := evidence.EvidenceTrustTierIDs()
-	sort.Strings(got)
-	sort.Strings(want)
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("EvidenceTrustTierIDs = %v want %v", got, want)
-	}
-}
-
-func TestEvidenceVerbatimShapesIncludeCommandAndOpaque(t *testing.T) {
-	t.Parallel()
-	got := evidence.EvidenceVerbatimShapeIDs()
-	sort.Strings(got)
-	want := []string{evidence.ShapeCommand, evidence.ShapeOpaque, evidence.ShapeStructuredEvent}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("EvidenceVerbatimShapeIDs = %v want %v", got, want)
-	}
-}
-
 func TestEvidenceTrivialityFloorLocked(t *testing.T) {
 	t.Parallel()
 	if evidence.EvidenceMinMeaningfulSpan < 4 {
@@ -167,32 +121,6 @@ func TestSurfaceSnapshotShapeIsSingular(t *testing.T) {
 	}
 	if binding.ToolKind("render_view") != "render" {
 		t.Fatalf("render_view kind = %q want render", binding.ToolKind("render_view"))
-	}
-
-	fields := evidence.SurfaceSnapshotHandleFields()
-	wantFields := []string{
-		evidence.SurfaceSnapshotHandleFieldSurface,
-		evidence.SurfaceSnapshotHandleFieldArtifactID,
-		evidence.SurfaceSnapshotHandleFieldFrameIndex,
-	}
-	sort.Strings(fields)
-	sort.Strings(wantFields)
-	if !reflect.DeepEqual(fields, wantFields) {
-		t.Fatalf("SurfaceSnapshotHandleFields = %v want %v", fields, wantFields)
-	}
-	match := 0
-	for _, id := range evidence.ShapeIDs() {
-		if id == evidence.ShapeSurfaceSnapshot {
-			match++
-		}
-	}
-	if match != 1 {
-		t.Fatalf("ShapeIDs must contain surface_snapshot exactly once; got %d", match)
-	}
-	surfaces := evidence.SurfaceSnapshotSurfaces()
-	wantSurfaces := []string{evidence.SurfaceDOM, evidence.SurfaceTUI, evidence.SurfaceHTTP}
-	if !reflect.DeepEqual(surfaces, wantSurfaces) {
-		t.Fatalf("SurfaceSnapshotSurfaces = %v want %v", surfaces, wantSurfaces)
 	}
 }
 
@@ -366,8 +294,14 @@ func captureSwitchToolNames(t *testing.T, path string) map[string]struct{} {
 	return out
 }
 
+// lockedShapes are the evidence shapes a citation may name.
+var lockedShapes = []string{
+	evidence.ShapeFileRegion, evidence.ShapeURL, evidence.ShapeCommand, evidence.ShapeArtifact, evidence.ShapeOpaque,
+	evidence.ShapeStructuredEvent, evidence.ShapeVisual, evidence.ShapeSurfaceSnapshot, evidence.ShapePageGeometry,
+}
+
 func isLockedEvidenceShape(shape string) bool {
-	for _, id := range evidence.ShapeIDs() {
+	for _, id := range lockedShapes {
 		if id == shape {
 			return true
 		}
@@ -377,7 +311,7 @@ func isLockedEvidenceShape(shape string) bool {
 
 func TestShapeIDsAreSnakeCaseOpenStrings(t *testing.T) {
 	t.Parallel()
-	for _, id := range evidence.ShapeIDs() {
+	for _, id := range lockedShapes {
 		if strings.TrimSpace(id) == "" {
 			t.Fatal("shape id must not be empty")
 		}

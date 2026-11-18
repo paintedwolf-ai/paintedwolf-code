@@ -98,7 +98,7 @@ func TestSupervisorEngineSIGKILLRemovesOnlyItsOwnCommands(t *testing.T) {
 			if !status.Signaled() || status.Signal() != syscall.SIGKILL {
 				t.Fatalf("engine exit status = %v, want SIGKILL", status)
 			}
-			testutil.FailErr(t, "engine-owned processes survived SIGKILL", waitForFixtureDescendantsGone(t.Context(), owned))
+			waitForFixtureDescendantsGone(t, owned)
 			if _, start, ok := procStat(otherPID); !ok || start != otherStart {
 				t.Fatal("engine loss affected an unrelated command")
 			}
@@ -131,20 +131,16 @@ func awaitEngineDaemon(t *testing.T, path string, engine *exec.Cmd, done <-chan 
 	}
 }
 
-func waitForFixtureDescendantsGone(ctx context.Context, owned []descendant) error {
-	for ctx.Err() == nil {
-		remaining := 0
+func waitForFixtureDescendantsGone(t testing.TB, owned []descendant) {
+	t.Helper()
+	testutil.WaitFor(t, "the engine-owned processes exit", func() bool {
 		for _, child := range owned {
 			if _, start, ok := procStat(child.pid); ok && start == child.start {
-				remaining++
+				return false
 			}
 		}
-		if remaining == 0 {
-			return nil
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	return fmt.Errorf("engine-owned process identities remain: %w", ctx.Err())
+		return true
+	})
 }
 
 func killFixtureDescendants(owned []descendant) {

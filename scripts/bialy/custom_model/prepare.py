@@ -6,7 +6,7 @@ from pathlib import Path
 
 from checkpoint import exclusive_run
 from admission import derive
-from common import digest, file_digest, inventory, write_new
+from common import file_digest, inventory, write_new
 from data import EncodingExclusion, assert_disjoint, encode, load_split
 
 
@@ -55,9 +55,9 @@ if __name__ == "__main__":
     from transformers import AutoTokenizer
     source = inventory(args.model)
     tokenizer = AutoTokenizer.from_pretrained(args.model, local_files_only=True, trust_remote_code=False)
-    from rendering import configure_training_renderer
+    from rendering import configure_training_renderer, template_sha256
     rendering_profile = configure_training_renderer(tokenizer, args.model)
-    identity = {"files": source, "template_sha256": digest(tokenizer.chat_template),
+    identity = {"files": source, "template_sha256": template_sha256(tokenizer.chat_template),
                 "rendering_profile": rendering_profile,
                 "transformers": importlib.metadata.version("transformers")}
     report = prepare({name: getattr(args, name) for name in ("train", "validation", "holdout")},

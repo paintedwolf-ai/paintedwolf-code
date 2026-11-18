@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -49,53 +50,55 @@ func mockToolThenDone(userPrompt string, toolCalls []llm.MockToolCall) []llm.Moc
 }
 
 func TestLoopRunsConcurrentTools(t *testing.T) {
-	var concurrent int32
-	var peak int32
-	reg := tools.NewStubRegistry()
-	_ = reg.Register("read", func(ctx context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
-		cur := atomic.AddInt32(&concurrent, 1)
-		for {
-			old := atomic.LoadInt32(&peak)
-			if cur > old && atomic.CompareAndSwapInt32(&peak, old, cur) {
-				break
+	synctest.Test(t, func(t *testing.T) {
+		var concurrent int32
+		var peak int32
+		reg := tools.NewStubRegistry()
+		_ = reg.Register("read", func(ctx context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+			cur := atomic.AddInt32(&concurrent, 1)
+			for {
+				old := atomic.LoadInt32(&peak)
+				if cur > old && atomic.CompareAndSwapInt32(&peak, old, cur) {
+					break
+				}
+				if cur <= old {
+					break
+				}
 			}
-			if cur <= old {
-				break
-			}
-		}
-		time.Sleep(40 * time.Millisecond)
-		atomic.AddInt32(&concurrent, -1)
-		path, _ := args["path"].(string)
-		return "contents of " + path, nil
-	})
+			time.Sleep(40 * time.Millisecond)
+			atomic.AddInt32(&concurrent, -1)
+			path, _ := args["path"].(string)
+			return "contents of " + path, nil
+		})
 
-	client := llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("survey", []llm.MockToolCall{
-		{ID: "tc1", Name: "read", Args: map[string]any{"path": "a.go"}},
-		{ID: "tc2", Name: "read", Args: map[string]any{"path": "b.go"}},
-	})})
-	store := store.NewMemory()
-	deps := promptloop.StoreDeps(store)
-	deps.Context.LoadedTools = workersLoaded
-	deps.Context.Limits = loopTestLimits(2)
-	deps.Model.LLM = client
-	deps.Context.Tools = reg
-	deps.Context.Policy = &recordingToolPolicy{}
-	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
-	deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
-	loop := promptloop.NewPromptLoopForTest(deps)
-	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create session", err)
-	_, err = loop.Run(ctx, promptloop.PromptRunInput{
-		SessionID: sess.ID,
-		Session:   sess,
-		History:   userHistory("survey"),
-		ProfileID: "explore_readonly",
+		client := llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("survey", []llm.MockToolCall{
+			{ID: "tc1", Name: "read", Args: map[string]any{"path": "a.go"}},
+			{ID: "tc2", Name: "read", Args: map[string]any{"path": "b.go"}},
+		})})
+		store := store.NewMemory()
+		deps := promptloop.StoreDeps(store)
+		deps.Context.LoadedTools = workersLoaded
+		deps.Context.Limits = loopTestLimits(2)
+		deps.Model.LLM = client
+		deps.Context.Tools = reg
+		deps.Context.Policy = &recordingToolPolicy{}
+		deps.Context.CoordinatorFrame = investigateCoordinatorContext()
+		deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
+		loop := promptloop.NewPromptLoopForTest(deps)
+		ctx := context.Background()
+		sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		testutil.FailErr(t, "create session", err)
+		_, err = loop.Run(ctx, promptloop.PromptRunInput{
+			SessionID: sess.ID,
+			Session:   sess,
+			History:   userHistory("survey"),
+			ProfileID: "explore_readonly",
+		})
+		testutil.FailErr(t, "loop.Run", err)
+		if atomic.LoadInt32(&peak) < 2 {
+			t.Fatalf("peak concurrent reads = %d want >= 2", peak)
+		}
 	})
-	testutil.FailErr(t, "loop.Run", err)
-	if atomic.LoadInt32(&peak) < 2 {
-		t.Fatalf("peak concurrent reads = %d want >= 2", peak)
-	}
 }
 
 func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
@@ -157,140 +160,144 @@ func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
 }
 
 func TestLoopParallelWorkerReadsCommitInCallOrder(t *testing.T) {
-	// Reverse completion order exercises timestamp and handle ordering.
-	sleeps := map[string]time.Duration{"a.go": 30 * time.Millisecond, "b.go": 15 * time.Millisecond, "c.go": 0}
-	reg := tools.NewStubRegistry()
-	_ = reg.Register("read", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
-		path, _ := args["path"].(string)
-		time.Sleep(sleeps[path])
-		return "contents of " + path, nil
-	})
+	synctest.Test(t, func(t *testing.T) {
+		// Reverse completion order exercises timestamp and handle ordering.
+		sleeps := map[string]time.Duration{"a.go": 30 * time.Millisecond, "b.go": 15 * time.Millisecond, "c.go": 0}
+		reg := tools.NewStubRegistry()
+		_ = reg.Register("read", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+			path, _ := args["path"].(string)
+			time.Sleep(sleeps[path])
+			return "contents of " + path, nil
+		})
 
-	client := llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("survey", []llm.MockToolCall{
-		{ID: "tc1", Name: "read", Args: map[string]any{"path": "a.go"}},
-		{ID: "tc2", Name: "read", Args: map[string]any{"path": "b.go"}},
-		{ID: "tc3", Name: "read", Args: map[string]any{"path": "c.go"}},
-	})})
-	store := store.NewMemory()
-	deps := promptloop.StoreDeps(store)
-	deps.Context.LoadedTools = workersLoaded
-	deps.Context.Limits = loopTestLimits(2)
-	deps.Model.LLM = client
-	deps.Context.Tools = reg
-	deps.Context.Policy = &recordingToolPolicy{}
-	deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
-	loop := promptloop.NewPromptLoopForTest(deps)
-	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create session", err)
-	sess.ParentSessionID = "coordinator-parent" // mark as a worker child so handles are tagged
-	_, err = loop.Run(ctx, promptloop.PromptRunInput{
-		SessionID: sess.ID,
-		Session:   sess,
-		History:   userHistory("survey"),
-		ProfileID: "explore_readonly",
-	})
-	testutil.FailErr(t, "loop.Run", err)
+		client := llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("survey", []llm.MockToolCall{
+			{ID: "tc1", Name: "read", Args: map[string]any{"path": "a.go"}},
+			{ID: "tc2", Name: "read", Args: map[string]any{"path": "b.go"}},
+			{ID: "tc3", Name: "read", Args: map[string]any{"path": "c.go"}},
+		})})
+		store := store.NewMemory()
+		deps := promptloop.StoreDeps(store)
+		deps.Context.LoadedTools = workersLoaded
+		deps.Context.Limits = loopTestLimits(2)
+		deps.Model.LLM = client
+		deps.Context.Tools = reg
+		deps.Context.Policy = &recordingToolPolicy{}
+		deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
+		loop := promptloop.NewPromptLoopForTest(deps)
+		ctx := context.Background()
+		sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		testutil.FailErr(t, "create session", err)
+		sess.ParentSessionID = "coordinator-parent" // mark as a worker child so handles are tagged
+		_, err = loop.Run(ctx, promptloop.PromptRunInput{
+			SessionID: sess.ID,
+			Session:   sess,
+			History:   userHistory("survey"),
+			ProfileID: "explore_readonly",
+		})
+		testutil.FailErr(t, "loop.Run", err)
 
-	msgs, err := store.GetMessages(ctx, sess.ID)
-	testutil.FailErr(t, "get messages", err)
-	type toolRow struct {
-		ts     time.Time
-		handle string
-		path   string
-	}
-	var rows []toolRow
-	for _, m := range msgs {
-		if m.Role != api.MessageRoleTool {
-			continue
+		msgs, err := store.GetMessages(ctx, sess.ID)
+		testutil.FailErr(t, "get messages", err)
+		type toolRow struct {
+			ts     time.Time
+			handle string
+			path   string
 		}
-		nl := strings.IndexByte(m.Content, '\n')
-		if nl <= 0 || !strings.HasPrefix(m.Content, "[read#") {
-			continue
+		var rows []toolRow
+		for _, m := range msgs {
+			if m.Role != api.MessageRoleTool {
+				continue
+			}
+			nl := strings.IndexByte(m.Content, '\n')
+			if nl <= 0 || !strings.HasPrefix(m.Content, "[read#") {
+				continue
+			}
+			rows = append(rows, toolRow{ts: m.CreatedAt, handle: m.Content[:nl], path: strings.TrimPrefix(m.Content[nl+1:], "contents of ")})
 		}
-		rows = append(rows, toolRow{ts: m.CreatedAt, handle: m.Content[:nl], path: strings.TrimPrefix(m.Content[nl+1:], "contents of ")})
-	}
-	// Simulate the production store's ORDER BY ts retrieval.
-	sort.SliceStable(rows, func(i, j int) bool { return rows[i].ts.Before(rows[j].ts) })
-	wantPaths := []string{"a.go", "b.go", "c.go"}
-	wantHandles := []string{"[read#1]", "[read#2]", "[read#3]"}
-	if len(rows) != 3 {
-		t.Fatalf("tagged read rows = %d want 3 (%v)", len(rows), rows)
-	}
-	for i, r := range rows {
-		if r.path != wantPaths[i] || r.handle != wantHandles[i] {
-			t.Fatalf("ts-ordered read %d = (%s, %s) want (%s, %s) — batch scrambled by completion-order ts",
-				i, r.handle, r.path, wantHandles[i], wantPaths[i])
+		// Simulate the production store's ORDER BY ts retrieval.
+		sort.SliceStable(rows, func(i, j int) bool { return rows[i].ts.Before(rows[j].ts) })
+		wantPaths := []string{"a.go", "b.go", "c.go"}
+		wantHandles := []string{"[read#1]", "[read#2]", "[read#3]"}
+		if len(rows) != 3 {
+			t.Fatalf("tagged read rows = %d want 3 (%v)", len(rows), rows)
 		}
-	}
+		for i, r := range rows {
+			if r.path != wantPaths[i] || r.handle != wantHandles[i] {
+				t.Fatalf("ts-ordered read %d = (%s, %s) want (%s, %s) — batch scrambled by completion-order ts",
+					i, r.handle, r.path, wantHandles[i], wantPaths[i])
+			}
+		}
+	})
 }
 
 func TestLoopMixedBatchSerializesWriteAfterParallelReads(t *testing.T) {
-	var concurrent int32
-	var peak int32
-	var order []string
-	var orderMu sync.Mutex
-	reg := tools.NewStubRegistry()
-	_ = reg.Register("read", func(ctx context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
-		cur := atomic.AddInt32(&concurrent, 1)
-		for {
-			old := atomic.LoadInt32(&peak)
-			if cur > old && atomic.CompareAndSwapInt32(&peak, old, cur) {
-				break
+	synctest.Test(t, func(t *testing.T) {
+		var concurrent int32
+		var peak int32
+		var order []string
+		var orderMu sync.Mutex
+		reg := tools.NewStubRegistry()
+		_ = reg.Register("read", func(ctx context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+			cur := atomic.AddInt32(&concurrent, 1)
+			for {
+				old := atomic.LoadInt32(&peak)
+				if cur > old && atomic.CompareAndSwapInt32(&peak, old, cur) {
+					break
+				}
+				if cur <= old {
+					break
+				}
 			}
-			if cur <= old {
-				break
-			}
-		}
-		time.Sleep(30 * time.Millisecond)
-		atomic.AddInt32(&concurrent, -1)
-		orderMu.Lock()
-		order = append(order, "read")
-		orderMu.Unlock()
-		path, _ := args["path"].(string)
-		return "contents of " + path, nil
-	})
-	_ = reg.Register("write", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
-		orderMu.Lock()
-		order = append(order, "write")
-		orderMu.Unlock()
-		path, _ := args["path"].(string)
-		return "wrote " + path, nil
-	})
+			time.Sleep(30 * time.Millisecond)
+			atomic.AddInt32(&concurrent, -1)
+			orderMu.Lock()
+			order = append(order, "read")
+			orderMu.Unlock()
+			path, _ := args["path"].(string)
+			return "contents of " + path, nil
+		})
+		_ = reg.Register("write", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+			orderMu.Lock()
+			order = append(order, "write")
+			orderMu.Unlock()
+			path, _ := args["path"].(string)
+			return "wrote " + path, nil
+		})
 
-	client := llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("edit", []llm.MockToolCall{
-		{ID: "tc1", Name: "read", Args: map[string]any{"path": "a.go"}},
-		{ID: "tc2", Name: "read", Args: map[string]any{"path": "b.go"}},
-		{ID: "tc3", Name: "write", Args: map[string]any{"path": "a.go", "content": "x"}},
-	})})
-	store := store.NewMemory()
-	deps := promptloop.StoreDeps(store)
-	deps.Context.LoadedTools = workersLoaded
-	deps.Context.Limits = loopTestLimits(2)
-	deps.Model.LLM = client
-	deps.Context.Tools = reg
-	deps.Context.Policy = &recordingToolPolicy{}
-	deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
-	loop := promptloop.NewPromptLoopForTest(deps)
-	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create session", err)
-	_, err = loop.Run(ctx, promptloop.PromptRunInput{
-		SessionID: sess.ID,
-		Session:   sess,
-		History:   userHistory("edit"),
-		ProfileID: "explore_readonly",
+		client := llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("edit", []llm.MockToolCall{
+			{ID: "tc1", Name: "read", Args: map[string]any{"path": "a.go"}},
+			{ID: "tc2", Name: "read", Args: map[string]any{"path": "b.go"}},
+			{ID: "tc3", Name: "write", Args: map[string]any{"path": "a.go", "content": "x"}},
+		})})
+		store := store.NewMemory()
+		deps := promptloop.StoreDeps(store)
+		deps.Context.LoadedTools = workersLoaded
+		deps.Context.Limits = loopTestLimits(2)
+		deps.Model.LLM = client
+		deps.Context.Tools = reg
+		deps.Context.Policy = &recordingToolPolicy{}
+		deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
+		loop := promptloop.NewPromptLoopForTest(deps)
+		ctx := context.Background()
+		sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		testutil.FailErr(t, "create session", err)
+		_, err = loop.Run(ctx, promptloop.PromptRunInput{
+			SessionID: sess.ID,
+			Session:   sess,
+			History:   userHistory("edit"),
+			ProfileID: "explore_readonly",
+		})
+		testutil.FailErr(t, "loop.Run", err)
+		if atomic.LoadInt32(&peak) < 2 {
+			t.Fatalf("peak concurrent reads = %d want >= 2", peak)
+		}
+		orderMu.Lock()
+		got := append([]string(nil), order...)
+		orderMu.Unlock()
+		if len(got) != 3 || got[0] != "read" || got[1] != "read" || got[2] != "write" {
+			t.Fatalf("tool order = %v want [read read write]", got)
+		}
 	})
-	testutil.FailErr(t, "loop.Run", err)
-	if atomic.LoadInt32(&peak) < 2 {
-		t.Fatalf("peak concurrent reads = %d want >= 2", peak)
-	}
-	orderMu.Lock()
-	got := append([]string(nil), order...)
-	orderMu.Unlock()
-	if len(got) != 3 || got[0] != "read" || got[1] != "read" || got[2] != "write" {
-		t.Fatalf("tool order = %v want [read read write]", got)
-	}
 }
 
 func TestLoopDropsEmptyArgPhantomTaskBeforeExecution(t *testing.T) {

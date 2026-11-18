@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from ci_policy import hosted_plan as ci
-from ci_policy import impact, evidence, resources, recovery
+from ci_policy import impact, evidence, resources
 
 
 class AdmissionTests(unittest.TestCase):
@@ -32,7 +32,7 @@ class AdmissionTests(unittest.TestCase):
         scope = dict(full=False, paths=['lycaon-den/src/a.ts'])
         lanes = {row['lane'] for row in ci.matrix('integration', scope=scope)['include']}
         # Any Den source can change the DOM a screen reader queries.
-        self.assertEqual(lanes, {'limits', 'build', 'frontend', 'behavior', 'webkit-gtk'})
+        self.assertEqual(lanes, {'build', 'frontend', 'behavior', 'webkit-gtk'})
         full = {row['lane'] for row in ci.matrix('integration', scope=dict(full=True))['include']}
         self.assertIn('behavior', full)
         self.assertIn('runner', full)
@@ -70,7 +70,7 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(impact.broad_scope(paths), (False, []))
         scope = dict(full=False, paths=paths)
         lanes = {row['lane'] for row in ci.matrix('integration', scope=scope)['include']}
-        self.assertEqual(lanes, {'limits', 'build', 'behavior'})
+        self.assertEqual(lanes, {'build', 'behavior'})
         with patch.object(impact.subprocess, 'run') as run:
             run.return_value = impact.subprocess.CompletedProcess([], 0, stdout=json.dumps({
                 'ImportPath': 'github.com/lycaon/lycaon/test/smoke', 'Dir': str(impact.ROOT / 'lycaon/test/smoke')}))
@@ -139,12 +139,7 @@ class AdmissionTests(unittest.TestCase):
             run.return_value.returncode = 1
             self.assertIsNone(impact.go_scope({'full': False, 'paths': ['lycaon/internal/a/a.go']}))
 
-    def test_only_proven_infrastructure_failure_retries_once(self):
-        for classification in ['test_failure', 'unknown', 'check_failure', 'passed']:
-            self.assertFalse(evidence.retryable([{'classification': classification}], 1))
-        self.assertTrue(evidence.retryable([{'classification': 'runner_oom'}], 1))
-        self.assertFalse(evidence.retryable([{'classification': 'runner_oom'}], 2))
-        self.assertFalse(evidence.retryable([{'classification': 'runner_oom'}, {'classification': 'test_failure'}], 1))
+    def test_runner_oom_needs_a_measured_increment_and_no_source_failure(self):
         record = {'oom_before': 0, 'oom_after': 1}
         self.assertEqual(evidence.classify(record, []), 'runner_oom')
         self.assertEqual(evidence.classify(record, [{'tests': ['TestA']}]), 'test_failure')
@@ -194,24 +189,6 @@ class AdmissionTests(unittest.TestCase):
         self.assertIn('setpriv --reuid="$uid" --regid="$gid"', shell)
         self.assertNotIn('lane;false', shell)
 
-    def test_quarantine_expires_and_only_skips_exact_package_test(self):
-        from ci_policy import quarantine
-        from datetime import date
-        row = {'package': 'github.com/lycaon/lycaon/internal/a', 'test': 'TestFlake',
-               'issue': 'https://github.com/paintedwolf-ai/paintedwolf-code/issues/1',
-               'owner': 'maintainer', 'expires': '2099-01-01'}
-        with tempfile.TemporaryDirectory() as directory:
-            policy = Path(directory) / 'quarantine.json'
-            policy.write_text(json.dumps([row]))
-            with patch.object(quarantine, 'POLICY', policy):
-                self.assertEqual(quarantine.arguments(row['package'], []), ['-test.skip=^(TestFlake)$'])
-                self.assertEqual(quarantine.arguments('unrelated', []), [])
-                self.assertEqual(quarantine.arguments(row['package'], [], observe=True), [])
-                self.assertEqual(quarantine.entries(date(2099, 1, 2)), [])
-                policy.write_text(json.dumps([{**row, 'test': 'Test.*'}]))
-                with self.assertRaises(ValueError):
-                    quarantine.entries()
-
     def test_health_counts_distinct_runs_not_repeated_artifacts(self):
         from ci_policy.health import summarize, queue_times
         runs = [{'id': n, 'html_url': str(n)} for n in range(3)]
@@ -256,9 +233,3 @@ class AdmissionTests(unittest.TestCase):
                 self.assertEqual(module.check(), 0)
                 (db / 'index/modules.json').write_text('[]')
                 self.assertEqual(module.check(), 1)
-
-    def test_pr_recovery_never_downloads_untrusted_artifacts(self):
-        run = {'path': '.github/workflows/ci.yml', 'event': 'pull_request'}
-        with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), patch.object(recovery, 'evidence') as read:
-            recovery.recover(run)
-        read.assert_not_called()

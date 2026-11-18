@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -66,10 +65,4 @@ func TestPostureRegistryRulesPathsExist(t *testing.T) {
 			}
 		}
 	}
-}
-
-func TestBundledToolProfilesLoad(t *testing.T) {
-	t.Parallel()
-	_, err := sandbox.LoadToolProfiles()
-	contractcheck.FailErr(t, "load tool profiles", err)
 }

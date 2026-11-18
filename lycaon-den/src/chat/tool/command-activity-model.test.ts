@@ -15,7 +15,7 @@ function entry(id: string, facts?: CommandActivity[], tool = "command"): Activit
   return { kind: "tool", part: { id, toolCallId: id, assistantMessageId: "assistant", messageId: "result", tool, kind: "command", status: "completed", commandProgram: program } };
 }
 function decision(key: string): ActivitySpanEntry {
-  return { kind: "turn_load", key, row: { key, role: "tools", assistantMessageId: "assistant", anchorMessageId: "result", sub: 8, load: {} } as never };
+  return { kind: "turn_load", key, row: { key, role: "tools", assistantMessageId: "assistant", anchorMessageId: "result", load: {} } as never };
 }
 function parts(entries: ActivitySpanEntry[]): ToolPartView[] { return entries.flatMap(entry => entry.kind === "tool" ? [entry.part] : []); }
 

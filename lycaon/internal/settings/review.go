@@ -2,13 +2,13 @@ package settings
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/config"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -89,7 +89,7 @@ func loadReviewFile(path string) (ReviewConfig, error) {
 		return ReviewConfig{}, err
 	}
 	var cfg ReviewConfig
-	if err := config.DecodeYAML(data, &cfg); err != nil {
+	if err := decodeProjectFile(data, &cfg); err != nil {
 		return ReviewConfig{}, err
 	}
 	return normalizeReviewConfig(cfg), nil
@@ -120,11 +120,35 @@ func (s *ReviewStore) Get(scope llm.SettingsScope, projectDir string) ReviewConf
 	if scope == llm.SettingsScopeProject && projectDir != "" {
 		if cached, ok := s.projectCache[projectDir]; ok {
 			cfg = mergeReviewConfig(cfg, cached)
-		} else if proj, err := loadReviewFile(projectReviewPath(projectDir)); err == nil {
-			cfg = mergeReviewConfig(cfg, proj)
+		} else {
+			proj, ok, rejected := readProjectFile(projectDir, settingsoverlay.BasenameReview, loadReviewFile)
+			switch {
+			case ok:
+				cfg = mergeReviewConfig(cfg, proj)
+			case rejected != nil:
+				cfg = mergeReviewConfig(cfg, ReviewConfig{ReviewPaths: []ContentReviewRule{reviewEverythingRule(*rejected)}})
+			}
 		}
 	}
 	return cfg
+}
+
+// reviewEverythingRule stands in for a project review.yaml the host could not
+// read: the paths it protected are unknown, so every edit asks for review.
+func reviewEverythingRule(rejected ProjectRejection) ContentReviewRule {
+	return ContentReviewRule{Path: "**", Reason: "Every edit asks for review until this project's review settings can be read (" + rejected.Detail + ")."}
+}
+
+// ProjectRejected reports a project review.yaml the host could not apply.
+func (s *ReviewStore) ProjectRejected(projectDir string) []ProjectRejection {
+	s.mu.RLock()
+	_, cached := s.projectCache[projectDir]
+	s.mu.RUnlock()
+	if cached || projectDir == "" {
+		return nil
+	}
+	_, _, rejected := readProjectFile(projectDir, settingsoverlay.BasenameReview, loadReviewFile)
+	return rejections(rejected)
 }
 
 func mergeReviewConfig(base, overlay ReviewConfig) ReviewConfig {
@@ -147,7 +171,7 @@ func (s *ReviewStore) MergedFrom(scope llm.SettingsScope, projectDir string) []s
 	if scope == llm.SettingsScopeProject && projectDir != "" {
 		if _, ok := s.projectCache[projectDir]; ok {
 			layers = append(layers, "project")
-		} else if _, err := os.Stat(projectReviewPath(projectDir)); err == nil {
+		} else if _, ok, _ := readProjectFile(projectDir, settingsoverlay.BasenameReview, loadReviewFile); ok {
 			layers = append(layers, "project")
 		}
 	}
@@ -173,6 +197,9 @@ func (s *ReviewStore) PutGlobal(cfg ReviewConfig) error {
 
 // PutProject persists project overlay at <overlay>/review.yaml.
 func (s *ReviewStore) PutProject(projectDir string, cfg ReviewConfig) error {
+	if len(s.ProjectRejected(projectDir)) > 0 {
+		return ErrProjectSettingsNeedRepair
+	}
 	cfg = normalizeReviewConfig(cfg)
 	path := projectReviewPath(projectDir)
 	data, err := yaml.Marshal(cfg)

@@ -11,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -242,7 +241,7 @@ func (q *sqlQueueClaims) ResumeReadyWaits(ctx context.Context) (int, error) {
 			return 0, err
 		}
 		if changed == 1 {
-			if err := jobstate.EnqueueJobEventTx(ctx, tx, q.store.outbox, jobID); err != nil {
+			if err := q.store.jobs.EnqueueJobEventTx(ctx, tx, q.store.outbox, jobID); err != nil {
 				return 0, err
 			}
 		}

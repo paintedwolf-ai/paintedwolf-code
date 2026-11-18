@@ -29,7 +29,8 @@ func TestRunReportsUnreachableFunctionsKeysAndTables(t *testing.T) {
 	want := []string{
 		"dead-func example.com/fixture/store.WithTenant",
 		"dead-func example.com/fixture/store.memoryRepo.Extra",
-		"dead-func example.com/fixture/store.unusedLinux",
+		"dead-func example.com/fixture/store.unusedLinux@platform_darwin.go",
+		"dead-func example.com/fixture/store.unusedLinux@platform_linux.go",
 		"dead-func example.com/fixture/orphan.Unused",
 		"unset-context-key example.com/fixture/store.tenantKey",
 		"write-only-table audit",

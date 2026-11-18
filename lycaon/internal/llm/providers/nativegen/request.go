@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
@@ -45,6 +46,12 @@ type renderCall struct {
 	} `json:"function"`
 }
 
+// prepareRender projects a request onto the template input the student was
+// trained on. Training rows are captured from the chat-completions wire of a
+// local provider, so this keeps that wire's message sequence: one system
+// preamble, the perception fact on a tool image this text model does not see,
+// trimmed user text, and only the tool results paired with a call of the
+// latest assistant message.
 func prepareRender(req modelcall.CompletionRequest) (renderRequest, error) {
 	if req.ToolProtocol != modelcall.ToolProtocolNative {
 		return renderRequest{}, errors.New("native generation: unsupported tool protocol")
@@ -63,22 +70,27 @@ func prepareRender(req modelcall.CompletionRequest) (renderRequest, error) {
 		}
 		result.Tools = append(result.Tools, renderTool{Type: "function", Function: renderFunction{Name: tool.Name, Description: tool.Description, Parameters: parameters}})
 	}
-	for _, message := range providerwire.SystemPreamble(req.Messages) {
-		if api.IsAgentNoteMessage(message) {
-			continue
-		}
+	pending := make(providerwire.ToolCallPairs)
+	messages := providerwire.PrepareMessagesForVision(providerwire.SystemPreamble(req.Messages), false, req.Debug.SessionID)
+	for _, message := range messages {
 		wire := renderMessage{Role: string(message.Role), Content: message.Content}
 		switch message.Role {
 		case api.MessageRoleSystem, api.MessageRoleUser:
 			if len(message.ToolCalls) > 0 || message.ToolResult != nil {
 				return renderRequest{}, errors.New("native generation: tool payload on a non-tool turn")
 			}
+			if message.Role == api.MessageRoleUser {
+				wire.Content = strings.TrimSpace(wire.Content)
+			}
 		case api.MessageRoleAssistant:
+			if len(message.ToolCalls) > 0 {
+				clear(pending)
+			}
 			for _, call := range message.ToolCalls {
 				if call.ID == "" || call.Name == "" || call.ArgsRef != nil || call.ArgsMalformed || call.ArgsTruncated {
 					return renderRequest{}, errors.New("native generation: incomplete tool-call history")
 				}
-				item := renderCall{ID: call.ID, Type: "function"}
+				item := renderCall{ID: pending.Add(call, false), Type: "function"}
 				item.Function.Name = call.Name
 				item.Function.Arguments = providerwire.ToolArgs(call.Args)
 				wire.ToolCalls = append(wire.ToolCalls, item)
@@ -87,7 +99,11 @@ func prepareRender(req modelcall.CompletionRequest) (renderRequest, error) {
 			if message.ToolResult == nil || message.ToolResult.Tool == "" {
 				return renderRequest{}, errors.New("native generation: tool result has no tool identity")
 			}
-			wire.ToolCallID = message.ToolResult.ToolCallID
+			id, paired := pending.Take(message.ToolResult)
+			if !paired {
+				continue
+			}
+			wire.ToolCallID = id
 			wire.Name = message.ToolResult.Tool
 			if wire.Content == "" {
 				wire.Content = message.ToolResult.Content

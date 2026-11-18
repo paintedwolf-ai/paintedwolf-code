@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
@@ -66,27 +65,23 @@ func startSourceFUSE(t *testing.T, volume string, module []byte) func() {
 			if done == nil {
 				return
 			}
+			// A lazy unmount detaches the mount at once, but the kernel keeps the
+			// connection alive while another process still holds the detached
+			// superblock: a concurrent protected launch can retain mount
+			// references after its command exits. So the mount must be gone from
+			// the namespace now, and the daemon, the fixture's own resource, is
+			// stopped unless it has already ended.
+			if attached, err := ownFUSEMountAttached(volume); err != nil {
+				t.Errorf("inspect own FUSE mount after unmount: %v", err)
+			} else if attached {
+				t.Error("own FUSE mount still attached after unmount")
+			}
 			select {
 			case err := <-done:
 				if err != nil {
 					t.Errorf("FUSE fixture protocol: %v", err)
 				}
-			case <-time.After(testutil.Timeout(time.Minute)):
-				// A lazy unmount detaches the mount immediately, but the
-				// kernel keeps the connection alive while another process
-				// still holds the detached superblock: a concurrent protected
-				// launch can retain mount references in its intake and watcher
-				// roles after the launch command exits. The daemon is the
-				// fixture's own resource, so stop it; the mount itself must
-				// still be gone from the namespace.
-				attached, err := ownFUSEMountAttached(volume)
-				if err != nil {
-					t.Errorf("inspect own FUSE mount after unmount: %v", err)
-				} else if attached {
-					t.Error("own FUSE mount still attached after unmount")
-				} else {
-					t.Logf("own FUSE server stopped after settle deadline; detached superblock still referenced by another process")
-				}
+			default:
 				_ = server.Process.Kill()
 				<-done
 			}

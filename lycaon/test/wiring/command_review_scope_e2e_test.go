@@ -31,7 +31,7 @@ func TestReviewRuleScopedToAToolHoldsItsCommandForm(t *testing.T) {
 			}()
 			kind := wire.CheckpointKindContentApply
 			var card string
-			testutil.WaitFor(t, func() bool {
+			testutil.WaitFor(t, "the content apply card is pending", func() bool {
 				select {
 				case err := <-done:
 					testutil.FailErr(t, "prompt", err)
@@ -79,7 +79,7 @@ func TestReviewRuleWithoutAToolHoldsAQueryPublication(t *testing.T) {
 	}()
 	kind := wire.CheckpointKindContentApply
 	var card string
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the content apply card is pending", func() bool {
 		select {
 		case err := <-done:
 			testutil.FailErr(t, "prompt", err)

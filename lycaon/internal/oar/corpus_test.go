@@ -2,9 +2,10 @@ package oar
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // Every fixture uses production document loading and evaluation.
