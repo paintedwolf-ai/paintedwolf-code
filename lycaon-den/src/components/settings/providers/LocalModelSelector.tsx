@@ -1,7 +1,8 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import type { SettingsClient } from "../../../api/http-capabilities/settings.ts";
 import type { LocalGenerationStatus, ProviderMeta } from "../../../api/types.ts";
-import { nativePathDialog } from "../../../platform/files/native-path-dialog.ts";
+import { hostSharesDevice } from "../../../platform/connection/host-identity.ts";
+import { OfflineModelImport } from "./OfflineModelImport.tsx";
 import { DenButton } from "../../primitives/DenButton.tsx";
 
 type Props = {
@@ -80,8 +81,8 @@ export function LocalModelSelector(props: Props) {
     onCleanup(() => { stopped = true; clearTimeout(timer); });
   });
 
-  const run = async (action: "apply" | "import" | "seed" | "cancel") => {
-    if (working()) return;
+  const run = async (action: "apply" | "import" | "cancel", path?: string) => {
+    if (working() || !alive) return;
     const model = selected();
     version++;
     setWorking(true);
@@ -96,15 +97,6 @@ export function LocalModelSelector(props: Props) {
         props.onContinue?.();
         return;
       }
-      let path: string | undefined;
-      if (action === "import") {
-        const picked = await nativePathDialog("Import offline model bundle", {
-          kind: "file", filter: { name: "Model bundles", extensions: ["pwmodel", "tar"] },
-        });
-        if (!picked || !alive) return;
-        path = picked.path;
-      }
-      if (action === "seed") path = ":seed:";
       setPendingModel(model);
       const next = model
         ? await props.client.selectLocalModel(props.provider.id, { model, bundle_path: path })
@@ -142,16 +134,18 @@ export function LocalModelSelector(props: Props) {
       <Show when={downloading()} fallback={
         <>
           <Show when={tier() && !current() && !tier()?.download_available}>
-            <p class="den-settings-hint">A download for this tier is not available yet. Import a signed bundle or continue without a local model.</p>
+            <p class="den-settings-hint">A download for this tier is not available yet.</p>
           </Show>
           <Show when={status()?.selected_model && !current()}>
             <p class="den-settings-hint">{selected() ? "Switching replaces your installed local model." : "Continuing removes your installed local model."}</p>
           </Show>
+          <Show when={tier()?.eligible && hostSharesDevice()}>
+            <OfflineModelImport busy={working()} onImport={path => run("import", path)} onFailure={setError} />
+          </Show>
           <div class="den-settings-provider-actions">
             <Show when={tier()?.eligible}>
-              <DenButton variant="secondary" disabled={working()} onClick={() => void run("import")}>Import offline bundle…</DenButton>
               <Show when={status()?.seed_available}>
-                <DenButton variant="secondary" disabled={working()} onClick={() => void run("seed")}>Use packaged bundle</DenButton>
+                <DenButton variant="secondary" disabled={working()} onClick={() => void run("import", ":seed:")}>Use packaged bundle</DenButton>
               </Show>
             </Show>
             <DenButton variant="primary" disabled={!canApply()} onClick={() => void run("apply")}>

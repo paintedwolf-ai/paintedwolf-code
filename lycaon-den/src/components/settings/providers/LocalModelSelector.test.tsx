@@ -5,6 +5,8 @@ import { nativePathDialog } from "../../../platform/files/native-path-dialog.ts"
 import { includedProvider } from "../../../test/local-generation-fixture.ts";
 import { LocalModelSelector } from "./LocalModelSelector.tsx";
 
+vi.mock("../../../platform/runtime.ts", () => ({isTauriRuntime: () => true}));
+vi.mock("../../../platform/connection/host-identity.ts", () => ({hostSharesDevice: () => true}));
 vi.mock("../../../platform/files/native-path-dialog.ts", () => ({ nativePathDialog: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -61,7 +63,8 @@ describe("Local model selection", () => {
     const { client, done } = mount({ ...initial, available_models: tiers.map(t => ({ ...t, download_available: false })) });
     expect((screen.getByRole("button", { name: "Download and continue" }) as HTMLButtonElement).disabled).toBe(true);
     vi.mocked(nativePathDialog).mockResolvedValue({ path: "/models/test.pwmodel", grant: null });
-    fireEvent.click(screen.getByRole("button", { name: "Import offline bundle…" }));
+    fireEvent.click(screen.getByText("Import offline bundle"));
+    fireEvent.click(screen.getByRole("button", { name: "Choose archive…" }));
     await waitFor(() => expect(done).toHaveBeenCalledOnce());
     expect(client.selectLocalModel).toHaveBeenCalledWith("nativegen", { model: "medium", bundle_path: "/models/test.pwmodel" });
   });
