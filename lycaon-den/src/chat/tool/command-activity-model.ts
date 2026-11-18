@@ -1,3 +1,4 @@
+import { FORM_PROGRAM_TOOLS } from "./program-tool-visibility.ts";
 import type { CommandActivity, CommandProgramReceipt } from "../../api/types.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
@@ -16,9 +17,6 @@ export type CommandActivityView = {
 
 type Assignment = { program: string; key: string; label: string; group: string; subject: string };
 type CallAssignment = { row: string; program: string };
-
-/** Tools whose calls run host command programs and take part in activity projection. */
-const FORM_PROGRAM_TOOLS = new Set(["command", "summarize", "survey_repo", "code_rewrite"]);
 
 /** Wire phase base rank (mechanics §3.1); group sub-tiers offset 0..2 within the phase. */
 const ACTIVITY_PHASE_RANK: Readonly<Record<string, number>> = { inspect: 10, execute: 20, mutate: 30 };
