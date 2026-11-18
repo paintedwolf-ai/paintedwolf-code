@@ -3,7 +3,8 @@ import { Show } from "solid-js";
 import type { AttentionRow } from "../../api/types.ts";
 import { attentionReasonLabel } from "../../attention/attention-model.ts";
 import { SidebarCollapseIcon, SidebarExpandIcon } from "./NavSidebarToggle.tsx";
-import { PaneAttentionDot, paneAttentionMark, paneToggleTip } from "./PaneToggle.tsx";
+import { PaneAttentionDot, paneAttentionMark } from "./PaneToggle.tsx";
+import { tipWithShortcut } from "../../shortcuts/display-binding-for.ts";
 
 type ToggleProps = {
   onClick: () => void;
@@ -19,7 +20,7 @@ export function ConversationCollapseButton(props: ToggleProps) {
       class="den-inset-icon-btn den-pane-toggle den-pane-toggle--hide-conversation"
       data-testid="conversation-collapse-btn"
       aria-label="Hide conversation"
-      data-tip={paneToggleTip("Hide conversation", "layout.toggleConversation")}
+      data-tip={tipWithShortcut("Hide conversation", "layout.toggleConversation")}
       aria-keyshortcuts={ariaKeyShortcutsForHandler("layout.toggleConversation")}
       onClick={() => props.onClick()}
     >
@@ -46,7 +47,7 @@ export function ConversationExpandButton(
       classList={{ "den-pane-toggle--labelled": props.labelled }}
       data-testid="conversation-expand-btn"
       aria-label={label()}
-      data-tip={paneToggleTip(label(), "layout.toggleConversation")}
+      data-tip={tipWithShortcut(label(), "layout.toggleConversation")}
       aria-keyshortcuts={ariaKeyShortcutsForHandler("layout.toggleConversation")}
       onClick={() => props.onClick()}
     >

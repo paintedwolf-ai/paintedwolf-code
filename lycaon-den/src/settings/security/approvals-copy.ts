@@ -23,7 +23,7 @@ export const APPROVALS_COPY = {
   vault: {
     label: (until: string) => `Values you stored are unlocked for this chat until ${until}. Lock now`,
     tooltip: (until: string) =>
-      `Values you stored are unlocked for this chat until ${until}, or until this computer locks or sleeps. Select to lock now.`,
+      `Values you stored are unlocked for this chat until ${until}, or until this computer locks or sleeps`,
     lockFailed: "This chat could not be locked. Try again.",
   },
   revokeButton: "Revoke",

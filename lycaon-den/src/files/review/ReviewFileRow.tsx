@@ -201,7 +201,7 @@ export function ReviewFileRow(props: Props) {
             classList={{ "den-review-revert--ready": props.row.op === "delete" }}
             data-testid="changes-row-revert"
             aria-label={props.row.commit ? `Restore working file ${props.row.basename} to last commit` : `Restore ${props.row.basename} to comparison baseline`}
-            data-tip={props.row.commit ? "Restore working file to last commit; staged changes stay in the index" : `Restore ${props.row.basename} to comparison baseline`}
+            data-tip={props.row.commit ? "Restore working file to last commit; staged changes stay in the index" : "Discard changes since the comparison baseline"}
             onClick={(event) => {
               event.stopPropagation();
               props.onRevert?.();
@@ -234,7 +234,7 @@ export function ReviewFileRow(props: Props) {
             <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
               <For each={props.row.contributors}>{(author, index) => <>
                 <Show when={index() > 0}><span>+</span></Show>
-                <span class="min-w-0 truncate" data-tip={contributorLabel(author)}>{contributorLabel(author)}</span>
+                <span class="min-w-0 truncate" data-tip={contributorLabel(author)} data-tip-when-clipped="">{contributorLabel(author)}</span>
               </>}</For>
               <Show when={props.row.lastTs}>
                 <span class="shrink-0 whitespace-nowrap">

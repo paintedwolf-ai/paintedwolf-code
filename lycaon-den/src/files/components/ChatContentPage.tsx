@@ -206,7 +206,7 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
   const resolvedLineWidth = useChatContentLineWidth(() => props.client, () => props.projectId, () => props.document, () => resolvedLanguage().formatters);
   return <section ref={setHost} class="den-source-reader" data-testid="chat-content-page" aria-label={props.document.title}>
     <ReadonlyFilesDocument title={props.document.title}
-      actions={<Show when={isSnapshot()}><button type="button" class="den-files-editor__tool den-inset-icon-btn" data-testid="chat-process-pretty-refresh" aria-label="Refresh snapshot" data-tip="Refresh snapshot" data-tip-pos="below" onClick={refreshSnapshot}>Refresh</button></Show>}
+      actions={<Show when={isSnapshot()}><button type="button" class="den-files-editor__tool den-inset-icon-btn" data-testid="chat-process-pretty-refresh" aria-label="Refresh snapshot" onClick={refreshSnapshot}>Refresh</button></Show>}
       onFind={() => { activeEditor()?.focus(); openFind(); }} onGotoLine={gotoLine} onCopy={copy}
       status={{ identity: resolveEditorIdentity({ historical: false, workerDraft: false, deleted: false, writable: null, preview: false, editable: false, unsupported: true }),
         windows: <DocumentWindows projectId={props.projectId} />,

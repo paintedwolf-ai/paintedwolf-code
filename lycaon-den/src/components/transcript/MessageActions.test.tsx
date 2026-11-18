@@ -30,12 +30,7 @@ describe("MessageActions", () => {
     ] as const) {
       const btn = screen.getByTestId(testid);
       expect(btn.getAttribute("aria-label")).toBe(label);
-      if (testid === "bubble-copy") {
-        expect(btn.hasAttribute("data-tip")).toBe(false);
-      } else {
-        expect(btn.getAttribute("data-tip")).toBe(label);
-        expect(btn.getAttribute("data-tip-pos")).toBe("below");
-      }
+      expect(btn.hasAttribute("data-tip")).toBe(false);
     }
   });
 

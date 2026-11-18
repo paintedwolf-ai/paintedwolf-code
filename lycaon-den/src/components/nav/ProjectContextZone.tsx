@@ -153,7 +153,6 @@ function ContextNavRowBody(
             class="project-context-zone__grip"
             data-testid={`project-context-grip-${props.id}`}
             aria-label={`Reorder ${meta().label}`}
-            data-tip="Drag to reorder"
             {...gripProps()}
           >
             <GripIcon />
@@ -491,7 +490,7 @@ export function ProjectContextZone(props: Props) {
                         class="project-context-zone__entry project-context-zone__entry--feature-off"
                         data-testid={`project-context-disabled-${id}`}
                         disabled
-                        data-tip="Turn on in Settings"
+                        data-tip="Turned off in Settings"
                       >
                         <span
                           class="project-context-zone__icon"

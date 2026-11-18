@@ -1,12 +1,6 @@
 import { Show } from "solid-js";
 import type { AttentionRow } from "../../api/types.ts";
 import { marksHiddenPane } from "../../attention/attention-model.ts";
-import { bindingForHandler } from "../../shortcuts/display-binding-for.ts";
-
-export function paneToggleTip(label: string, handler: string): string {
-  const binding = bindingForHandler(handler);
-  return binding === "—" ? label : `${label} (${binding})`;
-}
 
 /** Attention worth marking on a pane the person cannot currently see. */
 export function paneAttentionMark(

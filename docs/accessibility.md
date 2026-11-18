@@ -159,6 +159,15 @@ The chrome mark is `user-select: none`, so a stylesheet is one edit away from si
 
 Use hover tips for information the control does not already communicate: an unfamiliar action, a keyboard shortcut, a consequence, a disabled-state reason, or hidden detail. Ordinary show/hide, close, minimize, overflow-menu, and timeline navigation controls do not need them. Apply the choice to the whole control family, including opposite states and shared wrappers. Repeated visible text appears only when it is actually clipped.
 
+Tips share one voice:
+
+- Sentence case with no closing period, except when the tip has more than one sentence.
+- A shortcut follows the label in parentheses, `Find (⌘F)`, from `tipWithShortcut` in [`display-binding-for.ts`](../lycaon-den/src/shortcuts/display-binding-for.ts). An unbound command shows the label alone, never `(—)`.
+- Say what happens, not how to click: no "Click to…" or "Drag to…". Name only a gesture the pointer does not suggest, such as "Double-click to reset width".
+- Separate independent facts with ` · ` and put a consequence after ` — `.
+- Exact times come from `viewerCalendarTimeFormat().fullDateTime`, so every timestamp tip reads the same.
+- A tip on a disabled control gives the reason it is disabled. When the enabled control explains itself, it has no tip.
+
 A hover tip is Den's own layer, never the OS popup. A control carries `data-tip` (with `data-tip-pos` for placement and `data-tip-when-clipped` to show it only when the label is truncated), and one portaled [`TooltipHost`](../lycaon-den/src/components/primitives/TooltipHost.tsx) mounted at the app root renders it on hover or keyboard focus after a short delay. Because the host is delegated and portaled it also serves disabled controls, which dispatch no pointer events of their own.
 
 The native `title` attribute is not used anywhere in Den: it ignores the theme, delay, and placement, cannot be dismissed, varies under VoiceOver, and never appears on a touch or keyboard path. `findNativeTooltipAttributes` ([`test/style-contracts/browser.ts`](../lycaon-den/src/test/style-contracts/browser.ts), run from `styling-invariants.test.ts`) fails the build on an intrinsic `title=` attribute, `setAttribute("title", …)`, a `.title =` assignment, or `title="` inside a markup template.

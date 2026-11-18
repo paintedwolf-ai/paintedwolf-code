@@ -164,7 +164,6 @@ export function ProjectFolderZone(props: Props) {
               class="project-folders__add-icon den-icon-target den-inset-icon-btn"
               data-testid="project-folder-add"
               aria-label="Add folder"
-              data-tip="Add folder"
               onClick={() => props.onAddFolder()}
             >
               <PlusIcon />
@@ -195,7 +194,6 @@ export function ProjectFolderZone(props: Props) {
                           type="button"
                           class="den-row-action den-row-action--danger den-inset-icon-btn"
                           aria-label={`Remove ${root.path} from project`}
-                          data-tip="Remove folder from project"
                           data-testid={`project-folder-remove-${root.id}`}
                           onClick={() => props.onDetach(root.id)}
                         >

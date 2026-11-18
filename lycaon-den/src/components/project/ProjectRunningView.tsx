@@ -1,3 +1,4 @@
+import { viewerCalendarTimeFormat } from "../../time/calendar-time.ts";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ProjectBackgroundProcess } from "../../api/types.ts";
@@ -237,7 +238,7 @@ export function ProjectRunningView(props: Props) {
                                       </Show>
                                       <span
                                         data-testid={`project-running-started-${processId}`}
-                                        data-tip={item().started_at}
+                                        data-tip={viewerCalendarTimeFormat().fullDateTime(Date.parse(item().started_at))}
                                       >
                                         Started{" "}
                                         {formatTimeLabel(item().started_at)}
@@ -347,7 +348,7 @@ export function ProjectRunningView(props: Props) {
                                 </Show>
                                 <Show when={item().ended_at}>
                                   {(endedAt) => (
-                                    <span data-tip={endedAt()}>
+                                    <span data-tip={viewerCalendarTimeFormat().fullDateTime(Date.parse(endedAt()))}>
                                       Ended {formatTimeLabel(endedAt())}
                                     </span>
                                   )}

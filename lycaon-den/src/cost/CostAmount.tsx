@@ -21,7 +21,7 @@ export function CostAmount(props: Props) {
           class="den-status-mark"
           data-tone="warning"
           data-testid={props.testId ? `${props.testId}-coverage` : undefined}
-          data-tip={`Actual charges may be higher: ${joinReasons(view().reasons)}`}
+          data-tip={view().reasons.length > 0 ? `Actual charges may be higher: ${joinReasons(view().reasons)}` : "Actual charges may be higher"}
         >
           {view().qualifier}
         </span>

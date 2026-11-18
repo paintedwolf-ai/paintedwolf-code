@@ -271,7 +271,6 @@ function DirEntryRow(props: {
             type="button"
             class="den-files-tree__add"
             tabindex={-1}
-            data-tip={`New file in ${row().name}`}
             data-tip-pos="below"
             aria-label={`New file in ${row().name}`}
             data-testid="files-tree-new-file"
@@ -285,7 +284,6 @@ function DirEntryRow(props: {
             type="button"
             class="den-files-tree__add"
             tabindex={-1}
-            data-tip={`New folder in ${row().name}`}
             data-tip-pos="below"
             aria-label={`New folder in ${row().name}`}
             data-testid="files-tree-new-folder"

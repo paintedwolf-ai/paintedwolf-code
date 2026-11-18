@@ -347,7 +347,6 @@ export function WalkTransport(props: Props) {
                   type="button"
                   class="den-walk-transport__button"
                   data-testid="walk-transport-first"
-                  data-tip="First step"
                   data-tip-pos="above"
                   aria-label="First step"
                   disabled={at() <= 0}
@@ -359,7 +358,6 @@ export function WalkTransport(props: Props) {
                   type="button"
                   class="den-walk-transport__button"
                   data-testid="walk-transport-prev"
-                  data-tip="Previous step"
                   data-tip-pos="above"
                   aria-label="Previous step"
                   disabled={at() <= 0}
@@ -371,7 +369,6 @@ export function WalkTransport(props: Props) {
                   type="button"
                   class="den-walk-transport__button"
                   data-testid="walk-transport-next"
-                  data-tip="Next step"
                   data-tip-pos="above"
                   aria-label="Next step"
                   disabled={count() === 0 || at() >= count() - 1}
@@ -383,7 +380,6 @@ export function WalkTransport(props: Props) {
                   type="button"
                   class="den-walk-transport__button"
                   data-testid="walk-transport-last"
-                  data-tip="Latest step"
                   data-tip-pos="above"
                   aria-label="Latest step"
                   disabled={count() === 0 || at() >= count() - 1}

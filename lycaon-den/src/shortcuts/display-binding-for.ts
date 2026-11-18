@@ -85,6 +85,20 @@ export function bindingForHandler(
   return commandId ? displayBindingFor(commandId, opts) : "—";
 }
 
+/**
+ * Hover tip naming an action with its live shortcut: `Label (⌘S)`. An unbound
+ * handler leaves the label alone; `also` adds a fixed key such as Esc.
+ */
+export function tipWithShortcut(
+  label: string,
+  handlerId: string,
+  opts?: BindingProjectionOptions & { also?: string },
+): string {
+  const binding = bindingForHandler(handlerId, opts);
+  const keys = [binding === "—" ? "" : binding, opts?.also ?? ""].filter(Boolean);
+  return keys.length > 0 ? `${label} (${keys.join(" / ")})` : label;
+}
+
 export function handlerMatchesEvent(
   handlerId: string,
   event: KeyboardEventLike & { target?: EventTarget | null },

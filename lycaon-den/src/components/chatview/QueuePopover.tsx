@@ -303,7 +303,7 @@ export function QueuePopover(props: Props) {
                           data-testid="queue-grip"
                           disabled={props.sending}
                           aria-label={`Reorder message ${i() + 1} of ${count()}`}
-                          data-tip="Drag to reorder (Arrow keys work too)"
+                          data-tip="Reorder (↑ / ↓)"
                           onPointerDown={(e) => startDrag(e, i())}
                           onKeyDown={(e) => {
                             if (e.key === "ArrowUp") {
@@ -323,7 +323,6 @@ export function QueuePopover(props: Props) {
                             <button
                               type="button"
                               class="queue-row__text"
-                              data-tip="Click to edit"
                               disabled={props.sending}
                               onClick={() => startEdit(item)}
                             >
@@ -358,7 +357,6 @@ export function QueuePopover(props: Props) {
                               type="button"
                               class="queue-row__action den-inset-icon-btn"
                               aria-label="Move to the front"
-                              data-tip="Move to the front"
                               data-testid="queue-fire-now"
                               disabled={props.sending}
                               onClick={() => props.onFireNow(item.id)}
@@ -409,8 +407,8 @@ export function QueuePopover(props: Props) {
                                 }
                                 data-tip={
                                   isLinked()
-                                    ? "Linked — sends as one message. Click to unlink."
-                                    : "Link with the next message — they send as one."
+                                    ? "Linked — sends as one message"
+                                    : "Link with the next message — they send as one"
                                 }
                                 onClick={() =>
                                   isLinked()
