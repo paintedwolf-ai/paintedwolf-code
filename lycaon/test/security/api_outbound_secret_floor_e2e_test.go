@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/mcp"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestOutboundSecretFloorJ1WebSearchDeny(t *testing.T) {
@@ -79,7 +80,7 @@ func TestOutboundSecretFloorJ2FetchURLDeny(t *testing.T) {
 func TestOutboundSecretFloorJ3MCPDeny(t *testing.T) {
 	calls := map[string]map[string]int{}
 	callArgs := map[string]map[string]map[string]any{}
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{
 			"svca": {{Name: "do", Description: "do"}},
 		},

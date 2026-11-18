@@ -6,13 +6,15 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/mcp"
-	"github.com/lycaon/lycaon/internal/testutil"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestMCPSpawnAndListTools(t *testing.T) {
-	conn := &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{
+	conn := &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{
 		"svca": {{Name: "do", Description: "do"}},
 	}}
 	reg := newTestRegistry(t, conn, "svca")

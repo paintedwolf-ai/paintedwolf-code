@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/api"
@@ -20,7 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
@@ -38,7 +40,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workertopology"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Each test supplies its own server catalog.
@@ -100,7 +101,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	if o.mcpConnector != nil {
 		cfg.TestMCPConnector = o.mcpConnector
 	} else {
-		cfg.TestMCPConnector = &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{
+		cfg.TestMCPConnector = &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{
 			"svca": {{Name: "do", Description: "do"}},
 		}}
 	}

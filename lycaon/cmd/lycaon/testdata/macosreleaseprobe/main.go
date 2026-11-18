@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/hostidentity"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 )
 
 type probeErrorClassification struct {
@@ -77,7 +78,7 @@ func main() {
 		reg, mcpErr := mcp.NewRuntime(mcp.RuntimeOptions{
 			StatePath:          dir,
 			GlobalOverridePath: filepath.Join(dir, "mcp.yaml"),
-			Connector:          &mcp.MockConnector{},
+			Connector:          &mcptest.Connector{},
 		})
 		if mcpErr == nil {
 			mcpErr = reg.Catalog.Load(ctx)

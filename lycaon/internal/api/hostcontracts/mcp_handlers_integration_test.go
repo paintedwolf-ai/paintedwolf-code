@@ -12,10 +12,13 @@ import (
 	"strings"
 	"testing"
 
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -24,7 +27,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestHandlePatchMCPProviderEnable(t *testing.T) {
@@ -81,7 +83,7 @@ func TestMCPSettingsSSEOnToggle(t *testing.T) {
 	contractfixture.StageFakeMCPDistro(t, "svca")
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		GlobalOverridePath: filepath.Join(t.TempDir(), "mcp.yaml"),
-		Connector: &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{
+		Connector: &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{
 			"svca": {{Name: "do", Description: "do"}},
 		}},
 		OnSettingsChange: func() {

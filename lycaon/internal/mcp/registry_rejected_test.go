@@ -2,7 +2,6 @@ package mcp_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/pkg/api"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,9 +9,11 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestCheckSurfacesRejectedRows(t *testing.T) {
@@ -32,7 +33,7 @@ func TestCheckSurfacesRejectedRows(t *testing.T) {
 
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		GlobalOverridePath: globalPath,
-		Connector:          &mcp.MockConnector{},
+		Connector:          &mcptest.Connector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())
@@ -82,7 +83,7 @@ func TestSetProviderEnabledPreservesOverlayURL(t *testing.T) {
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath:          dir,
 		GlobalOverridePath: path,
-		Connector:          &mcp.MockConnector{},
+		Connector:          &mcptest.Connector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	testutil.FailErr(t, "Load", reg.Catalog.Load(context.Background()))
@@ -120,7 +121,7 @@ func TestConcurrentProviderUpdatesRetainBothRows(t *testing.T) {
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath:          dir,
 		GlobalOverridePath: path,
-		Connector:          &mcp.MockConnector{},
+		Connector:          &mcptest.Connector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	testutil.FailErr(t, "Load", reg.Catalog.Load(t.Context()))
@@ -164,7 +165,7 @@ func TestSpawnEnvTokenOnlyForSelf(t *testing.T) {
     enabled: true
 `)
 	globalPath := filepath.Join(t.TempDir(), "mcp.yaml")
-	conn := &capturingConnector{inner: &mcp.MockConnector{}, envs: map[string][]string{}}
+	conn := &capturingConnector{inner: &mcptest.Connector{}, envs: map[string][]string{}}
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		GlobalOverridePath: globalPath,
 		Connector:          conn,

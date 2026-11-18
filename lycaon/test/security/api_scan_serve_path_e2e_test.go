@@ -2,21 +2,22 @@ package security
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configdir"
-	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestAPIScanServePathSASTE2E(t *testing.T) {
@@ -45,7 +46,7 @@ func TestAPIScanServePathSASTE2E(t *testing.T) {
 	cfg := configuration.Config{}
 	cfg.DBPath = filepath.Join(t.TempDir(), "serve-path-scan.db")
 	cfg.ListenAddr = "127.0.0.1:0"
-	cfg.TestMCPConnector = &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{
+	cfg.TestMCPConnector = &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{
 		"svca": {{Name: "do", Description: "do"}},
 	}}
 	cfg.TestMCPGlobalOverridePath = filepath.Join(t.TempDir(), "mcp-override.yaml")

@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -75,7 +76,7 @@ func WithSecretMatcher(m *secretmatch.Matcher) Option {
 	}
 }
 
-// WithMCPConnector replaces the default MockConnector used by BuildForTest.
+// WithMCPConnector replaces the default mcptest.Connector used by BuildForTest.
 func WithMCPConnector(c mcp.SessionConnector) Option {
 	return func(o *options) {
 		o.mcpConnector = c

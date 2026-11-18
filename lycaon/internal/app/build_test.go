@@ -10,6 +10,8 @@ import (
 	"time"
 	"weak"
 
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/app/configuration"
@@ -19,7 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session"
@@ -32,7 +34,6 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func testBuildConfig(t *testing.T, configRoot string) configuration.Config {
@@ -45,7 +46,7 @@ func testBuildConfig(t *testing.T, configRoot string) configuration.Config {
 		DBPath:                    filepath.Join(t.TempDir(), "app-test.db"),
 		ListenAddr:                "127.0.0.1:0",
 		ConfigRoot:                configRoot,
-		TestMCPConnector:          &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{"svca": {{Name: "do"}}}},
+		TestMCPConnector:          &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{"svca": {{Name: "do"}}}},
 		TestMCPGlobalOverridePath: filepath.Join(t.TempDir(), "mcp-test.yaml"),
 	}
 }
