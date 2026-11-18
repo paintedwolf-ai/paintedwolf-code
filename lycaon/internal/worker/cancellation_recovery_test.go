@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,12 +13,10 @@ import (
 )
 
 func TestCancellationRecoveryContinuesPastCleanupFailure(t *testing.T) {
-	for _, backend := range []string{"memory", "sql"} {
+	for _, backend := range []string{"sql"} {
 		t.Run(backend, func(t *testing.T) {
 			q := cancellationQueue(t, backend)
 			switch queue := q.(type) {
-			case *InMemoryQueue:
-				queue.maxRunning = 2
 			case *SQLQueue:
 				queue.maxRunning = 2
 			}
@@ -65,7 +64,7 @@ func (q *transientRecoveryQueue) RecoverExpiredClaims(ctx context.Context) ([]ap
 }
 
 func TestPollerContinuesAfterInitialMaintenanceFailure(t *testing.T) {
-	base := NewInMemoryQueue(1)
+	base := newTestQueue(t, 1, testdbseed.DefaultProjectID)
 	id := enqueueCancellationWorker(t, base)
 	queue := &transientRecoveryQueue{WorkerQueue: base}
 	poller := NewLocalWorkerPoller(queue, &countingStartExecutor{}, DefaultWorkersConfig(), discardOutcomeRecorder{})

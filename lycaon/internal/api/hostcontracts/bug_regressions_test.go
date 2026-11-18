@@ -261,7 +261,7 @@ func TestListWorkersFiltersBySessionID(t *testing.T) {
 
 	ctx := context.Background()
 	now := time.Now().UTC()
-	queue := srv.Admin.Project.Sandboxes.Workers.(*worker.InMemoryQueue)
+	queue := srv.Admin.Project.Sandboxes.Workers.(*worker.SQLQueue)
 	if _, err := queue.Enqueue(ctx, wire.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",

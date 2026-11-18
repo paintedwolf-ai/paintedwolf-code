@@ -3,6 +3,8 @@ package sessioncontracts
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -61,7 +63,7 @@ func TestMessageNavigationUsesWorkerTree(t *testing.T) {
 	testutil.FailErr(t, "branch metadata", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{
 		Roots: []workspace.JobMetaRoot{{ID: "r", Label: "r", Path: primary, IsPrimary: true}}, SnapshotComplete: true,
 	}))
-	queue := worker.NewInMemoryQueue(1)
+	queue := workertest.NewQueue(t, 1, testdbseed.DefaultProjectID)
 	jobID := contractfixture.EnqueueBranchJob(t, queue, "p", branch)
 	server := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) { d.Workflow.Workers = queue }).Admin.SessionAdmin.Navigation
 	p := &project.Project{ID: "p", Roots: []project.Root{{ID: "r", Path: primary, IsPrimary: true}}}

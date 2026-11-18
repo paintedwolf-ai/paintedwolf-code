@@ -3,6 +3,8 @@ package contractfixture
 import (
 	"context"
 	"database/sql"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api"
@@ -86,7 +88,7 @@ func NewInMemoryWorkersServer(t *testing.T) *api.Server {
 	mock := llm.NewMockProvider(TestMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	workersCfg := worker.DefaultWorkersConfig()
-	queue := worker.NewInMemoryQueue(workersCfg.Poller.MaxConcurrency)
+	queue := workertest.NewQueue(t, workersCfg.Poller.MaxConcurrency, testdbseed.DefaultProjectID)
 	queue.SetWorkersConfig(workersCfg)
 	reg := project.NewMemoryRegistry()
 	snap := &board.SnapshotBuilder{Workers: queue, Repo: repotest.NewProvider(t)}

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -23,7 +25,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/watchfd"
-	"github.com/lycaon/lycaon/internal/worker"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -96,7 +97,7 @@ func TestWorkerBranchRoot(t *testing.T) {
 	branch := t.TempDir()
 
 	contractfixture.CompleteBranchMeta(t, branch)
-	q := worker.NewInMemoryQueue(1)
+	q := workertest.NewQueue(t, 1, testdbseed.DefaultProjectID)
 	workerID := contractfixture.EnqueueBranchJob(t, q, projectID, branch)
 	otherJobID := contractfixture.EnqueueBranchJob(t, q, "22222222-2222-4222-8222-222222222222", t.TempDir())
 
@@ -132,7 +133,7 @@ func TestWorkerBranchRootEmptyAfterPromoteReleasesOverlay(t *testing.T) {
 	t.Parallel()
 	const projectID = "44444444-4444-4444-8444-444444444444"
 
-	q := worker.NewInMemoryQueue(1)
+	q := workertest.NewQueue(t, 1, testdbseed.DefaultProjectID)
 	workerID := contractfixture.EnqueueBranchJob(t, q, projectID, "")
 
 	sources := contractfixture.NewTestSources(t, q)
@@ -144,7 +145,7 @@ func TestWorkerBranchRootEmptyAfterPromoteReleasesOverlay(t *testing.T) {
 
 func TestWorkerBranchRootEmptyForUnknownWorker(t *testing.T) {
 	t.Parallel()
-	sources := contractfixture.NewTestSources(t, worker.NewInMemoryQueue(1))
+	sources := contractfixture.NewTestSources(t, workertest.NewQueue(t, 1, testdbseed.DefaultProjectID))
 	if got, release := sources.Workspace.WorkerBranchRoot(context.Background(), "p", "55555555-5555-4555-8555-555555555555"); got != "" {
 		release()
 		t.Fatalf("branch root = %q want empty", got)

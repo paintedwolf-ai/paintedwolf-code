@@ -2,6 +2,7 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,7 +25,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -136,7 +136,7 @@ func TestAppendWorkerSummaryWriteWorkerOpenStatus(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	q := worker.NewInMemoryQueue(4)
+	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
 	mgr.SetWorkerQueue(q)
 	dir := t.TempDir()
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -190,7 +190,7 @@ func TestAppendWorkerSummaryUnmetEvidenceKeepsDeliveredWork(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	q := worker.NewInMemoryQueue(4)
+	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
 	mgr.SetWorkerQueue(q)
 	primary := t.TempDir()
 	overlay := filepath.Join(primary, settingsoverlay.DirName(), "overlays", "job-ev")
@@ -253,7 +253,7 @@ func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 	ledger := sourceledger.New(testdbfixture.Open(t, "source.db"), t.TempDir())
 	t.Cleanup(func() { testutil.FailErr(t, "close source snapshot store", ledger.Snapshots.Close()) })
 	mgr.SetSourceLedger(ledger, tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
-	q := worker.NewInMemoryQueue(4)
+	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
 	mgr.SetWorkerQueue(q)
 	primary := t.TempDir()
 	overlay := filepath.Join(primary, settingsoverlay.DirName(), "overlays", "job-ok")

@@ -17,32 +17,20 @@ import (
 )
 
 func TestPrerequisitesWaitForPromotedSuccessfulOutput(t *testing.T) {
-	for _, sqlMode := range []bool{false, true} {
+	for _, sqlMode := range []bool{true} {
 		t.Run(map[bool]string{false: "memory", true: "sql"}[sqlMode], func(t *testing.T) {
 			var q WorkerQueue
 			var transition func(string, string, api.WorkerMergeStatus)
-			if sqlMode {
-				database := testdbfixture.Open(t, "workers.db")
-				testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
-				queue := NewSQLQueue(database, 2)
-				q = queue
-				transition = func(id, status string, merge api.WorkerMergeStatus) {
-					_, err := database.ExecContext(t.Context(), `UPDATE worker_jobs SET status='complete', result_json=json_object('status',?), merge_status=? WHERE id=?`, status, string(merge), id)
-					testutil.FailErr(t, "set producer outcome", err)
-				}
-			} else {
-				queue := NewInMemoryQueue(2)
-				q = queue
-				transition = func(id, status string, merge api.WorkerMergeStatus) {
-					queue.mu.Lock()
-					defer queue.mu.Unlock()
-					job := queue.jobs[id]
-					job.task.Status = api.WorkerStatusComplete
-					job.task.Result = &api.WorkerResult{Status: status}
-					job.task.MergeStatus = merge
-					delete(queue.running, id)
-				}
+
+			database := testdbfixture.Open(t, "workers.db")
+			testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
+			queue := NewSQLQueue(database, 2)
+			q = queue
+			transition = func(id, status string, merge api.WorkerMergeStatus) {
+				_, err := database.ExecContext(t.Context(), `UPDATE worker_jobs SET status='complete', result_json=json_object('status',?), merge_status=? WHERE id=?`, status, string(merge), id)
+				testutil.FailErr(t, "set producer outcome", err)
 			}
+
 			producer := api.WorkerTask{WorkspacePath: t.TempDir(), ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, Prompt: "produce module", Brief: "produce module", AgentType: "implementer", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}
 			id, err := q.Enqueue(t.Context(), producer)
 			testutil.FailErr(t, "enqueue producer", err)
@@ -104,7 +92,7 @@ func TestPrerequisitesWaitForPromotedSuccessfulOutput(t *testing.T) {
 }
 
 func TestPrerequisitesRejectCrossSessionAndResumedConsumers(t *testing.T) {
-	q := NewInMemoryQueue(2)
+	q := newTestQueue(t, 2, testdbseed.DefaultProjectID, "old-child", "other", "parent")
 	producer := api.WorkerTask{ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, Prompt: "fixture", Brief: "fixture"}
 	id, err := q.Enqueue(t.Context(), producer)
 	testutil.FailErr(t, "enqueue producer", err)
@@ -126,7 +114,8 @@ func TestConsumerCapturesPrimaryAfterProducerPromotion(t *testing.T) {
 	projects := project.NewMemoryRegistry()
 	p, err := projects.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: canonical, Label: "app"}}})
 	testutil.FailErr(t, "create project", err)
-	q := NewInMemoryQueue(2)
+	q := newTestQueue(t, 2, p.ID, "parent")
+	testdbseed.InsertProjectRootWithID(t, q.db, p.ID, p.Roots[0].ID, canonical)
 	q.SetProjectStore(projects)
 	q.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{})))
 	producer := api.WorkerTask{ProjectID: p.ID, WorkspaceRootID: p.Roots[0].ID, WorkspacePath: canonical, ParentSessionID: "parent", AgentType: "implementer", Prompt: "produce", Brief: "produce", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}
@@ -140,11 +129,8 @@ func TestConsumerCapturesPrimaryAfterProducerPromotion(t *testing.T) {
 		t.Fatalf("premature snapshot: %v", err)
 	}
 	testutil.FailErr(t, "land producer output", os.WriteFile(filepath.Join(canonical, "producer.go"), []byte("package producer\n"), 0600))
-	q.mu.Lock()
-	q.jobs[id].task.Status = api.WorkerStatusComplete
-	q.jobs[id].task.Result = &api.WorkerResult{Status: "complete"}
-	q.jobs[id].task.MergeStatus = api.WorkerMergeStatusMerged
-	q.mu.Unlock()
+	_, err = q.db.ExecContext(t.Context(), `UPDATE worker_jobs SET status='complete', result_json='{"status":"complete"}', merge_status='merged' WHERE id=?`, id)
+	testutil.FailErr(t, "complete promoted producer", err)
 	branch, err := q.ClaimWorkerBranch(t.Context(), cid)
 	testutil.FailErr(t, "snapshot ready consumer", err)
 	body, err := os.ReadFile(filepath.Join(branch.WorkspaceRoot, "producer.go"))

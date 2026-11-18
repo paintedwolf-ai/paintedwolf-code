@@ -94,9 +94,11 @@ func (m *mockGracefulCancelSession) pending(childSessionID string) (mockGraceful
 }
 
 // setupRunningWorker creates a running task with a child session.
-func setupRunningWorker(t *testing.T, queue *InMemoryQueue, childSessionID string) string {
+func setupRunningWorker(t *testing.T, queue *SQLQueue, childSessionID string) string {
 	t.Helper()
 	ctx := context.Background()
+	testdbseed.InsertSession(t, queue.db, "parent-1", testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, queue.db, childSessionID, testdbseed.DefaultProjectID)
 	jobID, err := queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		ParentSessionID: "parent-1",
 		ProjectID:       testdbseed.DefaultProjectID,
@@ -117,7 +119,7 @@ func setupRunningWorker(t *testing.T, queue *InMemoryQueue, childSessionID strin
 }
 
 func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
-	queue := NewInMemoryQueue(2)
+	queue := newTestQueue(t, 2, testdbseed.DefaultProjectID)
 	hub := &recordingHub{}
 	queue.SetEventPublisher(&events.Publisher{Hub: hub})
 	mock := newMockGracefulCancelSession()
@@ -169,7 +171,7 @@ func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
 // A person's stop fences a running worker at once: no closeout turn is
 // registered for it.
 func TestPersonStopRunsNoCloseout(t *testing.T) {
-	queue := NewInMemoryQueue(2)
+	queue := newTestQueue(t, 2, testdbseed.DefaultProjectID)
 	mock := newMockGracefulCancelSession()
 	svc := &CancelService{Queue: queue, Events: mock, Cancellations: mock, Graceful: mock}
 	const child = "child-person"
@@ -182,7 +184,7 @@ func TestPersonStopRunsNoCloseout(t *testing.T) {
 }
 
 func TestCancelRunningGracefulNonBlockingUnderSlowCloseout(t *testing.T) {
-	queue := NewInMemoryQueue(2)
+	queue := newTestQueue(t, 2, testdbseed.DefaultProjectID)
 	mock := newMockGracefulCancelSession()
 	svc := &CancelService{Queue: queue, Events: mock, Cancellations: mock, Graceful: mock}
 

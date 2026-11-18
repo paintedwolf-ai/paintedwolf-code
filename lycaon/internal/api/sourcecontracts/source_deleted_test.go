@@ -2,6 +2,8 @@ package sourcecontracts
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -128,7 +129,7 @@ func TestDeletedSourceKeepsContentAvailabilityAndScreening(t *testing.T) {
 
 func TestDeletedWorkerSourceDoesNotOpenThePrimaryReplacement(t *testing.T) {
 	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
-	queue := worker.NewInMemoryQueue(1)
+	queue := workertest.NewQueue(t, 1, testdbseed.DefaultProjectID)
 	srv := contractfixture.NewTestServer(t, withLedger, contractfixture.WithWorkers(queue))
 	primary, branchRoot := t.TempDir(), t.TempDir()
 	p := contractfixture.CreateProjectForTest(t, srv, primary)

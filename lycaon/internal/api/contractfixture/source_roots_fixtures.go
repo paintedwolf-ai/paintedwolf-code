@@ -51,7 +51,7 @@ func DeleteProject(t *testing.T, srv *hostapi.Server, projectID string) {
 // newSnapshotTestServer serves a source ledger and keeps the project registry
 // in the ledger's database.
 
-func EnqueueBranchJob(t *testing.T, q *worker.InMemoryQueue, projectID, branchRoot string) string {
+func EnqueueBranchJob(t *testing.T, q *worker.SQLQueue, projectID, branchRoot string) string {
 	t.Helper()
 	id, err := q.EnqueueWithProjectID(context.Background(), projectID, wire.WorkerTask{
 		Prompt:        "fixture",

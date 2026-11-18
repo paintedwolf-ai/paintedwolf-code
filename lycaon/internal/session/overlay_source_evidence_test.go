@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,7 +89,7 @@ func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 	mem := store.NewMemory()
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	t.Cleanup(mgr.BeginEngineShutdown)
-	q := worker.NewInMemoryQueue(4)
+	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
 	mgr.SetWorkerQueue(q)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
@@ -132,7 +133,7 @@ func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	mem := store.NewMemory()
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	t.Cleanup(mgr.BeginEngineShutdown)
-	q := worker.NewInMemoryQueue(4)
+	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
 	mgr.SetWorkerQueue(q)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
@@ -375,7 +376,7 @@ func TestWorkerProjectionWaitsForOriginalDispatchResponse(t *testing.T) {
 			ctx := context.Background()
 			messages := store.NewMemory()
 			mgr := session.NewHost(messages, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-			queue := worker.NewInMemoryQueue(2)
+			queue := workertest.NewQueue(t, 2, testdbseed.DefaultProjectID)
 			mgr.SetWorkerQueue(queue)
 			parent, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create parent", err)
@@ -583,7 +584,7 @@ type unrelatedWorker struct {
 	primary string
 }
 
-func newObservationHost(t *testing.T) (*store.Memory, *tools.StubRegistry, *session.Host, *worker.InMemoryQueue) {
+func newObservationHost(t *testing.T) (*store.Memory, *tools.StubRegistry, *session.Host, *worker.SQLQueue) {
 	t.Helper()
 	mem := store.NewMemory()
 	reg := tools.NewStubRegistry()
@@ -603,7 +604,7 @@ func newObservationHost(t *testing.T) (*store.Memory, *tools.StubRegistry, *sess
 	mgr.Verification.SetDataDir(dataDir)
 	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
 
-	q := worker.NewInMemoryQueue(4)
+	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
 	mgr.SetWorkerQueue(q)
 
 	return mem, reg, mgr, q
@@ -614,7 +615,7 @@ func provisionUnrelatedWorker(
 	ctx context.Context,
 	mem *store.Memory,
 	mgr *session.Host,
-	q *worker.InMemoryQueue,
+	q *worker.SQLQueue,
 	reg *tools.StubRegistry,
 	parent *api.Session,
 	rev, rootDigest string,

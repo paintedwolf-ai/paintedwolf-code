@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func localClaim(ctx context.Context, q *InMemoryQueue, projectDir string) (*api.WorkerTask, error) {
+func localClaim(ctx context.Context, q *SQLQueue, projectDir string) (*api.WorkerTask, error) {
 	return q.ClaimNext(ctx, ClaimRequest{
 		ProjectID:       testdbseed.DefaultProjectID,
 		ExecutionTarget: api.ExecutionTargetLocal,
@@ -21,7 +21,7 @@ func localClaim(ctx context.Context, q *InMemoryQueue, projectDir string) (*api.
 }
 
 func TestGetLatestByChildSessionIDReturnsNewestRun(t *testing.T) {
-	q := NewInMemoryQueue(2)
+	q := newTestQueue(t, 2, testdbseed.DefaultProjectID, "parent", "child-1")
 	created := time.Now().UTC()
 	for _, task := range []api.WorkerTask{
 		{ID: "job-old", ChildSessionID: "child-1", CreatedAt: created},
@@ -43,7 +43,7 @@ func TestGetLatestByChildSessionIDReturnsNewestRun(t *testing.T) {
 }
 
 func TestQueueLifecycle(t *testing.T) {
-	q := NewInMemoryQueue(10)
+	q := newTestQueue(t, 10, testdbseed.DefaultProjectID, "sess-1")
 	ctx := context.Background()
 
 	id, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
@@ -88,7 +88,7 @@ func TestQueueLifecycle(t *testing.T) {
 }
 
 func TestQueueMaxWorkers(t *testing.T) {
-	q := NewInMemoryQueue(2)
+	q := newTestQueue(t, 2, testdbseed.DefaultProjectID, "s")
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
@@ -114,7 +114,7 @@ func TestQueueMaxWorkers(t *testing.T) {
 }
 
 func TestQueueCancel(t *testing.T) {
-	q := NewInMemoryQueue(10)
+	q := newTestQueue(t, 10, testdbseed.DefaultProjectID, "s")
 	ctx := context.Background()
 
 	id, _ := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
@@ -136,7 +136,7 @@ func TestQueueCancel(t *testing.T) {
 }
 
 func TestConcurrentWorkerCap(t *testing.T) {
-	q := NewInMemoryQueue(5)
+	q := newTestQueue(t, 5, testdbseed.DefaultProjectID, "s")
 	ctx := context.Background()
 
 	for i := 0; i < 10; i++ {
@@ -174,7 +174,7 @@ func TestConcurrentWorkerCap(t *testing.T) {
 }
 
 func TestRunnerTargetNotClaimedLocally(t *testing.T) {
-	q := NewInMemoryQueue(10)
+	q := newTestQueue(t, 10, testdbseed.DefaultProjectID, "s")
 	ctx := context.Background()
 
 	_, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{

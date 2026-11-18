@@ -12,29 +12,26 @@ import (
 )
 
 func TestWorkerCancellationCoversEveryActiveState(t *testing.T) {
-	for _, backend := range []string{"memory", "sql"} {
+	for _, backend := range []string{"sql"} {
 		for _, route := range []string{"job", "session", "workflow"} {
-			if backend == "sql" && route == "workflow" {
-				continue
-			}
 			for _, status := range []api.WorkerStatus{api.WorkerStatusPending, api.WorkerStatusHeld, api.WorkerStatusRunning, api.WorkerStatusWaiting} {
 				t.Run(backend+"/"+route+"/"+string(status), func(t *testing.T) {
 					var queue WorkerQueue
 					interrupted := 0
 					onCancel := func(context.Context, string) error { interrupted++; return nil }
-					if backend == "sql" {
-						database := testdbfixture.Open(t, "store.db")
-						testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)
-						testdbseed.InsertSession(t, database, "child-1", testdbseed.DefaultProjectID)
-						q := NewSQLQueue(database, 1)
-						q.SetRunningCancel(onCancel)
-						queue = q
+
+					database := testdbfixture.Open(t, "store.db")
+					if route == "workflow" {
+						testdbseed.InsertWorkflowRun(t, database, "run-1", "parent-1", testdbseed.DefaultProjectID)
 					} else {
-						q := NewInMemoryQueue(1)
-						q.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
-						q.SetRunningCancel(onCancel)
-						queue = q
+						testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)
 					}
+					testdbseed.InsertSession(t, database, "child-1", testdbseed.DefaultProjectID)
+					q := NewSQLQueue(database, 1)
+					q.SetRunningCancel(onCancel)
+					q.SetWorkflowDomains(&WorkflowDomains{Runs: &workflowAdmissionProbe{}, Tasks: &workflowAdmissionProbe{}})
+					queue = q
+
 					runID := ""
 					if route == "workflow" {
 						runID = "run-1"
@@ -100,7 +97,7 @@ func (e *parkedRuntimeExecutor) AbortWorkerRuntime(_ context.Context, task api.W
 }
 
 func TestPollerAbortReleasesParkedChildWithoutAnExecution(t *testing.T) {
-	queue := NewInMemoryQueue(1)
+	queue := newTestQueue(t, 1, testdbseed.DefaultProjectID, "child-1", "parent-1")
 	job, err := queue.Enqueue(t.Context(), api.WorkerTask{ParentSessionID: "parent-1", ProjectID: testdbseed.DefaultProjectID, AgentType: "implementer", Prompt: "fixture", Brief: "fixture"})
 	testutil.FailErr(t, "enqueue parked cleanup", err)
 	testutil.FailErr(t, "bind parked cleanup child", queue.SetChildSessionID(t.Context(), job, "child-1"))
@@ -113,7 +110,7 @@ func TestPollerAbortReleasesParkedChildWithoutAnExecution(t *testing.T) {
 }
 
 func TestPollerAbortReportsParkedRuntimeFailure(t *testing.T) {
-	queue := NewInMemoryQueue(1)
+	queue := newTestQueue(t, 1, testdbseed.DefaultProjectID, "child-1", "parent-1")
 	job, err := queue.Enqueue(t.Context(), api.WorkerTask{ParentSessionID: "parent-1", ProjectID: testdbseed.DefaultProjectID, AgentType: "implementer", Prompt: "fixture", Brief: "fixture"})
 	testutil.FailErr(t, "enqueue cleanup failure", err)
 	testutil.FailErr(t, "bind cleanup failure child", queue.SetChildSessionID(t.Context(), job, "child-1"))
@@ -129,7 +126,7 @@ func TestPollerAbortReportsParkedRuntimeFailure(t *testing.T) {
 }
 
 func TestPollerAbortRequiresExecutorForRetainedTask(t *testing.T) {
-	queue := NewInMemoryQueue(1)
+	queue := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent-1")
 	job, err := queue.Enqueue(t.Context(), api.WorkerTask{ParentSessionID: "parent-1", ProjectID: testdbseed.DefaultProjectID, AgentType: "implementer", Prompt: "fixture", Brief: "fixture"})
 	testutil.FailErr(t, "enqueue missing executor", err)
 	poller := NewLocalWorkerPoller(queue, nil, DefaultWorkersConfig(), discardOutcomeRecorder{})

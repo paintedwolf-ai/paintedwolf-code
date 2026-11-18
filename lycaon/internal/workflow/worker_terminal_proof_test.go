@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"path/filepath"
 	"testing"
@@ -13,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/worker"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -29,7 +29,7 @@ func TestRecordWorkerTerminalProofReentersBuildPhase(t *testing.T) {
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfStore := workflowpersistence.New(sqlDB)
 	mgr := NewManager(wfStore, store, reg, nil)
-	q := worker.NewInMemoryQueue(4)
+	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		WorkerCycleIdle: func(projectID, sessionID, completingJobID string) (bool, error) {
 			return workeroutcomes.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, sessionID, completingJobID)

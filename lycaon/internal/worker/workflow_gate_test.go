@@ -30,7 +30,7 @@ func (p *workflowAdmissionProbe) AssertWorkerTask(_ context.Context, task *api.W
 
 func TestQueueWorkflowAdmissionContract(t *testing.T) {
 	rejected := errors.New("workflow admission rejected")
-	for _, backend := range []string{"memory", "sql"} {
+	for _, backend := range []string{"sql"} {
 		for _, tc := range []struct {
 			name, run, phase        string
 			runErr, taskErr         error
@@ -57,15 +57,11 @@ func TestQueueWorkflowAdmissionContract(t *testing.T) {
 				}
 				var prepare func(context.Context, string, *api.WorkerTask) error
 				var lookup func(string) (*api.WorkerTask, bool)
-				if backend == "sql" {
-					q := NewSQLQueue(testdbfixture.Open(t, "store.db"), 1)
-					q.SetWorkflowDomains(domains)
-					prepare, lookup = q.PrepareEnqueue, q.Get
-				} else {
-					q := NewInMemoryQueue(1)
-					q.SetWorkflowDomains(domains)
-					prepare, lookup = q.PrepareEnqueue, q.Get
-				}
+
+				q := NewSQLQueue(testdbfixture.Open(t, "store.db"), 1)
+				q.SetWorkflowDomains(domains)
+				prepare, lookup = q.PrepareEnqueue, q.Get
+
 				task := api.WorkerTask{
 					ID: "job", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID,
 					AgentType: "implementer", Prompt: "fixture", Brief: "fixture",

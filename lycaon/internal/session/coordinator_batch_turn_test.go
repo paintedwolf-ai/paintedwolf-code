@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"strings"
 	"testing"
 
@@ -149,7 +150,7 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 					t.Fatalf("stale failure projection: %+v", observation.Failures)
 				}
 			}
-			q := worker.NewInMemoryQueue(1)
+			q := workertest.NewQueue(t, 1, testdbseed.DefaultProjectID)
 			manager.SetWorkerQueue(q)
 			jobID, err := q.Enqueue(t.Context(), api.WorkerTask{ParentSessionID: parent.ID, ProjectID: parent.ProjectID, Prompt: "work", Brief: "work", ExecutionTarget: api.ExecutionTargetLocal})
 			testutil.FailErr(t, "enqueue worker", err)

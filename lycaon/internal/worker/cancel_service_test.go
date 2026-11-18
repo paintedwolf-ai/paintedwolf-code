@@ -139,7 +139,7 @@ func (r *recordingOutcomeRecorder) OnOutcomeDelivered(context.Context, api.Worke
 }
 
 func TestAbortAllWorkersBoundsSlowWorkerAndPollerSettlesLateExit(t *testing.T) {
-	for _, backend := range []string{"memory", "sql"} {
+	for _, backend := range []string{"sql"} {
 		t.Run(backend, func(t *testing.T) {
 			q := cancellationQueue(t, backend)
 			exec := &slowUnwindingExecutor{
@@ -197,7 +197,7 @@ func TestAbortAllWorkersBoundsSlowWorkerAndPollerSettlesLateExit(t *testing.T) {
 }
 
 func TestRunStopServiceBoundsSlowWorkflowWorkerAndPollerSettlesLateExit(t *testing.T) {
-	q := NewInMemoryQueue(1)
+	q := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent")
 	q.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 	exec := &slowUnwindingExecutor{
 		started: make(chan struct{}),

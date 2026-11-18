@@ -18,9 +18,7 @@ import (
 
 func cancellationQueue(t *testing.T, backend string) WorkerQueue {
 	t.Helper()
-	if backend == "memory" {
-		return NewInMemoryQueue(1)
-	}
+
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
 	return NewSQLQueue(database, 1)
@@ -41,7 +39,7 @@ func claimCancellationWorker(t *testing.T, q WorkerQueue) *api.WorkerTask {
 }
 
 func TestCancellationFencesOutcomesBeforeRuntimeJoin(t *testing.T) {
-	for _, backend := range []string{"memory", "sql"} {
+	for _, backend := range []string{"sql"} {
 		t.Run(backend, func(t *testing.T) {
 			q := cancellationQueue(t, backend)
 			id := enqueueCancellationWorker(t, q)
@@ -94,7 +92,7 @@ func TestCancellationFencesOutcomesBeforeRuntimeJoin(t *testing.T) {
 }
 
 func TestStaleAttemptCannotCancelReplacement(t *testing.T) {
-	for _, backend := range []string{"memory", "sql"} {
+	for _, backend := range []string{"sql"} {
 		t.Run(backend, func(t *testing.T) {
 			q := cancellationQueue(t, backend)
 			id := enqueueCancellationWorker(t, q)
@@ -118,7 +116,7 @@ func TestStaleAttemptCannotCancelReplacement(t *testing.T) {
 func TestBatchStopFencesEveryWorkerBeforeJoining(t *testing.T) {
 	for _, scope := range []string{"session", "workflow"} {
 		t.Run(scope, func(t *testing.T) {
-			q := NewInMemoryQueue(2)
+			q := newTestQueue(t, 2, testdbseed.DefaultProjectID, "parent")
 			q.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 			for range 2 {
 				_, err := q.Enqueue(t.Context(), api.WorkerTask{
@@ -161,7 +159,7 @@ func TestBatchStopFencesEveryWorkerBeforeJoining(t *testing.T) {
 }
 
 func TestSessionStopFencesWorkerAdmissionAndSettlement(t *testing.T) {
-	for _, backend := range []string{"memory", "sql"} {
+	for _, backend := range []string{"sql"} {
 		t.Run(backend, func(t *testing.T) {
 			q := cancellationQueue(t, backend)
 			id := enqueueCancellationWorker(t, q)
@@ -202,7 +200,7 @@ func TestSessionStopFencesWorkerAdmissionAndSettlement(t *testing.T) {
 }
 
 func TestCancellationIntentSurvivesInterruptedRuntimeCleanup(t *testing.T) {
-	for _, backend := range []string{"memory", "sql"} {
+	for _, backend := range []string{"sql"} {
 		for _, state := range []string{"pending", "running", "waiting", "held"} {
 			t.Run(backend+"/"+state, func(t *testing.T) {
 				q := cancellationQueue(t, backend)
@@ -242,7 +240,7 @@ func TestCancellationIntentSurvivesInterruptedRuntimeCleanup(t *testing.T) {
 }
 
 func TestLeaseRecoveryHonorsSessionStop(t *testing.T) {
-	for _, backend := range []string{"memory", "sql"} {
+	for _, backend := range []string{"sql"} {
 		for _, attempt := range []int{1, maxWorkerExecutionAttempts} {
 			t.Run(fmt.Sprintf("%s/attempt%d", backend, attempt), func(t *testing.T) {
 				q := cancellationQueue(t, backend)
@@ -338,7 +336,7 @@ func TestSQLClaimConcurrencyCapIsAtomic(t *testing.T) {
 }
 
 func TestStopFailureRetainsCancellationIntent(t *testing.T) {
-	for _, backend := range []string{"memory", "sql"} {
+	for _, backend := range []string{"sql"} {
 		t.Run(backend, func(t *testing.T) {
 			q := cancellationQueue(t, backend)
 			id := enqueueCancellationWorker(t, q)
@@ -385,14 +383,14 @@ func expireCancellationClaim(t *testing.T, q WorkerQueue, id string) {
 		testutil.FailErr(t, "expire cancellation claim", err)
 		return
 	}
-	memory := q.(*InMemoryQueue)
+	memory := q.(*SQLQueue)
 	memory.mu.Lock()
 	memory.jobs[id].task.LeaseExpiresAt = &past
 	memory.mu.Unlock()
 }
 
 func TestCancellationReportObservesDrainedRuntime(t *testing.T) {
-	q := NewInMemoryQueue(1)
+	q := newTestQueue(t, 1, testdbseed.DefaultProjectID, "child")
 	id := enqueueCancellationWorker(t, q)
 	claimCancellationWorker(t, q)
 	testutil.FailErr(t, "bind child", q.SetChildSessionID(t.Context(), id, "child"))
@@ -414,7 +412,7 @@ func TestCancellationReportObservesDrainedRuntime(t *testing.T) {
 }
 
 func TestSelfCancellationReleasesChildBoundDuringExecution(t *testing.T) {
-	q := NewInMemoryQueue(1)
+	q := newTestQueue(t, 1, testdbseed.DefaultProjectID, "new-child")
 	id := enqueueCancellationWorker(t, q)
 	task := claimCancellationWorker(t, q)
 	testutil.FailErr(t, "bind child after claim", q.SetChildSessionID(t.Context(), id, "new-child"))

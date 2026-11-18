@@ -20,11 +20,6 @@ func (allowAllRuns) AssertRunnable(context.Context, string) error { return nil }
 func (allowAllRuns) AssertWorkerTask(context.Context, *api.WorkerTask) error { return nil }
 
 var matrixQueueBackends = map[string]func(t *testing.T) worker.WorkerQueue{
-	"memory": func(*testing.T) worker.WorkerQueue {
-		q := worker.NewInMemoryQueue(1)
-		q.SetWorkflowDomains(&worker.WorkflowDomains{Runs: allowAllRuns{}, Tasks: allowAllRuns{}})
-		return q
-	},
 	"sql": func(t *testing.T) worker.WorkerQueue {
 		database := testdbfixture.Open(t, "matrix.db")
 		testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)
