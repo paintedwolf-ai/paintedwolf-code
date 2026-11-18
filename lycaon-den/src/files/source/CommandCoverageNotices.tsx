@@ -7,8 +7,6 @@ type Props = {
   testId: string;
 };
 
-/** The folders a command window left uncompared: partial lists what it skipped
- * and why; not observed names the folder and reason, with no file rows. */
 export function CommandCoverageNotices(props: Props) {
   return (
     <For each={props.notices}>

@@ -15,18 +15,17 @@ import (
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// OutsideRootSpec is one write root beyond the project that a window compares
-// before and after its command.
+// OutsideRootSpec identifies a command write root and any excluded subtrees.
 type OutsideRootSpec struct {
 	// Path is the folder's canonical host path.
 	Path string
-	// Omit names folders under Path that other observation covers or source
-	// history never records.
+	// Omit holds subtrees covered elsewhere or excluded from source history.
 	Omit []string
 }
 
@@ -35,8 +34,6 @@ type outsideSnapshotPort interface {
 	OutsideScope(root string, omit []string) *sourcescope.Scope
 }
 
-// outsideFolder is one outside write root of a window. Its verdict is set once,
-// when its baseline fails or its settlement ends.
 type outsideFolder struct {
 	spec     OutsideRootSpec
 	rel      string
@@ -45,12 +42,11 @@ type outsideFolder struct {
 	verdict  *FolderCoverage
 }
 
-// outsideObservation is a window's before-and-after comparison of the command's
-// write roots beyond the project. Those roots have no watcher, so they are
-// compared only when they join the window and when it closes.
+// outsideObservation compares write roots beyond the project without binding watchers.
 type outsideObservation struct {
 	// rootID is the project's outside namespace; empty means none is observed.
 	rootID string
+	joins  chan struct{}
 
 	mu         sync.Mutex
 	folders    []*outsideFolder
@@ -70,9 +66,7 @@ func (o *outsideObservation) noteMissed() {
 	o.mu.Unlock()
 }
 
-// decided lists every folder whose verdict is known. An unconfined command
-// could write anywhere beyond the project, so one entry for all of it replaces
-// the folders; a missed launch leaves every folder without a baseline.
+// An unconfined launch replaces all outside coverage with one host-wide gap.
 func (o *outsideObservation) decided() []FolderCoverage {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -94,8 +88,7 @@ func (o *outsideObservation) decided() []FolderCoverage {
 	return out
 }
 
-// join adds the specs no folder already covers and returns the new folders. A
-// new folder holding earlier ones omits them, so their baselines still stand.
+// New parent folders omit previously joined subtrees to preserve their baselines.
 func (o *outsideObservation) join(specs []OutsideRootSpec) []*outsideFolder {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -137,8 +130,6 @@ func (o *outsideObservation) settle(folder *outsideFolder, verdict FolderCoverag
 	o.mu.Unlock()
 }
 
-// pending lists the folders that have a baseline and no verdict yet, or none
-// when the command ran unconfined.
 func (o *outsideObservation) pending() []*outsideFolder {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -190,9 +181,7 @@ func outsideFolderIdentity(folder string, want os.FileInfo) (os.FileInfo, error)
 	return info, nil
 }
 
-// baselineOutside records the starting state of the folders specs add to the
-// window and returns their snapshots. A folder whose baseline fails is not
-// observed; the command still runs.
+// A failed baseline leaves a coverage gap and lets the command proceed.
 func (s *Commands) baselineOutside(ctx context.Context, w *openCommandWindow, specs []OutsideRootSpec) []string {
 	added := w.outside.join(specs)
 	if len(added) == 0 {
@@ -221,24 +210,30 @@ func (s *Commands) baselineOutside(ctx context.Context, w *openCommandWindow, sp
 	return starts
 }
 
-// AddOutsideRoots joins write roots a later launch of the window's program may
-// write, recording their baselines before it starts.
-func (o *OpenCommandWindow) AddOutsideRoots(ctx context.Context, specs []OutsideRootSpec) {
-	if o == nil || o.store == nil {
-		return
+// AddOutsideRoots captures how new write roots looked before a launch.
+func (o *OpenCommandWindow) AddOutsideRoots(ctx context.Context, specs []OutsideRootSpec) error {
+	if o == nil || o.store == nil || len(specs) == 0 || o.window.outside.rootID == "" {
+		return nil
+	}
+	// Concurrent launches wait until a joining root has a baseline and its before-images.
+	joins := o.window.outside.joins
+	select {
+	case joins <- struct{}{}:
+		defer func() { <-joins }()
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 	starts := o.store.baselineOutside(ctx, o.window, specs)
 	if len(starts) == 0 {
-		return
+		return nil
 	}
 	if err := o.store.retention.Retain(ctx, o.window.id, o.window.retained, starts...); err != nil {
 		slog.WarnContext(ctx, "command window outside retention", "window_id", o.window.id, "err", err)
 	}
+	return ctx.Err()
 }
 
-// settleOutside compares each outside folder with its baseline and records what
-// changed against the window. Each folder settles on its own, so one failing
-// keeps the others' changes; the verdicts are stored before the row ends.
+// Each folder settles independently so a failure leaves other observations intact.
 func (s *Commands) settleOutside(ctx context.Context, w *openCommandWindow) {
 	if w.outside.rootID == "" {
 		return
@@ -248,8 +243,17 @@ func (s *Commands) settleOutside(ctx context.Context, w *openCommandWindow) {
 	for _, folder := range w.outside.pending() {
 		w.outside.settle(folder, s.compareOutside(ctx, w, folder))
 	}
-	if err := s.storeWindowCoverage(context.WithoutCancel(ctx), w.id, w.outside.decided()); err != nil {
+	coverage := w.outside.decided()
+	if len(coverage) == 0 {
+		return
+	}
+	publish := context.WithoutCancel(ctx)
+	if err := s.storeWindowCoverage(publish, w.id, coverage); err != nil {
 		slog.WarnContext(ctx, "command window outside coverage", "window_id", w.id, "err", err)
+		return
+	}
+	if err := sourcefeed.EmitProjectSignal(publish, w.projectID, rootRefsOf(w.roots)); err != nil {
+		slog.WarnContext(ctx, "command window outside publication", "window_id", w.id, "err", err)
 	}
 }
 
@@ -275,11 +279,7 @@ func (s *Commands) compareOutside(ctx context.Context, w *openCommandWindow, fol
 	return observedCoverage(w.outside.rootID, folder.rel, folder.spec.Path, comparison.boundaries())
 }
 
-// recordOutsideChanges records what differs between two snapshots of an outside
-// folder as the window's changes on the outside namespace. A file whose head
-// already holds the new state was recorded by the tool that wrote it; a tracked
-// file reconciles from its head, and an untracked one is admitted from the
-// snapshots, as a window admits untracked files under an attached root.
+// Tracked files reconcile from their ledger head. New identities record both snapshot states.
 func (s *Inventory) recordOutsideChanges(ctx context.Context, w *openCommandWindow, rootID string, comparison outsideComparison) error {
 	cause := observationCause{batchID: newID(), window: w}
 	now := time.Now().UTC()

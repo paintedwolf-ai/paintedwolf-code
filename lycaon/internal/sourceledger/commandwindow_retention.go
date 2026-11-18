@@ -19,8 +19,7 @@ const (
 	windowRetainBytes = 256 << 20
 )
 
-// retainedSet is what one window's before-images hold, shared by every folder
-// the window covers so its limits bound the window, not each folder.
+// retainedSet tracks the shared before-image budget of one window.
 type retainedSet struct {
 	mu    sync.Mutex
 	shas  map[string]struct{}
@@ -31,11 +30,7 @@ func newRetainedSet() *retainedSet {
 	return &retainedSet{shas: make(map[string]struct{})}
 }
 
-// startRetention keeps the before-images a window's admissions may need, bounded
-// by its file and byte limits across all the window's folders and by its budget.
-// A file left unretained loses its before-image, not its attribution, so
-// running out of time keeps the window; stored objects carry over, so later
-// opens resume cheaply.
+// startRetention pins before-images that history and Git cannot supply.
 type startRetention struct {
 	objects   *sourceblob.Store
 	queries   *db.Queries
@@ -55,8 +50,7 @@ type retainedObject struct {
 	size int64
 }
 
-// Retain pins what the snapshots hold to windowID until the window settles,
-// within what held leaves of the window's limits.
+// Retain pins available before-images until the window settles or reaches its budget.
 func (r *startRetention) Retain(ctx context.Context, windowID string, held *retainedSet, snapshotIDs ...string) error {
 	if r.snapshots == nil || held == nil {
 		return nil
@@ -95,8 +89,7 @@ func (r *startRetention) Retain(ctx context.Context, windowID string, held *reta
 	return nil
 }
 
-// storeObjects adds to pins what it stores, including when it stops early with
-// an error. Objects held already count once.
+// Objects shared by snapshots count once against retention.
 func (r *startRetention) storeObjects(ctx context.Context, windowID, snapshotID string, held *retainedSet, pins []retainedObject) ([]retainedObject, error) {
 	entries, err := r.snapshots.HashedEntries(ctx, snapshotID, sourceblob.MaxRevisionContentBytes, r.files+1)
 	if err != nil {

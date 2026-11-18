@@ -179,7 +179,7 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 		return nil, err
 	}
 	window := &openCommandWindow{
-		outside: &outsideObservation{rootID: outsideID}, retained: newRetainedSet(),
+		outside: &outsideObservation{rootID: outsideID, joins: make(chan struct{}, 1)}, retained: newRetainedSet(),
 		id: newID(), projectID: in.ProjectID,
 		roots: append([]RootSpec(nil), in.Roots...), sessionID: strings.TrimSpace(in.SessionID),
 		turn: in.Turn, toolCallID: strings.TrimSpace(in.ToolCallID), toolName: in.ToolName,
@@ -761,7 +761,7 @@ type Commands struct {
 type commandsInventoryPort interface {
 	EnsureInventory(ctx context.Context, req InventoryRequest) error
 	InventoryState(ctx context.Context, projectID string, branch sourcebranch.ID, rootsGeneration int) (InventoryState, error)
-	recordOutsideChanges(ctx context.Context, w *openCommandWindow, rootID, startID, endID string) error
+	recordOutsideChanges(ctx context.Context, w *openCommandWindow, rootID string, comparison outsideComparison) error
 }
 
 type commandsGitPort interface {

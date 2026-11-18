@@ -11,9 +11,7 @@ import (
 // maxWalkGapWindows bounds the coverage-only windows one page lists.
 const maxWalkGapWindows = 100
 
-// withGapWindows adds the chat's windows in the page's ordinal span that left a
-// folder uncompared. They may have recorded no change, and a chat's review
-// still says what it could not see. They never move the page's cursor.
+// Coverage-only windows share the page's ordinal span without advancing its cursor.
 func (s *Walk) withGapWindows(ctx context.Context, projectID string, baseline Baseline, from, before int64, listed []CommandWindow) ([]CommandWindow, error) {
 	if baseline.Kind != BaselineSession && baseline.Kind != BaselineTurn {
 		return listed, nil
