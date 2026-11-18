@@ -18,6 +18,10 @@ type Selection struct {
 
 func (s *Store) Selection() (Selection, error) {
 	h, err := s.history()
+	if err == nil && h.selection.State == "unconfigured" && len(h.visible) > 0 {
+		m := h.visible[len(h.visible)-1]
+		return Selection{State: "selected", Model: m.Model, Device: m.Device, Revision: m.Revision}, nil
+	}
 	return h.selection, err
 }
 

@@ -759,3 +759,7 @@ Every provider request passes the outbound secret screen before it leaves. A per
 - A failure with no HTTP status is still a classified fault, and a delivered request is never reported as one that never arrived.
 - Utility work is bounded, tool-free, and non-critical.
 - Credentials never enter durable transcript, backup, or diagnostics.
+
+### Import a local model from the command line
+
+Run `pw local-model import <path>` with a signed model directory or plain tar `.pwmodel` archive. The CLI asks the local host to import it and reports when the request is accepted. Follow progress in Settings → AI providers. Run `pw local-model opt-out` to remove the installed local generation model.
