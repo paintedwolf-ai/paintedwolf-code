@@ -7,7 +7,7 @@ import type { ChatContentMatch } from "../../chat/transcript/content/chat-conten
 import { CommandReceiptLimitError } from "../../chat/transcript/content/command-receipt-access.ts";
 import { useChatContentAccess } from "../../chat/transcript/content/use-chat-content-access.ts";
 import { bindChatContentFind } from "../../chat/transcript/content/chat-content-find.ts";
-import { getBackgroundProcessSnapshot, prepareBackgroundProcessOutput, subscribeBackgroundProcessStore } from "../../chat/tool/background-process-store.ts";
+import { useChatProcessText } from "./chat-process-text.ts";
 import { bindFindableView } from "../../find/use-findable-view.ts";
 import { activateFindableViewForEditor, findController, openFind, setFindCaseSensitive, setFindQuery } from "../../find/find-controller.ts";
 import { openGotoLine } from "../../find/goto-line-controller.ts";
@@ -60,25 +60,13 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
   const [editorHost, setEditorHost] = createSignal<HTMLDivElement>();
   const [found, setFound] = createSignal<ChatContentMatch>();
   const [retainedText, setRetainedText] = createSignal<ChatRetainedText | null>(null);
-  const [processSnapshot, setProcessSnapshot] = createSignal<{ text: string; rev: number } | null>(null);
   const copyAbort = new AbortController();
   onCleanup(() => copyAbort.abort());
   const reportError = (cause: unknown) => reportSurfaceFailure(contentFailure, cause, props.projectId);
   const reportCopyError = (cause: unknown) => reportSurfaceFailure(copyFailure, cause, props.projectId);
   const reportChanging = (cause: unknown) => reportSurfaceFailure(changingFailure, cause, props.projectId);
   const prettyEnabled = editorPrettyPref;
-  const refreshProcessSnapshot = () => {
-    if (props.document.content.kind !== "process") return;
-    const snap = getBackgroundProcessSnapshot(props.document.sessionId, props.document.content.handle)?.text ?? "";
-    setProcessSnapshot((prev) => ({ text: snap, rev: (prev?.rev ?? 0) + 1 }));
-  };
-  createEffect(() => {
-    if (props.document.content.kind === "process" && prettyEnabled()) {
-      untrack(refreshProcessSnapshot);
-    } else {
-      setProcessSnapshot(null);
-    }
-  });
+  const process = useChatProcessText(() => props.document, () => props.client, prettyEnabled, reportError);
   const access = useChatContentAccess(() => props.document, () => props.client, reportError);
   let retainedGen = 0;
   createEffect(() => {
@@ -199,7 +187,7 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
   // An unsettled receipt is a snapshot of records that are still being written.
   const isSnapshot = () => isProcessSnapshot() || access()?.settled() === false;
   const refreshSnapshot = () => {
-    if (isProcessSnapshot()) refreshProcessSnapshot();
+    if (isProcessSnapshot()) process.refresh();
     else void access()?.refresh(copyAbort.signal).catch(reportError);
   };
   const resolvedLanguage = createMemo(() => resolveChatContentLanguage(props.document));
@@ -214,7 +202,7 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
         cursor: cursor(), language: resolvedLanguage().label, indent: { label: indentChipLabel(editorDisplayPrefs().indent) },
         details: <><Show when={isSnapshot()}><span class="den-files-editor__status-detail" data-testid="chat-process-pretty-snapshot">Snapshot</span></Show><span class="den-files-editor__status-detail" data-testid="files-editor-encoding-chip">UTF-8</span></>,
       }}>
-    <Show when={usePagedReader()} fallback={<InlineChatContent document={props.document} client={props.client} prettyEnabled={prettyEnabled()} languageExtension={resolvedLanguage().extension} lineWidth={resolvedLineWidth()} processSnapshot={processSnapshot()} retainedText={retainedText()} onError={reportError} onEditor={setInlineEditor} />}>
+    <Show when={usePagedReader()} fallback={<InlineChatContent document={props.document} prettyEnabled={prettyEnabled()} languageExtension={resolvedLanguage().extension} lineWidth={resolvedLineWidth()} processText={process.text()} retainedText={retainedText()} onEditor={setInlineEditor} />}>
       <div class="den-source-reader__editors"><div class="den-source-reader__editor" ref={setEditorHost} /></div>
     </Show>
     </ReadonlyFilesDocument>
@@ -223,31 +211,20 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
 
 function InlineChatContent(props: {
   document: ChatContentDocument;
-  client: LycaonClient | null;
   prettyEnabled: boolean;
   languageExtension: ReturnType<typeof resolveChatContentLanguage>["extension"];
   lineWidth: number | undefined;
-  processSnapshot: { text: string; rev: number } | null;
+  processText: string;
   retainedText: ChatRetainedText | null;
-  onError: (cause: unknown) => void;
   onEditor: (editor: EditorView | undefined) => void;
 }) {
-  const [revision, setRevision] = createSignal(0);
   const [parent, setParent] = createSignal<HTMLDivElement>();
-  const handle = () => props.document.content.kind === "process" ? props.document.content.handle : "";
-  onCleanup(subscribeBackgroundProcessStore(() => setRevision(value => value + 1), () => ({ sessionId: props.document.sessionId, processId: handle() })));
-  createEffect(() => {
-    const client = props.client, process = handle();
-    if (client && process) void prepareBackgroundProcessOutput(client, props.document.sessionId, process).catch(props.onError);
-  });
   const rawText = () => {
     if (props.retainedText) return props.retainedText.text;
     const content = props.document.content;
     if (content.kind === "inline") return content.text;
     if (content.kind === "retained") return (content.reference.preview_rows ?? []).map(row => row.text).join("");
-    if (content.kind === "process" && props.prettyEnabled && props.processSnapshot) return props.processSnapshot.text;
-    revision();
-    return content.kind === "process" ? getBackgroundProcessSnapshot(props.document.sessionId, content.handle)?.text ?? "" : "";
+    return content.kind === "process" ? props.processText : "";
   };
   const redactionSpans = () => {
     if (props.retainedText) return props.retainedText.spans;
