@@ -191,9 +191,7 @@ func (l ExternalStages) Installed(name string, environment []string) bool {
 	return err == nil
 }
 
-// programEnvironment builds the program's initial environment from the same
-// AgentLaunchOptions and ProcessEnvironment pipeline that ExternalStages.Launch
-// uses for confined external child launches.
+// programEnvironment uses the external launch environment for shell expansion.
 func programEnvironment(tc tools.ToolContext) ([]string, error) {
 	confinement, _ := confine.DefaultConfinement(hitl.ActionConfineRequest(tools.ActionConfineInputsForContext(tc, nil)))
 	launch := agentCommandLaunch(tc, "command", confinement, nil, "")
