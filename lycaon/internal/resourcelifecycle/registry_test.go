@@ -181,3 +181,33 @@ func TestCanceledCleanupPreservesTrackedResourcesAndRegisteredRulesForRetry(t *t
 		})
 	}
 }
+
+func TestRegistryTrackedListsReleaseOrder(t *testing.T) {
+	registry := New()
+	scope := DeviceScope()
+	var released []string
+	for _, tc := range []struct {
+		name  string
+		order int
+	}{{"storage", 30}, {"admission", 10}, {"b-service", 20}, {"a-service", 20}} {
+		name := tc.name
+		testutil.FailErr(t, "track "+name, registry.Track(scope, name, tc.order, func(context.Context, Scope) error {
+			released = append(released, name)
+			return nil
+		}))
+	}
+	want := []string{"admission", "a-service", "b-service", "storage"}
+	if got := registry.Tracked(scope); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Tracked = %v, want %v", got, want)
+	}
+	testutil.FailErr(t, "dispose", registry.Dispose(t.Context(), scope))
+	if !reflect.DeepEqual(released, want) {
+		t.Fatalf("released = %v, want %v", released, want)
+	}
+	if got := registry.Tracked(scope); len(got) != 0 {
+		t.Fatalf("Tracked after dispose = %v, want none", got)
+	}
+	if got := registry.Tracked(SessionScope("unknown")); len(got) != 0 {
+		t.Fatalf("Tracked on an unknown scope = %v, want none", got)
+	}
+}

@@ -6,27 +6,32 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// A release stages no config tree — packs resolve from the engine binary's
-// embedded FS. Every other registry test points at the repo checkout, so a boot
-// path that reads packs off disk passes CI and still fails in the shipped .app.
-// This boots the registry with no config on disk and no override set.
+// A release stages no config tree: packs resolve from the engine binary's
+// embedded FS. This boots the registry against a staged engine root, from a
+// working directory outside the checkout, with no config override.
 func TestReleaseBootLoadsStockPackAgentsFromEmbed(t *testing.T) {
-	t.Parallel()
-	engineRoot := stageBundledEngineRoot(t)
-	if _, err := os.Stat(filepath.Join(engineRoot, "config")); err == nil {
-		t.Fatal("staged engine-root must not contain config/ — the engine embeds it")
+	if root := os.Getenv(config.EnvConfigRoot); root != "" {
+		t.Fatalf("%s=%q redirects bundled reads to disk", config.EnvConfigRoot, root)
 	}
+	if !config.SourceImmutable() {
+		t.Fatal("bundled configuration is not the embedded tree")
+	}
+	t.Setenv(configlayout.EnvEngineRoot, stageBundledEngineRoot(t))
+	t.Chdir(t.TempDir())
 
 	reg := orchestration.NewMemoryAgentRegistry()
 	if err := orchestration.LoadRequiredAgentRegistry(context.Background(), reg); err != nil {
 		contractcheck.FailErr(t, "load agent registry from embedded config", err)
 	}
-
+	if len(reg.List()) == 0 {
+		t.Fatal("embedded agent registry is empty")
+	}
 	// Gate agents may come from sibling embedded packs.
 	if err := orchestration.ValidateGateAgents(reg); err != nil {
 		contractcheck.FailErr(t, "validate gate agents resolve from embedded config", err)
@@ -44,7 +49,7 @@ func TestStagedEngineRootResolvesSchemasDir(t *testing.T) {
 }
 
 // stageBundledEngineRoot lays out a temp dir like the release bundle's
-// Resources/engine-root — without go.mod and without config/.
+// Resources/engine-root: schemas only.
 func stageBundledEngineRoot(t *testing.T) string {
 	t.Helper()
 	root := contractcheck.RepoRoot(t)
@@ -53,9 +58,6 @@ func stageBundledEngineRoot(t *testing.T) string {
 	dst := filepath.Join(engineRoot, configlayout.SchemasDirName)
 	if err := os.CopyFS(dst, os.DirFS(src)); err != nil {
 		contractcheck.FailErr(t, "stage "+src+" into bundle engine-root layout", err)
-	}
-	if _, err := os.Stat(filepath.Join(engineRoot, "go.mod")); err == nil {
-		t.Fatal("staged engine-root must not contain go.mod — the shipped bundle has none")
 	}
 	return engineRoot
 }

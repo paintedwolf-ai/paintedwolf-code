@@ -231,6 +231,9 @@ func (r *Registry) registerProvider(p SearchProvider) {
 	if rest, ok := p.(*RESTSearchProvider); ok {
 		if entry, hasEntry := r.catalog.Entry(rest.ID()); hasEntry {
 			rest.allowPrivateEndpoint = entry.AllowPrivateEndpoint
+			for _, field := range entry.ExtraFields {
+				rest.requiredConfig = append(rest.requiredConfig, field.Name)
+			}
 		}
 	}
 	entry, hasEntry := r.catalog.Entry(p.ID())

@@ -23,7 +23,7 @@ func (p *ietfRFCProvider) ID() string { return ietfRFCProviderID }
 func (p *ietfRFCProvider) Kind() ProviderKind { return KindKeyless }
 
 func (p *ietfRFCProvider) Configured(s Settings) bool {
-	return providerConfigured(ietfRFCProviderID, KindKeyless, s)
+	return providerConfigured(ietfRFCProviderID, KindKeyless, nil, s)
 }
 
 func (p *ietfRFCProvider) Search(ctx context.Context, s Settings, query string, maxResults int) providerOutcome {

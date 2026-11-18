@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/fileops"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/mcp"
@@ -29,6 +30,8 @@ type options struct {
 	installedPackDirs       []string
 	changeDebounce          time.Duration
 	fileOperationHold       func(context.Context, fileops.Request)
+	globalApprovalPosture   gate.Posture
+	configRoot              *string
 }
 
 // A scripted model calls surface tools outright, so the default decider
@@ -138,4 +141,14 @@ func WithChangeDebounce(delay time.Duration) Option {
 	return func(o *options) {
 		o.changeDebounce = delay
 	}
+}
+
+// withGlobalApprovalPosture sets the global approval posture once the host is built.
+func withGlobalApprovalPosture(posture gate.Posture) Option {
+	return func(o *options) { o.globalApprovalPosture = posture }
+}
+
+// withConfigRoot boots with dir as the configuration root in place of the checkout.
+func withConfigRoot(dir string) Option {
+	return func(o *options) { o.configRoot = &dir }
 }

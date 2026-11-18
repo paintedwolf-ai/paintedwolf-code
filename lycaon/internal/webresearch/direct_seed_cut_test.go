@@ -42,6 +42,7 @@ providers:
   - id: fast_seed
     kind: keyless
     label: Fast seed
+    hint: Fast seed fixture
     test_query: t
     default_endpoint: https://example.com
     roles: [results, seeds]
@@ -49,6 +50,7 @@ providers:
   - id: slow_seed
     kind: keyless
     label: Slow seed
+    hint: Slow seed fixture
     test_query: t
     default_endpoint: https://example.com
     roles: [results, seeds]

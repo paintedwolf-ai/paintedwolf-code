@@ -3,14 +3,15 @@ package app
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/app/configuration"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 	"weak"
+
+	"github.com/lycaon/lycaon/internal/app/configuration"
+	"github.com/lycaon/lycaon/internal/timelayout"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
@@ -63,21 +64,26 @@ func TestBuildFailsWithoutPostureRegistry(t *testing.T) {
 	}
 }
 
+// A failed build releases what it acquired, so the next boot on the same
+// store and device configuration succeeds.
 func TestBuildFailureReleasesInstanceResources(t *testing.T) {
-	testutil.SkipIfShort(t, "assembles the full app graph twice")
+	testutil.SkipIfShort(t, "assembles the full app graph three times")
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	t.Setenv("LYCAON_API_TOKEN", "test-token")
 
-	// An empty posture catalog fails after instance resources are acquired.
-	configtest.Overlay(t, map[config.Rel]string{config.SessionPostures: "postures: []\n"})
-
-	cfg := testBuildConfig(t, t.TempDir())
-	for attempt := 1; attempt <= 2; attempt++ {
-		_, err := Build(t.Context(), cfg)
-		if err == nil {
-			t.Fatalf("attempt %d: expected Build to fail", attempt)
+	cfg := testBuildConfig(t, configlayout.FindModuleRoot())
+	t.Run("failing", func(t *testing.T) {
+		// An empty posture catalog fails after instance resources are acquired.
+		configtest.Overlay(t, map[config.Rel]string{config.SessionPostures: "postures: []\n"})
+		for attempt := 1; attempt <= 2; attempt++ {
+			if _, err := Build(t.Context(), cfg); err == nil {
+				t.Fatalf("attempt %d: expected Build to fail", attempt)
+			}
 		}
-	}
+	})
+	app, err := Build(t.Context(), cfg)
+	testutil.FailErr(t, "build after failed builds", err)
+	testutil.FailErr(t, "close", app.Close())
 }
 
 func TestBuildFailsOnForbiddenBundledRule(t *testing.T) {

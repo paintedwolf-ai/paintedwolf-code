@@ -1,9 +1,6 @@
 package contract
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -13,39 +10,27 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
 )
 
 func TestBundledWorkflowsUseShippedCompleteWhenOnly(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	dir := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "workflows")
-	entries, err := os.ReadDir(dir)
-	contractcheck.FailErr(t, "read directory entries", err)
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		contractcheck.FailErr(t, "read file", err)
-		var doc struct {
-			Phases []struct {
-				ID           string `yaml:"id"`
-				CompleteWhen string `yaml:"complete_when"`
-			} `yaml:"phases"`
-		}
-		if err := yaml.Unmarshal(data, &doc); err != nil {
-			contractcheck.FailErr(t, "unmarshal YAML document", err)
-		}
-		for _, p := range doc.Phases {
-			cw := strings.TrimSpace(p.CompleteWhen)
-			if cw == "" || cw == "gates_satisfied" {
-				continue
-			}
-			if conditions.IsCatalogStub(cw) {
-				t.Fatalf("%s phase %q uses catalog stub complete_when %q", e.Name(), p.ID, cw)
+	reg, err := workflowdef.RegistryFromDirs("")
+	contractcheck.FailErr(t, "load bundled workflows", err)
+	manifests := reg.List()
+	if len(manifests) == 0 {
+		t.Fatal("no bundled workflow manifests loaded")
+	}
+	phases := 0
+	for _, m := range manifests {
+		for _, p := range m.PhaseDefs {
+			phases++
+			if conditions.IsCatalogStub(p.CompleteWhen) {
+				t.Errorf("%s@%s phase %q uses catalog stub complete_when %q", m.ID, m.Version, p.ID, p.CompleteWhen)
 			}
 		}
+	}
+	if phases == 0 {
+		t.Fatal("bundled workflow manifests declare no phases")
 	}
 }
 

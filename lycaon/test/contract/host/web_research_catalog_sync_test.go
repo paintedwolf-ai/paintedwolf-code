@@ -1,80 +1,18 @@
 package contract
 
 import (
-	"os"
-	"os/exec"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"path/filepath"
-	"strings"
+	"strconv"
 	"testing"
 
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/config/configtest"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 )
-
-func TestWebSearchSchemaOmitsProvider(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	contractcheck.FailErr(t, "LoadSchemaDir", err)
-	meta, ok := cfg.ToolMeta("web_search")
-	if !ok {
-		t.Fatal("web_search tool schema missing")
-	}
-	props, _ := meta.ArgsSchema["properties"].(map[string]any)
-	if props == nil {
-		t.Fatal("web_search.properties missing")
-	}
-	if _, hasProvider := props["provider"]; hasProvider {
-		t.Fatal("web_search LLM schema must not expose provider — host selects backends from Settings")
-	}
-	for _, key := range []string{"query", "limit"} {
-		if _, ok := props[key]; !ok {
-			t.Fatalf("web_search.properties.%s missing", key)
-		}
-	}
-}
-
-func TestWebResearchCatalogKinds(t *testing.T) {
-	t.Parallel()
-	cat, err := webresearch.LoadCatalog()
-	contractcheck.FailErr(t, "LoadCatalog", err)
-
-	for _, entry := range cat.Entries() {
-		switch entry.Kind {
-		case webresearch.KindKeyed, webresearch.KindKeyedExtra, webresearch.KindKeylessEndpoint, webresearch.KindKeyless:
-		default:
-			t.Fatalf("provider %q has unknown kind %q", entry.ID, entry.Kind)
-		}
-		if entry.Label == "" || entry.Hint == "" {
-			t.Fatalf("provider %q missing label or hint", entry.ID)
-		}
-		if entry.ID == "direct" || entry.ID == "docs" {
-			t.Fatalf("catalog must not include mode-side id %q", entry.ID)
-		}
-		if entry.DefaultEnabled && entry.Kind != webresearch.KindKeyless {
-			t.Fatalf("provider %q default_enabled on non-keyless kind", entry.ID)
-		}
-		if entry.Pacing != nil && entry.Kind != webresearch.KindKeyless {
-			t.Fatalf("provider %q pacing on non-keyless kind", entry.ID)
-		}
-		if entry.Kind == webresearch.KindKeyless && entry.DefaultEndpoint == "" {
-			t.Fatalf("provider %q keyless missing default_endpoint", entry.ID)
-		}
-		for _, role := range entry.Roles {
-			if role != webresearch.RoleResults && role != webresearch.RoleSeeds {
-				t.Fatalf("provider %q unknown role %q", entry.ID, role)
-			}
-		}
-		if len(entry.Roles) == 0 && entry.Roles != nil {
-			t.Fatalf("provider %q explicit empty roles forbidden", entry.ID)
-		}
-	}
-}
 
 // TestWebSearchProviderEnumCoversCatalog checks catalog and wire parity.
 func TestWebSearchProviderEnumCoversCatalog(t *testing.T) {
@@ -112,49 +50,51 @@ func TestWebResearchCatalogRegistrySubset(t *testing.T) {
 	}
 }
 
-func TestWebResearchCatalogFixtureRejectsKeylessViolations(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	catPath := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "web-research", "host", "web-research-providers.yaml")
-	if _, err := os.Stat(catPath); err != nil {
-		t.Fatalf("shipped catalog missing: %v", err)
-	}
-	if _, err := webresearch.LoadCatalog(); err != nil {
-		t.Fatalf("shipped catalog must load: %v", err)
-	}
-
-	configtest.Overlay(t, map[config.Rel]string{
-		config.WebResearchProviders: `
-providers:
-  - id: bad
-    kind: keyed
-    label: Bad
-    hint: bad
-    test_query: t
-    default_enabled: true
-`,
-	})
-	if _, err := webresearch.LoadCatalog(); err == nil {
-		t.Fatal("expected catalog validation to reject default_enabled on keyed provider")
-	}
-}
-
+// Provider behaviour lives in catalog specs and credential presence, never in a
+// comparison or case against a provider id.
 func TestWebResearchNoProviderIDBehaviorBranches(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
 	cat, err := webresearch.LoadCatalog()
 	contractcheck.FailErr(t, "LoadCatalog", err)
-
-	webresearchDir := filepath.Join(root, "lycaon", "internal", "webresearch")
+	ids := map[string]bool{}
 	for _, id := range cat.IDs() {
-		pattern := `== "` + id + `"`
-		cmd := exec.CommandContext(t.Context(), "rg", "-n", pattern, webresearchDir, "-g", "!*_test.go")
-		out, err := cmd.CombinedOutput()
-		if err == nil {
-			t.Fatalf("forbidden provider-id conditional %q in webresearch (behavior belongs in catalog specs + credential presence):\n%s",
-				pattern, strings.TrimSpace(string(out)))
+		ids[id] = true
+	}
+	if len(ids) == 0 {
+		t.Fatal("catalog has no provider ids")
+	}
+	dir := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "webresearch")
+	corpus, err := contractcheck.LoadGoASTCorpusMode(dir, parser.SkipObjectResolution)
+	contractcheck.FailErr(t, "load webresearch corpus", err)
+	files := corpus.Production()
+	if len(files) == 0 {
+		t.Fatal("webresearch has no production sources")
+	}
+	var violations []string
+	report := func(expr ast.Expr) {
+		lit, ok := expr.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return
 		}
-		if !isRgNoMatch(err) {
-			testutil.FailErr(t, "rg "+pattern, err)
+		if value, err := strconv.Unquote(lit.Value); err == nil && ids[value] {
+			violations = append(violations, fmt.Sprintf("%s: branch on provider id %q", corpus.Fset.Position(lit.Pos()), value))
 		}
 	}
+	for _, file := range files {
+		ast.Inspect(file.AST, func(n ast.Node) bool {
+			switch node := n.(type) {
+			case *ast.BinaryExpr:
+				if node.Op == token.EQL || node.Op == token.NEQ {
+					report(node.X)
+					report(node.Y)
+				}
+			case *ast.CaseClause:
+				for _, expr := range node.List {
+					report(expr)
+				}
+			}
+			return true
+		})
+	}
+	contractcheck.FailViolations(t, "provider-id behaviour branches in webresearch", violations)
 }

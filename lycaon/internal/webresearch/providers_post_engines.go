@@ -163,6 +163,8 @@ type RESTSearchProvider struct {
 	spec                 RESTSpec
 	kind                 ProviderKind
 	allowPrivateEndpoint bool
+	// requiredConfig names the catalog extra fields Configured requires.
+	requiredConfig []string
 }
 
 func NewRESTSearchProvider(spec RESTSpec, kind ProviderKind) *RESTSearchProvider {
@@ -174,7 +176,7 @@ func (p *RESTSearchProvider) ID() string { return p.spec.ProviderID }
 func (p *RESTSearchProvider) Kind() ProviderKind { return p.kind }
 
 func (p *RESTSearchProvider) Configured(s Settings) bool {
-	return providerConfigured(p.spec.ProviderID, p.kind, s)
+	return providerConfigured(p.spec.ProviderID, p.kind, p.requiredConfig, s)
 }
 
 func (p *RESTSearchProvider) providerTimeoutSec(s Settings) int {

@@ -74,6 +74,9 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 	}
 	cfg := configuration.Config{TestChangeDebounce: o.changeDebounce, TestFileOperationHold: o.fileOperationHold}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
+	if o.configRoot != nil {
+		cfg.ConfigRoot = *o.configRoot
+	}
 	// Install packs before the builder resolves the catalog.
 	installHarnessPacks(t, o.installedPackDirs)
 	testDir := dir
@@ -151,6 +154,9 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 
 	if o.replaceManifests != nil {
 		sa.Workflows.Manager.Resolver.Overlay = workflowdef.NewRegistry(o.replaceManifests)
+	}
+	if o.globalApprovalPosture != "" {
+		testutil.FailErr(t, "set approval posture", sa.Server.Admin.Settings.Service.Approvals.PutGlobal(settings.ApprovalConfig{Posture: o.globalApprovalPosture}))
 	}
 
 	trackHost(t.Name(), sa)

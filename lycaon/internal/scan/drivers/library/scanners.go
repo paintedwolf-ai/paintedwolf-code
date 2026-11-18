@@ -97,14 +97,7 @@ func (s *ScalibrScanner) Run(ctx context.Context, req scan.ScanRequest) (*scanou
 			PluginSpecific: []*cpb.PluginSpecificConfig{
 				{
 					Config: &cpb.PluginSpecificConfig_Osvlocal{
-						Osvlocal: &cpb.OSVLocalConfig{
-							LocalPath: cacheDir,
-							Download:  download,
-							RemoteHost: egressclass.RequireSingleFixedEndpoint(
-								egressclass.OSVAdvisoryDownload,
-								egressclass.HTTPDownload,
-							),
-						},
+						Osvlocal: osvLocalConfig(cacheDir, download),
 					},
 				},
 			},
@@ -382,4 +375,16 @@ func clearGitleaksFinding(finding *report.Finding) {
 	}
 	finding.Secret, finding.Match, finding.Line = "", "", ""
 	finding.Fragment = nil
+}
+
+// osvLocalConfig points the local matcher at the advisory class's endpoint.
+func osvLocalConfig(cacheDir string, download bool) *cpb.OSVLocalConfig {
+	return &cpb.OSVLocalConfig{
+		LocalPath: cacheDir,
+		Download:  download,
+		RemoteHost: egressclass.RequireSingleFixedEndpoint(
+			egressclass.OSVAdvisoryDownload,
+			egressclass.HTTPDownload,
+		),
+	}
 }
