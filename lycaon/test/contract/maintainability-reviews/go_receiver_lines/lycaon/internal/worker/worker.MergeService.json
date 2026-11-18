@@ -4,14 +4,16 @@
   "kind": "runtime_service",
   "workstream": "worker-promotion",
   "disposition": "retain",
-  "reason": "MergeService coordinates one leased promotion: filesystem apply and journal recovery, source publication, child merge statuses, and coordinator reconciliation. Keeping these phases together preserves the transaction and recovery boundaries. Retain the consolidated service with atomic apply, crash recovery, source publication, and lease contracts.",
-  "reviewed_commit": "7160f29cede0140c9f836ed6650118d7656f0f8e",
-  "ceiling": 1155,
+  "reason": "Retain 1158 receiver lines, 49 methods and 21 fields for one leased promotion: filesystem apply and journal recovery, source publication, child statuses and coordinator reconciliation. Branch access is now an explicit capability and refuses absent configuration before reconstruction; this accounts for the additional field and three receiver lines. PromotionStore performs the atomic persistence commit. Atomic apply, crash recovery, source publication, lease and relocation contracts support keeping the orchestration together.",
+  "reviewed_commit": "86547fa59f1327199afcdd83a2a01ffd2e5018f7",
+  "ceiling": 1158,
   "boundaries": {
-    "lycaon/internal/worker/promote_atomic_test.go": "daa15294d537b8d0768469e4641bc628d3235864503601c905a203e3f992d0e7",
+    "lycaon/internal/worker/promote_atomic_test.go": "4801f5cb95a20841c428fb6177c329b1ea6c6a173354ad1846aec634e6860f88",
     "lycaon/internal/worker/promote_transaction_crash_test.go": "52a372fd2182fa939b9a27ed7ac0c5c78dc186e78299c672f6ced80472aca35b",
-    "lycaon/internal/worker/promote_source_feed_test.go": "07fc2a28f95457ead7648cfed5bc1b868757b5e54ee3cb573506db45cee80a90",
-    "lycaon/internal/worker/merge_service_test.go": "9602c94d821eded32356d893550fc4b8e2d2a4abf1bbe6244dbd779e78201b34"
+    "lycaon/internal/worker/promote_source_feed_test.go": "0a391fcd222f3ec3b0b2d57383f8a841d17869afe3ffd618a5fbdb5cfb0e5de1",
+    "lycaon/internal/worker/merge_service_test.go": "7f606c96a7ef7d183ebf07f2c620b5626213b9362e92a6d67b8cc74fb53a747a",
+    "lycaon/internal/worker/merge_apply_claim_test.go": "b84e27a49267b699c1d03d7b604370f11d8b0d0bc7faf6686a4fdcd7d5476ea1",
+    "lycaon/internal/worker/branch_retention_e2e_test.go": "f0fe148505a01dc4109ff4f649a0fcf79e2a47bb98bdecb4d5389c3b286be018"
   },
-  "reviewed_shape": "56045797b13050d0adf55cef5b4ebdb7860acc0cbc626f76759707714affc810"
+  "reviewed_shape": "cf145fb370e49564343df5e624f366d20ed4a7e5a823e584d31fbe5a6add49b4"
 }
