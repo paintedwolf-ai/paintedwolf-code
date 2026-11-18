@@ -127,7 +127,7 @@ func openTokenJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args m
 	if name == "" {
 		return nil, secretcap.TokenJarRequest{}, invalid(fmt.Errorf("token_jar must be a name"))
 	}
-	if deps.Jars == nil {
+	if deps.Jars == nil || deps.Secrets == nil {
 		return nil, secretcap.TokenJarRequest{}, &toolrejection.ToolReject{
 			Code: TokenJarFailedCode, Data: map[string]any{"jar": name, "token_jar_name": name, "reason": "managed secrets are unavailable"},
 		}

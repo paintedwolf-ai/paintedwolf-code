@@ -64,7 +64,7 @@ func openCookieJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args 
 	if name == "" {
 		return nil, secretcap.CookieJarRequest{}, invalid(fmt.Errorf("cookie_jar must be a name"))
 	}
-	if deps.Jars == nil {
+	if deps.Jars == nil || deps.Secrets == nil {
 		return nil, secretcap.CookieJarRequest{}, &toolrejection.ToolReject{
 			Code: CookieJarFailedCode, Data: map[string]any{"jar": name, "cookie_jar_name": name, "reason": "managed secrets are unavailable"},
 		}
