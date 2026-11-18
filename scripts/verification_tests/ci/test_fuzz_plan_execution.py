@@ -5,6 +5,8 @@ import copy
 import io
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -115,6 +117,12 @@ class FuzzPlanTests(unittest.TestCase):
 
 
 class FuzzDeclarationTests(unittest.TestCase):
+    def test_the_module_refuses_an_unknown_mode(self):
+        scripts = Path(fuzz_plan.__file__).parents[1]
+        result = subprocess.run([sys.executable, "-m", "fuzz_plan", "explore"], capture_output=True, text=True,
+                                env={**os.environ, "PYTHONPATH": str(scripts)}, check=False)
+        self.assertEqual(result.returncode, 2, result.stderr)
+
     def test_the_catalog_refuses_a_malformed_fuzz_section(self):
         valid = planning.catalog()["fuzz"]
         self.assertTrue(planning.valid_fuzz(valid))

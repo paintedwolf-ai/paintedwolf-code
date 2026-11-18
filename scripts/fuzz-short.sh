@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Explores the plan's fuzz targets: `run [PACKAGE ...]` for their declared time,
-# `smoke` briefly in the packages the change touches. See scripts/fuzz_plan.py.
+# `smoke` briefly in the packages the change touches. See scripts/fuzz_plan.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -15,4 +15,4 @@ fi
 source "${ROOT}/scripts/document-core-env.sh"
 export GOCACHE="${GOCACHE:-$(go env GOCACHE)}"
 : "${PW_FUZZ_WORKERS:?verification admission must set PW_FUZZ_WORKERS}"
-exec python3 "${ROOT}/scripts/fuzz_plan.py" "$@"
+PYTHONPATH="${ROOT}/scripts${PYTHONPATH:+:${PYTHONPATH}}" exec python3 -m fuzz_plan "$@"

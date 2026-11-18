@@ -1525,7 +1525,8 @@
         "FuzzValidate": 30
       },
       "./internal/projectroot": {
-        "FuzzRootResolutionMatchesKernel": 300
+        "FuzzBaselinePathRoundTrip": 60,
+        "FuzzRootResolutionMatchesKernel": 240
       },
       "./internal/repomap": {
         "FuzzMarkdownDefinitionRanges": 30

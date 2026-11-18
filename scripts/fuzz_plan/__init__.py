@@ -156,6 +156,3 @@ def main(argv=None):
             output.write(f"### Fuzz {args.mode}\n\n{report}\n")
     return 1 if any(code for *_, code in results) else 0
 
-
-if __name__ == "__main__":
-    sys.exit(main())
