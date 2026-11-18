@@ -101,7 +101,7 @@ func (e RegistryGateEvaluator) ExpressionMet(ctx context.Context, expr string, d
 	ec := e.buildEvalContext(ctx, def, run, vars)
 
 	// A bare gate leaf parses to a one-node tree, so there is no second path.
-	node, err := boolexpr.Parse(expr)
+	node, err := reg.ParseExpression(expr)
 	if err != nil {
 		return false, workflowgates.GateCheckResult{Reason: "invalid complete_when: " + expr, FailedGate: expr, FailedLeaves: []string{expr}}, nil //nolint:nilerr // parse failure becomes a structured gate-deny reason rather than a fatal error
 	}

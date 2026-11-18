@@ -7,6 +7,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -15,6 +16,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -23,6 +25,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -31,6 +34,7 @@
       "domain": "scan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -39,6 +43,7 @@
       "domain": "blueprint",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -47,6 +52,7 @@
       "domain": "plan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -55,6 +61,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -63,6 +70,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -71,6 +79,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -79,6 +88,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -87,6 +97,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -95,6 +106,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -103,6 +115,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -111,6 +124,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -119,6 +133,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -127,6 +142,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -135,6 +151,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -143,6 +160,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -151,6 +169,7 @@
       "domain": "scan",
       "status": "catalog",
       "parameterized": false,
+      "kind": "reserved",
       "overlay": false
     },
     {
@@ -159,6 +178,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -167,6 +187,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "completion_form",
       "overlay": true
     },
     {
@@ -175,6 +196,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "completion_form",
       "overlay": true
     },
     {
@@ -183,6 +205,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -191,6 +214,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -199,6 +223,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -207,6 +232,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -215,6 +241,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -223,6 +250,7 @@
       "domain": "plan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -231,6 +259,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -239,6 +268,7 @@
       "domain": "scan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -247,6 +277,7 @@
       "domain": "scan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -255,6 +286,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -263,6 +295,7 @@
       "domain": "blueprint",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -271,6 +304,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -279,6 +313,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -287,6 +322,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -295,6 +331,7 @@
       "domain": "—",
       "status": "catalog",
       "parameterized": false,
+      "kind": "reserved",
       "overlay": false
     },
     {
@@ -303,6 +340,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -311,6 +349,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -319,6 +358,7 @@
       "domain": "plan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -327,6 +367,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -335,6 +376,7 @@
       "domain": "plan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -343,6 +385,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -351,6 +394,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -359,6 +403,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -367,6 +412,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -375,6 +421,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -383,6 +430,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -391,6 +439,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -399,6 +448,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -407,6 +457,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -415,6 +466,7 @@
       "domain": "scan",
       "status": "catalog",
       "parameterized": false,
+      "kind": "reserved",
       "overlay": false
     },
     {
@@ -423,6 +475,7 @@
       "domain": "scan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -431,6 +484,7 @@
       "domain": "plan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -439,6 +493,7 @@
       "domain": "plan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -447,6 +502,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -455,6 +511,7 @@
       "domain": "plan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -463,6 +520,7 @@
       "domain": "plan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -471,6 +529,7 @@
       "domain": "scan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -479,6 +538,7 @@
       "domain": "scan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -487,6 +547,7 @@
       "domain": "plan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -495,6 +556,7 @@
       "domain": "scan",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -503,6 +565,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -511,6 +574,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -519,6 +583,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -527,6 +592,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -535,6 +601,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -543,6 +610,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -551,6 +619,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -559,6 +628,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -567,6 +637,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -575,6 +646,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -583,6 +655,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -591,6 +664,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -599,6 +673,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -607,6 +682,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -615,6 +691,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -623,6 +700,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -631,6 +709,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -639,6 +718,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -647,6 +727,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -655,6 +736,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -663,6 +745,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -671,6 +754,7 @@
       "domain": "—",
       "status": "catalog",
       "parameterized": true,
+      "kind": "host_only",
       "overlay": false
     },
     {
@@ -679,6 +763,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true,
+      "kind": "predicate",
       "overlay": true
     },
     {
@@ -687,6 +772,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -695,6 +781,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -703,6 +790,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     },
     {
@@ -711,6 +799,7 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": false,
+      "kind": "predicate",
       "overlay": false
     }
   ]

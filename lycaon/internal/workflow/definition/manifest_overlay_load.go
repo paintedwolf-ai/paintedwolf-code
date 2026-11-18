@@ -63,7 +63,7 @@ func loadManifestsRawWithSources(dir string, origin ManifestSourceOrigin) (map[s
 		}
 		m, err := LoadManifestFromFile(p)
 		if err != nil {
-			return nil, nil, fmt.Errorf("%s: %w", p, err)
+			return nil,nil,predicateFileError(p,err)
 		}
 		key := ManifestKey(m.ID, m.Version)
 		if _, dup := entries[key]; dup {
@@ -140,7 +140,7 @@ func RegistryFromDirsWithSources(projectDir string) (*Registry, map[string]Manif
 	for key, source := range sources {
 		if source.Origin == OriginOverlay {
 			if err := resolved[key].checkPredicates(true); err != nil {
-				return nil, nil, fmt.Errorf("%s: %w", source.Path, err)
+ return nil,nil,predicateFileError(source.Path,err)
 			}
 		}
 	}

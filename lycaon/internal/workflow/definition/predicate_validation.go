@@ -1,6 +1,7 @@
 package definition
 
 import (
+ "errors"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/vocabulary"
@@ -36,4 +37,12 @@ func (phase PhaseDef) PredicateDiagnostics(path string, allowed func(string) boo
 		}
 	}
 	return out
+}
+
+func predicateFileError(path string, err error) error {
+ var issues PredicateErrors
+ if errors.As(err,&issues){
+ for i:=range issues{issues[i].Field=path+": "+issues[i].Field}
+ }
+ return fmt.Errorf("%s: %w",path,err)
 }

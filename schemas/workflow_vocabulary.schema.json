@@ -20,6 +20,7 @@
         "domain": { "type": "string" },
         "status": { "type": "string", "enum": ["shipped", "stub", "catalog"] },
         "parameterized": { "type": "boolean" },
+        "kind": { "type": "string", "enum": ["predicate", "completion_form", "reserved", "host_only"] },
         "overlay": { "type": "boolean" }
       },
       "additionalProperties": false

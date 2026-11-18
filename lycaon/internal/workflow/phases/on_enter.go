@@ -118,7 +118,7 @@ func evaluateReadinessCondition(reg *conditions.ConditionRegistry, ec conditions
 	if reg == nil {
 		return false, nil
 	}
-	node, err := boolexpr.Parse(readiness)
+	node, err := reg.ParseExpression(readiness)
 	if err != nil {
 		return false, err
 	}
