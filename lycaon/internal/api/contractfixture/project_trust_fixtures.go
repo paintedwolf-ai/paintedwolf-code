@@ -22,7 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-func NewProjectOverlayTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, *project.MemoryRegistry) {
+func NewProjectOverlayTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, *project.SQLRegistry) {
 	sessionFixture := storetest.New(t)
 
 	t.Helper()

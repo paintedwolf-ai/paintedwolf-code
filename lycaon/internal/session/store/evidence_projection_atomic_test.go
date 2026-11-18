@@ -18,6 +18,7 @@ func TestUntrustedProjectionFailureRollsBackEvidence(t *testing.T) {
 		"program network provenance": func(ctx context.Context, st *SQL, sess *api.Session) error {
 			_, err := st.CommitProgramHTTPProvenance(ctx, sess.ID, sess.WorkspacePath, evidence.ProgramHTTPProvenance{
 				UntrustedContent: true, ObservedURLs: []string{"https://example.invalid/"},
+				ClearedPaths: []string{"replaced.go"},
 			})
 			return err
 		},

@@ -69,7 +69,7 @@ func GetGlobalApprovalConfig(t *testing.T, base string) wire.ApprovalConfigRespo
 	return cfg
 }
 
-func NewSettingsTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, string, *project.MemoryRegistry) {
+func NewSettingsTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, string, *project.SQLRegistry) {
 	sessionFixture := storetest.New(t)
 
 	t.Helper()
