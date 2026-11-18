@@ -1,5 +1,5 @@
 import { createMemo } from "solid-js";
-import { createCommandActivityProjection, commandActivityHeadline } from "../../chat/tool/command-activity-model.ts";
+import { createCommandActivityProjection, commandActivityHeadline, commandActivitySequence } from "../../chat/tool/command-activity-model.ts";
 import { foldActionEntries } from "../../chat/action/part-action.ts";
 import { commandProgramActive, preferredCommandProgram, useCommandActivitySnapshots } from "../../chat/tool/command-activity-snapshots.ts";
 import { ActivitySpanCard, type ActivitySpanCardProps } from "./ActivitySpanCard.tsx";
@@ -14,5 +14,5 @@ export function CommandActivitySpan(props: ActivitySpanCardProps) {
     const program = preferredCommandProgram(entry.part.commandProgram, snapshots(entry.part));
     return program ? commandProgramActive(program) : entry.part.status === "running";
   });
-  return <ActivitySpanCard {...props} label={label()} entries={entries()} running={running()} />;
+  return <ActivitySpanCard {...props} label={label()} sequence={commandActivitySequence(entries())} entries={entries()} running={running()} />;
 }
