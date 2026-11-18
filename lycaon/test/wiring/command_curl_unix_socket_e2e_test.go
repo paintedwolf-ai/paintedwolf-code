@@ -39,6 +39,7 @@ func serveDaemonSocket(t *testing.T) (string, *atomic.Int32) {
 // Native curl reaches a Unix socket after one local-service approval: the
 // placeholder URL host asks for no loopback port and the socket is no file read.
 func TestNativeCurlUnixSocketAsksOnceForTheService(t *testing.T) {
+	p := newProgramHost(t)
 	path, hits := serveDaemonSocket(t)
 	link := filepath.Join(filepath.Dir(path), "linked.sock")
 	testutil.FailErr(t, "link daemon socket", os.Symlink(path, link))
@@ -55,7 +56,7 @@ func TestNativeCurlUnixSocketAsksOnceForTheService(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			before := hits.Load()
-			s := newCommandProgramSessionWithArgs(t, tc.args, wire.CreateSessionRequest{}, "")
+			s := p.programWithArgs(t, tc.args, wire.CreateSessionRequest{}, "")
 			cards := runCommandWithApprovals(t, s, "recommended")
 			if kind := cards[0].ToolApproval.Plan.Subject.Kind; kind != wire.ApprovalSubjectKindSocketSet {
 				t.Fatalf("approval subject = %q, want the local service socket: %+v", kind, cards[0].ToolApproval.Plan)

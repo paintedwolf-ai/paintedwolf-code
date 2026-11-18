@@ -61,6 +61,7 @@ func (s *commandProgramSession) outcome(t *testing.T, callID string) command.Pro
 }
 
 func TestCommandProgramCurlPreservesDataAndScreensModelDelivery(t *testing.T) {
+	p := newProgramHost(t)
 	body := "aws=AKIAQYJK5TXV4NZR7SGB\ngithub=ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3\n"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, body) }))
 	defer server.Close()
@@ -78,7 +79,7 @@ func TestCommandProgramCurlPreservesDataAndScreensModelDelivery(t *testing.T) {
 		{"model", "curl -s '" + server.URL + "'"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := newCommandProgramSession(t, tc.source, "")
+			s := p.program(t, tc.source, "")
 			if !s.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(s.session, []uint16{uint16(port)}, "curl-listener", "curl-fixture", nil) {
 				t.Fatal("listener grant failed")
 			}
@@ -173,6 +174,7 @@ func cardText(t *testing.T, card wire.CheckpointEvent) string {
 }
 
 func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
+	p := newProgramHost(t)
 	body := "external-payload-line-1\nexternal-payload-line-2\n"
 	proxyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/fail") {
@@ -248,7 +250,7 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := newCommandProgramSession(t, tc.source, approvals)
+			s := p.program(t, tc.source, approvals)
 			if !s.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(s.session, []uint16{uint16(port)}, "curl-proxy", "curl-fixture", nil) {
 				t.Fatal("listener grant failed")
 			}
@@ -285,7 +287,7 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 			},
 		}})
 		approvalsWithWrite := approvals + "  - category: file\n    pattern: '*'\n    effect: allow\n"
-		s := startSessionWithClient(t, mock, wire.CreateSessionRequest{}, approvalsWithWrite)
+		s := p.withClient(t, mock, wire.CreateSessionRequest{}, approvalsWithWrite)
 		s.h.SeedProgress(t, t.Context(), s.session)
 		if !s.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(s.session, []uint16{uint16(port)}, "curl-proxy", "curl-fixture", nil) {
 			t.Fatal("listener grant failed")
@@ -341,7 +343,7 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 			},
 		}})
 		approvalsWithWrite := approvals + "  - category: file\n    pattern: '*'\n    effect: allow\n"
-		s := startSessionWithClient(t, mock, wire.CreateSessionRequest{}, approvalsWithWrite)
+		s := p.withClient(t, mock, wire.CreateSessionRequest{}, approvalsWithWrite)
 		s.h.SeedProgress(t, t.Context(), s.session)
 		if !s.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(s.session, []uint16{uint16(port)}, "curl-proxy", "curl-fixture", nil) {
 			t.Fatal("listener grant failed")
@@ -377,6 +379,7 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 	})
 
 	t.Run("downstream_egress_policy_contrast_after_curl_ingestion", func(t *testing.T) {
+		p.usePosture(t, gate.PostureBalanced)
 		balancedRules := "  - category: tool\n    pattern: http_request\n    effect: allow\n"
 
 		// 1. Clean local session: the first contact with sink.external.example is
@@ -393,7 +396,7 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 				FollowUpText: "Sent.",
 			},
 		}})
-		cleanSess := startSessionWithClient(t, cleanMock, wire.CreateSessionRequest{}, balancedRules, gate.PostureBalanced)
+		cleanSess := p.withClient(t, cleanMock, wire.CreateSessionRequest{}, balancedRules)
 		cleanSess.h.SeedProgress(t, t.Context(), cleanSess.session)
 		if !cleanSess.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(cleanSess.session, []uint16{uint16(port)}, "curl-proxy", "curl-fixture", nil) {
 			t.Fatal("listener grant failed")
@@ -425,7 +428,7 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 				FollowUpText: "Recovered.",
 			},
 		}})
-		ingestedSess := startSessionWithClient(t, ingestedMock, wire.CreateSessionRequest{}, balancedRules, gate.PostureBalanced)
+		ingestedSess := p.withClient(t, ingestedMock, wire.CreateSessionRequest{}, balancedRules)
 		ingestedSess.h.SeedProgress(t, t.Context(), ingestedSess.session)
 		if !ingestedSess.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(ingestedSess.session, []uint16{uint16(port)}, "curl-proxy", "curl-fixture", nil) {
 			t.Fatal("listener grant failed")
@@ -450,6 +453,7 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 }
 
 func TestCommandProgramCurlRedirectDenialUnknownHopAndRecoveryRealAdapter(t *testing.T) {
+	p := newProgramHost(t, gate.PostureBalanced)
 	var originHits, targetHits atomic.Int32
 	dropHop1AfterRequest := atomic.Bool{}
 
@@ -523,15 +527,14 @@ func TestCommandProgramCurlRedirectDenialUnknownHopAndRecoveryRealAdapter(t *tes
 	}})
 
 	approvals := "  - category: tool\n    pattern: http_request\n    effect: allow\n"
-	s := startSessionWithClient(t, mock, wire.CreateSessionRequest{}, approvals, gate.PostureBalanced)
+	s := p.withClient(t, mock, wire.CreateSessionRequest{}, approvals)
 	s.h.SeedProgress(t, t.Context(), s.session)
 	if !s.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(s.session, []uint16{uint16(port)}, "curl-redirect-real", "curl-fixture", nil) {
 		t.Fatal("listener grant failed")
 	}
 
-	// wireEgressPolicy in startSessionWithClient installs an EgressPostureResolver and EgressApprovals
-	// resolver for the harness; override both after session creation so this test exercises per-hop
-	// confine.PostureAsk admission directly through the real native curl adapter.
+	// Override the host's egress posture and approval resolvers after session creation, so this test
+	// exercises per-hop confine.PostureAsk admission directly through the real native curl adapter.
 	confine.SetApprovalsDisabledSource(func(confine.EgressCommand) bool { return false })
 	confine.SetEgressPostureResolver(func(confine.EgressCommand) confine.EgressPosture { return confine.PostureAsk })
 	release := confine.SetEgressResolver(func(_ context.Context, cmd confine.EgressCommand, ep egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
@@ -636,6 +639,7 @@ func TestCommandProgramCurlRedirectDenialUnknownHopAndRecoveryRealAdapter(t *tes
 }
 
 func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter(t *testing.T) {
+	p := newProgramHost(t, gate.PostureBalanced)
 	const cookieSecret = "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
 	const unrelatedSecret = "AKIAQYJK5TXV4NZR7SGB"
 
@@ -725,7 +729,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 	}})
 
 	approvals := "  - category: tool\n    pattern: http_request\n    effect: allow\n  - category: network_recipient\n    pattern: '*'\n    effect: allow\n  - category: file\n    pattern: '*'\n    effect: allow\n"
-	s := startSessionWithClient(t, mock, wire.CreateSessionRequest{}, approvals, gate.PostureBalanced)
+	s := p.withClient(t, mock, wire.CreateSessionRequest{}, approvals)
 	s.h.SeedProgress(t, t.Context(), s.session)
 	if !s.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(s.session, []uint16{uint16(port)}, "curl-cookie-real", "curl-fixture", nil) {
 		t.Fatal("listener grant failed")
@@ -1007,6 +1011,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 }
 
 func TestCommandProgramCurlSecretDeliveryTimingAndUnlockLifecycle(t *testing.T) {
+	p := newProgramHost(t, gate.PostureBalanced)
 	const (
 		ignoredHeaderSecret = "AKIAQYJK5TXV4NZR7SGB"
 		cookieSecret        = "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
@@ -1047,7 +1052,7 @@ func TestCommandProgramCurlSecretDeliveryTimingAndUnlockLifecycle(t *testing.T) 
 		},
 	}})
 	approvals := "  - category: tool\n    pattern: http_request\n    effect: allow\n  - category: network_recipient\n    pattern: '*'\n    effect: allow\n  - category: file\n    pattern: '*'\n    effect: allow\n"
-	s := startSessionWithClient(t, mock, wire.CreateSessionRequest{}, approvals, gate.PostureBalanced)
+	s := p.withClient(t, mock, wire.CreateSessionRequest{}, approvals)
 	s.h.SeedProgress(t, t.Context(), s.session)
 	if !s.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(s.session, []uint16{uint16(port)}, "curl-timing-e2e", "curl-fixture", nil) {
 		t.Fatal("listener grant failed")
