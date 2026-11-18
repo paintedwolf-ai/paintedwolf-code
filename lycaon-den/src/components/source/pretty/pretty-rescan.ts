@@ -10,13 +10,13 @@ import {
   type Transaction,
 } from "@codemirror/state";
 import { Decoration, type DecorationSet } from "@codemirror/view";
+import { BlockFact, changedFactEvents, FactEvent, FactStore, NO_EVENTS } from "./pretty-block-facts.ts";
 import { planHasLayout } from "./pretty-fenced.ts";
 import { prettyPlanFor, prettyTargetFor } from "./pretty-recognition.ts";
 import { PrettyScanner } from "./pretty-scan.ts";
 import { type PrettySnapshot, snapshotsEqual } from "./pretty-snapshot.ts";
 import {
   PRETTY_CHECKPOINT_INTERVAL,
-  type PrettyBlockFacts,
   type PrettyPlan,
   type PrettySink,
   readsSyntaxTree,
@@ -73,15 +73,6 @@ class Checkpoint extends RangeValue {
   }
 }
 
-class BlockFact extends RangeValue {
-  constructor(readonly block: boolean) {
-    super();
-  }
-  override eq(other: RangeValue): boolean {
-    return other instanceof BlockFact && other.block === this.block;
-  }
-}
-
 const NO_CHECKPOINTS = RangeSet.empty as RangeSet<Checkpoint>;
 const NO_FACTS = RangeSet.empty as RangeSet<BlockFact>;
 export const NO_WORK: PrettyWork = { visits: 0, from: 0, to: 0, added: 0 };
@@ -96,42 +87,13 @@ export interface PrettyLayoutState {
   readonly outcome: PrettyOutcome;
   readonly decorations: DecorationSet;
   readonly checkpoints: RangeSet<Checkpoint>;
+  readonly events: RangeSet<FactEvent>;
   readonly facts: RangeSet<BlockFact>;
   /** Layout covers the document up to here; rules that read the syntax tree stop at its parsed end. */
   readonly scannedTo: number;
   readonly indentUnit: number;
   readonly tabSize: number;
   readonly work: PrettyWork;
-}
-
-/** Facts read from a set and new ones collected during one scan. */
-class FactStore implements PrettyBlockFacts {
-  readonly added = new Map<number, { end: number; block: boolean }>();
-  constructor(private readonly known: RangeSet<BlockFact>) {}
-
-  get(open: number): boolean | undefined {
-    const fresh = this.added.get(open);
-    if (fresh) return fresh.block;
-    let found: boolean | undefined;
-    this.known.between(open, open, (from, _to, value) => {
-      if (from === open) {
-        found = value.block;
-        return false;
-      }
-      return;
-    });
-    return found;
-  }
-
-  set(open: number, end: number, block: boolean): void {
-    if (!this.added.has(open)) this.added.set(open, { end, block });
-  }
-
-  ranges(): Range<BlockFact>[] {
-    return [...this.added.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([open, fact]) => new BlockFact(fact.block).range(open, Math.max(open + 1, fact.end)));
-  }
 }
 
 function emptyState(config: PrettyConfig, plan: PrettyPlan | null, outcome: PrettyOutcome, state: EditorState, work = NO_WORK): PrettyLayoutState {
@@ -142,6 +104,7 @@ function emptyState(config: PrettyConfig, plan: PrettyPlan | null, outcome: Pret
     decorations: Decoration.none,
     checkpoints: NO_CHECKPOINTS,
     facts: NO_FACTS,
+    events: NO_EVENTS,
     scannedTo: 0,
     indentUnit: getIndentUnit(state),
     tabSize: state.tabSize,
@@ -219,7 +182,9 @@ export function buildLayout(state: EditorState, config: PrettyConfig): PrettyLay
   const facts = new FactStore(NO_FACTS);
   const indentUnit = getIndentUnit(state);
   const end = layoutEnd(state, plan);
-  const scanner = new PrettyScanner({ doc, plan, tabSize: state.tabSize, indentUnit, facts, tokens: tokensFor(state, plan), lineWidth: config.lineWidth }, sink);
+  const events = new RangeSetBuilder<FactEvent>();
+  const factEvent = (pos: number, kind: number) => events.add(pos, pos, FactEvent.of(kind));
+  const scanner = new PrettyScanner({ doc, plan, factEvent, tabSize: state.tabSize, indentUnit, facts, tokens: tokensFor(state, plan), lineWidth: config.lineWidth }, sink);
   const checkpoints = new RangeSetBuilder<Checkpoint>();
   const limit = visitLimit(doc);
   let reason: PrettyLimitReason | null = null;
@@ -242,40 +207,12 @@ export function buildLayout(state: EditorState, config: PrettyConfig): PrettyLay
     decorations: builder.finish(),
     checkpoints: checkpoints.finish(),
     facts: RangeSet.of(facts.ranges()),
+    events: events.finish(),
     scannedTo: end,
     indentUnit,
     tabSize: state.tabSize,
     work,
   };
-}
-
-// Characters whose insertion or deletion can change brackets, protected
-// text or statements; edits without them leave every block fact standing.
-const STRUCTURAL = /[;{}[\]()"'`/*\\<>\n]/;
-const SEMICOLON_ONLY = /^[^{}[\]()"'`/*\\<>\n]*$/;
-
-interface ChangeSummary {
-  readonly from: number;
-  readonly to: number;
-  readonly quiet: boolean;
-  readonly semicolonsOnly: boolean;
-}
-
-function summarize(tr: Transaction): ChangeSummary {
-  let from = Infinity;
-  let to = -1;
-  let quiet = true;
-  let semicolonsOnly = true;
-  tr.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
-    from = Math.min(from, fromB);
-    to = Math.max(to, toB);
-    const removed = tr.startState.doc.sliceString(fromA, toA);
-    const text = inserted.toString();
-    if (STRUCTURAL.test(removed) || STRUCTURAL.test(text)) quiet = false;
-    // Only an added `;` can turn a group into a block.
-    if (removed.includes(";") || !SEMICOLON_ONLY.test(removed) || !SEMICOLON_ONLY.test(text)) semicolonsOnly = false;
-  });
-  return { from, to, quiet, semicolonsOnly };
 }
 
 /**
@@ -323,9 +260,12 @@ interface Rescan {
   readonly state: EditorState;
   readonly decorations: DecorationSet;
   readonly checkpoints: RangeSet<Checkpoint>;
+  readonly events: RangeSet<FactEvent>;
   readonly facts: RangeSet<BlockFact>;
   /** Where to start: the last saved state at or before here. */
   readonly restart: number;
+  readonly edit?: Transaction;
+  readonly spent?: number;
   /** Past here, a saved state that matches the new one ends the scan; null scans to the end. */
   readonly compareFrom: number | null;
 }
@@ -347,8 +287,10 @@ function rescan(prev: PrettyLayoutState, job: Rescan): PrettyLayoutState {
   }
   const added: Range<Decoration>[] = [];
   const store = new FactStore(job.facts);
+  const events: Range<FactEvent>[] = [];
+  const factEvent = (pos: number, kind: number) => { events.push(FactEvent.of(kind).range(pos)); };
   const scanner = new PrettyScanner(
-    { doc, plan, tabSize: prev.tabSize, indentUnit: prev.indentUnit, facts: store, tokens: tokensFor(state, plan), lineWidth: prev.config.lineWidth },
+    { doc, plan, factEvent, tabSize: prev.tabSize, indentUnit: prev.indentUnit, facts: store, tokens: tokensFor(state, plan), lineWidth: prev.config.lineWidth },
     collect(added),
   );
   const from = start?.pos ?? 0;
@@ -365,7 +307,7 @@ function rescan(prev: PrettyLayoutState, job: Rescan): PrettyLayoutState {
     const old = firstCheckpointFrom(checkpoints, Math.max(pos + 1, compareFrom));
     return old >= 0 ? Math.min(old, cadence) : cadence;
   };
-  const limit = visitLimit(doc);
+  const limit = visitLimit(doc) - (job.spent ?? 0);
   let reason: PrettyLimitReason | null = null;
   const reached = scanner.run(from, start ? nextStop(from) : 0, (pos) => {
     if (scanner.visits > limit) {
@@ -387,6 +329,27 @@ function rescan(prev: PrettyLayoutState, job: Rescan): PrettyLayoutState {
   if (reason) return limited(prev, reason, state);
 
   const end = converged;
+  let visits = scanner.visits + (job.spent ?? 0);
+  if (job.edit && prev.facts.size) {
+    const diff = changedFactEvents(prev.events, events, job.edit.changes, from, Math.min(end, reached + 1));
+    visits += diff.visits;
+    if (diff.from <= diff.to) {
+      let first = Infinity;
+      const facts = job.facts.update({
+        filterFrom: diff.from, filterTo: diff.to,
+        filter: (open, close) => {
+          if (open > diff.to || close < diff.from) return true;
+          first = Math.min(first, open);
+          return false;
+        },
+      });
+      if (Number.isFinite(first)) {
+        return rescan(prev, { ...job, edit: undefined, facts, spent: visits,
+          restart: Math.min(job.restart, first), compareFrom: Math.max(compareFrom, diff.to + 1) });
+      }
+    }
+  }
+  if (visits > visitLimit(doc)) return limited(prev, "work", state);
   const scannedTo = end <= doc.length ? Math.max(prev.scannedTo, reached) : Math.min(reached, layoutTo);
   const decorations = job.decorations.update({
     add: added,
@@ -411,9 +374,11 @@ function rescan(prev: PrettyLayoutState, job: Rescan): PrettyLayoutState {
     outcome: ACTIVE,
     decorations,
     checkpoints,
+    events: job.events.update({ add: events, filterFrom: from, filterTo: Math.min(end, doc.length),
+      filter: pos => pos < from || pos >= end }),
     facts: store.added.size > 0 ? job.facts.update({ add: store.ranges() }) : job.facts,
     scannedTo: Math.min(scannedTo, doc.length),
-    work: { visits: scanner.visits, from, to: Math.min(end, reached, doc.length), added: added.length },
+    work: { visits, from, to: Math.min(end, reached, doc.length), added: added.length },
   };
 }
 
@@ -430,36 +395,27 @@ export function updateLayout(prev: PrettyLayoutState, tr: Transaction): PrettyLa
   if (plan.kind === "fenced" && !planHasLayout(doc, plan)) {
     return emptyState(prev.config, plan, UNAVAILABLE, state);
   }
-  const change = summarize(tr);
-  let facts = prev.facts.map(tr.changes);
-  let restart = Math.max(0, change.from - lookbehind(prev.config));
-  if (!change.quiet) {
-    // A group whose statement facts the change may alter decides again from its opening.
-    facts = facts.update({
-      filterFrom: change.from,
-      filterTo: change.to,
-      filter: (from, to, value) => {
-        // A deleted closer collapses its group's range onto the change, so touching counts.
-        const affected = from <= change.to && to >= change.from;
-        if (!affected || (change.semicolonsOnly && value.block)) return true;
-        if (from < change.from) restart = Math.min(restart, from);
-        return false;
-      },
-    });
-  }
-  const line = doc.lineAt(change.from);
-  const oldLine = tr.startState.doc.lineAt(tr.changes.invertedDesc.mapPos(change.from, -1));
+  let first = doc.length, last = 0;
+  tr.changes.iterChangedRanges((_a, _b, from, to) => {
+    first = Math.min(first, from);
+    last = Math.max(last, to);
+  });
+  let restart = Math.max(0, first - lookbehind(prev.config));
+  const line = doc.lineAt(first);
+  const oldLine = tr.startState.doc.lineAt(tr.changes.invertedDesc.mapPos(first, -1));
   const now = lineLaidOut(doc, state, plan, prev.config, line.from, line.to);
   const before = lineLaidOut(tr.startState.doc, tr.startState, plan, prev.config, oldLine.from, oldLine.to);
   const flips = now === null || now !== before;
-  if (flips || change.from - line.from <= LEAD_REACH) restart = Math.min(restart, line.from);
+  if (flips || first - line.from <= LEAD_REACH) restart = Math.min(restart, line.from);
   return rescan({ ...prev, scannedTo: Math.min(tr.changes.mapPos(prev.scannedTo), doc.length) }, {
     state,
     decorations: prev.decorations.map(tr.changes),
     checkpoints: prev.checkpoints.map(tr.changes),
-    facts,
+    facts: prev.facts.map(tr.changes),
+    events: prev.events.map(tr.changes),
+    edit: tr,
     restart,
-    compareFrom: change.to + lookbehind(prev.config),
+    compareFrom: last + lookbehind(prev.config),
   });
 }
 
@@ -471,6 +427,7 @@ export function extendLayout(prev: PrettyLayoutState, state: EditorState): Prett
     decorations: prev.decorations,
     checkpoints: prev.checkpoints,
     facts: prev.facts,
+    events: prev.events,
     restart: prev.scannedTo,
     compareFrom: null,
   });

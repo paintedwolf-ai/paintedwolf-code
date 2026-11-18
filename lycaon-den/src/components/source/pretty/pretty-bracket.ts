@@ -1,3 +1,4 @@
+import { PROTECTED_END, PROTECTED_START } from "./pretty-block-facts.ts";
 import {
   type BracketRule,
   PRETTY_MAX_DEPTH,
@@ -104,6 +105,13 @@ export function stepBracket(cursor: ScanCursor, rule: BracketRule, pos: number, 
   const { text, state } = cursor;
   const lexer = state.lexer!;
   const skipped = lexer.skip(text, pos, end, state.lineEnd);
+  if (rule.statements) {
+    const protectedRun = skipped > pos;
+    if (protectedRun !== state.protectedRun) {
+      cursor.options.factEvent?.(pos, protectedRun ? PROTECTED_START : PROTECTED_END);
+      state.protectedRun = protectedRun;
+    }
+  }
   if (skipped > pos) {
     state.visits += skipped - pos;
     state.col += skipped - pos;
@@ -121,6 +129,7 @@ export function stepBracket(cursor: ScanCursor, rule: BracketRule, pos: number, 
     state.col += cursor.options.tabSize;
     return pos + 1;
   }
+  if (rule.statements && (isOpener(c) || isCloser(c) || c === SEMICOLON)) cursor.options.factEvent?.(pos, c);
   if (isOpener(c)) open(cursor, rule, c, pos);
   else if (isCloser(c)) close(cursor, rule, c, pos);
   else if (c === COMMA || (c === SEMICOLON && rule.statements)) separate(cursor, c, pos);
