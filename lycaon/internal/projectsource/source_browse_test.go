@@ -2,6 +2,7 @@ package projectsource
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -152,8 +153,8 @@ func TestSourceProjectionUnwatchedReadsFreshMembership(t *testing.T) {
 // A watched directory's listing is projected once and served from the cache.
 func TestSourceProjectionCachesWatchedMembership(t *testing.T) {
 	p, rootPath := browseFixtureProject(t)
-	repochange.ResetWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	repochange.EnsureRoot(t.Context(), rootPath)
 	projection := &sourceDirectoryProjection{
 		listings: make(map[sourceProjectionKey]projectedSourceListing),
@@ -182,8 +183,8 @@ func TestSourceProjectionCachesWatchedMembership(t *testing.T) {
 // Listing freshness follows its directory watch.
 func TestSourceListingReportsWatchCoveragePerDirectory(t *testing.T) {
 	p, rootPath := browseFixtureProject(t)
-	repochange.ResetWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	repochange.EnsureRoot(t.Context(), rootPath)
 
 	root, err := resolveSourceBrowseRoot(p, "r1")

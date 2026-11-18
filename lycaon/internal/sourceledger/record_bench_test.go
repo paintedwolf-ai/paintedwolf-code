@@ -3,6 +3,7 @@ package sourceledger
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
@@ -79,8 +80,8 @@ func BenchmarkOpenCommandWindow(b *testing.B) {
 
 func benchmarkOpenCommandWindow(b *testing.B, files int, committed, watched bool) {
 	if !watched {
-		repochange.DisableWatchersForTest()
-		b.Cleanup(repochange.ResetWatchersForTest)
+
+		repochangetest.Acquire(b)
 	}
 	sqlDB := testdbfixture.Open(b, "store.db")
 	testdbseed.InsertProject(b, sqlDB, "p1")
@@ -108,7 +109,7 @@ func benchmarkOpenCommandWindow(b *testing.B, files int, committed, watched bool
 	store.Commands.SetWindowStartQuietForTest(0, 0)
 	store.Commands.observationBudget = time.Minute
 	if watched {
-		repochange.MarkCoverageCompleteForTest(root)
+		repochangetest.Watch(b, root)
 		b.Cleanup(func() { repochange.CloseRoot(root) })
 	}
 	in := CommandWindowInput{ProjectID: "p1", Roots: []RootSpec{{ID: "r1", Path: root}}, SessionID: "s1", ToolName: "command", CommandLine: "make"}

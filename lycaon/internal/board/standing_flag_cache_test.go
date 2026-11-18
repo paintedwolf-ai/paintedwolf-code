@@ -2,6 +2,7 @@ package board
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -11,10 +12,10 @@ import (
 )
 
 func TestStandingFlagCacheKeysByEpochAndRules(t *testing.T) {
-	repochange.ResetWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	dir := t.TempDir()
-	repochange.MarkCoverageCompleteForTest(dir)
+	repochangetest.Watch(t, dir)
 	var loads atomic.Int32
 	cache := newStandingFlagCache(func(_ context.Context, _ string, rules []standingpatterns.Pattern) []standingpatterns.FlagCount {
 		loads.Add(1)
@@ -42,8 +43,8 @@ func TestStandingFlagCacheKeysByEpochAndRules(t *testing.T) {
 }
 
 func TestStandingFlagCacheBypassesIncompleteWatchCoverage(t *testing.T) {
-	repochange.ResetWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	dir := t.TempDir()
 	var loads atomic.Int32
 	cache := newStandingFlagCache(func(_ context.Context, _ string, _ []standingpatterns.Pattern) []standingpatterns.FlagCount {

@@ -44,7 +44,7 @@ type worktreeWatcher struct {
 	watchLimit    bool
 	limitReported bool
 	refs          refObserver
-	debounce      *Debouncer
+	debounce      *debouncer
 }
 
 func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *watchfd.Budget) (*worktreeWatcher, error) {

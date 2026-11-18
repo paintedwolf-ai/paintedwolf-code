@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -387,8 +388,8 @@ func navigationEntries(t *testing.T, catalog *Catalog, root Root, dir, after str
 
 func TestContentOnlyInvalidationKeepsDirectoryObservation(t *testing.T) {
 	catalog, root := indexFixture(t)
-	t.Cleanup(repochange.ResetWatchersForTest)
-	repochange.MarkCoverageCompleteForTest(root.Path)
+	repochangetest.Acquire(t)
+	repochangetest.Watch(t, root.Path)
 	writeIndexFile(t, root.Path, "file.txt", "before")
 	observed, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe root", err)
@@ -404,8 +405,8 @@ func TestContentOnlyInvalidationKeepsDirectoryObservation(t *testing.T) {
 
 func TestStructuralInvalidationRefreshesDirectoryObservation(t *testing.T) {
 	catalog, root := indexFixture(t)
-	t.Cleanup(repochange.ResetWatchersForTest)
-	repochange.MarkCoverageCompleteForTest(root.Path)
+	repochangetest.Acquire(t)
+	repochangetest.Watch(t, root.Path)
 	observed, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe empty root", err)
 	writeIndexFile(t, root.Path, "created.txt", "new")

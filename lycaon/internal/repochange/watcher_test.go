@@ -2,6 +2,7 @@ package repochange_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -47,7 +48,7 @@ func ensureLiveRoot(t *testing.T, dir string) {
 
 func TestWatcher_EmitsWorktreeChanged(t *testing.T) {
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) }) // Cleanup follows context cancellation.
-	t.Cleanup(repochange.ResetWatchersForTest)
+	repochangetest.Acquire(t)
 
 	dir := t.TempDir()
 	// Observers are process-global, so a test that counts every watcher event
@@ -79,7 +80,7 @@ func TestWatcher_EmitsWorktreeChanged(t *testing.T) {
 
 func TestWatcherEmitsForFilesNamedLikeDirectories(t *testing.T) {
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) }) // Cleanup follows context cancellation.
-	t.Cleanup(repochange.ResetWatchersForTest)
+	repochangetest.Acquire(t)
 
 	dir := t.TempDir()
 	root := canonicalTestDir(t, dir)
@@ -126,7 +127,7 @@ func TestWatcherEmitsForFilesNamedLikeDirectories(t *testing.T) {
 }
 
 func TestEnsureRootAcceptsRootWithNestedJunk(t *testing.T) {
-	t.Cleanup(repochange.ResetWatchersForTest)
+	repochangetest.Acquire(t)
 	dir := t.TempDir()
 	testutil.FailErr(t, "mkdir .git", os.Mkdir(filepath.Join(dir, ".git"), 0o755))
 	testutil.FailErr(t, "mkdir node_modules", os.Mkdir(filepath.Join(dir, "node_modules"), 0o755))
@@ -136,7 +137,7 @@ func TestEnsureRootAcceptsRootWithNestedJunk(t *testing.T) {
 
 func TestWatcherObservesHiddenAndMetadataChildren(t *testing.T) {
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
-	t.Cleanup(repochange.ResetWatchersForTest)
+	repochangetest.Acquire(t)
 	dir := t.TempDir()
 	root := canonicalTestDir(t, dir)
 	directories := []repochange.WatchDirectory{}

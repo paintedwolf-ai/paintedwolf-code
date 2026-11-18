@@ -2,6 +2,7 @@ package sourceledger
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
@@ -171,8 +172,8 @@ func TestCommandWindowAdmitsWhatTheCommandChanged(t *testing.T) {
 }
 
 func TestWindowIsSettledFollowsSettlement(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
 	window := openTestWindow(t, store, ctx, root, "make")
 	if window.IsSettled() {
@@ -187,7 +188,7 @@ func TestWindowIsSettledFollowsSettlement(t *testing.T) {
 
 func TestWindowOnTrustedCoverageSettlesAfterClose(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
-	repochange.MarkCoverageCompleteForTest(root)
+	repochangetest.Watch(t, root)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	endSettle := holdSettlePeriods(store)
 	window := openTestWindow(t, store, ctx, root, "make")
@@ -205,7 +206,7 @@ func TestWindowOnTrustedCoverageSettlesAfterClose(t *testing.T) {
 
 func TestOpenSessionWindowsListsOnlyThatSessionsUnsettledWindows(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
-	repochange.MarkCoverageCompleteForTest(root)
+	repochangetest.Watch(t, root)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	endSettle := holdSettlePeriods(store)
 	mine := openTestWindow(t, store, ctx, root, "make")

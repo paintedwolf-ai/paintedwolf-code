@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,8 +54,8 @@ func (o *countingOpener) OpenCommandWindow(ctx context.Context, in sourceledger.
 func newWindowFixture(t *testing.T) *windowFixture {
 	t.Helper()
 	// Without watcher coverage a close settles before the program's result.
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
 	ledger := f.AttachLedger(t)
 	opener := &countingOpener{inner: ledger.Commands}
@@ -119,7 +120,7 @@ func TestProgramWindowACCW01UntrustedTokenSettlesBeforeTheResult(t *testing.T) {
 
 func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
 	f := newWindowFixture(t)
-	repochange.MarkCoverageCompleteForTest(f.Dir)
+	repochangetest.Watch(t, f.Dir)
 	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
 	gate := make(chan time.Time)
 	f.ledger.Commands.SetWindowSettleGateForTest(gate)

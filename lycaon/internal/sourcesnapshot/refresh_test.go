@@ -48,7 +48,7 @@ func TestRefreshDemandVerifiesUncoveredRoot(t *testing.T) {
 	writeSource(t, root, "main.go", "package first\n")
 	base, err := store.EnsurePath(t.Context(), root, VerifyStat)
 	testutil.FailErr(t, "publish base", err)
-	repochange.ResetWatchersForTest()
+
 	writeSource(t, root, "main.go", "package changed\n")
 	refresh, err := store.RefreshNeeded(t.Context(), base.ID)
 	testutil.FailErr(t, "read uncovered demand", err)
@@ -105,7 +105,7 @@ func TestRefreshPendingDoesNotWalkUncoveredRoots(t *testing.T) {
 	writeSource(t, root, "main.go", "package main\n")
 	base, err := store.EnsurePath(t.Context(), root, VerifyStat)
 	testutil.FailErr(t, "publish base", err)
-	repochange.ResetWatchersForTest()
+
 	store.onSurvey = func(string) { t.Error("terminal freshness check walked the repository") }
 	store.onCapture = func(string) { t.Error("terminal freshness check read source bytes") }
 	pending, err := store.RefreshPending(t.Context(), base.ID)

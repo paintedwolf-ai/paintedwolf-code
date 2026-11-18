@@ -21,7 +21,7 @@ func TestDebouncerRetirementJoinsDeliveryAndSealsAdmission(t *testing.T) {
 			close(entered)
 			<-release
 		}))
-		d := NewDebouncer(time.Hour)
+		d := newDebouncer(time.Hour)
 		d.NotifyWorktree(t.Context(), root, []string{"first"}, SourceMutation)
 		settled := make(chan error, 1)
 		go func() { settled <- d.retire(t.Context()) }()
@@ -56,7 +56,7 @@ func TestWaitQuietIncludesInFlightDelivery(t *testing.T) {
 				<-release
 			}
 		}))
-		d := NewDebouncer(time.Millisecond)
+		d := newDebouncer(time.Millisecond)
 		d.NotifyWorktree(t.Context(), root, []string{"file"}, SourceMutation)
 		<-entered
 		quiet := make(chan struct{})

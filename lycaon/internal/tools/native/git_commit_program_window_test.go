@@ -2,6 +2,7 @@ package native
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -26,8 +27,8 @@ import (
 // A generated file stages with the session's work because the session's own
 // program was observed creating it; a peer's dirty file stays out.
 func TestGitCommitStagesWhatTheSessionsProgramGeneratedACCW10(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
 	ledger := f.AttachLedger(t)
 	manager := git.NewManager()
@@ -80,8 +81,8 @@ func TestGitCommitStagesWhatTheSessionsProgramGeneratedACCW10(t *testing.T) {
 // A person's save while a program sits between external processes is not staged
 // by the session's bulk commit; explicit paths remain the way to commit it.
 func TestBulkCommitLeavesAnOutsideEditMadeBetweenProcessesOfAProgram(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
 	f.Runtime.ParkThreshold = time.Hour
 	ledger := f.AttachLedger(t)
@@ -121,8 +122,8 @@ func TestBulkCommitLeavesAnOutsideEditMadeBetweenProcessesOfAProgram(t *testing.
 
 // Drift while two sessions' windows are active belongs to neither bulk commit.
 func TestBulkCommitLeavesDriftObservedWhileTwoSessionsWereActive(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
 	ledger := f.AttachLedger(t)
 	manager := git.NewManager()
@@ -164,8 +165,8 @@ func TestBulkCommitLeavesDriftObservedWhileTwoSessionsWereActive(t *testing.T) {
 // A person's edit to a file a window claimed earlier is theirs: it stays out of
 // the bulk commit and uncommitted_paths reports it.
 func TestBulkCommitLeavesAPersonsEditToAFileAWindowClaimed(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
 	ledger := f.AttachLedger(t)
 	manager := git.NewManager()
@@ -221,7 +222,7 @@ func TestBulkCommitWaitsForItsSessionsClosingWindow(t *testing.T) {
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
-	repochange.MarkCoverageCompleteForTest(f.Dir)
+	repochangetest.Watch(t, f.Dir)
 	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
 	gate := make(chan time.Time)
 	ledger.Commands.SetWindowSettleGateForTest(gate)
@@ -243,7 +244,7 @@ func TestBulkCommitReportsWhatAWindowStillSettlingLeftOut(t *testing.T) {
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
-	repochange.MarkCoverageCompleteForTest(f.Dir)
+	repochangetest.Watch(t, f.Dir)
 	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
 
 	first := make(chan time.Time)

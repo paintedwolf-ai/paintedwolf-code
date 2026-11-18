@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -17,7 +18,7 @@ import (
 // Catalog invalidation must follow the root a mutated path resolves against
 // under the session's active root, not the primary root.
 func TestWorktreeChangesFollowTheActiveRoot(t *testing.T) {
-	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) }) // t.Context() is already canceled during cleanup
+	repochangetest.Acquire(t)
 
 	base := t.TempDir()
 	primary, secondary := filepath.Join(base, "app"), filepath.Join(base, "den")

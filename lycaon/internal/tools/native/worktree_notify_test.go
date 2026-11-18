@@ -4,23 +4,28 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
 func TestWriteTool_EmitsWorktreeChanged(t *testing.T) {
-	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) }) // t.Context() is already canceled during cleanup
+	repochangetest.Acquire(t)
 
 	dir := t.TempDir()
 	abs, _ := filepath.Abs(dir)
-	var got repochange.Event
+	events := make(chan repochange.Event, 1)
 	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
-		if ev.ProjectDir != abs {
+		if ev.ProjectDir != abs || ev.Source != repochange.SourceMutation {
 			return
 		}
-		got = ev
+		select {
+		case events <- ev:
+		default:
+		}
 	}))
 
 	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
@@ -30,10 +35,12 @@ func TestWriteTool_EmitsWorktreeChanged(t *testing.T) {
 	}, nativefixture.Context(dir))
 	testutil.FailErr(t, "write", err)
 
-	testutil.WaitFor(t, "the write tool reports WorktreeChanged", func() bool {
-		repochange.ResetDebouncerForTest(t.Context())
-		return got.Kind == repochange.WorktreeChanged
-	})
+	var got repochange.Event
+	select {
+	case got = <-events:
+	case <-time.After(5 * time.Second):
+		t.Fatal("write tool did not report WorktreeChanged")
+	}
 	if got.Source != repochange.SourceMutation {
 		t.Fatalf("source=%q", got.Source)
 	}

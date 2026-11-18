@@ -2,6 +2,7 @@ package repochange_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -30,7 +31,7 @@ func seedBareGitLayout(t *testing.T, root string) {
 
 func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
-	t.Cleanup(repochange.ResetWatchersForTest)
+	repochangetest.Acquire(t)
 
 	rootDir := t.TempDir()
 	seedBareGitLayout(t, rootDir)
@@ -83,7 +84,7 @@ func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 
 func TestRefWatchReportsIndexChanges(t *testing.T) {
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
-	t.Cleanup(repochange.ResetWatchersForTest)
+	repochangetest.Acquire(t)
 
 	rootDir := t.TempDir()
 	seedBareGitLayout(t, rootDir)
@@ -108,7 +109,7 @@ func TestRefWatchReportsIndexChanges(t *testing.T) {
 
 func TestRefWatchEmitsForLinkedWorktreeCommonDirectory(t *testing.T) {
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
-	t.Cleanup(repochange.ResetWatchersForTest)
+	repochangetest.Acquire(t)
 
 	root := t.TempDir()
 	common := t.TempDir()

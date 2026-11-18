@@ -2,6 +2,7 @@ package sourcesnapshot
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,9 +15,9 @@ import (
 // Synthetic coverage exercises delta capture without a platform watcher.
 func coverRoot(t *testing.T, root string) {
 	t.Helper()
-	repochange.ResetWatchersForTest()
-	repochange.MarkCoverageCompleteForTest(root)
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Watch(t, root)
+	repochangetest.Acquire(t)
 }
 
 func notifyChange(root string, paths ...string) {
@@ -248,7 +249,7 @@ func TestMultiRootCaptureKeepsDeltasIndependent(t *testing.T) {
 	store := openSnapshotStore(t)
 	roots := []Root{{Path: t.TempDir()}, {Path: t.TempDir()}}
 	coverRoot(t, roots[0].Path)
-	repochange.MarkCoverageCompleteForTest(roots[1].Path)
+	repochangetest.Watch(t, roots[1].Path)
 	for _, root := range roots {
 		writeSource(t, root.Path, "main.go", "package initial\n")
 	}

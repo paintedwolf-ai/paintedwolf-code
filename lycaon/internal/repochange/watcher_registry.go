@@ -22,12 +22,10 @@ type WatcherRegistry struct {
 	byDir   map[string]*worktreeWatcher
 	maxDirs int
 	// budget is process-wide: one descriptor pool for every worktree watcher.
-	budget *watchfd.Budget
-	// disabled keeps Ensure from starting platform watchers.
-	disabled bool
+	budget   *watchfd.Budget
 	closed   bool
 	work     workscope.Group
-	debounce *Debouncer
+	debounce *debouncer
 }
 
 // NewWatcherRegistry returns an empty registry.
@@ -36,7 +34,7 @@ func NewWatcherRegistry() *WatcherRegistry {
 		byDir:    map[string]*worktreeWatcher{},
 		maxDirs:  watchfd.MaxDirs,
 		budget:   watchfd.NewProcessBudget(),
-		debounce: NewDebouncer(DefaultDebounce),
+		debounce: newDebouncer(DefaultDebounce),
 	}
 }
 
@@ -144,7 +142,7 @@ func watchTarget(root, dir string) string {
 
 // Ensure starts watching projectDir if not already.
 func (r *WatcherRegistry) Ensure(ctx context.Context, projectDir string) {
-	if r == nil || r.disabled {
+	if r == nil {
 		return
 	}
 	key, err := filepath.Abs(strings.TrimSpace(projectDir))
@@ -174,7 +172,7 @@ func (r *WatcherRegistry) Ensure(ctx context.Context, projectDir string) {
 	}
 	w.refs.work = &r.work
 	if r.debounce == nil {
-		r.debounce = NewDebouncer(DefaultDebounce)
+		r.debounce = newDebouncer(DefaultDebounce)
 	}
 	w.debounce = r.debounce
 	loopCtx, finish, err := r.work.Begin(context.WithoutCancel(ctx))
@@ -337,47 +335,5 @@ func (r *WatcherRegistry) CloseRoot(root string) {
 	}
 }
 
-// ResetWatchersForTest closes the process-global registry.
-func ResetWatchersForTest() {
-	processWatchers().CloseAll()
-	watcherLifetimes.Lock()
-	watcherLifetimes.current = NewWatcherRegistry()
-	watcherLifetimes.Unlock()
-}
-
-// DisableWatchersForTest closes the process-global registry and keeps it from
-// starting platform watchers, so only events a test publishes reach observers.
-func DisableWatchersForTest() {
-	processWatchers().CloseAll()
-	watcherLifetimes.Lock()
-	watcherLifetimes.current = NewWatcherRegistry()
-	watcherLifetimes.Unlock()
-	processWatchers().disabled = true
-}
-
-// CloseWatchers releases every process-wide filesystem descriptor at shutdown.
-func CloseWatchers() { processWatchers().CloseAll() }
-
-// CloseRoot releases one process-wide root watcher.
+// CloseRoot releases one process-wide root watcher without joining its callbacks.
 func CloseRoot(root string) { processWatchers().CloseRoot(root) }
-
-// MarkCoverageCompleteForTest registers root as recursively watched with
-// complete coverage and no platform stream, so a test can exercise the
-// paths that trust the watcher by delivering events through Notify itself.
-func MarkCoverageCompleteForTest(root string) {
-	key := canonicalDir(root)
-	if key == "" {
-		return
-	}
-	w := &worktreeWatcher{
-		root: key, recursive: true, done: make(chan struct{}),
-		watched: map[string]int{key: 1},
-	}
-	registry := processWatchers()
-	registry.mu.Lock()
-	if previous := registry.byDir[key]; previous != nil {
-		previous.close()
-	}
-	registry.byDir[key] = w
-	registry.mu.Unlock()
-}

@@ -1,4 +1,4 @@
-package repochange_test
+package repochange
 
 import (
 	"context"
@@ -7,32 +7,31 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestDebouncer_CoalescesWorktreeBurst(t *testing.T) {
-	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) }) // t.Context() is already canceled during cleanup
+	t.Cleanup(func() { ResetDebouncerForTest(context.Background()) }) // t.Context() is already canceled during cleanup
 
 	var n atomic.Int32
 	var lastPaths []string
-	var lastSrc repochange.Source
-	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	var lastSrc Source
+	t.Cleanup(RegisterObserver(func(_ context.Context, ev Event) {
 		n.Add(1)
 		lastPaths = append([]string(nil), ev.Paths...)
 		lastSrc = ev.Source
 	}))
 
 	dir := t.TempDir()
-	d := repochange.NewDebouncer(30 * time.Millisecond)
-	d.NotifyWorktree(context.Background(), dir, []string{"a.go"}, repochange.SourceWatcher)
-	d.NotifyWorktree(context.Background(), dir, []string{"b.go"}, repochange.SourceMutation)
+	d := newDebouncer(30 * time.Millisecond)
+	d.NotifyWorktree(context.Background(), dir, []string{"a.go"}, SourceWatcher)
+	d.NotifyWorktree(context.Background(), dir, []string{"b.go"}, SourceMutation)
 	d.FlushForTest(t.Context())
 
 	if n.Load() != 1 {
 		t.Fatalf("expected 1 coalesced Notify, got %d", n.Load())
 	}
-	if lastSrc != repochange.SourceMutation {
+	if lastSrc != SourceMutation {
 		t.Fatalf("expected mutation preference, got %q", lastSrc)
 	}
 	got := map[string]bool{}
@@ -45,20 +44,20 @@ func TestDebouncer_CoalescesWorktreeBurst(t *testing.T) {
 }
 
 func TestNotifyWorktreeDebounced_EmitsWithSource(t *testing.T) {
-	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) }) // t.Context() is already canceled during cleanup
+	t.Cleanup(func() { ResetDebouncerForTest(context.Background()) }) // t.Context() is already canceled during cleanup
 
-	var got repochange.Event
-	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	var got Event
+	t.Cleanup(RegisterObserver(func(_ context.Context, ev Event) {
 		got = ev
 	}))
 	dir := t.TempDir()
-	repochange.NotifyWorktreeDebounced(context.Background(), dir, []string{"x"}, repochange.SourceMutation)
-	repochange.ResetDebouncerForTest(t.Context()) // flush
+	NotifyWorktreeDebounced(context.Background(), dir, []string{"x"}, SourceMutation)
+	ResetDebouncerForTest(t.Context()) // flush
 
-	if got.Kind != repochange.WorktreeChanged {
+	if got.Kind != WorktreeChanged {
 		t.Fatalf("kind=%v", got.Kind)
 	}
-	if got.Source != repochange.SourceMutation {
+	if got.Source != SourceMutation {
 		t.Fatalf("source=%q", got.Source)
 	}
 	abs, err := filepath.Abs(dir)
@@ -70,23 +69,23 @@ func TestNotifyWorktreeDebounced_EmitsWithSource(t *testing.T) {
 
 // Flush callbacks may queue more work while the lock is released.
 func TestFlushForTestDeliversWorkQueuedDuringTheFlush(t *testing.T) {
-	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
+	t.Cleanup(func() { ResetDebouncerForTest(context.Background()) })
 
 	dir := t.TempDir()
 	var seen []string
 	var queued atomic.Bool
-	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	t.Cleanup(RegisterObserver(func(_ context.Context, ev Event) {
 		seen = append(seen, ev.Paths...)
 		// Stands in for the watcher goroutine landing an event mid-flush.
 		if queued.CompareAndSwap(false, true) {
-			repochange.NotifyWorktreeDebounced(
-				context.Background(), dir, []string{"late.go"}, repochange.SourceWatcher)
+			NotifyWorktreeDebounced(
+				context.Background(), dir, []string{"late.go"}, SourceWatcher)
 		}
 	}))
 
-	repochange.NotifyWorktreeDebounced(
-		context.Background(), dir, []string{"first.go"}, repochange.SourceWatcher)
-	repochange.ResetDebouncerForTest(t.Context())
+	NotifyWorktreeDebounced(
+		context.Background(), dir, []string{"first.go"}, SourceWatcher)
+	ResetDebouncerForTest(t.Context())
 
 	got := map[string]bool{}
 	for _, p := range seen {
@@ -98,19 +97,19 @@ func TestFlushForTestDeliversWorkQueuedDuringTheFlush(t *testing.T) {
 }
 
 func TestDebouncerPreservesStructuredChangeKinds(t *testing.T) {
-	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
+	t.Cleanup(func() { ResetDebouncerForTest(context.Background()) })
 
-	var got repochange.Event
-	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) { got = ev }))
+	var got Event
+	t.Cleanup(RegisterObserver(func(_ context.Context, ev Event) { got = ev }))
 	dir := t.TempDir()
-	d := repochange.NewDebouncer(30 * time.Millisecond)
-	d.NotifyWorktreeChanges(context.Background(), dir, []repochange.WorktreeChange{{Path: "edit.go", Kind: repochange.WorktreeChangeContent}}, repochange.SourceWatcher)
-	d.NotifyWorktreeChanges(context.Background(), dir, []repochange.WorktreeChange{{Path: "new.go", Kind: repochange.WorktreeChangeStructural}}, repochange.SourceWatcher)
-	d.NotifyWorktreeChanges(context.Background(), dir, []repochange.WorktreeChange{{Path: "ambiguous.go", Kind: repochange.WorktreeChangeContent}}, repochange.SourceWatcher)
-	d.NotifyWorktree(context.Background(), dir, []string{"ambiguous.go"}, repochange.SourceWatcher)
+	d := newDebouncer(30 * time.Millisecond)
+	d.NotifyWorktreeChanges(context.Background(), dir, []WorktreeChange{{Path: "edit.go", Kind: WorktreeChangeContent}}, SourceWatcher)
+	d.NotifyWorktreeChanges(context.Background(), dir, []WorktreeChange{{Path: "new.go", Kind: WorktreeChangeStructural}}, SourceWatcher)
+	d.NotifyWorktreeChanges(context.Background(), dir, []WorktreeChange{{Path: "ambiguous.go", Kind: WorktreeChangeContent}}, SourceWatcher)
+	d.NotifyWorktree(context.Background(), dir, []string{"ambiguous.go"}, SourceWatcher)
 	d.FlushForTest(t.Context())
 
-	structural := repochange.StructuralPaths(got)
+	structural := StructuralPaths(got)
 	if structural.Full {
 		t.Fatal("coalesced paths requested full structural resync")
 	}
@@ -124,16 +123,16 @@ func TestDebouncerPreservesStructuredChangeKinds(t *testing.T) {
 }
 
 func TestStructuralPathsDistinguishesContentOnlyFromResync(t *testing.T) {
-	content := repochange.Event{Kind: repochange.WorktreeChanged, Changes: []repochange.WorktreeChange{{Path: "file.go", Kind: repochange.WorktreeChangeContent}}}
-	if structural := repochange.StructuralPaths(content); structural.Full || len(structural.Paths) != 0 {
+	content := Event{Kind: WorktreeChanged, Changes: []WorktreeChange{{Path: "file.go", Kind: WorktreeChangeContent}}}
+	if structural := StructuralPaths(content); structural.Full || len(structural.Paths) != 0 {
 		t.Fatalf("content-only structural paths = %+v, want no structural work", structural)
 	}
-	resync := repochange.Event{Kind: repochange.WorktreeChanged, Changes: []repochange.WorktreeChange{{Path: ".", Kind: repochange.WorktreeChangeResync}}}
-	if structural := repochange.StructuralPaths(resync); !structural.Full {
+	resync := Event{Kind: WorktreeChanged, Changes: []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}}
+	if structural := StructuralPaths(resync); !structural.Full {
 		t.Fatalf("resync structural paths = %+v, want full", structural)
 	}
-	unknown := repochange.Event{Kind: repochange.WorktreeChanged, Paths: []string{"file.go"}}
-	if structural := repochange.StructuralPaths(unknown); structural.Full || len(structural.Paths) != 1 || structural.Paths[0] != "file.go" {
+	unknown := Event{Kind: WorktreeChanged, Paths: []string{"file.go"}}
+	if structural := StructuralPaths(unknown); structural.Full || len(structural.Paths) != 1 || structural.Paths[0] != "file.go" {
 		t.Fatalf("unknown structural paths = %+v, want path-conservative", structural)
 	}
 }

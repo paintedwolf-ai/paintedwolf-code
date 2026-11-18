@@ -3,6 +3,7 @@ package survey
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -213,13 +214,13 @@ func (l listingSignal) OpenSessionWindows(projectID, sessionID string) []sourcel
 }
 
 func TestSourceHistoryOverviewACCW02WaitsForTheAsynchronousSettle(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	h := newHistoryHarness(t)
 	roots := make([]sourceledger.RootSpec, 0, len(h.tctx.Source.Roots))
 	for _, root := range h.tctx.Source.Roots {
 		roots = append(roots, sourceledger.RootSpec{ID: root.ID, Path: root.Path})
-		repochange.MarkCoverageCompleteForTest(root.Path)
+		repochangetest.Watch(t, root.Path)
 		t.Cleanup(func() { repochange.CloseRoot(root.Path) })
 	}
 	h.beginSession(historySession)
