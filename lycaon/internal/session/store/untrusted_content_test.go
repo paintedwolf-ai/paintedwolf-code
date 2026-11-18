@@ -149,6 +149,11 @@ func testSessionURLStanding(t *testing.T, st urlStandingStore, projectID string)
 			t.Errorf("SessionURLStanding(%q) = %d, want %d", address, got, want)
 		}
 	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if got := st.SessionURLStanding(canceled, sess.ID, recorded); got != evidence.URLUnknown {
+		t.Fatalf("canceled lookup returned recorded standing %v", got)
+	}
 	for name, sessionID := range map[string]string{"another session": other.ID, "no session": "", "a missing session": "missing-session"} {
 		if got := st.SessionURLStanding(ctx, sessionID, recorded); got != evidence.URLUnknown {
 			t.Errorf("%s knows the address: %d", name, got)
