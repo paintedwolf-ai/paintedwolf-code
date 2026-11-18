@@ -1074,7 +1074,7 @@ func sessionPrepareWorkerHistory(ctx context.Context, s *conformanceSweep, _ *co
 	return successInputs{query: map[string]string{"project_id": s.fixture.project.ID, "session_id": chat, "worker": name}}, nil
 }
 
-// sessionRosterWorker puts a worker with one admitted round on the chat's
+// sessionRosterWorker puts a worker with two settled rounds on the chat's
 // roster, as a coordinator's spawn does, and returns its name.
 func sessionRosterWorker(ctx context.Context, s *conformanceSweep, chat string) (string, error) {
 	parent, err := s.host.Store.Get(ctx, chat)
@@ -1093,18 +1093,25 @@ func sessionRosterWorker(ctx context.Context, s *conformanceSweep, chat string) 
 	if err != nil {
 		return "", err
 	}
-	job, err := s.host.Workers.Queue.Enqueue(ctx, wire.WorkerTask{
-		ProjectID: s.fixture.project.ID, ParentSessionID: chat, ChildSessionID: child.ID, AgentType: "implementer",
-		Status: wire.WorkerStatusComplete, ExecutionTarget: wire.ExecutionTargetLocal, Prompt: "conformance", Brief: "conformance",
-		Result: &wire.WorkerResult{Status: "complete", CompletionReport: &wire.WorkerCompletionReport{LegStatus: "complete"}},
-	})
-	if err != nil {
-		return "", err
+	// Cancelling a round's job settles it, so the worker can take the next.
+	for range 2 {
+		job, err := s.host.Workers.Queue.Enqueue(ctx, wire.WorkerTask{
+			ProjectID: s.fixture.project.ID, ParentSessionID: chat, ChildSessionID: child.ID, AgentType: "implementer",
+			ExecutionTarget: wire.ExecutionTargetLocal, Prompt: "conformance", Brief: "conformance",
+		})
+		if err != nil {
+			return "", err
+		}
+		if _, err := s.host.Workers.Records.AdmitRound(ctx, coordinator, workerrecords.Op{ID: uuid.NewString()}, created.WorkerID, workerrecords.RoundSpec{
+			JobID: job, ExecutionTarget: "local",
+		}); err != nil {
+			return "", err
+		}
+		if err := s.host.Workers.Queue.Cancel(ctx, job, nil); err != nil {
+			return "", err
+		}
 	}
-	_, err = s.host.Workers.Records.AdmitRound(ctx, coordinator, workerrecords.Op{ID: uuid.NewString()}, created.WorkerID, workerrecords.RoundSpec{
-		JobID: job, ExecutionTarget: "local",
-	})
-	return name, err
+	return name, nil
 }
 
 // sessionTurnState names why a chat may not have run a prompt: its status,
