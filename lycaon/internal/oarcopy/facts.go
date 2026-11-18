@@ -47,16 +47,6 @@ func buildStandardProfileFacts() map[string][]string {
 	return out
 }
 
-// RequiredCoreFacts returns the normative core facts.
-func RequiredCoreFacts() []string {
-	return append([]string(nil), requiredCoreFacts...)
-}
-
-// RequiredCoreFunctions returns the normative core observation functions.
-func RequiredCoreFunctions() []string {
-	return append([]string(nil), requiredCoreFunctions...)
-}
-
 // StandardProfileFacts returns each standard profile and its complete membership.
 func StandardProfileFacts() map[string][]string {
 	out := make(map[string][]string, len(standardProfileFacts))

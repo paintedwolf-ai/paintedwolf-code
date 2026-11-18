@@ -7,11 +7,12 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/oarcopy"
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestCatalogueTiersAreComplete(t *testing.T) {
-	testutil.FailErr(t, "validate catalogue tiers", ValidateCatalogueTiers())
+	testutil.FailErr(t, "validate catalogue tiers", validateCatalogueTiers())
 
 	byName := map[string]FactInfo{}
 	for _, f := range FactCatalogue() {
@@ -29,16 +30,16 @@ func TestCatalogueTiersAreComplete(t *testing.T) {
 			t.Errorf("fact %q has tier %q", f.Name, f.Tier)
 		}
 	}
-	for _, name := range requiredCoreFacts {
+	for name := range oarcore.CoreFacts() {
 		if byName[name].Tier != FactTierCore {
 			t.Errorf("core fact %q is tiered %q", name, byName[name].Tier)
 		}
 	}
 	for _, profile := range StandardProfiles() {
-		for _, member := range StandardProfileMembers(profile) {
+		for _, member := range standardProfileFacts[profile] {
 			info, ok := byName[member]
 			if !ok {
-				continue // observation functions are checked by ValidateCatalogueTiers
+				continue // The tier check covers observation functions.
 			}
 			if info.Tier != FactTierStandard || info.Profile != profile {
 				t.Errorf("profile %q member %q is tier %q profile %q", profile, member, info.Tier, info.Profile)
@@ -52,7 +53,7 @@ func TestValidateCatalogueTiersCatchesDrift(t *testing.T) {
 		saved := factDecls
 		factDecls = append(append([]factDecl(nil), saved...), factDecl{name: "ghost_fact"})
 		t.Cleanup(func() { factDecls = saved })
-		err := ValidateCatalogueTiers()
+		err := validateCatalogueTiers()
 		if err == nil || !strings.Contains(err.Error(), `fact "ghost_fact" has no tier`) {
 			t.Fatalf("err = %v", err)
 		}
@@ -67,7 +68,7 @@ func TestValidateCatalogueTiersCatchesDrift(t *testing.T) {
 		}
 		factDecls = kept
 		t.Cleanup(func() { factDecls = saved })
-		err := ValidateCatalogueTiers()
+		err := validateCatalogueTiers()
 		if err == nil || !strings.Contains(err.Error(), `core fact "breaker_count" is not in FactCatalogue()`) {
 			t.Fatalf("err = %v", err)
 		}
@@ -83,7 +84,7 @@ func TestValidateCatalogueTiersCatchesDrift(t *testing.T) {
 		}
 		factDecls = kept
 		t.Cleanup(func() { factDecls = saved })
-		err := ValidateCatalogueTiers()
+		err := validateCatalogueTiers()
 		if err == nil || !strings.Contains(err.Error(), `standard profile "content-safety" member "jailbreak_score" is not in FactCatalogue()`) {
 			t.Fatalf("err = %v", err)
 		}
@@ -248,7 +249,7 @@ func TestLintPortability(t *testing.T) {
 		"when": `tool == "read" && same_call_run >= 2`,
 	}))
 	testutil.FailErr(t, "parse portable rule", err)
-	if rep := LintPortability(core); !rep.Portable {
+	if rep := lintPortability(core); !rep.Portable {
 		t.Fatalf("core-only rule reported non-portable: %+v", rep)
 	}
 
@@ -258,7 +259,7 @@ func TestLintPortability(t *testing.T) {
 		"requires_facts": []any{"paintedwolf.pending_overlay_promote"},
 	}))
 	testutil.FailErr(t, "parse host rule", err)
-	rep := LintPortability(host)
+	rep := lintPortability(host)
 	if rep.Portable {
 		t.Fatal("host rule reported portable")
 	}
