@@ -212,7 +212,14 @@ func (m *Service) AfterTool(ctx context.Context, sess *api.Session, tool string,
 		oar.ObserveMCPStructuralPost(gc, tool, m.MCP, raised.Succeeded(), raised.ProviderErrorCode, output)
 	}
 	ObserveConfine(gc, raised.Confine)
-	gc.Refusals.OptionalReadPaths = m.optionalReads.observe(sess.ID, raised)
+	if paths := m.optionalReads.observe(sess.ID, raised); len(paths) > 0 {
+		gc.Refusals.OptionalReadPaths = paths
+		defer func() {
+			if !facts.HasCode(optionalReadNoticeCode) {
+				m.optionalReads.release(sess.ID, paths)
+			}
+		}()
+	}
 	m.observeSocketResources(ctx, gc, sess.ProjectID)
 	RegisterWorktreeFacts(ctx, gc, raised.IndexWatch)
 	ObserveEditorConfigMismatch(gc, raised)

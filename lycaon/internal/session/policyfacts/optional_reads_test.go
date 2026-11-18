@@ -33,6 +33,10 @@ func TestOptionalProtectedReadsAppearOncePerPathAndChat(t *testing.T) {
 	if paths := m.optionalReads.observe("other", facts); !slices.Equal(paths, want) {
 		t.Fatalf("other chat's notice = %v, want %v", paths, want)
 	}
+	m.optionalReads.release("first", want[:1])
+	if paths := m.optionalReads.observe("first", facts); !slices.Equal(paths, want[:1]) {
+		t.Fatalf("notice dropped before delivery did not retry: %v", paths)
+	}
 	m.ForgetSession("first")
 	if paths := m.optionalReads.observe("first", facts); !slices.Equal(paths, want) {
 		t.Fatalf("released chat's notice = %v, want %v", paths, want)

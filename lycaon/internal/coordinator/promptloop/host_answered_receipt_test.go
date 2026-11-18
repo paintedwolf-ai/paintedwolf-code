@@ -297,6 +297,7 @@ func TestInvocationSettlementMatchesEffectsAndRefusal(t *testing.T) {
 		beforeEffect   bool
 		programState   string
 		programStarted bool
+		deliveryReject bool
 		status         api.InvocationStatus
 		invoked        bool
 		code           string
@@ -306,6 +307,7 @@ func TestInvocationSettlementMatchesEffectsAndRefusal(t *testing.T) {
 		{name: "program stopped before any operation", programState: "rejected", status: api.InvocationStatusRejected, code: "COMMAND_OPTION_UNSUPPORTED"},
 		{name: "program stopped after an operation", programState: "rejected", programStarted: true, status: api.InvocationStatusRejected, invoked: true, code: "COMMAND_OPTION_UNSUPPORTED"},
 		{name: "program ran to exit", programState: "completed", programStarted: true, status: api.InvocationStatusCompleted, invoked: true},
+		{name: "program exited but delivery was refused", programState: "completed", programStarted: true, deliveryReject: true, status: api.InvocationStatusRejected, invoked: true, code: "COMMAND_OUTPUT_SCREEN_LIMIT"},
 	} {
 		t.Run(want.name, func(t *testing.T) {
 			rec := newRecordingRecorder()
@@ -320,6 +322,10 @@ func TestInvocationSettlementMatchesEffectsAndRefusal(t *testing.T) {
 					ID: "program", ParentReceiptID: tc.Invocation.ID, State: want.programState, StopCode: want.code, StatusCode: &status,
 				}
 				tc.Effects.Out.CommandStarted = want.programStarted
+				if want.deliveryReject {
+					tc.Effects.Out.CommandProgram.StopCode = ""
+					tc.Effects.Out.CommandDeliveryReject = &toolrejection.ToolReject{Code: want.code, Data: map[string]any{"maximum": 8}}
+				}
 				return "fixture command outcome", nil
 			}))
 			deps.Context.Tools = reg

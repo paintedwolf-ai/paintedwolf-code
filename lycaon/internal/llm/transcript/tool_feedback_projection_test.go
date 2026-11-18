@@ -246,3 +246,28 @@ func TestToolFeedbackPreservesBoundedDiscoveryPage(t *testing.T) {
 		t.Fatalf("provider discovery changed: %+v", got)
 	}
 }
+
+func TestToolFeedbackKeepsRefusalFactsWithoutLedgerDetails(t *testing.T) {
+	msg := feedbackMessage()
+	code := msg.ToolResult.Feedback[0].Code
+	msg.ToolResult.Invocation = &api.InvocationReceipt{
+		ID: "receipt", Tool: msg.ToolResult.Tool, ToolCallID: msg.ToolResult.ToolCallID, Status: api.InvocationStatusRejected,
+		Failure: &api.InvocationFailure{Code: code},
+	}
+	details := msg.ToolResult.Feedback[0].Details
+	details["failure_class"] = "host_rejection"
+	details["retryable"] = false
+	details["owner_ref"] = "owner"
+	details["tool"] = msg.ToolResult.Tool
+	parts := toolFeedbackParts(msg)
+	if len(parts) != 1 {
+		t.Fatalf("projected feedback parts = %d", len(parts))
+	}
+	var payload struct {
+		Feedback []api.ToolFeedback `json:"tool_feedback"`
+	}
+	testutil.FailErr(t, "decode rejection feedback", json.Unmarshal([]byte(parts[0].Content), &payload))
+	if len(payload.Feedback) != 1 || len(payload.Feedback[0].Details) != 1 || payload.Feedback[0].Details["entries"] == nil || len(details) != 5 {
+		t.Fatalf("model = %+v, stored = %+v", payload.Feedback, details)
+	}
+}

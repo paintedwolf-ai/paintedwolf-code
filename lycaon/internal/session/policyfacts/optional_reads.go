@@ -7,7 +7,10 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 )
 
-const maxOptionalReadNotices = 512
+const (
+	maxOptionalReadNotices = 512
+	optionalReadNoticeCode = "SANDBOX_OPTIONAL_READ_WITHHELD"
+)
 
 type optionalReadNotices struct {
 	mu    sync.Mutex
@@ -53,4 +56,16 @@ func (n *optionalReadNotices) observe(sessionID string, facts guidance.ToolResul
 		}
 	}
 	return paths
+}
+
+func (n *optionalReadNotices) release(sessionID string, paths []string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	seen := n.shown[sessionID]
+	for _, path := range paths {
+		delete(seen, path)
+	}
+	if len(seen) == 0 {
+		delete(n.shown, sessionID)
+	}
 }
