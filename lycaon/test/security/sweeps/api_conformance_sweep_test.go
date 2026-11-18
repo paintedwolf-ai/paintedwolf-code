@@ -83,6 +83,20 @@ func TestAPIConformance(t *testing.T) {
 	presencePublic, presenceKey, err := ed25519.GenerateKey(rand.Reader)
 	testutil.FailErr(t, "generate a presence key", err)
 	t.Setenv(presence.PublicKeyEnv, base64.RawURLEncoding.EncodeToString(presencePublic))
+
+	validator, err := openapi.Bundled()
+	testutil.FailErr(t, "load the bundled OpenAPI document", err)
+	doc, err := openapi.Document()
+	testutil.FailErr(t, "load the bundled OpenAPI document", err)
+	root, err := openapi.RepoRoot()
+	testutil.FailErr(t, "find the repository root", err)
+	sweep := newConformanceSweep(doc, validator, nil, nil)
+	sweep.eventSchemas = openapi.NewEventSchemas(filepath.Join(root, "docs"))
+	sweep.fixture = conformanceFixture{t: t, presenceKey: presenceKey}
+	// A host's construction sets process-wide configuration, so the terminal
+	// hosts are built before the host every other operation runs against.
+	sweep.runTerminal(t)
+
 	h := wiring.BuildForTest(t, wiring.WithChangeDebounce(conformanceDebounce),
 		wiring.WithInstalledPack(filepath.Join("testdata", "conformance-pack")),
 		wiring.WithMCPConnector(conformanceMCP()))
@@ -102,17 +116,7 @@ func TestAPIConformance(t *testing.T) {
 	provider := createConformanceProvider(t, h.Server)
 	createConformanceMCPProvider(t, h.Server)
 
-	validator, err := openapi.Bundled()
-	testutil.FailErr(t, "load the bundled OpenAPI document", err)
-	doc, err := openapi.Document()
-	testutil.FailErr(t, "load the bundled OpenAPI document", err)
-	noticeCfg, err := usernotice.LoadEffectiveUserNotices(extpacks.Active())
-	testutil.FailErr(t, "load the server's notice catalog", err)
-
-	root, err := openapi.RepoRoot()
-	testutil.FailErr(t, "find the repository root", err)
-	sweep := newConformanceSweep(doc, validator, h.Server, usernotice.NewCatalog(noticeCfg))
-	sweep.eventSchemas = openapi.NewEventSchemas(filepath.Join(root, "docs"))
+	sweep.handler, sweep.notices = h.Server, conformanceNotices(t)
 	settleSourceWatcher(t, h.Server.WaitForBackground, hub, projectDir)
 	effects := openConformanceEffects(t, h, hub, projectDir, conformanceDebounce)
 	sweep.effects, sweep.keyRows = effects, effects
@@ -122,11 +126,7 @@ func TestAPIConformance(t *testing.T) {
 	sweep.values.bind("/v1/web-research/providers/{provider_id}", "", string(wire.WebSearchProviderTavily))
 	sweep.host = h
 	sweep.fixture = conformanceFixture{t: t, presenceKey: presenceKey, projectDir: projectDir, project: project, session: sess}
-	effects.probe(t, "after the settle")
-	sweep.runTerminal(t)
-	effects.probe(t, "after the terminal hosts")
 	hostIDs := conformanceHostLookup(t, h)
-	effects.probe(t, "after the host lookup")
 	sweep.beforeDeletes = hostIDs.remember
 	sweep.runAll(t.Context())
 
@@ -137,6 +137,14 @@ func TestAPIConformance(t *testing.T) {
 	sweep.checkCorpus(sweep.corpus.corpus(events), filepath.Join(root, openapi.HostCorpusPath), os.Getenv("UPDATE_HOST_CORPUS") == "1")
 	sweep.secrets.scanEvents(sweep.findings, events)
 	sweep.report(t)
+}
+
+// conformanceNotices is the notice catalog of the host built last.
+func conformanceNotices(t *testing.T) *usernotice.Catalog {
+	t.Helper()
+	cfg, err := usernotice.LoadEffectiveUserNotices(extpacks.Active())
+	testutil.FailErr(t, "load the server's notice catalog", err)
+	return usernotice.NewCatalog(cfg)
 }
 
 // bindConformanceFixtures binds the fixture project and chat by their

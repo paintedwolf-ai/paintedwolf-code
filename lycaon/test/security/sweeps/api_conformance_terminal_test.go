@@ -18,6 +18,7 @@ func (s *conformanceSweep) runTerminal(t *testing.T) {
 			continue
 		}
 		sub := s.onHost(wiring.BuildForTest(t))
+		sub.notices = conformanceNotices(t)
 		req, err := sub.successRequest(t.Context(), op)
 		if err != nil {
 			s.findings.add(ruleOperationsSucceed, op.ID, "success", "could not prepare: %v", err)

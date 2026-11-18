@@ -234,12 +234,6 @@ func (e *hostEffects) awaitWatcherBarrier(ctx context.Context) error {
 	return fmt.Errorf("the watcher reported none of %d barrier rounds in %s; it reported %v; coverage %+v", watcherBarrierRounds, e.projectDir, e.unmatched, repochange.Coverage(e.projectDir))
 }
 
-// probe logs whether the watcher answers a barrier at stage.
-func (e *hostEffects) probe(t *testing.T, stage string) {
-	t.Helper()
-	t.Logf("watcher probe %s: %v", stage, e.awaitWatcherBarrier(t.Context()))
-}
-
 // watcherBarrierRounds bounds the rewrites of an unanswered barrier, so a
 // watcher that stopped reporting fails each read instead of hanging the sweep.
 const watcherBarrierRounds = 6
