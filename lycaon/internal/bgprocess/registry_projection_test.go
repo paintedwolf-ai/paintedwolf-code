@@ -16,7 +16,7 @@ import (
 const projectionSecret = "capture-secret-value"
 
 func projectionProjector() *captureprojection.Projector {
-	m := secretmatch.NewInertMatcher()
+	m := &secretmatch.Matcher{}
 	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{
 			Secret: projectionSecret,
@@ -219,7 +219,7 @@ func TestUnwiredProjectorWithholdsTheTail(t *testing.T) {
 func TestFailedScreeningSuppressesTheTail(t *testing.T) {
 	h := newProjectionHarness(t, DefaultRingBufferBytes)
 	failing := captureprojection.New(
-		secretmatch.NewInertMatcher(),
+		&secretmatch.Matcher{},
 		func(context.Context, string, string) error { return errUnavailablePrimer },
 	)
 	h.reg.Output.SetCaptureProjector(failing)

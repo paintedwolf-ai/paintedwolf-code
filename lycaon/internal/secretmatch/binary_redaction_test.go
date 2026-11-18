@@ -12,7 +12,7 @@ func TestRedactionPreservesBinaryBytesOutsideMatchedRanges(t *testing.T) {
 	prefix := []byte{0xff, 0xc3, 0x28, 0, 'b', 'e', 'f', 'o', 'r', 'e', ' '}
 	suffix := []byte{' ', 0xfe, 0xf0, 0x28, 0x8c, 0x28, '\r', '\n'}
 	input := append(append(append([]byte(nil), prefix...), []byte(secret)...), suffix...)
-	matcher := NewInertMatcher()
+	matcher := &Matcher{}
 	matcher.SetHarvestSource(func(context.Context) []HarvestedValue {
 		return []HarvestedValue{{Secret: secret, RuleID: ManagedRuleID, NonDisclosable: true, Fingerprint: "sf1_0123456789abcdef"}}
 	})

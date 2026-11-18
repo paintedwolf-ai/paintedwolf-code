@@ -72,7 +72,7 @@ func TestCaptureHandlerReadsAndReturnsTheUnsavedWorkerSurface(t *testing.T) {
 	testutil.FailErr(t, "write worker capture fixture", os.WriteFile(filepath.Join(branch, "index.html"), []byte(workerHTML), 0o600))
 
 	pool := browser.NewPool("")
-	pool.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	pool.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	t.Cleanup(pool.Close)
 	out := &tools.ToolInvocationOut{}
 	result, err := CaptureHandler(pool, nil, nil)(t.Context(), map[string]any{

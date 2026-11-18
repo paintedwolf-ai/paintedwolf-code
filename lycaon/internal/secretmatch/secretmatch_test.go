@@ -317,7 +317,7 @@ func checkExportedTypeExpr(t *testing.T, file, typeName string, node ast.Node) {
 }
 
 func TestInertMatcherByteIdentical(t *testing.T) {
-	for _, m := range []*Matcher{nil, NewInertMatcher()} {
+	for _, m := range []*Matcher{nil, &Matcher{}} {
 		if !m.Inert() {
 			t.Fatal("expected Inert")
 		}

@@ -125,7 +125,7 @@ func TestCurlClientCertificateAndPassphrase(t *testing.T) {
 	h.write("plain.key", string(client.KeyPEM))
 	h.write("bundle.pem", string(client.CertPEM)+string(client.KeyPEM))
 	// Presenting the certificate is a disclosure reviewed for its recipient.
-	identityMatcher := secretmatch.NewInertMatcher()
+	identityMatcher := &secretmatch.Matcher{}
 	identityFP, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("i", 32)))
 	testutil.FailErr(t, "identity fingerprinter", err)
 	identityMatcher.SetFingerprinter(identityFP)
@@ -193,7 +193,7 @@ func TestCurlClientCertificateAndPassphrase(t *testing.T) {
 	// The passphrase is never written by curl, and what the transcript and the
 	// retained review receive passes the program's screen, which holds the
 	// resolved reference value.
-	matcher := secretmatch.NewInertMatcher()
+	matcher := &secretmatch.Matcher{}
 	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{Name: "MTLS_PASSPHRASE", Secret: passphrase, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true}}
 	})
@@ -304,7 +304,7 @@ func TestCurlVerboseScreensCredentials(t *testing.T) {
 	}
 	// What reaches the model passes the program's output screen, which masks
 	// resolved secret values wherever they appear.
-	matcher := secretmatch.NewInertMatcher()
+	matcher := &secretmatch.Matcher{}
 	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{
 			{Name: "API_TOKEN", Secret: token, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true},

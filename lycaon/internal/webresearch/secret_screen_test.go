@@ -245,7 +245,7 @@ func TestScreenInertMatcherByteIdentical(t *testing.T) {
 		t.Fatalf("ask=%d hits=%d", askCalls.Load(), hits.Load())
 	}
 
-	ctx = withSecretScreen(context.Background(), secretmatch.NewInertMatcher(), ask, "", screenDestination{})
+	ctx = withSecretScreen(context.Background(), &secretmatch.Matcher{}, ask, "", screenDestination{})
 	out = searchTestProvider(t, ctx, p, googleCSETestSettings(), "leak "+plantedAWS, 5)
 	if !out.OK || askCalls.Load() != 0 {
 		t.Fatalf("inert matcher must be byte-identical: out=%+v ask=%d", out, askCalls.Load())

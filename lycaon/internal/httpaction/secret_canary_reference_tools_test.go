@@ -172,7 +172,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	testutil.FailErr(t, "load tool profiles", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, profiles)
 	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-	background.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	background.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	runner := hostcmd.NewRunner()
 	capturedCommand := &command.CommandTool{Runner: runner, Boundary: boundary, Background: background}
 	verify := &native.VerifyTool{Programs: program.Runtime}

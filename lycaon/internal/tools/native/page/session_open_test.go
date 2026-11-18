@@ -29,7 +29,7 @@ func TestOpenHandlerIdempotentReopen(t *testing.T) {
 		testutil.FailErr(t, "write "+site+" index", os.WriteFile(filepath.Join(workspace, site, "index.html"), []byte(body), 0o600))
 	}
 	pool := browser.NewPool("")
-	pool.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	pool.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	t.Cleanup(pool.Close)
 	pages := pagesession.NewRegistry(pagesession.Config{MaxPages: 1})
 	t.Cleanup(func() { pages.Close(t.Context()) })

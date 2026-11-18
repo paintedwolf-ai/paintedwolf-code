@@ -271,7 +271,7 @@ func custodyMatcher(t *testing.T, service *Service) *secretmatch.Matcher {
 	fingerprinter, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("g", 32)))
 	testutil.FailErr(t, "fingerprinter", err)
 	service.SetFingerprinter(fingerprinter)
-	matcher := secretmatch.NewInertMatcher()
+	matcher := &secretmatch.Matcher{}
 	matcher.SetFingerprinter(fingerprinter)
 	return matcher
 }
