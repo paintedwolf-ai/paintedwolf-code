@@ -16,8 +16,7 @@ import (
 
 func TestAPIScanFeedbackAsyncEvidenceAndSummary(t *testing.T) {
 	h := wiring.BuildForTest(t)
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 	srv := h.Server
 	projectDir := t.TempDir()
 	project := createProjectHTTP(t, srv, projectDir)

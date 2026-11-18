@@ -24,8 +24,7 @@ func TestImplementModeTaskEnqueue(t *testing.T) {
 		FollowUpText: "Queued implementer.",
 	}}})
 	h := BuildForTest(t, WithLLMClient(mock))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	ctx := context.Background()
 	dir := t.TempDir()

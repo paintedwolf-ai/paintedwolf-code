@@ -73,14 +73,6 @@ type ServeApp struct {
 	eventPub *events.Publisher
 }
 
-// StartBackgroundWorkers starts registered runners and returns their stop function.
-func (a *ServeApp) StartBackgroundWorkers(ctx context.Context) (context.CancelFunc, error) {
-	if err := a.startRunners(ctx); err != nil {
-		return nil, err
-	}
-	return a.stopRunners, nil
-}
-
 const (
 	// serveDrainTimeout bounds the serve loop's runner and HTTP drain.
 	serveDrainTimeout = 3 * time.Second

@@ -12,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -477,7 +476,7 @@ func TestCommandProgramHTTPMessagesEndpointReturnsContentAndReceipt(t *testing.T
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+s.session+"/messages", nil)
-	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	req.Header.Set("Authorization", "Bearer "+s.h.APIToken)
 	w := httptest.NewRecorder()
 	s.h.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

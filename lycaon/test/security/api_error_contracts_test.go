@@ -594,7 +594,7 @@ func runAPIErrorRows(t *testing.T, base string, rows []apiErrorMatrixRow) {
 			case "none":
 				// Omit authorization.
 			case "":
-				req.Header.Set("Authorization", api.TestAuthHeader())
+				req.Header.Set("Authorization", fixtureAuthorization())
 			default:
 				req.Header.Set("Authorization", "Bearer "+row.auth)
 			}

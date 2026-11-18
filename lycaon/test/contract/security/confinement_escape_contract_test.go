@@ -16,7 +16,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/project"
@@ -264,11 +263,12 @@ func TestConfinementIntegrityForeignTemporaryTreeWriteDenied(t *testing.T) {
 }
 
 func TestConfinementIntegrityProjectRootStateAncestorRefused(t *testing.T) {
-	srv := wiring.BuildForTest(t).Server
+	h := wiring.BuildForTest(t)
+	srv := h.Server
 	ancestor := rootfacts.Install(t).ContainsState
 	body := `{"roots":[{"path":` + jsonQuote(ancestor) + `}]}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects", strings.NewReader(body))
-	req.Header.Set("Authorization", api.TestAuthHeader())
+	req.Header.Set("Authorization", "Bearer "+h.APIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -287,7 +287,7 @@ func TestConfinementIntegrityProjectRootStateAncestorRefused(t *testing.T) {
 	okDir := t.TempDir()
 	okBody := `{"roots":[{"path":` + jsonQuote(okDir) + `}]}`
 	okReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects", strings.NewReader(okBody))
-	okReq.Header.Set("Authorization", api.TestAuthHeader())
+	okReq.Header.Set("Authorization", "Bearer "+h.APIToken)
 	okReq.Header.Set("Content-Type", "application/json")
 	okW := httptest.NewRecorder()
 	srv.ServeHTTP(okW, okReq)
@@ -312,11 +312,12 @@ func TestConfinementIntegrityCompositeChain(t *testing.T) {
 	})
 
 	t.Run("b_token_in_hand_still_refuses_control_plane_root", func(t *testing.T) {
-		srv := wiring.BuildForTest(t).Server
+		h := wiring.BuildForTest(t)
+		srv := h.Server
 		cfg := os.Getenv("LYCAON_CONFIG_DIR")
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects",
 			strings.NewReader(`{"roots":[{"path":`+jsonQuote(cfg)+`}]}`))
-		req.Header.Set("Authorization", api.TestAuthHeader())
+		req.Header.Set("Authorization", "Bearer "+h.APIToken)
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
