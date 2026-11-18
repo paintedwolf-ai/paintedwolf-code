@@ -1,0 +1,12 @@
+manifest_version: 1
+id: conformance/sweep
+name: Conformance sweep
+description: >-
+  Contributions the API conformance sweep invokes: a project command, a
+  command whose choice step reads an MCP tool, and an MCP search source.
+version: 1.0.0
+compatibility:
+  extension_api: "^1.0.0"
+dependencies:
+  painted-wolf/platform:
+    version: "^1.0.0"

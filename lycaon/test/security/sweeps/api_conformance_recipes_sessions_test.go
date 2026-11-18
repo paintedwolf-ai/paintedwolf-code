@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"sync"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -21,10 +22,13 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	openapi "github.com/lycaon/lycaon/test/openapi"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 // sessionRecipes cover sessions, workflow runs, checkpoints, workers,
@@ -53,9 +57,12 @@ var sessionRecipes = map[string]successRecipe{
 	"resolveCheckpoint":              {prepare: sessionPrepareResolveCheckpoint},
 	"beginCheckpointUnlockChallenge": {prepare: sessionPrepareUnlockChallenge},
 
-	"listWorkers":           {seed: sessionSeedWorkers},
-	"cancelWorker":          {prepare: sessionPrepareCancelWorker},
-	"getWorkerChanges":      {prepare: sessionPrepareWorkerChanges},
+	"listWorkers":      {seed: sessionSeedWorkers},
+	"cancelWorker":     {prepare: sessionPrepareCancelWorker},
+	"getWorkerChanges": {prepare: sessionPrepareWorkerChanges},
+	"getWorkerHistory": {prepare: sessionPrepareWorkerHistory},
+	// Other deletes address the fixture chat, so it goes last.
+	"deleteSession":         {stage: stageDelete, order: 1},
 	"dispatchDelegationLeg": {prepare: sessionPrepareDispatchLeg},
 
 	"previewSessionRewind":     {prepare: sessionPreparePreviewRewind},
@@ -68,7 +75,7 @@ var sessionRecipes = map[string]successRecipe{
 	"getCommandProgramReceipt":     {prepare: sessionPrepareProgramReceipt},
 	"getCommandReceiptDocument":    {prepare: sessionPrepareReceiptDocument},
 	"searchCommandReceiptDocument": {prepare: sessionPrepareReceiptSearch},
-	"listSessionInvocations":       {seed: sessionSeedInvocations},
+	"listSessionInvocations":       {prepare: sessionPrepareInvocations},
 
 	"getSessionBackgroundProcessOutput": {prepare: sessionPrepareProcessOutput},
 	"stopBackgroundProcess":             {prepare: sessionPrepareStopProcess},
@@ -79,9 +86,10 @@ var sessionRecipes = map[string]successRecipe{
 	"deleteProjectArtifact": {prepare: sessionPrepareDeleteArtifact},
 	"listProjectArtifacts":  {seed: sessionSeedProjectArtifacts},
 
-	"invokeSessionCommand": {prepare: sessionPrepareInvokeSessionCommand},
-	"invokeProjectCommand": {prepare: sessionPrepareInvokeProjectCommand},
-	"landGitWorktree":      {prepare: sessionPrepareLandWorktree},
+	"invokeSessionCommand":       {prepare: sessionPrepareInvokeSessionCommand},
+	"invokeProjectCommand":       {prepare: sessionPrepareInvokeProjectCommand},
+	"resolveContributionChoices": {prepare: sessionPrepareResolveChoices},
+	"landGitWorktree":            {prepare: sessionPrepareLandWorktree},
 }
 
 const sessionJSONType = "application/json"
@@ -95,32 +103,17 @@ const (
 	sessionChoiceWorkflow   = "choice-transitions-fixture"
 )
 
-// sessionMemo keeps what a recipe made, so a read recipe that runs in every
-// read pass makes its resource once per sweep.
-var sessionMemo = struct {
-	sync.Mutex
-	values map[sessionMemoKey]any
-}{values: map[sessionMemoKey]any{}}
-
-type sessionMemoKey struct {
-	sweep *conformanceSweep
-	key   string
-}
-
+// sessionOnce makes a recipe's resource once per sweep, so a read recipe
+// that runs in every read pass does not make another.
 func sessionOnce[T any](s *conformanceSweep, key string, build func() (T, error)) (T, error) {
-	sessionMemo.Lock()
-	cached, ok := sessionMemo.values[sessionMemoKey{s, key}]
-	sessionMemo.Unlock()
-	if ok {
+	if cached, ok := s.memo.load("session:" + key); ok {
 		return cached.(T), nil
 	}
 	value, err := build()
 	if err != nil {
 		return value, err
 	}
-	sessionMemo.Lock()
-	sessionMemo.values[sessionMemoKey{s, key}] = value
-	sessionMemo.Unlock()
+	s.memo.store("session:"+key, value)
 	return value, nil
 }
 
@@ -202,7 +195,7 @@ func sessionRegisterManifests(s *conformanceSweep) error {
 				}},
 			}},
 		})
-		raw, err := os.ReadFile(filepath.Join("..", "..", "config", "fixtures", "workflows", "choice-transitions.yaml"))
+		raw, err := os.ReadFile(sessionRepoFile("lycaon", "config", "fixtures", "workflows", "choice-transitions.yaml"))
 		if err != nil {
 			return false, err
 		}
@@ -428,7 +421,7 @@ func sessionSeedWorkflowRuns(ctx context.Context, s *conformanceSweep) error {
 
 // sessionComposeYAML is the session workflow fixture under a fresh id.
 func sessionComposeYAML(id string) ([]byte, error) {
-	raw, err := os.ReadFile(filepath.Join("..", "contract", "testdata", "workflow", "compose_session_plan.yaml"))
+	raw, err := os.ReadFile(sessionRepoFile("lycaon", "test", "contract", "testdata", "workflow", "compose_session_plan.yaml"))
 	if err != nil {
 		return nil, err
 	}
@@ -599,7 +592,7 @@ func sessionEnqueueWorker(ctx context.Context, s *conformanceSweep, chat string)
 	if len(s.fixture.project.Roots) == 0 {
 		return "", errors.New("the fixture project has no root")
 	}
-	return s.host.Delegations.Queue.Enqueue(ctx, wire.WorkerTask{
+	return s.host.Workers.Queue.Enqueue(ctx, wire.WorkerTask{
 		Prompt: "conformance", Brief: "conformance", ParentSessionID: chat, ProjectID: s.fixture.project.ID,
 		WorkspaceRootID: s.fixture.project.Roots[0].ID, WorkspacePath: s.fixture.projectDir, AgentType: "implementer",
 		Scope: &wire.TaskScope{Mode: wire.TaskScopeModeRead},
@@ -613,7 +606,7 @@ func sessionSettledWorker(ctx context.Context, s *conformanceSweep, chat string)
 	if err != nil {
 		return "", err
 	}
-	return id, s.host.Delegations.Queue.Cancel(ctx, id, nil)
+	return id, s.host.Workers.Queue.Cancel(ctx, id, nil)
 }
 
 func sessionSeedWorkers(ctx context.Context, s *conformanceSweep) error {
@@ -676,6 +669,8 @@ func sessionPrompt(ctx context.Context, s *conformanceSweep, chat, text string) 
 		return "", err
 	}
 	sessionSettle(ctx, s)
+	// A finished prompt may schedule a follow-up wake that takes the turn lock.
+	wiring.WaitForSessionIdleGate(s.fixture.t, s.host, ctx, chat)
 	return id, nil
 }
 
@@ -752,7 +747,7 @@ func sessionPrepareQueueUpdate(ctx context.Context, s *conformanceSweep, _ *conf
 		return successInputs{}, err
 	}
 	return sessionJSON(map[string]string{"id": chat}, map[string]any{
-		"op": "hold", "hold": false, "expected_revision": sessionInt(queue, "revision"), "operation_id": uuid.NewString(),
+		"op": "hold", "hold": false, "expected_revision": sessionInt(queue, "revision"),
 	}), nil
 }
 
@@ -762,23 +757,26 @@ func sessionPrepareCostSummary(_ context.Context, s *conformanceSweep, _ *confor
 	return successInputs{query: map[string]string{"session_id": s.fixture.session.ID}}, nil
 }
 
-// sessionProgram is a settled command program in the fixture chat and the
-// revision of its receipt document.
-type sessionProgram struct{ id, revision string }
+// sessionProgram is a settled command program, its chat and the revision of
+// its receipt document.
+type sessionProgram struct{ chat, id, revision string }
 
 // sessionFixtureProgram runs the mock model's readme prompt, whose command
 // program the receipt reads address.
 func sessionFixtureProgram(ctx context.Context, s *conformanceSweep) (sessionProgram, error) {
 	return sessionOnce(s, "program", func() (sessionProgram, error) {
-		chat := s.fixture.session.ID
+		chat, err := sessionNewChat(ctx, s, s.fixture.project.ID, string(wire.SessionPostureBuild))
+		if err != nil {
+			return sessionProgram{}, err
+		}
 		if _, err := sessionPrompt(ctx, s, chat, "read the readme"); err != nil {
 			return sessionProgram{}, err
 		}
-		var program sessionProgram
+		program := sessionProgram{chat: chat}
 		if err := s.host.DB.QueryRowContext(ctx, `SELECT p.id FROM invocation_programs p
 			JOIN invocation_receipts r ON r.id = p.parent_receipt_id
 			WHERE r.session_id = ? ORDER BY p.started_at DESC LIMIT 1`, chat).Scan(&program.id); err != nil {
-			return sessionProgram{}, fmt.Errorf("find the readme command program: %w", err)
+			return sessionProgram{}, fmt.Errorf("find the readme command program: %w; %s", err, sessionTurnState(ctx, s, chat))
 		}
 		document, err := s.prerequisite(ctx, "getCommandReceiptDocument", successInputs{
 			params: map[string]string{"id": chat}, query: map[string]string{"scopes": program.id},
@@ -796,7 +794,7 @@ func sessionPrepareProgramReceipt(ctx context.Context, s *conformanceSweep, _ *c
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{params: map[string]string{"id": s.fixture.session.ID, "program_id": program.id}}, nil
+	return successInputs{params: map[string]string{"id": program.chat, "program_id": program.id}}, nil
 }
 
 func sessionPrepareReceiptDocument(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
@@ -804,7 +802,7 @@ func sessionPrepareReceiptDocument(ctx context.Context, s *conformanceSweep, _ *
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{params: map[string]string{"id": s.fixture.session.ID}, query: map[string]string{"scopes": program.id}}, nil
+	return successInputs{params: map[string]string{"id": program.chat}, query: map[string]string{"scopes": program.id}}, nil
 }
 
 func sessionPrepareReceiptSearch(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
@@ -812,21 +810,37 @@ func sessionPrepareReceiptSearch(ctx context.Context, s *conformanceSweep, _ *co
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{params: map[string]string{"id": s.fixture.session.ID}, query: map[string]string{
+	return successInputs{params: map[string]string{"id": program.chat}, query: map[string]string{
 		// Every receipt row carries a type field, so a search walks many matches.
 		"scopes": program.id, "revision": program.revision, "q": `"type"`,
 	}}, nil
 }
 
-// sessionSeedInvocations answers two readme prompts, each a command
-// invocation in the fixture chat.
-func sessionSeedInvocations(ctx context.Context, s *conformanceSweep) error {
-	for range 2 {
-		if _, err := sessionPrompt(ctx, s, s.fixture.session.ID, "read the readme"); err != nil {
-			return err
+// sessionPrepareInvocations lists a chat of its own with two answered
+// prompts, each a command invocation.
+func sessionPrepareInvocations(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	chat, err := sessionOnce(s, "invocations-chat", func() (string, error) {
+		chat, err := sessionNewChat(ctx, s, s.fixture.project.ID, string(wire.SessionPostureBuild))
+		if err != nil {
+			return "", err
 		}
-	}
-	return nil
+		// The mock model names each pattern's tool call once, and a chat's
+		// call ids are unique, so the two prompts use different patterns.
+		for _, prompt := range []string{"read the readme", "corpus seed"} {
+			if _, err := sessionPrompt(ctx, s, chat, prompt); err != nil {
+				return "", err
+			}
+		}
+		var receipts int
+		if err := s.host.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM invocation_receipts WHERE session_id = ?`, chat).Scan(&receipts); err != nil {
+			return "", err
+		}
+		if receipts < 2 {
+			return "", fmt.Errorf("two command prompts left %d receipts; %s", receipts, sessionTurnState(ctx, s, chat))
+		}
+		return chat, nil
+	})
+	return successInputs{params: map[string]string{"id": chat}}, err
 }
 
 func sessionBackgroundChat(ctx context.Context, s *conformanceSweep) (string, error) {
@@ -837,15 +851,21 @@ func sessionBackgroundChat(ctx context.Context, s *conformanceSweep) (string, er
 
 // sessionStartProcess starts a long-running background process in chat, as
 // the command tool does for a background job.
+// sessionStartProcess starts a long sleep; each call sleeps a different
+// length, because the host refuses a second identical running command.
 func sessionStartProcess(ctx context.Context, s *conformanceSweep, chat string) (string, error) {
+	seconds := strconv.FormatInt(600+sessionProcesses.Add(1), 10)
 	return s.host.Sessions.Manager.Processes.Background.StartPipeline(ctx, bgprocess.PipelineSpec{
 		SessionID: chat, ProjectID: s.fixture.project.ID, Runner: hostcmd.NewRunner(), Mode: bgprocess.JobModeBackground,
 		Request: hostcmd.Request{
 			Launch: exec.HostLaunch("conformance-server"), ProjectDir: s.fixture.projectDir,
-			Stages: []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
+			Stages: []exec.Stage{{Name: "sleep", Args: []string{seconds}}},
 		},
 	})
 }
+
+// sessionProcesses numbers the processes the recipes start.
+var sessionProcesses atomic.Int64
 
 func sessionPrepareProcessOutput(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 	chat, err := sessionBackgroundChat(ctx, s)
@@ -973,23 +993,26 @@ func sessionPrepareInvokeSessionCommand(ctx context.Context, s *conformanceSweep
 	return successInputs{}, errors.New("the contribution frame has no summarize editor action")
 }
 
-// sessionPrepareInvokeProjectCommand invokes a project-scoped command of the
-// device catalog. Bundled packs contribute none.
+// sessionPrepareInvokeProjectCommand invokes the conformance pack's composer
+// prefill command.
 func sessionPrepareInvokeProjectCommand(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 	frame, err := s.host.Server.Admin.Extensions.Contributions.CaptureContributionFrame(ctx, s.fixture.project.ID, s.fixture.projectDir)
 	if err != nil {
 		return successInputs{}, err
 	}
-	for _, command := range frame.View.Contributions.Commands() {
-		resolved, ok := frame.View.Contributions.ResolveCommand(command)
-		if !ok || contribution.InvocationScopeFor(resolved.Action.Kind) != contribution.InvocationProject {
-			continue
-		}
-		return sessionJSON(map[string]string{"id": s.fixture.project.ID, "command_id": command.ID}, map[string]any{
-			"operation_id": uuid.NewString(), "frame_revision": frame.Revision,
-		}), nil
+	return sessionJSON(map[string]string{"id": s.fixture.project.ID, "command_id": "conformance/sweep:prefill"}, map[string]any{
+		"operation_id": uuid.NewString(), "frame_revision": frame.Revision,
+	}), nil
+}
+
+// sessionPrepareResolveChoices loads the conformance pack's MCP choice step.
+func sessionPrepareResolveChoices(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	frame, err := s.host.Server.Admin.Extensions.Contributions.CaptureContributionFrame(ctx, s.fixture.project.ID, s.fixture.projectDir)
+	if err != nil {
+		return successInputs{}, err
 	}
-	return successInputs{}, errors.New("the contribution frame has no project-scoped command")
+	return sessionJSON(map[string]string{"id": s.fixture.project.ID, "command_id": "conformance/sweep:choose", "step_id": "item"},
+		map[string]any{"frame_revision": frame.Revision}), nil
 }
 
 // sessionPrepareLandWorktree binds a chat in a committed repository project
@@ -1024,4 +1047,100 @@ func sessionPrepareLandWorktree(ctx context.Context, s *conformanceSweep, _ *con
 		return successInputs{}, err
 	}
 	return successInputs{params: map[string]string{"id": chat}}, nil
+}
+
+// sessionRepoFile resolves a path from the repository root.
+func sessionRepoFile(parts ...string) string {
+	root, err := openapi.RepoRoot()
+	if err != nil {
+		return filepath.Join(parts...)
+	}
+	return filepath.Join(append([]string{root}, parts...)...)
+}
+
+// sessionPrepareWorkerHistory reads a settled worker on the fixture chat's
+// roster.
+func sessionPrepareWorkerHistory(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	chat := s.fixture.session.ID
+	name, err := sessionOnce(s, "history-worker", func() (string, error) { return sessionRosterWorker(ctx, s, chat) })
+	if err != nil {
+		return successInputs{}, err
+	}
+	return successInputs{query: map[string]string{"project_id": s.fixture.project.ID, "session_id": chat, "worker": name}}, nil
+}
+
+// sessionRosterWorker puts a worker with two settled rounds on the chat's
+// roster, as a coordinator's spawn does, and returns its name.
+func sessionRosterWorker(ctx context.Context, s *conformanceSweep, chat string) (string, error) {
+	parent, err := s.host.Store.Get(ctx, chat)
+	if err != nil {
+		return "", err
+	}
+	child, err := s.host.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer"})
+	if err != nil {
+		return "", err
+	}
+	coordinator := workerrecords.Actor{SessionID: chat, Role: workerrecords.RoleCoordinator, PrincipalID: chat}
+	const name = "conformance-scout"
+	created, err := s.host.Workers.Records.CreateWorker(ctx, coordinator, workerrecords.Op{ID: uuid.NewString()}, workerrecords.WorkerSpec{
+		Name: name, AgentType: "implementer", ScopeMode: "read", Brief: "conformance", ChildSessionID: child.ID,
+	})
+	if err != nil {
+		return "", err
+	}
+	// Cancelling a round's job settles it, so the worker can take the next.
+	for range 2 {
+		job, err := s.host.Workers.Queue.Enqueue(ctx, wire.WorkerTask{
+			ProjectID: s.fixture.project.ID, ParentSessionID: chat, ChildSessionID: child.ID, AgentType: "implementer",
+			ExecutionTarget: wire.ExecutionTargetLocal, Prompt: "conformance", Brief: "conformance",
+		})
+		if err != nil {
+			return "", err
+		}
+		if _, err := s.host.Workers.Records.AdmitRound(ctx, coordinator, workerrecords.Op{ID: uuid.NewString()}, created.WorkerID, workerrecords.RoundSpec{
+			JobID: job, ExecutionTarget: "local",
+		}); err != nil {
+			return "", err
+		}
+		if err := s.host.Workers.Queue.Cancel(ctx, job, nil); err != nil {
+			return "", err
+		}
+	}
+	return name, nil
+}
+
+// sessionTurnState names why a chat may not have run a prompt: its status,
+// receipts, queue and newest messages.
+func sessionTurnState(ctx context.Context, s *conformanceSweep, chat string) string {
+	var status string
+	if err := s.host.DB.QueryRowContext(ctx, `SELECT status FROM sessions WHERE id = ?`, chat).Scan(&status); err != nil {
+		status = err.Error()
+	}
+	queue, err := s.prerequisite(ctx, "getSessionQueue", successInputs{params: map[string]string{"id": chat}})
+	queued := fmt.Sprint(queue)
+	if err != nil {
+		queued = err.Error()
+	}
+	var receipts []string
+	if rows, err := s.host.DB.QueryContext(ctx, `SELECT tool_name, status FROM invocation_receipts WHERE session_id = ? ORDER BY started_at`, chat); err == nil {
+		for rows.Next() {
+			var tool, state string
+			if rows.Scan(&tool, &state) == nil {
+				receipts = append(receipts, tool+"="+state)
+			}
+		}
+		_ = rows.Close()
+	}
+	var messages []string
+	if rows, err := s.host.DB.QueryContext(ctx, `SELECT m.role, m.content FROM messages m JOIN session_entries e ON e.id = m.entry_id
+		WHERE m.session_id = ? ORDER BY e.ord DESC LIMIT 4`, chat); err == nil {
+		for rows.Next() {
+			var role, content string
+			if rows.Scan(&role, &content) == nil {
+				messages = append(messages, fmt.Sprintf("%s %.80q", role, content))
+			}
+		}
+		_ = rows.Close()
+	}
+	return fmt.Sprintf("the chat is %s with receipts %v, queue %s and newest messages %v", status, receipts, queued, messages)
 }

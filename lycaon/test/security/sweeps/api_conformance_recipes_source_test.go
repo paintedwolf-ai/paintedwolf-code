@@ -20,6 +20,9 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/fileops"
+	"github.com/lycaon/lycaon/internal/mcp"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // sourceClientID is the editor and view client every source recipe acts as.
@@ -29,12 +32,20 @@ const sourceClientID = "window:conformance-source"
 // search replacement, chat content and briefings.
 var sourceRecipes = map[string]successRecipe{
 	// Source views.
+	// A retained view expires or yields to newer ones over a long sweep, so
+	// each operation on one addresses a view of its own.
+	"cancelSourceOperation":         {prepare: sourceHeldOperationInputs, after: func(s *conformanceSweep) { s.hold.release() }},
 	"createSourceView":              {stage: stageCreate, prepare: sourceCreateViewInputs},
+	"getSourceView":                 {prepare: sourceViewInputs},
 	"applySourceViewIntent":         {prepare: sourceApplyViewIntentInputs},
 	"createSourcePresentation":      {prepare: sourceCreatePresentationInputs},
+	"getSourceViewRows":             {prepare: sourcePresentationInputs},
+	"searchSourceView":              {prepare: sourcePresentationInputs},
 	"locateSourceView":              {prepare: sourceLocateViewInputs},
+	"releaseSourcePresentation":     {prepare: sourcePresentationInputs},
 	"replaceSourceViewportInterest": {prepare: sourceViewportInterestInputs},
-	"releaseSourceView":             {prepare: sourceReleaseViewInputs},
+	"releaseSourceViewportInterest": {prepare: sourceReleaseInterestInputs},
+	"releaseSourceView":             {prepare: sourceViewInputs},
 
 	// Editor documents.
 	"createEditorDocumentSnapshot":   {prepare: sourceEditorSnapshotInputs},
@@ -64,7 +75,7 @@ var sourceRecipes = map[string]successRecipe{
 	"searchProjectSource":       {seed: sourceSeedSearchFiles},
 
 	// Recorded history.
-	"listProjectSourceVersions":         {seed: sourceSeedVersions},
+	"listProjectSourceVersions":         {prepare: sourceVersionsInputs},
 	"restoreProjectSourceVersion":       {prepare: sourceRestoreVersionInputs},
 	"getProjectSourceComparison":        {prepare: sourceComparisonInputs},
 	"digestSourceComparisons":           {prepare: sourceDigestInputs},
@@ -90,20 +101,17 @@ var sourceRecipes = map[string]successRecipe{
 
 // sourceState caches fixtures that are costly to build once per sweep.
 type sourceState struct {
-	names     int
-	versions  *sourceVersioned
-	git       *sourceGitFixture
-	briefing  map[string]any
-	recordID  string
-	chatSHA   string
-	chatQuery string
+	names       int
+	versions    *sourceVersioned
+	git         *sourceGitFixture
+	briefing    map[string]any
+	recordID    string
+	chatSHA     string
+	chatMessage string
 }
 
-var sourceStates sync.Map
-
 func sourceStateOf(s *conformanceSweep) *sourceState {
-	state, _ := sourceStates.LoadOrStore(s, &sourceState{})
-	return state.(*sourceState)
+	return s.memo.loadOrStore("source-state", &sourceState{}).(*sourceState)
 }
 
 // sourceName is a fresh file name inside the fixture project.
@@ -303,21 +311,55 @@ func sourceCreateViewInputs(ctx context.Context, s *conformanceSweep, _ *conform
 	return successInputs{fields: fields}, err
 }
 
-// sourceViewRevision waits for the bound view to finish preparing and
-// answers its intent revision.
-func sourceViewRevision(ctx context.Context, s *conformanceSweep) (string, error) {
+// sourceView is a fresh tree view, ready, and its intent revision.
+func sourceView(ctx context.Context, s *conformanceSweep) (string, string, error) {
 	if s.host == nil {
-		return "", errors.New("the sweep has no production host")
+		return "", "", errors.New("the sweep has no production host")
 	}
-	s.host.Server.WaitForBackground(ctx)
-	view, err := s.prerequisite(ctx, "getSourceView", successInputs{})
+	fields, err := sourceTreeViewFields(ctx, s)
 	if err != nil {
-		return "", err
+		return "", "", err
+	}
+	created, err := s.prerequisite(ctx, "createSourceView", successInputs{fields: fields})
+	if err != nil {
+		return "", "", err
+	}
+	id := sourceString(created, "id")
+	s.host.Server.WaitForBackground(ctx)
+	view, err := s.prerequisite(ctx, "getSourceView", successInputs{params: map[string]string{"view_id": id}})
+	if err != nil {
+		return "", "", err
 	}
 	if state := sourceString(view, "state"); state != "ready" {
-		return "", fmt.Errorf("the source view is %q after its preparation settled", state)
+		return "", "", fmt.Errorf("the source view is %q after its preparation settled", state)
 	}
-	return sourceString(view, "intent_revision"), nil
+	return id, sourceString(view, "intent_revision"), nil
+}
+
+// sourceViewPresentation is a presentation of a fresh view.
+func sourceViewPresentation(ctx context.Context, s *conformanceSweep) (map[string]string, error) {
+	view, revision, err := sourceView(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+	created, err := s.prerequisite(ctx, "createSourcePresentation", successInputs{
+		params: map[string]string{"view_id": view},
+		fields: map[string]any{"operation_id": uuid.NewString(), "intent_revision": revision},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{"view_id": view, "presentation_id": sourceString(created, "id")}, nil
+}
+
+func sourceViewInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	view, _, err := sourceView(ctx, s)
+	return successInputs{params: map[string]string{"view_id": view}}, err
+}
+
+func sourcePresentationInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	params, err := sourceViewPresentation(ctx, s)
+	return successInputs{params: params}, err
 }
 
 func sourceApplyViewIntentInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
@@ -325,26 +367,26 @@ func sourceApplyViewIntentInputs(ctx context.Context, s *conformanceSweep, _ *co
 	if err != nil {
 		return successInputs{}, err
 	}
-	revision, err := sourceViewRevision(ctx, s)
+	view, revision, err := sourceView(ctx, s)
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{fields: map[string]any{
+	return successInputs{params: map[string]string{"view_id": view}, fields: map[string]any{
 		"kind": "tree", "operation_id": uuid.NewString(), "expected_intent_revision": revision,
 		"command": map[string]any{"kind": "reveal", "address": map[string]any{"root_id": root, "path": "README.md"}},
 	}}, nil
 }
 
 func sourceCreatePresentationInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
-	revision, err := sourceViewRevision(ctx, s)
+	view, revision, err := sourceView(ctx, s)
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{fields: map[string]any{"operation_id": uuid.NewString(), "intent_revision": revision}}, nil
+	return successInputs{params: map[string]string{"view_id": view}, fields: map[string]any{"operation_id": uuid.NewString(), "intent_revision": revision}}, nil
 }
 
 // sourceLocateViewInputs locates README.md by the tree anchor a row carries.
-func sourceLocateViewInputs(_ context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+func sourceLocateViewInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 	root, err := sourceRootID(s)
 	if err != nil {
 		return successInputs{}, err
@@ -353,29 +395,36 @@ func sourceLocateViewInputs(_ context.Context, s *conformanceSweep, _ *conforman
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{query: map[string]string{"anchor": base64.RawURLEncoding.EncodeToString(anchor)}}, nil
+	params, err := sourceViewPresentation(ctx, s)
+	return successInputs{params: params, query: map[string]string{"anchor": base64.RawURLEncoding.EncodeToString(anchor)}}, err
 }
 
-func sourceViewportInterestInputs(_ context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
-	presentation := s.values.byPrefix["/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}"]
-	if presentation == "" {
-		return successInputs{}, errors.New("no source presentation was created")
-	}
-	return successInputs{fields: map[string]any{"presentation_id": presentation, "sequence": 1, "start": 0, "end": 1, "direction": 1}}, nil
-}
-
-// sourceReleaseViewInputs releases a view of its own, so the bound view
-// outlives it for the presentation and interest releases.
-func sourceReleaseViewInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
-	fields, err := sourceTreeViewFields(ctx, s)
+// sourceInterest declares demand for the first row of a fresh presentation.
+func sourceInterest(ctx context.Context, s *conformanceSweep) (successInputs, error) {
+	params, err := sourceViewPresentation(ctx, s)
 	if err != nil {
 		return successInputs{}, err
 	}
-	view, err := s.prerequisite(ctx, "createSourceView", successInputs{fields: fields})
+	presentation := params["presentation_id"]
+	return successInputs{
+		params: map[string]string{"view_id": params["view_id"], "interest_id": uuid.NewString()},
+		fields: map[string]any{"presentation_id": presentation, "sequence": 1, "start": 0, "end": 1, "direction": 1},
+	}, nil
+}
+
+func sourceViewportInterestInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	return sourceInterest(ctx, s)
+}
+
+func sourceReleaseInterestInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	interest, err := sourceInterest(ctx, s)
 	if err != nil {
 		return successInputs{}, err
 	}
-	return successInputs{params: map[string]string{"view_id": sourceString(view, "id")}}, nil
+	if _, err := s.prerequisite(ctx, "replaceSourceViewportInterest", interest); err != nil {
+		return successInputs{}, err
+	}
+	return successInputs{params: interest.params}, nil
 }
 
 // --- Editor documents -----------------------------------------------------
@@ -892,17 +941,13 @@ func sourceVersionedFile(ctx context.Context, s *conformanceSweep) (*sourceVersi
 	return state.versions, nil
 }
 
-// sourceSeedVersions makes the listed file one with three recorded states.
-func sourceSeedVersions(ctx context.Context, s *conformanceSweep) error {
+// sourceVersionsInputs lists a file with three recorded states.
+func sourceVersionsInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 	versioned, err := sourceVersionedFile(ctx, s)
 	if err != nil {
-		return err
+		return successInputs{}, err
 	}
-	s.values.bind("", "file_id", versioned.fileID)
-	if bound := s.values.byName["file_id"]; bound != versioned.fileID {
-		return fmt.Errorf("file_id is already bound to %s, which the seed cannot version", bound)
-	}
-	return nil
+	return successInputs{query: map[string]string{"file_id": versioned.fileID}}, nil
 }
 
 func sourceRestoreVersionInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
@@ -1047,7 +1092,8 @@ func sourceGitCommit(ctx context.Context, s *conformanceSweep, files [2]string, 
 	if _, err := sourceGit(ctx, s, "add", "--", files[0], files[1]); err != nil {
 		return "", err
 	}
-	if _, err := sourceGit(ctx, s, "commit", "-q", "-m", message); err != nil {
+	// A retried recipe finds its earlier commit in place.
+	if _, err := sourceGit(ctx, s, "commit", "-q", "--allow-empty", "-m", message); err != nil {
 		return "", err
 	}
 	head, err := sourceGit(ctx, s, "rev-parse", "HEAD")
@@ -1073,6 +1119,14 @@ func sourceGitHistory(ctx context.Context, s *conformanceSweep) (*sourceGitFixtu
 		}
 	}
 	fixture := &sourceGitFixture{files: [2]string{"conformance-git-a.txt", "conformance-git-b.txt"}}
+	// Files the host creates carry a ledger identity the commit restore names.
+	for _, name := range fixture.files {
+		if _, err := os.Stat(filepath.Join(s.fixture.projectDir, name)); errors.Is(err, os.ErrNotExist) {
+			if err := sourceCreateEntry(ctx, s, name); err != nil {
+				return nil, err
+			}
+		}
+	}
 	var err error
 	if fixture.parent, err = sourceGitCommit(ctx, s, fixture.files, "one\n", "conformance one"); err != nil {
 		return nil, err
@@ -1103,6 +1157,10 @@ func sourceRestoreCommitInputs(ctx context.Context, s *conformanceSweep, _ *conf
 	if err != nil {
 		return successInputs{}, err
 	}
+	fileID := sourceString(read, "file_id")
+	if fileID == "" {
+		return successInputs{}, fmt.Errorf("reading %s names no file_id", name)
+	}
 	current, err := sourceDiskSHA(s, name)
 	if err != nil {
 		return successInputs{}, err
@@ -1110,7 +1168,7 @@ func sourceRestoreCommitInputs(ctx context.Context, s *conformanceSweep, _ *conf
 	return successInputs{
 		params: map[string]string{"commit_sha": history.parent},
 		fields: map[string]any{
-			"operation_id": uuid.NewString(), "file_id": sourceString(read, "file_id"), "root_id": root,
+			"operation_id": uuid.NewString(), "file_id": fileID, "root_id": root,
 			"path": name, "source_path": name, "blob_oid": history.blob,
 			"base": map[string]any{"state": "content", "sha256": current},
 		},
@@ -1226,48 +1284,32 @@ func sourceBriefingRecordInputs(ctx context.Context, s *conformanceSweep, _ *con
 	return successInputs{params: map[string]string{"record_id": state.recordID}}, nil
 }
 
-// sourceChatContent names the bound message's content revision as the
-// transcript shows it, and a query it matches at least twice.
-func sourceChatContent(ctx context.Context, s *conformanceSweep) (string, string, error) {
+// sourceChatContent is an assistant message of its own whose lines each
+// match the search query, and the content's digest.
+func sourceChatContent(ctx context.Context, s *conformanceSweep) (map[string]string, string, error) {
 	state := sourceStateOf(s)
-	if state.chatSHA != "" {
-		return state.chatSHA, state.chatQuery, nil
-	}
-	messageID := s.values.byPrefix["/v1/sessions/{id}/messages/{message_id}"]
-	if messageID == "" {
-		return "", "", errors.New("no chat message is bound")
-	}
-	transcript, err := s.prerequisite(ctx, "listSessionMessages", successInputs{})
-	if err != nil {
-		return "", "", err
-	}
-	message := sourceFindObject(transcript, "id", messageID)
-	if message == nil {
-		return "", "", fmt.Errorf("the transcript does not show message %s", messageID)
-	}
-	content := sourceString(message, "content")
-	counts := map[rune]int{}
-	query := ""
-	for _, r := range content {
-		if counts[r]++; counts[r] >= 2 && (query == "" || counts[r] > counts[[]rune(query)[0]]) {
-			query = string(r)
+	if state.chatSHA == "" {
+		content := "conformance one\nconformance two\nconformance three"
+		id := uuid.NewString()
+		if err := s.host.Store.AppendMessages(ctx, s.fixture.session.ID, wire.Message{
+			ID: id, Role: wire.MessageRoleAssistant, Origin: wire.MessageOriginModel,
+			Content: content, Visibility: wire.MessageVisibilityTranscript,
+		}); err != nil {
+			return nil, "", err
 		}
+		state.chatMessage, state.chatSHA = id, sourceSHA([]byte(content))
 	}
-	if query == "" {
-		query = "conformance"
-	}
-	state.chatSHA, state.chatQuery = sourceSHA([]byte(content)), query
-	return state.chatSHA, state.chatQuery, nil
+	return map[string]string{"id": s.fixture.session.ID, "message_id": state.chatMessage}, state.chatSHA, nil
 }
 
 func sourceChatContentInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
-	sha, _, err := sourceChatContent(ctx, s)
-	return successInputs{query: map[string]string{"field": "content", "sha256": sha}}, err
+	params, sha, err := sourceChatContent(ctx, s)
+	return successInputs{params: params, query: map[string]string{"field": "content", "sha256": sha}}, err
 }
 
 func sourceSearchChatContentInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
-	sha, query, err := sourceChatContent(ctx, s)
-	return successInputs{query: map[string]string{"field": "content", "sha256": sha, "q": query}}, err
+	params, sha, err := sourceChatContent(ctx, s)
+	return successInputs{params: params, query: map[string]string{"field": "content", "sha256": sha, "q": "conformance"}}, err
 }
 
 // sourceHostResourceInputs sets the bound resource to follow its default.
@@ -1280,8 +1322,9 @@ func sourcePricingRefreshInputs(_ context.Context, _ *conformanceSweep, _ *confo
 	return successInputs{params: map[string]string{"source_id": "models-dev"}}, nil
 }
 
-// sourceContributionSearchInputs searches the first source the captured
-// contribution frame declares.
+// sourceContributionSearchInputs searches the first source the contribution
+// frame declares. A client holds the device frame's revision, so a project's
+// frame must carry the same one.
 func sourceContributionSearchInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 	frame, err := s.prerequisite(ctx, "getContributions", successInputs{})
 	if err != nil {
@@ -1291,8 +1334,92 @@ func sourceContributionSearchInputs(ctx context.Context, s *conformanceSweep, _ 
 	if len(sources) == 0 {
 		return successInputs{}, errors.New("the contribution frame declares no search source")
 	}
+	device := sourceString(frame, "frame_revision")
+	projected, err := s.host.Server.Admin.Extensions.Contributions.CaptureContributionFrame(ctx, s.fixture.project.ID, s.fixture.projectDir)
+	if err != nil {
+		return successInputs{}, err
+	}
+	if projected.Revision != device {
+		deviceFrame, err := s.host.Server.Admin.Extensions.Contributions.CaptureContributionFrame(ctx, "", "")
+		if err != nil {
+			return successInputs{}, err
+		}
+		return successInputs{}, fmt.Errorf("the project frame revision differs from the device frame revision: project MCP %s; device MCP %s",
+			sourceGeneration(projected.MCP), sourceGeneration(deviceFrame.MCP))
+	}
 	return successInputs{
 		params: map[string]string{"source_id": sourceString(sources[0], "id")},
-		fields: map[string]any{"frame_revision": sourceString(frame, "frame_revision"), "query": "conformance"},
+		fields: map[string]any{"frame_revision": device, "query": "conformance"},
 	}, nil
+}
+
+// sourceGeneration names an MCP generation's providers, tools and rejected rows.
+func sourceGeneration(gen *mcp.ResourceGeneration) string {
+	if gen == nil {
+		return "none"
+	}
+	var parts []string
+	for _, p := range gen.Providers {
+		tools := make([]string, 0, len(p.Tools))
+		for _, t := range p.Tools {
+			tools = append(tools, t.Name)
+		}
+		parts = append(parts, fmt.Sprintf("%s(enabled=%t status=%s tools=%v)", p.ID, p.Enabled, p.Status, tools))
+	}
+	for _, r := range gen.Rejected {
+		parts = append(parts, fmt.Sprintf("rejected(%s %s %s)", r.Layer, r.ID, r.Reason))
+	}
+	return strings.Join(parts, " ")
+}
+
+// conformanceHeldPrefix names the files whose operations the hold keeps in
+// their cancelable phase.
+const conformanceHeldPrefix = "conformance-held-"
+
+// conformanceHold keeps a file operation on a held file cancelable until it
+// is canceled or released.
+type conformanceHold struct {
+	mu       sync.Mutex
+	released chan struct{}
+}
+
+func newConformanceHold() *conformanceHold {
+	return &conformanceHold{released: make(chan struct{})}
+}
+
+func (h *conformanceHold) wait(ctx context.Context, r fileops.Request) {
+	if !bytes.Contains(r.Body, []byte(conformanceHeldPrefix)) {
+		return
+	}
+	h.mu.Lock()
+	released := h.released
+	h.mu.Unlock()
+	select {
+	case <-ctx.Done():
+	case <-released:
+	}
+}
+
+// release frees every held operation.
+func (h *conformanceHold) release() {
+	h.mu.Lock()
+	close(h.released)
+	h.released = make(chan struct{})
+	h.mu.Unlock()
+}
+
+// sourceHeldOperationInputs cancels a file creation the hold keeps cancelable.
+func sourceHeldOperationInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	root, err := sourceRootID(s)
+	if err != nil {
+		return successInputs{}, err
+	}
+	id := uuid.NewString()
+	if _, err := s.prerequisite(ctx, "createProjectSourceEntry", successInputs{fields: map[string]any{
+		"operation_id": id, "path": sourceName(s, "held", ".txt"), "kind": "file", "root_id": root,
+	}}); err != nil {
+		s.hold.release()
+		return successInputs{}, err
+	}
+	return successInputs{params: map[string]string{"operation_id": id}}, nil
 }

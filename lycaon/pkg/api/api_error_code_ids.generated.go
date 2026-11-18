@@ -383,9 +383,6 @@ const (
 	// ApiErrorCodeProjectRemovalAssessmentChanged Project removal references
 	// changed after review; assess again.
 	ApiErrorCodeProjectRemovalAssessmentChanged ApiErrorCode = "project_removal_assessment_changed"
-	// ApiErrorCodeProjectRemovalOperationConflict A project removal operation id
-	// was reused with different input.
-	ApiErrorCodeProjectRemovalOperationConflict ApiErrorCode = "project_removal_operation_conflict"
 	// ApiErrorCodeExtensionStateChanged Extension mutation expected_revision is
 	// stale; reload and retry
 	ApiErrorCodeExtensionStateChanged ApiErrorCode = "extension_state_changed"
@@ -1087,7 +1084,6 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeDuplicateRoot,
 	ApiErrorCodeDuplicateRootLabel,
 	ApiErrorCodeProjectRemovalAssessmentChanged,
-	ApiErrorCodeProjectRemovalOperationConflict,
 	ApiErrorCodeExtensionStateChanged,
 	ApiErrorCodeExtensionCandidateRejected,
 	ApiErrorCodeContributionsUnavailable,
@@ -1509,7 +1505,6 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeDuplicateRoot,
 		ApiErrorCodeDuplicateRootLabel,
 		ApiErrorCodeProjectRemovalAssessmentChanged,
-		ApiErrorCodeProjectRemovalOperationConflict,
 		ApiErrorCodeExtensionStateChanged,
 		ApiErrorCodeContributionFrameChanged,
 		ApiErrorCodeCommandUnavailable,

@@ -1,10 +1,12 @@
 package wiring
 
 import (
+	"context"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
+	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -24,6 +26,7 @@ type options struct {
 	mcpConnector            mcp.SessionConnector
 	installedPackDirs       []string
 	changeDebounce          time.Duration
+	fileOperationHold       func(context.Context, fileops.Request)
 }
 
 // A scripted model calls surface tools outright, so the default decider
@@ -68,6 +71,12 @@ func WithSecretMatcher(m *secretmatch.Matcher) Option {
 	return func(o *options) {
 		o.secretMatcher = m
 	}
+}
+
+// WithFileOperationHold runs hold before each file operation's work, while it
+// is still cancelable.
+func WithFileOperationHold(hold func(context.Context, fileops.Request)) Option {
+	return func(o *options) { o.fileOperationHold = hold }
 }
 
 // WithMCPConnector replaces the default MockConnector used by BuildForTest.

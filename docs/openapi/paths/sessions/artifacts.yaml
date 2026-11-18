@@ -149,9 +149,13 @@ paths:
           format: uuid
       responses:
         '200':
-          description: Artifact bytes
+          description: Artifact bytes, an image or a recording
           content:
             image/*:
+              schema:
+                type: string
+                format: binary
+            video/*:
               schema:
                 type: string
                 format: binary

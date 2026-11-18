@@ -36,6 +36,14 @@ type conformanceOp struct {
 	// Authenticated marks an operation whose effective security requires a
 	// credential.
 	Authenticated bool
+	// IdempotentRelease marks a release whose unknown handle is already
+	// released (x-idempotent-release).
+	IdempotentRelease bool
+	// MultiStream marks a list answering several arrays (x-multi-stream-list).
+	MultiStream bool
+	// ReadEffect names the work a read declares it may start
+	// (x-read-starts-work).
+	ReadEffect string
 }
 
 var templateParamRE = regexp.MustCompile(`\{([^}]+)\}`)
@@ -51,6 +59,9 @@ func conformanceOperations(doc *openapi3.T) []*conformanceOp {
 				security = *op.Security
 			}
 			out.Authenticated = len(security) > 0
+			out.IdempotentRelease = op.Extensions["x-idempotent-release"] == true
+			out.MultiStream = op.Extensions["x-multi-stream-list"] == true
+			out.ReadEffect, _ = op.Extensions["x-read-starts-work"].(string)
 			ops = append(ops, out)
 		}
 	}

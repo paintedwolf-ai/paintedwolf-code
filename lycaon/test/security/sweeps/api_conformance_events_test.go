@@ -48,7 +48,11 @@ func (s *conformanceSweep) checkScopeID(ctx context.Context, topic, field, id st
 		s.findings.add(ruleEventScopesAreHostIDs, topic, "scope "+field, "%q is not a UUID", id)
 		return
 	}
+	s.outcomes.mu.Lock()
+	created := s.outcomes.created[id]
+	s.outcomes.mu.Unlock()
 	ok, err := exists(ctx, id)
+	ok = ok || created
 	switch {
 	case err != nil:
 		s.findings.add(ruleEventScopesAreHostIDs, topic, "scope "+field, "could not look up %s: %v", id, err)

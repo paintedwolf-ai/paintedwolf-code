@@ -100,7 +100,7 @@ func (s *Removal) writeRemovalError(w http.ResponseWriter, r *http.Request, err 
 	case errors.Is(err, projectremoval.ErrInvalidSelection):
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "Only extensions assessed as eligible may be selected.")
 	case errors.Is(err, projectremoval.ErrOperationConflict):
-		s.responses.Fail(w, wire.ApiErrorCodeProjectRemovalOperationConflict, "This operation id was already used for another removal request.")
+		s.responses.Fail(w, wire.ApiErrorCodeIdempotencyConflict, "This operation id was already used for another removal request.")
 	case errors.Is(err, projectremoval.ErrOperationNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeProjectRemovalNotFound, "Project removal operation not found.")
 	default:

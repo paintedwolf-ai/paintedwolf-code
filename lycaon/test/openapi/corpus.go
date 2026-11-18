@@ -16,6 +16,9 @@ const HostCorpusPath = "lycaon-den/src/api/testdata/host-corpus.json"
 // HostCorpusRefresh is the command that rewrites the corpus.
 const HostCorpusRefresh = "UPDATE_HOST_CORPUS=1 ./task test:digest -- ./test/security/sweeps -run TestAPIConformance"
 
+// CorpusBodyBound is the largest JSON answer the corpus keeps whole.
+const CorpusBodyBound = 64 << 10
+
 // HostCorpus is what the conformance sweep observed the host answer and
 // publish.
 type HostCorpus struct {
@@ -40,6 +43,9 @@ type CorpusExchange struct {
 	// Body is the JSON answer; Text is any other text answer.
 	Body json.RawMessage `json:"body,omitempty"`
 	Text string          `json:"text,omitempty"`
+	// BodyShape stands in for a JSON answer larger than CorpusBodyBound: each
+	// JSON path and the kinds of value found there.
+	BodyShape map[string]string `json:"body_shape,omitempty"`
 }
 
 // ReadHostCorpus loads the committed corpus.

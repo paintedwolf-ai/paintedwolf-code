@@ -1,0 +1,7 @@
+id: conformance/sweep:prefill
+title: Prefill the composer
+category: Conformance
+icon: edit
+action:
+  kind: composer_prefill
+  text: Conformance prefill

@@ -283,6 +283,9 @@ func wireSourceEditing(b *serveBuilder, deps *api.Dependencies) error {
 	}
 	deps.Source.SourceMutations = sourceMutations
 	deps.Source.FileOperations = fileops.NewService(fileops.NewStore(b.storage.Database))
+	if hold := b.startup.cfg.TestFileOperationHold; hold != nil {
+		deps.Source.FileOperations.HoldBeforeWorkForTest(hold)
+	}
 	b.sessions.Manager.ToolContext.SetSourceMutations(sourceMutations)
 	editorDocuments := editordoc.New(editordoc.NewStore(b.storage.Database), b.storage.SourceLedger, b.storage.SourceLedger.History, b.storage.Projects)
 	if b.worker.merge != nil {

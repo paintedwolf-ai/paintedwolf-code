@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -99,13 +98,6 @@ var hostRecipes = map[string]successRecipe{
 	"getProjectRemoval": {prepare: hostRecipeGetProjectRemoval},
 }
 
-// hostRecipeMemo holds what one sweep's recipes share, so each fixture is
-// made once per sweep.
-var hostRecipeMemo = struct {
-	sync.Mutex
-	values map[*conformanceSweep]map[string]string
-}{values: map[*conformanceSweep]map[string]string{}}
-
 func hostRecipeT(s *conformanceSweep) (*testing.T, error) {
 	if s.host == nil || s.fixture.t == nil {
 		return nil, errors.New("host recipes need the production-wired host")
@@ -114,29 +106,15 @@ func hostRecipeT(s *conformanceSweep) (*testing.T, error) {
 }
 
 func hostRecipeRecall(s *conformanceSweep, key string) (string, bool) {
-	hostRecipeMemo.Lock()
-	defer hostRecipeMemo.Unlock()
-	value, ok := hostRecipeMemo.values[s][key]
-	return value, ok
+	value, ok := s.memo.load("host:" + key)
+	text, _ := value.(string)
+	return text, ok
 }
 
 func hostRecipeRemember(s *conformanceSweep, key, value string) {
-	hostRecipeMemo.Lock()
-	defer hostRecipeMemo.Unlock()
-	if hostRecipeMemo.values[s] == nil {
-		hostRecipeMemo.values[s] = map[string]string{}
-		if s.fixture.t != nil {
-			s.fixture.t.Cleanup(func() {
-				hostRecipeMemo.Lock()
-				defer hostRecipeMemo.Unlock()
-				delete(hostRecipeMemo.values, s)
-			})
-		}
-	}
-	hostRecipeMemo.values[s][key] = value
+	s.memo.store("host:"+key, value)
 }
 
-// hostRecipeOnce returns key's value, making it the first time.
 func hostRecipeOnce(s *conformanceSweep, key string, build func() (string, error)) (string, error) {
 	if value, ok := hostRecipeRecall(s, key); ok {
 		return value, nil
@@ -598,24 +576,24 @@ func hostRecipeDeleteCredential(ctx context.Context, s *conformanceSweep, _ *con
 // --- MCP ----------------------------------------------------------------
 
 // hostRecipeCreateMCPProvider adds an enabled custom provider; the harness
-// connector answers every provider, so enabling connects nothing real. The
-// first one created serves tool listing.
-func hostRecipeCreateMCPProvider(_ context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
-	id := hostRecipeID("conformance-mcp")
-	if _, ok := hostRecipeRecall(s, "mcp-tools-provider"); !ok {
-		hostRecipeRemember(s, "mcp-tools-provider", id)
-	}
-	return successInputs{fields: map[string]any{
-		"source": "custom", "id": id, "url": "http://127.0.0.1:9/mcp", "enabled": true,
-	}}, nil
+// connector answers every provider, so enabling connects nothing real.
+func hostRecipeCreateMCPProvider(_ context.Context, _ *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	return successInputs{fields: hostRecipeMCPProviderFields(hostRecipeID("conformance-mcp"))}, nil
 }
 
-// hostRecipeListMCPTools lists the first created conformance provider; before
-// it exists the read answers not found.
-func hostRecipeListMCPTools(_ context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
-	id, ok := hostRecipeRecall(s, "mcp-tools-provider")
-	if !ok {
-		id = "conformance-mcp-absent"
+func hostRecipeMCPProviderFields(id string) map[string]any {
+	return map[string]any{"source": "custom", "id": id, "url": "http://127.0.0.1:9/mcp", "enabled": true}
+}
+
+// hostRecipeListMCPTools lists the tools of a provider it created once.
+func hostRecipeListMCPTools(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	id, err := hostRecipeOnce(s, "mcp-tools-provider", func() (string, error) {
+		id := hostRecipeID("conformance-mcp-tools")
+		_, err := s.prerequisite(ctx, "createMcpProvider", successInputs{fields: hostRecipeMCPProviderFields(id)})
+		return id, err
+	})
+	if err != nil {
+		return successInputs{}, err
 	}
 	return successInputs{params: map[string]string{"provider_id": id}}, nil
 }

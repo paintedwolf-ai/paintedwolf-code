@@ -26,12 +26,14 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	openapi "github.com/lycaon/lycaon/test/openapi"
 	"github.com/lycaon/lycaon/test/wiring"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // conformanceRule names one runtime invariant of the sweep.
@@ -51,7 +53,7 @@ const (
 	ruleOperationsSucceed            conformanceRule = "every_operation_succeeds"
 	ruleKeyedOperationsAreIdempotent conformanceRule = "keyed_operations_are_idempotent"
 	ruleCorpusIsCurrent              conformanceRule = "host_corpus_is_current"
-	ruleRequestsNeedTheBearer conformanceRule = "requests_need_the_bearer"
+	ruleRequestsNeedTheBearer        conformanceRule = "requests_need_the_bearer"
 )
 
 var conformanceRules = []conformanceRule{
@@ -81,7 +83,24 @@ func TestAPIConformance(t *testing.T) {
 	presencePublic, presenceKey, err := ed25519.GenerateKey(rand.Reader)
 	testutil.FailErr(t, "generate a presence key", err)
 	t.Setenv(presence.PublicKeyEnv, base64.RawURLEncoding.EncodeToString(presencePublic))
-	h := wiring.BuildForTest(t, wiring.WithChangeDebounce(conformanceDebounce))
+
+	validator, err := openapi.Bundled()
+	testutil.FailErr(t, "load the bundled OpenAPI document", err)
+	doc, err := openapi.Document()
+	testutil.FailErr(t, "load the bundled OpenAPI document", err)
+	root, err := openapi.RepoRoot()
+	testutil.FailErr(t, "find the repository root", err)
+	sweep := newConformanceSweep(doc, validator, nil, nil)
+	sweep.eventSchemas = openapi.NewEventSchemas(filepath.Join(root, "docs"))
+	sweep.fixture = conformanceFixture{t: t, presenceKey: presenceKey}
+	// A host's construction sets process-wide configuration, so the terminal
+	// hosts are built before the host every other operation runs against.
+	sweep.runTerminal(t)
+
+	sweep.hold = newConformanceHold()
+	h := wiring.BuildForTest(t, wiring.WithChangeDebounce(conformanceDebounce), wiring.WithFileOperationHold(sweep.hold.wait),
+		wiring.WithInstalledPack(filepath.Join("testdata", "conformance-pack")),
+		wiring.WithMCPConnector(conformanceMCP()))
 	hub := h.MemoryHub()
 	if hub == nil {
 		t.Fatal("conformance sweep needs the in-memory event hub")
@@ -91,20 +110,14 @@ func TestAPIConformance(t *testing.T) {
 	projectDir := h.ProjectDir(t, "conformance")
 	testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(projectDir, "README.md"), []byte("conformance\n"), 0o644))
 	project := security.CreateTestProjectHTTP(t, h.Server, projectDir)
+	// The sweep reads as an open window does; without a claim the host parks
+	// the project and stops watching its files.
+	t.Cleanup(h.ProjectLiveness.ClaimWorkspace(project.ID))
 	sess := security.CreateSessionForProjectHTTP(t, h.Server, project.ID, wire.SessionPostureBuild)
 	provider := createConformanceProvider(t, h.Server)
+	createConformanceMCPProvider(t, h.Server)
 
-	validator, err := openapi.Bundled()
-	testutil.FailErr(t, "load the bundled OpenAPI document", err)
-	doc, err := openapi.Document()
-	testutil.FailErr(t, "load the bundled OpenAPI document", err)
-	noticeCfg, err := usernotice.LoadEffectiveUserNotices(extpacks.Active())
-	testutil.FailErr(t, "load the server's notice catalog", err)
-
-	root, err := openapi.RepoRoot()
-	testutil.FailErr(t, "find the repository root", err)
-	sweep := newConformanceSweep(doc, validator, h.Server, usernotice.NewCatalog(noticeCfg))
-	sweep.eventSchemas = openapi.NewEventSchemas(filepath.Join(root, "docs"))
+	sweep.handler, sweep.notices = h.Server, conformanceNotices(t)
 	settleSourceWatcher(t, h.Server.WaitForBackground, hub, projectDir)
 	effects := openConformanceEffects(t, h, hub, projectDir, conformanceDebounce)
 	sweep.effects, sweep.keyRows = effects, effects
@@ -114,7 +127,6 @@ func TestAPIConformance(t *testing.T) {
 	sweep.values.bind("/v1/web-research/providers/{provider_id}", "", string(wire.WebSearchProviderTavily))
 	sweep.host = h
 	sweep.fixture = conformanceFixture{t: t, presenceKey: presenceKey, projectDir: projectDir, project: project, session: sess}
-	sweep.runTerminal(t)
 	hostIDs := conformanceHostLookup(t, h)
 	sweep.beforeDeletes = hostIDs.remember
 	sweep.runAll(t.Context())
@@ -126,6 +138,14 @@ func TestAPIConformance(t *testing.T) {
 	sweep.checkCorpus(sweep.corpus.corpus(events), filepath.Join(root, openapi.HostCorpusPath), os.Getenv("UPDATE_HOST_CORPUS") == "1")
 	sweep.secrets.scanEvents(sweep.findings, events)
 	sweep.report(t)
+}
+
+// conformanceNotices is the notice catalog of the host built last.
+func conformanceNotices(t *testing.T) *usernotice.Catalog {
+	t.Helper()
+	cfg, err := usernotice.LoadEffectiveUserNotices(extpacks.Active())
+	testutil.FailErr(t, "load the server's notice catalog", err)
+	return usernotice.NewCatalog(cfg)
 }
 
 // bindConformanceFixtures binds the fixture project and chat by their
@@ -163,7 +183,13 @@ type conformanceSweep struct {
 	notices   *usernotice.Catalog
 	values    *conformanceValues
 	effects   conformanceEffects
-	keyRows   conformanceKeyRows
+	// readEffects are the effects a read may declare with x-read-starts-work.
+	readEffects map[string]readEffect
+	// hold keeps a file operation cancelable for the cancel recipe.
+	hold *conformanceHold
+	// memo keeps what recipes made, once per sweep.
+	memo    *sweepMemo
+	keyRows conformanceKeyRows
 	// readObserved names reads whose answered request has already been checked for effects.
 	readObserved map[string]bool
 	secrets      *conformanceSecrets
@@ -193,16 +219,19 @@ type conformanceOutcomes struct {
 	lastAnswer map[string]string
 	// replayed counts keyed operations whose success was replayed.
 	replayed int
-	// paged counts lists walked one row at a time.
-	paged int
+	// paged counts lists walked one row at a time; multiStream counts lists
+	// left unwalked because the spec does not name the array limit bounds.
+	paged, multiStream int
+	// created holds the project and chat ids the host answered from a create.
+	created map[string]bool
 }
 
 func newConformanceSweep(doc *openapi3.T, validator *openapi.Validator, handler http.Handler, notices *usernotice.Catalog) *conformanceSweep {
 	s := &conformanceSweep{
 		ops: conformanceOperations(doc), validator: validator, handler: handler, notices: notices,
-		values: newConformanceValues(), secrets: &conformanceSecrets{}, findings: newConformanceFindings(),
+		values: newConformanceValues(), secrets: &conformanceSecrets{}, findings: newConformanceFindings(), readEffects: hostReadEffects, memo: &sweepMemo{},
 		children: map[string][]string{}, readObserved: map[string]bool{},
-		outcomes: &conformanceOutcomes{succeeded: map[string]bool{}, lastAnswer: map[string]string{}}, corpus: newCorpusRecorder(),
+		outcomes: &conformanceOutcomes{succeeded: map[string]bool{}, lastAnswer: map[string]string{}, created: map[string]bool{}}, corpus: newCorpusRecorder(),
 	}
 	seen := map[string]bool{}
 	for _, op := range s.ops {
@@ -458,7 +487,11 @@ func (s *conformanceSweep) recordOutcome(ex conformanceExchange, valid bool) {
 		s.outcomes.succeeded[id] = true
 		return
 	}
-	s.outcomes.lastAnswer[id] = ex.req.probe + " answered " + ex.outcome()
+	answer := ex.req.probe + " answered " + ex.outcome()
+	if ex.apiErr != nil && len(ex.apiErr.Details) > 0 {
+		answer += fmt.Sprintf(" %v", ex.apiErr.Details)
+	}
+	s.outcomes.lastAnswer[id] = answer
 }
 
 // conformanceFixture is the project and chat every sweep starts from, and
@@ -469,4 +502,83 @@ type conformanceFixture struct {
 	projectDir  string
 	project     wire.Project
 	session     wire.Session
+}
+
+// conformanceMCPProvider serves the conformance pack's choice step, search
+// source and read command.
+const conformanceMCPProvider = "conformance-tracker"
+
+func conformanceMCP() *mcp.MockConnector {
+	// Choice steps and search sources call only read-only tools.
+	readOnly := &sdkmcp.ToolAnnotations{ReadOnlyHint: true}
+	return &mcp.MockConnector{
+		Tools: map[string][]*sdkmcp.Tool{
+			"svca": {{Name: "do", Description: "do"}},
+			conformanceMCPProvider: {
+				{Name: "list_items", Description: "List items", Annotations: readOnly},
+				{Name: "search_items", Description: "Search items", Annotations: readOnly},
+				{Name: "get_item", Description: "Read an item", Annotations: readOnly},
+			},
+		},
+		Results: map[string]map[string]string{conformanceMCPProvider: {
+			"list_items":   `{"choices":[{"id":"item-1","label":"Item one","description":"The first item"}]}`,
+			"search_items": `{"results":[{"item_id":"item-1","title":"Item one","kind":"task","state":"open","activation":{"item-id":"item-1"}}]}`,
+			"get_item":     `{"item_id":"item-1","title":"Item one"}`,
+		}},
+	}
+}
+
+// createConformanceMCPProvider enables the provider the conformance pack
+// requires.
+func createConformanceMCPProvider(t *testing.T, srv http.Handler) {
+	t.Helper()
+	req := security.AuthedRequest(t, http.MethodPost, "/v1/mcp/providers",
+		strings.NewReader(`{"source":"custom","id":"`+conformanceMCPProvider+`","url":"http://127.0.0.1:9/mcp","enabled":true}`))
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create MCP provider fixture status = %d body = %s", w.Code, w.Body.String())
+	}
+	// Listing connects the provider, so the contribution frame the recipes
+	// capture already holds its tools.
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, security.AuthedRequest(t, http.MethodGet, "/v1/mcp/providers/"+conformanceMCPProvider+"/tools", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("list MCP provider fixture tools status = %d body = %s", w.Code, w.Body.String())
+	}
+}
+
+// sweepMemo is what one sweep's recipes made; it lives as long as the sweep.
+type sweepMemo struct {
+	mu     sync.Mutex
+	values map[string]any
+}
+
+func (m *sweepMemo) load(key string) (any, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	value, ok := m.values[key]
+	return value, ok
+}
+
+func (m *sweepMemo) store(key string, value any) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.values == nil {
+		m.values = map[string]any{}
+	}
+	m.values[key] = value
+}
+
+func (m *sweepMemo) loadOrStore(key string, value any) any {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if existing, ok := m.values[key]; ok {
+		return existing
+	}
+	if m.values == nil {
+		m.values = map[string]any{}
+	}
+	m.values[key] = value
+	return value
 }

@@ -3,6 +3,7 @@ paths:
     get:
       tags: [projects]
       operationId: getFileBriefing
+      x-read-starts-work: file_briefing
       summary: Get the AI briefing for one exact source presentation
       description: >-
         current accepts worker_id; document requires document_id and

@@ -45,7 +45,9 @@ func (c *corpusRecorder) record(ex conformanceExchange) {
 	}
 	switch contentType := ex.header.Get("Content-Type"); {
 	case strings.HasPrefix(contentType, "application/json") && json.Valid(ex.body):
-		entry.Body = compactJSON(ex.body)
+		if entry.Body = compactJSON(ex.body); len(entry.Body) > openapi.CorpusBodyBound {
+			entry.Body, entry.BodyShape = nil, jsonShape(entry.Body)
+		}
 	case strings.HasPrefix(contentType, "text/"):
 		entry.Text = string(ex.body)
 	}
@@ -75,7 +77,8 @@ func (c *corpusRecorder) corpus(events []wire.EventEnvelope) openapi.HostCorpus 
 	for _, id := range slices.Sorted(maps.Keys(c.successes)) {
 		first, last := c.successes[id], c.latest[id]
 		out.Exchanges = append(out.Exchanges, first)
-		if !bytes.Equal(first.Body, last.Body) && first.Method == http.MethodGet {
+		changed := !bytes.Equal(first.Body, last.Body) || !maps.Equal(first.BodyShape, last.BodyShape)
+		if changed && first.Method == http.MethodGet {
 			out.Exchanges = append(out.Exchanges, last)
 		}
 	}
@@ -172,6 +175,7 @@ func exchangeShapes(c openapi.HostCorpus) map[string]map[string]string {
 			out[key] = map[string]string{}
 		}
 		maps.Copy(out[key], jsonShape(ex.Body))
+		maps.Copy(out[key], ex.BodyShape)
 	}
 	return out
 }

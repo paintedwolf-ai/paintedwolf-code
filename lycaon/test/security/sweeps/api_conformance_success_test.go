@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"math"
 	"net/http"
 	"slices"
 	"sort"
@@ -39,6 +38,8 @@ type successRecipe struct {
 	// seed adds rows to a paged list that holds fewer than two, for lists
 	// no create operation posts to.
 	seed func(ctx context.Context, s *conformanceSweep) error
+	// after runs once the success request answered, whatever it answered.
+	after func(s *conformanceSweep)
 }
 
 // successInputs override what the value generator would send.
@@ -94,12 +95,10 @@ func stageOf(op *conformanceOp) successStage {
 	return stageChange
 }
 
-// orderOf places an operation in its stage; an unordered one runs last.
+// orderOf places an operation in its stage: unordered ones first, then the
+// ordered ones in their order.
 func orderOf(op *conformanceOp) int {
-	if order := successRecipes[op.ID].order; order > 0 {
-		return order
-	}
-	return math.MaxInt
+	return successRecipes[op.ID].order
 }
 
 func endsWithParam(path string) bool {
@@ -134,6 +133,9 @@ func (s *conformanceSweep) probeSuccessPaths(ctx context.Context, stages ...succ
 		}
 		ex := s.send(ctx, req)
 		s.lastMutation = op.ID
+		if after := successRecipes[op.ID].after; after != nil {
+			after(s)
+		}
 		if ex.status/100 != 2 {
 			continue
 		}
@@ -235,6 +237,11 @@ func (s *conformanceSweep) bindCreated(op *conformanceOp, ex conformanceExchange
 	if json.Unmarshal(ex.body, &answer) != nil {
 		return
 	}
+	if id, ok := answer["id"].(string); ok && op.Method == http.MethodPost && (op.Path == "/v1/projects" || op.Path == "/v1/sessions") {
+		s.outcomes.mu.Lock()
+		s.outcomes.created[id] = true
+		s.outcomes.mu.Unlock()
+	}
 	for _, name := range s.children[op.Path] {
 		value, _ := answer[name].(string)
 		if id, ok := answer["id"].(string); ok && value == "" {
@@ -268,5 +275,5 @@ func (s *conformanceSweep) checkCoverage() {
 	}
 	s.findings.note("success path: %d of %d operations answered a validated success", covered, len(s.ops))
 	s.findings.note("idempotency: %d of %d keyed operations replayed", s.outcomes.replayed, keyed)
-	s.findings.note("pagination: %d lists walked one row at a time", s.outcomes.paged)
+	s.findings.note("pagination: %d lists walked one row at a time; %d multi-stream lists not walked", s.outcomes.paged, s.outcomes.multiStream)
 }
