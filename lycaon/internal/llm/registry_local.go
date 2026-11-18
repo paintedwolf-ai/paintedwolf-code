@@ -17,6 +17,18 @@ func (r *registryCore) LocalGenerationStatus() api.LocalGenerationStatus {
 		Revision: status.Revision, ContextTokens: status.ContextTokens,
 	}
 	r.localRuntime.SelectionStatus(&out)
+	if r.localRuntime == nil && r.localStore != nil {
+		selection, err := r.localStore.Selection()
+		if err != nil {
+			out.Detail = err.Error()
+		} else {
+			out.SelectedModel = selection.Model
+			if selection.State == "opted_out" {
+				out.State = "opted_out"
+				out.RecoveryAction = "none"
+			}
+		}
+	}
 	return out
 }
 
@@ -58,6 +70,9 @@ func (r *Registry) SelectLocalModel(req api.LocalModelSelectionRequest, settled 
 }
 
 func (r *Registry) RemoveLocalModel(ctx context.Context) error {
+	if r.localRuntime == nil && r.localStore != nil {
+		return r.localStore.PurgeAll()
+	}
 	err := r.localRuntime.RemoveModel(ctx)
 	r.RefreshDiscovery(IncludedProviderID)
 	return err

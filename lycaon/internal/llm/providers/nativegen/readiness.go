@@ -22,6 +22,7 @@ type Readiness struct {
 
 // Availability carries startup facts when no runtime could be allocated.
 type Availability struct {
+	Store   *modelstore.Store
 	Runtime *Runtime
 	Initial Readiness
 }

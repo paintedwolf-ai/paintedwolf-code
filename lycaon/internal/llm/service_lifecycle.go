@@ -122,6 +122,7 @@ func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *pro
 	if local != nil {
 		r.localRuntime = local.Runtime
 		r.localStartup = local.Initial
+		r.localStore = local.Store
 	}
 	r.rateGate = providerretry.NewProviderRateGate(rateDirectory)
 	r.catalog = catalog

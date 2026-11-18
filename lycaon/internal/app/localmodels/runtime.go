@@ -16,6 +16,7 @@ import (
 
 // Options names packaged resources and device-persistent model storage.
 type Options struct {
+	Store        *modelstore.Store
 	Binary       string
 	MetalLibrary string
 	Authority    string
@@ -39,9 +40,13 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if options.Binary == "" || options.StoreRoot == "" || options.Decision.Disabled {
 		return nil, errors.New("local models: incomplete runtime configuration")
 	}
-	authority, err := readAuthority(options.Authority)
-	if err != nil {
-		return nil, err
+	store := options.Store
+	if store == nil {
+		authority, err := readAuthority(options.Authority)
+		if err != nil {
+			return nil, err
+		}
+		store = modelstore.New(options.StoreRoot, authority)
 	}
 	inventory, err := nativegen.InspectDevices(ctx, options.Binary, options.MetalLibrary)
 	if err != nil {
@@ -63,7 +68,6 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	store := modelstore.New(options.StoreRoot, authority)
 	if _, err := store.Collect(); err != nil {
 		resources.Close()
 		return nil, err

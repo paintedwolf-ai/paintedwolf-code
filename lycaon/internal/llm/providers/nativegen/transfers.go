@@ -13,7 +13,8 @@ import (
 
 type transferState struct {
 	sync.Mutex
-	active *transfer
+	active   *transfer
+	removing bool
 }
 type transfer struct {
 	cancel       context.CancelFunc
@@ -78,7 +79,7 @@ func (p *Runtime) StartSelection(req api.LocalModelSelectionRequest, settled fun
 	}
 	p.transfers.Lock()
 	defer p.transfers.Unlock()
-	if p.transfers.active != nil {
+	if p.transfers.active != nil || p.transfers.removing {
 		return errors.New("a model transfer is in progress")
 	}
 	ctx, cancel := context.WithCancel(p.lifetime)
@@ -143,6 +144,14 @@ func (p *Runtime) RemoveModel(ctx context.Context) error {
 	if p == nil {
 		return errors.New("local generation runtime is unavailable")
 	}
+	p.transfers.Lock()
+	if p.transfers.removing {
+		p.transfers.Unlock()
+		return errors.New("local model removal is in progress")
+	}
+	p.transfers.removing = true
+	p.transfers.Unlock()
+	defer func() { p.transfers.Lock(); p.transfers.removing = false; p.transfers.Unlock() }()
 	if err := p.CancelTransfer(ctx); err != nil {
 		return err
 	}

@@ -129,6 +129,9 @@ func (p *Provider) Profile() providerprofile.Profile {
 
 func (p *Runtime) Close() error {
 	p.cancel()
+	if err := p.CancelTransfer(context.Background()); err != nil {
+		return err
+	}
 	<-p.gate
 	defer func() { p.gate <- struct{}{} }()
 	p.unload()
