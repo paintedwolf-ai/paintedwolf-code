@@ -199,7 +199,7 @@ func TestWaitForScanIDTimesOutWhilePending(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	_, err := scanbase.WaitForScanID(ctx, store, "pending-1", 0)
+	_, err := scanbase.WaitForScanID(ctx, store.Reads, "pending-1", 0)
 	if err == nil {
 		t.Fatal("expected timeout")
 	}
@@ -221,7 +221,7 @@ func TestWaitForScanIDFollowsSnapshotReplacement(t *testing.T) {
 	if !won {
 		t.Fatal("scan superseded-1 was not pending")
 	}
-	got, err := scanbase.WaitForScanID(t.Context(), store, "superseded-1", time.Millisecond)
+	got, err := scanbase.WaitForScanID(t.Context(), store.Reads, "superseded-1", time.Millisecond)
 	testutil.FailErr(t, "wait for replacement", err)
 	if got == nil || got.ID != "replacement-1" || got.Status != api.CodeScanStatusComplete {
 		t.Fatalf("replacement result = %+v", got)

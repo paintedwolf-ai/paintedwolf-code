@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/observability"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
@@ -26,7 +27,11 @@ const terminalCallbackTimeout = 30 * time.Second
 
 // Runner claims pending code scans and executes them through the scanner registry.
 type Runner struct {
-	Store    *scanbase.SQLStore
+	reads    *scanbase.ReadStore
+	runs     *scanbase.RunStore
+	findings *scanbase.FindingStore
+	ignores  *scanbase.IgnoreStore
+	database db.Handle
 	Registry scanbase.CodeScannerRegistry
 	Ingester scanbase.ScanResultIngester
 	Events   *events.Publisher
@@ -77,7 +82,7 @@ const PreemptedCode = "SCAN_PREEMPTED"
 // canceled with the reason, a pending one fails before any runner claims it.
 // Either way the scan settles through the ordinary terminal path.
 func (r *Runner) Preempt(ctx context.Context, scanID, reason string) {
-	if r == nil || r.Store == nil {
+	if r == nil || r.runs == nil {
 		return
 	}
 	r.claimMu.Lock()
@@ -90,14 +95,14 @@ func (r *Runner) Preempt(ctx context.Context, scanID, reason string) {
 	if execution != nil {
 		return
 	}
-	won, err := r.Store.Runs.FinalizePendingFailure(ctx, scanID, PreemptedCode, reason)
+	won, err := r.runs.FinalizePendingFailure(ctx, scanID, PreemptedCode, reason)
 	if err != nil || !won {
 		if err != nil {
 			slog.WarnContext(ctx, "preempt pending scan", "scan_id", scanID, "error", err)
 		}
 		return
 	}
-	if rec, err := r.Store.Reads.Get(ctx, scanID); err == nil && rec != nil {
+	if rec, err := r.reads.Get(ctx, scanID); err == nil && rec != nil {
 		r.notifyTerminal(ctx, rec)
 	}
 }
@@ -126,8 +131,8 @@ func NewRunner(store *scanbase.SQLStore, reg scanbase.CodeScannerRegistry, inges
 	if chunk <= 0 {
 		chunk = defaults.Runner.ChunkFiles
 	}
-	return &Runner{
-		Store:             store,
+	runner := &Runner{
+
 		Registry:          reg,
 		Ingester:          ingester,
 		Events:            pub,
@@ -141,11 +146,19 @@ func NewRunner(store *scanbase.SQLStore, reg scanbase.CodeScannerRegistry, inges
 		claims:            make(map[string]*scanExecution),
 		Broker:            backgroundwork.Process(),
 	}
+	if store != nil {
+		runner.reads = store.Reads
+		runner.runs = store.Runs
+		runner.findings = store.Findings
+		runner.ignores = store.Ignores
+		runner.database = store.DB()
+	}
+	return runner
 }
 
 // Run services committed work and waits for demand or a recovery deadline.
 func (r *Runner) Run(ctx context.Context) error {
-	if r == nil || r.Store == nil || r.Registry == nil {
+	if r == nil || r.runs == nil || r.Registry == nil {
 		return errors.New("scan runner: store and registry required")
 	}
 	defer r.inflight.Wait()
@@ -160,7 +173,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			slog.WarnContext(ctx, "service scan work", "error", err)
 			delay = r.retryDelay()
 		}
-		waitForWork(ctx, r.Store.Runs.Changed.Wake(), changed, delay)
+		waitForWork(ctx, r.runs.Changed.Wake(), changed, delay)
 	}
 	return ctx.Err()
 }
@@ -168,7 +181,7 @@ func (r *Runner) Run(ctx context.Context) error {
 func (r *Runner) serviceWork(ctx context.Context) error {
 	// Renew live claims before the expiry sweep after scheduling pauses.
 	r.renewActiveClaims(ctx)
-	if recovered, err := r.Store.Runs.RecoverExpiredClaims(ctx); err == nil {
+	if recovered, err := r.runs.RecoverExpiredClaims(ctx); err == nil {
 		for i := range recovered {
 			r.notifyTerminal(ctx, &recovered[i])
 		}
@@ -177,7 +190,7 @@ func (r *Runner) serviceWork(ctx context.Context) error {
 	}
 	reconcileErr := r.reconcileTerminal(ctx)
 	if r.Settings != nil && !r.Settings.Effective().Enabled {
-		canceled, err := r.Store.Runs.CancelPendingScans(ctx, scannersDisabledReason)
+		canceled, err := r.runs.CancelPendingScans(ctx, scannersDisabledReason)
 		if err != nil {
 			return errors.Join(reconcileErr, err)
 		}
@@ -195,12 +208,12 @@ func (r *Runner) serviceWork(ctx context.Context) error {
 		default:
 			return reconcileErr
 		}
-		running, err := r.Store.Runs.CountRunning(ctx)
+		running, err := r.runs.CountRunning(ctx)
 		if err != nil || running >= r.MaxRunning {
 			<-r.sem
 			return errors.Join(reconcileErr, err)
 		}
-		scan, err := r.Store.Runs.ClaimNext(ctx)
+		scan, err := r.runs.ClaimNext(ctx)
 		if errors.Is(err, scanbase.ErrNoPendingScans) {
 			<-r.sem
 			return reconcileErr
@@ -215,7 +228,7 @@ func (r *Runner) serviceWork(ctx context.Context) error {
 			defer r.inflight.Done()
 			defer func() {
 				<-r.sem
-				r.Store.Runs.Changed.Notify()
+				r.runs.Changed.Notify()
 			}()
 			defer observability.GuardPanic("scan.runner")
 			defer r.unregisterExecution(job.ID, registered)

@@ -34,10 +34,10 @@ func TestScanStubPredicatesWithSQLiteLedger(t *testing.T) {
 		CreatedAt:        now,
 		CompletedAt:      &now,
 	}
-	if err := store.Insert(context.Background(), scanRec, nil, ""); err != nil {
+	if err := store.Runs.Insert(context.Background(), scanRec, nil, ""); err != nil {
 		testutil.FailErr(t, "store.Insert failed", err)
 	}
-	if err := store.SaveIngest(context.Background(), scanRec.ID, evidence.Record{
+	if err := store.Findings.SaveIngest(context.Background(), scanRec.ID, evidence.Record{
 		Artifacts: map[string]any{
 			"guidance": []api.ScanGuidanceSummary{{Severity: "medium", Message: "ok"}},
 		},

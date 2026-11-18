@@ -35,7 +35,7 @@ func TestBaseComparisonAvailabilityPreservesCurrentFindings(t *testing.T) {
 			entries, err := snapshots.EntriesUnder(ctx, base.ID, root, ".")
 			testutil.FailErr(t, "read base", err)
 			scanner := &scanbase.MockScanner{Result: &scanoutput.Result{ScannedPaths: []string{"a.go", "b.go"}}}
-			runner := &Runner{Store: store, Snapshots: snapshots, Registry: &scanbase.MockRegistry{Scanner: scanner}, DataDir: t.TempDir()}
+			runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB(), Snapshots: snapshots, Registry: &scanbase.MockRegistry{Scanner: scanner}, DataDir: t.TempDir()}
 			if scenario == "cached clean" {
 				runner.cacheFileFindings(ctx, "execution", entries, scanner.Result)
 			}
@@ -113,7 +113,7 @@ func TestBaseStagingCancellationDoesNotBecomeUnavailableHistory(t *testing.T) {
 	testutil.FailErr(t, "capture base", err)
 	entries, err := snapshots.EntriesUnder(t.Context(), base.ID, root, ".")
 	testutil.FailErr(t, "read base", err)
-	runner := &Runner{Store: store, Snapshots: snapshots, DataDir: t.TempDir()}
+	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB(), Snapshots: snapshots, DataDir: t.TempDir()}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	staged, err := runner.stageBaseVersions(ctx, &api.CodeScan{ID: "canceled", CanonicalPath: root}, entries)

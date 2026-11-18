@@ -17,7 +17,7 @@ func TestRunnerConfirmsAbsenceOnlyWithSufficientCoverage(t *testing.T) {
 				t.Run(fmt.Sprintf("%s/%s/%s", prior, target, coverage), func(t *testing.T) {
 					root := ledgerRoot(t)
 					store := ledgerFixture(t, root, "sast", "execution-1")
-					runner := &Runner{Store: store}
+					runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
 					finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 					first := ledgerScan(t, store, "first", root, "sast", api.ScanTargetFull, api.ScanCoverageComplete, finding)
 					first.ExecutionFingerprint = "execution-1"
@@ -57,7 +57,7 @@ func TestRunnerConfirmationPreservesScopeAndReopening(t *testing.T) {
 		t.Run(fmt.Sprintf("empty_scope_%t", emptyScope), func(t *testing.T) {
 			root := ledgerRoot(t)
 			store := ledgerFixture(t, root, "sast", "execution-1")
-			runner := &Runner{Store: store}
+			runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
 			findings := []api.SecurityFinding{
 				scanfindings.FixtureFinding("returns", api.FindingLevelHigh, "returns", "a.go", 1),
 				scanfindings.FixtureFinding("absent", api.FindingLevelHigh, "absent", "a.go", 2),
@@ -90,7 +90,7 @@ func TestRunnerConfirmationPreservesScopeAndReopening(t *testing.T) {
 func TestRunnerConfirmationTraversesLedgerPagesAndExecutionChanges(t *testing.T) {
 	root := ledgerRoot(t)
 	store := ledgerFixture(t, root, "sast", "execution-1")
-	runner := &Runner{Store: store}
+	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
 	findings := make([]api.SecurityFinding, scanbase.MaxLedgerPageSize+1)
 	for i := range findings {
 		findings[i] = scanfindings.FixtureFinding(fmt.Sprintf("rule-%04d", i), api.FindingLevelHigh, "a", "a.go", i+1)
@@ -144,7 +144,7 @@ func TestFindingConfirmationSeparatesScannerAndRoot(t *testing.T) {
 	root := ledgerRoot(t)
 	otherRoot := ledgerRoot(t)
 	store := ledgerFixture(t, root, "sast", "execution-1")
-	runner := &Runner{Store: store}
+	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
 	for i, series := range []struct{ root, scanner string }{
 		{root, "sast"}, {root, "other-scanner"}, {otherRoot, "sast"},
 	} {

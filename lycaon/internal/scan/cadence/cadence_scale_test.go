@@ -29,14 +29,14 @@ func TestCadenceDispatchRequeuesWhenCallerDeadlineExpires(t *testing.T) {
 	}
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	rows, err := store.ListSeriesForPath(context.Background(), canonical)
+	rows, err := store.Series.ListSeriesForPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListSeriesForPath", err)
 	for _, row := range rows {
 		if row.DispatchToken != "" || row.DueAt.IsZero() {
 			t.Fatalf("scanner %s still holds a claim after the deadline: %+v", row.ScannerID, row)
 		}
 	}
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	if len(scans) != 0 {
 		t.Fatalf("no scan may be enqueued without a generation, got %d", len(scans))
@@ -62,13 +62,13 @@ func TestCadenceHeartbeatKeepsALiveClaimFromBeingRecovered(t *testing.T) {
 	})
 	// Heartbeats retain the claim while publication waits beyond its TTL.
 	clock.Advance(scanbase.DispatchClaimTTL + time.Minute)
-	rows, err := store.ListSeriesForPath(context.Background(), canonical)
+	rows, err := store.Series.ListSeriesForPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListSeriesForPath", err)
 	for i := range rows {
-		testutil.FailErr(t, "heartbeat", store.HeartbeatClaim(context.Background(), rows[i], clock.Now()))
+		testutil.FailErr(t, "heartbeat", store.Series.HeartbeatClaim(context.Background(), rows[i], clock.Now()))
 	}
 	cadence.Tick(context.Background())
-	rows, err = store.ListSeriesForPath(context.Background(), canonical)
+	rows, err = store.Series.ListSeriesForPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListSeriesForPath after tick", err)
 	for _, row := range rows {
 		if row.DispatchToken == "" {
@@ -77,7 +77,7 @@ func TestCadenceHeartbeatKeepsALiveClaimFromBeingRecovered(t *testing.T) {
 	}
 	close(coord.release)
 	testutil.FailErr(t, "attach once the generation arrived", <-done)
-	rows, err = store.ListSeriesForPath(context.Background(), canonical)
+	rows, err = store.Series.ListSeriesForPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListSeriesForPath after attach", err)
 	for _, row := range rows {
 		if row.LastCoveredSnapshotID == "" || row.DispatchToken != "" {
@@ -105,7 +105,7 @@ func TestCadenceWritesDuringAClaimAccumulateWithoutBecomingDue(t *testing.T) {
 		return coord.waited > 0
 	})
 	testutil.FailErr(t, "NoteWrites during claim", noteCadenceWrites(context.Background(), cadence, dir, []string{"main.go"}))
-	rows, err := store.ListSeriesForPath(context.Background(), canonical)
+	rows, err := store.Series.ListSeriesForPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListSeriesForPath", err)
 	for _, row := range rows {
 		if !row.DueAt.IsZero() {
@@ -117,7 +117,7 @@ func TestCadenceWritesDuringAClaimAccumulateWithoutBecomingDue(t *testing.T) {
 	}
 	close(coord.release)
 	<-done
-	rows, err = store.ListSeriesForPath(context.Background(), canonical)
+	rows, err = store.Series.ListSeriesForPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListSeriesForPath after settle", err)
 	for _, row := range rows {
 		if row.DispatchToken != "" || row.DueAt.IsZero() {
@@ -136,13 +136,13 @@ func TestCadenceIgnoredWritesNeverSettleOrArm(t *testing.T) {
 	completeCadenceScans(t, cadence, store)
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	before, err := store.ListByCanonicalPath(context.Background(), canonical)
+	before, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "list before", err)
 
 	testutil.FailErr(t, "mkdir scratch", os.MkdirAll(filepath.Join(dir, "scratch", "deep"), 0o755))
 	testutil.FailErr(t, "write scratch", os.WriteFile(filepath.Join(dir, "scratch", "deep", "out"), []byte("x"), 0o644))
 	testutil.FailErr(t, "NoteWrites ignored", noteCadenceWrites(context.Background(), cadence, dir, []string{"scratch/deep/out"}))
-	rows, err := store.ListSeriesForPath(context.Background(), canonical)
+	rows, err := store.Series.ListSeriesForPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListSeriesForPath", err)
 	for _, row := range rows {
 		if !row.DueAt.IsZero() || len(row.DesiredPaths) != 0 {
@@ -151,7 +151,7 @@ func TestCadenceIgnoredWritesNeverSettleOrArm(t *testing.T) {
 	}
 	clock.Advance(time.Minute)
 	cadence.Tick(context.Background())
-	after, err := store.ListByCanonicalPath(context.Background(), canonical)
+	after, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "list after", err)
 	if len(after) != len(before) {
 		t.Fatalf("an ignored write scheduled a scan: %d -> %d", len(before), len(after))
@@ -173,7 +173,7 @@ func TestCanceledDispatchReturnsClaimsWithoutWaitingForExpiry(t *testing.T) {
 	}
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "canonical root", err)
-	rows, err := store.ListSeriesForPath(t.Context(), canonical)
+	rows, err := store.Series.ListSeriesForPath(t.Context(), canonical)
 	testutil.FailErr(t, "inspect canceled claims", err)
 	for _, row := range rows {
 		if row.DispatchToken != "" || row.DueAt.IsZero() {
@@ -190,14 +190,14 @@ func TestTerminalSettlementDoesNotPublishTheNextGeneration(t *testing.T) {
 	testutil.FailErr(t, "baseline", cadence.BaselineRoot(t.Context(), dir))
 	_, err := cadence.RequestFull(t.Context(), dir, nil, api.ScanTriggerManual, scanbase.FullScanContext{})
 	testutil.FailErr(t, "request scan", err)
-	claimed, err := store.ClaimNext(t.Context())
+	claimed, err := store.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "claim scan", err)
-	won, err := store.MarkComplete(t.Context(), claimed, &scanoutput.Result{})
+	won, err := store.Runs.MarkComplete(t.Context(), claimed, &scanoutput.Result{})
 	testutil.FailErr(t, "complete scan", err)
 	if !won {
 		t.Fatal("completion lost")
 	}
-	completed, err := store.Get(t.Context(), claimed.ID)
+	completed, err := store.Reads.Get(t.Context(), claimed.ID)
 	testutil.FailErr(t, "read completion", err)
 	coord := &blockingCoordinator{CoordinatorImpl: cadence.Coordinator.(*scanbase.CoordinatorImpl), release: make(chan struct{})}
 	cadence.Coordinator = coord
@@ -206,7 +206,7 @@ func TestTerminalSettlementDoesNotPublishTheNextGeneration(t *testing.T) {
 	if ctx.Err() != nil || coord.waited != 0 {
 		t.Fatalf("terminal settlement started source preparation: error=%v calls=%d", ctx.Err(), coord.waited)
 	}
-	row, err := store.GetSeries(t.Context(), claimed.CanonicalPath, claimed.ScannerID)
+	row, err := store.Series.GetSeries(t.Context(), claimed.CanonicalPath, claimed.ScannerID)
 	testutil.FailErr(t, "read settled series", err)
 	if row.ActiveScanID != "" || row.LastCompletedAt.IsZero() {
 		t.Fatalf("terminal facts were not settled: %+v", row)

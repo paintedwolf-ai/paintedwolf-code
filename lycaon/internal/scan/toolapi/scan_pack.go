@@ -274,7 +274,7 @@ func waitForScanPack(ctx context.Context, coord scanbase.ScanCoordinator, scanID
 	results := make(chan scanPackWaitResult, len(ids))
 	for index, id := range ids {
 		go func() {
-			record, err := scanbase.WaitForScanID(waitCtx, store, id, 250*time.Millisecond)
+			record, err := scanbase.WaitForScanID(waitCtx, store.Reads, id, 250*time.Millisecond)
 			results <- scanPackWaitResult{index: index, record: record, err: err}
 		}()
 	}

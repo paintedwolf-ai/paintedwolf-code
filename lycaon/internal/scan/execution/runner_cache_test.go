@@ -32,7 +32,7 @@ func TestCurrentScanCacheSurvivesUnavailableBaseBytes(t *testing.T) {
 	entries, err := snapshots.EntriesUnder(t.Context(), base.ID, root, ".")
 	testutil.FailErr(t, "base entries", err)
 	finding := scanfindings.FixtureFinding("rule", api.FindingLevelHigh, "found", "a.go", 1)
-	runner := &Runner{Store: store, Snapshots: snapshots}
+	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB(), Snapshots: snapshots}
 	result := &scanoutput.Result{ScannedPaths: []string{"a.go"}, Findings: []api.SecurityFinding{finding}}
 	runner.cacheCurrentFindings(t.Context(), &api.CodeScan{CanonicalPath: root, SourceSnapshotID: base.ID, SourceCaptureQuality: string(base.Quality), ExecutionFingerprint: "execution"}, scancatalog.ScannerContract{}, result)
 	testutil.FailErr(t, "remove old source", os.Remove(filepath.Join(root, "a.go")))
@@ -51,7 +51,7 @@ func TestCurrentScanCacheSurvivesUnavailableBaseBytes(t *testing.T) {
 
 func TestFileCacheRequiresCompleteSingleFileCoverage(t *testing.T) {
 	store := scanbase.NewSQLStore(testdbfixture.Open(t, "cache.db"))
-	runner := &Runner{Store: store}
+	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
 	entries := []sourcesnapshot.Entry{}
 	for _, rel := range []string{"clean.go", "unscanned.go", "moved.go", "partial.go", "first.go", "second.go"} {
 		entries = append(entries, sourcesnapshot.Entry{Path: rel, SHA256: rel})

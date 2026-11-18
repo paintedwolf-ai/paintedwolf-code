@@ -37,7 +37,7 @@ func TestFullPassScansTakeTheBindingsOfEveryRequester(t *testing.T) {
 	if second.ID != first.ID {
 		t.Fatalf("workflow request recorded pass %s, want it to join %s", second.ID, first.ID)
 	}
-	passes, err := store.FullPassesForWorkflowRun(t.Context(), "run-b")
+	passes, err := store.FullPasses.FullPassesForWorkflowRun(t.Context(), "run-b")
 	testutil.FailErr(t, "passes for run", err)
 	if len(passes) != 1 || passes[0].ID != first.ID || passes[0].Started() {
 		t.Fatalf("run passes before start = %+v", passes)
@@ -45,9 +45,9 @@ func TestFullPassScansTakeTheBindingsOfEveryRequester(t *testing.T) {
 
 	finishBusyScan(t, cadence, store, busy)
 	for label, list := range map[string]func() ([]api.CodeScan, error){
-		"session-a": func() ([]api.CodeScan, error) { return store.ListBySessionID(t.Context(), "session-a") },
-		"session-b": func() ([]api.CodeScan, error) { return store.ListBySessionID(t.Context(), "session-b") },
-		"run-b":     func() ([]api.CodeScan, error) { return store.ListByWorkflowRunID(t.Context(), "run-b") },
+		"session-a": func() ([]api.CodeScan, error) { return store.Reads.ListBySessionID(t.Context(), "session-a") },
+		"session-b": func() ([]api.CodeScan, error) { return store.Reads.ListBySessionID(t.Context(), "session-b") },
+		"run-b":     func() ([]api.CodeScan, error) { return store.Reads.ListByWorkflowRunID(t.Context(), "run-b") },
 	} {
 		scans, err := list()
 		testutil.FailErr(t, "list "+label+" scans", err)
@@ -58,7 +58,7 @@ func TestFullPassScansTakeTheBindingsOfEveryRequester(t *testing.T) {
 
 	third, err := cadence.RequestFull(t.Context(), dir, []string{"lycaon-sast"}, api.ScanTriggerScanPack, scanbase.FullScanContext{SessionID: "session-c"})
 	testutil.FailErr(t, "late request", err)
-	late, err := store.ListBySessionID(t.Context(), "session-c")
+	late, err := store.Reads.ListBySessionID(t.Context(), "session-c")
 	testutil.FailErr(t, "list late session scans", err)
 	if third.ID != first.ID || len(late) != 3 {
 		t.Fatalf("late requester joined %s holding %d scans, want %s with three", third.ID, len(late), first.ID)
@@ -123,18 +123,18 @@ func TestFullPassListsOrderEqualRequestTimesByAdmission(t *testing.T) {
 	firstID := "ffffffff-ffff-4fff-8fff-ffffffffffff"
 	secondID := "00000000-0000-4000-8000-000000000001"
 	for _, id := range []string{firstID, secondID} {
-		testutil.FailErr(t, "insert full pass "+id, store.InsertFullPass(t.Context(), scanbase.FullPassDraft{
+		testutil.FailErr(t, "insert full pass "+id, store.FullPasses.InsertFullPass(t.Context(), scanbase.FullPassDraft{
 			ID: id, CanonicalPath: canonical, Scanners: []string{"lycaon-sast"},
 			Trigger: api.ScanTriggerManual, RequestedAt: requestedAt,
 		}))
 	}
 	for _, id := range []string{secondID, firstID} {
-		testutil.FailErr(t, "bind full pass "+id, store.BindFullPassRequester(t.Context(), id,
+		testutil.FailErr(t, "bind full pass "+id, store.FullPasses.BindFullPassRequester(t.Context(), id,
 			scanbase.FullScanContext{WorkflowRunID: "run-order"}))
 	}
-	byPath, err := store.FullPassesForPath(t.Context(), canonical)
+	byPath, err := store.FullPasses.FullPassesForPath(t.Context(), canonical)
 	testutil.FailErr(t, "list root full passes", err)
-	byRun, err := store.FullPassesForWorkflowRun(t.Context(), "run-order")
+	byRun, err := store.FullPasses.FullPassesForWorkflowRun(t.Context(), "run-order")
 	testutil.FailErr(t, "list workflow full passes", err)
 	for _, result := range []struct {
 		name   string
@@ -160,31 +160,31 @@ func TestFullPassOwedForSessionCountsOnlyThePassesTheSessionRequested(t *testing
 	store := scanbase.NewSQLStore(sqlDB)
 	canonical := t.TempDir()
 	passID := "11111111-1111-4111-8111-111111111111"
-	testutil.FailErr(t, "insert full pass", store.InsertFullPass(t.Context(), scanbase.FullPassDraft{
+	testutil.FailErr(t, "insert full pass", store.FullPasses.InsertFullPass(t.Context(), scanbase.FullPassDraft{
 		ID: passID, CanonicalPath: canonical, Scanners: []string{"lycaon-sast"},
 		Trigger: api.ScanTriggerManual, RequestedAt: newTestClock().Now(),
 	}))
-	testutil.FailErr(t, "bind requester", store.BindFullPassRequester(t.Context(), passID,
+	testutil.FailErr(t, "bind requester", store.FullPasses.BindFullPassRequester(t.Context(), passID,
 		scanbase.FullScanContext{SessionID: "session-requester"}))
 	series := scanbase.SeriesRow{
 		CanonicalPath: canonical, ScannerID: "lycaon-sast", DesiredPassID: passID, DesiredTrigger: api.ScanTriggerManual,
 	}
-	testutil.FailErr(t, "owe the pass", store.UpsertSeries(t.Context(), series))
+	testutil.FailErr(t, "owe the pass", store.Series.UpsertSeries(t.Context(), series))
 
 	for session, want := range map[string]bool{"session-requester": true, "session-bystander": false} {
-		owed, err := store.FullPassOwedForSession(t.Context(), session)
+		owed, err := store.FullPasses.FullPassOwedForSession(t.Context(), session)
 		testutil.FailErr(t, "owed for "+session, err)
 		if owed != want {
 			t.Fatalf("pass owed to %s = %t, want %t", session, owed, want)
 		}
 	}
-	if owed, err := store.FullPassOwed(t.Context(), canonical); err != nil || !owed {
+	if owed, err := store.FullPasses.FullPassOwed(t.Context(), canonical); err != nil || !owed {
 		t.Fatalf("root pass owed = %t, %v; the root still owes it", owed, err)
 	}
 
 	series.DesiredPassID, series.DesiredTrigger = "", ""
-	testutil.FailErr(t, "settle the pass", store.UpsertSeries(t.Context(), series))
-	if owed, err := store.FullPassOwedForSession(t.Context(), "session-requester"); err != nil || owed {
+	testutil.FailErr(t, "settle the pass", store.Series.UpsertSeries(t.Context(), series))
+	if owed, err := store.FullPasses.FullPassOwedForSession(t.Context(), "session-requester"); err != nil || owed {
 		t.Fatalf("a settled pass is still owed to its requester: %t, %v", owed, err)
 	}
 }

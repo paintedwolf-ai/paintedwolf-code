@@ -13,7 +13,7 @@ import (
 func TestReturningToEarlierSourceGetsAFreshLedgerObservation(t *testing.T) {
 	root := ledgerRoot(t)
 	store := ledgerFixture(t, root, "sast", "execution-1")
-	runner := &Runner{Store: store}
+	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
 	finding := scanfindings.FixtureFinding("cycle", api.FindingLevelHigh, "cycle", "a.go", 1)
 	for index, present := range []bool{true, false, true, false, true, false} {
 		findings := []api.SecurityFinding{}

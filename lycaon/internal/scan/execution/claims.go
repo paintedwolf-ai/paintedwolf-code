@@ -44,7 +44,7 @@ func (r *Runner) renewActiveClaims(ctx context.Context) {
 	}
 	r.claimMu.Unlock()
 	for _, claim := range claims {
-		renewed, err := r.Store.Runs.RenewClaim(ctx, claim.id, claim.token)
+		renewed, err := r.runs.RenewClaim(ctx, claim.id, claim.token)
 		if err != nil || !renewed {
 			claim.execution.cancel()
 		}
@@ -57,7 +57,7 @@ func (r *Runner) reconcileSoftRuntime(ctx context.Context, job *api.CodeScan, po
 		return
 	}
 	at := time.Now().UTC()
-	if _, err := r.Store.Runs.MarkLongRunning(ctx, job, at); err != nil {
+	if _, err := r.runs.MarkLongRunning(ctx, job, at); err != nil {
 		slog.WarnContext(ctx, "reconcile scan long-running state", "scan_id", job.ID, "error", err)
 	}
 }
@@ -80,7 +80,7 @@ func (r *Runner) scanClaimContext(parent context.Context, job *api.CodeScan) (co
 				return
 			case <-changed:
 			case <-ticker.C:
-				renewed, err := r.Store.Runs.RenewClaim(ctx, job.ID, job.ClaimToken)
+				renewed, err := r.runs.RenewClaim(ctx, job.ID, job.ClaimToken)
 				if err != nil || !renewed {
 					cancel()
 					return
@@ -109,7 +109,7 @@ func (r *Runner) scannerContext(parent context.Context, job *api.CodeScan, polic
 				return
 			case <-soft.C:
 				at := time.Now().UTC()
-				won, err := r.Store.Runs.MarkLongRunning(ctx, job, at)
+				won, err := r.runs.MarkLongRunning(ctx, job, at)
 				if err != nil {
 					slog.WarnContext(ctx, "mark scan long-running", "scan_id", job.ID, "error", err)
 				} else if !won {
