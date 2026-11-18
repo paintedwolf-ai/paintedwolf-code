@@ -13,19 +13,21 @@ import (
 )
 
 func TestPoliteAcquirePacesRequestStarts(t *testing.T) {
+	crawler := newTestCrawler()
+
 	const interval = 40 * time.Millisecond
-	resetPoliteness(interval)
-	t.Cleanup(func() { resetPoliteness(5 * time.Millisecond) })
+	crawler = newTestCrawler()
+	crawler.interval = interval
 
 	stats := newSearchStats("t-polite")
 	ctx := withSearchStats(t.Context(), stats)
 	var nextSlots []time.Time
 	for i := 0; i < 3; i++ {
-		release, err := politeAcquire(ctx, "paced.example")
+		release, err := crawler.politeAcquire(ctx, "paced.example")
 		if err != nil {
 			t.Fatalf("acquire %d: %v", i, err)
 		}
-		g := gateFor("paced.example")
+		g := crawler.gateFor("paced.example")
 		g.mu.Lock()
 		nextSlots = append(nextSlots, g.nextAt)
 		g.mu.Unlock()
@@ -42,15 +44,18 @@ func TestPoliteAcquirePacesRequestStarts(t *testing.T) {
 }
 
 func TestPoliteAcquireBoundsInFlight(t *testing.T) {
+	crawler := newTestCrawler()
+
 	synctest.Test(t, func(t *testing.T) {
-		resetPoliteness(time.Millisecond)
+		crawler = newTestCrawler()
+		crawler.interval = time.Millisecond
 		var inFlight, peak int64
 		var wg sync.WaitGroup
 		for i := 0; i < 8; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				release, err := politeAcquire(t.Context(), "bounded.example")
+				release, err := crawler.politeAcquire(t.Context(), "bounded.example")
 				if err != nil {
 					return
 				}
@@ -74,13 +79,16 @@ func TestPoliteAcquireBoundsInFlight(t *testing.T) {
 }
 
 func TestPoliteRecordCooldownOn429(t *testing.T) {
-	resetPoliteness(time.Millisecond)
-	politeRecord("busy.example", http.StatusTooManyRequests, "2")
-	if _, err := politeAcquire(t.Context(), "busy.example"); err == nil {
+	crawler := newTestCrawler()
+
+	crawler = newTestCrawler()
+	crawler.interval = time.Millisecond
+	crawler.politeRecord("busy.example", http.StatusTooManyRequests, "2")
+	if _, err := crawler.politeAcquire(t.Context(), "busy.example"); err == nil {
 		t.Fatal("want cooldown error after 429")
 	}
 	// Host cooldowns are isolated.
-	release, err := politeAcquire(t.Context(), "fine.example")
+	release, err := crawler.politeAcquire(t.Context(), "fine.example")
 	if err != nil {
 		t.Fatalf("other host: %v", err)
 	}
@@ -88,43 +96,49 @@ func TestPoliteRecordCooldownOn429(t *testing.T) {
 }
 
 func TestPoliteRecordForbiddenStrikes(t *testing.T) {
-	resetPoliteness(time.Millisecond)
-	politeRecord("waf.example", http.StatusForbidden, "")
-	if _, err := politeAcquire(t.Context(), "waf.example"); err != nil {
+	crawler := newTestCrawler()
+
+	crawler = newTestCrawler()
+	crawler.interval = time.Millisecond
+	crawler.politeRecord("waf.example", http.StatusForbidden, "")
+	if _, err := crawler.politeAcquire(t.Context(), "waf.example"); err != nil {
 		t.Fatalf("one 403 must not cool down: %v", err)
 	}
-	politeRecord("waf.example", http.StatusForbidden, "")
-	if _, err := politeAcquire(t.Context(), "waf.example"); err == nil {
+	crawler.politeRecord("waf.example", http.StatusForbidden, "")
+	if _, err := crawler.politeAcquire(t.Context(), "waf.example"); err == nil {
 		t.Fatal("want cooldown after consecutive 403s")
 	}
 	// Success clears forbidden strikes.
-	resetPoliteness(time.Millisecond)
-	politeRecord("ok.example", http.StatusForbidden, "")
-	politeRecord("ok.example", http.StatusOK, "")
-	politeRecord("ok.example", http.StatusForbidden, "")
-	if _, err := politeAcquire(t.Context(), "ok.example"); err != nil {
+	crawler = newTestCrawler()
+	crawler.interval = time.Millisecond
+	crawler.politeRecord("ok.example", http.StatusForbidden, "")
+	crawler.politeRecord("ok.example", http.StatusOK, "")
+	crawler.politeRecord("ok.example", http.StatusForbidden, "")
+	if _, err := crawler.politeAcquire(t.Context(), "ok.example"); err != nil {
 		t.Fatalf("interleaved success must clear strikes: %v", err)
 	}
 }
 
 func TestRobotsCrawlDelayParsedAndCapped(t *testing.T) {
+	crawler := newTestCrawler()
+
 	body := "User-agent: *\nCrawl-delay: 2\n\nUser-agent: other\ncrawl-delay: 4.5\n"
 	if d := robotsCrawlDelay(body); d != 4500*time.Millisecond {
 		t.Fatalf("delay = %v want max declared value", d)
 	}
-	resetPoliteness(time.Millisecond)
-	politeSetCrawlDelay("slow.example", time.Hour)
-	if g := gateFor("slow.example"); g.interval != politeMaxCrawlDelay {
+	crawler = newTestCrawler()
+	crawler.interval = time.Millisecond
+	crawler.politeSetCrawlDelay("slow.example", time.Hour)
+	if g := crawler.gateFor("slow.example"); g.interval != politeMaxCrawlDelay {
 		t.Fatalf("interval = %v want capped at %v", g.interval, politeMaxCrawlDelay)
 	}
 }
 
 func TestProbeHonorsRobotsDisallow(t *testing.T) {
-	discovery := NewDiscovery()
+	crawler := newTestCrawler()
 
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(crawler)
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	var blockedHits int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -139,7 +153,7 @@ func TestProbeHonorsRobotsDisallow(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	probe := fetchPageProbe(context.Background(), srv.URL+"/private/secret")
+	probe := crawler.fetchPageProbe(context.Background(), srv.URL+"/private/secret")
 	if probe.live {
 		t.Fatal("robots-disallowed probe must not report live")
 	}
@@ -149,11 +163,10 @@ func TestProbeHonorsRobotsDisallow(t *testing.T) {
 }
 
 func TestProbeHonorsRobotsOnRedirectTarget(t *testing.T) {
-	discovery := NewDiscovery()
+	crawler := newTestCrawler()
 
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(crawler)
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	var blockedHits int64
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -176,7 +189,7 @@ func TestProbeHonorsRobotsOnRedirectTarget(t *testing.T) {
 	}))
 	t.Cleanup(source.Close)
 
-	probe := fetchPageProbe(context.Background(), source.URL+"/start")
+	probe := crawler.fetchPageProbe(context.Background(), source.URL+"/start")
 	if probe.live || !probe.robotsBlocked {
 		t.Fatalf("probe = %+v want redirect target blocked by robots", probe)
 	}
@@ -202,11 +215,10 @@ func TestDiscoverFeedURLsFromDeclaration(t *testing.T) {
 
 // TestDiscoverSiteIndexesNoBlindFeedProbes limits crawls to declared and well-known paths.
 func TestDiscoverSiteIndexesNoBlindFeedProbes(t *testing.T) {
-	discovery := NewDiscovery()
+	crawler := newTestCrawler()
 
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(crawler)
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	var mu sync.Mutex
 	paths := map[string]int{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -217,7 +229,7 @@ func TestDiscoverSiteIndexesNoBlindFeedProbes(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	discoverSiteIndexes(context.Background(), srv.URL, []string{"widget"})
+	crawler.discoverSiteIndexes(context.Background(), srv.URL, []string{"widget"})
 	mu.Lock()
 	defer mu.Unlock()
 	allowed := map[string]struct{}{"/robots.txt": {}, "/llms.txt": {}, "/sitemap.xml": {}, "/": {}}

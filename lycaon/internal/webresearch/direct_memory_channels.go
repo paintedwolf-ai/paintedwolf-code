@@ -153,7 +153,7 @@ func (d *Discovery) searchIndexMemory(ctx context.Context, index *webindex.Store
 		return outcome
 	}
 	defer release()
-	hits, _, dead := verifyHits(ctx, ranked, scorer, maxResults, maxHitsPerHost)
+	hits, _, dead := d.crawler.verifyHits(ctx, ranked, scorer, maxResults, maxHitsPerHost)
 	for _, url := range dead {
 		index.QueueDelete(ctx, url)
 	}

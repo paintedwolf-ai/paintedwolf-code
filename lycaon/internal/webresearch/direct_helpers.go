@@ -177,8 +177,8 @@ func (p *seedPlan) mergeLeadHosts() {
 	}
 }
 
-func fetchTextURL(ctx context.Context, rawURL string) (string, error) {
-	body, status, err := fetchIndexBody(ctx, rawURL)
+func (crawler *Crawler) fetchTextURL(ctx context.Context, rawURL string) (string, error) {
+	body, status, err := crawler.fetchIndexBody(ctx, rawURL)
 	if err != nil {
 		return "", err
 	}
@@ -191,7 +191,7 @@ func fetchTextURL(ctx context.Context, rawURL string) (string, error) {
 // indexBodyByteLimit is the index or robots page prefix discovery reads.
 const indexBodyByteLimit = 1 << 20
 
-func fetchIndexBody(ctx context.Context, rawURL string) (body string, status int, err error) {
+func (crawler *Crawler) fetchIndexBody(ctx context.Context, rawURL string) (body string, status int, err error) {
 	u, err := normalizeFetchURL(rawURL)
 	if err != nil {
 		return "", 0, err
@@ -220,7 +220,7 @@ func fetchIndexBody(ctx context.Context, rawURL string) (body string, status int
 			FetchMs:  elapsed.Milliseconds(),
 		})
 	}()
-	resp, _, err := politeGuardedGet(ctx, u, researchAcceptHeader, indexBodyByteLimit, false)
+	resp, _, err := crawler.politeGuardedGet(ctx, u, researchAcceptHeader, indexBodyByteLimit, false)
 	if err != nil {
 		return "", 0, err
 	}
@@ -233,8 +233,8 @@ func fetchIndexBody(ctx context.Context, rawURL string) (body string, status int
 	return string(raw), resp.StatusCode, nil
 }
 
-func fetchRobotsTxt(ctx context.Context, siteBase string) string {
-	body, status, err := fetchIndexBody(ctx, siteBase+"/robots.txt")
+func (crawler *Crawler) fetchRobotsTxt(ctx context.Context, siteBase string) string {
+	body, status, err := crawler.fetchIndexBody(ctx, siteBase+"/robots.txt")
 	if err != nil || status < 200 || status >= 300 {
 		return ""
 	}

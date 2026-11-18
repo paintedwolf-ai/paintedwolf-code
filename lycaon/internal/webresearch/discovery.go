@@ -8,6 +8,7 @@ import (
 
 // Discovery coordinates interactive searches and background warming.
 type Discovery struct {
+	crawler   *Crawler
 	slots     chan struct{}
 	active    atomic.Int64
 	seedMu    sync.Mutex
@@ -17,8 +18,9 @@ type Discovery struct {
 	seen      map[string]*seenScope
 }
 
-func NewDiscovery() *Discovery {
+func NewDiscovery(crawler *Crawler) *Discovery {
 	return &Discovery{
+		crawler:   crawler,
 		slots:     make(chan struct{}, directDiscoverMaxParallel),
 		seedSlots: make(map[string]chan struct{}),
 		plans:     newTTLCache[seedPlan](seedPlanCacheTTL, seedPlanCacheMax),

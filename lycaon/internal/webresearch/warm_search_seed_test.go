@@ -11,10 +11,9 @@ import (
 )
 
 func TestWarmQueryUnderfilledSearchSeedSkipsWithoutModel(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	index := testIndex(t)
 	query := "useEffect react hooks"
 	index.QueueSearchOutcome(t.Context(), query, "", "", 0, 10)
@@ -54,10 +53,9 @@ func TestWarmQueryUnderfilledSearchSeedSkipsWithoutModel(t *testing.T) {
 }
 
 func TestWarmQueryFilledSearchDoesNotSeed(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	index := testIndex(t)
 	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
 	testutil.FailErr(t, "open web research store", openErr)
@@ -86,11 +84,8 @@ func TestWarmQueryFilledSearchDoesNotSeed(t *testing.T) {
 }
 
 func TestSearchSeedSuccessMarksQueryRewarmed(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	srv := warmTestSite(t)
 	index := testIndex(t)
 	query := "widget frobnicator guide"

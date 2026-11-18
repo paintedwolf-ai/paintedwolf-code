@@ -151,6 +151,8 @@ func TestWebSearchScreenRedactsTransientQuery(t *testing.T) {
 }
 
 func TestFetchURLScreenDeniesBeforeDial(t *testing.T) {
+	crawler := newTestCrawler()
+
 	var dialAsks atomic.Int32
 	confine.SetEgressResolver(func(context.Context, confine.EgressCommand, egressproxy.Endpoint, *confine.EgressDetectionCitation) bool {
 		dialAsks.Add(1)
@@ -165,7 +167,6 @@ func TestFetchURLScreenDeniesBeforeDial(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	}))
 	t.Cleanup(srv.Close)
-	allowLoopbackFetch(t)
 
 	u, err := url.Parse(srv.URL + "/?key=" + plantedAWS)
 	testutil.FailErr(t, "parse", err)
@@ -176,7 +177,7 @@ func TestFetchURLScreenDeniesBeforeDial(t *testing.T) {
 	ctx := egressgate.WithAttribution(context.Background(), confine.EgressCommand{SessionID: "sess-secret-fetch"})
 	ctx = withSecretScreen(ctx, testSecretMatcher(t), ask, "", screenDestination{})
 
-	resp, _, err := guardedGet(ctx, u, "", fetchBodyByteLimit)
+	resp, _, err := crawler.guardedGet(ctx, u, "", fetchBodyByteLimit)
 	if resp != nil && resp.Body != nil {
 		_ = resp.Body.Close()
 	}

@@ -109,7 +109,6 @@ func TestDoProviderHTTPPinsValidatedPublicTarget(t *testing.T) {
 		_, _ = w.Write([]byte(`ok`))
 	})
 	t.Cleanup(srv.Close)
-	allowLoopbackFetch(t)
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
 	testutil.FailErr(t, "http.NewRequestWithContext failed", err)
@@ -158,7 +157,6 @@ func TestDoProviderHTTPReadsAPrefixOfALargeBody(t *testing.T) {
 		_, _ = w.Write(bytes.Repeat([]byte("x"), providerBodyMax+64))
 	})
 	t.Cleanup(srv.Close)
-	allowLoopbackFetch(t)
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
 	testutil.FailErr(t, "build request", err)

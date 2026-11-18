@@ -372,10 +372,10 @@ func buildFanOut(ctx context.Context, query string, maxResults int, opts SearchO
 }
 
 // fanOutGraceTimeout bounds the wait for more hits after the first result.
-var fanOutGraceTimeout = 2 * time.Second
+const fanOutGraceTimeout = 2 * time.Second
 
 // fanOutZeroHitTimeout bounds a fan-out that has returned no hits.
-var fanOutZeroHitTimeout = 4 * time.Second
+const fanOutZeroHitTimeout = 4 * time.Second
 
 func runProviderTasks(ctx context.Context, cancel context.CancelFunc, tasks []fanTask, maxResults int) []providerOutcome {
 	if len(tasks) == 0 {

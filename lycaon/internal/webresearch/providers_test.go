@@ -42,7 +42,7 @@ func TestProviderGoogleCSE(t *testing.T) {
 
 func TestProviderGoogleCSEMissingCXNotConfigured(t *testing.T) {
 	reg := testRegistry(t, nil)
-	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query: "test",
 		Settings: Settings{
 			Keys:             map[string]string{"google_cse": "secret"},
@@ -93,7 +93,7 @@ func TestSearchExplicitSerperCustomMode(t *testing.T) {
 	}
 	reg := NewRegistry(testCatalog(t), srv.exchange)
 	reg.Register(NewRESTSearchProvider(spec, KindKeyed, srv.exchange))
-	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query:    "test",
 		Provider: "serper",
 		Settings: Settings{

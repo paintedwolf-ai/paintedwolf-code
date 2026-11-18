@@ -9,7 +9,7 @@ import (
 // The warmer only seeds off the coordinator's provider when the lite role
 // shares it; a dedicated lite provider means the summarizer is its own budget.
 func TestWarmSummarizerSharesCoordinatorFromPolicy(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	dedicated := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "openai", Model: "gpt-4o"},

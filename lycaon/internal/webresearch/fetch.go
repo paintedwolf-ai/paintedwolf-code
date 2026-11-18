@@ -171,7 +171,7 @@ func fetchTextResult(raw fetchResponse) FetchURLResult {
 	return sanitizeFetchResult(res)
 }
 
-func fetchBytes(ctx context.Context, opts FetchOptions) (fetchResponse, error) {
+func (crawler *Crawler) fetchBytes(ctx context.Context, opts FetchOptions) (fetchResponse, error) {
 	u, err := normalizeFetchURL(opts.URL)
 	if err != nil {
 		return fetchResponse{}, err
@@ -190,7 +190,7 @@ func fetchBytes(ctx context.Context, opts FetchOptions) (fetchResponse, error) {
 			return fetchResponse{}, err
 		}
 	}
-	resp, err := outboundhttp.Do(ctx, outboundhttp.Request{
+	resp, err := crawler.exchange(ctx, outboundhttp.Request{
 		Method: "GET", URL: u.String(), Timeout: timeout, Redirects: outboundhttp.RedirectSafe,
 		RedirectLimit: maxFetchRedirects, MaxBodyBytes: fetchBodyByteLimit,
 		HopHeaders:   []outboundhttp.Header{{Name: "User-Agent", Value: fetchUserAgent}, {Name: "Accept", Value: researchAcceptHeader}},

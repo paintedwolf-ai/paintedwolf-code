@@ -35,6 +35,7 @@ type FetchWarmHook func(ctx context.Context, sessionID, toolCallID, pageURL, tit
 
 // ToolDeps wires catalog-backed search into native tools.
 type ToolDeps struct {
+	Crawler   *Crawler
 	Discovery *Discovery
 	Creds     *CredentialStore
 	Config    *ConfigStore
@@ -75,6 +76,9 @@ const (
 func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFactory FactoryGetter) error {
 	if reg == nil {
 		return fmt.Errorf("registry required")
+	}
+	if deps.Crawler == nil {
+		return fmt.Errorf("crawler required")
 	}
 	if deps.Discovery == nil {
 		return fmt.Errorf("discovery required")
@@ -288,7 +292,8 @@ func WireRuntime(ctx context.Context, exchange Exchange) (Runtime, error) {
 	if err != nil {
 		return Runtime{}, fmt.Errorf("fetch_url limits: %w", err)
 	}
-	return Runtime{Discovery: NewDiscovery(), Creds: creds, Config: cfg, Catalog: cat, Registry: reg, FetchBudget: NewFetchBudget(limits)}, nil
+	crawler := NewCrawler(exchange)
+	return Runtime{Crawler: crawler, Discovery: NewDiscovery(crawler), Creds: creds, Config: cfg, Catalog: cat, Registry: reg, FetchBudget: NewFetchBudget(limits)}, nil
 }
 
 func projectDirFrom(tctx tools.ToolContext) string {

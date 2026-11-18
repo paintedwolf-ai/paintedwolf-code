@@ -2,7 +2,9 @@ package webresearch
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -53,7 +55,7 @@ func TestRuntimeFetchBudgetsStayLocal(t *testing.T) {
 }
 
 func TestDiscoveryAdmissionUsesExactReservation(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 1)
 	release, ok := discovery.tryAcquire()
 	if !ok {
@@ -62,7 +64,7 @@ func TestDiscoveryAdmissionUsesExactReservation(t *testing.T) {
 	if _, ok := discovery.tryAcquire(); ok {
 		t.Fatal("admitted above capacity")
 	}
-	independent := NewDiscovery()
+	independent := NewDiscovery(newTestCrawler())
 	other, ok := independent.tryAcquire()
 	if !ok {
 		t.Fatal("another runtime consumed independent capacity")
@@ -86,7 +88,7 @@ func TestDiscoveryAdmissionUsesExactReservation(t *testing.T) {
 }
 
 func TestDiscoveryMemoryStaysLocal(t *testing.T) {
-	left, right := NewDiscovery(), NewDiscovery()
+	left, right := NewDiscovery(newTestCrawler()), NewDiscovery(newTestCrawler())
 	left.recordSeen("session", []WebHit{{URL: "https://example.com/hit"}})
 	if len(left.seenURLs("session")) != 1 {
 		t.Fatal("recorded hit missing")
@@ -104,7 +106,7 @@ func TestDiscoveryMemoryStaysLocal(t *testing.T) {
 }
 
 func TestDiscoverySeedAdmissionUsesExactReservation(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 	releases := make([]func(), seedCallMaxParallelShared)
 	for i := range releases {
 		release, err := discovery.acquireSeed(t.Context(), "provider", true)
@@ -116,7 +118,7 @@ func TestDiscoverySeedAdmissionUsesExactReservation(t *testing.T) {
 	if _, err := discovery.acquireSeed(ctx, "provider", true); err != context.Canceled {
 		t.Fatalf("canceled seed acquire = %v", err)
 	}
-	independent := NewDiscovery()
+	independent := NewDiscovery(newTestCrawler())
 	other, err := independent.acquireSeed(t.Context(), "provider", true)
 	testutil.FailErr(t, "reserve independent seed call", err)
 	other()
@@ -131,4 +133,92 @@ func TestDiscoverySeedAdmissionUsesExactReservation(t *testing.T) {
 	for _, release := range releases {
 		release()
 	}
+}
+
+func TestCrawlerStateStaysLocal(t *testing.T) {
+	left, right := NewCrawler(nil), NewCrawler(nil)
+	left.politeRecord("busy.example", 429, "30")
+	if _, err := left.politeAcquire(t.Context(), "busy.example"); err != errHostCoolingDown {
+		t.Fatalf("rate limited crawler = %v", err)
+	}
+	release, err := right.politeAcquire(t.Context(), "busy.example")
+	testutil.FailErr(t, "independent host admission", err)
+	release()
+	release()
+	left.storeRobotsBody("busy.example", "User-agent: *\nDisallow: /private")
+	if _, ok := right.cachedRobotsBody("busy.example"); ok {
+		t.Fatal("another crawler inherited robots state")
+	}
+	if body, ok := left.cachedRobotsBody("busy.example"); !ok || body == "" {
+		t.Fatal("stored robots body missing")
+	}
+	left.indexes.put("https://busy.example", []indexCandidate{{URL: "https://busy.example/page"}})
+	if _, ok := right.indexes.get("https://busy.example"); ok {
+		t.Fatal("another crawler inherited site index")
+	}
+}
+
+func TestCrawlerRetainsActiveHostGateAcrossEviction(t *testing.T) {
+	crawler := NewCrawler(nil)
+	release, err := crawler.politeAcquire(t.Context(), "active.example")
+	testutil.FailErr(t, "reserve active host", err)
+	defer release()
+	gate := crawler.gateFor("active.example")
+	for i := 0; i < politeMaxHosts+1; i++ {
+		crawler.gateFor(fmt.Sprintf("host-%d.example", i))
+	}
+	if current := crawler.gateFor("active.example"); current != gate {
+		t.Fatal("active host acquired a second gate")
+	}
+	crawler.gatesMu.Lock()
+	count := len(crawler.gates)
+	crawler.gatesMu.Unlock()
+	if count > politeMaxHosts {
+		t.Fatalf("inactive gates exceeded bound: %d", count)
+	}
+}
+
+func TestCrawlerCancellationReleasesPacingReservation(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		crawler := NewCrawler(nil)
+		gate := crawler.gateFor("paced.example")
+		gate.pace <- struct{}{}
+		ctx, cancel := context.WithCancel(t.Context())
+		result := make(chan error, 1)
+		go func() { _, err := crawler.politeAcquire(ctx, "paced.example"); result <- err }()
+		synctest.Wait()
+		cancel()
+		if err := <-result; err != context.Canceled {
+			t.Fatalf("pacing cancellation = %v", err)
+		}
+		<-gate.pace
+		if len(gate.sem) != 0 {
+			t.Fatal("canceled pacing retained host capacity")
+		}
+		crawler.gatesMu.Lock()
+		users := gate.users
+		crawler.gatesMu.Unlock()
+		if users != 0 {
+			t.Fatalf("canceled pacing retained %d gate references", users)
+		}
+	})
+}
+
+func TestCrawlerQueuedRequestHonorsNewCooldown(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		crawler := NewCrawler(nil)
+		gate := crawler.gateFor("paced.example")
+		gate.pace <- struct{}{}
+		result := make(chan error, 1)
+		go func() { _, err := crawler.politeAcquire(t.Context(), "paced.example"); result <- err }()
+		synctest.Wait()
+		crawler.politeRecord("paced.example", 429, "30")
+		<-gate.pace
+		if err := <-result; err != errHostCoolingDown {
+			t.Fatalf("queued request ignored cooldown: %v", err)
+		}
+		if len(gate.sem) != 0 {
+			t.Fatal("cooldown rejection retained host capacity")
+		}
+	})
 }

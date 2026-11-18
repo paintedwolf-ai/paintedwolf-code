@@ -57,7 +57,7 @@ func TestFanOutCutsSlowProviderWhenBudgetMet(t *testing.T) {
 		health: reg.ensureHealthGate("slow"),
 	})
 
-	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query: "widget probe",
 		Limit: 1,
 		Settings: Settings{
@@ -75,9 +75,6 @@ func TestFanOutCutsSlowProviderWhenBudgetMet(t *testing.T) {
 }
 
 func TestFanOutGraceCutsStragglersWithPartialHits(t *testing.T) {
-	prevGrace := fanOutGraceTimeout
-	fanOutGraceTimeout = 200 * time.Millisecond
-	t.Cleanup(func() { fanOutGraceTimeout = prevGrace })
 
 	reg := NewRegistry(testCatalog(t), nil)
 	reg.Register(&healthWrappedProvider{
@@ -92,7 +89,7 @@ func TestFanOutGraceCutsStragglersWithPartialHits(t *testing.T) {
 		health: reg.ensureHealthGate("slow"),
 	})
 
-	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query: "widget probe",
 		Limit: 5,
 		Settings: Settings{

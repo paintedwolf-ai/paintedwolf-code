@@ -160,6 +160,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	}
 
 	deps := webresearch.ToolDeps{
+		Crawler:     r.WebRuntime.Crawler,
 		Discovery:   r.WebRuntime.Discovery,
 		FetchBudget: r.WebRuntime.FetchBudget,
 		Creds:       r.WebCreds,

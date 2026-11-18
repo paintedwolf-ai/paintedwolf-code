@@ -172,8 +172,11 @@ func Fill(t *testing.T, d *Deps) {
 func fillWebResearch(t *testing.T, d *Deps) {
 	t.Helper()
 	dir := t.TempDir()
+	if d.WebResearch.Crawler == nil {
+		d.WebResearch.Crawler = webresearch.NewCrawler(nil)
+	}
 	if d.WebResearch.Discovery == nil {
-		d.WebResearch.Discovery = webresearch.NewDiscovery()
+		d.WebResearch.Discovery = webresearch.NewDiscovery(d.WebResearch.Crawler)
 	}
 	if d.WebResearch.FetchBudget == nil {
 		d.WebResearch.FetchBudget = webresearch.NewFetchBudget(webresearch.DefaultFetchURLLimits())

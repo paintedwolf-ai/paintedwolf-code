@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
+	"testing/synctest"
 )
 
 func TestWholeSearchResultCacheReplay(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	fake := &FakeDirectDiscoverer{
 		Hits: []WebHit{{URL: "https://a.example/widget", Title: "Widget guide", Snippet: "widget guide content"}},
@@ -37,7 +37,7 @@ func TestWholeSearchResultCacheReplay(t *testing.T) {
 }
 
 func TestWholeSearchResultCacheCanBeBypassedForProviderTests(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	fake := &FakeDirectDiscoverer{
 		Hits: []WebHit{{URL: "https://a.example/widget", Title: "Widget guide", Snippet: "widget guide content"}},
@@ -134,37 +134,34 @@ func TestFrontierPlateauAfterZeroGainRound(t *testing.T) {
 }
 
 func TestPickSeedsHedgeWinsBeforeSlowPrimary(t *testing.T) {
-	discovery := NewDiscovery()
+	synctest.Test(t, func(t *testing.T) {
+		discovery := NewDiscovery(newTestCrawler())
 
-	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
-	prevDelay := seedHedgeDelay
-	seedHedgeDelay = 20 * time.Millisecond
-	t.Cleanup(func() { seedHedgeDelay = prevDelay })
+		discovery.slots = make(chan struct{}, 1)
 
-	sum := &hedgeRaceSummarizer{
-		slimResponse: `{"seeds":["https://fast.example.com"],"fresh":false,"expand":["widget"],"leads":[]}`,
-	}
-	d := &directDiscoverer{discovery: discovery, summarizer: sum, seedSharedProvider: true}
-	stats := newSearchStats("t-hedge")
-	ctx := withSearchStats(context.Background(), stats)
-	plan, err := d.pickSeedsCached(ctx, "widget install guide", CurrentPeriod(), 8, nil, nil)
-	if err != nil {
-		t.Fatalf("pickSeedsCached: %v", err)
-	}
-	if len(plan.seeds) == 0 {
-		t.Fatalf("plan = %+v", plan)
-	}
-	if !stats.seedHedge.Load() || !stats.seedHedgeWin.Load() {
-		t.Fatalf("hedge=%v hedge_win=%v want both true", stats.seedHedge.Load(), stats.seedHedgeWin.Load())
-	}
+		sum := &hedgeRaceSummarizer{
+			slimResponse: `{"seeds":["https://fast.example.com"],"fresh":false,"expand":["widget"],"leads":[]}`,
+		}
+		d := &directDiscoverer{discovery: discovery, summarizer: sum, seedSharedProvider: true}
+		stats := newSearchStats("t-hedge")
+		ctx := withSearchStats(context.Background(), stats)
+		plan, err := d.pickSeedsCached(ctx, "widget install guide", CurrentPeriod(), 8, nil, nil)
+		if err != nil {
+			t.Fatalf("pickSeedsCached: %v", err)
+		}
+		if len(plan.seeds) == 0 {
+			t.Fatalf("plan = %+v", plan)
+		}
+		if !stats.seedHedge.Load() || !stats.seedHedgeWin.Load() {
+			t.Fatalf("hedge=%v hedge_win=%v want both true", stats.seedHedge.Load(), stats.seedHedgeWin.Load())
+		}
+	})
 }
 
 func TestPickSeedsHedgedSkipsRaceWhenDedicated(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 
 	sum := &scriptedSummarizer{responses: []string{
 		`{"seeds":["https://fast.example.com"],"fresh":false,"expand":["widget"],"leads":[]}`,

@@ -26,15 +26,13 @@ const (
 	politeMaxHosts          = 512
 )
 
-// politeHostInterval spaces request starts for one host.
-var politeHostInterval = 500 * time.Millisecond
-
 var errHostCoolingDown = errors.New("host cooling down after rate-limit or block")
 var errRobotsBlocked = errors.New("blocked by robots.txt")
 
 type hostGate struct {
+	users      int
 	sem        chan struct{}
-	pace       sync.Mutex
+	pace       chan struct{}
 	mu         sync.Mutex
 	nextAt     time.Time
 	interval   time.Duration
@@ -43,59 +41,83 @@ type hostGate struct {
 	touched    time.Time
 }
 
-var politeGates = struct {
-	sync.Mutex
-	m map[string]*hostGate
-}{m: make(map[string]*hostGate)}
+func (crawler *Crawler) gateFor(host string) *hostGate {
+	crawler.gatesMu.Lock()
+	defer crawler.gatesMu.Unlock()
+	return crawler.gateForLocked(host)
+}
 
-func gateFor(host string) *hostGate {
+func (crawler *Crawler) gateForLocked(host string) *hostGate {
 	host = strings.ToLower(strings.TrimSpace(host))
-	politeGates.Lock()
-	defer politeGates.Unlock()
-	g, ok := politeGates.m[host]
+	g, ok := crawler.gates[host]
 	if !ok {
-		if len(politeGates.m) >= politeMaxHosts {
+		if len(crawler.gates) >= politeMaxHosts {
 			oldestKey, oldestAt := "", time.Time{}
-			for k, e := range politeGates.m {
+			for k, e := range crawler.gates {
+				if e.users != 0 {
+					continue
+				}
 				if oldestKey == "" || e.touched.Before(oldestAt) {
 					oldestKey, oldestAt = k, e.touched
 				}
 			}
-			delete(politeGates.m, oldestKey)
+			delete(crawler.gates, oldestKey)
 		}
 		g = &hostGate{
 			sem:      make(chan struct{}, politeHostMaxInFlight),
-			interval: politeHostInterval,
+			pace:     make(chan struct{}, 1),
+			interval: crawler.interval,
 		}
-		politeGates.m[host] = g
+		crawler.gates[host] = g
 	}
 	g.touched = time.Now()
 	return g
 }
 
+// Active requests keep the same gate through pacing and response recording.
+func (crawler *Crawler) retainGate(host string) (*hostGate, func()) {
+	crawler.gatesMu.Lock()
+	gate := crawler.gateForLocked(host)
+	gate.users++
+	crawler.gatesMu.Unlock()
+	return gate, sync.OnceFunc(func() {
+		crawler.gatesMu.Lock()
+		gate.users--
+		if gate.users == 0 && len(crawler.gates) > politeMaxHosts {
+			delete(crawler.gates, strings.ToLower(strings.TrimSpace(host)))
+		}
+		crawler.gatesMu.Unlock()
+	})
+}
+
 // politeAcquire reserves one paced request slot for a host.
-func politeAcquire(ctx context.Context, host string) (func(), error) {
+func (crawler *Crawler) politeAcquire(ctx context.Context, host string) (func(), error) {
 	waitStart := time.Now()
 	defer func() { statsFrom(ctx).addPoliteWait(time.Since(waitStart)) }()
-	g := gateFor(host)
+	g, drop := crawler.retainGate(host)
 	g.mu.Lock()
 	cooling := time.Now().Before(g.coolUntil)
 	g.mu.Unlock()
 	if cooling {
+		drop()
 		return nil, errHostCoolingDown
 	}
 	select {
 	case g.sem <- struct{}{}:
 	case <-ctx.Done():
+		drop()
 		return nil, ctx.Err()
 	}
-	g.pace.Lock()
-	g.mu.Lock()
-	now := time.Now()
-	start := g.nextAt
-	if start.Before(now) {
-		start = now
+	release := sync.OnceFunc(func() { <-g.sem; drop() })
+	select {
+	case g.pace <- struct{}{}:
+	case <-ctx.Done():
+		release()
+		return nil, ctx.Err()
 	}
+	defer func() { <-g.pace }()
+	g.mu.Lock()
+	start := g.nextAt
 	g.mu.Unlock()
 	if wait := time.Until(start); wait > 0 {
 		timer := time.NewTimer(wait)
@@ -103,22 +125,28 @@ func politeAcquire(ctx context.Context, host string) (func(), error) {
 		select {
 		case <-timer.C:
 		case <-ctx.Done():
-			g.pace.Unlock()
-			<-g.sem
+			release()
 			return nil, ctx.Err()
 		}
 	}
 	g.mu.Lock()
+	defer g.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		release()
+		return nil, err
+	}
+	if time.Now().Before(g.coolUntil) {
+		release()
+		return nil, errHostCoolingDown
+	}
 	g.nextAt = time.Now().Add(g.interval)
-	g.mu.Unlock()
-	g.pace.Unlock()
-	return func() { <-g.sem }, nil
+	return release, nil
 }
 
 // politeRecord folds a response status into the host's gate: rate-limit and
 // block responses start a cooldown, success clears forbidden strikes.
-func politeRecord(host string, status int, retryAfter string) {
-	g := gateFor(host)
+func (crawler *Crawler) politeRecord(host string, status int, retryAfter string) {
+	g := crawler.gateFor(host)
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	switch {
@@ -157,14 +185,14 @@ func parseRetryAfter(v string) time.Duration {
 
 // politeSetCrawlDelay applies a robots-declared Crawl-delay to the host's
 // pacing interval — never below the default, capped at politeMaxCrawlDelay.
-func politeSetCrawlDelay(host string, d time.Duration) {
+func (crawler *Crawler) politeSetCrawlDelay(host string, d time.Duration) {
 	if d <= 0 {
 		return
 	}
 	if d > politeMaxCrawlDelay {
 		d = politeMaxCrawlDelay
 	}
-	g := gateFor(host)
+	g := crawler.gateFor(host)
 	g.mu.Lock()
 	if d > g.interval {
 		g.interval = d
@@ -188,53 +216,49 @@ func robotsCrawlDelay(body string) time.Duration {
 	return maxDelay
 }
 
-// robotsBodies caches robots.txt per host so frontier probes (which can land
-// on hosts no index crawl visited) can check permission without re-fetching.
-var robotsBodies = newTTLCache[string](siteIndexCacheTTL, politeMaxHosts)
-
-func storeRobotsBody(host, body string) {
+func (crawler *Crawler) storeRobotsBody(host, body string) {
 	host = strings.ToLower(strings.TrimSpace(host))
 	if host == "" {
 		return
 	}
-	robotsBodies.put(host, body)
+	crawler.robots.put(host, body)
 }
 
-func cachedRobotsBody(host string) (string, bool) {
-	return robotsBodies.get(strings.ToLower(strings.TrimSpace(host)))
+func (crawler *Crawler) cachedRobotsBody(host string) (string, bool) {
+	return crawler.robots.get(strings.ToLower(strings.TrimSpace(host)))
 }
 
 // probeAllowedByRobots gates crawl-initiated page probes on the target host's
 // robots.txt, fetching and caching it on first contact with a host. An empty
 // or unreachable robots file allows everything.
-func probeAllowedByRobots(ctx context.Context, pageURL string) bool {
+func (crawler *Crawler) probeAllowedByRobots(ctx context.Context, pageURL string) bool {
 	host := strings.ToLower(urlHost(pageURL))
 	if host == "" {
 		return false
 	}
-	body, ok := cachedRobotsBody(host)
+	body, ok := crawler.cachedRobotsBody(host)
 	if !ok {
 		// First contact with this host: the robots fetch is charged against
 		// the caller's probe window, so account for it separately.
 		fetchStart := time.Now()
 		base := normalizeSiteBase(pageURL)
-		body = fetchRobotsTxt(ctx, base)
+		body = crawler.fetchRobotsTxt(ctx, base)
 		statsFrom(ctx).addRobotsFetch(time.Since(fetchStart))
-		storeRobotsBody(host, body)
-		politeSetCrawlDelay(host, robotsCrawlDelay(body))
+		crawler.storeRobotsBody(host, body)
+		crawler.politeSetCrawlDelay(host, robotsCrawlDelay(body))
 	}
 	return urlAllowedByRobots(body, pageURL)
 }
 
-func politeGuardedGet(ctx context.Context, u *url.URL, accept string, limit int64, checkRobots bool) (*http.Response, string, error) {
+func (crawler *Crawler) politeGuardedGet(ctx context.Context, u *url.URL, accept string, limit int64, checkRobots bool) (*http.Response, string, error) {
 	beforeHop := func(ctx context.Context, hopURL *url.URL) (func(), error) {
-		if checkRobots && !probeAllowedByRobots(ctx, hopURL.String()) {
+		if checkRobots && !crawler.probeAllowedByRobots(ctx, hopURL.String()) {
 			return nil, errRobotsBlocked
 		}
-		return politeAcquire(ctx, hopURL.Host)
+		return crawler.politeAcquire(ctx, hopURL.Host)
 	}
 	recordHop := func(hopURL *url.URL, resp *http.Response) {
-		politeRecord(hopURL.Host, resp.StatusCode, resp.Header.Get("Retry-After"))
+		crawler.politeRecord(hopURL.Host, resp.StatusCode, resp.Header.Get("Retry-After"))
 	}
-	return guardedGetWithHopPolicy(ctx, u, accept, limit, beforeHop, recordHop)
+	return crawler.guardedGetWithHopPolicy(ctx, u, accept, limit, beforeHop, recordHop)
 }

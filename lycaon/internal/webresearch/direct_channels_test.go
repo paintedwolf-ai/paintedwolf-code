@@ -48,7 +48,7 @@ func testSeedSettings(enabled ...string) Settings {
 }
 
 func TestWarmOriginSkipsProviderChannels(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	reg := testRegistry(t, nil)
 	d := &directDiscoverer{discovery: discovery,
@@ -68,7 +68,7 @@ func TestWarmOriginSkipsProviderChannels(t *testing.T) {
 }
 
 func TestUserOriginConstructsProviderChannels(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	reg := testRegistry(t, nil)
 	d := &directDiscoverer{discovery: discovery,
@@ -103,11 +103,8 @@ func channelIDs(chs []seedChannel) []string {
 }
 
 func TestProviderBackedSearchWithoutModel(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 
 	srv := widgetReviewSite(t)
 	d := providerBackedDiscoverer(t, "hn", "Widget frobnicator review", srv.URL+"/guide")
@@ -124,11 +121,8 @@ func TestProviderBackedSearchWithoutModel(t *testing.T) {
 }
 
 func TestProviderSeedChannelDedupesURL(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -172,7 +166,8 @@ func TestProviderSeedChannelDedupesURL(t *testing.T) {
 }
 
 func TestAPISnippetFallbackAdmitsRobotsBlocked(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/robots.txt" {
 			fmt.Fprint(w, "User-agent: *\nDisallow: /\n")
@@ -183,7 +178,7 @@ func TestAPISnippetFallbackAdmitsRobotsBlocked(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	scorer := newQueryScorer("github issue widget frobnicator", nil, false, CurrentPeriod())
-	hits, _, _ := verifyHits(context.Background(), []indexCandidate{
+	hits, _, _ := crawler.verifyHits(context.Background(), []indexCandidate{
 		{
 			Title:         "Widget frobnicator issue",
 			URL:           srv.URL + "/issues/1",
@@ -204,7 +199,8 @@ func TestAPISnippetFallbackAdmitsRobotsBlocked(t *testing.T) {
 }
 
 func TestAPISnippetFallbackRejects404WithoutRobots(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/robots.txt" {
 			fmt.Fprint(w, "User-agent: *\nAllow: /\n")
@@ -215,7 +211,7 @@ func TestAPISnippetFallbackRejects404WithoutRobots(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	scorer := newQueryScorer("widget frobnicator missing", nil, false, CurrentPeriod())
-	hits, _, dead := verifyHits(context.Background(), []indexCandidate{
+	hits, _, dead := crawler.verifyHits(context.Background(), []indexCandidate{
 		{
 			Title:      "Missing page",
 			URL:        srv.URL + "/missing",
@@ -232,11 +228,8 @@ func TestAPISnippetFallbackRejects404WithoutRobots(t *testing.T) {
 }
 
 func TestProviderHitIngestedToIndex(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")

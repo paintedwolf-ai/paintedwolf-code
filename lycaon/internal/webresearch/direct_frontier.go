@@ -178,7 +178,7 @@ func (f *frontier) round(ctx context.Context, d *directDiscoverer, scorer *query
 	perHostCap := f.perHostCap
 	f.mu.Unlock()
 
-	newHits, expand, dead := verifyHits(ctx, batch, scorer, need, perHostCap)
+	newHits, expand, dead := d.discovery.crawler.verifyHits(ctx, batch, scorer, need, perHostCap)
 
 	f.mu.Lock()
 	f.spent += len(batch)
@@ -416,12 +416,12 @@ func (h *hostCrawler) launch(base string, phrases []string) {
 	go func() {
 		defer h.crawls.Done()
 		h.ensureSlot()
-		local, ok := siteIndexCache.get(base)
+		local, ok := h.discovery.crawler.indexes.get(base)
 		if !ok {
-			local = discoverSiteIndexes(h.ctx, base, phrases)
+			local = h.discovery.crawler.discoverSiteIndexes(h.ctx, base, phrases)
 			// Empty crawls remain uncached because transient failures also return no candidates.
 			if h.ctx.Err() == nil && len(local) > 0 {
-				siteIndexCache.put(base, local)
+				h.discovery.crawler.indexes.put(base, local)
 			}
 		}
 		h.mu.Lock()

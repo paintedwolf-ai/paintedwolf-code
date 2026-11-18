@@ -54,7 +54,7 @@ func TestSearchQueryReachesOnlySelectedProviders(t *testing.T) {
 	ctx := egressgate.WithAttribution(context.Background(), confine.EgressCommand{
 		SessionID: "chat", ToolCallID: "call", Image: "web_search",
 	})
-	out := Search(ctx, SearchOptions{Discovery: NewDiscovery(),
+	out := Search(ctx, SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query: query,
 		Settings: Settings{
 			Keys:             map[string]string{"brave": "brave-key"},

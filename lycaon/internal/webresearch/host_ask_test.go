@@ -32,7 +32,6 @@ func TestDoProviderHTTPHostAskSurvivesShortTimeout(t *testing.T) {
 		_, _ = w.Write([]byte(`ok`))
 	})
 	t.Cleanup(srv.Close)
-	allowLoopbackFetch(t)
 
 	release := make(chan struct{})
 	resolverEntered := make(chan struct{}, 1)
@@ -94,9 +93,6 @@ func TestDoProviderHTTPHostAskSurvivesShortTimeout(t *testing.T) {
 }
 
 func TestRunProviderTasksSkipsEarlyCancelDuringHostAsk(t *testing.T) {
-	prevZero := fanOutZeroHitTimeout
-	fanOutZeroHitTimeout = 80 * time.Millisecond
-	t.Cleanup(func() { fanOutZeroHitTimeout = prevZero })
 
 	release := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())

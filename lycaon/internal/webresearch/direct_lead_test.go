@@ -111,11 +111,10 @@ func (s *failThenRespondSummarizer) Summarize(_ context.Context, _, user string,
 }
 
 func TestPickSeedsSlimRetryAfterTimeout(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	testutil.SkipIfShort(t, "seed pick slim retry after timeout")
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	sum := &failThenRespondSummarizer{
 		response: `{"seeds":["https://docs.example.com"],"fresh":false,"expand":["widget install"],"leads":[{"title":"Widget install guide","host":"docs.example.com"}]}`,
 	}
@@ -138,10 +137,9 @@ func TestPickSeedsSlimRetryAfterTimeout(t *testing.T) {
 }
 
 func TestPickSeedsNoRetryWhenCallerContextDone(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	sum := &failThenRespondSummarizer{response: `{"seeds":["https://docs.example.com"]}`}
 	d := &directDiscoverer{discovery: discovery, summarizer: sum}
 	ctx, cancel := context.WithCancel(context.Background())

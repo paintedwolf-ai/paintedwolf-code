@@ -18,11 +18,8 @@ import (
 // earlier search is findable when provider seeds only name an unrelated host —
 // memory widens discovery past the live seed channels.
 func TestDirectIndexMemoryAnswersWhenProviderMissesHost(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -64,11 +61,8 @@ func TestDirectIndexMemoryAnswersWhenProviderMissesHost(t *testing.T) {
 // TestDirectMemoryAnswersWithoutModel verifies phase 1 returns from index
 // memory without invoking the Summarizer when strong hits meet the budget.
 func TestDirectMemoryAnswersWithoutModel(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -104,11 +98,8 @@ func TestDirectMemoryAnswersWithoutModel(t *testing.T) {
 // TestDirectSearchIngestsIntoIndex verifies the write path: hits and anchor
 // observations from a search land in the persistent index.
 func TestDirectSearchIngestsIntoIndex(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/llms.txt" {
@@ -140,11 +131,8 @@ func TestDirectSearchIngestsIntoIndex(t *testing.T) {
 // a remembered URL that probes dead is deleted from the index so it never
 // wastes another probe.
 func TestDirectDeadIndexMemoryURLEvicted(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 
 	live := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/llms.txt" {
@@ -183,12 +171,10 @@ func TestDirectDeadIndexMemoryURLEvicted(t *testing.T) {
 // TestDirectMemoryAnswersFromWarmIndex: a warm index fills the hit budget
 // without any provider seed or Summarizer.
 func TestDirectMemoryAnswersFromWarmIndex(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	testutil.SkipIfShort(t, "memory-only search with multi-second budget")
-	allowLoopbackFetch(t)
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, `<html><head><title>Widget frobnicator review</title>
@@ -225,12 +211,10 @@ func TestDirectMemoryAnswersFromWarmIndex(t *testing.T) {
 // TestDirectStragglerHostDoesNotBlockResults: one responsive host fills the
 // budget while another host's crawl hangs — no barrier waits for it.
 func TestDirectStragglerHostDoesNotBlockResults(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	testutil.SkipIfShort(t, "straggler host crawl with multi-second budget")
-	allowLoopbackFetch(t)
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	fast := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/llms.txt" {
 			fmt.Fprintf(w, "- [Guide](%s/guide.md): widget frobnicator guide with benchmarks\n", srvURL(r))

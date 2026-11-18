@@ -13,7 +13,7 @@ func searchTestProvider(t *testing.T, ctx context.Context, provider SearchProvid
 	t.Helper()
 	reg := NewRegistry(testCatalog(t), nil)
 	reg.Register(provider)
-	return Search(ctx, SearchOptions{Discovery: NewDiscovery(), Registry: reg, Settings: settings, Provider: provider.ID(), Query: query, Limit: limit, SkipResultCache: true})
+	return Search(ctx, SearchOptions{Discovery: NewDiscovery(newTestCrawler()), Registry: reg, Settings: settings, Provider: provider.ID(), Query: query, Limit: limit, SkipResultCache: true})
 }
 
 type queryRecorder struct {
@@ -56,7 +56,7 @@ func TestEverySearchProviderReceivesScreenedQuery(t *testing.T) {
 				}
 				return secretmatch.Resolution{Decision: decision}, nil
 			}, "", destination)
-			result := Search(ctx, SearchOptions{Discovery: NewDiscovery(), Query: "docs " + plantedAWS, Settings: settings, Registry: reg, SkipResultCache: true})
+			result := Search(ctx, SearchOptions{Discovery: NewDiscovery(newTestCrawler()), Query: "docs " + plantedAWS, Settings: settings, Registry: reg, SkipResultCache: true})
 			if asks != 1 {
 				t.Fatalf("asks = %d", asks)
 			}

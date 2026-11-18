@@ -10,6 +10,7 @@ import (
 )
 
 type Runtime struct {
+	Crawler     *Crawler
 	Discovery   *Discovery
 	FetchBudget *FetchBudget
 	Creds       *CredentialStore

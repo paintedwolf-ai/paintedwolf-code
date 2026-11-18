@@ -31,7 +31,7 @@ func TestSearchSiteOperatorHostIsTheAgentsOwnAddress(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	factory := func(context.Context, tools.ToolContext) DirectDiscoverer { return dialingDiscoverer{hosts: reached} }
 	testutil.FailErr(t, "RegisterToolsWithFactory",
-		RegisterToolsWithFactory(reg, ToolDeps{Discovery: NewDiscovery(), FetchBudget: NewFetchBudget(DefaultFetchURLLimits())}, func() DirectDiscovererFactory { return factory }))
+		RegisterToolsWithFactory(reg, ToolDeps{Crawler: newTestCrawler(), Discovery: NewDiscovery(newTestCrawler()), FetchBudget: NewFetchBudget(DefaultFetchURLLimits())}, func() DirectDiscovererFactory { return factory }))
 
 	_, err := reg.Run(context.Background(), "web_search", map[string]any{"query": "guide site:Named.example"},
 		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "chat", ToolCallID: "call"}})

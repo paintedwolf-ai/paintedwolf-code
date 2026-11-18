@@ -9,11 +9,11 @@ import (
 	"time"
 )
 
-func fetchSitemapLinks(ctx context.Context, sitemapURL string, depth int, rankPhrases []string) []siteIndexLink {
+func (crawler *Crawler) fetchSitemapLinks(ctx context.Context, sitemapURL string, depth int, rankPhrases []string) []siteIndexLink {
 	if depth <= 0 || sitemapURL == "" {
 		return nil
 	}
-	body, err := fetchTextURL(ctx, sitemapURL)
+	body, err := crawler.fetchTextURL(ctx, sitemapURL)
 	if err != nil {
 		return nil
 	}
@@ -40,7 +40,7 @@ func fetchSitemapLinks(ctx context.Context, sitemapURL string, depth int, rankPh
 		}
 		var out []siteIndexLink
 		for _, child := range rankSiteLinks(children, rankPhrases) {
-			out = append(out, fetchSitemapLinks(ctx, child.URL, depth-1, rankPhrases)...)
+			out = append(out, crawler.fetchSitemapLinks(ctx, child.URL, depth-1, rankPhrases)...)
 			if len(out) >= maxSitemapFetch {
 				return rankSiteLinks(out, rankPhrases)[:maxSitemapFetch]
 			}
@@ -170,15 +170,11 @@ type siteIndexLink struct {
 	Date  time.Time
 }
 
-// siteIndexCache holds crawled index pools per site base so repeat queries in a
-// session skip the network entirely.
-var siteIndexCache = newTTLCache[[]indexCandidate](siteIndexCacheTTL, siteIndexCacheMaxHosts)
-
 // discoverSiteIndexes crawls one site's published indexes. Primary probes
 // (robots.txt, llms.txt, /sitemap.xml, homepage) fire concurrently; robots
 // filtering applies after collection. Sites with no published index fall back
 // to the homepage's own links.
-func discoverSiteIndexes(ctx context.Context, siteBase string, rankPhrases []string) []indexCandidate {
+func (crawler *Crawler) discoverSiteIndexes(ctx context.Context, siteBase string, rankPhrases []string) []indexCandidate {
 	ctx, cancel := context.WithTimeout(ctx, siteCrawlTimeout)
 	defer cancel()
 
@@ -206,12 +202,12 @@ func discoverSiteIndexes(ctx context.Context, siteBase string, rankPhrases []str
 	wg.Add(4)
 	go func() {
 		defer wg.Done()
-		robotsBody = fetchRobotsTxt(ctx, siteBase)
+		robotsBody = crawler.fetchRobotsTxt(ctx, siteBase)
 		// Cache for frontier probes on this host and honor a declared
 		// Crawl-delay for the rest of the session.
 		if h := urlHost(siteBase); h != "" {
-			storeRobotsBody(h, robotsBody)
-			politeSetCrawlDelay(h, robotsCrawlDelay(robotsBody))
+			crawler.storeRobotsBody(h, robotsBody)
+			crawler.politeSetCrawlDelay(h, robotsCrawlDelay(robotsBody))
 		}
 		// Sitemaps declared in robots.txt are fetched once robots arrives; the
 		// default /sitemap.xml probe already runs concurrently below.
@@ -228,24 +224,24 @@ func discoverSiteIndexes(ctx context.Context, siteBase string, rankPhrases []str
 			inner.Add(1)
 			go func(sm string) {
 				defer inner.Done()
-				collect(fetchSitemapLinks(ctx, sm, maxSitemapIndexDepth, rankPhrases), "sitemap")
+				collect(crawler.fetchSitemapLinks(ctx, sm, maxSitemapIndexDepth, rankPhrases), "sitemap")
 			}(sm)
 		}
 		inner.Wait()
 	}()
 	go func() {
 		defer wg.Done()
-		collect(fetchLLMsTxtLinks(ctx, siteBase+"/llms.txt"), "llms.txt")
+		collect(crawler.fetchLLMsTxtLinks(ctx, siteBase+"/llms.txt"), "llms.txt")
 	}()
 	go func() {
 		defer wg.Done()
-		collect(fetchSitemapLinks(ctx, siteBase+"/sitemap.xml", maxSitemapIndexDepth, rankPhrases), "sitemap")
+		collect(crawler.fetchSitemapLinks(ctx, siteBase+"/sitemap.xml", maxSitemapIndexDepth, rankPhrases), "sitemap")
 	}()
 	go func() {
 		defer wg.Done()
 		// One homepage fetch serves rel=alternate feed autodiscovery and,
 		// when every index is empty, the hub-links fallback.
-		body, err := fetchTextURL(ctx, siteBase+"/")
+		body, err := crawler.fetchTextURL(ctx, siteBase+"/")
 		if err != nil {
 			return
 		}
@@ -255,7 +251,7 @@ func discoverSiteIndexes(ctx context.Context, siteBase string, rankPhrases []str
 			inner.Add(1)
 			go func(feedURL string) {
 				defer inner.Done()
-				collect(fetchFeedLinks(ctx, feedURL, maxRSSItems), "rss")
+				collect(crawler.fetchFeedLinks(ctx, feedURL, maxRSSItems), "rss")
 			}(feedURL)
 		}
 		inner.Wait()

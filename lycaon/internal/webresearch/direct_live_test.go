@@ -12,12 +12,11 @@ import (
 // ./task test:digest -- ./internal/webresearch -run LivePublic -count=1 -timeout=3m
 // Skipped under -short (CI / check-fast).
 func TestDirectLivePublicIndexFetch(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	skipUnlessLiveDirectFetch(t)
 
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 
 	type siteExpect struct {
 		base       string
@@ -68,12 +67,11 @@ func TestDirectLivePublicIndexFetch(t *testing.T) {
 }
 
 func TestDirectLiveSparseWithSynthesis(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	skipUnlessLiveDirectFetch(t)
 
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 
 	// sqlite.org publishes no sitemap or llms.txt — seed the known WAL page
 	// directly via the provider channel.
@@ -97,12 +95,11 @@ func TestDirectLiveSparseWithSynthesis(t *testing.T) {
 }
 
 func TestDirectLiveParallelQueries(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	skipUnlessLiveDirectFetch(t)
 
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 
 	queries := []string{
 		"Alpine Linux apk package manager",
@@ -151,11 +148,10 @@ func TestDirectLiveParallelQueries(t *testing.T) {
 }
 
 func TestDirectLiveTalosQueryIsolated(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	skipUnlessLiveDirectFetch(t)
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	d := discovererSeedingURLs(t,

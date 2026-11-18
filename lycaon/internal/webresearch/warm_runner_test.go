@@ -26,10 +26,9 @@ func writeFile(t *testing.T, dir, name, content string) {
 
 // Missing model capacity leaves the stack fingerprint unstamped.
 func TestWarmRunnerStackWarmSkipLeavesStackUnstamped(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	index := testIndex(t)
 	dir := t.TempDir()
 	writeFile(t, dir, "package.json", `{"dependencies":{"widget-frobnicator":"^1.0"}}`)
@@ -55,10 +54,9 @@ func TestWarmRunnerStackWarmSkipLeavesStackUnstamped(t *testing.T) {
 }
 
 func TestWarmRunnerStackWarmCrawlOnlyNoSeed(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	index := testIndex(t)
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "Docs at https://example.com/docs/start\n")
@@ -97,11 +95,8 @@ func TestWarmRunnerStackWarmCrawlOnlyNoSeed(t *testing.T) {
 }
 
 func TestWarmRunnerStackBudgetCountsFailedProbes(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	index := testIndex(t)
 	dir := t.TempDir()
 	srv := warmTestSite(t)
@@ -126,10 +121,9 @@ func TestWarmRunnerStackBudgetCountsFailedProbes(t *testing.T) {
 }
 
 func TestWarmRunnerUnwiredLiveIsSilent(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	index := testIndex(t)
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "Docs at https://example.com/docs/start\n")
@@ -146,10 +140,9 @@ func TestWarmRunnerUnwiredLiveIsSilent(t *testing.T) {
 }
 
 func TestWarmRunnerIdleSkipsCycle(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	index := testIndex(t)
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "Docs at https://example.com/docs/start\n")
@@ -192,11 +185,8 @@ func TestWarmRunnerIdleSkipsCycle(t *testing.T) {
 }
 
 func TestWarmRunnerHistoryRewarmRespectsCooldown(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	srv := warmTestSite(t)
 	index := testIndex(t)
 	// The loopback server uses HTTP, so its HTTPS re-crawl tests only the cooldown stamp.
@@ -231,10 +221,9 @@ func TestWarmRunnerHistoryRewarmRespectsCooldown(t *testing.T) {
 }
 
 func TestWarmRunnerBootstrapOnceWhenNearEmpty(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	index := testIndex(t)
 	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
 	runner := &WarmRunner{W: w, Live: warmTestLive}
@@ -261,10 +250,9 @@ func TestWarmRunnerBootstrapOnceWhenNearEmpty(t *testing.T) {
 }
 
 func TestWarmRunnerOffModeNoCycleWork(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	index := testIndex(t)
 	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
 	testutil.FailErr(t, "open web research store", openErr)
@@ -281,10 +269,9 @@ func TestWarmRunnerOffModeNoCycleWork(t *testing.T) {
 }
 
 func TestWarmRunnerStarvedRewarmNoModelKeepsQueue(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	index := testIndex(t)
 	index.QueueSearchOutcome(t.Context(), "rare widget firmware", "", "", 0, 10)
 	index.Flush()
@@ -317,11 +304,10 @@ func TestWarmRunnerStarvedRewarmNoModelKeepsQueue(t *testing.T) {
 
 // Transient seed failures leave the query eligible for retry.
 func TestWarmSeedTransientErrorSkip(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	testutil.SkipIfShort(t, "warm seed retry timing")
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	index := testIndex(t)
 	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
 	release, acquired := discovery.tryAcquire()
@@ -343,10 +329,9 @@ func TestWarmSeedTransientErrorSkip(t *testing.T) {
 
 // The invalid host isolates crawl-target derivation from network access.
 func TestWarmRunnerStackWarmCrawlsRegistryDocs(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	index := testIndex(t)
 	dir := t.TempDir()
 	writeFile(t, dir, "go.mod", "module example.com/app\n\nrequire github.com/foo/bar v1.0.0\n")
@@ -387,10 +372,9 @@ func TestWarmRunnerStackWarmCrawlsRegistryDocs(t *testing.T) {
 }
 
 func TestWarmRunnerRunsFirstCycleImmediately(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	index := testIndex(t)
 	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
 	runner := &WarmRunner{W: w, Interval: time.Hour, Live: warmTestLive}

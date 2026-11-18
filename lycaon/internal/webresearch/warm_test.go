@@ -37,7 +37,7 @@ func warmTestSite(t *testing.T) *httptest.Server {
 }
 
 func TestWarmCancelSessionJoinsWorkAndSuppressesCompletion(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	w := NewWarmer(discovery, nil, nil, nil, nil)
 	t.Cleanup(w.Close)
@@ -92,11 +92,8 @@ func warmSearchDone(t *testing.T, w *Warmer, query, projectDir string, hitURLs, 
 }
 
 func TestWarmSearchAsyncIngestsFromHitHosts(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	srv := warmTestSite(t)
 	index := testIndex(t)
 
@@ -133,11 +130,8 @@ func TestWarmSearchAsyncIngestsFromHitHosts(t *testing.T) {
 }
 
 func TestWarmDeclaredURLCrawlIngestsWithWarmedOrigin(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	srv := warmTestSite(t)
 	index := testIndex(t)
 	// Seed the index with an earned page for this host.
@@ -168,7 +162,7 @@ func TestWarmDeclaredURLCrawlIngestsWithWarmedOrigin(t *testing.T) {
 }
 
 func TestCollectWarmCrawlBasesDedupesHitAndIndex(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	index := testIndex(t)
 	srv := "http://127.0.0.1:8080"
@@ -183,10 +177,9 @@ func TestCollectWarmCrawlBasesDedupesHitAndIndex(t *testing.T) {
 }
 
 func TestWarmSkipsWhenDiscoveryBusy(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	index := testIndex(t)
 	index.QueuePage(t.Context(), webindex.Page{URL: "https://a.example/p", Title: "widget frobnicator"})
 	index.Flush()
@@ -210,10 +203,9 @@ func TestWarmSkipsWhenDiscoveryBusy(t *testing.T) {
 }
 
 func TestWarmSeedTierRespectsHourCap(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	index := testIndex(t)
 	ctx := context.Background()
 	for i := 0; i < defaultWarmCaps().SeedWarmsPerHour; i++ {
@@ -242,11 +234,8 @@ func TestWarmSeedTierRespectsHourCap(t *testing.T) {
 }
 
 func TestWarmSeedTierStreamsAndIngests(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	srv := warmTestSite(t)
 	index := testIndex(t)
 
@@ -285,23 +274,22 @@ func anyWarmedDoc(t *testing.T, index *webindex.Store, query string) bool {
 }
 
 func TestPreSlottedCrawlerNeverDoubleAcquires(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	release, acquired := discovery.tryAcquire()
 	if !acquired {
 		t.Fatal("slot")
 	}
 	defer release()
-	crawler := newHostCrawlerPreSlotted(context.Background(), discovery)
-	// The pre-slotted crawler does not acquire the slot.
-	crawler.ensureSlot()
-	if crawler.release != nil {
-		t.Fatal("pre-slotted crawler must not own the slot")
+	hostCrawler := newHostCrawlerPreSlotted(context.Background(), discovery)
+	// The pre-slotted hostCrawler does not acquire the slot.
+	hostCrawler.ensureSlot()
+	if hostCrawler.release != nil {
+		t.Fatal("pre-slotted hostCrawler must not own the slot")
 	}
-	// The pre-slotted crawler does not release the caller's slot.
-	crawler.releaseSlot()
+	// The pre-slotted hostCrawler does not release the caller's slot.
+	hostCrawler.releaseSlot()
 	if extraRelease, acquired := discovery.tryAcquire(); acquired {
 		extraRelease()
 		t.Fatal("caller's slot was stolen by pre-slotted release")
@@ -309,10 +297,9 @@ func TestPreSlottedCrawlerNeverDoubleAcquires(t *testing.T) {
 }
 
 func TestWarmOffModeIsInert(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	index := testIndex(t)
 	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
 	testutil.FailErr(t, "open web research store", openErr)
@@ -367,7 +354,7 @@ func TestWarmPageURLsExtractsAndCaps(t *testing.T) {
 }
 
 func TestWarmDeclaredURLsIgnoresPromptWithoutURL(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	index := testIndex(t)
 	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
@@ -385,11 +372,8 @@ func TestWarmDeclaredURLsIgnoresPromptWithoutURL(t *testing.T) {
 }
 
 func TestWarmDeclaredURLCrawlsItsHost(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	srv := warmTestSite(t)
 	index := testIndex(t)
 
@@ -409,11 +393,8 @@ func TestWarmDeclaredURLCrawlsItsHost(t *testing.T) {
 }
 
 func TestWarmSearchResidualPagesProbed(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	srv := warmTestSite(t)
 	index := testIndex(t)
 
@@ -433,11 +414,8 @@ func TestWarmSearchResidualPagesProbed(t *testing.T) {
 }
 
 func TestWarmFetchAsyncCrawlsFetchedHost(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 2)
-	resetCrawlState()
 	srv := warmTestSite(t)
 	index := testIndex(t)
 

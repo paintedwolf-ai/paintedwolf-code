@@ -127,6 +127,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	webRT, err := webresearch.WireRuntime(t.Context(), nil)
 	contractcheck.FailErr(t, "webresearch.WireRuntime", err)
 	if err := webresearch.RegisterToolsWithFactory(reg, webresearch.ToolDeps{
+		Crawler:     webRT.Crawler,
 		Discovery:   webRT.Discovery,
 		FetchBudget: webRT.FetchBudget,
 		Creds:       webRT.Creds, Config: webRT.Config, Catalog: webRT.Catalog, Registry: webRT.Registry,

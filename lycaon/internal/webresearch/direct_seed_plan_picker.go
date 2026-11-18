@@ -151,7 +151,7 @@ type seedWarmAdmission func(context.Context) (bool, error)
 
 // seedHedgeDelay is how long the primary seed call runs before a slim parallel
 // call hedges its tail latency.
-var seedHedgeDelay = 8 * time.Second
+const seedHedgeDelay = 8 * time.Second
 
 func pickSeedsSystemPrompt(ctx context.Context) (string, error) {
 	return guidance.RenderCatalog(ctx, guidance.UtilityPickSeedsSystemRef, nil)

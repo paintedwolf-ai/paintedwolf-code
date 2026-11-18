@@ -44,7 +44,7 @@ func customBraveOptions(t *testing.T, srv *providerHTTPFixture, index *webindex.
 	reg := NewRegistry(testCatalog(t), srv.exchange)
 	reg.Register(NewRESTSearchProvider(spec, KindKeyed, srv.exchange))
 
-	return SearchOptions{Discovery: NewDiscovery(),
+	return SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Settings: Settings{
 			Keys:             map[string]string{"brave": "brave-key"},
 			EnabledProviders: []string{"brave"},
@@ -55,10 +55,9 @@ func customBraveOptions(t *testing.T, srv *providerHTTPFixture, index *webindex.
 }
 
 func TestCustomModeIngestsProviderHits(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	index := testIndex(t)
 	srv := braveTestServer(t, map[string]string{
 		"url": "https://news.example/widget-frobnicator-review", "title": "Widget frobnicator review", "description": "hands-on",
@@ -81,11 +80,8 @@ func TestCustomModeIngestsProviderHits(t *testing.T) {
 // TestCustomModeMemoryCarriesResultWhenProviderFails is the fallback: the
 // provider rate-limits, the remembered page (live-verified) answers anyway.
 func TestCustomModeMemoryCarriesResultWhenProviderFails(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	index := testIndex(t)
 
 	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -122,11 +118,8 @@ func TestCustomModeMemoryCarriesResultWhenProviderFails(t *testing.T) {
 // with a long, specific query must not become the answer just because the
 // configured providers returned nothing.
 func TestSearchIndexMemoryDropsLowConfidenceMatch(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	index := testIndex(t)
 
 	offtopic := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -152,11 +145,8 @@ func TestSearchIndexMemoryDropsLowConfidenceMatch(t *testing.T) {
 // TestSearchIndexMemoryKeepsOnTopicMatch is the counterpart: a remembered page
 // that matches most of the same long query clears the memory relevance bar.
 func TestSearchIndexMemoryKeepsOnTopicMatch(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	index := testIndex(t)
 
 	ontopic := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -180,11 +170,8 @@ func TestSearchIndexMemoryKeepsOnTopicMatch(t *testing.T) {
 }
 
 func TestSearchIndexMemoryVerifiesAndEvictsDead(t *testing.T) {
-	discovery := NewDiscovery()
-
-	allowLoopbackFetch(t)
+	discovery := NewDiscovery(newTestCrawler())
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	index := testIndex(t)
 
 	dead := httptest.NewServer(http.NotFoundHandler())
@@ -206,10 +193,9 @@ func TestSearchIndexMemoryVerifiesAndEvictsDead(t *testing.T) {
 }
 
 func TestSearchIndexMemoryNilAndEmpty(t *testing.T) {
-	discovery := NewDiscovery()
+	discovery := NewDiscovery(newTestCrawler())
 
 	discovery.slots = make(chan struct{}, 1)
-	resetCrawlState()
 	if o := discovery.searchIndexMemory(context.Background(), nil, decide.Reranker{}, "q", CurrentPeriod(), 3); o.ok || o.reason != "not_configured" {
 		t.Fatalf("nil index outcome = %+v", o)
 	}
