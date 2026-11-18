@@ -1009,8 +1009,9 @@ type BoardGitRepoLine struct {
 
 // BoardGitSlice
 type BoardGitSlice struct {
-	Available       bool               `json:"available"`
-	RepoID          string             `json:"repo_id"`
+	Available bool `json:"available"`
+	// Absent when the active folder is not in a git repository.
+	RepoID          string             `json:"repo_id,omitempty"`
 	Label           string             `json:"label"`
 	Branch          string             `json:"branch,omitempty"`
 	HeadShort       string             `json:"head_short,omitempty"`
@@ -4019,9 +4020,10 @@ type HistoryPruneCandidate struct {
 type HistoryPruneResult struct {
 	RemovedCount int64 `json:"removed_count"`
 	// Encoded body bytes whose retained references were released; physical unlink and page reclamation may finish later.
-	ReleasedBytes int64  `json:"released_bytes"`
-	Complete      bool   `json:"complete"`
-	PreviewToken  string `json:"preview_token"`
+	ReleasedBytes int64 `json:"released_bytes"`
+	Complete      bool  `json:"complete"`
+	// Authorizes the next batch; absent once pruning is complete.
+	PreviewToken string `json:"preview_token,omitempty"`
 }
 
 // HistoryRetentionPolicy
@@ -5732,7 +5734,6 @@ type QueueMutateRequest struct {
 	Op string `json:"op,omitempty"`
 	// Queue revision the mutation was authored against; stale mutations are rejected atomically.
 	ExpectedRevision uint64   `json:"expected_revision"`
-	OperationID      string   `json:"operation_id,omitempty"`
 	ItemIDs          []string `json:"item_ids,omitempty"`
 	Hold             *bool    `json:"hold,omitempty"`
 	// Replacement message body for op "update" (targets item_ids[0]).
@@ -7757,7 +7758,8 @@ type SourceOperationList struct {
 
 // SourceOperationStatus Durable file operation identified by its mutation operation_id. Disconnects leave accepted work running; terminal results survive restart.
 type SourceOperationStatus struct {
-	RootID   string `json:"root_id"`
+	// The root the request named; absent when it named none.
+	RootID   string `json:"root_id,omitempty"`
 	Path     string `json:"path"`
 	FromPath string `json:"from_path"`
 	// Original history head for an undo or redo request; omitted for other operations.
@@ -8969,7 +8971,7 @@ type UpdateFileSummariesSettingsRequest struct {
 
 // UpdateHostResourceRequest
 type UpdateHostResourceRequest struct {
-	Access HostResourceAccessSetting `json:"access,omitempty"`
+	Access HostResourceAccessSetting `json:"access"`
 }
 
 // UpdateManagedSecretRequest Administers one capability. Omitted fields are left as they stand, and nothing here reaches the stored value. A revoked capability is terminal and accepts no update.
@@ -9633,16 +9635,17 @@ type WorkerResultBriefingTarget struct {
 
 // WorkerSummaryMeta
 type WorkerSummaryMeta struct {
-	SourceContext   *SourceContext         `json:"source_context,omitempty"`
-	DelegationID    string                 `json:"delegation_id,omitempty"`
-	LegID           string                 `json:"leg_id,omitempty"`
-	WorkerRecordID  string                 `json:"worker_record_id,omitempty"`
-	WorkerName      string                 `json:"worker_name,omitempty"`
-	Round           int                    `json:"round,omitempty"`
-	ResultHandle    string                 `json:"result_handle,omitempty"`
-	ReviewOf        string                 `json:"review_of,omitempty"`
-	WorkerID        string                 `json:"worker_id"`
-	ChildSessionID  string                 `json:"child_session_id"`
+	SourceContext  *SourceContext `json:"source_context,omitempty"`
+	DelegationID   string         `json:"delegation_id,omitempty"`
+	LegID          string         `json:"leg_id,omitempty"`
+	WorkerRecordID string         `json:"worker_record_id,omitempty"`
+	WorkerName     string         `json:"worker_name,omitempty"`
+	Round          int            `json:"round,omitempty"`
+	ResultHandle   string         `json:"result_handle,omitempty"`
+	ReviewOf       string         `json:"review_of,omitempty"`
+	WorkerID       string         `json:"worker_id"`
+	// Absent for a worker cancelled before it started a session.
+	ChildSessionID  string                 `json:"child_session_id,omitempty"`
 	AgentType       string                 `json:"agent_type"`
 	Status          WorkerSummaryStatus    `json:"status"`
 	Grounding       *CitationGrounding     `json:"grounding,omitempty"`

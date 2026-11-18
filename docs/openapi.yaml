@@ -1505,9 +1505,13 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Artifact bytes
+          description: Artifact bytes, an image or a recording
           content:
             image/*:
+              schema:
+                type: string
+                format: binary
+            video/*:
               schema:
                 type: string
                 format: binary
@@ -2904,7 +2908,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: The chosen folder is not empty (FOLDER_NOT_EMPTY)
+          description: The chosen folder is not empty (FOLDER_NOT_EMPTY), or the project is not a draft (PROJECT_NOT_DRAFT)
           content:
             application/json:
               schema:
@@ -15051,7 +15055,7 @@ components:
       properties:
         repo_id:
           type: string
-          format: uuid
+          pattern: ^[a-zA-Z0-9_-]+$
         label:
           type: string
         branch:
@@ -15069,7 +15073,6 @@ components:
       type: object
       required:
         - available
-        - repo_id
         - label
         - dirty
         - staged_count
@@ -15081,8 +15084,9 @@ components:
         available:
           type: boolean
         repo_id:
+          description: Absent when the active folder is not in a git repository.
           type: string
-          format: uuid
+          pattern: ^[a-zA-Z0-9_-]+$
         label:
           type: string
         branch:
@@ -22494,7 +22498,6 @@ components:
       additionalProperties: false
       required:
         - worker_id
-        - child_session_id
         - agent_type
         - status
         - envelope
@@ -22526,6 +22529,7 @@ components:
           type: string
           format: uuid
         child_session_id:
+          description: Absent for a worker cancelled before it started a session.
           type: string
           format: uuid
         agent_type:
@@ -23171,9 +23175,6 @@ components:
           format: int64
           minimum: 0
           description: Queue revision the mutation was authored against; stale mutations are rejected atomically.
-        operation_id:
-          type: string
-          format: uuid
         item_ids:
           x-go-name: ItemIDs
           type: array
@@ -24385,7 +24386,7 @@ components:
             $ref: '#/components/schemas/ApprovalSecretRecipient'
         id:
           type: string
-          pattern: ^[a-z0-9_-]+$
+          pattern: ^[A-Za-z0-9_-]+$
           description: Opaque id bound to the complete authority and security witness.
         scope:
           $ref: '#/components/schemas/ApprovalGrantScope'
@@ -27338,6 +27339,7 @@ components:
         - project_mutation_in_progress
         - promotion_conflict
         - promotion_not_found
+        - project_not_draft
         - draft_root_immutable
         - project_busy
         - checkpoint_not_pending
@@ -27429,7 +27431,6 @@ components:
         - duplicate_root
         - duplicate_root_label
         - project_removal_assessment_changed
-        - project_removal_operation_conflict
         - extension_state_changed
         - extension_candidate_rejected
         - contributions_unavailable
@@ -32480,7 +32481,7 @@ components:
       properties:
         pack_id:
           type: string
-          pattern: ^[A-Za-z0-9_.:-]+$
+          pattern: ^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$
         disposition:
           type: string
           enum:
@@ -33054,7 +33055,6 @@ components:
       type: object
       additionalProperties: false
       required:
-        - root_id
         - path
         - from_path
         - operation_id
@@ -33071,6 +33071,7 @@ components:
         root_id:
           type: string
           format: uuid
+          description: The root the request named; absent when it named none.
         path:
           type: string
         from_path:
@@ -39769,7 +39770,6 @@ components:
         - removed_count
         - released_bytes
         - complete
-        - preview_token
       properties:
         removed_count:
           type: integer
@@ -39781,6 +39781,7 @@ components:
         complete:
           type: boolean
         preview_token:
+          description: Authorizes the next batch; absent once pruning is complete.
           type: string
           pattern: ^[a-z0-9_-]+$
     LocalDataClearRequest:
@@ -41543,6 +41544,8 @@ components:
     UpdateHostResourceRequest:
       x-go-generate: true
       type: object
+      required:
+        - access
       properties:
         access:
           $ref: '#/components/schemas/HostResourceAccessSetting'
