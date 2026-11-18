@@ -13,7 +13,6 @@ import (
 
 func TestDistinctPersonaRenderHash(t *testing.T) {
 	contractcheck.ActivateStockCatalog(t)
-	prompts.ResetPersonaContractCache()
 	engine := contractPersonaEngine(t)
 	implReader, err := prompts.DeclaredReader(nil, "implementer")
 	contractcheck.FailErr(t, "DeclaredReader implementer", err)
