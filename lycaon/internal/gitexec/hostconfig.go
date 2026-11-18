@@ -11,15 +11,13 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/gitengine"
 )
 
 const hostConfigQueryTimeout = 5 * time.Second
 
 // hostConfigResolver reads only user-owned global configuration.
 type hostConfigResolver struct{}
-
-// HostConfigResolver returns the production HostConfig.
-func HostConfigResolver() HostConfig { return hostConfigResolver{} }
 
 func (hostConfigResolver) HelperFor(ctx context.Context, remoteURL string) string {
 	remoteURL = strings.TrimSpace(remoteURL)
@@ -87,7 +85,7 @@ func fileFingerprint(path string) (string, error) {
 
 // runHostConfigQuery reports unavailable or unset values as false.
 func runHostConfigQuery(ctx context.Context, cfgPath string, argv func(cfgPath string) []string) ([]byte, bool) {
-	bin, err := binaryPathFn()
+	bin, err := gitengine.BinaryPath()
 	if err != nil {
 		return nil, false
 	}

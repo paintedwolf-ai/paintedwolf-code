@@ -19,7 +19,7 @@ func RunRecords(ctx context.Context, dir string, args []string, opts Opts, consu
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	w := &recordWriter{ctx: ctx, consume: consume, cancel: cancel}
-	diagnostics, code, err := run(ctx, dir, args, opts, w)
+	diagnostics, code, err := productionExecution().run(ctx, dir, args, opts, w)
 	if w.err != nil {
 		return w.err
 	}

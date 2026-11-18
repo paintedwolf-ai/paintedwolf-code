@@ -21,9 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/gitengine"
-	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/messageview"
@@ -33,15 +31,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
-
-type fixedCredentialStore struct{ username, password string }
-
-func (s fixedCredentialStore) Get(c gitcredential.Credential) (gitcredential.Credential, bool, error) {
-	c.Username, c.Password = s.username, s.password
-	return c, true, nil
-}
-func (fixedCredentialStore) Store(gitcredential.Credential) error { return nil }
-func (fixedCredentialStore) Erase(gitcredential.Credential) error { return nil }
 
 // authenticatedUploadPack serves a repository's refs only to the fixture
 // user and records whether any request carried its credentials.
@@ -86,7 +75,7 @@ func authenticatedUploadPack(t *testing.T, repo string) (*httptest.Server, func(
 func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_SANDBOX", "on")
-	t.Cleanup(gitexec.TestingUseAgentCredentialStore(fixedCredentialStore{username: "alice", password: "remote-secret"}))
+	gittest.UserCredentials(t, "alice", "remote-secret")
 	remote := t.TempDir()
 	testutil.FailErr(t, "seed remote", os.WriteFile(filepath.Join(remote, "README"), []byte("remote\n"), 0o644))
 	gittest.InitCommit(t, remote, "seed")

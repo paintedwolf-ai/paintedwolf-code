@@ -28,11 +28,12 @@ var identityCache sync.Map // string -> cachedIdentity
 
 // ResolveIdentity returns a complete repository-over-global identity.
 func ResolveIdentity(ctx context.Context, repoDir string) (Identity, bool) {
-	bin, err := binaryPathFn()
+	e := productionExecution()
+	bin, err := e.binaryPath()
 	if err != nil {
 		return Identity{}, false
 	}
-	prefix, err := neutralizeArgs(resolveSSHCommand(ctx))
+	prefix, err := e.neutralizeArgs(e.resolveSSHCommand(ctx))
 	if err != nil {
 		return Identity{}, false
 	}

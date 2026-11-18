@@ -8,7 +8,6 @@ import (
 	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/git"
-	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/toolhost"
@@ -51,7 +50,6 @@ func (b *serveBuilder) wireWorkflows() error {
 
 func (b *serveBuilder) wireWorkflowScanServices() error {
 	b.git.mgr = git.NewManager()
-	gitexec.SetHostConfig(gitexec.HostConfigResolver())
 	b.git.status = git.NewStatusCache(b.git.mgr)
 	releaseGitStatus := b.git.status.RegisterRepochangeObserver()
 	b.startup.resources.Track("git-status-observer", 22, func(context.Context) error { releaseGitStatus(); return nil })
