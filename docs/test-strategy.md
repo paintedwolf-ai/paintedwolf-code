@@ -1309,24 +1309,16 @@ groups that failed, creation-to-failure latency, and observed job minutes includ
 retries. Missing job completion timestamps are counted explicitly. These measure
 the observation window; a successful group is not itself evidence of a main merge.
 
-#### Failure evidence and recovery
+#### Failure evidence
 
 Every lane retains compact JSON receipts separately from large diagnostic logs.
 A stable signature is formed from stage, package, and failing test identities.
-Assertions and package memory limits are source failures and are never retried.
-Only a measured cgroup OOM increment without test-failure evidence permits one
-retry, and every failed executable job must have a matching record. Signal 9,
-exit 137, timeout, a cancelled run, and missing evidence alone are ambiguous and
-do not authorize retry. Recovery does not retry pull request artifacts with a
-privileged token.
-
-[`verification-recovery.yml`](../.github/workflows/verification-recovery.yml)
-runs only for failed merge-group or manual CI/Qualification runs whose head
-repository is this repository. Other events skip runner allocation. The
-controller checks eligibility again before downloading receipts. It runs code
-from main, parses bounded JSON without extracting or executing artifacts, and
-retries measured runner faults. Source failures remain in run annotations,
-summaries, and retained evidence for investigation.
+Each receipt classifies its lane: assertions and package memory limits are source
+failures; only a measured cgroup OOM increment without test-failure evidence is a
+runner fault. Signal 9, exit 137, timeout, a cancelled run, and missing evidence
+alone are ambiguous. Nothing retries a failed run; queue health reads the
+classifications as bounded JSON, without extracting or executing artifacts, to
+report recurring signatures.
 
 Each Linux Go test process has a 3.5 GiB RSS ceiling, declared in
 [`resources.json`](../scripts/ci_policy/resources.json): hosted runners have
