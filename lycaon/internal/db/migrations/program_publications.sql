@@ -27,3 +27,6 @@ CREATE INDEX idx_program_publications_primary_custody
 CREATE INDEX idx_program_publications_shared_custody
     ON invocation_program_publications(chat_session_id, shared_custody_start)
     WHERE state = 'staged' AND shared_custody_start > 0;
+
+CREATE INDEX idx_program_publications_session
+    ON invocation_program_publications(session_id);

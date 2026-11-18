@@ -25,7 +25,7 @@ type Part struct {
 func Revision5(target Baseline) Step {
 	return composeStep(Step{
 		ID:       "source-manifests-and-command-records",
-		Checksum: "c31383ec59ffdbea6499d59cadbe843826334696239e5aa5ac2512025f95941b",
+		Checksum: "d2a5deb29cffcab14d32cc9c36ac050695fd7fcda024d2cd03e07988bdaf9aae",
 		From:     manifestLayoutSource, To: target,
 	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords(), ProgramPublications())
 }
@@ -91,6 +91,6 @@ func ProgramPublications() Part {
 		_, err := tx.ExecContext(ctx, string(programPublicationsSQL))
 		return err
 	}, Writes: func(context.Context, DBTX, uint64) (uint64, error) {
-		return 64 << 10, nil
+		return 1 << 20, nil
 	}}
 }
