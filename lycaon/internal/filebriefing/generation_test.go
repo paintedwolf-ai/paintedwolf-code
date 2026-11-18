@@ -46,7 +46,7 @@ func TestGenerationPublishesNoPartialText(t *testing.T) {
 func TestFileBriefingPreviewPersistsFallbackText(t *testing.T) {
 	cfg, err := LoadConfig()
 	testutil.FailErr(t, "load file briefing config", err)
-	briefings := NewMemory()
+	briefings, _ := newBriefingStore(t, "project-1", "root-1")
 	server := NewService(t.Context(), Dependencies{Store: briefings, Config: cfg})
 	briefing := Briefing{
 		ProjectID: "project-1", RootID: "root-1", Path: "main.go", TargetKey: "target-1",

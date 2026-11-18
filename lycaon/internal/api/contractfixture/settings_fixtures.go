@@ -86,7 +86,7 @@ func NewSettingsTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, str
 	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: svc.Limits})
 	reg := project.NewSQLRegistry(sessionFixture.DB())
 	hub := events.NewMemoryHub()
-	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: reg, Sessions: mgr, Settings: svc}, Host: hostapi.HostDependencies{Events: hub}}
+	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Database: sessionFixture.DB(), Store: store, Projects: reg, Sessions: mgr, Settings: svc}, Host: hostapi.HostDependencies{Events: hub}}
 	for _, opt := range opts {
 		opt(&deps)
 	}
