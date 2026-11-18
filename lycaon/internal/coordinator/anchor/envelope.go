@@ -16,6 +16,7 @@ type Envelope struct {
 	WorkerDigest            string
 	EvidenceDigest          string
 	CommandCompletionDigest string
+	CommandExitObservation  kick.DeliveryObservation
 	// CommandRefusalDigest reports what the kernel refused a running job.
 	CommandRefusalDigest string
 	TopologyOutput       string
@@ -54,6 +55,9 @@ func (e Envelope) KickOptions() []kick.KickOption {
 	}
 	if d := strings.TrimSpace(e.CommandCompletionDigest); d != "" {
 		opts = append(opts, kick.WithCommandCompletion(d))
+	}
+	if e.CommandExitObservation != nil {
+		opts = append(opts, kick.WithDeliveryObservation(e.CommandExitObservation))
 	}
 	if d := strings.TrimSpace(e.CommandRefusalDigest); d != "" {
 		opts = append(opts, kick.WithCommandRefusal(d))

@@ -78,6 +78,24 @@ func TestCommandSettlementRetainsReportAndWakesOnlySubscribedWait(t *testing.T) 
 	if len(f.wakes) != 2 || f.wakes[1] != anchor.ProcessRefused {
 		t.Fatalf("refusal wake=%v", f.wakes)
 	}
+	seen := &bgprocess.ExitObservation{}
+	seen.Observe()
+	seenCompletion := bgprocess.Completion{SessionID: "session", Handle: "seen", ExitObservation: seen, FinishedAt: now}
+	service.HandleCommandCompletion(t.Context(), seenCompletion)
+	if len(f.emitted) != 2 {
+		t.Fatalf("observed exit emitted guidance: %v", f.emitted)
+	}
+	if _, found := service.Report("session", "seen"); !found {
+		t.Fatal("observed exit lost the report for an explicit wait")
+	}
+
+	newExit := &bgprocess.ExitObservation{}
+	seenCompletion.Handle, seenCompletion.ExitObservation = "fresh", newExit
+	service.HandleCommandCompletion(t.Context(), seenCompletion)
+	service.Observe("session", "fresh")
+	if !newExit.Observed() || len(f.emitted) != 3 {
+		t.Fatalf("retained report was not observed: delivered=%t signals=%v", newExit.Observed(), f.emitted)
+	}
 	if _, found := service.Report("foreign", "handle"); found {
 		t.Fatal("foreign session read completion report")
 	}

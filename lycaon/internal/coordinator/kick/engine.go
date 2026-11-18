@@ -199,6 +199,10 @@ func (k *KickEngine) RenderPendingNudge(ctx context.Context, sessionID string, l
 	if item == nil {
 		return "", 0, false, nil
 	}
+	if item.observed() {
+		queue.dropStaged(item)
+		return "", 0, false, nil
+	}
 	if item.deferred {
 		if item.hasSeq && live.BatchSeq > 0 && item.batchSeq > 0 && item.batchSeq < live.BatchSeq {
 			queue.dropStaged(item)
@@ -220,15 +224,6 @@ func (k *KickEngine) RenderPendingNudge(ctx context.Context, sessionID string, l
 		return strings.TrimSpace(text), item.lease, true, nil
 	}
 	return item.nudge, item.lease, item.nudge != "", nil
-}
-
-// PendingNudgeSubject returns the subject bound to a staged lease.
-func (k *KickEngine) PendingNudgeSubject(sessionID string, lease uint64) (string, bool) {
-	item := k.sessionKickQueue(sessionID).stagedItem()
-	if item == nil || item.lease != lease {
-		return "", false
-	}
-	return item.subject, true
 }
 
 // HasLatest reports whether a kick is held under latestKey.

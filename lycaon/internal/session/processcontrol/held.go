@@ -25,7 +25,7 @@ func (m *Service) HandleHeldCallSettled(sessionID, handle string) {
 		"held_call_handle": status.Handle, "held_call_tool": status.Tool,
 		"held_call_outcome": string(status.Settled.Outcome),
 	}}
-	m.processReports.publish(sessionID, handle, digest)
+	m.processReports.publish(sessionID, handle, processReport{digest: digest})
 	m.nudgeProcessWait(context.Background(), sessionID, handle, anchor.ProcessFinished, env)
 }
 

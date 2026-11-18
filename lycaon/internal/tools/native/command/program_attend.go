@@ -74,6 +74,7 @@ type programEnding struct {
 	outcome    ProgramOutcome
 	err        error
 	finishedAt time.Time
+	personWait time.Duration
 }
 
 func (e *programEnding) content() (string, error) {
@@ -94,16 +95,17 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	lifetime := &programLifetime{release: e.release}
 	e.release = lifetime.settled
 	defer lifetime.callerDone()
-	budget := newForegroundBudget(r.clock(), ProgramInlineWait)
+	startedAt := e.ports.Clock.Now()
+	budget := newForegroundBudget(e.ports.Clock, ProgramInlineWait)
 	defer budget.Close()
 	expired := budget.Expired()
 	e.waits = &programWaits{budget: budget}
 	e.ctx = hitl.WithHumanWaitObserver(e.ctx, e.waits)
-	startedAt := e.ports.Clock.Now()
 	//nolint:contextcheck // Detached evaluation outlives a parked call.
 	go func() {
 		ending.outcome, ending.err = r.finish(e)
 		ending.finishedAt = e.ports.Clock.Now()
+		ending.personWait = e.waits.personWait(ending.finishedAt)
 		close(ending.done)
 	}()
 	for waiting := true; waiting; {

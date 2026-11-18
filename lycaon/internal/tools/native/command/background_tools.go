@@ -52,9 +52,7 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 	if err != nil {
 		return "", fmt.Errorf("command_output encode: %w", err)
 	}
-	if snapshot.Output.ExitCode != nil {
-		t.Registry.Observe(tctx.Identity.SessionID, handle)
-	}
+	snapshot.ExitObservation.Observe()
 	return string(encoded), nil
 }
 

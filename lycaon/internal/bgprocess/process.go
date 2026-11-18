@@ -60,8 +60,7 @@ type processRuntimeState struct {
 	personWaitSince     time.Time
 	personWaited        time.Duration
 	completedPersonWait *time.Duration
-	// observed records delivery of the exit.
-	observed bool
+	exitObservation     *ExitObservation
 }
 
 type processIOState struct {

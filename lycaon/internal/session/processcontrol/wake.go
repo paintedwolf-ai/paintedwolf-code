@@ -67,16 +67,19 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 			Confine: completion.Observation, IndexWatch: completion.IndexWatch,
 		})
 	}
-	m.processReports.publish(completion.SessionID, completion.Handle, digest)
+	m.processReports.publish(completion.SessionID, completion.Handle, processReport{digest: digest, exit: completion.ExitObservation})
 	env := anchor.Envelope{
 		Subject:                 strings.TrimSpace(completion.Handle),
 		CommandCompletionDigest: digest,
+	}
+	if completion.ExitObservation != nil {
+		env.CommandExitObservation = completion.ExitObservation
 	}
 	if m.nudgeProcessWait(ctx, completion.SessionID, completion.Handle, anchor.ProcessFinished, env) {
 		return
 	}
 	if completion.TerminationReason == bgprocess.TerminationStoppedByAgent ||
-		m.Observed(completion.SessionID, completion.Handle) {
+		completion.ExitObservation.Observed() {
 		return
 	}
 	if sess == nil || !sess.IsWorkerChild() {

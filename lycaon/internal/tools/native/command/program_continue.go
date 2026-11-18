@@ -43,9 +43,8 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 			if ending.err != nil && status == 0 {
 				status = 1
 			}
-			waited := e.waits.personWait(ending.finishedAt)
 			return bgprocess.ProgramJobResult{
-				ExitCode: status, FinishedAt: ending.finishedAt, PersonWait: &waited,
+				ExitCode: status, FinishedAt: ending.finishedAt, PersonWait: &ending.personWait,
 			}, errors.Join(ending.err, attachErr)
 		},
 	})
