@@ -1,6 +1,7 @@
 package evidence_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -60,7 +61,7 @@ func TestBuildLedgerFromTranscript_nativeScanQuery(t *testing.T) {
 	if rec.Fidelity != evidence.FidelityStructured {
 		t.Fatalf("trust = %q want structured", rec.Fidelity)
 	}
-	if !evidence.PathObserved(ev, flagged) {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev), flagged) {
 		t.Fatalf("expected %q in evidence, got %v", flagged, evidence.ObservedPathsSorted(ev))
 	}
 	if ok, _ := evidence.VerifyRecord(rec, evidence.Claim{Excerpt: "SQL injection risk"}); !ok {

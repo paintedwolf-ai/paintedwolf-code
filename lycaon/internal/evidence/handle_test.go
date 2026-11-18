@@ -3,6 +3,7 @@ package evidence_test
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -151,7 +152,7 @@ func TestNamespaceLedger_prefixesHandles(t *testing.T) {
 	})
 	namespaced := evidence.NamespaceLedger(child, "child-1")
 	rec, ok := evidence.ResolveHandle(namespaced, "child-1:grep#1")
-	if !ok || !evidence.PathObserved(namespaced, "src/a.go") {
+	if !ok || !slices.Contains(evidence.ObservedPathsSorted(namespaced), "src/a.go") {
 		t.Fatalf("rec = %+v ok=%v paths=%v", rec, ok, evidence.ObservedPathsSorted(namespaced))
 	}
 }
@@ -268,7 +269,7 @@ func TestUnionLegEvidence_namespacedMerge(t *testing.T) {
 	if _, ok := evidence.ResolveHandle(ev.Ledger, "leg-b:read#1"); !ok {
 		t.Fatal("missing leg-b handle")
 	}
-	if !evidence.PathObserved(ev.Ledger, "a.go") || !evidence.PathObserved(ev.Ledger, "b.go") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev.Ledger), "a.go") || !slices.Contains(evidence.ObservedPathsSorted(ev.Ledger), "b.go") {
 		t.Fatal("expected both paths observed")
 	}
 }

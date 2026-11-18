@@ -182,7 +182,7 @@ func TestCommitEvidenceToolResult_assignsOrdinalAndPersists(t *testing.T) {
 
 	ev, err := store.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
-	if !evidence.PathObserved(ev, "src/a.go") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev), "src/a.go") {
 		t.Fatalf("paths = %v", evidence.ObservedPathsSorted(ev))
 	}
 }
@@ -417,7 +417,7 @@ func TestCommitEvidenceToolResult_grepDoesNotRetireReadOnPartialOverlap(t *testi
 	if !ok {
 		t.Fatal("read#1 must stay live after greps that touched then dropped README")
 	}
-	if !evidence.PathObserved(ev, "README.md") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev), "README.md") {
 		t.Fatalf("README.md missing from live paths: %v", evidence.ObservedPathsSorted(ev))
 	}
 	if !strings.Contains(strings.Join(got.Body, "\n"), "| Engine | load |") {
