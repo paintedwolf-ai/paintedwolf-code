@@ -261,7 +261,7 @@ func TestMultiRootInvariantI9_AnalyzeRootsParity(t *testing.T) {
 	provider := repotest.NewProvider(t)
 	defer func() { _ = provider.Close() }()
 	// Brief is non-blocking: compare materialized counts, not the placeholder.
-	brief, err := repoinfo.AwaitBrief(ctx, provider, dir)
+	brief, err := repotest.AwaitBrief(ctx, provider, dir)
 	contractcheck.FailErr(t, "AwaitBrief", err)
 	if brief.FileCount != 1 {
 		t.Fatalf("materialized file count = %d want 1", brief.FileCount)
@@ -369,13 +369,17 @@ func TestMultiRootAnalyzeRootsBudget(t *testing.T) {
 	budget := repoinfo.BriefBudget{TotalBytes: 2048, PrimaryShare: 0.6}
 	provider := repotest.NewProvider(t)
 	defer func() { _ = provider.Close() }()
+	for _, dir := range []string{primary, secondary} {
+		_, err := repotest.AwaitBrief(t.Context(), provider, dir)
+		contractcheck.FailErr(t, "settle root brief", err)
+	}
 	mrb, err := repoinfo.AnalyzeRoots(ctx, []projectroot.RootRef{
 		{Path: primary, IsPrimary: true, Label: "a"},
 		{Path: secondary, Label: "b"},
 	}, budget, provider)
 	contractcheck.FailErr(t, "AnalyzeRoots", err)
-	if mrb.RenderedBytes() > budget.TotalBytes+256 {
-		t.Fatalf("rendered %d exceeds budget %d", mrb.RenderedBytes(), budget.TotalBytes)
+	if bytes := repotest.BriefTextBytes(mrb.OrientationRoots()); bytes > budget.TotalBytes {
+		t.Fatalf("rendered %d exceeds budget %d", bytes, budget.TotalBytes)
 	}
 }
 

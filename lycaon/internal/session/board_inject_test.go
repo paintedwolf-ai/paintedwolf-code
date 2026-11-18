@@ -53,7 +53,7 @@ func materializeRepoBrief(t *testing.T, p repoinfo.Provider, dir string) {
 	t.Helper()
 	p.Warm(dir)
 	ctx := t.Context()
-	if _, err := repoinfo.AwaitBrief(ctx, p, dir); err != nil {
+	if _, err := repotest.AwaitBrief(ctx, p, dir); err != nil {
 		testutil.FailErr(t, "AwaitBrief", err)
 	}
 }

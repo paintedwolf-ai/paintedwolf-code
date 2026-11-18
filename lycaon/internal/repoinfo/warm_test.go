@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -25,7 +24,7 @@ func TestBriefReturnsPlaceholderUntilWarmCompletes(t *testing.T) {
 		t.Fatalf("first miss = %+v, want an unmeasured placeholder", brief)
 	}
 	ctx := t.Context()
-	materialized, err := repoinfo.AwaitBrief(ctx, p, dir)
+	materialized, err := repotest.AwaitBrief(ctx, p, dir)
 	testutil.FailErr(t, "AwaitBrief", err)
 	if !materialized.Materialized {
 		t.Fatal("AwaitBrief returned unmaterialized brief")
@@ -53,7 +52,7 @@ func TestCloseDrainsAndDisablesWarm(t *testing.T) {
 	p.Warm(dir)
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
-	if brief, err := repoinfo.AwaitBrief(ctx, p, dir); err == nil && brief.Materialized {
+	if brief, err := repotest.AwaitBrief(ctx, p, dir); err == nil && brief.Materialized {
 		t.Fatal("brief materialized after Close, want warm disabled")
 	}
 }
@@ -64,7 +63,7 @@ func TestKnownEmptyMeasuresTheIndexNotTheBrief(t *testing.T) {
 	defer func() { _ = p.Close() }()
 
 	empty := t.TempDir()
-	_, err := repoinfo.AwaitBrief(t.Context(), p, empty)
+	_, err := repotest.AwaitBrief(t.Context(), p, empty)
 	testutil.FailErr(t, "warm empty root", err)
 	got, err := p.KnownEmpty(t.Context(), empty)
 	testutil.FailErr(t, "measure empty root", err)
@@ -93,7 +92,7 @@ func TestProgressiveBriefCacheHitAfterBackgroundFinish(t *testing.T) {
 		t.Fatal("first Brief should be an unmeasured placeholder")
 	}
 	ctx := t.Context()
-	_, err = repoinfo.AwaitBrief(ctx, p, dir)
+	_, err = repotest.AwaitBrief(ctx, p, dir)
 	testutil.FailErr(t, "AwaitBrief", err)
 
 	second, err := p.Brief(context.Background(), dir)

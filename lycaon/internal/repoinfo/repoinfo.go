@@ -102,25 +102,6 @@ func NewProvider(catalog repositoryIndex, resolve CatalogRootResolver, cacheDir 
 	}
 }
 
-// AwaitBrief accepts settled summaries even when coverage has omissions.
-func AwaitBrief(ctx context.Context, p Provider, projectDir string) (*Brief, error) {
-	p.Warm(projectDir)
-	for {
-		brief, err := p.Brief(ctx, projectDir)
-		if err != nil {
-			return nil, err
-		}
-		if brief != nil && brief.Materialized && !brief.Refreshing {
-			return brief, nil
-		}
-		select {
-		case <-ctx.Done():
-			return brief, ctx.Err()
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
-}
-
 type fileProvider struct {
 	mu       sync.RWMutex
 	cache    map[string]*Brief
