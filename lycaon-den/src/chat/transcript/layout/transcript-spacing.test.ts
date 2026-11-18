@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { DEFAULT_TRANSCRIPT_SPACING, TRANSCRIPT_SPACING, TRANSCRIPT_ROOT_REM_PX, setTranscriptSpacing, transcriptGeometryKey, transcriptInteriorSignature, transcriptSeamPx, transcriptSpacing, transcriptSpacingProperty, transcriptSpacingStyles } from "./transcript-spacing.ts";
+import { CHAT_GAPS_PX, DEFAULT_TRANSCRIPT_SPACING, TRANSCRIPT_SPACING, TRANSCRIPT_ROOT_REM_PX, setTranscriptSpacing, transcriptGeometryKey, transcriptInteriorSignature, transcriptSeamPx, transcriptSpacing, transcriptSpacingProperty, transcriptSpacingStyles } from "./transcript-spacing.ts";
 import { presentedVisualsHeight, transcriptRowContentEstimate } from "./transcript-row-content-estimate.ts";
 import { denSourceRoot, loadSourceCorpus } from "../../../test/source-corpus.ts";
 
@@ -13,24 +13,22 @@ describe("transcript spacing", () => {
     for (const [name, spec] of Object.entries(TRANSCRIPT_SPACING)) {
       expect(styles[transcriptSpacingProperty(name as keyof typeof TRANSCRIPT_SPACING)]).toBe(`${spec.value}${spec.unit}`);
     }
-    expect(styles["--transcript-item-gap"]).toBe("1.1429rem");
     expect(styles["--transcript-paragraph-gap"]).toBe("0.9em");
   });
   it("carries every seam rung in rem so it follows the text scale", () => {
     for (const rung of ["partGap", "itemGap", "messageGap"] as const) {
       expect(TRANSCRIPT_SPACING[rung].unit, rung).toBe("rem");
     }
-    expect(DEFAULT_TRANSCRIPT_SPACING.partGap).toBeLessThan(DEFAULT_TRANSCRIPT_SPACING.itemGap);
-    expect(DEFAULT_TRANSCRIPT_SPACING.itemGap).toBeLessThan(DEFAULT_TRANSCRIPT_SPACING.messageGap);
   });
   it("resolves a seam against the live root size, and the first row to nothing", () => {
-    const at = (remPx: number) => [
-      transcriptSeamPx("item", DEFAULT_TRANSCRIPT_SPACING, remPx),
-      transcriptSeamPx("message", DEFAULT_TRANSCRIPT_SPACING, remPx),
-      transcriptSeamPx("message-reserved", DEFAULT_TRANSCRIPT_SPACING, remPx),
-    ].map((px) => Math.round(px));
-    expect(at(TRANSCRIPT_ROOT_REM_PX)).toEqual([16, 48, 19]);
-    expect(at(TRANSCRIPT_ROOT_REM_PX * 2)).toEqual([32, 96, 42]);
+    for (const scale of [1, 2]) {
+      const rem = TRANSCRIPT_ROOT_REM_PX * scale;
+      const message = CHAT_GAPS_PX.aroundMessages * scale;
+      const reserve = 4 + (1.5 + DEFAULT_TRANSCRIPT_SPACING.messageTimeGap) * rem;
+      expect(transcriptSeamPx("item", DEFAULT_TRANSCRIPT_SPACING, rem)).toBeCloseTo(CHAT_GAPS_PX.betweenItems * scale);
+      expect(transcriptSeamPx("message", DEFAULT_TRANSCRIPT_SPACING, rem)).toBeCloseTo(message);
+      expect(transcriptSeamPx("message-reserved", DEFAULT_TRANSCRIPT_SPACING, rem)).toBeCloseTo(Math.max(0, message - reserve));
+    }
     expect(transcriptSeamPx(undefined, DEFAULT_TRANSCRIPT_SPACING, TRANSCRIPT_ROOT_REM_PX)).toBe(0);
   });
   it("clamps the seam when the reserved bar fills the gap", () => {

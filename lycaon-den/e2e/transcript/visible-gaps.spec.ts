@@ -54,8 +54,16 @@ for (const scale of [1, 53 / 17]) {
     const stage = liveChatStage(page);
     const review = stage.getByTestId("turn-walk-card");
     await expect(review).toBeVisible();
-    await page.evaluate((value) => {
+    const gaps = await page.evaluate(async (value) => {
       (window as unknown as { __harness: { setTextScale(scale: number): void } }).__harness.setTextScale(value);
+      const modulePath = "/src/chat/transcript/layout/transcript-spacing.ts";
+      const { CHAT_GAPS_PX, transcriptActionReservePx, transcriptRootRemPx, transcriptSpacing } =
+        await import(/* @vite-ignore */ modulePath) as typeof import("../../src/chat/transcript/layout/transcript-spacing.ts");
+      return {
+        item: CHAT_GAPS_PX.betweenItems * value,
+        message: CHAT_GAPS_PX.aroundMessages * value,
+        afterActions: Math.max(CHAT_GAPS_PX.aroundMessages * value, transcriptActionReservePx(transcriptSpacing(), transcriptRootRemPx())),
+      };
     }, scale);
     const user = stage.locator(`[data-msg-id="${opening}"] .bubble--user`);
     const second = stage.locator(`[data-msg-id="${next}"] .bubble--user`);
@@ -67,20 +75,20 @@ for (const scale of [1, 53 / 17]) {
     const footer = stage.getByTestId("turn-tail").first();
     const label = (link: Locator) => link.locator(".den-transcript-disclosure-header > :first-child");
     const distances: [Locator, Locator, number][] = [
-      [user, stage.getByTestId("progress-strip-created"), 48],
-      [stage.getByTestId("progress-strip-created"), activity, 16],
-      [activity, label(diff), 16],
-      [label(diff), delta.getByTestId("progress-strip-rest"), 16],
-      [delta.getByTestId("progress-strip-rest"), prose, 48],
-      [label(grounded), review, 48],
-      [review, footer, 16],
-      [footer, second, 48],
+      [user, stage.getByTestId("progress-strip-created"), gaps.afterActions],
+      [stage.getByTestId("progress-strip-created"), activity, gaps.item],
+      [activity, label(diff), gaps.item],
+      [label(diff), delta.getByTestId("progress-strip-rest"), gaps.item],
+      [delta.getByTestId("progress-strip-rest"), prose, gaps.message],
+      [label(grounded), review, gaps.afterActions],
+      [review, footer, gaps.item],
+      [footer, second, gaps.message],
     ];
     for (const [above, below, expected] of distances) {
       await expect.poll(async () => {
         const upper = await bounds(above);
         const lower = await bounds(below);
-        return Math.abs(lower.top - upper.bottom - expected * scale);
+        return Math.abs(lower.top - upper.bottom - expected);
       }).toBeLessThanOrEqual(0.5);
     }
     for (const chip of [diff.locator("button").first(), grounded.locator("button").first(), delta.locator("button").first()]) {

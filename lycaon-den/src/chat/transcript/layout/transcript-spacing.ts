@@ -1,12 +1,21 @@
 import { createEffect, createRoot, createSignal } from "solid-js";
 import { effectiveTextScale } from "../../../platform/desktop/accessibility-text-size.ts";
 
+/** Visible transcript gaps in pixels at the default text size. */
+export const CHAT_GAPS_PX = {
+  aroundMessages: 48,
+  betweenItems: 16,
+} as const;
+
+/** The root font size Den declares at scale 1. */
+export const TRANSCRIPT_ROOT_REM_PX = 14;
+
 export type TranscriptSeam = "item" | "message" | "message-reserved";
 
 export const TRANSCRIPT_SPACING = {
   partGap: { value: 0.5714, unit: "rem", affects: "row" },
-  itemGap: { value: 1.1429, unit: "rem", affects: "placement" },
-  messageGap: { value: 3.4286, unit: "rem", affects: "placement" },
+  itemGap: { value: CHAT_GAPS_PX.betweenItems / TRANSCRIPT_ROOT_REM_PX, unit: "rem", affects: "placement" },
+  messageGap: { value: CHAT_GAPS_PX.aroundMessages / TRANSCRIPT_ROOT_REM_PX, unit: "rem", affects: "placement" },
   userWidth: { value: 78, unit: "%", affects: "row" },
   userPaddingX: { value: 0.9286, unit: "rem", affects: "row" },
   userPaddingY: { value: 0.6429, unit: "rem", affects: "row" },
@@ -52,8 +61,6 @@ export const DEFAULT_TRANSCRIPT_SPACING: TranscriptSpacing = Object.freeze(Objec
 const [spacing, setSpacing] = createSignal(DEFAULT_TRANSCRIPT_SPACING);
 export const transcriptSpacing = spacing;
 
-/** The root font size Den declares at scale 1. */
-export const TRANSCRIPT_ROOT_REM_PX = 14;
 const [rootRemPx, setRootRemPx] = createSignal(TRANSCRIPT_ROOT_REM_PX);
 /** Root font size in px; rem seams resolve against it. */
 export const transcriptRootRemPx = rootRemPx;
