@@ -8,40 +8,25 @@ package credentialstore
 import "C"
 
 import (
-	"errors"
 	"fmt"
 	"unsafe"
 )
 
-type keychainStatus int32
+// KeychainStatus is a Security framework failure code.
+type KeychainStatus int32
 
 const (
-	keychainNotFound           keychainStatus = -25300
-	keychainDuplicate          keychainStatus = -25299
-	keychainMissingEntitlement keychainStatus = -34018
+	keychainNotFound           KeychainStatus = -25300
+	keychainDuplicate          KeychainStatus = -25299
+	keychainMissingEntitlement KeychainStatus = -34018
 	// Read-back rejections from keychain_darwin.m.
-	keychainUnexpectedAccessibility   keychainStatus = C.PW_KEYCHAIN_UNEXPECTED_ACCESSIBILITY
-	keychainUnexpectedSynchronization keychainStatus = C.PW_KEYCHAIN_UNEXPECTED_SYNCHRONIZATION
+	keychainUnexpectedAccessibility   KeychainStatus = C.PW_KEYCHAIN_UNEXPECTED_ACCESSIBILITY
+	keychainUnexpectedSynchronization KeychainStatus = C.PW_KEYCHAIN_UNEXPECTED_SYNCHRONIZATION
 )
-
-// KeychainMissingEntitlementStatus is the Security framework OSStatus (-34018,
-// errSecMissingEntitlement) returned when the data protection Keychain refuses
-// an unsigned or unentitled process.
-const KeychainMissingEntitlementStatus int32 = int32(keychainMissingEntitlement)
-
-// KeychainOSStatus extracts the Security framework OSStatus from err's chain
-// when err wraps a Keychain status failure.
-func KeychainOSStatus(err error) (int32, bool) {
-	var status keychainStatus
-	if errors.As(err, &status) {
-		return int32(status), true
-	}
-	return 0, false
-}
 
 // Is maps the Keychain's missing and duplicate statuses to the custodian
 // sentinels the identity provider acts on.
-func (s keychainStatus) Is(target error) bool {
+func (s KeychainStatus) Is(target error) bool {
 	switch target {
 	case errIdentityMissing:
 		return s == keychainNotFound
@@ -51,7 +36,7 @@ func (s keychainStatus) Is(target error) bool {
 	return false
 }
 
-func (s keychainStatus) Error() string {
+func (s KeychainStatus) Error() string {
 	switch s {
 	case keychainMissingEntitlement:
 		return "macOS data protection Keychain requires the provisioned, signed host bundle (OSStatus -34018)"
@@ -74,7 +59,7 @@ func (dataProtectionItems) read(account string) ([]byte, error) {
 	var size C.long
 	status := C.pw_keychain_read(service, name, &data, &size) //nolint:gocritic // dupSubExpr flags cgo's generated output-pointer nil check.
 	if status != 0 {
-		return nil, keychainStatus(status)
+		return nil, KeychainStatus(status)
 	}
 	defer C.pw_keychain_free(data, size)
 	return C.GoBytes(unsafe.Pointer(data), C.int(size)), nil
@@ -86,7 +71,7 @@ func (dataProtectionItems) create(account string, value []byte) error {
 	defer C.free(unsafe.Pointer(name))
 	status := C.pw_keychain_create(service, name, (*C.uchar)(unsafe.Pointer(unsafe.SliceData(value))), C.long(len(value)))
 	if status != 0 {
-		return keychainStatus(status)
+		return KeychainStatus(status)
 	}
 	return nil
 }
@@ -96,7 +81,7 @@ func (dataProtectionItems) remove(account string) error {
 	defer C.free(unsafe.Pointer(service))
 	defer C.free(unsafe.Pointer(name))
 	if status := C.pw_keychain_remove(service, name); status != 0 {
-		return keychainStatus(status)
+		return KeychainStatus(status)
 	}
 	return nil
 }

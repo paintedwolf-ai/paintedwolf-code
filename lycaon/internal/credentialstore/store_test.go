@@ -23,7 +23,7 @@ func TestStoreRoundTripIsPrivateAndValidated(t *testing.T) {
 		t.Fatalf("Set known: %v", err)
 	}
 	assertOwnerOnly(t, path)
-	reloaded, err := OpenFile(slot, func(id string) bool { return id == "known" })
+	reloaded, err := Open(slot, func(id string) bool { return id == "known" })
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestStorePreservesShortAndWhitespaceBearingValuesExactly(t *testing.T) {
 			t.Fatalf("Set %s: %v", id, err)
 		}
 	}
-	reloaded, err := OpenFile(slot, nil)
+	reloaded, err := Open(slot, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestOpenIgnoresCredentialsOutsideTheAcceptedCatalog(t *testing.T) {
 	if err := seed.Set("retired", "no"); err != nil {
 		t.Fatalf("seed retired: %v", err)
 	}
-	store, err := OpenFile(slot, func(id string) bool { return id == "known" })
+	store, err := Open(slot, func(id string) bool { return id == "known" })
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

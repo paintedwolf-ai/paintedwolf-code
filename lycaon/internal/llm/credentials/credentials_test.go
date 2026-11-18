@@ -27,7 +27,7 @@ func TestCredentialStoreRoundTrip(t *testing.T) {
 		t.Fatal("credential vault exposed plaintext")
 	}
 
-	vault, err := credentialstore.OpenFile(credentialstore.Slot{
+	vault, err := credentialstore.Open(credentialstore.Slot{
 		Path: path, Namespace: credentialstore.NamespaceProviders, Context: credentialContext,
 	}, nil)
 	testutil.FailErr(t, "reopen credential vault", err)

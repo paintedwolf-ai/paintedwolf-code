@@ -68,7 +68,7 @@ func TestFileEvidenceSurvivesRestartAndExplicitProjectDeletion(t *testing.T) {
 	if bytes.Contains(cipher, []byte("retained-value-4411")) {
 		t.Fatal("evidence persisted plaintext")
 	}
-	reopened, err := credentialstore.OpenFile(slot, nil)
+	reopened, err := credentialstore.Open(slot, nil)
 	testutil.FailErr(t, "reopen encrypted evidence", err)
 	second := NewRuntime(fp)
 	testutil.FailErr(t, "restore evidence", second.RestoreFiles(reopened))
@@ -82,7 +82,7 @@ func TestFileEvidenceSurvivesRestartAndExplicitProjectDeletion(t *testing.T) {
 		t.Fatal("discovery did not restore active standing")
 	}
 	testutil.FailErr(t, "delete project evidence", second.ForgetProject("project"))
-	reopened, err = credentialstore.OpenFile(slot, nil)
+	reopened, err = credentialstore.Open(slot, nil)
 	testutil.FailErr(t, "reopen deletion", err)
 	third := NewRuntime(fp)
 	testutil.FailErr(t, "restore deletion", third.RestoreFiles(reopened))

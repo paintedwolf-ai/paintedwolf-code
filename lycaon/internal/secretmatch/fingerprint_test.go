@@ -37,7 +37,7 @@ func TestFingerprintKeyPersistsInPrivateCredentialStore(t *testing.T) {
 	first, err := loadOrCreateFingerprinter(firstStore)
 	testutil.FailErr(t, "create fingerprint key", err)
 
-	reloadedStore, err := credentialstore.OpenFile(slot, validFingerprintKeyID)
+	reloadedStore, err := credentialstore.Open(slot, validFingerprintKeyID)
 	testutil.FailErr(t, "reopen fingerprint key store", err)
 	reloaded, err := loadOrCreateFingerprinter(reloadedStore)
 	testutil.FailErr(t, "reload fingerprint key", err)

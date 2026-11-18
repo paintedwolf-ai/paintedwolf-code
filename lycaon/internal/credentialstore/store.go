@@ -74,11 +74,6 @@ func Open(slot Slot, validate Validator) (*Store, error) {
 	return openWith(backend, slot.Context, validate)
 }
 
-// OpenFile loads a slot with a development identity file.
-func OpenFile(slot Slot, validate Validator) (*Store, error) {
-	return openWith(newDevelopmentBackend(slot.Path, slot.Namespace), slot.Context, validate)
-}
-
 func openWith(backend Backend, context string, validate Validator) (*Store, error) {
 	s := &Store{
 		backend: backend, keys: make(map[string]string),
