@@ -14,22 +14,27 @@
 /* Each seam belongs inside the following row's measured box. */
 .den-seam {
   box-sizing: border-box;
+  pointer-events: none;
 }
 
-.den-seam[data-seam="part"] {
-  padding-top: var(--transcript-part-gap);
+.den-seam > * {
+  pointer-events: auto;
 }
 
-.den-seam[data-seam="row"] {
-  padding-top: var(--transcript-row-gap);
+.den-seam[data-seam="item"] {
+  padding-top: var(--transcript-item-gap);
 }
 
-.den-seam[data-seam="section"] {
-  padding-top: var(--transcript-section-gap);
+.den-seam[data-seam="message"] {
+  padding-top: var(--transcript-message-gap);
 }
 
-.den-seam[data-seam="turn"] {
-  padding-top: var(--transcript-turn-gap);
+.den-seam[data-seam="message-reserved"] {
+  padding-top: max(0px, calc(var(--transcript-message-gap) - var(--den-msg-actions-h) - var(--transcript-message-time-gap)));
+}
+
+.den-seam--in-row {
+  margin-top: calc(-1 * var(--transcript-part-gap));
 }
 
 .den-chat-stream-inner .transcript-viewport-row {

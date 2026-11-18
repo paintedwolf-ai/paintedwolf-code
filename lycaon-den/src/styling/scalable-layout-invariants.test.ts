@@ -19,13 +19,13 @@ describe("scalable layout chrome", () => {
     expect(row).toMatch(/gap:\s*var\(--transcript-part-gap\)/);
     expect(row).not.toMatch(/margin/);
     expect(chat).toMatch(/\.den-seam\s*\{[^}]*box-sizing:\s*border-box/);
-    for (const rung of ["part", "row", "section", "turn"]) {
+    for (const rung of ["item", "message"]) {
       expect(chat, rung).toMatch(
         new RegExp(`\\.den-seam\\[data-seam="${rung}"\\]\\s*\\{\\s*padding-top:\\s*var\\(--transcript-${rung}-gap\\)`),
       );
     }
     // A px seam would freeze at scale 1 while the text around it grew.
-    for (const rung of ["partGap", "rowGap", "sectionGap", "turnGap"] as const) {
+    for (const rung of ["partGap", "itemGap", "messageGap"] as const) {
       expect(TRANSCRIPT_SPACING[rung].unit, rung).toBe("rem");
     }
     expect(chat.match(/@utility den-chat-transcript-visual\s*\{([^}]+)\}/)?.[1]).not.toMatch(/(?:^|[;\s])gap:/);

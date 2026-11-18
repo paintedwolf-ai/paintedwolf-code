@@ -36,6 +36,10 @@
 
 /* An update rests as one line and opens into the plan's box. */
 .progress-strip--update {
+  margin-block: calc(-1 * var(--den-transcript-link-inset-y));
+  border-width: 0;
+  outline: 1px solid color-mix(in srgb, var(--den-border) 70%, transparent);
+  outline-offset: -1px;
   transition:
     background-color var(--den-duration-drawer) var(--den-ease),
     border-color var(--den-duration-drawer) var(--den-ease);
@@ -44,6 +48,7 @@
 .progress-strip--update[data-expanded="false"],
 .progress-strip--update[data-closing] {
   border-color: transparent;
+  outline-color: transparent;
   background: transparent;
 }
 
@@ -74,8 +79,8 @@
 .progress-strip--update[data-expanded="false"] > .progress-strip__summary,
 .progress-strip--update[data-closing] > .progress-strip__summary {
   width: fit-content;
-  max-width: calc(100% + var(--den-transcript-link-inset-x) + 1px);
-  margin-inline-start: calc(-1 * var(--den-transcript-link-inset-x) - 1px);
+  max-width: calc(100% + var(--den-transcript-link-inset-x));
+  margin-inline-start: calc(-1 * var(--den-transcript-link-inset-x));
   padding-inline: var(--den-transcript-link-inset-x) calc(var(--den-transcript-link-inset-x) + 2px);
 }
 

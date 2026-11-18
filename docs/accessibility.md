@@ -24,7 +24,7 @@ Accessibility → Display → Text size is read from the Sonoma+ content-size ca
 | Scale formula | `--den-text-scale = TABLE[category] × productTextScale`: the OS category scale (default / Large → `1.0`, the Den baseline) times the device Text size preference (`PRODUCT_TEXT_SCALES`, default `1`), composed in [`accessibility-text-size.ts`](../lycaon-den/src/platform/desktop/accessibility-text-size.ts); either input may move without the other |
 | Root CSS | `html { font-size: calc(14px * var(--den-text-scale)) }` with `:root { --den-text-scale: 1; }` |
 | Type tokens | `@theme --text-den-*` in rem, where `1rem` is the baseline root at scale 1 (14px). Every font size resolves to a rung (`accessibility-macos-invariants.test.ts`) |
-| Transcript seams | The four rungs in [`transcript-spacing.ts`](../lycaon-den/src/chat/transcript/layout/transcript-spacing.ts) are rem for the same reason: a px seam holds 14px while the text around it triples, so a turn boundary vanishes where it is needed most. Virtual geometry resolves them against one published root size (`styling/scalable-layout-invariants.test.ts`) |
+| Transcript seams | Both the message and item gaps scale with the root font size. Virtual geometry resolves the same lengths as CSS. |
 | Delivery | Tauri event and the `accessibility_preferred_text_size()` command return `{ category, textScale, revision }`; the monotonic revision prevents an older launch snapshot from overwriting a live change |
 | Non-macOS | Linux reports the desktop text scaling fact ([Linux desktop preferences](#linux-desktop-preferences)); elsewhere the bridge returns `{ category: "default", textScale: 1, revision: 0 }` and the app runs unscaled |
 

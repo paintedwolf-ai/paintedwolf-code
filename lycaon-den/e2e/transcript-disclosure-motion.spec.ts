@@ -38,7 +38,7 @@ webE2e(`transcript disclosures animate without moving the viewport${expandedSpac
     }
   });
   await bootstrapChatSession(page, request);
-  if (expandedSpacing) await setTranscriptSpacingForTest(page, { rowGap: 1.9375, sectionGap: 2.5, turnGap: 4, partGap: 1.4286, paragraphGap: 1.2, userPaddingY: 1.2143 });
+  if (expandedSpacing) await setTranscriptSpacingForTest(page, { itemGap: 1.9375, messageGap: 4, partGap: 1.4286, paragraphGap: 1.2, userPaddingY: 1.2143 });
   const sessionId = await settledChatSessionId(page);
   const assistantMessageId = "00000000-0000-4000-8000-000000000901";
 
@@ -267,7 +267,7 @@ webE2e(`expanding a tall row at the tail preserves the reading position${expande
   request,
 }) => {
   await bootstrapChatSession(page, request);
-  if (expandedSpacing) await setTranscriptSpacingForTest(page, { rowGap: 1.9375, sectionGap: 2.5, turnGap: 4, partGap: 1.4286, paragraphGap: 1.2, userPaddingY: 1.2143 });
+  if (expandedSpacing) await setTranscriptSpacingForTest(page, { itemGap: 1.9375, messageGap: 4, partGap: 1.4286, paragraphGap: 1.2, userPaddingY: 1.2143 });
   const sessionId = await settledChatSessionId(page);
   const assistantMessageId = "00000000-0000-4000-f000-000000000901";
 

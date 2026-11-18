@@ -287,7 +287,7 @@
 }
 
 .den-user-msg-footer--actions {
-  height: calc(1.5rem + 4px);
+  height: var(--den-msg-actions-h);
 }
 
 .den-user-msg-footer > .den-msg-actions {
@@ -313,7 +313,7 @@
   width: max-content;
   min-width: 0;
   max-width: 100%;
-  height: calc(1.5rem + 4px);
+  height: var(--den-msg-actions-h);
   align-items: center;
   gap: 1px;
   padding: 1px;

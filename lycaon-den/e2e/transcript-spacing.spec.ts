@@ -141,11 +141,10 @@ for (const following of [true, false]) {
     const reading = await position(stream);
     await trace(stream);
     for (const spacing of [
-      { turnGap: 4.8125 },
-      { sectionGap: 2.5 },
-      { rowGap: 1.9375 },
+      { messageGap: 4.8125 },
+      { itemGap: 1.9375 },
       { paragraphGap: 1.2, userPaddingY: 1.2143 },
-      { rowGap: 0, sectionGap: 0, turnGap: 0 },
+      { itemGap: 0, messageGap: 0 },
       {},
     ]) {
       await phase(page, `spacing ${JSON.stringify(spacing)}`);
@@ -187,7 +186,7 @@ for (const following of [true, false]) {
 
   test(`chat chrome preserves ${following ? "autofollow" : "reading position"} with expanded spacing`, async ({ page, request }) => {
     const { stream, sessionId } = await seed(page, request);
-    await setSpacing(page, { rowGap: 1.6786, turnGap: 4.8125, paragraphGap: 1, userPaddingY: 0.9286 });
+    await setSpacing(page, { itemGap: 1.6786, messageGap: 4.8125, paragraphGap: 1, userPaddingY: 0.9286 });
     await expect.poll(() => tail(stream).then(Math.abs)).toBeLessThan(2);
     if (!following) { await trace(stream); await readHistory(page, stream); await stopTrace(page); }
     const reading = await position(stream);

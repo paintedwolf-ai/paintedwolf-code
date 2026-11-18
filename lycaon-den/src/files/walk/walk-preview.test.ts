@@ -3,6 +3,7 @@ import { applySourceChangesEvent } from "../source/source-events.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import {
   cachedWalkPreview,
+  hasWalkPreviewCard,
   refreshWalkPreviews,
   resetWalkPreviewsForTests,
   subscribeWalkPreview,
@@ -71,4 +72,18 @@ it("refreshes a zero-step turn when a commit arrives without a file batch", asyn
   expect(notify).toHaveBeenLastCalledWith(expect.objectContaining({steps: 1, items: 0}));
   expect(read).toHaveBeenCalledTimes(2);
   stop();
+});
+
+it("keeps spacing facts for mounted cards when retained sessions fill the cache", async () => {
+  vi.useFakeTimers();
+  const client = stubClient({ getProjectSourceWalkSummary: async () => [
+    { message_id: "prompt", turn: 1, steps: 1, items: 1 },
+  ] });
+  const releases = Array.from({ length: 17 }, (_, i) =>
+    subscribeWalkPreview(client, "p", String(i), "prompt", vi.fn()));
+  await vi.advanceTimersByTimeAsync(450);
+  expect(hasWalkPreviewCard("p", "0", "prompt")).toBe(true);
+  releases.shift()?.();
+  expect(hasWalkPreviewCard("p", "0", "prompt")).toBe(false);
+  for (const release of releases) release();
 });

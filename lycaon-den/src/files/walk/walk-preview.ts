@@ -1,3 +1,4 @@
+import { createSignal } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
 import type { SourceWalkTurnSummary } from "../../api/types.ts";
 import { createBoundedDebouncedAsyncScheduler } from "../../store/coalesced-async.ts";
@@ -11,6 +12,7 @@ type Preview = {
   scheduler: ReturnType<typeof createBoundedDebouncedAsyncScheduler>;
 };
 const previews = new Set<Preview>();
+const [cardRevision, advanceCardRevision] = createSignal(0);
 
 /** Cached turn summaries include empty results. */
 type SessionAnswers = {
@@ -31,6 +33,16 @@ function sessionKey(projectId: string, sessionId: string): string {
   return `${projectId}\0${sessionId}`;
 }
 
+function trimInactiveAnswers(): void {
+  if (answers.size <= ANSWERED_SESSION_MEMORY) return;
+  const mounted = new Set([...previews].map((preview) => sessionKey(preview.projectId, preview.sessionId)));
+  for (const key of answers.keys()) {
+    if (mounted.has(key)) continue;
+    answers.delete(key);
+    if (answers.size <= ANSWERED_SESSION_MEMORY) break;
+  }
+}
+
 function sessionAnswers(projectId: string, sessionId: string): SessionAnswers {
   const key = sessionKey(projectId, sessionId);
   const record = answers.get(key) ?? {
@@ -38,10 +50,7 @@ function sessionAnswers(projectId: string, sessionId: string): SessionAnswers {
   };
   answers.delete(key);
   answers.set(key, record);
-  if (answers.size > ANSWERED_SESSION_MEMORY) {
-    const oldest = answers.keys().next().value;
-    if (oldest !== undefined) answers.delete(oldest);
-  }
+  trimInactiveAnswers();
   return record;
 }
 
@@ -50,6 +59,11 @@ export function cachedWalkPreview(
   projectId: string, sessionId: string, messageId: string,
 ): SourceWalkTurnSummary | null | undefined {
   return answers.get(sessionKey(projectId, sessionId))?.summaries.get(messageId);
+}
+
+export function hasWalkPreviewCard(projectId: string, sessionId: string, messageId: string): boolean {
+  cardRevision();
+  return Boolean(cachedWalkPreview(projectId, sessionId, messageId)?.steps);
 }
 
 /** Cards share bounded requests for their visible turn summaries. */
@@ -70,11 +84,14 @@ export function subscribeWalkPreview(
             for (const row of rows) fetched.set(row.message_id, row);
             if (entry.listeners.size === 0) return;
           }
+          let visibilityChanged = false;
           const record = sessionAnswers(projectId, sessionId);
           for (const id of ids) {
+            if (Boolean(record.summaries.get(id)?.steps) !== Boolean(fetched.get(id)?.steps)) visibilityChanged = true;
             record.summaries.set(id, fetched.get(id) ?? null);
             record.fresh.add(id);
           }
+          if (visibilityChanged) advanceCardRevision((value) => value + 1);
           for (const listener of entry.listeners) listener.notify(record.summaries.get(listener.messageId) ?? null);
         } catch {
           // Failed refreshes preserve the cached preview.
@@ -96,6 +113,7 @@ export function subscribeWalkPreview(
     if (held.listeners.size === 0) {
       held.scheduler.cancel();
       previews.delete(held);
+      trimInactiveAnswers();
     }
   };
 }

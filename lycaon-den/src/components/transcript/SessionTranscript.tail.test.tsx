@@ -109,12 +109,12 @@ describe("SessionTranscript tail", () => {
 
     setMessages([message("m1", 1)]);
 
-    // The tail now opens its own unit below the rows.
+    // The turn footer precedes the external tail slot.
     expect(
       container
         .querySelector("[data-transcript-tail=pending-sends]")
         ?.getAttribute("data-seam"),
-    ).toBe("section");
+    ).toBe("item");
     // The row's day label is the first row, so it takes the seat.
     expect(
       container
