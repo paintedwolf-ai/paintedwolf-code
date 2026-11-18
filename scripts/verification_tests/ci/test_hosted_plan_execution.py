@@ -128,6 +128,7 @@ class HostedPlanTests(unittest.TestCase):
         for profile in ci.PROFILES:
             for row in ci.matrix(profile)["include"]:
                 with self.subTest(profile=profile, lane=row["lane"]):
+                    self.assertEqual(row["step_minutes"] - row["minutes"], 1)
                     self.assertEqual(row["job_minutes"] - row["minutes"], 30)
                     self.assertLess(row["job_minutes"], 360)
                     # macOS hosts only the lanes that test macOS-specific behavior, and arm64 only
