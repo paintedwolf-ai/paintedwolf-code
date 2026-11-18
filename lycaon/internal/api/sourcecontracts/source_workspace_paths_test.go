@@ -2,6 +2,10 @@ package sourcecontracts
 
 import (
 	"encoding/json"
+	hostapi "github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -33,9 +36,13 @@ func TestSourceWorkspaceNamesBranchPerRoot(t *testing.T) {
 }
 
 func TestWorkerSourceReadsUseRecordedRootLayout(t *testing.T) {
-	queue := worker.NewInMemoryQueue(1)
-	srv := contractfixture.NewTestServer(t, contractfixture.WithWorkers(queue), contractfixture.WithSQLProjects(t))
-	primary, branchRoot := t.TempDir(), t.TempDir()
+	database := testdbfixture.Open(t, "workers.db")
+	queue := worker.NewSQLQueue(database, 1)
+	srv := contractfixture.NewTestServer(t, contractfixture.WithWorkers(queue), func(d *hostapi.Dependencies) {
+		d.Core.Database = database
+		d.Core.Projects = project.NewSQLRegistry(database)
+	})
+	primary, branchRoot := t.TempDir(), workertest.NewBranch(t, database)
 	p := contractfixture.CreateProjectForTest(t, srv, primary)
 	rootID := p.Roots[0].ID
 	roots := []workspace.JobMetaRoot{
@@ -53,7 +60,7 @@ func TestWorkerSourceReadsUseRecordedRootLayout(t *testing.T) {
 	testutil.FailErr(t, "record worker roots", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branchRoot), workspace.JobMeta{
 		Roots: roots, SnapshotComplete: true,
 	}))
-	workerID := contractfixture.EnqueueBranchJob(t, queue, p.ID, branchRoot)
+	workerID := contractfixture.EnqueueBranchJob(t, queue, database, p.ID, branchRoot)
 	read := func(root string) *httptest.ResponseRecorder {
 		t.Helper()
 		q := url.Values{"path": {"same.go"}, "root_id": {root}, "worker_id": {workerID}, "include_deleted": {"true"}}

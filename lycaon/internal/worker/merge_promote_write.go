@@ -22,8 +22,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s mergeEngine) registerReconcilePaths(sessionID string, assessment PromoteAssessment) {
-	if s.MergeService == nil || s.Reconcile == nil {
+func (s *MergeService) registerReconcilePaths(sessionID string, assessment PromoteAssessment) {
+	if s == nil || s.Reconcile == nil {
 		return
 	}
 	var paths []string
@@ -35,8 +35,8 @@ func (s mergeEngine) registerReconcilePaths(sessionID string, assessment Promote
 	}
 }
 
-func (s mergeEngine) recordPromoteOutput(sessionID, jobID string, out *api.WorkerMergeResult) {
-	if s.MergeService == nil || s.Reconcile == nil || out == nil {
+func (s *MergeService) recordPromoteOutput(sessionID, jobID string, out *api.WorkerMergeResult) {
+	if s == nil || s.Reconcile == nil || out == nil {
 		return
 	}
 	if rows := promotionstate.NormalizePromotePathStatusRows(out.PathStatus); len(rows) > 0 {
@@ -48,8 +48,8 @@ func (s mergeEngine) recordPromoteOutput(sessionID, jobID string, out *api.Worke
 	}
 }
 
-func (s mergeEngine) clearReconcilePaths(sessionID string) {
-	if s.MergeService == nil || s.Reconcile == nil {
+func (s *MergeService) clearReconcilePaths(sessionID string) {
+	if s == nil || s.Reconcile == nil {
 		return
 	}
 	s.Reconcile.ClearMergeReconcilePaths(sessionID)
@@ -134,7 +134,7 @@ func notifyMergeWorktreeChanged(ctx context.Context, task *api.WorkerTask, roots
 	}
 }
 
-func (s mergeEngine) rejectConflict(ctx context.Context, jobID string, assessment PromoteAssessment) error {
+func (s *MergeService) rejectConflict(ctx context.Context, jobID string, assessment PromoteAssessment) error {
 	conflictPaths := make([]string, 0, len(assessment.Conflicts))
 	for _, c := range assessment.Conflicts {
 		conflictPaths = append(conflictPaths, c.Path)
@@ -175,7 +175,7 @@ type promoteFinishInput struct {
 	childStatuses []MergeStatusUpdate
 }
 
-func (s mergeEngine) finishPromoteState(ctx context.Context, in promoteFinishInput) error {
+func (s *MergeService) finishPromoteState(ctx context.Context, in promoteFinishInput) error {
 	fullPaths := s.jobPromotePaths(ctx, in.task)
 	fullAssessment, err := s.assessMerge(ctx, in.sessionID, in.task, fullPaths)
 	if err != nil {
@@ -195,7 +195,7 @@ func (s mergeEngine) finishPromoteState(ctx context.Context, in promoteFinishInp
 	return nil
 }
 
-func (s mergeEngine) commitCompletedPromotion(ctx context.Context, in promoteFinishInput) error {
+func (s *MergeService) commitCompletedPromotion(ctx context.Context, in promoteFinishInput) error {
 	plan := obligation.Plan{}
 	if s.Scans != nil && in.task != nil {
 		var planErr error
@@ -230,7 +230,7 @@ func (s mergeEngine) commitCompletedPromotion(ctx context.Context, in promoteFin
 	return nil
 }
 
-func (s mergeEngine) finalizeMergedOverlay(ctx context.Context, task *api.WorkerTask, jobID string, plan obligation.Plan) {
+func (s *MergeService) finalizeMergedOverlay(ctx context.Context, task *api.WorkerTask, jobID string, plan obligation.Plan) {
 	if s.Scans != nil && !plan.Empty() {
 		if err := s.Scans.PublishObligation(ctx, plan); err != nil {
 			slog.WarnContext(ctx, "scan obligation publication deferred", "landed_change_id", plan.ID, "scan_id", plan.ScanID, "err", err)

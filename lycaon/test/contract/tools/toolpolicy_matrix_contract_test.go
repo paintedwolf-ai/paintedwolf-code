@@ -2,8 +2,6 @@ package contract
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -24,7 +23,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerplan/plantest"
@@ -199,7 +200,7 @@ func wireToolpolicyMatrixContract(
 		contractcheck.FailErr(t, "workflowinputs.RegisterAskUserTool failed", err)
 	}
 
-	queue := worker.NewInMemoryQueue(4)
+	queue := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
 	planDeps := plantest.Deps(workerrecords.New(sqlDB))
 	planDeps.Plans, planDeps.Approvals = blueprintMgr, blueprintMgr
 	planSvc := plantest.New(t, planDeps)

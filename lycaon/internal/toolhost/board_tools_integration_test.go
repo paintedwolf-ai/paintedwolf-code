@@ -5,8 +5,10 @@ package toolhost
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/worker"
 )
 
 func boardToolFixture(t *testing.T) (*toolexecution.Executor, *tools.DefaultRegistry) {
@@ -32,7 +33,7 @@ func boardToolFixture(t *testing.T) (*toolexecution.Executor, *tools.DefaultRegi
 	rt, err := NewRuntime(RuntimeConfig{ConfigRoot: root, Catalog: extpackstest.StockCatalog(t)})
 	testutil.FailErr(t, "NewRuntime failed", err)
 	builder := &board.SnapshotBuilder{
-		Workers: worker.NewInMemoryQueue(10),
+		Workers: workertest.NewQueue(t, 10, testdbseed.DefaultProjectID),
 		Repo:    repotest.NewProvider(t),
 	}
 	if err := board.RegisterBoardTools(rt.Registry, board.ToolDeps{
