@@ -9,6 +9,7 @@ import (
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/internal/scan/registry"
 	"github.com/lycaon/lycaon/internal/scan/rules"
+	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -61,8 +62,8 @@ func TestRulesProvenanceVendorsSchema(t *testing.T) {
 		t.Fatal("rules-provenance.yaml missing vendors: block")
 	}
 
-	prov, err := rules.LoadRulesProvenance()
-	contractcheck.FailErr(t, "rules.LoadRulesProvenance failed", err)
+	prov, err := scantest.LoadRulesProvenance()
+	contractcheck.FailErr(t, "scantest.LoadRulesProvenance failed", err)
 	if len(prov.Vendors) != len(wantRulesProvenanceVendorIDs) {
 		t.Fatalf("vendor catalog count = %d, want %d", len(prov.Vendors), len(wantRulesProvenanceVendorIDs))
 	}
@@ -79,13 +80,13 @@ func TestRulesProvenanceVendorsSchema(t *testing.T) {
 
 func TestRulesProvenanceVendorMIT(t *testing.T) {
 	t.Parallel()
-	prov, err := rules.LoadRulesProvenance()
-	contractcheck.FailErr(t, "rules.LoadRulesProvenance failed", err)
+	prov, err := scantest.LoadRulesProvenance()
+	contractcheck.FailErr(t, "scantest.LoadRulesProvenance failed", err)
 	if prov.Lycaon.License != "CC-BY-4.0" {
 		t.Fatalf("lycaon license = %q", prov.Lycaon.License)
 	}
-	if prov.Lycaon.Origin != rules.LycaonProvenanceOriginBundledInRepo {
-		t.Fatalf("lycaon origin = %q, want %q", prov.Lycaon.Origin, rules.LycaonProvenanceOriginBundledInRepo)
+	if prov.Lycaon.Origin != scantest.LycaonProvenanceOriginBundledInRepo {
+		t.Fatalf("lycaon origin = %q, want %q", prov.Lycaon.Origin, scantest.LycaonProvenanceOriginBundledInRepo)
 	}
 	if len(prov.Vendors) != len(wantRulesProvenanceVendorIDs) {
 		t.Fatalf("vendor catalog count = %d, want %d", len(prov.Vendors), len(wantRulesProvenanceVendorIDs))

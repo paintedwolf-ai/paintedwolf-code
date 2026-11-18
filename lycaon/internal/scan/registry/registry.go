@@ -45,7 +45,6 @@ type Impl struct {
 	scanners    *catalogruntime.Registry[scan.CodeScanner]
 	opts        Options
 	home        string
-	static      *scancatalog.ScannerConfig
 
 	// merged caches overlay catalogs by their input file stamps.
 	mergedMu sync.Mutex
@@ -97,25 +96,6 @@ func (r *Impl) mergedConfig(overlayDir string) (*scancatalog.ScannerConfig, erro
 
 // New loads scanner catalogs and registers available drivers.
 func New(ctx context.Context, opts Options) (*Impl, error) {
-	cfg, err := scancatalog.LoadMergedScannerConfig(opts.ModuleRoot, "", opts.HomeDir)
-	if err != nil {
-		return nil, err
-	}
-	return newFromScannerConfig(ctx, cfg, opts, false)
-}
-
-// NewFromScannerConfig registers scanners from an already-loaded catalog.
-func NewFromScannerConfig(ctx context.Context, cfg *scancatalog.ScannerConfig, opts Options) (*Impl, error) {
-	if err := scancatalog.ValidateScannerConfig(cfg); err != nil {
-		return nil, err
-	}
-	return newFromScannerConfig(ctx, cfg, opts, true)
-}
-
-func newFromScannerConfig(ctx context.Context, cfg *scancatalog.ScannerConfig, opts Options, static bool) (*Impl, error) {
-	if strings.TrimSpace(opts.ModuleRoot) == "" {
-		return nil, fmt.Errorf("module root required")
-	}
 	home := opts.HomeDir
 	var err error
 	if home == "" {
@@ -123,6 +103,10 @@ func newFromScannerConfig(ctx context.Context, cfg *scancatalog.ScannerConfig, o
 		if err != nil {
 			return nil, err
 		}
+	}
+	cfg, err := scancatalog.LoadMergedScannerConfig(opts.ModuleRoot, "", home)
+	if err != nil {
+		return nil, err
 	}
 	manifest, err := bundled.LoadManifest()
 	if err != nil {
@@ -140,9 +124,6 @@ func newFromScannerConfig(ctx context.Context, cfg *scancatalog.ScannerConfig, o
 		scanners: catalogruntime.NewRegistry[scan.CodeScanner](),
 		opts:     opts,
 		home:     home,
-	}
-	if static {
-		reg.static = cfg
 	}
 	reg.scanners.Replace(values)
 	return reg, nil
@@ -282,17 +263,13 @@ func (r *Impl) List(categories ...api.ScanCategory) []scan.ScannerMeta {
 
 // ListForProject applies trusted project scanner settings.
 func (r *Impl) ListForProject(ctx context.Context, projectDir string, categories ...api.ScanCategory) []scan.ScannerMeta {
-	cfg := r.static
-	if cfg == nil {
-		overlayDir := ""
-		if strings.TrimSpace(projectDir) != "" && r.opts.ProjectTierApplies != nil && r.opts.ProjectTierApplies(ctx, projectDir) {
-			overlayDir = projectDir
-		}
-		var err error
-		cfg, err = r.mergedConfig(overlayDir)
-		if err != nil {
-			return nil
-		}
+	overlayDir := ""
+	if strings.TrimSpace(projectDir) != "" && r.opts.ProjectTierApplies != nil && r.opts.ProjectTierApplies(ctx, projectDir) {
+		overlayDir = projectDir
+	}
+	cfg, err := r.mergedConfig(overlayDir)
+	if err != nil {
+		return nil
 	}
 	var out []scan.ScannerMeta
 	for _, entry := range cfg.Scanners {
