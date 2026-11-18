@@ -20,7 +20,7 @@ import (
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -32,11 +32,11 @@ func TestBoardRequiresProjectID(t *testing.T) {
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
 
-	queue := worker.NewInMemoryQueue(2)
-	snap := &board.SnapshotBuilder{Workers: queue, Repo: repotest.NewProvider(t)}
 	sessionStore := sessionFixture
 	coord, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create coordinator session", err)
+	queue := workertest.OnDatabase(t, sessionFixture.DB(), 2)
+	snap := &board.SnapshotBuilder{Workers: queue, Repo: repotest.NewProvider(t)}
 	_, err = queue.Enqueue(t.Context(), wire.WorkerTask{
 		ID:              "w-board-1",
 		ParentSessionID: coord.ID,
@@ -76,7 +76,7 @@ func TestBoardRequiresSessionIDMissing(t *testing.T) {
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: sessionFixture, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
-		Workers: worker.NewInMemoryQueue(2), Board: &board.SnapshotBuilder{Repo: repotest.NewProvider(t)}}}), nil, hostapi.TestAPIToken)
+		Workers: workertest.OnDatabase(t, sessionFixture.DB(), 2), Board: &board.SnapshotBuilder{Repo: repotest.NewProvider(t)}}}), nil, hostapi.TestAPIToken)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/board", nil)
 	w := httptest.NewRecorder()
@@ -96,7 +96,7 @@ func TestWorkersRequiresSessionID(t *testing.T) {
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: sessionFixture, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
-		Workers: worker.NewInMemoryQueue(2)}}), nil, hostapi.TestAPIToken)
+		Workers: workertest.OnDatabase(t, sessionFixture.DB(), 2)}}), nil, hostapi.TestAPIToken)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/workers?project_id="+p.ID, nil)
 	w := httptest.NewRecorder()

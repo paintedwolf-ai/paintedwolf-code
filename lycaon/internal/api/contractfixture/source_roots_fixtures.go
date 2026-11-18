@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/api/briefingadmin"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -13,15 +12,18 @@ import (
 
 	"github.com/google/uuid"
 	hostapi "github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/api/briefingadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -48,10 +50,7 @@ func DeleteProject(t *testing.T, srv *hostapi.Server, projectID string) {
 	DrainBackground(t, srv)
 }
 
-// newSnapshotTestServer serves a source ledger and keeps the project registry
-// in the ledger's database.
-
-func EnqueueBranchJob(t *testing.T, q *worker.InMemoryQueue, projectID, branchRoot string) string {
+func EnqueueBranchJob(t *testing.T, q *worker.SQLQueue, database db.Handle, projectID, branchRoot string) string {
 	t.Helper()
 	id, err := q.EnqueueWithProjectID(context.Background(), projectID, wire.WorkerTask{
 		Prompt:        "fixture",
@@ -62,14 +61,16 @@ func EnqueueBranchJob(t *testing.T, q *worker.InMemoryQueue, projectID, branchRo
 		Scope:         &wire.TaskScope{Mode: wire.TaskScopeModeWrite, Paths: []string{"."}},
 	})
 	testutil.FailErr(t, "enqueue", err)
+	if branchRoot != "" {
+		workertest.BindBranch(t, database, id, branchRoot)
+	}
 	return id
 }
 
 func NewSnapshotTestServer(t *testing.T) *hostapi.Server {
 	t.Helper()
 	_, ledgerDB, withLedger := TestSourceLedger(t)
-	// Production keeps the project registry and snapshots in one database, so
-	// deletion also cascades the inventory row that may pin this snapshot.
+	// Shared persistence lets deletion cascade snapshot pins.
 	return NewTestServer(t, withLedger, func(d *hostapi.Dependencies) {
 		d.Core.Projects = project.NewSQLRegistry(ledgerDB)
 		if d.Core.Sessions != nil {

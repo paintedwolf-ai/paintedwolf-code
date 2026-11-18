@@ -182,7 +182,6 @@ func (s *MergeService) RecoverOrphanedMergeApplies(ctx context.Context) error {
 	if s == nil || s.Store == nil || s.Queue == nil {
 		return fmt.Errorf("merge apply sweep requires queue and store")
 	}
-	eng := s.engine()
 	settleCommittedPromotes(ctx, s.Queue, s.DataDir)
 	for {
 		ids, err := s.Store.ListMergeApplying(ctx)
@@ -202,7 +201,7 @@ func (s *MergeService) RecoverOrphanedMergeApplies(ctx context.Context) error {
 			if lockErr != nil {
 				return lockErr
 			}
-			reclaimed, err := eng.reclaimOrphanedApply(ctx, task, id)
+			reclaimed, err := s.reclaimOrphanedApply(ctx, task, id)
 			if err != nil {
 				slog.WarnContext(ctx, "orphaned merge apply repair deferred", "job_id", id, "err", err)
 			}
@@ -247,12 +246,12 @@ func (s *MergeService) beginMergeClaim(ctx context.Context, jobID string) (*merg
 	}
 	claimCtx, cancel := context.WithCancelCause(ctx)
 	claim := &mergeApplyClaim{jobID: jobID, token: token, cancel: cancel}
-	s.engine().startMergeHeartbeat(ctx, claim)
+	s.startMergeHeartbeat(ctx, claim)
 	return claim, claimCtx, nil
 }
 
 // startMergeHeartbeat renews the apply lease for the duration of the apply.
-func (s mergeEngine) startMergeHeartbeat(ctx context.Context, claim *mergeApplyClaim) {
+func (s *MergeService) startMergeHeartbeat(ctx context.Context, claim *mergeApplyClaim) {
 	hbCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	done := make(chan struct{})
 	claim.heartbeatStop = cancel
@@ -298,15 +297,15 @@ func (claim *mergeApplyClaim) stopOnPanic() {
 }
 
 // releaseMergeClaim returns the branch to pending under the claim.
-func (s mergeEngine) releaseMergeClaim(ctx context.Context, claim *mergeApplyClaim) error {
+func (s *MergeService) releaseMergeClaim(ctx context.Context, claim *mergeApplyClaim) error {
 	claim.stop()
 	cleanupCtx, cancel := promoteCleanupContext(ctx)
 	defer cancel()
 	return s.Store.ReleaseMergeApply(cleanupCtx, claim.jobID, claim.token)
 }
 
-func (s mergeEngine) teardownBranch(ctx context.Context, task *api.WorkerTask) error {
-	if s.MergeService == nil || s.Workspace == nil || task == nil || s.Lanes.Holds(ctx, task) {
+func (s *MergeService) teardownBranch(ctx context.Context, task *api.WorkerTask) error {
+	if s == nil || s.Workspace == nil || task == nil || s.Lanes.Holds(ctx, task) {
 		return nil
 	}
 	cleanupCtx, cancel := promoteCleanupContext(ctx)
@@ -319,7 +318,7 @@ func (s mergeEngine) teardownBranch(ctx context.Context, task *api.WorkerTask) e
 
 // holdBranch leases the overlay's branch tree for a merge read, rebuilding a
 // reclaimed tree. A tree that cannot be rebuilt rejects as not pending.
-func (s mergeEngine) holdBranch(ctx context.Context, jobID string) (*BranchLease, error) {
+func (s *MergeService) holdBranch(ctx context.Context, jobID string) (*BranchLease, error) {
 	task, exists := s.Queue.Get(jobID)
 	checkpointed := exists && task != nil && session.CheckpointStoreDirForTask(task) != ""
 	if checkpointed {

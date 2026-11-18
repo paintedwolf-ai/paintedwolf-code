@@ -4,20 +4,19 @@ package board
 
 import (
 	"context"
-	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"os"
 	"path/filepath"
 	"testing"
-
 	"time"
 
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
-	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -94,7 +93,7 @@ func TestSnapshotBuilderPackContentHashNonEmpty(t *testing.T) {
 	}
 	builder := &SnapshotBuilder{
 		Repo:    repotest.NewProvider(t),
-		Workers: worker.NewInMemoryQueue(4),
+		Workers: workertest.NewQueue(t, 4, testdbseed.DefaultProjectID),
 	}
 	snap, err := builder.Build(context.Background(), testdbseed.DefaultProjectID, dir, "sess-1", api.BoardDetailLevelCompact, nil)
 	testutil.FailErr(t, "builder.Build failed", err)

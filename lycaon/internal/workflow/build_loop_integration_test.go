@@ -3,10 +3,7 @@
 package workflow
 
 import (
-	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
-
 	"context"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"path/filepath"
 	"testing"
 
@@ -17,9 +14,11 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -34,7 +33,7 @@ func TestImplementBuildLoopClosure(t *testing.T) {
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfStore := workflowpersistence.New(sqlDB)
 	mgr := NewManager(wfStore, store, reg, nil)
-	q := worker.NewInMemoryQueue(4)
+	q := workertest.OnDatabase(t, sqlDB, 4)
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		WorkerCycleIdle: func(projectID, sessionID, completingJobID string) (bool, error) {
 			return workeroutcomes.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, sessionID, completingJobID)

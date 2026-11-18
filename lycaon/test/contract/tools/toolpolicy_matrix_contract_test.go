@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerplan/plantest"
@@ -197,7 +198,7 @@ func wireToolpolicyMatrixContract(
 		contractcheck.FailErr(t, "workflowinputs.RegisterAskUserTool failed", err)
 	}
 
-	queue := worker.NewInMemoryQueue(4)
+	queue := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
 	planDeps := plantest.Deps(workerrecords.New(sqlDB))
 	planDeps.Plans, planDeps.Approvals = blueprintMgr, blueprintMgr
 	planSvc := plantest.New(t, planDeps)

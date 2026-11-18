@@ -23,7 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -43,7 +43,7 @@ func boardInjectManager(t *testing.T) (*session.Host, *llm.RecordingClient, *sto
 	reconP := repotest.NewProvider(t)
 	builder := &board.SnapshotBuilder{
 		Repo:    reconP,
-		Workers: worker.NewInMemoryQueue(10),
+		Workers: workertest.NewQueue(t, 10, testdbseed.DefaultProjectID),
 	}
 	mgr.Coordinator.ConfigureBoard(&board.InjectBuilder{SnapshotBuilder: builder}, board.DefaultInjectFormatter(), mgr.Promotion)
 	return mgr, rec, store, reconP
@@ -152,7 +152,7 @@ func TestInjectOmitsWorkflowWhenRunContext(t *testing.T) {
 	oartest.InstallCloseoutPolicy(t, mgr2)
 	wirePromptTestManager(t, mgr2)
 	mgr2.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	builder := &board.SnapshotBuilder{Repo: repotest.NewProvider(t), Workers: worker.NewInMemoryQueue(10)}
+	builder := &board.SnapshotBuilder{Repo: repotest.NewProvider(t), Workers: workertest.NewQueue(t, 10, testdbseed.DefaultProjectID)}
 	mgr2.Coordinator.ConfigureBoard(&board.InjectBuilder{SnapshotBuilder: builder}, board.DefaultInjectFormatter(), mgr2.Promotion)
 	mgr2.SetCoordinatorTurnFrameSource(&phaseStubCoordinator{phase: "implement"})
 

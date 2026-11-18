@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -74,7 +75,7 @@ func requireCatalogDecision(t *testing.T, anchor string, gc *oar.GuardContext, c
 
 func TestCatalogStackedBaseUsesValidatedState(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "catalog-stacked-parent")
 	sess := &api.Session{ID: "catalog-stacked-parent", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: t.TempDir(), AgentType: "coordinator", Posture: api.SessionPostureBuild}
 	job, err := q.Enqueue(ctx, api.WorkerTask{ParentSessionID: sess.ID, ProjectID: sess.ProjectID, WorkspacePath: sess.WorkspacePath, AgentType: "implementer", Prompt: "fixture", Brief: "fixture", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}})
 	testutil.FailErr(t, "enqueue base", err)
@@ -95,12 +96,12 @@ func TestCatalogStackedBaseUsesValidatedState(t *testing.T) {
 
 // finishedBase reports one queued worker as finished and awaiting promotion.
 type finishedBase struct {
-	*worker.InMemoryQueue
+	*worker.SQLQueue
 	id string
 }
 
 func (f finishedBase) Get(id string) (*api.WorkerTask, bool) {
-	task, ok := f.InMemoryQueue.Get(id)
+	task, ok := f.SQLQueue.Get(id)
 	if ok && task != nil && id == f.id {
 		finished := *task
 		finished.MergeStatus = api.WorkerMergeStatusPending
@@ -111,7 +112,7 @@ func (f finishedBase) Get(id string) (*api.WorkerTask, bool) {
 
 func TestCatalogReadCapacityDoesNotMeanWorkersIdle(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "catalog-cap-parent")
 	sess := &api.Session{ID: "catalog-cap-parent", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: t.TempDir(), AgentType: "coordinator", Posture: api.SessionPostureBuild}
 	_, err := q.Enqueue(ctx, api.WorkerTask{ParentSessionID: sess.ID, ProjectID: sess.ProjectID, WorkspacePath: sess.WorkspacePath, AgentType: "path-explorer", Prompt: "fixture", Brief: "fixture", Scope: &api.TaskScope{Mode: api.TaskScopeModeRead}})
 	testutil.FailErr(t, "enqueue read worker", err)

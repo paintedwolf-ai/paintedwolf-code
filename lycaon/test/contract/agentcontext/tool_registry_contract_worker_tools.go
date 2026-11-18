@@ -4,8 +4,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session/decisions/decisionstest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/internal/workerops"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -25,7 +27,7 @@ func registerContractWorkerSurfaceTools(t *testing.T, reg *tools.DefaultRegistry
 	}
 	if err := worker.RegisterAnswerDecisionTool(reg, worker.AnswerDecisionToolDeps{
 		Answer: &worker.AnswerDecisionService{
-			Queue:     worker.NewInMemoryQueue(1),
+			Queue:     workertest.NewQueue(t, 1, testdbseed.DefaultProjectID),
 			Decisions: decisionstest.New(t),
 		},
 		Workers: ops,

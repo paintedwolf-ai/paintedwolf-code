@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -35,7 +36,7 @@ func TestParentSessionWorkerCycleIdleWithoutQueue(t *testing.T) {
 
 func TestParentSessionWorkerCycleIdle(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	parent := "parent-1"
 
@@ -70,7 +71,7 @@ func TestParentSessionWorkerCycleIdle(t *testing.T) {
 
 func TestParentSessionWorkerCycleWaitsForTerminalOutcomeDelivery(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(1)
+	q := workertest.NewQueue(t, 1, testdbseed.DefaultProjectID, "parent-outcome")
 	parent := "parent-outcome"
 	jobID, err := q.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: parent, ProjectID: testdbseed.DefaultProjectID,
@@ -99,7 +100,7 @@ func TestParentSessionWorkerCycleWaitsForTerminalOutcomeDelivery(t *testing.T) {
 
 func TestObserveCoordinatorTaskInFlightParallelCap(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	sess := &api.Session{
 		ID:            "parent-1",
@@ -146,7 +147,7 @@ func TestObserveCoordinatorTaskInFlightParallelCap(t *testing.T) {
 
 func TestObserveCoordinatorTaskInFlight(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	sess := &api.Session{
 		ID:            "parent-1",
@@ -203,7 +204,7 @@ func TestObserveCoordinatorTaskInFlight(t *testing.T) {
 
 func TestObserveCoordinatorTaskInFlightAllowsUnderCap(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	sess := &api.Session{
 		ID:            "parent-1",
@@ -234,7 +235,7 @@ func TestObserveCoordinatorTaskInFlightAllowsUnderCap(t *testing.T) {
 
 func TestShouldNudgeCoordinatorLoopAfterWorkerTask(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	parent := "parent-1"
 	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
@@ -263,7 +264,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTask(t *testing.T) {
 
 func TestShouldNudgeCoordinatorLoopAfterWorkerTaskWriteDefersUntilIdle(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	parent := "parent-1"
 	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
@@ -295,7 +296,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskWriteDefersUntilIdle(t *testin
 
 func TestShouldNudgeCoordinatorLoopAfterWorkerTaskPerJobWakeWhileSiblingsInFlight(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	parent := "parent-1"
 	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
@@ -330,7 +331,7 @@ func TestBuildImplementSessionStateLedgerOverridesStaleEnvelope(t *testing.T) {
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create parent", err)
 
-	q := worker.NewInMemoryQueue(4)
+	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID, parent.ID)
 	_, err = q.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: parent.ID,
 		ProjectID:       testdbseed.DefaultProjectID, WorkspacePath: dir,

@@ -48,6 +48,7 @@ import (
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerplan/plantest"
@@ -102,7 +103,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}
 	if err := worker.RegisterWorkerTools(reg, worker.WorkerToolDeps{
 		Ops:     &workerops.Service{},
-		Queue:   worker.NewInMemoryQueue(2),
+		Queue:   workertest.NewQueue(t, 2, testdbseed.DefaultProjectID),
 		Workers: worker.DefaultWorkersConfig(),
 		Plan:    planSvc,
 	}); err != nil {
@@ -217,7 +218,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
 	planSvc := plantest.New(t, plantest.Deps(workerrecords.New(sqlDB)))
 	if err := worker.RegisterTaskTool(rt.Registry, worker.TaskToolDeps{
-		Queue:         worker.NewInMemoryQueue(2),
+		Queue:         workertest.NewQueue(t, 2, testdbseed.DefaultProjectID),
 		Agents:        agents,
 		Workers:       worker.DefaultWorkersConfig(),
 		WorkerRecords: workerrecords.New(sqlDB),
@@ -228,7 +229,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	}
 	if err := worker.RegisterWorkerTools(rt.Registry, worker.WorkerToolDeps{
 		Ops:     &workerops.Service{},
-		Queue:   worker.NewInMemoryQueue(2),
+		Queue:   workertest.NewQueue(t, 2, testdbseed.DefaultProjectID),
 		Workers: worker.DefaultWorkersConfig(),
 		Plan:    planSvc,
 	}); err != nil {

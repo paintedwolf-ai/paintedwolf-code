@@ -14,8 +14,11 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -55,14 +58,16 @@ func TestMessageNavigationEndpointResolvesStoredDestinations(t *testing.T) {
 }
 
 func TestMessageNavigationUsesWorkerTree(t *testing.T) {
-	primary, branch := t.TempDir(), t.TempDir()
+	database := testdbfixture.Open(t, "workers.db")
+	testdbseed.InsertProject(t, database, "p")
+	primary, branch := t.TempDir(), workertest.NewBranch(t, database)
 	testutil.FailErr(t, "primary-only file", os.WriteFile(filepath.Join(primary, "primary.go"), nil, 0600))
 	testutil.FailErr(t, "worker-only file", os.WriteFile(filepath.Join(branch, "worker.go"), nil, 0600))
 	testutil.FailErr(t, "branch metadata", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{
 		Roots: []workspace.JobMetaRoot{{ID: "r", Label: "r", Path: primary, IsPrimary: true}}, SnapshotComplete: true,
 	}))
-	queue := worker.NewInMemoryQueue(1)
-	jobID := contractfixture.EnqueueBranchJob(t, queue, "p", branch)
+	queue := worker.NewSQLQueue(database, 1)
+	jobID := contractfixture.EnqueueBranchJob(t, queue, database, "p", branch)
 	server := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) { d.Workflow.Workers = queue }).Admin.SessionAdmin.Navigation
 	p := &project.Project{ID: "p", Roots: []project.Root{{ID: "r", Path: primary, IsPrimary: true}}}
 	refs := []wire.NavigationReference{
