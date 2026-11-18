@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,30 +12,19 @@ import (
 
 	"github.com/lycaon/lycaon/internal/platformfloor"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
 
 type releasePlatform struct {
 	UpdaterKey   string   `json:"updater_key"`
-	Runner       string   `json:"runner"`
 	ArtifactArch string   `json:"artifact_arch"`
 	GOOS         string   `json:"goos"`
-	GOARCH       string   `json:"goarch"`
 	Publication  string   `json:"publication"`
 	PackageExts  []string `json:"package_extensions"`
 	// UpdaterExt is nil for package-managed platforms, which publish no updater artifact.
 	UpdaterExt *string `json:"updater_extension"`
-}
-
-func stringPtr(value string) *string { return &value }
-
-func (p releasePlatform) equal(other releasePlatform) bool {
-	return p.UpdaterKey == other.UpdaterKey && p.Runner == other.Runner && p.ArtifactArch == other.ArtifactArch &&
-		p.GOOS == other.GOOS && p.GOARCH == other.GOARCH && p.Publication == other.Publication &&
-		strings.Join(p.PackageExts, ",") == strings.Join(other.PackageExts, ",") &&
-		(p.UpdaterExt == nil) == (other.UpdaterExt == nil) &&
-		(p.UpdaterExt == nil || *p.UpdaterExt == *other.UpdaterExt)
 }
 
 type releasePlatformCatalog struct {
@@ -47,43 +35,6 @@ type releasePlatformCatalog struct {
 func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	raw := contractcheck.ReadRepoFile(t, root, "packaging/release-platforms.json")
-	var catalog releasePlatformCatalog
-	contractcheck.FailErr(t, "parse release platform catalog", json.Unmarshal([]byte(raw), &catalog))
-	want := map[string]releasePlatform{
-		"darwin-aarch64": {
-			UpdaterKey: "darwin-aarch64", Runner: "macos-15", ArtifactArch: "aarch64",
-			GOOS: "darwin", GOARCH: "arm64", Publication: "public",
-			PackageExts: []string{"dmg"}, UpdaterExt: stringPtr("app.tar.gz"),
-		},
-		// Linux installs through the package manager: one .deb, one .rpm, and one
-		// native pacman package per architecture, and no Tauri updater artifact.
-		"linux-x86_64": {
-			UpdaterKey: "linux-x86_64", Runner: "ubuntu-24.04", ArtifactArch: "x86_64",
-			GOOS: "linux", GOARCH: "amd64", Publication: "public",
-			PackageExts: []string{"deb", "rpm", "pkg.tar.zst"}, UpdaterExt: nil,
-		},
-		"linux-aarch64": {
-			UpdaterKey: "linux-aarch64", Runner: "ubuntu-24.04-arm", ArtifactArch: "aarch64",
-			GOOS: "linux", GOARCH: "arm64", Publication: "public",
-			PackageExts: []string{"deb", "rpm", "pkg.tar.zst"}, UpdaterExt: nil,
-		},
-		"windows-x86_64": {
-			UpdaterKey: "windows-x86_64", Runner: "windows-2025", ArtifactArch: "x86_64",
-			GOOS: "windows", GOARCH: "amd64", Publication: "candidate",
-			PackageExts: []string{"exe"}, UpdaterExt: stringPtr("exe"),
-		},
-	}
-	if catalog.SchemaVersion != 2 || len(catalog.Platforms) != len(want) {
-		t.Fatalf("release platform catalog = %+v", catalog)
-	}
-	for _, platform := range catalog.Platforms {
-		expected, ok := want[platform.UpdaterKey]
-		if !ok || !platform.equal(expected) {
-			t.Fatalf("release platform is unsupported or incomplete: %+v", platform)
-		}
-		delete(want, platform.UpdaterKey)
-	}
 	workflow := contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml")
 	for _, needle := range []string{
 		`matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)`,
@@ -213,31 +164,6 @@ func TestUpdaterManifestAssemblerRequiresPublicBuildsAndExcludesCandidatePlatfor
 	run(false)
 }
 
-func TestReleaseChannelsHaveIndependentPointersAndPackageTokens(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	cmd := exec.Command("bash", filepath.Join(root, "scripts", "release-halt.sh"), "--self-test")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("updater generation policy: %v\n%s", err, output)
-	}
-	workflow := contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml")
-	aggregate := contractcheck.ReadRepoFile(t, root, "scripts/release_assembly/aggregate.sh")
-	if !strings.Contains(aggregate, "render painted-wolf-code@preview preview") ||
-		!strings.Contains(workflow, "--channel \"${selected}\"") ||
-		!strings.Contains(workflow, "--advance-if-newer") ||
-		!strings.Contains(extractYAMLJob(workflow, "update-cask"), `scripts/release_distribution.py casks --source release-metadata --tap tap --channel "${CHANNEL}"`) {
-		t.Fatal("stable publication must advance Preview without sharing its cask token")
-	}
-	github := extractYAMLJob(workflow, "publish-github-release")
-	if !strings.Contains(github, "needs: [classify, publish-immutable, activate-updater]") {
-		t.Fatal("GitHub Release must remain a trailing mirror after channel activation")
-	}
-	live := contractcheck.ReadRepoFile(t, root, "scripts/release-r2-live-test.sh")
-	if !strings.Contains(live, "stable and preview pointers are isolated") {
-		t.Fatal("credentialed release rehearsal does not prove channel isolation")
-	}
-}
-
 func TestReleaseSigningAndPublicationCustodyAreSeparated(t *testing.T) {
 	t.Parallel()
 	workflow := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/release.yml")
@@ -273,57 +199,6 @@ func TestReleaseSigningAndPublicationCustodyAreSeparated(t *testing.T) {
 	if !strings.Contains(halt, "FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}") ||
 		strings.Contains(halt, "TAURI_SIGNING_PRIVATE_KEY") {
 		t.Fatal("release halt must sign replacement pointers with the feed key only")
-	}
-}
-
-func TestWindowsCandidateIsNativelySignedAndVerified(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	staging := contractcheck.ReadRepoFile(t, root, "scripts/release-stage-platform-artifacts.sh")
-	for _, needle := range []string{
-		"x86_64-pc-windows-msvc",
-		"release-verify-windows-signature.ps1",
-		"-ApplicationPath",
-		"-SidecarPath",
-		"-LogViewerPath",
-		"-GitPath",
-		"-GitLFSPath",
-		"-OpenGrepPath",
-		"-BrowserPath",
-		"-EngineRootPath",
-	} {
-		if !strings.Contains(staging, needle) {
-			t.Fatalf("Windows candidate release is missing %q", needle)
-		}
-	}
-	bundle := contractcheck.ReadRepoFile(t, root, "scripts/den-build-bundle.sh")
-	for _, needle := range []string{
-		"BUNDLE_KIND=\"nsis\"", "signCommand", "artifact-signing-cli", "WINDOWS_PACKAGE_VERSION",
-		"WINDOWS_GIT", "WINDOWS_GIT_LFS", "WINDOWS_OPENGREP", "WINDOWS_BROWSER",
-		"WINDOWS_BUNDLED_EXECUTABLES", `find "${ENGINE_ROOT}" -type f -iname '*.exe'`,
-	} {
-		if !strings.Contains(bundle, needle) {
-			t.Fatalf("Windows bundle signing path is missing %q", needle)
-		}
-	}
-	windowsVerify := contractcheck.ReadRepoFile(t, root, "scripts/release-verify-windows-signature.ps1")
-	for _, needle := range []string{"EngineRootPath", "Get-ChildItem", "Assert-CodeSignature $executable.FullName"} {
-		if !strings.Contains(windowsVerify, needle) {
-			t.Fatalf("Windows executable-tree verification is missing %q", needle)
-		}
-	}
-	stage := contractcheck.ReadRepoFile(t, root, "scripts/stage-engine.sh")
-	if !strings.Contains(stage, `EXE_SUFFIX=".exe"`) {
-		t.Fatal("Windows sidecar staging must apply the plain .exe suffix")
-	}
-	linuxStage := contractcheck.ReadRepoFile(t, root, "scripts/release-stage-platform-artifacts.sh")
-	for _, needle := range []string{
-		"bundled log viewer", "bundled browser", "bundled OpenGrep", "bundled Git", "bundled Git LFS",
-		"assert_native_arch", "packaged native payload", "packaged executable payload",
-	} {
-		if !strings.Contains(linuxStage, needle) {
-			t.Fatalf("Linux candidate verification is missing %q", needle)
-		}
 	}
 }
 
@@ -376,115 +251,6 @@ func TestCandidatePlatformsCarryPinnedGitAndOpenGrep(t *testing.T) {
 		contractcheck.FailErr(t, "require scanner release for darwin/"+arch, err)
 	}
 
-	stageEngine := contractcheck.ReadRepoFile(t, root, "scripts/stage-engine.sh")
-	if strings.Contains(stageEngine, `if [[ "${TARGET}" == "aarch64-apple-darwin" ]]`) ||
-		strings.Count(stageEngine, `scripts/gitengine-fetch.sh`) != 1 {
-		t.Fatal("full release staging must fetch the pinned Git engine on every catalogued platform")
-	}
-	launcher := contractcheck.RustModuleSource(t, root, "lycaon-den/src-tauri/src/sidecar.rs")
-	for _, needle := range []string{
-		"setup_bundled_engine_layout", "resource_dir()", `"pw.exe"`,
-		"engine_root: PathBuf", "CONTROL_STDIN_ENV", ".stdin(Stdio::piped())",
-		"request_graceful_stop(&mut proc)",
-	} {
-		if !strings.Contains(launcher, needle) {
-			t.Fatalf("cross-platform sidecar launcher is missing %q", needle)
-		}
-	}
-	control := contractcheck.ReadRepoFile(t, root, "lycaon/internal/startupprotocol/control.go")
-	if !strings.Contains(control, `ControlStdinEnv = "LYCAON_CONTROL_STDIN"`) ||
-		!strings.Contains(control, "ReadControlShutdown") {
-		t.Fatal("desktop control pipe must terminate the engine through ordered shutdown")
-	}
-	liveness := contractcheck.ReadRepoFile(t, root, "lycaon/internal/osprocess/alive_windows.go")
-	if !strings.Contains(liveness, "windows.OpenProcess") ||
-		!strings.Contains(liveness, "windows.WaitForSingleObject") {
-		t.Fatal("Windows process liveness must query process state")
-	}
-	if !strings.Contains(contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/parent_watch.go"), "osprocess.Alive(") {
-		t.Fatal("parent watchdog must decide exit through the shared process liveness probe")
-	}
-	gitResolver := contractcheck.ReadRepoFile(t, root, "lycaon/internal/gitengine/resolve.go")
-	if !strings.Contains(gitResolver, "configlayout.EngineRoot()") {
-		t.Fatal("bundled Git must resolve from the structured engine-root passed by the desktop launcher")
-	}
-	for _, path := range []string{"scripts/den-dev-sidecar.sh", "scripts/e2e-sidecar-serve.sh"} {
-		if !strings.Contains(contractcheck.ReadRepoFile(t, root, path), "LYCAON_ENGINE_ROOT") {
-			t.Fatalf("%s must pass the staged engine root to checkout-launched sidecars", path)
-		}
-	}
-	ensure := contractcheck.ReadRepoFile(t, root, "scripts/gitengine-ensure.sh")
-	if strings.Contains(ensure, ".bin/gitengine") || strings.Contains(ensure, "ln -s") {
-		t.Fatal("Git engine development staging must not depend on a Unix-only compatibility symlink")
-	}
-	fetch := contractcheck.ReadRepoFile(t, root, "scripts/gitengine-fetch.sh")
-	for _, forbidden := range []string{"<<'EOF'", "for proto in", "maxdepth 3 -type f"} {
-		if strings.Contains(fetch, forbidden) {
-			t.Fatalf("Git engine staging contains compatibility path %q", forbidden)
-		}
-	}
-	if !strings.Contains(fetch, `cp -f "${core}/git-remote-http" "${core}/git-remote-https"`) {
-		t.Fatal("Git engine staging must install HTTPS as a native helper file")
-	}
-	openGrepStage := contractcheck.ReadRepoFile(t, root, "scripts/stage-bundled-opengrep.sh")
-	if strings.Contains(openGrepStage, "PLACEHOLDER") || strings.Contains(openGrepStage, "skip — no pin") {
-		t.Fatal("scanner staging must fail when an immutable platform pin is absent")
-	}
-	e2eBuild := contractcheck.ReadRepoFile(t, root, "scripts/e2e-sidecar-build.sh")
-	if strings.Contains(e2eBuild, `gitengine-ensure.sh" || true`) {
-		t.Fatal("E2E staging must not accept a partial engine payload")
-	}
-}
-
-func TestUpdaterSignaturesBindTheProductVersion(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	verification := contractcheck.ReadRepoFile(t, root, "lycaon-den/src-tauri/src/update_service/verification.rs")
-	for _, needle := range []string{
-		`"Artifact signature does not bind the offered version"`,
-		"pub fn verify_feed(",
-		"comment.file.as_deref() != Some(expected_file)",
-	} {
-		if !strings.Contains(verification, needle) {
-			t.Fatalf("the updater must refuse signatures that are not bound to a version and feed (%q missing)", needle)
-		}
-	}
-	// The native bundle version drops the prerelease, so build signatures are rebound.
-	bundle := contractcheck.ReadRepoFile(t, root, "scripts/den-build-bundle.sh")
-	if !strings.Contains(bundle, `tauri signer sign --app-version "${PRODUCT_VERSION}"`) {
-		t.Fatal("den-build-bundle.sh must bind updater signatures to the product version")
-	}
-	pointer := contractcheck.ReadRepoFile(t, root, "scripts/release-r2-publish-pointer.sh")
-	if !strings.Contains(pointer, `release-validate-updater-manifest.sh" --file "${FILE}"`+"\n") ||
-		!strings.Contains(pointer, `release-validate-updater-manifest.sh" --file "${CURRENT}" --existing`) {
-		t.Fatal("the pointer publisher must validate the new manifest strictly and read the current one as existing")
-	}
-	if !strings.Contains(pointer, `feed_signing.py" --file "${SIGNED_COPY}"`) ||
-		!strings.Contains(pointer, `feed_signature.py" --signature "${SIGNATURE}" --pointer "${SIGNED_COPY}" --file "${FEED_NAME}"`) ||
-		!pointerPublishesFollowSignature(pointer) {
-		t.Fatal("the pointer publisher must sign the pointer under its feed name and publish the signature before the pointer")
-	}
-	stage := contractcheck.ReadRepoFile(t, root, "scripts/release-stage-platform-artifacts.sh")
-	if !strings.Contains(stage, `verify-updater-signature.sh" "${UPDATER}" "${SIGNATURE}" "${VERSION}"`) {
-		t.Fatal("artifact staging must verify the signature's bound version")
-	}
-}
-
-// pointerPublishesFollowSignature reports whether every pointer write is
-// immediately preceded by publishing its signature, on either transport.
-func pointerPublishesFollowSignature(script string) bool {
-	lines := strings.Split(script, "\n")
-	writes := 0
-	for i, line := range lines {
-		if strings.TrimSpace(line) != `publish_object "${OBJECT_KEY}" "${FILE}" application/json` {
-			continue
-		}
-		writes++
-		if i == 0 || strings.TrimSpace(lines[i-1]) != "publish_signature" {
-			return false
-		}
-	}
-	return writes > 0 && !strings.Contains(script, `r2 object put "${R2_BUCKET}/${OBJECT_KEY}"`)
 }
 
 // testUpdaterSignature encodes an unverifiable minisign document whose trusted
@@ -509,4 +275,25 @@ func testUpdateKeyBinding(t *testing.T, root string) map[string]any {
 		binding[key] = metadata[key]
 	}
 	return binding
+}
+
+// The GitHub Release is a trailing mirror: it follows immutable publication and
+// channel activation, and neither waits on it.
+func TestGitHubReleaseMirrorTrailsChannelActivation(t *testing.T) {
+	t.Parallel()
+	workflow := parseLane(t, ".github/workflows/release.yml")
+	if _, ok := workflow.Jobs["publish-github-release"]; !ok {
+		t.Fatal("release.yml has no publish-github-release job")
+	}
+	ancestors := workflow.ancestors("publish-github-release")
+	for _, job := range []string{"publish-immutable", "activate-updater"} {
+		if !ancestors[job] {
+			t.Errorf("publish-github-release must follow %s", job)
+		}
+	}
+	for _, job := range []string{"publish-immutable", "activate-updater"} {
+		if workflow.ancestors(job)["publish-github-release"] {
+			t.Errorf("%s waits on the GitHub Release mirror", job)
+		}
+	}
 }

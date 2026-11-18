@@ -1858,6 +1858,22 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-preflight.sh {{.CLI_ARGS}}
 
+  release:contracts:check:
+    desc: Verify catalog contracts and published migration identities against the stable release tags
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - |
+        published="$(git tag --list 'v*' | python3 -c '
+        import json, re, sys
+        stable = re.compile(r"v([1-9][0-9]*\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))")
+        versions = [match[1] for tag in sys.stdin.read().split() if (match := stable.fullmatch(tag))]
+        if not versions:
+            sys.exit("no published stable release tags; fetch tags before checking release contracts")
+        print(json.dumps(versions))
+        ')"
+        LYCAON_ENGINE_ROOT="${LYCAON_ENGINE_ROOT:-{{.ROOT_DIR}}/lycaon-den/src-tauri/engine-root}" \
+          go run ./cmd/release-contracts --check-all --published-versions "${published}"
+
   release:halt:
     desc: 'Signed-feed and negative-ledger halt primitive; use the protected release-halt workflow for complete multi-surface withdrawal'
     preconditions:

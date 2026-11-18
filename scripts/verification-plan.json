@@ -21,7 +21,8 @@
       "licenses:notices",
       "comments:check",
       "test:fail-messages:check",
-      "docs:links"
+      "docs:links",
+      "release:contracts:check"
     ],
     "oar:verify": [
       "test:oar",
@@ -53,7 +54,8 @@
       "den:lint",
       "den:test:rust",
       "decide:test",
-      "test:lycaon-rules"
+      "test:lycaon-rules",
+      "release:contracts:check"
     ],
     "check:drift": [
       "codegen:wire-enums:check",
@@ -501,6 +503,9 @@
     ],
     "test:fuzz:smoke": [
       "test:fuzz:smoke"
+    ],
+    "release:contracts:check": [
+      "release:contracts:check"
     ]
   },
   "private": [
@@ -1085,6 +1090,15 @@
       "shared_locks": [
         "go"
       ]
+    },
+    "release:contracts:check": {
+      "locks": [
+        "go"
+      ],
+      "workers": "shared",
+      "shared_locks": [
+        "go"
+      ]
     }
   },
   "environment": {
@@ -1158,7 +1172,8 @@
         "build:cross",
         "budgets",
         "coverage:changes",
-        "test:fuzz:smoke"
+        "test:fuzz:smoke",
+        "release:contracts:check"
       ],
       "minutes": 120,
       "profiles": [
@@ -1203,7 +1218,8 @@
         "openapi:lint",
         "validate:workflows",
         "oar:verify",
-        "test:lycaon-rules"
+        "test:lycaon-rules",
+        "release:contracts:check"
       ],
       "minutes": 120,
       "profiles": [

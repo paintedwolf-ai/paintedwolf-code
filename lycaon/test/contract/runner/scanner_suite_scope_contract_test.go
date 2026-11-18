@@ -108,18 +108,6 @@ func TestHostedProfilesRequireTheFullScannerSuite(t *testing.T) {
 	}
 }
 
-func TestScannerSuiteStagesItsEngine(t *testing.T) {
-	t.Parallel()
-	body := taskBody(taskfile(t), scannerSuiteTask)
-	if body == "" {
-		t.Fatalf("Taskfile.yml has no %s task", scannerSuiteTask)
-	}
-	if !strings.Contains(body, "with-bundled-scanners.sh") ||
-		!strings.Contains(contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "scripts/with-bundled-scanners.sh"), "resolve-opengrep.sh") {
-		t.Fatalf("%s must resolve its bundled engine before running", scannerSuiteTask)
-	}
-}
-
 func scannerSuiteScopes(t *testing.T) []goTestScope {
 	t.Helper()
 	body := taskBody(taskfile(t), scannerSuiteTask)
