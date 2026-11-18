@@ -1123,6 +1123,14 @@ runtime engines. Only
 main publishes archives, after successful installation. Package candidates still
 follow the runner's distribution repositories.
 
+A lane's setup inputs (container images, the pinned browser, the reference userlands,
+repository tools, Nix, the protected-launch display and native libraries, notices
+tools, analysis tool sets, and whether it needs the runtime engines) are derived
+from what it runs. `provisions` in `scripts/verification-plan.json` names, once, the
+targets (and, where a script runs legs, the arguments) and the Go packages that
+need each input; the plan refuses a provision naming a target or package that does
+not exist or that no lane runs, so an input cannot drift from the lane that needs it.
+
 Pinned Go, Cargo, frontend, scanner, and generator inputs are provisioned first;
 Go and Cargo offline modes reject missing inputs during execution. Dependency
 service outages can still prevent provisioning, and cache availability is not

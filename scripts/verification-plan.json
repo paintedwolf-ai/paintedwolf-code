@@ -1250,8 +1250,7 @@
       ],
       "suite": "all",
       "setup": "verification",
-      "priority": "reject",
-      "runtime_engines": false
+      "priority": "reject"
     },
     "behavior": {
       "targets": [
@@ -1302,8 +1301,7 @@
         "nightly"
       ],
       "suite": "all",
-      "setup": "shell",
-      "runtime_engines": false
+      "setup": "shell"
     },
     "webkit": {
       "targets": [
@@ -1477,6 +1475,75 @@
       "check": 3,
       "nightly": 6,
       "release": 1
+    }
+  },
+  "provisions": {
+    "containers": {
+      "targets": {
+        "den:webkit:atspi": []
+      }
+    },
+    "browser": {
+      "targets": {
+        "test:confine:linux": [
+          "browser"
+        ]
+      }
+    },
+    "userlands": {
+      "targets": {
+        "test:userlands": []
+      }
+    },
+    "repository_tools": {
+      "targets": {
+        "test:runner": [],
+        "scripts:coverage:changes": []
+      }
+    },
+    "nix": {
+      "targets": {
+        "nix:check": []
+      }
+    },
+    "linux_launch": {
+      "targets": {
+        "test:confine:linux": [
+          "launch",
+          "launch-desktop"
+        ],
+        "coverage:changes": [],
+        "test:integration:changes": []
+      },
+      "packages": [
+        "./internal/launchguard"
+      ]
+    },
+    "notices": {
+      "targets": {
+        "licenses:notices": []
+      }
+    },
+    "analysis_lint": {
+      "targets": {
+        "lint:fast": [],
+        "lint:full": [],
+        "lint:deadcode": [],
+        "arch-lint:changes": []
+      }
+    },
+    "analysis_vulnerabilities": {
+      "targets": {
+        "lint:vuln": [],
+        "lint:vuln:fresh": []
+      }
+    },
+    "engine_free": {
+      "targets": {
+        "den:test:rust": [],
+        "decide:test": [],
+        "scripts:coverage:changes": []
+      }
     }
   }
 }

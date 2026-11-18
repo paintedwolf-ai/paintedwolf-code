@@ -19,10 +19,12 @@ class NativeAdmissionTests(unittest.TestCase):
             self.assertEqual(native_admission.commands(scope), expected)
             rows = hosted_plan.matrix('fast', scope=scope)['include']
             self.assertEqual({row['lane']: row['setup'] for row in rows}, {**go, **({'frontend': 'frontend'} if frontend else {})})
-        lanes = hosted_plan.lanes()
-        self.assertEqual(lanes['native']['targets'], ['den:test:rust', 'decide:test'])
-        self.assertIn('integration', lanes['native']['profiles'])
-        self.assertFalse(lanes['native']['runtime_engines'])
+        # The native unit tests compile in the merge queue, without the engines a host check needs.
+        native = [lane for lane in hosted_plan.lanes().values() if 'den:test:rust' in lane['targets']]
+        self.assertTrue(native)
+        for lane in native:
+            self.assertIn('integration', lane['profiles'])
+            self.assertFalse(hosted_plan.provisioned(lane)['runtime_engines'])
 
     def test_package_metadata_lint_runs_for_exactly_its_inputs(self):
         lint = [['./task', 'release:rehearse:deb-metadata'], ['./task', 'release:rehearse:rpm-metadata']]
