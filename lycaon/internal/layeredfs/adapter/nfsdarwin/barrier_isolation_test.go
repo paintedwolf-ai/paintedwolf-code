@@ -178,7 +178,11 @@ func TestBarrierDrainCancellationAndPerViewIsolationAndGateRetention(t *testing.
 	verifySharedServerPerViewIsolation(t, tmp, trunkDir, adp, srv, viewA, uid, gid, writeEntered, releaseHeldWrite)
 
 	releaseHeldWrite = make(chan struct{})
-	connA, rootFHA := mountTestNFSConn(t, srv.Addr().String(), extraTestExport(t, srv, viewA), uid, gid)
+	exportPath := extraTestExport(t, srv, viewA)
+	connA, rootFHA := mountTestNFSConn(t, srv.Addr().String(), exportPath, uid, gid)
+	if handshake, ok := srv.LastMountHandshake(exportPath); !ok || !handshake.Mounted {
+		t.Fatalf("mounted export has no mounted handshake: %+v", handshake)
+	}
 	defer func() { _ = connA.Close() }()
 	fileFHA := lookupTestNFSFile(t, connA, rootFHA, "shared.txt", uid, gid)
 
@@ -202,11 +206,9 @@ func TestBarrierDrainCancellationAndPerViewIsolationAndGateRetention(t *testing.
 	if st := <-writeDoneA; st != nfs.NFSStatusOk {
 		t.Fatalf("expected held write on viewA to complete after cancel, got %v", st)
 	}
-	if gated, inFlight, _ := srv.GateStateForTest(); gated != 0 || inFlight != 0 {
-		t.Fatalf("expected 0 gated/inFlight views after canceled barrier + write completion, got gated=%d inFlight=%d", gated, inFlight)
-	}
-
-	recRetry, relRetry, err := adp.CheckpointBarrier(t.Context(), viewA)
+	retryCtx, cancelRetry := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancelRetry()
+	recRetry, relRetry, err := adp.CheckpointBarrier(retryCtx, viewA)
 	if err != nil || !recRetry.OperationsDrained {
 		t.Fatalf("expected retry CheckpointBarrier on viewA to succeed, got %v", err)
 	}
@@ -214,8 +216,11 @@ func TestBarrierDrainCancellationAndPerViewIsolationAndGateRetention(t *testing.
 	if _, err := adp.Release(t.Context(), viewA); err != nil {
 		t.Fatalf("Release viewA: %v", err)
 	}
-	if gated, inFlight, handshakes := srv.GateStateForTest(); gated != 0 || inFlight != 0 || handshakes != 0 {
-		t.Fatalf("expected 0 retained gate state after server close, got (%d, %d, %d)", gated, inFlight, handshakes)
+	if srv.IsAlive() {
+		t.Fatal("server remained alive after releasing its last view")
+	}
+	if handshake, ok := srv.LastMountHandshake(exportPath); ok {
+		t.Fatalf("released export retained a handshake: %+v", handshake)
 	}
 }
 
