@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/oarcopy"
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -29,7 +30,7 @@ func TestCatalogueTiersAreComplete(t *testing.T) {
 			t.Errorf("fact %q has tier %q", f.Name, f.Tier)
 		}
 	}
-	for _, name := range requiredCoreFacts {
+	for name := range oarcore.CoreFacts() {
 		if byName[name].Tier != FactTierCore {
 			t.Errorf("core fact %q is tiered %q", name, byName[name].Tier)
 		}
@@ -38,7 +39,7 @@ func TestCatalogueTiersAreComplete(t *testing.T) {
 		for _, member := range standardProfileFacts[profile] {
 			info, ok := byName[member]
 			if !ok {
-				continue // observation functions are checked by ValidateCatalogueTiers
+				continue // The tier check covers observation functions.
 			}
 			if info.Tier != FactTierStandard || info.Profile != profile {
 				t.Errorf("profile %q member %q is tier %q profile %q", profile, member, info.Tier, info.Profile)
