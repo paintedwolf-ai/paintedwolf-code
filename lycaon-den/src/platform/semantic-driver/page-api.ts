@@ -49,7 +49,7 @@ export interface LycaonDriverApi {
   /** Streams timeline telemetry through a host binding until stopped or the document unloads. */
   startRecording(opts: RecordOptions): Json;
   stopRecording(): Json;
-  waitFor(opts: { selector?: string; text?: string; timeout_ms?: number }): Promise<Json>;
+  waitFor(opts: { selector?: string; text?: string; gone?: boolean; timeout_ms?: number }): Promise<Json>;
   waitIdle(opts?: { timeout_ms?: number; settle_ms?: number }): Promise<Json>;
 }
 
@@ -497,16 +497,21 @@ export function installLycaonDriver(): LycaonDriverApi {
 
     async waitFor(opts) {
       const timeoutMs = opts.timeout_ms ?? 30_000;
+      let present: () => boolean;
+      let label: string;
       if (opts.selector) {
-        return waitUntil(() => !!resolve(opts.selector!), { timeoutMs, label: `selector ${opts.selector}` });
+        present = () => !!resolve(opts.selector!);
+        label = `selector ${opts.selector}`;
+      } else if (opts.text) {
+        present = () => (document.body.innerText ?? "").includes(opts.text!);
+        label = `text "${opts.text}"`;
+      } else {
+        return { ok: false, error: "wait_for requires selector or text" };
       }
-      if (opts.text) {
-        return waitUntil(() => (document.body.innerText ?? "").includes(opts.text!), {
-          timeoutMs,
-          label: `text "${opts.text}"`,
-        });
+      if (opts.gone) {
+        return waitUntil(() => !present(), { timeoutMs, label: `${label} to be gone` });
       }
-      return { ok: false, error: "wait_for requires selector or text" };
+      return waitUntil(present, { timeoutMs, label });
     },
 
     async waitIdle(opts = {}) {
