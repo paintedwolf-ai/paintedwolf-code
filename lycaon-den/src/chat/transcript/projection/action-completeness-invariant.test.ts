@@ -3,6 +3,9 @@ import type { CheckpointStatus, Message } from "../../../api/types.ts";
 import { resolvedCheckpointStatuses } from "../../../api/enum-registries.ts";
 import { type ActivitySpanEntry, type TranscriptItem } from "./transcript-item-model.ts";
 import { createTranscriptDisplayProjector } from "./transcript-display-projection.ts";
+import { activityDecision, activityFact, activityProgram, activityTool, outputRead } from "../../../test/command-activity-fixtures.ts";
+import { foldActionEntries } from "../../action/part-action.ts";
+import { createCommandActivityProjection, FORM_PROGRAM_TOOLS } from "../../tool/command-activity-model.ts";
 import { taskCardStatus } from "../../task/task-card-model.ts";
 import { isTaskToolName } from "../../tool/tool-part-model.ts";
 import { LONG_RUNNING_COORDINATOR_TOOLS } from "../../tool/tool-presentation.generated.ts";
@@ -241,5 +244,44 @@ describe("action completeness invariant", () => {
       const toolRows = msgs.filter((m) => m.role === "tool");
       expect(toolRows[0]!.tool_result?.checkpoint_decision?.status).toBe(status);
     }
+  });
+});
+
+it.each([...FORM_PROGRAM_TOOLS])("accounts for every %s span call and decision", tool => {
+  const project = createCommandActivityProjection();
+  const launch = activityTool("launch", tool, { commandProgram: activityProgram("launch", {
+    activities: [activityFact("job", { phase: "execute", job_handle: "job" })],
+  }) });
+  const inspect = (id: string) => activityTool(id, tool, {
+    commandProgram: activityProgram(id, { activities: [activityFact(id)] }),
+  });
+  const running = activityTool("pending", tool, { status: "running" });
+  const decisionKeys = ["before-command", "before-read", "before-pending", "last"];
+  const entries = [
+    activityDecision(decisionKeys[0]!), inspect("first"), inspect("folded"), launch,
+    activityDecision(decisionKeys[1]!), outputRead("output"), activityTool("other", "read"),
+    activityDecision(decisionKeys[2]!), running, activityDecision(decisionKeys[3]!),
+  ];
+  const allCalls = entries.flatMap(entry => entry.kind === "tool" ? [entry.part.id] : []);
+  const projectedItems = (source: ActivitySpanEntry[]) => {
+    const calls: string[] = [];
+    const decisions: string[] = [];
+    for (const row of foldActionEntries(project(source))) {
+      if (row.kind === "turn_load") decisions.push(row.key);
+      if (row.kind !== "tool") continue;
+      for (const part of [row.part, ...(row.part.foldMembers ?? [])]) {
+        calls.push(...(part.commandActivity?.calls ?? [part]).map(call => call.id));
+        decisions.push(...(part.commandActivity?.decisions ?? []).map(decision => decision.key));
+      }
+    }
+    return { calls: calls.sort(), decisions: decisions.sort() };
+  };
+
+  expect(projectedItems(entries)).toEqual({
+    calls: allCalls.filter(id => id !== "pending").sort(),
+    decisions: decisionKeys.filter(key => key !== "before-pending").sort(),
+  });
+  expect(projectedItems(entries.map(entry => entry === running ? inspect("pending") : entry))).toEqual({
+    calls: allCalls.sort(), decisions: decisionKeys.sort(),
   });
 });

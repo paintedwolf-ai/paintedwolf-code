@@ -1,10 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  noteActivitySpanRowWithdrawals,
+  visibleActivitySpanRows,
   visibleRowContinuity,
   withdrawnRows,
   type RowWithdrawal,
 } from "./row-withdrawal-watch.ts";
+import { denScrollDebugLog, isStreamScrollDebugEnabled } from "../../stream/den-scroll-debug.ts";
+import { foldActionEntries } from "../../action/part-action.ts";
+import { activityDecision, activityFact, activityTool } from "../../../test/command-activity-fixtures.ts";
 import type { TranscriptItem } from "../projection/transcript-item-model.ts";
+
+vi.mock("../../stream/den-scroll-debug.ts", async importOriginal => ({
+  ...await importOriginal<typeof import("../../stream/den-scroll-debug.ts")>(),
+  isStreamScrollDebugEnabled: vi.fn(),
+  denScrollDebugLog: vi.fn(),
+}));
 
 function draftRow(id: string): TranscriptItem {
   return { kind: "draft", key: id, text: "", live: true } as TranscriptItem;
@@ -84,5 +95,61 @@ describe("transcript row withdrawal", () => {
       toolRow("m2", "call_2"),
     ]);
     expect(withdrawnRows(before, after, retained("m1", "m2"))).toEqual([]);
+  });
+});
+
+describe("activity span row withdrawal", () => {
+  beforeEach(() => {
+    vi.mocked(isStreamScrollDebugEnabled).mockReturnValue(false);
+    noteActivitySpanRowWithdrawals("span", [], []);
+    vi.mocked(isStreamScrollDebugEnabled).mockReturnValue(true);
+    vi.mocked(denScrollDebugLog).mockClear();
+  });
+
+  it("logs a missing child row while its source stays in the span exactly once", () => {
+    const source = activityTool("assistant:call", "command");
+    const fact = activityFact("late");
+    const key = `${source.part.id}:activity:${fact.id}`;
+    const child = {
+      ...source, part: {
+        ...source.part, id: key,
+        commandActivity: { fact, members: [fact], calls: [source.part], receiptScopes: [] },
+      },
+    };
+    expect(visibleActivitySpanRows([source, child]).get(key)).toEqual({ kind: "tool", source: source.part.id });
+    expect(noteActivitySpanRowWithdrawals("span", [source], [source, child])).toEqual([]);
+    expect(noteActivitySpanRowWithdrawals("span", [source], [source])).toEqual([{ key, kind: "tool", source: source.part.id }]);
+    expect(noteActivitySpanRowWithdrawals("span", [source], [source])).toEqual([]);
+    expect(denScrollDebugLog).toHaveBeenCalledTimes(1);
+    expect(denScrollDebugLog).toHaveBeenCalledWith("scroll", "row-withdrawn", expect.objectContaining({
+      row_key: key, kind: "tool", source_key: source.part.id,
+    }));
+  });
+
+  it("lets a row move to another span or leave the transcript", () => {
+    const a = activityTool("assistant:a", "command");
+    const b = activityDecision("decision");
+    noteActivitySpanRowWithdrawals("span", [a, b], [a, b]);
+    expect(noteActivitySpanRowWithdrawals("span", [a], [a])).toEqual([]);
+    expect(noteActivitySpanRowWithdrawals("span", [b], [b])).toEqual([]);
+    expect(noteActivitySpanRowWithdrawals("span", [], [])).toEqual([]);
+    expect(denScrollDebugLog).not.toHaveBeenCalled();
+  });
+
+  it("reports rows absorbed by the action fold after first sight only", () => {
+    const a = activityTool("assistant:a", "terminal_send");
+    const b = activityTool("assistant:b", "terminal_send");
+    const foldKey = { label: "Terminal", status: "done", ran: { text: "Read", noun: "command" }, facts: [], row: [], links: [], fold_key: "terminal" } as const;
+    const folded = foldActionEntries([a, b].map(entry => ({
+      ...entry, part: { ...entry.part, action: { ...foldKey, facts: [], row: [], links: [] } },
+    })));
+    expect(folded).toHaveLength(1);
+    noteActivitySpanRowWithdrawals("visible-then-folded", [a, b], [a, b]);
+    expect(noteActivitySpanRowWithdrawals("visible-then-folded", [a, b], folded)).toEqual([
+      { key: b.part.id, kind: "tool", source: b.part.id },
+    ]);
+    expect(noteActivitySpanRowWithdrawals("folded-on-arrival", [a, b], folded)).toEqual([]);
+    expect(noteActivitySpanRowWithdrawals("folded-on-arrival", [a, b], folded)).toEqual([]);
+    expect(denScrollDebugLog).toHaveBeenCalledTimes(1);
   });
 });

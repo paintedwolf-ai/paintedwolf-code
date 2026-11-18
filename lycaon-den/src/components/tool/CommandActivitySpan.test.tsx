@@ -6,6 +6,9 @@ import type { ActivitySpanEntry } from "../../chat/transcript/projection/transcr
 import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
 import { ToolPartShell } from "./ToolPartShell.tsx";
 import { CommandActivitySpan } from "./CommandActivitySpan.tsx";
+import { ToolPartCard } from "./ToolPartCard.tsx";
+import { activityDecision, activityFact, activityProgram, activityTool } from "../../test/command-activity-fixtures.ts";
+import { registerOpenFilesSurfaceSink } from "../../platform/navigation/open-files-surface.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 vi.mock("../../platform/connection/app-connection.ts", () => ({ getLycaonClient: vi.fn() }));
@@ -51,4 +54,66 @@ it("takes its status from the settled receipt, not the program recorded while ru
   const view = render(() => <CommandActivitySpan label="Running commands" entries={[recorded]} sessionId="session" layout="chat" entryKey="command-groups-settled" renderToolEntry={part => <ToolPartShell part={part()} layout="chat"><span>Recorded detail</span></ToolPartShell>} />);
   const group = () => view.container.querySelector('[data-testid="activity-span-card"]');
   await waitFor(() => expect(group()?.getAttribute("data-status")).toBe("done"));
+});
+
+it("opens an attached decision and every folded program receipt in Files", async () => {
+  const sink = vi.fn();
+  const unregister = registerOpenFilesSurfaceSink(sink);
+  const read = (id: string) => activityTool(id, "command", { commandProgram: activityProgram(id, {
+    activities: [activityFact(id, {
+      action: {
+        label: "Read files", status: "done", ran: { text: id, noun: "command" },
+        facts: [{ kind: "steps", count: 1, sequence: [id] }], row: ["steps"],
+        links: [{ kind: "receipt", receipts: [{ program_id: `program-${id}`, activity_id: id }] }],
+      },
+    })],
+  }) });
+  try {
+    const view = render(() => <CommandActivitySpan
+      label="Reading files" entries={[activityDecision("turn-decision"), read("first"), read("next")]}
+      layout="chat" entryKey="command-record-links"
+      renderToolEntry={part => <ToolPartCard part={part()} layout="chat" projectId="project" slots={{}} />}
+    />);
+    const group = view.getByTestId("activity-span-card");
+    fireEvent.click(disclosureToggle(group));
+    await waitFor(() => expect(isDisclosureOpen(view.getByTestId("action-card"))).toBe(true));
+    fireEvent.click(view.getByTestId("command-activity-decisions"));
+    expect(sink).toHaveBeenLastCalledWith(expect.objectContaining({ document: expect.objectContaining({
+      content: { kind: "inline", text: expect.any(String) },
+    }) }));
+    fireEvent.click(view.getByTestId("action-link-receipt"));
+    expect(sink).toHaveBeenLastCalledWith(expect.objectContaining({ document: expect.objectContaining({
+      content: { kind: "command_receipts", scopes: [
+        { programId: "program-first", activityId: "first" }, { programId: "program-next", activityId: "next" },
+      ] },
+    }) }));
+  } finally {
+    unregister();
+  }
+});
+
+it("keeps independently visible rows when a session's span remounts under a new key", () => {
+  const inspect = (id: string) => activityTool(id, "command", { commandProgram: activityProgram(id, {
+    activities: [activityFact(id, { steps: [] })],
+  }) });
+  const first = inspect("first");
+  const second = inspect("second");
+  const pending = activityTool("first", "command", { status: "running" });
+  const span = (entries: () => readonly ActivitySpanEntry[], key: string) => (
+    <CommandActivitySpan label="Reading files" entries={entries()} layout="chat"
+      sessionId="continuity-remount" entryKey={key}
+      renderToolEntry={part => <ToolPartShell part={part()} layout="chat"><span>Recorded detail</span></ToolPartShell>} />
+  );
+  const [entries, setEntries] = createSignal<readonly ActivitySpanEntry[]>([pending, second]);
+  const original = render(() => span(entries, "original"));
+  const rowKeys = (container: HTMLElement) => [...container.querySelectorAll("[data-activity-entry-key]")]
+    .map(row => row.getAttribute("data-activity-entry-key"));
+  fireEvent.click(disclosureToggle(original.getByTestId("activity-span-card")));
+  expect(rowKeys(original.container)).toEqual(["second"]);
+  setEntries([first, second]);
+  expect(rowKeys(original.container)).toEqual(["second", "first"]);
+  original.unmount();
+  const remount = render(() => span(() => [first, second], "remount"));
+  fireEvent.click(disclosureToggle(remount.getByTestId("activity-span-card")));
+  expect(rowKeys(remount.container)).toEqual(["second", "first"]);
 });

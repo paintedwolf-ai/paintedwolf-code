@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CommandActivity, CommandActivityStep, CommandProgramReceipt } from "../../api/types.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
-import { commandActivityGroups, commandActivityHeadline, commandActivityRank, createCommandActivityProjection } from "./command-activity-model.ts";
+import { commandActivityGroups, commandActivityHeadline, commandActivityRank, createCommandActivityProjection, FORM_PROGRAM_TOOLS } from "./command-activity-model.ts";
 
 function fact(id: string, overrides: Partial<CommandActivity> = {}): CommandActivity {
   return { id, group: "Exploring project files", phase: "inspect", label: "Read source", subject: "source.rs", state: "completed", outcome: "Exited 0", status_code: 0, execution_ids: [id], spans: [], ...overrides };
@@ -190,7 +190,7 @@ it("ranks the span headline by two-level phase and group tiers (AT-ACT-HEAD-01)"
 
 it("holds running FormTool calls back and coalesces the settled inspect sequence (AT-ACT-PROJ-01)", () => {
  const project = createCommandActivityProjection();
- const formTools = ["command", "summarize", "survey_repo", "code_rewrite"];
+ const formTools = [...FORM_PROGRAM_TOOLS];
  const running = formTools.map((tool, index) => {
   const row = entry(`call-${index}`, undefined, tool);
   if (row.kind === "tool") row.part.status = "running";
