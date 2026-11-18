@@ -19,6 +19,7 @@ event_outbox:delete #17
 event_outbox:delete #18
 event_outbox:delete #19
 event_outbox:delete #2
+event_outbox:delete #20
 event_outbox:delete #3
 event_outbox:delete #4
 event_outbox:delete #5
@@ -41,6 +42,7 @@ event_outbox:insert history_storage_clock:update messages:insert session_entries
 event_outbox:insert history_storage_clock:update messages:insert session_entries:insert sessions:update #3
 event_outbox:insert history_storage_clock:update sessions:update #1
 event_outbox:insert history_storage_clock:update sessions:update #2
+event_outbox:insert history_storage_clock:update sessions:update #3
 event_outbox:insert history_storage_clock:update workflow_commands:insert workflow_runs:update #1
 event_outbox:insert history_storage_clock:update workflow_runs:update #1
 event_outbox:insert history_storage_clock:update workflow_runs:update #2

@@ -132,6 +132,8 @@ func runTurnChild(t *testing.T, dir, killAt string) {
 	tracer.armed.Store(true)
 	_, err = h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "Read the notes.")
 	testutil.FailErr(t, "prompt", err)
+	// The turn ends with the session's idle commit, after Prompt returns.
+	WaitForSessionIdleGate(t, h, t.Context(), sess.ID)
 	waitForOutboxDrained(t, h)
 	tracer.armed.Store(false)
 	os.Exit(finishedExit)
