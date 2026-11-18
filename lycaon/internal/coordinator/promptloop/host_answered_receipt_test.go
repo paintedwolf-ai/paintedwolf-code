@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -306,6 +307,7 @@ func TestInvocationSettlementMatchesEffectsAndRefusal(t *testing.T) {
 		{name: "owner refused", status: api.InvocationStatusRejected, invoked: true, code: "ASK_USER_OPTIONS_FORBIDDEN"},
 		{name: "program stopped before any operation", programState: "rejected", status: api.InvocationStatusRejected, code: "COMMAND_OPTION_UNSUPPORTED"},
 		{name: "program stopped after an operation", programState: "rejected", programStarted: true, status: api.InvocationStatusRejected, invoked: true, code: "COMMAND_OPTION_UNSUPPORTED"},
+		{name: "program stopped at the control plane", programState: "rejected", status: api.InvocationStatusRejected, code: isolation.CodeControlPlaneDenied},
 		{name: "program ran to exit", programState: "completed", programStarted: true, status: api.InvocationStatusCompleted, invoked: true},
 		{name: "program exited but delivery was refused", programState: "completed", programStarted: true, deliveryReject: true, status: api.InvocationStatusRejected, invoked: true, code: "COMMAND_OUTPUT_SCREEN_LIMIT"},
 	} {
@@ -337,6 +339,11 @@ func TestInvocationSettlementMatchesEffectsAndRefusal(t *testing.T) {
 			}
 			if settlement.Status != want.status || settlement.Invoked != want.invoked || code != want.code {
 				t.Fatalf("settlement = (%q, %v, %q), want (%q, %v, %q)", settlement.Status, settlement.Invoked, code, want.status, want.invoked, want.code)
+			}
+			if want.code == isolation.CodeControlPlaneDenied &&
+				(settlement.Isolation == nil || settlement.Isolation.Code != want.code ||
+					settlement.Failure.Class != api.FailureClassIsolationRejection || settlement.Failure.Retryable) {
+				t.Fatalf("missing terminal isolation facts: %+v", settlement)
 			}
 		})
 	}

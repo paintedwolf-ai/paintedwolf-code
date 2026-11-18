@@ -187,8 +187,12 @@ func rejectionFailure(code, class, ownerRef string, details ...map[string]any) *
 	if len(details) > 0 {
 		data = details[0]
 	}
+	retryable := false
+	if outcome, ok := isolation.Lookup(code); ok {
+		class, retryable = api.FailureClassIsolationRejection, outcome.Retryable()
+	}
 	return &api.InvocationFailure{
-		Code: code, Class: class, Retryable: false, OwnerRef: strings.TrimSpace(ownerRef), Details: data,
+		Code: code, Class: class, Retryable: retryable, OwnerRef: strings.TrimSpace(ownerRef), Details: data,
 	}
 }
 
