@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gitcredential"
@@ -85,7 +86,7 @@ func authenticatedUploadPack(t *testing.T, repo string) (*httptest.Server, func(
 // capability request.
 func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
 	gitengine.TestingEnableBundledBinary()
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	t.Setenv("LYCAON_SANDBOX", "on")
 	t.Cleanup(gitexec.TestingUseAgentCredentialStore(fixedCredentialStore{username: "alice", password: "remote-secret"}))
 	remote := t.TempDir()
@@ -185,7 +186,7 @@ func fakeSSHAgent(t *testing.T) (string, func() int) {
 // otherwise.
 func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T) {
 	gitengine.TestingEnableBundledBinary()
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	t.Setenv("LYCAON_SANDBOX", "on")
 	agent, requests := fakeSSHAgent(t)
 	t.Setenv("SSH_AUTH_SOCK", agent)

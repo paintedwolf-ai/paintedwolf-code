@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
@@ -107,7 +107,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 		return adapter.BudgetFact{Class: class, Limit: 1 << 20, EntryCost: 1}
 	}
 	if mounted {
-		confine.TestingSetAutoConfine(t)
+		admissionfixture.Enable(t)
 		t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(branches))
 		selector = workspace.HostSelector()
 		selector.BudgetFor = adapter.ZeroBudget

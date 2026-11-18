@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine/internal/admissionstate"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 )
 
@@ -26,9 +27,8 @@ func TestRequireAppliedHonorsExplicitSandboxPolicy(t *testing.T) {
 		{name: "not enabled"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			previous := autoConfineEnabled()
-			setAutoConfine(tc.auto)
-			t.Cleanup(func() { setAutoConfine(previous) })
+			previous := admissionstate.ProcessEnabled.Swap(tc.auto)
+			t.Cleanup(func() { admissionstate.ProcessEnabled.Store(previous) })
 			t.Setenv("LYCAON_SANDBOX", tc.sandbox)
 			t.Setenv("LYCAON_BYPASS_APPROVALS", tc.bypass)
 			err := RequireApplied(tc.applied)

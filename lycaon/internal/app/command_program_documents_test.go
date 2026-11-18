@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/programtest"
@@ -29,11 +28,13 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/literal"
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 )
 
 func documentProgram(t *testing.T) (*programtest.Fixture, *editordoc.Service, *project.Project) {
 	t.Helper()
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
 	t.Setenv("LYCAON_SANDBOX", "on")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")

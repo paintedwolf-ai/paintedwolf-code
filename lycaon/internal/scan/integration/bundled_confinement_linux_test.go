@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -21,7 +22,7 @@ func TestLinuxScannerBoundaryKeepsSourceReadOnlyAndOutputWritable(t *testing.T) 
 		caps, _ := confine.LinuxCapabilities()
 		t.Fatalf("required Linux scanner boundary is unavailable: %+v", caps)
 	}
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	python, err := exec.LookPath("python3")
