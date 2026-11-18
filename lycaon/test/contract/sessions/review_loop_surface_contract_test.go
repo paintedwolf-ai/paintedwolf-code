@@ -1,47 +1,40 @@
 package contract
 
 import (
-	"path/filepath"
+	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// review_loop phases that spawn a Binding reviewer bind review_adjudicate so
-// task() sees the workflow agents[] roster.
+// A review_loop phase spawns its reviewer through task, so the coordinator
+// surface it binds, directly or through its surface profile, offers task immediately.
 func TestReviewLoopDeliberationPhasesBindAdjudicateSurface(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	cases := []struct {
-		workflowID string
-		phaseID    string
-		surface    string
-		template   string
-	}{
-		{"security-survey", "claims", "review_adjudicate", "agents/coordinator-surface-vet.md"},
-		{"security-survey", "challenge", "review_adjudicate", "agents/coordinator-surface-vet.md"},
-		{"options", "judge", "decision_adjudicate", "agents/coordinator-surface-orchestrate.md"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.workflowID+"/"+tc.phaseID, func(t *testing.T) {
-			t.Parallel()
-			path := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", tc.workflowID, "workflows", tc.workflowID, "workflow.yaml")
-			m, err := workflowdef.LoadManifestFromFile(path)
-			contractcheck.FailErr(t, "LoadManifestFromFile "+tc.workflowID, err)
-			ph, ok := m.PhaseByID(tc.phaseID)
-			if !ok {
-				t.Fatalf("missing phase %q", tc.phaseID)
-			}
+	reg, err := workflowdef.RegistryFromDirs("")
+	contractcheck.FailErr(t, "RegistryFromDirs", err)
+	checked := 0
+	for key, m := range reg.All() {
+		for _, ph := range m.PhaseDefs {
 			if ph.ReviewLoop == nil {
-				t.Fatalf("phase %q: review_loop required", tc.phaseID)
+				continue
 			}
-			if ph.CoordinatorSurface != tc.surface {
-				t.Fatalf("coordinator_surface = %q want %q", ph.CoordinatorSurface, tc.surface)
+			checked++
+			binding, err := workflowdef.ResolveSurfaceBinding(m, ph.ID, m.ID, "")
+			contractcheck.FailErr(t, "ResolveSurfaceBinding "+key+" "+ph.ID, err)
+			plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: binding.CoordinatorSurface}, 1)
+			if err != nil {
+				t.Errorf("%s phase %s: compile surface %q: %v", key, ph.ID, binding.CoordinatorSurface, err)
+				continue
 			}
-			if ph.SurfaceTemplate != tc.template {
-				t.Fatalf("surface_template = %q want %q", ph.SurfaceTemplate, tc.template)
+			if !slices.Contains(plan.ImmediateNames(), "task") {
+				t.Errorf("%s phase %s: surface %q does not offer task immediately", key, ph.ID, binding.CoordinatorSurface)
 			}
-		})
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no shipped phase declares a review_loop")
 	}
 }

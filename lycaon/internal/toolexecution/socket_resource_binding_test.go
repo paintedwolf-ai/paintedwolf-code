@@ -24,10 +24,13 @@ type resourceSocketReview struct {
 	hitl.CheckpointManager
 	runtime *approvalstate.SocketCapabilityRuntime
 	calls   int
+	// chatStop counts the latest plan's options that stop asking for the chat.
+	chatStop int
 }
 
 func (r *resourceSocketReview) RequestCheckpoint(_ context.Context, req hitl.CheckpointRequest) (*hitl.CheckpointResponse, error) {
 	r.calls++
+	r.chatStop = chatStopOptions(req.ApprovalPlan.Options)
 	for _, option := range req.ApprovalPlan.Options {
 		if option.Rung != hitl.ApprovalRungOnce {
 			continue
@@ -88,6 +91,9 @@ func assertHostResourceSocketBinding(t *testing.T, operation string) {
 	if review.calls != 1 || first.AuthorizationSource != authzledger.AuthorizationSourceHuman {
 		t.Fatalf("pathname lease covered retained request: calls=%d, source=%s", review.calls, first.AuthorizationSource)
 	}
+	if review.chatStop != 1 {
+		t.Fatalf("socket approval plan offers %d chat stop options, want 1", review.chatStop)
+	}
 	assertSocketLedgerSource(t, recorder.records, authzledger.ActionCapabilityGranted, authzledger.AuthorizationSourceHuman)
 	grant := first.SocketGrants[0]
 	if !runtime.GrantChat(tc.ChatSessionID(), grant, "reviewed-chat", "human-review", first.ActionDigest, nil) {
@@ -135,6 +141,46 @@ func assertSocketLedgerSource(t *testing.T, records []authzledger.CapabilityReco
 		}
 	}
 	t.Fatalf("ledger lacks %s", action)
+}
+
+// The direct-network card lets the person stop asking for the rest of the chat,
+// as every other approval does.
+func TestDirectIPApprovalOffersChatStop(t *testing.T) {
+	ctx := socketInvocationContext(t)
+	executor := NewExecutor(nil, nil, "")
+	review := &resourceSocketReview{}
+	executor.Approvals.SetCheckpointManager(ctx, review, resourceSocketGate{})
+	declared := []string{"https://rates.example.test:443"}
+	tc := httpRequestSocketContext(t, shortTempDir(t))
+	contract, ok := toolcontract.Lookup("command")
+	if !ok {
+		t.Fatal("command contract is unavailable")
+	}
+	tc.Invocation.Contract = contract
+	args := map[string]any{
+		"command":            "python3 rates.py",
+		"capability_request": map[string]any{"direct_ip": map[string]any{"declared_destinations": []any{declared[0]}}},
+	}
+	action, lease := DirectIPReview("command", args, tc, declared, nil)
+	approval, err := resourceSocketGate{}.Evaluate(ctx, action)
+	testutil.FailErr(t, "evaluate the explicit approval request", err)
+	testutil.FailErr(t, "direct-network approval", executor.Capabilities.awaitDirectIPCapability(ctx, action, lease, tc, approval))
+	if review.calls != 1 || review.chatStop != 1 {
+		t.Fatalf("direct-network asks = %d with %d chat stop options, want one ask with one", review.calls, review.chatStop)
+	}
+}
+
+// chatStopOptions counts the enabled options that stop asking for the rest of
+// the chat.
+func chatStopOptions(options []hitl.ApprovalOption) int {
+	n := 0
+	for _, option := range options {
+		if option.Rung == hitl.ApprovalRungChat && !option.Disabled &&
+			(option.Kind == hitl.ApprovalOptionLease || option.Kind == hitl.ApprovalOptionQuiet) {
+			n++
+		}
+	}
+	return n
 }
 
 type resourceSocketGate struct{ coveringHostResourceGate }

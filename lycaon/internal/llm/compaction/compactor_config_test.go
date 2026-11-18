@@ -161,6 +161,27 @@ func TestLoadBundledCompactionConfigDerivesBudgets(t *testing.T) {
 	if cfg.TargetTokens != 131072*35/100 {
 		t.Fatalf("TargetTokens = %d want %d", cfg.TargetTokens, 131072*35/100)
 	}
+	assertCompactionBand(t, cfg)
+}
+
+// The fallback percentages keep the same band when compaction.yaml omits them.
+func TestOmittedCompactionPercentagesKeepTheBand(t *testing.T) {
+	cfg := DefaultCompactionConfig()
+	cfg.BudgetTriggerPct, cfg.TargetTokensPct, cfg.HardCeilingPct = 0, 0, 0
+	cfg.HardCeilingTokens, cfg.TargetTokens = 0, 0
+	cfg, err := NormalizeConfig(cfg)
+	testutil.FailErr(t, "normalize compaction config", err)
+	assertCompactionBand(t, cfg)
+}
+
+// assertCompactionBand requires target < trigger < hard ceiling: compaction
+// starts below the ceiling and lands below where it starts.
+func assertCompactionBand(t *testing.T, cfg CompactionConfig) {
+	t.Helper()
+	trigger := cfg.CompactionTriggerTokens()
+	if !(cfg.TargetTokens > 0 && cfg.TargetTokens < trigger && trigger < cfg.HardCeilingTokens) {
+		t.Fatalf("band target %d < trigger %d < ceiling %d does not hold", cfg.TargetTokens, trigger, cfg.HardCeilingTokens)
+	}
 }
 
 func TestCompactionPctKnobsDerivedTokens(t *testing.T) {

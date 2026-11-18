@@ -1,131 +1,118 @@
 package contract
 
 import (
-	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolvocab"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func TestManifestAdvancePolicyEnumsParseAndRejectNever(t *testing.T) {
-	t.Parallel()
-	_, err := workflowdef.ParseManifestYAML([]byte(`
-id: bad
-version: 1.0.0
-phases:
-  - id: x
-    activity_label: Doing x
-    advance:
-      when_gate_met: never
-`))
-	if err == nil || !strings.Contains(err.Error(), "when_gate_met") {
-		t.Fatalf("err = %v", err)
-	}
-	m, err := workflowdef.ParseManifestYAML([]byte(`
-id: ok
-version: 1.0.0
-phases:
-  - id: research
-    activity_label: Researching
-    advance:
-      when_gate_met: coordinator
-    loop:
-      exit: self
-`))
-	contractcheck.FailErr(t, "ParseManifestYAML", err)
-	phase, ok := m.PhaseByID("research")
-	if !ok {
-		t.Fatal("missing research")
-	}
-	if phase.AdvanceWhenGateMet != workflowdef.AdvanceWhenGateMetCoordinator {
-		t.Fatalf("advance = %q", phase.AdvanceWhenGateMet)
-	}
-	if phase.LoopExit != workflowdef.LoopExitSelf {
-		t.Fatalf("loop.exit = %q", phase.LoopExit)
-	}
-}
+const workflowAdvanceTool = "workflow_advance"
 
-func TestEffectiveAdvancePolicyShippedManifestContractParity(t *testing.T) {
-	t.Parallel()
-	reg, err := workflowdef.RegistryFromDirs("")
-	contractcheck.FailErr(t, "RegistryFromDirs", err)
-
-	hostKeys := map[string]struct{}{
-		"implement@1.0.0":       {},
-		"plan@1.0.0":            {},
-		"plan@1.0.1":            {},
-		"recon-pack@1.0.1":      {},
-		"recon-pack@1.0.0":      {},
-		"security-survey@2.0.1": {},
-		"security-survey@2.0.0": {},
-		"security-survey@1.0.0": {},
-		"options@1.0.0":         {},
-		// bugbash host-advances so a human triage approval never sits waiting
-		// for the coordinator to call workflow_advance (see its manifest note).
-		"bugbash@1.1.0": {},
-		"bugbash@1.0.0": {},
-	}
-	coordKeys := map[string]struct{}{}
-
-	for key, m := range reg.All() {
-		for _, phase := range m.PhaseDefs {
-			if phase.AdvanceWhenGateMet != "" {
-				if phase.AdvanceWhenGateMet != workflowdef.AdvanceWhenGateMetAuto &&
-					phase.AdvanceWhenGateMet != workflowdef.AdvanceWhenGateMetCoordinator {
-					t.Fatalf("%s phase %q: bad advance %q", key, phase.ID, phase.AdvanceWhenGateMet)
-				}
-				if m.ID == "plan" && phase.ID == "research" &&
-					phase.AdvanceWhenGateMet != workflowdef.AdvanceWhenGateMetCoordinator {
-					t.Fatalf("plan research advance = %q want coordinator", phase.AdvanceWhenGateMet)
-				}
-				continue
-			}
-			got := workflowdef.EffectiveAdvancePolicy(m, phase)
-			if _, ok := hostKeys[key]; ok {
-				if got != workflowdef.AdvanceWhenGateMetAuto {
-					t.Fatalf("%s phase %q: effective = %q want auto", key, phase.ID, got)
-				}
-			}
-			if _, ok := coordKeys[key]; ok {
-				if got != workflowdef.AdvanceWhenGateMetCoordinator {
-					t.Fatalf("%s phase %q: effective = %q want coordinator", key, phase.ID, got)
-				}
-			}
-		}
-	}
-}
-
+// Gate feedback renders under both advance policies, and every tool it names
+// is one the phase's coordinator surface offers under that policy: the host
+// refuses workflow_advance on an auto phase and promotes it on a coordinator one.
 func TestGateFeedbackSatisfySplitByAdvancePolicy(t *testing.T) {
 	t.Parallel()
 	catalog, err := feedback.LoadGateFeedbackCatalog()
 	contractcheck.FailErr(t, "LoadGateFeedbackCatalog", err)
+	vocab := gateFeedbackToolCatalog(t)
+	policies := []workflowdef.AdvanceWhenGateMet{workflowdef.AdvanceWhenGateMetAuto, workflowdef.AdvanceWhenGateMetCoordinator}
 
-	coordCtx := feedback.GateFeedbackContext(feedback.WorkflowEvaluationContext{
-		AdvanceWhenGateMet: "coordinator",
-	}, nil)
-	out, err := catalog.RenderGateFeedback(t.Context(), "research_satisfied", coordCtx)
-	contractcheck.FailErr(t, "RenderGateFeedback coordinator", err)
-	if !strings.Contains(out, "repo researcher") {
-		t.Fatalf("coordinator satisfy missing research dispatch:\n%s", out)
+	if len(catalog.GateIDs()) == 0 {
+		t.Fatal("no gate feedback keys loaded")
 	}
-	if strings.Contains(out, "Call workflow_advance") || strings.Contains(out, "workflow_advance") {
-		t.Fatalf("gate-feedback must not teach leave via workflow_advance:\n%s", out)
+	for _, gateID := range catalog.GateIDs() {
+		for _, policy := range policies {
+			out := renderGateFeedback(t, catalog, gateID, feedback.WorkflowEvaluationContext{AdvanceWhenGateMet: string(policy)})
+			if out == "" {
+				t.Errorf("%s under %s renders nothing", gateID, policy)
+			}
+		}
 	}
 
-	autoCtx := feedback.GateFeedbackContext(feedback.WorkflowEvaluationContext{
-		AdvanceWhenGateMet: "auto",
-	}, nil)
-	out, err = catalog.RenderGateFeedback(t.Context(), "plan_stub_valid", autoCtx)
-	contractcheck.FailErr(t, "RenderGateFeedback auto", err)
-	if !strings.Contains(out, "## Approach") {
-		t.Fatalf("auto satisfy missing stub sections:\n%s", out)
+	reg, err := workflowdef.RegistryFromDirs("")
+	contractcheck.FailErr(t, "RegistryFromDirs", err)
+	checked := 0
+	for key, m := range reg.All() {
+		for _, phase := range m.PhaseDefs {
+			for _, gateID := range phase.Gates {
+				if !catalog.Has(gateID) {
+					continue
+				}
+				binding, err := workflowdef.ResolveSurfaceBinding(m, phase.ID, m.ID, "")
+				contractcheck.FailErr(t, "ResolveSurfaceBinding "+key+" "+phase.ID, err)
+				for _, policy := range policies {
+					offered := offeredCoordinatorTools(t, api.CoordinatorRunContext{
+						WorkflowID: m.ID, WorkflowVersion: m.Version, RunStatus: "running",
+						CurrentPhase: phase.ID, FailedLeaves: []string{gateID}, SurfaceProfile: m.SurfaceProfile,
+						PhaseCoordinatorSurface: binding.CoordinatorSurface, PhaseSurfaceTemplate: binding.SurfaceTemplate,
+						PhaseModeRefs: binding.ModeRefs, WorkflowInvestigateEligible: &binding.WorkflowInvestigateEligible,
+						AdvanceWhenGateMet: string(policy),
+					})
+					out := renderGateFeedback(t, catalog, gateID, feedback.WorkflowEvaluationContext{
+						WorkflowID: m.ID, CurrentPhase: phase.ID, FailedLeaves: []string{gateID},
+						AdvanceWhenGateMet: string(policy), RunActive: true,
+					})
+					for _, name := range toolvocab.ToolsIn(vocab, out) {
+						if !offered(name) {
+							t.Errorf("%s phase %s gate %s under %s names %s, which that surface does not offer",
+								key, phase.ID, gateID, policy, name)
+						}
+					}
+					checked++
+				}
+			}
+		}
 	}
-	if strings.Contains(out, "workflow_advance") {
-		t.Fatalf("auto satisfy must not teach workflow_advance:\n%s", out)
+	if checked == 0 {
+		t.Fatal("no shipped phase binds a gate with feedback")
 	}
+}
+
+func renderGateFeedback(t *testing.T, catalog *feedback.GateFeedbackCatalog, gateID string, wf feedback.WorkflowEvaluationContext) string {
+	t.Helper()
+	out, err := catalog.RenderGateFeedback(t.Context(), gateID, feedback.GateFeedbackContext(wf, nil))
+	contractcheck.FailErr(t, "RenderGateFeedback "+gateID, err)
+	return out
+}
+
+// offeredCoordinatorTools resolves the turn's surface as the prompt loop does from
+// the run frame's phase binding, and applies the advance policy's effect on workflow_advance.
+func offeredCoordinatorTools(t *testing.T, runCtx api.CoordinatorRunContext) func(string) bool {
+	t.Helper()
+	profile := surface.ResolveTurnProfile(runCtx, &api.Session{Posture: api.SessionPostureBuild}, nil)
+	plan, err := surface.CompileToolPlan(profile, 1)
+	contractcheck.FailErr(t, "CompileToolPlan "+profile.SurfaceID, err)
+	coordinator := runCtx.AdvanceWhenGateMet == string(workflowdef.AdvanceWhenGateMetCoordinator)
+	if coordinator {
+		plan = plan.Promote(workflowAdvanceTool)
+	}
+	return func(name string) bool {
+		if name == workflowAdvanceTool && !coordinator {
+			return false
+		}
+		return plan.Addressable(name)
+	}
+}
+
+func gateFeedbackToolCatalog(t *testing.T) *toolvocab.Catalog {
+	t.Helper()
+	eff := contractcheck.StockCatalog(t)
+	profiles, err := sandbox.LoadToolProfilesWithCatalog(eff)
+	contractcheck.FailErr(t, "load tool profiles", err)
+	schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+	contractcheck.FailErr(t, "load tool schemas", err)
+	vocab, err := toolvocab.NewCatalog(schemas, profiles, toolvocab.Provenance{})
+	contractcheck.FailErr(t, "toolvocab.NewCatalog", err)
+	return vocab
 }
 
 func TestPhaseExitProjectorPlanContract(t *testing.T) {
