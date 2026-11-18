@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/webresearch/warm.go",
+  "kind": "runtime_service",
+  "workstream": "web-research-runtime",
+  "disposition": "retain",
+  "reason": "Retain the 569-line warm request lifecycle, policy selection and crawl/seed execution phases. Session cancellation, activity recording and shutdown are coordinated by one Warmer; shared Discovery admission and Crawler transport are explicit dependencies. The runner stays separate and the focused warming suite covers busy, disabled, canceled and pre-acquired-slot paths.",
+  "reviewed_commit": "07ad83d4a386172877e6221d2ed1feffb7f6900f",
+  "ceiling": 569,
+  "boundaries": {
+    "lycaon/internal/webresearch/warm_test.go": "f6f92d847a4573178ee891bb9b36398dedd88b221f6b75ec036322f27e8a278a",
+    "lycaon/internal/webresearch/warm_runner_test.go": "fead8d13430f9debcb18b63d432bac918b15279d0e7f4bbd14e191e0e90f908d",
+    "lycaon/internal/webresearch/runtime_resources_test.go": "96e4a128bff2d6172940f6175fd0219f6ceaa62865254eefb6db430752e52e1e"
+  }
+}

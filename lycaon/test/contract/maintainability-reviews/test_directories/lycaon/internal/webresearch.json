@@ -2,15 +2,18 @@
   "category": "test_directories",
   "artifact": "lycaon/internal/webresearch",
   "kind": "test_suite",
-  "workstream": "web-research-flow",
+  "workstream": "web-research-runtime",
   "disposition": "retain",
-  "reason": "Retain the web research package at 53 production and 72 test files. Search providers and fetch share egress, secret screening, indexing, and budgets. Read-only fetch registration, visual screening, and content classification are explicit file boundaries; removing raw transfers reduces behavior without creating a second network authority.",
-  "reviewed_commit": "655e22133e9396805819a601fbd788f77270eecb",
-  "ceiling": 72,
+  "reason": "Retain 55 production and 77 test files for the shared research flow. Registry, Discovery, Crawler and FetchBudget have explicit resource lifetimes; interactive search and warming share only their runtime instances. Provider adapters, ranking, text extraction and tool admission remain separate file boundaries because they compose the same egress, secret-screening and index contracts. Isolation, cancellation, pacing, redirect and fetch-content tests support this boundary.",
+  "reviewed_commit": "07ad83d4a386172877e6221d2ed1feffb7f6900f",
+  "ceiling": 77,
   "boundaries": {
-    "lycaon/internal/webresearch/fetch_readonly_test.go": "9531624acebbd93bf17450c4e2fcceed6af1b4e14f80275f062dbffd91e6a37b",
-    "lycaon/internal/webresearch/fetch_format_test.go": "8c28f8f03259a79bad20ceb86600e9f9690c6f3ac0dd71c9584129970acb7d79",
-    "lycaon/internal/webresearch/fetch_visual_test.go": "44777c7fc7835e6adf426aeb3c1761b56a3a753a1781625ae1d6e1b0532abbef"
+    "lycaon/internal/webresearch/runtime_resources_test.go": "96e4a128bff2d6172940f6175fd0219f6ceaa62865254eefb6db430752e52e1e",
+    "lycaon/internal/webresearch/ssrf_test.go": "99a98d0edd009a7e2935c824e7d6ce6e719f8452523d2f456896632409dd2f63",
+    "lycaon/internal/webresearch/direct_polite_test.go": "648e425e2e8a9c9515ef81eff8f08a13666281812a58ca971f720cad96093fc2",
+    "lycaon/internal/webresearch/fetch_readonly_test.go": "8bd1913ea9b7efbf443fc4949bae4795618c3382ce86c337f8462e7515432eb2",
+    "lycaon/internal/webresearch/fetch_format_test.go": "5548774ea21fb97b0c01a4c0db2fb7613ac51149918c1d158688d05a220e96e4",
+    "lycaon/internal/webresearch/fetch_visual_test.go": "9ba599a6891960811deedd8fc395a6f7aa1c8eeb78b8632e99a9544e7b0825fc"
   },
-  "reviewed_shape": "742970c4937c8d633d430564d7486af998b45b3f969ef366dcacee6816fb8ec0"
+  "reviewed_shape": "87e24172b300d40e942777c0d11a82d8f293c1d3b77a3558661ca6de9cbf94bf"
 }

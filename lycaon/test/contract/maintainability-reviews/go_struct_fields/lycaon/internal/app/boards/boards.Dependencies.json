@@ -1,0 +1,16 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/app/boards/boards.Dependencies",
+  "kind": "construction",
+  "workstream": "web-research-runtime",
+  "disposition": "retain",
+  "reason": "Retain 19 explicit application construction fields. WebResearchExchange supplies a named bounded network effect at startup; production uses the host outbound door and fixtures supply isolated exchanges. The configuration does not carry mutable request state or replace process resources. App-wired outbound-secret tests preserve per-operation screening and approval.",
+  "reviewed_commit": "07ad83d4a386172877e6221d2ed1feffb7f6900f",
+  "ceiling": 19,
+  "boundaries": {
+    "lycaon/test/security/api_outbound_secret_floor_e2e_test.go": "bba80e68228943c61ed01bca76737d98e77309f4811f932389d99ab7814af535",
+    "lycaon/test/security/outbound_secret_testutil_test.go": "6f0f0e240a25e59affdcabe6f0a9cdf47345b7040c2f699bbc162f3161d0b726",
+    "lycaon/internal/webresearch/runtime_resources_test.go": "96e4a128bff2d6172940f6175fd0219f6ceaa62865254eefb6db430752e52e1e"
+  },
+  "reviewed_shape": "90782b9be2285c4591503354ec4d57ef5c67ee2d28561fc15c5004867df04e42"
+}
