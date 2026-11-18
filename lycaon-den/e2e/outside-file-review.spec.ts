@@ -4,12 +4,14 @@ import path from "node:path";
 import { expect } from "@playwright/test";
 import type { CheckpointListResponse, SourceComparison } from "../src/api/types.ts";
 import {
-  apiJson, apiPostPrompt, openNewChatSession, openProjectFilesFixture, webE2e,
+  apiJson, apiPostPrompt, e2eTempDir, openNewChatSession, openProjectFilesFixture, webE2e,
 } from "./helpers.ts";
 import { manualHarnessTools } from "./manual-harness-tools.ts";
 
 webE2e("Review shows an outside edit and its retained versions in the chat that made it", async ({ page, request }) => {
-  const folder = realpathSync(mkdtempSync(path.join(process.env.PW_TEST_HOST_HOME ?? homedir(), "paintedwolf-outside-review-")));
+  const folder = realpathSync(process.env.LYCAON_E2E_DOCKER_STACK === "1"
+    ? e2eTempDir(request, "outside-review")
+    : mkdtempSync(path.join(process.env.PW_TEST_HOST_HOME ?? homedir(), "paintedwolf-outside-review-")));
   const filename = "outside-note.txt";
   const destination = path.join(folder, filename);
   try {
@@ -45,8 +47,6 @@ webE2e("Review shows an outside edit and its retained versions in the chat that 
     } finally {
       const completion = "The notes are updated.";
       await apiJson(request, "POST", "/harness/llm/auto", { enabled: true, text: completion });
-      const pending = await apiJson<{ pending: boolean; id: string }>(request, "GET", "/harness/llm/pending");
-      if (pending.pending) await apiJson(request, "POST", "/harness/llm/respond", { id: pending.id, content: completion });
     }
     const openReview = () => page.evaluate((projectId) => {
       const harness = (window as unknown as { __harness: { openReviewLens(id: string, scope: { kind: string }): void } }).__harness;
