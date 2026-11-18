@@ -20,7 +20,13 @@ var newestFirst = map[string]string{
 }
 
 type projectRowTable struct {
+	// key is the row's identity: rowid, or the primary key columns.
 	name, column, key, order string
+}
+
+// keyColumns is the key as a select list.
+func (t projectRowTable) keyColumns() string {
+	return strings.TrimSuffix(strings.TrimPrefix(t.key, "("), ")")
 }
 
 // DeleteProjectRows removes every row that references a project, leaving the
@@ -34,7 +40,7 @@ func DeleteProjectRows(ctx context.Context, database DBTX, projectID string) err
 	}
 	for _, table := range tables {
 		statement := fmt.Sprintf(`DELETE FROM %s WHERE %s IN (SELECT %s FROM %s WHERE %s = ? %s LIMIT %d)`, // #nosec G201 -- names read from the schema
-			quoteIdent(table.name), table.key, table.key, quoteIdent(table.name), quoteIdent(table.column), table.order, ProjectRowBatch)
+			quoteIdent(table.name), table.key, table.keyColumns(), quoteIdent(table.name), quoteIdent(table.column), table.order, ProjectRowBatch)
 		for {
 			result, err := database.ExecContext(ctx, statement, projectID)
 			if err != nil {

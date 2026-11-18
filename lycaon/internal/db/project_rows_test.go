@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -89,7 +90,7 @@ func TestDeleteProjectRowsClearsChainedHistoryInBoundedStatements(t *testing.T) 
 // reference the one before, so any order but newest-first breaks a reference.
 func seedChainedHistory(t *testing.T, store *Store, projectID string, files int) {
 	t.Helper()
-	testdbseed.InsertProject(t, store, projectID)
+	root := testdbseed.InsertProjectRoot(t, store, projectID, filepath.Join(t.TempDir(), projectID))
 	const now = "2026-11-17T00:00:00Z"
 	parentVersion, parentDirectory := sql.NullString{}, sql.NullString{}
 	for i := range files {
@@ -100,11 +101,11 @@ func seedChainedHistory(t *testing.T, store *Store, projectID string, files int)
 		testutil.FailErr(t, "insert file", err)
 		_, err = store.ExecContext(t.Context(), `INSERT INTO source_versions
 (id, file_id, project_id, parent_version_id, root_id, path, state, content_sha256, byte_size, capture_state, capture_quality, created_ts, seq)
-VALUES (?, ?, ?, ?, 'root', ?, 'content', ?, 1, 'metadata_only', 'exact', ?, ?)`,
-			version, file, projectID, parentVersion, fmt.Sprintf("f%d", i), fmt.Sprintf("%064x", i), now, i+1)
+VALUES (?, ?, ?, ?, ?, ?, 'content', ?, 1, 'metadata_only', 'exact', ?, ?)`,
+			version, file, projectID, parentVersion, root, fmt.Sprintf("f%d", i), fmt.Sprintf("%064x", i), now, i+1)
 		testutil.FailErr(t, "insert version", err)
 		_, err = store.ExecContext(t.Context(), `INSERT INTO source_directories (id, project_id, root_id, parent_id, name, present, ordinal, observed_ts)
-VALUES (?, ?, 'root', ?, ?, 1, 0, ?)`, directory, projectID, parentDirectory, fmt.Sprintf("d%d", i), now)
+VALUES (?, ?, ?, ?, ?, 1, 0, ?)`, directory, projectID, root, parentDirectory, fmt.Sprintf("d%d", i), now)
 		testutil.FailErr(t, "insert directory", err)
 		parentVersion = sql.NullString{String: version, Valid: true}
 		parentDirectory = sql.NullString{String: directory, Valid: true}
