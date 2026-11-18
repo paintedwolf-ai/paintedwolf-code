@@ -44,7 +44,7 @@ func newWorkerHistoryTestEnv(t *testing.T) *workerHistoryTestEnv {
 	sqlDB := testdbfixture.Open(t, "worker-history.db")
 	st := store.NewSQL(sqlDB)
 	projReg := project.NewSQLRegistry(sqlDB)
-	queue := worker.NewSQLQueue(sqlDB, 1)
+	queue := worker.NewSQLServices(sqlDB, 1).Queue
 	records := workerrecords.New(sqlDB)
 
 	reg := toolstest.NewRegistry()

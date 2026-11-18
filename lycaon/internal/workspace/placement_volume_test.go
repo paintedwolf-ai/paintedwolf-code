@@ -26,14 +26,14 @@ type placementFixture struct {
 	mgr   *Manager
 }
 
-func newPlacementFixture(t *testing.T) placementFixture {
+func newPlacementFixture(t *testing.T, clone adapter.FileCloner) placementFixture {
 	t.Helper()
 	state, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve state", err)
-	return placementFixtureAt(t, state)
+	return placementFixtureAt(t, state, clone)
 }
 
-func placementFixtureAt(t *testing.T, state string) placementFixture {
+func placementFixtureAt(t *testing.T, state string, clone adapter.FileCloner) placementFixture {
 	t.Helper()
 	testutil.FailErr(t, "create state", os.MkdirAll(state, 0o700))
 	t.Cleanup(func() {
@@ -43,7 +43,7 @@ func placementFixtureAt(t *testing.T, state string) placementFixture {
 	})
 	return placementFixture{
 		state: state,
-		mgr:   NewManager(enginepaths.WorkerBranchesRootUnder(state), platform.NewSelector(platform.Config{})),
+		mgr:   NewManager(enginepaths.WorkerBranchesRootUnder(state), platform.NewSelector(platform.Config{}), clone),
 	}
 }
 
@@ -121,7 +121,7 @@ func TestSecondVolumeSourceClonesWithZeroCopiedBytes(t *testing.T) {
 	}
 	project := volume.Dir(t, "project")
 	want := writeTree(t, project, projectFiles)
-	fixture := newPlacementFixture(t)
+	fixture := newPlacementFixture(t, nil)
 
 	first, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), project, "job-1")
 	testutil.FailErr(t, "first clone", err)
@@ -170,7 +170,7 @@ func TestRootAttachedAtVolumeRootCopiesToStateFolderAndNeverOntoTheVolume(t *tes
 	}
 	writeTree(t, volume.Root, projectFiles)
 	before := volumeListing(t, volume.Root)
-	fixture := newPlacementFixture(t)
+	fixture := newPlacementFixture(t, nil)
 
 	first, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), volume.Root, "job-1")
 	testutil.FailErr(t, "first", err)
@@ -204,7 +204,7 @@ func TestHomeAttachmentHoldingTheStateFolderClonesTwiceWithoutGrowth(t *testing.
 	home := filepath.Join(base, "home")
 	writeTree(t, home, projectFiles)
 	source := entryCount(t, home)
-	fixture := placementFixtureAt(t, filepath.Join(home, ".config", "paintedwolf"))
+	fixture := placementFixtureAt(t, filepath.Join(home, ".config", "paintedwolf"), nil)
 	testutil.FailErr(t, "write state file", os.WriteFile(filepath.Join(fixture.state, "store.db"), []byte("state"), 0o600))
 
 	first, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), home, "job-1")
@@ -232,7 +232,7 @@ func TestHomeOnSecondVolumePlacesAtVolumeRoot(t *testing.T) {
 	}
 	home := volume.Dir(t, "home")
 	writeTree(t, home, projectFiles)
-	fixture := placementFixtureAt(t, filepath.Join(home, ".config", "paintedwolf"))
+	fixture := placementFixtureAt(t, filepath.Join(home, ".config", "paintedwolf"), nil)
 
 	first, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), home, "job-1")
 	testutil.FailErr(t, "first", err)
@@ -256,7 +256,7 @@ func TestRootsSpanningVolumesAreNotClonable(t *testing.T) {
 	other := t.TempDir()
 	writeTree(t, onVolume, map[string]string{"a.txt": "a"})
 	writeTree(t, other, map[string]string{"b.txt": "b"})
-	fixture := newPlacementFixture(t)
+	fixture := newPlacementFixture(t, nil)
 	roots := []projectroot.RootRef{
 		{ID: "primary", Path: onVolume, Label: "one", IsPrimary: true},
 		{ID: "second", Path: other, Label: "two"},
@@ -280,7 +280,7 @@ func TestUnwritableVolumeRootIsNotClonableAndWritesNothing(t *testing.T) {
 	writeTree(t, project, projectFiles)
 	volume.MakeReadOnly(t)
 	before := volumeListing(t, volume.Root)
-	fixture := newPlacementFixture(t)
+	fixture := newPlacementFixture(t, nil)
 
 	binding, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), project, "job")
 	testutil.FailErr(t, "create", err)
@@ -305,7 +305,7 @@ func TestSourceThatCannotCloneDeclaresCostBeforeCopying(t *testing.T) {
 	}
 	project := volume.Dir(t, "project")
 	want := writeTree(t, project, projectFiles)
-	fixture := newPlacementFixture(t)
+	fixture := newPlacementFixture(t, nil)
 	wantEntries := int64(entryCount(t, project))
 
 	var declared atomic.Pointer[PreparationProgress]
@@ -358,7 +358,7 @@ func TestDiskThatCannotHoldTheCopyRefusesWithTheNumbers(t *testing.T) {
 	}
 	project := volume.Dir(t, "project")
 	want := writeTree(t, project, projectFiles)
-	fixture := newPlacementFixture(t)
+	fixture := newPlacementFixture(t, nil)
 	previous := queryAvailableStorageBytes
 	queryAvailableStorageBytes = func(string) (uint64, bool, error) { return 16, true, nil }
 	t.Cleanup(func() { queryAvailableStorageBytes = previous })
@@ -384,7 +384,7 @@ func TestCancelledCopyReleasesOnlyItsOwnPreparation(t *testing.T) {
 	}
 	project := volume.Dir(t, "project")
 	writeTree(t, project, projectFiles)
-	fixture := newPlacementFixture(t)
+	fixture := newPlacementFixture(t, nil)
 	kept, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), project, "kept")
 	testutil.FailErr(t, "create kept", err)
 	keptEntries := entryCount(t, kept.Root)
@@ -419,10 +419,9 @@ func TestEjectedVolumeKeepsRecordsAndTheWorkerRecoversOnRemount(t *testing.T) {
 	if ran {
 		return
 	}
-	t.Cleanup(UseCopyAsCloneForTest())
 	project := volume.Dir(t, "project")
 	writeTree(t, project, projectFiles)
-	fixture := newPlacementFixture(t)
+	fixture := newPlacementFixture(t, testvolume.CopyAsClone)
 	binding, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), project, "job")
 	testutil.FailErr(t, "create", err)
 	if binding.Preparation.PlacementFolder == "" {
@@ -493,10 +492,9 @@ func TestPlacedBranchIsFoundByRetentionAndLifecycle(t *testing.T) {
 	if ran {
 		return
 	}
-	t.Cleanup(UseCopyAsCloneForTest())
 	project := volume.Dir(t, "project")
 	writeTree(t, project, projectFiles)
-	fixture := newPlacementFixture(t)
+	fixture := newPlacementFixture(t, testvolume.CopyAsClone)
 	binding, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), project, "job")
 	testutil.FailErr(t, "create", err)
 
@@ -544,10 +542,9 @@ func TestStateFolderTreeWinsOverAStaleRecordAfterRestore(t *testing.T) {
 	if ran {
 		return
 	}
-	t.Cleanup(UseCopyAsCloneForTest())
 	project := volume.Dir(t, "project")
 	writeTree(t, project, projectFiles)
-	fixture := newPlacementFixture(t)
+	fixture := newPlacementFixture(t, testvolume.CopyAsClone)
 	binding, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), project, "job")
 	testutil.FailErr(t, "create", err)
 	restored := fixture.mgr.jobRoot(project, "job")
@@ -585,7 +582,7 @@ func TestStateFolderTreeWinsOverAStaleRecordAfterRestore(t *testing.T) {
 func TestStateFolderOnSourceVolumeOutsideRootsKeepsTheBranch(t *testing.T) {
 	project := t.TempDir()
 	writeTree(t, project, projectFiles)
-	fixture := newPlacementFixture(t)
+	fixture := newPlacementFixture(t, nil)
 	binding, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), project, "job")
 	testutil.FailErr(t, "create", err)
 	if binding.Preparation.PlacementFolder != "" {
@@ -607,7 +604,7 @@ func TestUnreadableEntriesAreCountedAndAbsent(t *testing.T) {
 	testutil.FailErr(t, "close directory", os.Chmod(closed, 0))
 	testutil.FailErr(t, "lock file", os.Chmod(locked, 0))
 	t.Cleanup(func() { _ = os.Chmod(closed, 0o755) })
-	fixture := newPlacementFixture(t)
+	fixture := newPlacementFixture(t, nil)
 
 	binding, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), project, "job")
 	testutil.FailErr(t, "create", err)

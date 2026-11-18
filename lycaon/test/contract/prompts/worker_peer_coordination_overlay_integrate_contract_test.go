@@ -49,7 +49,7 @@ func TestPromoteAtomicResolutionContractP4(t *testing.T) {
 	}
 	testbaseline.RecordBranch(t, "root", dir, branch)
 	svc := &worker.MergeService{
-		Queue:  contractMergeQueue{task: task},
+		Queue: contractMergeQueue{task: task}, Branches: contractMergeQueue{task: task},
 		Reject: rejectFmt,
 	}
 	_, mergeErr := svc.PromoteOverlay(ctx, "parent-1", "job-shift", api.PromoteOverlayInput{

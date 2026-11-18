@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/turnguards"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
+	"github.com/lycaon/lycaon/internal/session/workerworkspace"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -17,9 +18,6 @@ type WorkerCycleLister interface {
 	ListBySession(ctx context.Context, projectID, sessionID string, status ...api.WorkerStatus) ([]api.WorkerTask, error)
 	ListPendingOutcomes(ctx context.Context) ([]api.WorkerTask, error)
 	Get(jobID string) (*api.WorkerTask, bool)
-	ClaimWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, error)
-	// ReviewsWorker reports a read job that reviews a sealed result.
-	ReviewsWorker(ctx context.Context, task *api.WorkerTask) bool
 }
 
 // SetWorkerRounds sets the policy that bounds worker rounds and their notices.
@@ -30,7 +28,7 @@ func (m *Host) SetWorkerRounds(policy spawn.RoundPolicy) {
 }
 
 // SetWorkerQueue wires the worker job ledger for coordinator worker-cycle guards.
-func (m *Host) SetWorkerQueue(q WorkerCycleLister) {
+func (m *Host) SetWorkerQueue(q WorkerCycleLister, branches workerworkspace.Branches) {
 	if m != nil {
 		m.Coordinator.Tools.Workers = q
 		m.Coordinator.Nudging.Workers = q
@@ -55,6 +53,7 @@ func (m *Host) SetWorkerQueue(q WorkerCycleLister) {
 		m.Workers.Summaries.SetTasks(q)
 		m.Workers.Results.SetWorkers(q)
 		m.Workers.Workspaces.SetTasks(q)
+		m.Workers.Workspaces.SetBranches(branches)
 		m.Coordinator.Guidance.SetWorkers(q)
 		m.Coordinator.ProgressClosure.SetTasks(q)
 		m.Coordinator.Loading.SetWorkers(q)

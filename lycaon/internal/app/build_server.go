@@ -92,7 +92,7 @@ func (b *serveBuilder) wireServer() error {
 			Sockets: b.security.Sockets, ChatGrants: chatGrantLedger(b.sessions.Checkpoints), Vault: b.security.Unlocks,
 		}}, Scans: api.ScansDependencies{
 		ScanCoordinator: b.scanning.Coordinator, ScannerRegistry: b.scanning.Registry, ScanCadence: b.scanning.Cadence,
-		GateRepeatLedger: b.sessions.GateRepeat, PublishDetections: b.security.Detections.Publish}, Workflow: api.WorkflowDependencies{
+		GateRepeatLedger: b.sessions.GateRepeat, PublishDetections: b.security.Detections.Publish}, Workflow: api.WorkflowDependencies{Branches: b.workerRuntime.Queue.Branches,
 		Workflows: b.workflows.Manager, WorkflowCatalog: b.workflows.Resolver,
 		WorkflowRuns: b.workflows.Store, WorkflowComposer: b.workflows.Composer, WorkflowPersister: b.workflows.Persister,
 		Blueprints: b.workflows.Blueprints, Orchestrator: b.server.Orchestrator, Workers: b.workerRuntime.Queue,
@@ -379,7 +379,7 @@ func (b *serveBuilder) wireOrchestrator() error {
 	workerOutcomes := &worker.SessionOutcomeBridge{Workers: b.sessions.Manager.Coordinator.Workers, Loop: b.sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges, Results: b.sessions.Manager.Workers.Results, State: b.sessions.Manager.Workers.State, Closure: b.sessions.Manager.Coordinator.ProgressClosure}
 	var executor worker.WorkerExecutor = b.workerRuntime.Executor
 	if configdir.IsHarnessChannel() {
-		scripted, err := harnessfixture.NewWorkers(b.storage.Directory, b.storage.Sessions, b.workerRuntime.Queue, b.sessions.Manager.Workers.Harness.Verify, b.sessions.Manager.Workers.Harness.Read, b.sessions.Decisions, b.workerRuntime.Executor)
+		scripted, err := harnessfixture.NewWorkers(b.storage.Directory, b.storage.Sessions, b.workerRuntime.Queue, b.workerRuntime.Queue.Branches, b.sessions.Manager.Workers.Harness.Verify, b.sessions.Manager.Workers.Harness.Read, b.sessions.Decisions, b.workerRuntime.Executor)
 		if err != nil {
 			return err
 		}
@@ -439,7 +439,7 @@ func (b *serveBuilder) quietRounds() *worker.QuietRounds {
 		Notify: b.sessions.Manager.Coordinator.Workers.RoundNotice,
 		After:  b.worker.cfg.RoundPolicy().QuietNoticeAfter,
 		Waiting: func(ctx context.Context, task *wire.WorkerTask) bool {
-			pending, err := workerops.PrerequisitePending(ctx, queries.LatestRoundJobForJob, b.workerRuntime.Queue, *task)
+			pending, err := workerops.PrerequisitePending(ctx, queries.LatestRoundJobForJob, b.workerRuntime.Queue.Get, *task)
 			return err == nil && pending
 		},
 	}
@@ -524,10 +524,10 @@ func wireDestinationConfig(b *serveBuilder) error {
 }
 
 func restoreWorkerDrafts(b *serveBuilder, ctx context.Context) error {
-	if b.workerRuntime == nil || b.workerRuntime.Queue == nil {
+	if b.workerRuntime == nil || b.workerRuntime.Promotions == nil {
 		return nil
 	}
-	pending, err := b.workerRuntime.Queue.ListPendingOverlays(ctx)
+	pending, err := b.workerRuntime.Promotions.ListPendingOverlays(ctx)
 	if err != nil {
 		return err
 	}

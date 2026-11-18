@@ -39,7 +39,7 @@ func TestPromoteOverlayLandsChangesOutsideSuggestedPaths(t *testing.T) {
 	}
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  &mergeStoreStub{},
 		Reject: mergeRejectFmt(t),
@@ -84,7 +84,7 @@ func TestPromoteOverlayFolderDrop(t *testing.T) {
 	}
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  &mergeStoreStub{},
 		Reject: mergeRejectFmt(t),

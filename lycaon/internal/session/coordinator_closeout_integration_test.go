@@ -29,8 +29,8 @@ func requireWorkflowCloseoutRejection(t *testing.T, resp *promptresult.Result, e
 func TestLegFinishedQueuesKickAndAutoPrompts(t *testing.T) {
 	fix := setupLoopFixture(t, settings.DefaultSessionLimits())
 	ctx := context.Background()
-	queue := worker.NewSQLQueue(fix.store.DB(), 4)
-	fix.mgr.SetWorkerQueue(queue)
+	queue := worker.NewSQLServices(fix.store.DB(), 4).Queue
+	fix.mgr.SetWorkerQueue(queue, queue.Branches)
 	child, err := fix.store.CreateChild(ctx, fix.sess, wire.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
 	testutil.FailErr(t, "create child", err)
 	jobID, err := queue.Enqueue(ctx, wire.WorkerTask{

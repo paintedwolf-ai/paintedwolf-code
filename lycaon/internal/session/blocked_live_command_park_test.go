@@ -97,7 +97,7 @@ func TestBranchWorkspaceRejectsMissingMeta(t *testing.T) {
 	testutil.FailErr(t, "mkdir project", os.MkdirAll(dir, 0o755))
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "only.txt"), []byte("x"), 0o644))
 	roots := []projectroot.RootRef{{ID: "p", Label: "root", Path: dir, IsPrimary: true}}
-	mgr := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}))
+	mgr := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}), nil)
 	binding, _, err := mgr.CreateWorkerWorkspaceFromSources(context.Background(), roots, roots, "p", "job-meta")
 	testutil.FailErr(t, "CreateWorkerWorkspaceFromSources", err)
 	testutil.FailErr(t, "remove meta", os.RemoveAll(enginepaths.MetaDirForBranchRoot(binding.Root)))
@@ -119,7 +119,7 @@ func TestBranchWorkspaceRejectsInvalidMultiRootPath(t *testing.T) {
 		{ID: "primary", Label: "app", Path: primary, IsPrimary: true},
 		{ID: "secondary", Label: "docs", Path: secondary},
 	}
-	mgr := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}))
+	mgr := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}), nil)
 	binding, _, err := mgr.CreateWorkerWorkspaceFromSources(context.Background(), roots, roots, "primary", "job-roots")
 	testutil.FailErr(t, "create branch", err)
 	branch, err := newBranchWorkspace(binding.Root)
@@ -139,7 +139,7 @@ func TestEnsureWorkerBranchRestoresPrimaryReadDeniesFromMetadata(t *testing.T) {
 	testutil.FailErr(t, "mkdir primary", os.MkdirAll(primary, 0o755))
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(primary, "module.py"), []byte("value = 1\n"), 0o644))
 	roots := []projectroot.RootRef{{ID: "primary", Label: "app", Path: primary, IsPrimary: true}}
-	workspaceManager := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}))
+	workspaceManager := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}), nil)
 	binding, _, err := workspaceManager.CreateWorkerWorkspaceFromSources(
 		context.Background(), roots, roots, "primary", "job-read-deny",
 	)
@@ -170,12 +170,6 @@ func (j jobLister) ListBySession(_ context.Context, _, sessionID string, _ ...ap
 }
 func (jobLister) ListPendingOutcomes(context.Context) ([]api.WorkerTask, error) { return nil, nil }
 func (jobLister) Get(string) (*api.WorkerTask, bool)                            { return nil, false }
-func (jobLister) ReviewsWorker(context.Context, *api.WorkerTask) bool           { return false }
-
-func (jobLister) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error) {
-	return nil, nil
-}
-
 func TestCloseoutEvidenceListsDispatchedLegsSinceTheIntent(t *testing.T) {
 	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
@@ -188,7 +182,7 @@ func TestCloseoutEvidenceListsDispatchedLegsSinceTheIntent(t *testing.T) {
 		{ID: "plain", ParentSessionID: parent.ID, ChildSessionID: "child-plain", CreatedAt: intent.Add(2 * time.Minute)},
 		{ID: "pending", ParentSessionID: parent.ID, CreatedAt: intent.Add(3 * time.Minute)},
 		{ID: "other", ParentSessionID: "someone-else", ChildSessionID: "child-other", CreatedAt: intent.Add(time.Minute)},
-	}})
+	}}, nil)
 
 	legs, err := mgr.Verification.Evidence.WorkerLegs(t.Context(), parent.ID, intent)
 	testutil.FailErr(t, "worker legs", err)
@@ -225,14 +219,14 @@ func TestWorkflowEvidenceSurvivesLaterUserMessagesAndCompaction(t *testing.T) {
 		{ID: "original", ParentSessionID: parent.ID, ChildSessionID: child.ID, AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, CreatedAt: before},
 		{ID: "unrelated", ParentSessionID: parent.ID, ChildSessionID: "other", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, WorkflowRunID: "another-run", CreatedAt: before.Add(time.Hour)},
 	}
-	mgr.SetWorkerQueue(jobLister{tasks: tasks})
+	mgr.SetWorkerQueue(jobLister{tasks: tasks}, nil)
 	legs, err := mgr.Verification.Evidence.WorkerLegs(t.Context(), parent.ID, before.Add(time.Minute))
 	testutil.FailErr(t, "read run evidence", err)
 	if len(legs) != 1 || legs[0].ChildSessionID != child.ID {
 		t.Fatalf("run evidence = %+v", legs)
 	}
 	tasks = append(tasks, api.WorkerTask{ID: "previous-phase", ParentSessionID: parent.ID, ChildSessionID: "earlier-phase-child", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, WorkflowRunID: run.ID, WorkflowPhase: "claims", CreatedAt: before})
-	mgr.SetWorkerQueue(jobLister{tasks: tasks})
+	mgr.SetWorkerQueue(jobLister{tasks: tasks}, nil)
 	reviewers, err := mgr.Coordinator.Closeout.ReviewerEvidence(t.Context(), parent.ID, []api.Message{{Role: api.MessageRoleUser, CreatedAt: before.Add(time.Minute)}}, []string{"skeptic"})
 	testutil.FailErr(t, "read reviewers without summaries", err)
 	if len(reviewers) != 1 || len(reviewers[0].LegIDs) != 1 || reviewers[0].LegIDs[0] != child.ID {
@@ -361,7 +355,6 @@ func TestRecentSiblingNotesExcludesPriorRunFindings(t *testing.T) {
 }
 
 type stubSiblingTaskQueue struct {
-	noopWorkerBranchClaim
 	byChild map[string]*api.WorkerTask
 }
 

@@ -168,7 +168,7 @@ func verifiedOverlayService(t *testing.T, workspaces *workerworkspace.Service) *
 	}
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue:  &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
 		Reports: worker.ChangeReportDeps{
 			Messages: func(context.Context, string) ([]api.Message, error) {
@@ -242,7 +242,7 @@ func TestPreviewForSessionPublishesUnmetEvidence(t *testing.T) {
 	}
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue:    &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject:   mergeRejectFmt(t),
 		Evidence: worker.SourceEvidenceContext{Workspaces: workerworkspace.New(nil, nil, nil)},
 	}
@@ -276,7 +276,7 @@ func TestPromoteOverlayPromotesAndClears(t *testing.T) {
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	store := &mergeStoreStub{}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  store,
 		Reject: mergeRejectFmt(t),
@@ -325,7 +325,7 @@ func TestPromoteOverlayRemovesDeletedPath(t *testing.T) {
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	store := &mergeStoreStub{}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  store,
 		Reject: mergeRejectFmt(t),
@@ -363,7 +363,7 @@ func TestPromoteOverlayAppliesExplicitConflictResolution(t *testing.T) {
 	}
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  &mergeStoreStub{},
 		Reject: mergeRejectFmt(t),
@@ -398,7 +398,7 @@ func TestPromoteOverlayWritesResolvedContent(t *testing.T) {
 	}
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  &mergeStoreStub{},
 		Reject: mergeRejectFmt(t),
@@ -442,7 +442,7 @@ func TestPromoteOverlayAppliesCleanAndResolvedPathsTogether(t *testing.T) {
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	store := &mergeStoreStub{}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  store,
 		Reject: mergeRejectFmt(t),
@@ -481,7 +481,7 @@ func TestPreviewForSessionReportsConflicts(t *testing.T) {
 	}
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Reject: mergeRejectFmt(t),
 	}
@@ -503,7 +503,7 @@ func TestPromoteOverlayRejectsWrongSession(t *testing.T) {
 		Scope:           &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"x.go"}},
 	}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Reject: mergeRejectFmt(t),
 	}
@@ -538,7 +538,7 @@ func TestPromoteOverlayMergesVacuousBranch(t *testing.T) {
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	store := &mergeStoreStub{}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  store,
 		Reject: mergeRejectFmt(t),
@@ -588,7 +588,7 @@ func TestPromoteOverlayInvalidResolutionLeavesCleanPathsUntouched(t *testing.T) 
 	ctx, dir, task := lineShiftMergeFixture(t)
 	dataDir := t.TempDir()
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Reject:  mergeRejectFmt(t),
 		DataDir: dataDir,
@@ -627,7 +627,7 @@ func (n mergeNamesStub) NamesByJob(_ context.Context, jobID string) (workerrecor
 func TestRejectOverlayNotPendingNamesTheResult(t *testing.T) {
 	task := &api.WorkerTask{ID: "job-9", ParentSessionID: "parent-1", MergeStatus: api.WorkerMergeStatusMerged}
 	svc := &worker.MergeService{
-		Queue:  &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
 		Names:  mergeNamesStub{"job-9": {Worker: "parser-fix", Handle: "result-9"}},
 	}

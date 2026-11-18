@@ -205,7 +205,6 @@ func TestSourceRewindResolvesEachRootAndRenamedFile(t *testing.T) {
 }
 
 type stubProjectWorkerLister struct {
-	noopWorkerBranchClaim
 	tasks []api.WorkerTask
 }
 
@@ -279,7 +278,7 @@ func TestRootDependentsInFlightWorkerAndBusySession(t *testing.T) {
 		WorkspacePath:   dir,
 		AgentType:       "implementer",
 		Status:          api.WorkerStatusRunning,
-	}}})
+	}}}, nil)
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)

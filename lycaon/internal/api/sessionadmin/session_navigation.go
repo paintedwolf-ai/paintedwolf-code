@@ -115,7 +115,7 @@ func (s *Navigation) ResolveNavigationJob(ctx context.Context, p *project.Projec
 		}
 		return out
 	}
-	_, lease, err := s.Workers.EnsureWorkerBranch(ctx, jobID)
+	_, lease, err := s.Branches.EnsureWorkerBranch(ctx, jobID)
 	if err != nil || lease == nil {
 		return unavailable()
 	}

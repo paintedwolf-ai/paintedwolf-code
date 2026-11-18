@@ -35,7 +35,7 @@ func TestPreviewForSessionHunksOmitsFullBodies(t *testing.T) {
 	}
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue:  &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
 	}
 	out, err := svc.PreviewForSession(ctx, "parent-1", "job-hunks", "hunks", []string{"d.go"})
@@ -83,7 +83,7 @@ func TestPreviewForSessionIncludesOverlayIntent(t *testing.T) {
 	}
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue:  &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
 	}
 	out, err := svc.PreviewForSession(ctx, "parent-1", "job-intent", "hunks", nil)
@@ -117,7 +117,7 @@ func TestPreviewForSessionFullIncludesBodies(t *testing.T) {
 	}
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue:  &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
 	}
 	out, err := svc.PreviewForSession(ctx, "parent-1", "job-full", "full", []string{"d.go"})

@@ -120,7 +120,7 @@ func (f *engineFixture) boot() *Runtime {
 	engine.Recovery = coordinator
 	f.engine = engine
 	f.bindWorkspace(f.selector)
-	engine.Queue.SetBaselineStore(sourceledger.New(f.database, filepath.Join(f.dataRoot, "source-content")).Baselines)
+	engine.Queue.Branches.SetBaselineStore(sourceledger.New(f.database, filepath.Join(f.dataRoot, "source-content")).Baselines)
 	return engine
 }
 
@@ -129,8 +129,8 @@ func (f *engineFixture) bindWorkspace(selector *adapter.Selector) {
 	if selector == nil {
 		selector = platform.NewSelector(platform.Config{})
 	}
-	f.engine.Workspace = workspace.NewManager(f.engine.BranchRoot, selector).WithRecovery(f.engine.Recovery)
-	f.engine.Queue.SetWorkerWorkspaceManager(f.engine.Workspace)
+	f.engine.Workspace = workspace.NewManager(f.engine.BranchRoot, selector, nil).WithRecovery(f.engine.Recovery)
+	f.engine.Queue.Branches.SetWorkerWorkspaceManager(f.engine.Workspace)
 }
 
 // mountedSelector makes the ordinary claim path prepare a mounted view without a kernel mount.
@@ -162,7 +162,7 @@ func (f *engineFixture) claimMountedWorker() *api.WorkerTask {
 	testutil.FailErr(f.t, "enqueue", err)
 	claimed, err := f.engine.Queue.ClaimNext(ctx, worker.ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(f.t, "claim next", err)
-	claimed, err = f.engine.Queue.ClaimWorkerBranch(ctx, claimed.ID)
+	claimed, err = f.engine.Queue.Branches.ClaimWorkerBranch(ctx, claimed.ID)
 	testutil.FailErr(f.t, "claim branch", err)
 	if claimed.ID != id || claimed.WorkspaceRoot == "" {
 		f.t.Fatalf("claimed %+v", claimed)
@@ -258,7 +258,7 @@ func (f *engineFixture) claimDefaultWorker() *api.WorkerTask {
 	testutil.FailErr(f.t, "enqueue", err)
 	claimed, err := f.engine.Queue.ClaimNext(ctx, worker.ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(f.t, "claim next", err)
-	claimed, err = f.engine.Queue.ClaimWorkerBranch(ctx, claimed.ID)
+	claimed, err = f.engine.Queue.Branches.ClaimWorkerBranch(ctx, claimed.ID)
 	testutil.FailErr(f.t, "claim branch", err)
 	return claimed
 }

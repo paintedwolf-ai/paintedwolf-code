@@ -31,6 +31,7 @@ import (
 )
 
 type Deps struct {
+	Branches     worker.WorkerBranches
 	Git          *gitadmin.Handler
 	MutationGate *project.MutationGate
 	// CatalogSnapshot and WatchNeedsSeed replace the process source catalog
@@ -204,6 +205,7 @@ type Watch struct {
 }
 
 type Workspace struct {
+	Branches        worker.WorkerBranches
 	ManagedSecrets  *secretcap.Service
 	MutationGate    *project.MutationGate
 	ProjectRegistry project.Registry
@@ -237,6 +239,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 		httpio.Required{Name: "SourceLedger", Present: deps.SourceLedger != nil},
 		httpio.Required{Name: "SourceMutations", Present: deps.SourceMutations != nil},
 		httpio.Required{Name: "Workers", Present: deps.Workers != nil},
+		httpio.Required{Name: "Branches", Present: deps.Branches != nil},
 	)
 	hub := deps.Events
 	deps.FileOperations.Observe(func(request fileops.Request) { publishSourceRequest(hub, request) })
@@ -258,7 +261,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	h.Trees = &Trees{ProjectRegistry: deps.ProjectRegistry, SourceLedger: deps.SourceLedger, background: background, responses: responses, sourceViews: sourceViews}
 	h.Views = &Views{Events: deps.Events, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, background: background, responses: responses, sourceReaders: sourceReaders, sourceViews: sourceViews}
 	h.Watch = &Watch{CatalogSnapshot: deps.CatalogSnapshot, EditorDocuments: deps.EditorDocuments, ProjectRegistry: deps.ProjectRegistry, ScanCadence: deps.ScanCadence, SourceInventory: deps.SourceInventory, WatchNeedsSeed: deps.WatchNeedsSeed, background: background, responses: responses, sourceWatchJobs: make(map[string]*sourceWatchJob)}
-	h.Workspace = &Workspace{ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, Workers: deps.Workers, responses: responses}
+	h.Workspace = &Workspace{Branches: deps.Branches, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, Workers: deps.Workers, responses: responses}
 	h.Analysis.Workspace = h.Workspace
 	h.ComparisonViews.Comparisons = h.Comparisons
 	h.ComparisonViews.Views = h.Views

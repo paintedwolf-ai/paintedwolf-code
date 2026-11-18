@@ -24,7 +24,8 @@ func TestBeginMergeApplyClaimsPendingOnce(t *testing.T) {
 	ctx := context.Background()
 	sqlDB := testdbfixture.Open(t, "store.db")
 	store := NewSQLStore(sqlDB)
-	q := NewSQLQueue(sqlDB, 8)
+	qServices := NewSQLServices(sqlDB, 8)
+	q := qServices.Queue
 	dir := t.TempDir()
 	testdbseed.InsertSessionWithRoot(t, sqlDB, "parent-1", testdbseed.DefaultProjectID, dir)
 	id, err := q.Enqueue(ctx, api.WorkerTask{
@@ -42,14 +43,14 @@ func TestBeginMergeApplyClaimsPendingOnce(t *testing.T) {
 	if !bound {
 		t.Fatal("expected workspace root CAS to win on an unbound job")
 	}
-	testutil.FailErr(t, "SetMergeStatus", q.SetMergeStatus(ctx, id, api.WorkerMergeStatusPending))
+	testutil.FailErr(t, "SetMergeStatus", qServices.Promotions.SetMergeStatus(ctx, id, api.WorkerMergeStatusPending))
 
-	token, ok, err := q.BeginMergeApply(ctx, id)
+	token, ok, err := qServices.Promotions.BeginMergeApply(ctx, id)
 	testutil.FailErr(t, "BeginMergeApply first", err)
 	if !ok || token == "" {
 		t.Fatalf("expected first claim with token, got ok=%v token=%q", ok, token)
 	}
-	_, ok, err = q.BeginMergeApply(ctx, id)
+	_, ok, err = qServices.Promotions.BeginMergeApply(ctx, id)
 	testutil.FailErr(t, "BeginMergeApply second", err)
 	if ok {
 		t.Fatal("expected second claim to fail while applying")
@@ -134,7 +135,7 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 			trunkUpdated := "package app\n\nfunc A() int { return 10 }\n\nfunc B() int { return 2 }\n"
 			testutil.FailErr(t, "write trunk update", os.WriteFile(filepath.Join(primary, "app.go"), []byte(trunkUpdated), 0o644))
 
-			svc := &MergeService{Queue: q, Store: q, DataDir: t.TempDir()}
+			svc := &MergeService{Queue: q, Branches: q.Branches, Store: fixture.promotions, DataDir: t.TempDir()}
 			previewOut, err := svc.PreviewForSession(ctx, "parent-cp", jobID, "summary", nil)
 			testutil.FailErr(t, "PreviewForSession", err)
 			if len(previewOut.CleanPaths) != 3 {
@@ -296,6 +297,7 @@ func requirePromotedEffects(t *testing.T, fixture publishedCheckpointWorker, che
 }
 
 type publishedCheckpointWorker struct {
+	promotions                                *PromotionStore
 	db                                        *db.Store
 	queue                                     *SQLQueue
 	primary, jobID, workerContent, featureOID string
@@ -312,7 +314,8 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 	ctx := t.Context()
 	sqlDB := testdbfixture.Open(t, "store.db")
 	sqlStore := NewSQLStore(sqlDB)
-	q := NewSQLQueue(sqlDB, 8)
+	qServices := NewSQLServices(sqlDB, 8)
+	q := qServices.Queue
 	primary := t.TempDir()
 	testdbseed.InsertSessionWithRoot(t, sqlDB, "parent-cp", testdbseed.DefaultProjectID, primary)
 
@@ -388,10 +391,21 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 
 	_, err = sqlStore.SetWorkerWorkspace(ctx, jobID, overlay, baselinePath)
 	testutil.FailErr(t, "SetWorkerWorkspace", err)
-	testutil.FailErr(t, "SetMergeStatus", q.SetMergeStatus(ctx, jobID, api.WorkerMergeStatusPending))
+	testutil.FailErr(t, "SetMergeStatus", qServices.Promotions.SetMergeStatus(ctx, jobID, api.WorkerMergeStatusPending))
 
 	// Tear down the active worker view directory completely after checkpoint publication.
 	testutil.FailErr(t, "RemoveAll overlay view", os.RemoveAll(overlay))
 
-	return publishedCheckpointWorker{overlay: overlay, db: sqlDB, queue: q, primary: primary, jobID: jobID, workerContent: workerContent, featureOID: featureOID, store: cpStore, core: core, path: lp, publisher: pub, manifest: manifest}
+	return publishedCheckpointWorker{overlay: overlay, db: sqlDB, queue: q, promotions: qServices.Promotions, primary: primary, jobID: jobID, workerContent: workerContent, featureOID: featureOID, store: cpStore, core: core, path: lp, publisher: pub, manifest: manifest}
+}
+
+func TestPromotionMutationsRequirePersistence(t *testing.T) {
+	for _, store := range []*PromotionStore{nil, {}} {
+		if err := store.SetMergeStatus(t.Context(), "job", api.WorkerMergeStatusRejected); err == nil {
+			t.Fatal("promotion state mutation accepted absent persistence")
+		}
+		if err := store.ClearWorkerWorkspace(t.Context(), "job"); err == nil {
+			t.Fatal("workspace metadata mutation accepted absent persistence")
+		}
+	}
 }

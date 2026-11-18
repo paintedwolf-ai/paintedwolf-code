@@ -25,7 +25,8 @@ func TestPrerequisitesWaitForPromotedSuccessfulOutput(t *testing.T) {
 
 	database := testdbfixture.Open(t, "workers.db")
 	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
-	queue := NewSQLQueue(database, 2)
+	queueServices := NewSQLServices(database, 2)
+	queue := queueServices.Queue
 	q = queue
 	transition = func(id, status string, merge api.WorkerMergeStatus) {
 		_, err := database.ExecContext(t.Context(), `UPDATE worker_jobs SET status='complete', result_json=json_object('status',?), merge_status=? WHERE id=?`, status, string(merge), id)
@@ -116,9 +117,9 @@ func TestConsumerCapturesPrimaryAfterProducerPromotion(t *testing.T) {
 	p, err := projects.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: canonical, Label: "app"}}})
 	testutil.FailErr(t, "create project", err)
 	testdbseed.InsertSession(t, database, "parent", p.ID)
-	q := NewSQLQueue(database, 2)
-	q.SetProjectStore(projects)
-	q.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(db.DataDir(q.db), "worker-branches"), platform.NewSelector(platform.Config{})))
+	q := newTestQueueOnDatabase(database, 2)
+	q.Branches.SetProjectStore(projects)
+	q.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(db.DataDir(q.db), "worker-branches"), platform.NewSelector(platform.Config{}), nil))
 	producer := api.WorkerTask{ProjectID: p.ID, WorkspaceRootID: p.Roots[0].ID, WorkspacePath: canonical, ParentSessionID: "parent", AgentType: "implementer", Prompt: "produce", Brief: "produce", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}
 	id, err := q.Enqueue(t.Context(), producer)
 	testutil.FailErr(t, "enqueue producer", err)
@@ -126,13 +127,13 @@ func TestConsumerCapturesPrimaryAfterProducerPromotion(t *testing.T) {
 	consumer.AfterWorkers = []string{id}
 	cid, err := q.Enqueue(t.Context(), consumer)
 	testutil.FailErr(t, "enqueue consumer", err)
-	if _, err := q.ClaimWorkerBranch(t.Context(), cid); !errors.Is(err, ErrWorkerPrerequisitesPending) {
+	if _, err := q.Branches.ClaimWorkerBranch(t.Context(), cid); !errors.Is(err, ErrWorkerPrerequisitesPending) {
 		t.Fatalf("premature snapshot: %v", err)
 	}
 	testutil.FailErr(t, "land producer output", os.WriteFile(filepath.Join(canonical, "producer.go"), []byte("package producer\n"), 0600))
 	_, err = q.db.ExecContext(t.Context(), `UPDATE worker_jobs SET status='complete', result_json='{"status":"complete"}', merge_status='merged' WHERE id=?`, id)
 	testutil.FailErr(t, "complete promoted producer", err)
-	branch, err := q.ClaimWorkerBranch(t.Context(), cid)
+	branch, err := q.Branches.ClaimWorkerBranch(t.Context(), cid)
 	testutil.FailErr(t, "snapshot ready consumer", err)
 	body, err := os.ReadFile(filepath.Join(branch.WorkspaceRoot, "producer.go"))
 	testutil.FailErr(t, "read producer module in consumer", err)
@@ -140,7 +141,7 @@ func TestConsumerCapturesPrimaryAfterProducerPromotion(t *testing.T) {
 		t.Fatalf("consumer snapshot: %q", body)
 	}
 	testutil.FailErr(t, "later primary edit", os.WriteFile(filepath.Join(canonical, "producer.go"), []byte("package later\n"), 0600))
-	again, err := q.ClaimWorkerBranch(t.Context(), cid)
+	again, err := q.Branches.ClaimWorkerBranch(t.Context(), cid)
 	testutil.FailErr(t, "reuse consumer snapshot", err)
 	body, err = os.ReadFile(filepath.Join(again.WorkspaceRoot, "producer.go"))
 	testutil.FailErr(t, "read stable snapshot", err)
@@ -152,7 +153,8 @@ func TestConsumerCapturesPrimaryAfterProducerPromotion(t *testing.T) {
 func TestProducerPromotionPublishesConsumerReadiness(t *testing.T) {
 	database := testdbfixture.Open(t, "events.db")
 	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
-	queue := NewSQLQueue(database, 2)
+	queueServices := NewSQLServices(database, 2)
+	queue := queueServices.Queue
 	queue.SetEventOutbox(eventoutbox.New(database, nil))
 	producer := api.WorkerTask{WorkspacePath: t.TempDir(), ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, Prompt: "produce", Brief: "produce", AgentType: "implementer", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}
 	id, err := queue.Enqueue(t.Context(), producer)
@@ -163,7 +165,7 @@ func TestProducerPromotionPublishesConsumerReadiness(t *testing.T) {
 	testutil.FailErr(t, "enqueue consumer", err)
 	_, err = database.ExecContext(t.Context(), `UPDATE worker_jobs SET status='complete', result_json='{"status":"complete"}' WHERE id=?`, id)
 	testutil.FailErr(t, "complete producer", err)
-	testutil.FailErr(t, "promote producer", queue.SetMergeStatus(t.Context(), id, api.WorkerMergeStatusMerged))
+	testutil.FailErr(t, "promote producer", queueServices.Promotions.SetMergeStatus(t.Context(), id, api.WorkerMergeStatusMerged))
 	var state string
 	err = database.QueryRowContext(t.Context(), `SELECT json_extract(data_json,'$.dependencies[0].state') FROM event_outbox WHERE topic='worker' AND facet=? ORDER BY id DESC LIMIT 1`, cid).Scan(&state)
 	testutil.FailErr(t, "read consumer event", err)

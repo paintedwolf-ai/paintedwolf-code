@@ -126,10 +126,11 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 		MountReconciler: recovery.ConnectionReconciler{Recoveries: platform.ConnectionRecoveries()},
 	})
 	testutil.FailErr(t, "open recovery coordinator", err)
-	manager := workspace.NewManager(branches, selector).WithPrivateGit(gitManager).WithRecovery(coordinator)
-	queue := NewSQLQueue(database, 4)
-	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(root, "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(manager)
+	manager := workspace.NewManager(branches, selector, nil).WithPrivateGit(gitManager).WithRecovery(coordinator)
+	queueServices := NewSQLServices(database, 4)
+	queue := queueServices.Queue
+	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(root, "source-content")).Baselines)
+	queue.Branches.SetWorkerWorkspaceManager(manager)
 	fixture := &layeredWorkerFixture{db: database, queue: queue, manager: manager, source: source, branches: branches}
 	if phase == "prepare" {
 		runPrepareLifecyclePhase(t, fixture, root, mounted, trace)
@@ -165,7 +166,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	if !ok {
 		t.Fatal("restart lost worker")
 	}
-	task, lease, err := queue.EnsureWorkerBranch(t.Context(), fields[0])
+	task, lease, err := queue.Branches.EnsureWorkerBranch(t.Context(), fields[0])
 	testutil.FailErr(t, "lease recovered worker branch", err)
 	cleaned := false
 	t.Cleanup(func() {
@@ -188,7 +189,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	if string(base) != "package main\n" {
 		t.Fatalf("retained base = %q", base)
 	}
-	service := &MergeService{Queue: queue, Store: queue, DataDir: testbaseline.DataDir(t, database), Workspace: manager}
+	service := &MergeService{Queue: queue, Branches: queue.Branches, Store: queueServices.Promotions, DataDir: testbaseline.DataDir(t, database), Workspace: manager}
 	testutil.FailErr(t, "recover merge transactions", service.RecoverOrphanedMergeApplies(t.Context()))
 	if sourceConflict {
 		assertRecoveredSourceConflict(t, service, task, source, manifest.CheckpointID, fields[1])

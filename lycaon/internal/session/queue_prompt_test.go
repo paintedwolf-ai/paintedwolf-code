@@ -23,7 +23,6 @@ import (
 )
 
 type queueRoundWorkerQueue struct {
-	noopWorkerBranchClaim
 	jobs []api.WorkerTask
 }
 
@@ -429,7 +428,7 @@ func TestMixedContentReceiptWaitsForPriorWorkerCycle(t *testing.T) {
 	mgr.SetWorkerQueue(&queueRoundWorkerQueue{jobs: []api.WorkerTask{{
 		ID: "job-1", ParentSessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: dir, Status: api.WorkerStatusRunning,
-	}}})
+	}}}, nil)
 	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "mixed", promptinput.Input{
 		Text: "inspect image", ArtifactIDs: []string{"artifact-1"},
 	})
@@ -458,7 +457,7 @@ func TestQueueableReceiptJoinsDraftWhilePriorWorkerCycleRuns(t *testing.T) {
 	mgr.SetWorkerQueue(&queueRoundWorkerQueue{jobs: []api.WorkerTask{{
 		ID: "job-1", ParentSessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: dir, Status: api.WorkerStatusRunning,
-	}}})
+	}}}, nil)
 	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "next", promptinput.Input{Text: "run next"})
 	testutil.FailErr(t, "admit prompt", err)
 
@@ -486,7 +485,7 @@ func TestQueueRoundCompleteRequiresIdleWorkerCycle(t *testing.T) {
 	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
 
 	workers := &queueRoundWorkerQueue{}
-	mgr.SetWorkerQueue(workers)
+	mgr.SetWorkerQueue(workers, nil)
 
 	if !mgr.Admission.RoundComplete(ctx, sess.ID) {
 		t.Fatal("expected complete with no workers")

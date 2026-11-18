@@ -28,7 +28,7 @@ func (f *workerToolsFixture) changeStates(t *testing.T) map[string]workerrecords
 // still runs, the rejection is refused.
 func TestRejectionReachesLaterRoundsOfTheLane(t *testing.T) {
 	f := newWorkerToolsFixture(t)
-	merge := &MergeService{Queue: f.queue, Store: f.queue, DataDir: t.TempDir()}
+	merge := &MergeService{Queue: f.queue, Branches: f.queue.Branches, Store: f.promotions, DataDir: t.TempDir()}
 	f.deliverWith(t, "job-1", "checkpoint-1")
 	f.deliverWith(t, "job-2", "checkpoint-2")
 	f.deliverWith(t, "job-3", "")

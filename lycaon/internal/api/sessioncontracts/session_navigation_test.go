@@ -66,7 +66,7 @@ func TestMessageNavigationUsesWorkerTree(t *testing.T) {
 	testutil.FailErr(t, "branch metadata", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{
 		Roots: []workspace.JobMetaRoot{{ID: "r", Label: "r", Path: primary, IsPrimary: true}}, SnapshotComplete: true,
 	}))
-	queue := worker.NewSQLQueue(database, 1)
+	queue := worker.NewSQLServices(database, 1).Queue
 	jobID := contractfixture.EnqueueBranchJob(t, queue, database, "p", branch)
 	server := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) { d.Workflow.Workers = queue }).Admin.SessionAdmin.Navigation
 	p := &project.Project{ID: "p", Roots: []project.Root{{ID: "r", Path: primary, IsPrimary: true}}}

@@ -23,7 +23,7 @@ func TestSQLQueueParksAndResumesWorkerWait(t *testing.T) {
 			database := testdbfixture.Open(t, "store.db")
 			testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)
 			testdbseed.InsertSession(t, database, "child-1", testdbseed.DefaultProjectID)
-			queue := NewSQLQueue(database, 1)
+			queue := NewSQLServices(database, 1).Queue
 			jobID, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 				ParentSessionID: "parent-1", ProjectID: testdbseed.DefaultProjectID,
 				AgentType: "implementer", Prompt: "wait for service", Brief: "Wait for service",
@@ -89,7 +89,7 @@ func TestSQLQueueExpiresWorkerWaitDeadlineAtomically(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, database, "child-1", testdbseed.DefaultProjectID)
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	jobID, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		ParentSessionID: "parent-1", ProjectID: testdbseed.DefaultProjectID,
 		AgentType: "implementer", Prompt: "wait", Brief: "Wait", ExecutionTarget: api.ExecutionTargetLocal,
@@ -126,7 +126,7 @@ func TestSQLQueueCanceledWaitCannotResume(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, database, "child-1", testdbseed.DefaultProjectID)
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	jobID, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		ParentSessionID: "parent-1", ProjectID: testdbseed.DefaultProjectID,
 		AgentType: "implementer", Prompt: "wait for service", Brief: "Wait for service",

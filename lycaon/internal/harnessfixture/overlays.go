@@ -136,7 +136,7 @@ func validateFiles(files map[string]string) error {
 // poller cannot claim these jobs; their ordinary overlay lifecycle remains intact.
 type VerifyWorker func(context.Context, *api.Session, *api.WorkerTask, string) (*tools.SourceRunCapture, error)
 
-func Prepare(ctx context.Context, queue worker.WorkerQueue, sessions session.Store, parent *api.Session, root project.Root, setup Setup, verify VerifyWorker) (Evidence, error) {
+func Prepare(ctx context.Context, queue worker.WorkerQueue, branches *worker.BranchService, sessions session.Store, parent *api.Session, root project.Root, setup Setup, verify VerifyWorker) (Evidence, error) {
 	if err := setup.Validate(); err != nil {
 		return Evidence{}, err
 	}
@@ -156,7 +156,7 @@ func Prepare(ctx context.Context, queue worker.WorkerQueue, sessions session.Sto
 	}
 	evidence := Evidence{Overlays: []PreparedOverlay{}}
 	for _, overlay := range setup.Overlays {
-		prepared, err := prepareOverlay(ctx, queue, sessions, parent, root, overlay, verify)
+		prepared, err := prepareOverlay(ctx, queue, branches, sessions, parent, root, overlay, verify)
 		if err != nil {
 			return evidence, err
 		}
@@ -170,7 +170,7 @@ func Prepare(ctx context.Context, queue worker.WorkerQueue, sessions session.Sto
 	return evidence, replaceFiles(root.Path, setup.IntegrationFiles)
 }
 
-func prepareOverlay(ctx context.Context, queue worker.WorkerQueue, sessions session.Store, parent *api.Session, root project.Root, overlay Overlay, verify VerifyWorker) (PreparedOverlay, error) {
+func prepareOverlay(ctx context.Context, queue worker.WorkerQueue, branches *worker.BranchService, sessions session.Store, parent *api.Session, root project.Root, overlay Overlay, verify VerifyWorker) (PreparedOverlay, error) {
 	id := uuid.NewString()
 	paths := sortedPaths(overlay.Files)
 	child, err := enqueueFixtureWorker(ctx, queue, sessions, parent, root, overlay, id, paths)
@@ -184,7 +184,7 @@ func prepareOverlay(ctx context.Context, queue worker.WorkerQueue, sessions sess
 	if claimed.ID != id {
 		return PreparedOverlay{}, fmt.Errorf("fixture claimed an unexpected worker")
 	}
-	branch, err := queue.ClaimWorkerBranch(ctx, id)
+	branch, err := branches.ClaimWorkerBranch(ctx, id)
 	if err != nil {
 		return PreparedOverlay{}, err
 	}

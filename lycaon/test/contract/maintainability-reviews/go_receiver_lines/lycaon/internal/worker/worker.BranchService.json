@@ -1,0 +1,17 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/worker/worker.BranchService",
+  "kind": "runtime_service",
+  "workstream": "worker-branch-lifecycle",
+  "disposition": "retain",
+  "reason": "Retain 441 receiver lines and 25 methods for one branch lifecycle: keyed lazy provisioning, immutable baseline binding, completion evidence, cancellation retention and leased reconstruction. Its workspace, roots, baseline and lane resources are explicit; it does not commit terminal job state. Provisioning, relocation, process settlement and canceled-byte retention contracts support this boundary.",
+  "reviewed_commit": "c394d5f5e306f298bdd367474215babafad75eb9",
+  "ceiling": 441,
+  "boundaries": {
+    "lycaon/internal/worker/deferred_branch_claim_test.go": "ef59a63b8140149ba6dd7bca7c1c263488892a53205d1972cbbd0fc1416d793b",
+    "lycaon/internal/worker/branch_retention_e2e_test.go": "6f45998522d1fc3fc3311adb5bc7088282387185123136992e937d3a589a879a",
+    "lycaon/internal/worker/materialized_process_lifecycle_test.go": "a95f7c5f598daa94ffc26852eb4522dc38bd80340d4602012b1d7c475dae7b78",
+    "lycaon/internal/app/workerruntime/canceled_work_retention_test.go": "5bffe8e72f6824ecae3bd419fc6497cd16a489f56e96bed2909ae360382ceea8"
+  },
+  "reviewed_shape": "256359e19e01c7f238605df5875373aa3c435a7dc73740bb2c29a4eece1520e4"
+}

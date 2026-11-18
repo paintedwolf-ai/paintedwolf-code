@@ -34,7 +34,7 @@ func (e *ViewRecoveryError) Unwrap() error { return e.Cause }
 
 // SettleWorkerViewsAtStartup settles every recorded view, then resumes or fails each active
 // worker that lost one. Runs before the poller can claim, so no live worker is in scope.
-func SettleWorkerViewsAtStartup(ctx context.Context, queue WorkerQueue, views WorkerViewRecovery) error {
+func SettleWorkerViewsAtStartup(ctx context.Context, queue WorkerQueue, branches WorkerBranches, views WorkerViewRecovery) error {
 	if views == nil {
 		return nil
 	}
@@ -48,14 +48,14 @@ func SettleWorkerViewsAtStartup(ctx context.Context, queue WorkerQueue, views Wo
 		if !ok || task == nil || task.Status.IsTerminal() || strings.TrimSpace(task.WorkspaceRoot) == "" {
 			continue
 		}
-		if err := settleRecoveredTask(ctx, queue, task, report); err != nil {
+		if err := settleRecoveredTask(ctx, queue, branches, task, report); err != nil {
 			errs = append(errs, fmt.Errorf("recover worker %s view: %w", report.WorkerID, err))
 		}
 	}
 	return errors.Join(errs...)
 }
 
-func settleRecoveredTask(ctx context.Context, queue WorkerQueue, task *api.WorkerTask, report recovery.WorkerRuntimeReport) error {
+func settleRecoveredTask(ctx context.Context, queue WorkerQueue, branches WorkerBranches, task *api.WorkerTask, report recovery.WorkerRuntimeReport) error {
 	if !report.Deletable() {
 		return fenceUnresolvedTask(ctx, queue, task.ID)
 	}
@@ -65,7 +65,7 @@ func settleRecoveredTask(ctx context.Context, queue WorkerQueue, task *api.Worke
 	if report.Reason != recovery.ReasonRecovered {
 		return failRecoveredTask(ctx, queue, task, &ViewRecoveryError{WorkerID: task.ID, Reason: report.Reason, Cause: report.Err})
 	}
-	_, lease, err := queue.EnsureWorkerBranch(ctx, task.ID)
+	_, lease, err := branches.EnsureWorkerBranch(ctx, task.ID)
 	if err != nil {
 		return failRecoveredTask(ctx, queue, task, &ViewRecoveryError{WorkerID: task.ID, Reason: recovery.ReasonCheckpointUnusable, Cause: err})
 	}

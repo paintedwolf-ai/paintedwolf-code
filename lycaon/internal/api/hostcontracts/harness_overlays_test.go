@@ -37,11 +37,11 @@ func TestHarnessPreparesOverlaysThroughAuthenticatedApplicationRoute(t *testing.
 	sessions := store.NewSQL(database)
 	parent, err := sessions.Create(t.Context(), wire.CreateSessionRequest{WorkspaceRootID: attached.Roots[0].ID}, attached.ID)
 	testutil.FailErr(t, "create session", err)
-	queue := worker.NewSQLQueue(database, 2)
+	queue := worker.NewSQLServices(database, 2).Queue
 	ledger := sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
-	queue.SetBaselineStore(ledger.Baselines)
-	queue.SetProjectStore(projects)
-	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{})))
+	queue.Branches.SetBaselineStore(ledger.Baselines)
+	queue.Branches.SetProjectStore(projects)
+	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}), nil))
 	server := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessions, Projects: projects}, Workflow: hostapi.WorkflowDependencies{Workers: queue}}), nil, hostapi.TestAPIToken)
 	payload, err := json.Marshal(harnessfixture.Request{SessionID: parent.ID, Setup: harnessfixture.Setup{Overlays: []harnessfixture.Overlay{
 		{Label: "one", Files: map[string]string{"app.py": "value = 1\n"}},

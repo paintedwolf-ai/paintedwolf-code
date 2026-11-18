@@ -260,7 +260,7 @@ func (r *Runtime) wireDecisionAndCallTools(ctx context.Context) error {
 	r.Snapshot.Touches = r.deps.Sessions.Manager.Workers.Workspaces.Touches
 	r.Snapshot.ActiveReservations = r.deps.Sessions.Manager.Workers.Workspaces.ReservationEntries
 
-	r.deps.Sessions.Manager.SetWorkerQueue(r.deps.Workers.Queue)
+	r.deps.Sessions.Manager.SetWorkerQueue(r.deps.Workers.Queue, r.deps.Workers.Queue.Branches)
 	r.deps.Sessions.Manager.SetWorkerRounds(r.deps.WorkersCfg.RoundPolicy())
 	r.deps.Sessions.Manager.SetSessionWorkerAbort(r.deps.Workers.Cancel)
 	roster := workerroster.Source{

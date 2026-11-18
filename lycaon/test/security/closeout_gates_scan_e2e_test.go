@@ -85,7 +85,7 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 	})
 	testutil.FailErr(t, "SetChange landed", err)
 	planDeps := plantest.Deps(records)
-	planDeps.Jobs = worker.NewSQLQueue(sqlDB, 1)
+	planDeps.Jobs = worker.NewSQLServices(sqlDB, 1).Queue
 	planSvc := plantest.New(t, planDeps)
 
 	verifyRec := evidence.Record{

@@ -14,12 +14,12 @@ import (
 )
 
 // Enqueue adds a worker task.
-func (q *sqlQueueClaims) Enqueue(ctx context.Context, task api.WorkerTask) (string, error) {
+func (q *SQLQueue) Enqueue(ctx context.Context, task api.WorkerTask) (string, error) {
 	return q.EnqueueWithProjectID(ctx, "", task)
 }
 
 // EnqueueWithProjectID enqueues a task scoped to a project id.
-func (q *sqlQueueClaims) EnqueueWithProjectID(ctx context.Context, projectID string, task api.WorkerTask) (string, error) {
+func (q *SQLQueue) EnqueueWithProjectID(ctx context.Context, projectID string, task api.WorkerTask) (string, error) {
 	var jobID string
 	err := q.WithTaskAdmission(ctx, task, func() error {
 		var enqueueErr error
@@ -29,7 +29,7 @@ func (q *sqlQueueClaims) EnqueueWithProjectID(ctx context.Context, projectID str
 	return jobID, err
 }
 
-func (q *sqlQueueClaims) enqueueAdmitted(ctx context.Context, projectID string, task api.WorkerTask) (string, error) {
+func (q *SQLQueue) enqueueAdmitted(ctx context.Context, projectID string, task api.WorkerTask) (string, error) {
 	if current, ok := q.idempotentTask(ctx, task); ok {
 		err := compareTaskReceipt(current, task)
 		if err == nil && current.Status == api.WorkerStatusPending {
@@ -50,12 +50,12 @@ func (q *sqlQueueClaims) enqueueAdmitted(ctx context.Context, projectID string, 
 		}
 		return "", err
 	}
-	q.refreshBoard(ctx, task, task.ProjectID)
+	q.changes.board(ctx, task, task.ProjectID)
 	q.NotifyRunnable()
 	return task.ID, nil
 }
 
-func (q *sqlQueueClaims) idempotentTask(ctx context.Context, task api.WorkerTask) (*api.WorkerTask, bool) {
+func (q *SQLQueue) idempotentTask(ctx context.Context, task api.WorkerTask) (*api.WorkerTask, bool) {
 	if strings.TrimSpace(task.ParentSessionID) == "" || strings.TrimSpace(task.SourceToolCallID) == "" {
 		return nil, false
 	}
@@ -71,7 +71,7 @@ func compareTaskReceipt(current *api.WorkerTask, proposed api.WorkerTask) error 
 }
 
 // PrepareEnqueue applies queue invariants without writing.
-func (q *sqlQueueClaims) PrepareEnqueue(ctx context.Context, projectID string, task *api.WorkerTask) error {
+func (q *SQLQueue) PrepareEnqueue(ctx context.Context, projectID string, task *api.WorkerTask) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -118,32 +118,32 @@ func (q *sqlQueueClaims) PrepareEnqueue(ctx context.Context, projectID string, t
 }
 
 // PublishEnqueued refreshes projections and wakes claimers.
-func (q *sqlQueueClaims) PublishEnqueued(ctx context.Context, jobID string) {
-	q.refreshBoardByID(ctx, jobID)
+func (q *SQLQueue) PublishEnqueued(ctx context.Context, jobID string) {
+	q.changes.byID(ctx, jobID)
 	q.NotifyRunnable()
 }
 
 // ClaimNext claims the next pending job when under the running cap.
-func (q *sqlQueueClaims) ClaimNext(ctx context.Context, req ClaimRequest) (*api.WorkerTask, error) {
+func (q *SQLQueue) ClaimNext(ctx context.Context, req ClaimRequest) (*api.WorkerTask, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	q.mu.Lock()
 	maxRunning := q.maxRunning
 	q.mu.Unlock()
-	task, err := q.store.ClaimNext(ctx, req, maxRunning, q.self)
+	task, err := q.store.ClaimNext(ctx, req, maxRunning, q)
 	if err != nil {
 		return nil, err
 	}
 	if task == nil {
 		return nil, fmt.Errorf("worker queue: claim returned no task")
 	}
-	q.refreshBoard(ctx, *task, task.ProjectID)
+	q.changes.board(ctx, *task, task.ProjectID)
 	return task, nil
 }
 
 // Cancel aborts or settles a canceled worker.
-func (q *sqlQueueClaims) Cancel(ctx context.Context, jobID string, result *api.WorkerResult) error {
+func (q *SQLQueue) Cancel(ctx context.Context, jobID string, result *api.WorkerResult) error {
 	if err := q.StopExecution(ctx, jobID); err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ func (q *sqlQueueClaims) Cancel(ctx context.Context, jobID string, result *api.W
 }
 
 // StopExecution retains the workspace until runtime has released it.
-func (q *sqlQueueClaims) StopExecution(ctx context.Context, jobID string) error {
+func (q *SQLQueue) StopExecution(ctx context.Context, jobID string) error {
 	task, ok := q.Get(jobID) //nolint:contextcheck // Get has internal sqlQueueGetTimeout
 	if !ok {
 		return fmt.Errorf("job not found: %s", jobID)
@@ -189,9 +189,9 @@ func (q *sqlQueueClaims) StopExecution(ctx context.Context, jobID string) error 
 }
 
 // RequestCancellation durably fences claims and execution outcomes before joining runtime.
-func (q *sqlQueueClaims) RequestCancellation(ctx context.Context, jobID string) (bool, error) {
+func (q *SQLQueue) RequestCancellation(ctx context.Context, jobID string) (bool, error) {
 	var n int64
-	err := q.retryOnFullDisk(func() (err error) {
+	err := q.Branches.retryOnFullDisk(func() (err error) {
 		n, err = q.store.queries.RequestWorkerCancellation(ctx, db.RequestWorkerCancellationParams{
 			ID: jobID, RequestedAt: db.NullString(timelayout.Format(time.Now().UTC())),
 		})
@@ -201,12 +201,12 @@ func (q *sqlQueueClaims) RequestCancellation(ctx context.Context, jobID string) 
 }
 
 // RequestClaimCancellation preserves a stopped attempt when runtime cleanup must be retried.
-func (q *sqlQueueClaims) RequestClaimCancellation(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
+func (q *SQLQueue) RequestClaimCancellation(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
 	if claimed == nil || claimed.ClaimToken == "" {
 		return false, fmt.Errorf("claimed worker task required")
 	}
 	var won bool
-	err := q.retryOnFullDisk(func() error {
+	err := q.Branches.retryOnFullDisk(func() error {
 		return q.store.inTx(ctx, func(queries *db.Queries, _ *sql.Tx) error {
 			job, err := queries.GetWorkerJob(ctx, claimed.ID)
 			if db.IsNoRows(err) {
@@ -229,33 +229,33 @@ func (q *sqlQueueClaims) RequestClaimCancellation(ctx context.Context, claimed *
 }
 
 // FinishCanceled records cancellation after execution exits and its runtime settled.
-func (q *sqlQueueClaims) FinishCanceled(ctx context.Context, jobID string, result *api.WorkerResult) error {
-	if err := q.settleCanceledRuntime(ctx, jobID); err != nil {
+func (q *SQLQueue) FinishCanceled(ctx context.Context, jobID string, result *api.WorkerResult) error {
+	if err := q.Branches.settleCanceledRuntime(ctx, jobID); err != nil {
 		return err
 	}
 	if result == nil {
 		q.mu.Lock()
 		deps := q.cancelReports
 		q.mu.Unlock()
-		result = cancellationResultForJob(ctx, q.self, jobID, deps)
+		result = cancellationResultForJob(ctx, q, jobID, deps)
 	}
 	return q.finalizeCanceled(ctx, jobID, result)
 }
 
 // ReleaseAdmitted makes a job enqueued held claimable once its worker round
 // is recorded. A job already released or canceled is left as it is.
-func (q *sqlQueueClaims) ReleaseAdmitted(ctx context.Context, jobID string) error {
+func (q *SQLQueue) ReleaseAdmitted(ctx context.Context, jobID string) error {
 	released, err := q.store.ReleaseAdmittedJob(ctx, jobID)
 	if err != nil || !released {
 		return err
 	}
 	q.NotifyRunnable()
-	q.refreshBoardByID(ctx, jobID)
+	q.changes.byID(ctx, jobID)
 	return nil
 }
 
 // Hold moves a pending job to held without terminating it.
-func (q *sqlQueueClaims) Hold(ctx context.Context, jobID string) error {
+func (q *SQLQueue) Hold(ctx context.Context, jobID string) error {
 	task, ok := q.Get(jobID) //nolint:contextcheck // Get has internal sqlQueueGetTimeout
 	if !ok {
 		return fmt.Errorf("job not found: %s", jobID)
@@ -268,12 +268,12 @@ func (q *sqlQueueClaims) Hold(ctx context.Context, jobID string) error {
 		return err
 	}
 	if held {
-		q.refreshBoardByID(ctx, jobID)
+		q.changes.byID(ctx, jobID)
 	}
 	return nil
 }
 
-func (q *sqlQueueClaims) finalizeCanceled(ctx context.Context, jobID string, result *api.WorkerResult) error {
+func (q *SQLQueue) finalizeCanceled(ctx context.Context, jobID string, result *api.WorkerResult) error {
 	// Read the workspace before the cancel clears it.
 	task, ok := q.Get(jobID) //nolint:contextcheck // Get has internal sqlQueueGetTimeout
 	if !ok {
@@ -282,9 +282,9 @@ func (q *sqlQueueClaims) finalizeCanceled(ctx context.Context, jobID string, res
 	if task.Status.IsTerminal() {
 		return nil
 	}
-	kept := q.keptCheckpoint(ctx, task)
+	kept := q.Branches.keptCheckpoint(ctx, task)
 	var won bool
-	if err := q.retryOnFullDisk(func() (err error) {
+	if err := q.Branches.retryOnFullDisk(func() (err error) {
 		won, err = q.store.CancelJob(ctx, jobID, result, kept)
 		return err
 	}); err != nil {
@@ -294,8 +294,8 @@ func (q *sqlQueueClaims) finalizeCanceled(ctx context.Context, jobID string, res
 		return nil
 	}
 	if kept == "" {
-		q.destroyWorkerWorkspace(ctx, task)
+		q.Branches.destroyWorkerWorkspace(ctx, task)
 	}
-	q.refreshBoardByID(ctx, jobID)
+	q.changes.byID(ctx, jobID)
 	return nil
 }

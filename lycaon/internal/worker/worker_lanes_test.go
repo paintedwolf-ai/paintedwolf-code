@@ -33,12 +33,12 @@ func TestWorkerRoundsShareTheirLaneThroughTheClaimPath(t *testing.T) {
 		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'implementer', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
 	testutil.FailErr(t, "insert child", err)
 
-	q := NewSQLQueue(sqlDB, 4)
-	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
-	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), platform.NewSelector(platform.Config{}))
-	q.SetWorkerWorkspaceManager(manager)
+	q := NewSQLServices(sqlDB, 4).Queue
+	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
+	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), platform.NewSelector(platform.Config{}), nil)
+	q.Branches.SetWorkerWorkspaceManager(manager)
 	records := workerrecords.New(sqlDB)
-	q.SetWorkerLanes(&WorkerLanes{Lanes: workerlane.New(manager, records), Records: records, State: workerlane.NewM14State(q)})
+	q.Branches.SetWorkerLanes(&WorkerLanes{Lanes: workerlane.New(manager, records), Records: records, State: workerlane.NewM14State(q)})
 
 	coord := workerrecords.Actor{SessionID: "coord", Role: workerrecords.RoleCoordinator, PrincipalID: "coord"}
 	w, err := records.CreateWorker(t.Context(), coord, workerrecords.Op{ID: "create"}, workerrecords.WorkerSpec{Name: "fixer", AgentType: "implementer", ScopeMode: "write", ChildSessionID: "child"})
@@ -60,7 +60,7 @@ func TestWorkerRoundsShareTheirLaneThroughTheClaimPath(t *testing.T) {
 		if claimed == nil || claimed.ID != id {
 			t.Fatalf("claimed %+v, want %s", claimed, id)
 		}
-		branch, err := q.ClaimWorkerBranch(t.Context(), id)
+		branch, err := q.Branches.ClaimWorkerBranch(t.Context(), id)
 		testutil.FailErr(t, "branch "+id, err)
 		branch.ClaimToken = claimed.ClaimToken
 		return branch

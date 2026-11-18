@@ -66,7 +66,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 	})
 	var attachmentStore func(context.Context, string) (blobstore.Store, bool)
 	var tryRunPromotion func(context.Context, string)
-	s.Sources = sourceapi.New(&s.responses, &s.background, sourceOperations, sourceapi.Deps{
+	s.Sources = sourceapi.New(&s.responses, &s.background, sourceOperations, sourceapi.Deps{Branches: deps.Workflow.Branches,
 		Git: &s.Admin.Git, MutationGate: deps.Core.MutationGate,
 		CatalogSnapshot: deps.Source.CatalogSnapshot, WatchNeedsSeed: deps.Source.WatchNeedsSeed,
 		EditorClients: deps.Source.EditorClients, EditorDocuments: deps.Source.EditorDocuments, ProjectViews: deps.Source.ProjectViews, Events: deps.Host.Events,
@@ -83,7 +83,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 		VisualStore: deps.Source.VisualStore, Sources: &s.Sources, Video: deps.Source.Video,
 		GrantedPaths: deps.Approvals.Authority.GrantedPaths,
 	})
-	s.Admin.SessionAdmin = sessionadmin.New(&s.responses, &s.background, sessionadmin.Deps{
+	s.Admin.SessionAdmin = sessionadmin.New(&s.responses, &s.background, sessionadmin.Deps{Branches: deps.Workflow.Branches,
 		Checkpoints: deps.Approvals.Checkpoints, EventPublisher: deps.Host.EventPublisher, Events: deps.Host.Events,
 		Invocations: deps.Core.Invocations, LLMService: deps.Providers.LLM, Preview: deps.Host.Preview,
 		ProgressStore: deps.Source.ProgressStore, Projects: deps.Core.Projects, ProjectRules: deps.Source.ProjectRules, Store: deps.Core.Store,
@@ -165,6 +165,7 @@ func requireDependencies(deps Dependencies) {
 		httpio.Required{Name: "VisualStore", Present: deps.Source.VisualStore != nil},
 		httpio.Required{Name: "WorkerCancel", Present: deps.Workflow.WorkerCancel != nil},
 		httpio.Required{Name: "Workers", Present: deps.Workflow.Workers != nil},
+		httpio.Required{Name: "WorkerBranches", Present: deps.Workflow.Branches != nil},
 	)
 }
 

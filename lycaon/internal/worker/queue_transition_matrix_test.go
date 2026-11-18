@@ -17,7 +17,7 @@ func newMatrixQueue(t *testing.T) *worker.SQLQueue {
 	database := testdbfixture.Open(t, "matrix.db")
 	testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, database, "child-1", testdbseed.DefaultProjectID)
-	return worker.NewSQLQueue(database, 1)
+	return worker.NewSQLServices(database, 1).Queue
 }
 
 var matrixClaim = worker.ClaimRequest{ClaimedBy: "fixture", ExecutionTarget: api.ExecutionTargetLocal}
@@ -91,9 +91,6 @@ var queueMethodsWithoutStatusWrites = map[string]string{
 	"RenewClaim":                      "extends a running lease only",
 	"ListPendingOutcomes":             "read",
 	"MarkOutcomeDelivered":            "delivery ledger only",
-	"ClaimWorkerBranch":               "branch provisioning only",
-	"EnsureWorkerBranch":              "branch provisioning only",
-	"ListBranchJobs":                  "read",
 }
 
 func TestQueueStatusTransitionsCoverWorkerQueue(t *testing.T) {

@@ -29,17 +29,17 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 	sessions := store.NewSQL(database)
 	parent, err := sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: project.Roots[0].ID}, project.ID)
 	testutil.FailErr(t, "create parent", err)
-	queue := &fixtureQueue{SQLQueue: worker.NewSQLQueue(database, 2)}
-	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}))
+	queue := &fixtureQueue{SQLQueue: worker.NewSQLServices(database, 2).Queue}
+	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}), nil)
 	ledger := sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
-	queue.SetBaselineStore(ledger.Baselines)
-	queue.SetProjectStore(projects)
-	queue.SetWorkerWorkspaceManager(manager)
+	queue.Branches.SetBaselineStore(ledger.Baselines)
+	queue.Branches.SetProjectStore(projects)
+	queue.Branches.SetWorkerWorkspaceManager(manager)
 	setup := Setup{Overlays: []Overlay{
 		{Label: "Filter", Files: map[string]string{"catalog.py": "value = 'filter'\n"}},
 		{Label: "Page", ResultStatus: "partial", Files: map[string]string{"catalog.py": "value = 'page'\n"}},
 	}, IntegrationFiles: map[string]string{"preferences.json": "violet"}}
-	evidence, err := Prepare(t.Context(), queue, sessions, parent, project.Roots[0], setup, nil)
+	evidence, err := Prepare(t.Context(), queue, queue.Branches, sessions, parent, project.Roots[0], setup, nil)
 	testutil.FailErr(t, "prepare overlays", err)
 	if queue.pendingOutcomes != 0 {
 		t.Fatal("fixture exposed outcomes to the automatic coordinator wake path")
@@ -65,7 +65,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 			t.Fatalf("child parent: %s", child.ParentSessionID)
 		}
 	}
-	service := &worker.MergeService{Queue: queue, Store: worker.NewSQLStore(database), Projects: projects, Workspace: manager, DataDir: t.TempDir(), SourceLedger: ledger, SourceHistory: ledger.Walk}
+	service := &worker.MergeService{Queue: queue, Branches: queue.Branches, Store: worker.NewSQLStore(database), Projects: projects, Workspace: manager, DataDir: t.TempDir(), SourceLedger: ledger, SourceHistory: ledger.Walk}
 	first := evidence.Overlays[0].JobID
 	landed, err := service.PromoteOverlay(t.Context(), parent.ID, first, api.PromoteOverlayInput{})
 	testutil.FailErr(t, "promote first overlay", err)
@@ -95,7 +95,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 	if string(body) != "violet" {
 		t.Fatalf("user edit lost: %q", body)
 	}
-	if _, err := Prepare(t.Context(), queue, sessions, parent, project.Roots[0], setup, nil); err == nil {
+	if _, err := Prepare(t.Context(), queue, queue.Branches, sessions, parent, project.Roots[0], setup, nil); err == nil {
 		t.Fatal("fixture reused an existing project")
 	}
 }

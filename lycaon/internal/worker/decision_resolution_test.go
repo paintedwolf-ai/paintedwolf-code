@@ -38,7 +38,7 @@ func TestSQLDecisionResolverRollsBackEveryWrite(t *testing.T) {
 	messages := sessionstore.NewSQL(database)
 	outbox := eventoutbox.New(database, nil)
 	messages.SetEventOutbox(outbox)
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	queue.SetEventOutbox(outbox)
 	resolver := NewSQLDecisionResolver(messages, queue)
 	decision, ok, err := decisions.Get(t.Context(), "child-1")
@@ -67,7 +67,7 @@ func TestSQLDecisionResolverRequeuesSameWorkerWithBranchContinuity(t *testing.T)
 	testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, database, "child-1", testdbseed.DefaultProjectID)
 
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	store := queue.store
 	testutil.FailErr(t, "insert worker", store.InsertTask(t.Context(), api.WorkerTask{
 		ID: "job-1", ProjectID: testdbseed.DefaultProjectID,

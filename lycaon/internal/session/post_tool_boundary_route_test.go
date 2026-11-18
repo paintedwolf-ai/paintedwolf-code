@@ -239,7 +239,7 @@ func TestWorkerDecisionUsesBoundJobInsteadOfRenderedPreamble(t *testing.T) {
 	worker := &api.Session{ID: "child", ParentSessionID: "parent", AgentType: "builder"}
 	job := &api.WorkerTask{ID: "job", ChildSessionID: worker.ID, ParentSessionID: worker.ParentSessionID, AgentType: worker.AgentType, Brief: "Add Docker support", Prompt: strings.Repeat("host instructions ", 200)}
 	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	mgr.SetWorkerQueue(decisionWorkerJobs{job: job})
+	mgr.SetWorkerQueue(decisionWorkerJobs{job: job}, nil)
 	history := []api.Message{{ID: "opening", WorkerID: job.ID, Content: strings.Repeat("host instructions ", 200)}}
 	for _, jobID := range []string{job.ID, ""} {
 		text, ok := mgr.Coordinator.Loading.WorkerRequest(worker, jobID, "opening", history)

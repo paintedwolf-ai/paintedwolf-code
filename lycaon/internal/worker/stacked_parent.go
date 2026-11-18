@@ -18,7 +18,7 @@ type sealedOverlayPublisher interface {
 // stackedParentCheckpoint names the immutable checkpoint a stacked worker starts from. A worker whose
 // base already landed, or that has no base, starts from the live project. A parent still producing
 // its result has nothing immutable to stack on: its working tree is never a source.
-func stackedParentCheckpoint(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, overlays overlayTaskLookup, publisher sealedOverlayPublisher) (string, error) {
+func stackedParentCheckpoint(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, lookup func(context.Context, string) (*api.WorkerTask, bool), publisher sealedOverlayPublisher) (string, error) {
 	if task == nil {
 		return "", fmt.Errorf("worker task required")
 	}
@@ -26,10 +26,10 @@ func stackedParentCheckpoint(ctx context.Context, task *api.WorkerTask, roots []
 	if baseID == "" {
 		return "", nil
 	}
-	if overlays == nil {
+	if lookup == nil {
 		return "", fmt.Errorf("base overlay %q is unavailable", baseID)
 	}
-	base, ok := overlays.Get(baseID)
+	base, ok := lookup(ctx, baseID)
 	if !ok || base == nil {
 		return "", fmt.Errorf("base overlay %q is unavailable", baseID)
 	}
@@ -51,7 +51,7 @@ func stackedParentCheckpoint(ctx context.Context, task *api.WorkerTask, roots []
 			return "", fmt.Errorf("base overlay %q has no checkpoint store", baseID)
 		}
 		// The parent's result is its delta over its own parent, so that link joins the chain.
-		grandparent, err := stackedParentCheckpoint(ctx, base, roots, overlays, publisher)
+		grandparent, err := stackedParentCheckpoint(ctx, base, roots, lookup, publisher)
 		if err != nil {
 			return "", err
 		}

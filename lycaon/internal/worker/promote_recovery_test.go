@@ -21,13 +21,14 @@ func testPromoteCrashAfterCommit(t *testing.T) {
 	setup := func(t *testing.T, id string, status api.WorkerMergeStatus) (*MergeService, *promoteCrashFixture) {
 		t.Helper()
 		sqlDB := testdbfixture.Open(t, "store.db")
-		queue := NewSQLQueue(sqlDB, 8)
+		queueServices := NewSQLServices(sqlDB, 8)
+		queue := queueServices.Queue
 		root := t.TempDir()
 		testdbseed.InsertSessionWithRoot(t, sqlDB, "parent", testdbseed.DefaultProjectID, root)
 		_, err := queue.Enqueue(ctx, api.WorkerTask{ID: id, ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: root, AgentType: "implementer", Prompt: "p", Brief: "b", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}})
 		testutil.FailErr(t, "enqueue", err)
-		testutil.FailErr(t, "set merge status", queue.SetMergeStatus(ctx, id, status))
-		svc := &MergeService{Queue: queue, Store: queue, DataDir: t.TempDir()}
+		testutil.FailErr(t, "set merge status", queueServices.Promotions.SetMergeStatus(ctx, id, status))
+		svc := &MergeService{Queue: queue, Branches: queue.Branches, Store: queueServices.Promotions, DataDir: t.TempDir()}
 		task, ok := queue.Get(id)
 		if !ok {
 			t.Fatal("job not found")
@@ -189,7 +190,8 @@ func (s cancelAfterRepair) ListMergeApplying(ctx context.Context) ([]string, err
 // it waits a lease interval only while a remaining lease is live.
 func TestRecoverOrphanedMergeAppliesEndsWithoutWaitingAfterRepair(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
-	queue := NewSQLQueue(sqlDB, 8)
+	queueServices := NewSQLServices(sqlDB, 8)
+	queue := queueServices.Queue
 	root := t.TempDir()
 	testdbseed.InsertSessionWithRoot(t, sqlDB, "parent", testdbseed.DefaultProjectID, root)
 	id, err := queue.Enqueue(t.Context(), api.WorkerTask{ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: root, AgentType: "implementer", Prompt: "p", Brief: "b"})
@@ -200,7 +202,7 @@ func TestRecoverOrphanedMergeAppliesEndsWithoutWaitingAfterRepair(t *testing.T) 
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	svc := &MergeService{Queue: queue, Store: cancelAfterRepair{MergeStore: queue, cancel: cancel}, DataDir: t.TempDir()}
+	svc := &MergeService{Queue: queue, Branches: queue.Branches, Store: cancelAfterRepair{MergeStore: queueServices.Promotions, cancel: cancel}, DataDir: t.TempDir()}
 	testutil.FailErr(t, "recover", svc.RecoverOrphanedMergeApplies(ctx))
 	if task, ok := queue.Get(id); !ok || task.MergeStatus == api.WorkerMergeStatusApplying {
 		t.Fatalf("crashed promotion left applying: %+v", task)

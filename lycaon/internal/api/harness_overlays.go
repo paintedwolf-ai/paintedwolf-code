@@ -28,7 +28,7 @@ func (s *HarnessPreparation) handleHarnessOverlays(w http.ResponseWriter, r *htt
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "Fixture requires one attached project root")
 		return
 	}
-	evidence, err := harnessfixture.Prepare(r.Context(), s.workers, s.sessionStore, parent, project.Roots[0], request.Setup, s.sessions.Workers.Harness.Verify)
+	evidence, err := harnessfixture.Prepare(r.Context(), s.workers, s.branches, s.sessionStore, parent, project.Roots[0], request.Setup, s.sessions.Workers.Harness.Verify)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return

@@ -43,7 +43,7 @@ func TestPromoteOverlayDoesNotScanKeepOursResolution(t *testing.T) {
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	hook := &landingPathsHook{}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t), Scans: hook,
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t), Scans: hook,
 	}
 	out, err := svc.PromoteOverlay(t.Context(), "parent-1", task.ID, api.PromoteOverlayInput{
 		Resolutions: []api.WorkerPromoteResolution{{

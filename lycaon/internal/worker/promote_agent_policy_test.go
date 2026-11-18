@@ -47,7 +47,7 @@ func TestPromoteOverlayNeverLandsTheProjectOverlay(t *testing.T) {
 		MergeStatus: api.WorkerMergeStatusPending, AgentType: "implementer", Scope: &scope, Status: api.WorkerStatusComplete,
 	}
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
-	svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t)}
+	svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t)}
 
 	var named []api.WorkerPromoteResolution
 	for _, rel := range overlayFiles {

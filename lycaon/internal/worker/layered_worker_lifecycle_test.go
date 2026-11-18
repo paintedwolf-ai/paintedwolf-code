@@ -65,11 +65,12 @@ func differentDevice(path string) (bool, error) {
 }
 
 type layeredWorkerFixture struct {
-	db       *db.Store
-	queue    *SQLQueue
-	manager  *workspace.Manager
-	source   string
-	branches string
+	db         *db.Store
+	queue      *SQLQueue
+	promotions *PromotionStore
+	manager    *workspace.Manager
+	source     string
+	branches   string
 }
 
 func newLayeredWorkerFixture(t *testing.T, selector *adapter.Selector) *layeredWorkerFixture {
@@ -87,11 +88,12 @@ func newLayeredWorkerFixture(t *testing.T, selector *adapter.Selector) *layeredW
 	if selector == nil {
 		selector = platform.NewSelector(platform.Config{})
 	}
-	manager := workspace.NewManager(branches, selector).WithPrivateGit(privateGit)
-	queue := NewSQLQueue(sqlDB, 4)
-	queue.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(manager)
-	return &layeredWorkerFixture{db: sqlDB, queue: queue, manager: manager, source: source, branches: branches}
+	manager := workspace.NewManager(branches, selector, nil).WithPrivateGit(privateGit)
+	services := NewSQLServices(sqlDB, 4)
+	queue := services.Queue
+	queue.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
+	queue.Branches.SetWorkerWorkspaceManager(manager)
+	return &layeredWorkerFixture{db: sqlDB, queue: queue, promotions: services.Promotions, manager: manager, source: source, branches: branches}
 }
 
 // claim runs the ordinary production path: enqueue, ClaimNext, ClaimWorkerBranch.
@@ -105,7 +107,7 @@ func (f *layeredWorkerFixture) claim(t *testing.T) *api.WorkerTask {
 	testutil.FailErr(t, "Enqueue", err)
 	next, err := f.queue.ClaimNext(t.Context(), ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "ClaimNext", err)
-	claimed, err := f.queue.ClaimWorkerBranch(t.Context(), id)
+	claimed, err := f.queue.Branches.ClaimWorkerBranch(t.Context(), id)
 	testutil.FailErr(t, "ClaimWorkerBranch", err)
 	claimed.ClaimToken = next.ClaimToken
 	return claimed

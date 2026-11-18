@@ -39,7 +39,7 @@ func TestPromoteOverlayLandsNewFilesOnPrimary(t *testing.T) {
 	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	store := &mergeStoreStub{}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  store,
 		Reject: mergeRejectFmt(t),

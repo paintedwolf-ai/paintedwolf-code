@@ -145,8 +145,8 @@ func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 	next := f.boot()
 	next.Recovery = coordinator
 	// The restarted engine can mount, so a worker created mounted is rebuilt on its mount.
-	next.Workspace = workspace.NewManager(next.BranchRoot, platform.NewSelector(platform.Config{Confinement: fixtureConfinement{}})).WithRecovery(coordinator)
-	next.Queue.SetWorkerWorkspaceManager(next.Workspace)
+	next.Workspace = workspace.NewManager(next.BranchRoot, platform.NewSelector(platform.Config{Confinement: fixtureConfinement{}}), nil).WithRecovery(coordinator)
+	next.Queue.Branches.SetWorkerWorkspaceManager(next.Workspace)
 	testutil.FailErr(t, "startup recovery", next.RecoverWorkerViews(t.Context()))
 
 	for i, w := range workers {

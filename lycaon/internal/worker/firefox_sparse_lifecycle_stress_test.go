@@ -93,7 +93,7 @@ func TestStressFirefoxMountedSparseWorkerLifecycle(t *testing.T) {
 	if !published || len(manifest.Entries) != 1 || manifest.Entries[0].Path.Rel != name {
 		t.Fatal("checkpoint scope differs from the single authored file")
 	}
-	service := &MergeService{Queue: fixture.queue, Store: fixture.queue, DataDir: testbaseline.DataDir(t, fixture.db), Workspace: fixture.manager}
+	service := &MergeService{Queue: fixture.queue, Branches: fixture.queue.Branches, Store: fixture.promotions, DataDir: testbaseline.DataDir(t, fixture.db), Workspace: fixture.manager}
 	started = time.Now()
 	result, err := service.PromoteOverlay(t.Context(), "", task.ID, api.PromoteOverlayInput{})
 	t.Logf("promotion elapsed=%s", time.Since(started))
@@ -119,11 +119,12 @@ func newFirefoxWorkerFixture(t *testing.T, source string) *layeredWorkerFixture 
 	testutil.FailErr(t, "scale private Git", err)
 	selector := workspace.HostSelector()
 	selector.BudgetFor = adapter.ZeroBudget
-	manager := workspace.NewManager(branches, selector).WithPrivateGit(git)
-	queue := NewSQLQueue(database, 4)
-	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(manager)
-	return &layeredWorkerFixture{db: database, queue: queue, manager: manager, source: source, branches: branches}
+	manager := workspace.NewManager(branches, selector, nil).WithPrivateGit(git)
+	services := NewSQLServices(database, 4)
+	queue := services.Queue
+	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content")).Baselines)
+	queue.Branches.SetWorkerWorkspaceManager(manager)
+	return &layeredWorkerFixture{db: database, queue: queue, promotions: services.Promotions, manager: manager, source: source, branches: branches}
 }
 
 func claimFirefoxWorker(t *testing.T, f *layeredWorkerFixture, name string) *api.WorkerTask {
@@ -139,7 +140,7 @@ func claimFirefoxWorker(t *testing.T, f *layeredWorkerFixture, name string) *api
 	if next == nil {
 		t.Fatal("scale worker was not claimable")
 	}
-	task, err := f.queue.ClaimWorkerBranch(t.Context(), id)
+	task, err := f.queue.Branches.ClaimWorkerBranch(t.Context(), id)
 	testutil.FailErr(t, "prepare scale worker", err)
 	task.ClaimToken = next.ClaimToken
 	return task

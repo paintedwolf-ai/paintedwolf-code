@@ -1,0 +1,17 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/worker/worker.SQLQueue",
+  "kind": "runtime_service",
+  "workstream": "worker-admission-settlement",
+  "disposition": "retain",
+  "reason": "Retain 694 receiver lines, 58 methods and 16 fields for session admission, fenced claims, cancellation, terminal settlement and task reads over one SQL adapter. Branch preparation and leased promotion persistence have separate components and direct callers. Keeping admission and settlement together preserves claim-token and outbox atomicity and lets recovery use the ordinary transitions without shared-core embeddings or queue back-references.",
+  "reviewed_commit": "c394d5f5e306f298bdd367474215babafad75eb9",
+  "ceiling": 58,
+  "boundaries": {
+    "lycaon/internal/worker/cancellation_fence_test.go": "0674d75ac99f3e549947d255dbe58bae3f6d4f4d0cb38b671421d964fbb72d5e",
+    "lycaon/internal/worker/decision_resolution_test.go": "c18985ffa10af51e34a63a7db6f004193be60a51d60a259e480cb1e29aa9f587",
+    "lycaon/internal/worker/prerequisites_test.go": "5c0c9543d2fde762411728198624637b202a53de0ad66717a79faa3f174a75b1",
+    "lycaon/internal/worker/queue_transition_matrix_test.go": "a28974eb95d7653bbbcccf331d09d39b46db7d5f707172f97f9c457ffc0b9637"
+  },
+  "reviewed_shape": "11b3f9025285376c355e81b1c0dc22b16a77bcfe9b3729e0b388e6279588ace0"
+}

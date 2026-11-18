@@ -30,15 +30,16 @@ import (
 )
 
 type workerToolsFixture struct {
-	db        *db.Store
-	queue     *SQLQueue
-	records   *workerrecords.Store
-	decisions sessiondecisions.Store
-	reg       *tools.DefaultRegistry
-	coord     workerrecords.Actor
-	workerID  string
-	root      string
-	ops       *workerops.Service
+	db         *db.Store
+	queue      *SQLQueue
+	promotions *PromotionStore
+	records    *workerrecords.Store
+	decisions  sessiondecisions.Store
+	reg        *tools.DefaultRegistry
+	coord      workerrecords.Actor
+	workerID   string
+	root       string
+	ops        *workerops.Service
 }
 
 func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
@@ -49,8 +50,9 @@ func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
 	_, err := database.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
 		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
 	testutil.FailErr(t, "insert child", err)
+	services := NewSQLServices(database, 1)
 	f := &workerToolsFixture{
-		db: database, queue: NewSQLQueue(database, 1), records: workerrecords.New(database),
+		db: database, queue: services.Queue, promotions: services.Promotions, records: workerrecords.New(database),
 		decisions: sessiondecisions.NewSQL(database), reg: tools.NewDefaultRegistry(),
 		coord: workerrecords.Actor{SessionID: "coord", Role: workerrecords.RoleCoordinator, PrincipalID: "coord"},
 		root:  t.TempDir(),
@@ -358,7 +360,7 @@ func TestPrerequisiteFollowsTheProducersLatestRound(t *testing.T) {
 	if got := next(); got != round2 {
 		t.Fatalf("consumer ran while its producer works: next = %q", got)
 	}
-	if _, err := f.queue.ClaimWorkerBranch(t.Context(), "job-c"); !errors.Is(err, ErrWorkerPrerequisitesPending) {
+	if _, err := f.queue.Branches.ClaimWorkerBranch(t.Context(), "job-c"); !errors.Is(err, ErrWorkerPrerequisitesPending) {
 		t.Fatalf("branch claim while the producer works: err = %v", err)
 	}
 	claimed, err := f.queue.ClaimNext(t.Context(), ClaimRequest{ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
@@ -370,7 +372,7 @@ func TestPrerequisiteFollowsTheProducersLatestRound(t *testing.T) {
 	if got := next(); got != "job-c" {
 		t.Fatalf("consumer still held after its producer delivered again: next = %q", got)
 	}
-	if _, err := f.queue.ClaimWorkerBranch(t.Context(), "job-c"); err != nil {
+	if _, err := f.queue.Branches.ClaimWorkerBranch(t.Context(), "job-c"); err != nil {
 		t.Fatalf("branch claim after the producer delivered again: %v", err)
 	}
 }
@@ -762,7 +764,7 @@ func TestLookupByResultResolvesSettledRoundJob(t *testing.T) {
 	f.deliver(t, "job-1")
 	resHandle := "result-job-1"
 
-	var nilCore *sqlQueueCore
+	var nilCore *SQLQueue
 	if got, ok := nilCore.LookupByResult(t.Context(), resHandle); ok || got != nil {
 		t.Fatalf("nil core LookupByResult = (%+v, %v), want (nil, false)", got, ok)
 	}

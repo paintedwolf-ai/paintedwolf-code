@@ -308,7 +308,7 @@ func (s *Workspace) WorkerBranchRoot(ctx context.Context, projectID, rawWorkerID
 	if strings.TrimSpace(task.ProjectID) != strings.TrimSpace(projectID) || strings.TrimSpace(task.WorkspaceRoot) == "" {
 		return "", noop
 	}
-	_, lease, err := s.Workers.EnsureWorkerBranch(ctx, workerID)
+	_, lease, err := s.Branches.EnsureWorkerBranch(ctx, workerID)
 	if err != nil {
 		s.responses.Logger.DebugContext(ctx, "worker overlay unavailable for source read", "worker_id", workerID, "err", err)
 		return "", noop

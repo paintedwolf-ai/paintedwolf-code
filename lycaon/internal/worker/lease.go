@@ -67,12 +67,12 @@ func recoverExpiredWorkerJobs(ctx context.Context, queue WorkerQueue, ids []stri
 }
 
 // A persisted stop still joins any surviving local runtime before cleanup.
-func (q *sqlQueueClaims) recoverCancellations(ctx context.Context) ([]api.WorkerTask, error) {
+func (q *SQLQueue) recoverCancellations(ctx context.Context) ([]api.WorkerTask, error) {
 	ids, err := q.store.queries.ListInterruptedWorkerCancellationIDs(ctx, db.NullString(timelayout.Format(time.Now().UTC())))
 	if err != nil {
 		return nil, err
 	}
-	return recoverCancellationJobs(ctx, q.self, ids)
+	return recoverCancellationJobs(ctx, q, ids)
 }
 
 func recoverCancellationJobs(ctx context.Context, queue WorkerQueue, ids []string) ([]api.WorkerTask, error) {
@@ -143,18 +143,18 @@ func isJobCancellationRequested(ctx context.Context, queue WorkerQueue, jobID st
 	}
 }
 
-func (q *sqlQueueClaims) RenewClaim(ctx context.Context, jobID, claimToken string) (bool, error) {
+func (q *SQLQueue) RenewClaim(ctx context.Context, jobID, claimToken string) (bool, error) {
 	return q.store.RenewClaim(ctx, jobID, claimToken)
 }
 
 // RecoverExpiredClaims tears down workspaces for terminal recoveries.
-func (q *sqlQueueClaims) RecoverExpiredClaims(ctx context.Context) ([]api.WorkerTask, error) {
+func (q *SQLQueue) RecoverExpiredClaims(ctx context.Context) ([]api.WorkerTask, error) {
 	canceled, cancelErr := q.recoverCancellations(ctx)
 	ids, err := q.store.queries.ListExpiredWorkerJobIDs(ctx, db.NullString(timelayout.Format(time.Now().UTC())))
 	if err != nil {
 		return canceled, errors.Join(cancelErr, err)
 	}
-	recovered, err := recoverExpiredWorkerJobs(ctx, q.self, ids)
+	recovered, err := recoverExpiredWorkerJobs(ctx, q, ids)
 	return append(canceled, recovered...), errors.Join(cancelErr, err)
 }
 

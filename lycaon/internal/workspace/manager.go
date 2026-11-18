@@ -161,9 +161,7 @@ type branchViewState struct {
 type Manager struct {
 	branchRoot string
 	// stateRoot holds the placement registry; branchRoot sits directly under it.
-	stateRoot string
-	// cloneProbe replaces the real source-to-volume clone probe in fixtures.
-	cloneProbe func(ctx context.Context, dir string) (bool, error)
+	stateRoot  string
 	cloneFile  adapter.FileCloner
 	selector   *adapter.Selector
 	recovery   *recovery.Coordinator
@@ -176,9 +174,8 @@ type Manager struct {
 	servicesErr error
 }
 
-// NewManager returns a workspace manager rooted at an out-of-repo branch base that chooses each
-// worker's adapter with selector.
-func NewManager(branchRoot string, selector *adapter.Selector) *Manager {
+// NewManager creates worker sandboxes with the selected adapters. A nil cloner uses native cloning.
+func NewManager(branchRoot string, selector *adapter.Selector, cloneFile adapter.FileCloner) *Manager {
 	if selector == nil {
 		panic("workspace: NewManager requires a selector")
 	}
@@ -191,6 +188,7 @@ func NewManager(branchRoot string, selector *adapter.Selector) *Manager {
 		branchRoot: branchRoot,
 		stateRoot:  stateRoot,
 		selector:   selector,
+		cloneFile:  cloneFile,
 		views:      make(map[string]branchViewState),
 	}
 }

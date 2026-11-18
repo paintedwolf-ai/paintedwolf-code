@@ -148,7 +148,7 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 		}
 	}
 	q := workertest.OnDatabase(t, database, 1)
-	manager.SetWorkerQueue(q)
+	manager.SetWorkerQueue(q, q.Branches)
 	jobID, err := q.Enqueue(t.Context(), api.WorkerTask{ParentSessionID: parent.ID, ProjectID: parent.ProjectID, Prompt: "work", Brief: "work", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "enqueue worker", err)
 	check(false)

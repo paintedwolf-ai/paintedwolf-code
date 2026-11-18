@@ -169,7 +169,7 @@ func TestTaskToolPlannedWorkerDispatchNameValidationAndReplay(t *testing.T) {
 		t.Fatalf("explicit files mismatch: %v", enqueued.Files)
 	}
 
-	q := worker.NewSQLQueue(sqlDB, 1)
+	q := worker.NewSQLServices(sqlDB, 1).Queue
 	q.SetWorkflowDomains(&worker.WorkflowDomains{Runs: receiptWorkflowChecker{}, Tasks: receiptWorkflowChecker{}})
 	ops := &workerops.Service{
 		Reader:     workerops.Reader{Records: records, Jobs: q},

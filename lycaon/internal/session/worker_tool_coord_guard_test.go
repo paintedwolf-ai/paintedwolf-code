@@ -28,7 +28,7 @@ func TestBeforeWorkerWriteRejectsReadScopedMutation(t *testing.T) {
 	testdbseed.InsertSessionWithRoot(t, sessions.DB(), "parent", testdbseed.DefaultProjectID, t.TempDir())
 	mgr := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := workertest.OnDatabase(t, sessions.DB(), 8)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 	dir := t.TempDir()
 	readScope := api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"internal/**"}}
 	_, err := q.Enqueue(context.Background(), api.WorkerTask{
@@ -61,7 +61,7 @@ func TestBeforeWorkerWriteAllowsPathOutsideSuggestion(t *testing.T) {
 	testdbseed.InsertSessionWithRoot(t, sessions.DB(), "parent", testdbseed.DefaultProjectID, t.TempDir())
 	mgr := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := workertest.OnDatabase(t, sessions.DB(), 8)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 	writeScope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"src/allowed/**"}}
 	_, err := q.Enqueue(context.Background(), api.WorkerTask{
 		ID: "job-write", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID,
@@ -101,7 +101,7 @@ func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 	testdbseed.InsertSessionWithRoot(t, sessions.DB(), "parent", testdbseed.DefaultProjectID, t.TempDir())
 	mgr := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	queue := workertest.OnDatabase(t, sessions.DB(), 8)
-	mgr.SetWorkerQueue(queue)
+	mgr.SetWorkerQueue(queue, queue.Branches)
 	scope := api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"docs/README.md"}}
 	parent, err := sessions.Get(ctx, "parent")
 	testutil.FailErr(t, "read parent", err)
@@ -147,7 +147,7 @@ func readScopedWorkerManager(t *testing.T, jobID string, mode api.TaskScopeMode)
 	testdbseed.InsertSessionWithRoot(t, sessions.DB(), "parent", testdbseed.DefaultProjectID, t.TempDir())
 	mgr := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := workertest.OnDatabase(t, sessions.DB(), 8)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 	scope := api.TaskScope{Mode: mode, Paths: []string{"."}}
 	ctx := context.Background()
 	_, err := q.Enqueue(ctx, api.WorkerTask{

@@ -91,7 +91,7 @@ func TestTaskRootRefsUsesBranchSnapshotAfterProjectRename(t *testing.T) {
 	}})
 	testutil.FailErr(t, "create project", err)
 	roots := project.RootRefsFrom(p)
-	mgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{}))
+	mgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{}), nil)
 	binding, _, err := mgr.CreateWorkerWorkspaceFromSources(ctx, roots, roots, roots[0].ID, "job-1")
 	testutil.FailErr(t, "create workspace", err)
 	renamed := "manuals"
@@ -152,7 +152,7 @@ func TestPromoteOverlayDoesNotInferSatisfiedEditsFromLinePresence(t *testing.T) 
 				Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{path}},
 			}
 			testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
-			svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t), DataDir: t.TempDir()}
+			svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t), DataDir: t.TempDir()}
 			out, err := svc.PromoteOverlay(t.Context(), "parent", task.ID, api.PromoteOverlayInput{})
 			if err == nil || len(out.Conflicts) != 1 || out.OverlayPromotion != nil {
 				t.Fatalf("overlapping structural edit accepted: result=%+v error=%v", out, err)

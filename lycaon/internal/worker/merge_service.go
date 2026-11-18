@@ -41,7 +41,6 @@ const mergeHostPurpose = "worker_merge"
 // MergeQueue loads worker jobs and materializes their branches.
 type MergeQueue interface {
 	Get(jobID string) (*api.WorkerTask, bool)
-	WorkerBranches
 }
 
 // MergeStore persists leased promotion state.
@@ -106,6 +105,7 @@ type OverlayDocumentSynchronizer interface {
 // MergeService applies coordinator merge tools to worker branches.
 type MergeService struct {
 	Queue     MergeQueue
+	Branches  WorkerBranches
 	Store     MergeStore
 	Reports   ChangeReportDeps
 	Evidence  SourceEvidenceContext

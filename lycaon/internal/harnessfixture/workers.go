@@ -80,6 +80,7 @@ type Workers struct {
 	root      string
 	sessions  session.Store
 	queue     worker.WorkerQueue
+	branches  *worker.BranchService
 	verify    VerifyWorker
 	read      ReadWorker
 	decisions sessiondecisions.Store
@@ -87,15 +88,15 @@ type Workers struct {
 	locks     sync.Map
 }
 
-func NewWorkers(root string, sessions session.Store, queue worker.WorkerQueue, verify VerifyWorker, read ReadWorker, decisions sessiondecisions.Store, fallback worker.WorkerExecutor) (*Workers, error) {
-	if !configdir.IsHarnessChannel() || sessions == nil || queue == nil || verify == nil || read == nil || decisions == nil || fallback == nil {
+func NewWorkers(root string, sessions session.Store, queue worker.WorkerQueue, branches *worker.BranchService, verify VerifyWorker, read ReadWorker, decisions sessiondecisions.Store, fallback worker.WorkerExecutor) (*Workers, error) {
+	if !configdir.IsHarnessChannel() || sessions == nil || queue == nil || branches == nil || verify == nil || read == nil || decisions == nil || fallback == nil {
 		return nil, fmt.Errorf("scripted workers require an isolated harness and worker services")
 	}
 	root = filepath.Join(root, "worker-scripts")
 	if err := os.MkdirAll(filepath.Join(root, "outcomes"), 0o700); err != nil {
 		return nil, err
 	}
-	return &Workers{root: root, sessions: sessions, queue: queue, verify: verify, read: read, decisions: decisions, fallback: fallback}, nil
+	return &Workers{root: root, sessions: sessions, queue: queue, branches: branches, verify: verify, read: read, decisions: decisions, fallback: fallback}, nil
 }
 
 // Install binds the fixture's scripts to the prepared children and the parent.
@@ -383,7 +384,7 @@ func (w *Workers) answeredOption(ctx context.Context, childID string) (string, b
 }
 
 func (w *Workers) deliverWrite(ctx context.Context, child *api.Session, task api.WorkerTask, delivery Delivery) (api.WorkerResult, error) {
-	branch, err := w.queue.ClaimWorkerBranch(ctx, task.ID)
+	branch, err := w.branches.ClaimWorkerBranch(ctx, task.ID)
 	if err != nil {
 		return api.WorkerResult{}, err
 	}

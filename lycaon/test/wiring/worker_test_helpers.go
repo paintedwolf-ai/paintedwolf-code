@@ -216,7 +216,7 @@ func workerQueueQuiescent(ctx context.Context, h *Harness, projectID string) boo
 		if len(job.AfterWorkers) == 0 || h.Workers.Records == nil {
 			return false
 		}
-		waiting, wErr := workerops.PrerequisitePending(ctx, h.Workers.Records.LatestRoundJob, h.Workers.Queue, job)
+		waiting, wErr := workerops.PrerequisitePending(ctx, h.Workers.Records.LatestRoundJob, h.Workers.Queue.Get, job)
 		if wErr != nil || !waiting {
 			return false
 		}

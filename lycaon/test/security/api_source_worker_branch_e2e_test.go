@@ -48,7 +48,7 @@ func TestProjectSourceReadsLiveWorkerOverlay(t *testing.T) {
 	if strings.TrimSpace(claimed.WorkspaceRoot) != "" {
 		t.Fatal("ClaimNext must not provision a private branch")
 	}
-	claimed, err = h.Workers.Queue.ClaimWorkerBranch(t.Context(), workerID)
+	claimed, err = h.Workers.Queue.Branches.ClaimWorkerBranch(t.Context(), workerID)
 	testutil.FailErr(t, "ClaimWorkerBranch", err)
 	overlayDir := claimed.WorkspaceRoot
 	if overlayDir == "" {
