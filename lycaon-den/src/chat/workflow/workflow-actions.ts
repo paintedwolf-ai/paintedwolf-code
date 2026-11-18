@@ -21,6 +21,9 @@ const WORKFLOW_CHANGED_CODES = [
   "workflow_run_not_active",
 ] as const;
 
+const EXIT_STALE_CODES = ["workflow_revision_conflict", "workflow_run_not_active"] as const;
+const EXITABLE_STATUSES = new Set<WorkflowRun["status"]>(["running", "paused", "paused_on_child"]);
+
 function workflowRunIdsFromMessages(messages: readonly Message[]): string[] {
   const ids = new Set<string>();
   for (const m of messages) {
@@ -206,12 +209,21 @@ export async function exitActiveWorkflow(
 		appStore.state.workflowRuns,
 	) ?? appStore.state.activeWorkflowRun;
   if (!active) return null;
-  return mutateWorkflowAndRefresh(appStore, sessionId, projectDir, projects, client, () =>
-    client.exitWorkflowRun(active.id, {
-      expected_revision: active.revision,
-      ...(reason ? { reason } : {}),
-    }),
-  );
+  const exit = (run: WorkflowRun) =>
+    mutateWorkflowAndRefresh(appStore, sessionId, projectDir, projects, client, () =>
+      client.exitWorkflowRun(run.id, {
+        expected_revision: run.revision,
+        ...(reason ? { reason } : {}),
+      }),
+    );
+  try {
+    return await exit(active);
+  } catch (err) {
+    if (!isApiErrorCode(err, EXIT_STALE_CODES)) throw err;
+    // The run advanced or ended after the view was read; the exit still names this run.
+    const current = await client.getWorkflowRun(active.id);
+    return EXITABLE_STATUSES.has(current.status) ? exit(current) : current;
+  }
 }
 
 export async function pauseActiveWorkflow(

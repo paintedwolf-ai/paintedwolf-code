@@ -9,6 +9,7 @@ import { createProjectsStore } from "../../store/projects-store.ts";
 import type { Message, WorkflowRun } from "../../api/types.ts";
 import { mergeWorkflowRunsFromMessages, refreshWorkflowState, startWorkflowForSession, exitActiveWorkflow } from "./workflow-actions.ts";
 import { emptyProjects } from "../../test/projects-fixture.ts";
+import { LycaonApiError } from "../../api/http.ts";
 import { applySessionTranscriptSnapshot } from "../session/session-transcript-hydrate.ts";
 
 const terminalRun: WorkflowRun = {
@@ -232,5 +233,46 @@ describe("workflow mutation backend changes", () => {
     finish(terminalRun);
     await expect(pending).resolves.toEqual(terminalRun);
     expect(client.getActiveWorkflowRun).not.toHaveBeenCalled();
+  });
+});
+
+describe("exitActiveWorkflow on a stale view", () => {
+  const planRun: WorkflowRun = { ...terminalRun, id: "run-plan", workflow_id: "plan", status: "running", revision: 2 };
+  const exitClient = (exitWorkflowRun: ReturnType<typeof vi.fn>, current: WorkflowRun) => stubClient({
+    exitWorkflowRun,
+    getWorkflowRun: vi.fn().mockResolvedValue(current),
+    getActiveWorkflowRun: vi.fn().mockResolvedValue(null),
+    listSessionWorkflowRuns: vi.fn().mockResolvedValue({ runs: [] }),
+    listWorkflows: vi.fn().mockResolvedValue([]),
+    listBlueprints: vi.fn().mockResolvedValue([]),
+  });
+
+  it("exits the same run again at its current revision", async () => {
+    const advanced = { ...planRun, revision: 5 };
+    const exited = { ...advanced, status: "canceled" as const, revision: 6 };
+    const exitWorkflowRun = vi.fn()
+      .mockRejectedValueOnce(new LycaonApiError("moved", 409, "workflow_revision_conflict"))
+      .mockResolvedValueOnce(exited);
+    const client = exitClient(exitWorkflowRun, advanced);
+
+    await expect(exitActiveWorkflow(createAppStore(), client, "s1", "/project", [], undefined, planRun)).resolves.toEqual(exited);
+    expect(exitWorkflowRun.mock.calls.map(([id, body]) => [id, body.expected_revision])).toEqual([["run-plan", 2], ["run-plan", 5]]);
+  });
+
+  it("settles without a second exit when the run already ended", async () => {
+    const ended = { ...planRun, status: "complete" as const, revision: 3 };
+    const exitWorkflowRun = vi.fn().mockRejectedValue(new LycaonApiError("ended", 409, "workflow_run_not_active"));
+    const client = exitClient(exitWorkflowRun, ended);
+
+    await expect(exitActiveWorkflow(createAppStore(), client, "s1", "/project", [], undefined, planRun)).resolves.toEqual(ended);
+    expect(exitWorkflowRun).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports any other refusal", async () => {
+    const refusal = new LycaonApiError("denied", 403, "forbidden");
+    const client = exitClient(vi.fn().mockRejectedValue(refusal), planRun);
+
+    await expect(exitActiveWorkflow(createAppStore(), client, "s1", "/project", [], undefined, planRun)).rejects.toBe(refusal);
+    expect(client.getWorkflowRun).not.toHaveBeenCalled();
   });
 });
