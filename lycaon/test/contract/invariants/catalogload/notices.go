@@ -149,7 +149,7 @@ var noticeClosure = []invariants.Invariant{{
 	// Every notice on the preflight surface is raised by a probe and scoped
 	// to the app, the only scope readiness renders.
 	Name:    "preflight-notices-are-raised-and-app-scoped",
-	Anchors: []invariants.Anchor{invariants.Func("internal/usernotice", "PreflightCodes")},
+	Anchors: []invariants.Anchor{invariants.Dir(noticesDir)},
 	Check: func(r *invariants.Run) {
 		cfg := notices(r)
 		for _, code := range noticeSurfaceCodes(cfg, "preflight") {

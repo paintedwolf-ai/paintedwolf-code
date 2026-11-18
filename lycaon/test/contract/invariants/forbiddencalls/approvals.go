@@ -233,7 +233,6 @@ var person = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Func("internal/people", "Acting"), invariants.Func("internal/people", "Deciding")},
 	Exempt: []invariants.Exemption{
 		{Key: "internal/session/store:sqlSessions.CreateWithStatus", Reason: "a root chat the host opens belongs to the host's person"},
-		{Key: "internal/session/store:memorySessions.CreateWithStatus", Reason: "memory twin of the SQL session store"},
 		{Key: "internal/session/transcript:Service.PromptAuthor", Reason: "a prompt without an admission receipt is authored by its request's caller"},
 		{Key: "internal/session/submissions:Service.admitPrompt", Reason: "a user prompt admission names its request's caller"},
 		{Key: "internal/editordoc:authorshipTracker.personActor", Reason: "editor transitions are authored by their client's person"},
