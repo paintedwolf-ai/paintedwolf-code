@@ -192,8 +192,9 @@ jobs:
         run: |
           set -euo pipefail
           key="$RUNNER_TEMP/updater/rehearsal.key"
-          (cd lycaon-den && bun run tauri signer generate --ci --password "" --write-keys "$key")
-          TAURI_SIGNING_PRIVATE_KEY="$(cat "$key")" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" ./task den:bundle
+          # bun run drops an empty argument, so the disposable key gets a throwaway password.
+          (cd lycaon-den && bun run tauri signer generate --ci --password rehearsal --write-keys "$key")
+          TAURI_SIGNING_PRIVATE_KEY="$(cat "$key")" TAURI_SIGNING_PRIVATE_KEY_PASSWORD=rehearsal ./task den:bundle
 
       - name: Audit the unsigned bundle
         run: |
