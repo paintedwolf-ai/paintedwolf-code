@@ -142,6 +142,7 @@ webE2e.describe("onboarding first-run", () => {
   webE2e("an existing installation sees only the model choice", async ({ page }) => {
     await seedAppState(page, {onboarding: {firstRunSetupCompleted: true, localModelOnboardingCompleted: false}});
     await page.goto("/");
+    await expect(page.getByTestId("onboarding-local-model")).toBeVisible({timeout: 60_000});
     await expect(page.getByTestId("onboarding-progress")).toHaveText("1 / 1");
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("onboarding-gate")).toHaveCount(0);
