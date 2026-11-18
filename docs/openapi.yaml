@@ -34322,10 +34322,19 @@ components:
       type: object
       additionalProperties: false
       required:
-        - path
-        - root_id
         - client_id
+      description: Address a project file by root and path, or an outside file by its recorded file ID.
+      anyOf:
+        - required:
+            - root_id
+            - path
+        - required:
+            - file_id
       properties:
+        file_id:
+          type: string
+          format: uuid
+          description: Recorded project file identity for an outside tab.
         path:
           type: string
           minLength: 1

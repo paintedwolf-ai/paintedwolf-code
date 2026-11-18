@@ -15,7 +15,7 @@ export async function findTreePrefix(options: {
     let offset = from!;
     while (offset < to!) {
       signal.throwIfAborted();
-      const page = await options.frame(offset, Math.min(200, to! - offset), signal);
+      const page = await options.frame(Math.floor(offset / 200) * 200, 200, signal);
       signal.throwIfAborted();
       for (let i = 0; i < page.rows.length; i++) {
         const index = page.span.start + i;

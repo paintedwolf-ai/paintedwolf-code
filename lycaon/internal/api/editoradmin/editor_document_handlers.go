@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/textfile"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -42,10 +43,13 @@ func (s *Handler) HandleOpenEditorDocument(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	switch {
-	case strings.TrimSpace(req.Path) == "":
+	case req.FileID != "" && uuid.Validate(req.FileID) != nil:
+		s.responses.InvalidField(w, "file_id", "must be a UUID")
+		return
+	case req.FileID == "" && strings.TrimSpace(req.Path) == "":
 		s.responses.InvalidField(w, "path", "is required")
 		return
-	case uuid.Validate(req.RootID) != nil:
+	case req.FileID == "" && uuid.Validate(req.RootID) != nil:
 		s.responses.InvalidField(w, "root_id", "must be a UUID")
 		return
 	case strings.TrimSpace(req.ClientID) == "":
@@ -61,12 +65,25 @@ func (s *Handler) HandleOpenEditorDocument(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	p, err := outsideaccess.Admit(r.Context(), s.SourceLedger, p, req.RootID, req.Path)
+	root, path := req.RootID, req.Path
+	if req.FileID != "" {
+		var err error
+		root, path, err = s.SourceLedger.HeldFileAddress(r.Context(), p.ID, req.FileID)
+		if errors.Is(err, sourceledger.ErrHistoryNotFound) {
+			s.writeEditorDocumentError(w, r, editordoc.ErrNotFound)
+			return
+		}
+		if err != nil {
+			s.writeEditorDocumentError(w, r, err)
+			return
+		}
+	}
+	p, err := outsideaccess.Admit(r.Context(), s.SourceLedger, p, root, path)
 	if err != nil {
 		s.writeEditorDocumentError(w, r, err)
 		return
 	}
-	d, err := s.EditorDocuments.Open(r.Context(), p, req.Path, req.RootID, req.DecodeAs, req.ClientID, retainedReplica(req.Replica))
+	d, err := s.EditorDocuments.Open(r.Context(), p, path, root, req.DecodeAs, req.ClientID, retainedReplica(req.Replica))
 	if err != nil {
 		s.writeEditorDocumentError(w, r, err)
 		return

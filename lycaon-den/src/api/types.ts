@@ -13575,14 +13575,20 @@ export interface components {
             state_vector: string;
             base_sha256: string;
         };
+        /** @description Address a project file by root and path, or an outside file by its recorded file ID. */
         OpenEditorDocumentRequest: {
+            /**
+             * Format: uuid
+             * @description Recorded project file identity for an outside tab.
+             */
+            file_id?: string;
             /** @description Root-relative, slash-separated file path. */
-            path: string;
+            path?: string;
             /**
              * Format: uuid
              * @description Attached root that contains the file.
              */
-            root_id: string;
+            root_id?: string;
             /** @description Stable id for the client view opening the document. */
             client_id: string;
             /**
@@ -13591,7 +13597,7 @@ export interface components {
              */
             decode_as?: "utf-16le" | "utf-16be";
             replica?: components["schemas"]["RetainedReplica"];
-        };
+        } | unknown | unknown;
         /** @description Exact text transition of an explicit editor command, replayable independently of later shared edits. */
         EditorCommandHistory: {
             /** Format: uuid */
