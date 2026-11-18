@@ -75,14 +75,12 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 			toolCallID: strings.TrimSpace(spec.ToolCallID),
 		},
 		processConfinementState: processConfinementState{
-			isCheck:          spec.IsCheck,
-			sourceRevision:   spec.SourceRevision,
-			sourceRootDigest: spec.SourceRootDigest,
-			cwd:              spec.Cwd,
-			runID:            strings.TrimSpace(spec.RunID),
-			runKey:           runKey,
-			boundary:         confine.BoundaryOf(req.Launch.Confinement),
-			facts:            spec.Facts,
+			isCheck:  spec.IsCheck,
+			cwd:      spec.Cwd,
+			runID:    strings.TrimSpace(spec.RunID),
+			runKey:   runKey,
+			boundary: confine.BoundaryOf(req.Launch.Confinement),
+			facts:    spec.Facts,
 		},
 	}
 	if proc.RootSessionID == "" {
@@ -139,6 +137,11 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	r.jobs.workDirs[handle] = workDir
 	r.jobs.mu.Unlock()
 
+	source, err := prepareJobStart(ctx, runCtx, req)
+	if err != nil {
+		cancel()
+		return "", r.jobs.failStart(proc, err)
+	}
 	stdout := streamWriter{proc: proc, stream: "stdout", publish: r.Output.publishStream}
 	stderr := streamWriter{proc: proc, stream: "stderr", publish: r.Output.publishStream}
 
@@ -163,6 +166,7 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	}
 	r.jobs.mu.Lock()
 	proc.async = async
+	proc.sourceRevision, proc.sourceRootDigest = source.Revision, source.RootDigest
 	stopped := r.jobs.revalidateStartedProcessLocked(proc, workDir)
 	startEv, emitStart := r.jobs.indexProjectProcessLocked(proc)
 	publishProject := r.Output.publishProject

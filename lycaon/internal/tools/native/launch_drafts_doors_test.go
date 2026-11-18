@@ -29,7 +29,7 @@ type launchDoorWorld struct {
 	registry  *tools.DefaultRegistry
 	capture   *command.CommandTool
 	tc        tools.ToolContext
-	terminal string
+	terminal  string
 }
 
 func newLaunchDoorWorld(t *testing.T) *launchDoorWorld {
@@ -109,7 +109,7 @@ type launchDoor struct {
 	tool string
 	// prepare opens any terminal needed before the draft is typed.
 	prepare func(w *launchDoorWorld)
-	launch func(w *launchDoorWorld) (toolcontract.LaunchDrafts, error)
+	launch  func(w *launchDoorWorld) (toolcontract.LaunchDrafts, error)
 }
 
 var launchDoors = []launchDoor{
@@ -274,6 +274,15 @@ func TestCallsThatStartNoProcessSaveNoDraft(t *testing.T) {
 		{"terminal open without a command", func() (string, error) {
 			return w.run(terminal.OpenToolName, map[string]any{})
 		}},
+		{"terminal open without an executable", func() (string, error) {
+			return w.run(terminal.OpenToolName, map[string]any{"command": "./missing-command"})
+		}},
+		{"terminal capture without an executable", func() (string, error) {
+			return w.capture.Run(t.Context(), map[string]any{"command": "./missing-command", "terminal_capture": map[string]any{}}, w.tc)
+		}},
+		{"snapshot capture without an executable", func() (string, error) {
+			return w.capture.Run(t.Context(), map[string]any{"command": "./missing-command", "snapshot_capture": map[string]any{}}, w.tc)
+		}},
 		{"desktop capture", func() (string, error) {
 			return w.capture.Run(t.Context(), map[string]any{"command": "screencapture out.png", "terminal_capture": map[string]any{}}, w.tc)
 		}},
@@ -288,5 +297,35 @@ func TestCallsThatStartNoProcessSaveNoDraft(t *testing.T) {
 		if got, _ := w.read("a.txt"); got != "saved\n" {
 			t.Fatalf("%s wrote the draft to disk: %q", c.name, got)
 		}
+	}
+}
+
+func TestCapturedLaunchRunsTheSavedExecutable(t *testing.T) {
+	for _, capture := range []string{"terminal_capture", "snapshot_capture", "terminal_open"} {
+		t.Run(capture, func(t *testing.T) {
+			w := newLaunchDoorWorld(t)
+			script := "#!/bin/sh\nprintf 'updated executable' > witness.txt\n"
+			if capture == "snapshot_capture" {
+				script += "exit 42\n"
+			}
+			w.documents.Type("copy.sh", script)
+			w.documents.Publish = func(path, text string) error {
+				replacement := filepath.Join(w.dir, "replacement.sh")
+				if err := os.WriteFile(replacement, []byte(text), 0o755); err != nil {
+					return err
+				}
+				return os.Rename(replacement, filepath.Join(w.dir, path))
+			}
+			var err error
+			if capture == "terminal_open" {
+				_, err = w.openTerminal("copy.sh")
+			} else {
+				_, err = w.capture.Run(t.Context(), map[string]any{"command": "./copy.sh", capture: map[string]any{}}, w.tc)
+			}
+			testutil.FailErr(t, "launch the saved executable", err)
+			if got := w.witness(); got != "updated executable" {
+				t.Fatalf("launch ran the wrong executable: witness=%q", got)
+			}
+		})
 	}
 }

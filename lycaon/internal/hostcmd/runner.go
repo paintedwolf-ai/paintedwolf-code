@@ -24,6 +24,13 @@ type Request struct {
 	PathExtra []string
 	// ServiceEnv points a declared service's client at its reviewed endpoint.
 	ServiceEnv []string
+	// BeforeStart prepares the inputs of an admitted command job.
+	BeforeStart func(context.Context) (SourceIdentity, error)
+}
+
+// SourceIdentity states the verification inputs as prepared for launch.
+type SourceIdentity struct {
+	Revision, RootDigest string
 }
 
 // StageResult is one stage outcome in the tool-visible JSON envelope.

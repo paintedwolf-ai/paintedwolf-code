@@ -226,16 +226,20 @@ func runCommandForeground(
 		bound.close(ctx)
 		return RunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
 	}
-	drafts, err := tools.SaveLaunchDrafts(ctx, tctx)
-	if err != nil {
-		bound.close(ctx)
-		return RunOutcome{}, err
+	var drafts toolcontract.LaunchDrafts
+	var source commandSourceIdentity
+	req.BeforeStart = func(ctx context.Context) (hostcmd.SourceIdentity, error) {
+		var err error
+		drafts, err = tools.SaveLaunchDrafts(ctx, tctx)
+		if err != nil {
+			return hostcmd.SourceIdentity{}, err
+		}
+		source = captureVerificationSource(ctx, tctx)
+		return hostcmd.SourceIdentity{Revision: source.Revision, RootDigest: source.Root}, nil
 	}
-	source := captureVerificationSource(ctx, tctx)
 	index := watchIndex(tctx, confinement)
 	handle, err := registry.StartPipeline(ctx, bgprocess.PipelineSpec{
-		IsCheck:        tctx.Execution.VerificationCheck,
-		SourceRevision: source.Revision, SourceRootDigest: source.Root, Cwd: cwdDisplay,
+		IsCheck: tctx.Execution.VerificationCheck, Cwd: cwdDisplay,
 		SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(),
 		ProjectID: tctx.Identity.ProjectID, Request: req,
 		Runner: runner,

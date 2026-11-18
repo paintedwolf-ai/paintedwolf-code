@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os/exec"
 	"strings"
 
@@ -15,6 +14,8 @@ import (
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -113,15 +114,17 @@ func runCommandTerminalCapture(
 		}
 		return RunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
 	}
-	drafts, err := tools.SaveLaunchDrafts(ctx, tctx)
-	if err != nil {
-		bound.close(ctx)
-		if directIPApplied {
-			tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleCompleted)
+	var drafts toolcontract.LaunchDrafts
+	var source commandSourceIdentity
+	request.BeforeStart = func(ctx context.Context) (hostcmd.SourceIdentity, error) {
+		var err error
+		drafts, err = tools.SaveLaunchDrafts(ctx, tctx)
+		if err != nil {
+			return hostcmd.SourceIdentity{}, err
 		}
-		return RunOutcome{}, err
+		source = captureVerificationSource(ctx, tctx)
+		return hostcmd.SourceIdentity{Revision: source.Revision, RootDigest: source.Root}, nil
 	}
-	source := captureVerificationSource(ctx, tctx)
 	captured, runErr := registry.Terminal.RunPTYCapture(
 		ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID, tctx.Identity.ProjectID, request, runner,
 		terminalCaptureWinSize(args), facts,

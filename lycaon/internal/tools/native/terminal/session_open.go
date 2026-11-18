@@ -144,10 +144,11 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 			egressLease.Close(ctx)
 			return "", toolrejection.HeldHandOffReject("terminal_open", err)
 		}
-		drafts, err := tools.SaveLaunchDrafts(ctx, tctx)
-		if err != nil {
-			egressLease.Close(ctx)
-			return "", err
+		var drafts toolcontract.LaunchDrafts
+		req.BeforeStart = func(ctx context.Context) (hostcmd.SourceIdentity, error) {
+			var err error
+			drafts, err = tools.SaveLaunchDrafts(ctx, tctx)
+			return hostcmd.SourceIdentity{}, err
 		}
 		handle, err := bg.Terminal.StartPTY(
 			ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID, tctx.Identity.ProjectID,
