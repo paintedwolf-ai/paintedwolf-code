@@ -15,6 +15,7 @@ import (
 )
 
 func TestBackupRequiresGitHistoryInItsRecoverableRoot(t *testing.T) {
+	t.Parallel()
 	for _, location := range []string{"current", "ancestor"} {
 		t.Run(location, func(t *testing.T) {
 			verifyRootHistoryPlacement(t, location)

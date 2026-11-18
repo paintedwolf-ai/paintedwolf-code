@@ -148,6 +148,7 @@ func copyGitObjectsDir(t *testing.T, srcObjects, dstObjects string) {
 }
 
 func TestBackupValidatesPublishedWorkerCheckpointsAndGitObjects(t *testing.T) {
+	t.Parallel()
 	fx := setupCheckpointBackupFixture(t)
 
 	// Even with the branch working tree evicted on disk, Create succeeds because the checkpoint and
@@ -186,6 +187,7 @@ func TestBackupValidatesPublishedWorkerCheckpointsAndGitObjects(t *testing.T) {
 }
 
 func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
+	t.Parallel()
 	t.Run("unrelated_valid_pack_and_index", func(t *testing.T) {
 		fx := setupCheckpointBackupFixture(t)
 		retainedObjectsDir := filepath.Join(fx.root, "worker-branches", ".adapter", "privategit", "retained-store", "objects")
@@ -352,6 +354,7 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 }
 
 func TestBackupPackedWorkerGitHistoryRestoresWithoutOriginalTrunkOrStore(t *testing.T) {
+	t.Parallel()
 	fx := setupCheckpointBackupFixture(t)
 	retainedObjectsDir := filepath.Join(fx.root, "worker-branches", ".adapter", "privategit", "retained-store", "objects")
 	testutil.FailErr(t, "clear loose retained objects", os.RemoveAll(retainedObjectsDir))
@@ -562,6 +565,7 @@ func writeBranchCheckpointMeta(t *testing.T, root, branchRel, storeDir, lastChec
 }
 
 func TestBackupCheckpointSharedStoreScalingAndCycleDetection(t *testing.T) {
+	t.Parallel()
 	t.Run("shared_store_diamond_dag_scales_with_store_once", func(t *testing.T) {
 		fx := setupCheckpointBackupFixture(t)
 		retainedObjectsDir := filepath.Join(fx.root, "worker-branches", ".adapter", "privategit", "retained-store", "objects")

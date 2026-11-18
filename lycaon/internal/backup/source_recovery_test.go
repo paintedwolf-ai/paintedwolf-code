@@ -16,6 +16,7 @@ import (
 )
 
 func TestBackupRequiresTrashRecoveryObjects(t *testing.T) {
+	t.Parallel()
 	config := t.TempDir()
 	dbPath := filepath.Join(config, "store.db")
 	database := testdbfixture.OpenPath(t, dbPath)

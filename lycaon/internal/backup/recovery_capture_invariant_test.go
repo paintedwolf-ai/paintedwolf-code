@@ -15,6 +15,7 @@ import (
 )
 
 func TestRecoveryCaptureFailureRemovesOnlyItsIncompleteDestination(t *testing.T) {
+	t.Parallel()
 	for _, failure := range []string{"closed store", "canceled", "invalid outbox", "invalid durable file", "invalid durable directory"} {
 		t.Run(failure, func(t *testing.T) {
 			root := t.TempDir()
@@ -59,6 +60,7 @@ func TestRecoveryCaptureFailureRemovesOnlyItsIncompleteDestination(t *testing.T)
 }
 
 func TestRecoveryMaterializationNeverOverwritesAnExistingDestination(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	source, destination := filepath.Join(root, "source"), filepath.Join(root, "destination")
 	testutil.FailErr(t, "seed source", os.WriteFile(source, []byte("new bytes"), 0o600))

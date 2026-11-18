@@ -15,6 +15,7 @@ import (
 )
 
 func TestRecoveryCaptureDoesNotPublishWithoutReadableDurablePayloads(t *testing.T) {
+	t.Parallel()
 	for _, relative := range []string{historyretention.PolicyFilename, filepath.Join(editoroutbox.Directory(), "document", "records.log")} {
 		t.Run(relative, func(t *testing.T) {
 			root := t.TempDir()

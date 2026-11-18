@@ -6,7 +6,8 @@ import (
 	"testing"
 )
 
-// SkipIfRace skips tests that race instrumentation breaks, not merely slows.
+// SkipIfRace skips tests the detector cannot check: instrumentation breaks them, or they start
+// no goroutines and only pay its slowdown.
 func SkipIfRace(t testing.TB, reason string) {
 	t.Helper()
 	if RaceEnabled {

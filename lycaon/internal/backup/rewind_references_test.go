@@ -16,6 +16,7 @@ import (
 )
 
 func TestRestoredRewindJournalUsesDestination(t *testing.T) {
+	t.Parallel()
 	source, project := t.TempDir(), t.TempDir()
 	database := testdbfixture.OpenPath(t, filepath.Join(source, "store.db"))
 	testdbseed.InsertSessionWithRoot(t, database, "review-session", testdbseed.DefaultProjectID, project)
@@ -49,6 +50,7 @@ func TestRestoredRewindJournalUsesDestination(t *testing.T) {
 }
 
 func TestBackupRefusesMissingOrMismatchedRewindJournal(t *testing.T) {
+	t.Parallel()
 	config, project := t.TempDir(), t.TempDir()
 	database := testdbfixture.OpenPath(t, filepath.Join(config, "store.db"))
 	testdbseed.InsertSessionWithRoot(t, database, "session", testdbseed.DefaultProjectID, project)

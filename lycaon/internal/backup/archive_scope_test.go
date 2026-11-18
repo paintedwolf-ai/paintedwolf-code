@@ -9,6 +9,7 @@ import (
 )
 
 func TestArchiveVersionsRequireTheirExactReplacementScope(t *testing.T) {
+	t.Parallel()
 	legacy := Manifest{FormatVersion: 1, ReplaceRelPaths: slices.Clone(archiveV1Files),
 		ReplaceRelDirs: slices.Clone(archiveV1Directories),
 		Files:          []FileEntry{{RelPath: "store.db", Kind: fileKindRegular, Mode: 0600, SHA256: strings.Repeat("a", 64)}},

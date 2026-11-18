@@ -11,6 +11,7 @@ import (
 )
 
 func TestArchiveWriterRefusesBeyondLimitWithoutWritingExcess(t *testing.T) {
+	t.Parallel()
 	var dest bytes.Buffer
 	w := &archiveLimitWriter{dest: &dest, remaining: 8}
 	_, err := w.Write([]byte("12345678"))
@@ -24,6 +25,7 @@ func TestArchiveWriterRefusesBeyondLimitWithoutWritingExcess(t *testing.T) {
 }
 
 func TestCaptureLimitsIncludeManifestAndMatchRestoreLimits(t *testing.T) {
+	t.Parallel()
 	manifest := Manifest{Files: []FileEntry{{Kind: fileKindRegular, Size: int64(MaxExpandedArchiveBytes) - 2}}}
 	testutil.FailErr(t, "expanded exactly at limit", validateCaptureManifest(manifest, []byte("{}")))
 	manifest.Files[0].Size++
@@ -37,6 +39,7 @@ func TestCaptureLimitsIncludeManifestAndMatchRestoreLimits(t *testing.T) {
 }
 
 func TestCanceledCaptureStopsWithinCurrentFile(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	r := contextReader{ctx: ctx, in: bytes.NewBufferString("body")}
@@ -46,6 +49,7 @@ func TestCanceledCaptureStopsWithinCurrentFile(t *testing.T) {
 }
 
 func TestUpgradeSpaceRequiresRecoveryAndScratchAllowance(t *testing.T) {
+	t.Parallel()
 	var space *db.InsufficientSpaceError
 	if err := requireUpgradeSpace(4<<30, 3<<30); !errors.As(err, &space) || space.NeededBytes != 4<<30 || space.AvailableBytes != 3<<30 {
 		t.Fatalf("insufficient space = %v, want a typed refusal with both sizes", err)
@@ -54,6 +58,7 @@ func TestUpgradeSpaceRequiresRecoveryAndScratchAllowance(t *testing.T) {
 }
 
 func TestWorkerBackupScopeIncludesOnlyLayoutMetadata(t *testing.T) {
+	t.Parallel()
 	const root = "worker-branches/0123456789abcdef"
 	for _, path := range []string{root + "/job-1.meta/state.json", root + "/a.meta/state.json"} {
 		if !RestorableRelPath(path) {

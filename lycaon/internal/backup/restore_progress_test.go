@@ -14,6 +14,7 @@ import (
 )
 
 func TestRestoreProgressBoundsRepeatedFilesAndBytes(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "pending.json")
 	restore := &pendingRestore{markerPath: path, marker: PendingMarker{StagingDir: t.TempDir()}, appliedSet: map[string]struct{}{}}
 	testutil.FailErr(t, "seed pending decision", writeMarker(path, restore.marker))
@@ -61,12 +62,14 @@ func TestRestoreProgressBoundsRepeatedFilesAndBytes(t *testing.T) {
 }
 
 func TestRestoreReplaysUncheckpointedDurableFiles(t *testing.T) {
+	t.Parallel()
 	for _, prefix := range []int{restoreProgressFiles - 1, restoreProgressFiles + 1} {
 		t.Run(fmt.Sprint(prefix), func(t *testing.T) { testRestoreReplayPrefix(t, prefix, "") })
 	}
 }
 
 func TestRestoreCompletesWithUnusableProgress(t *testing.T) {
+	t.Parallel()
 	for _, damage := range []string{"cursor", "destination", "directory", "destination-directory", "destination-loop"} {
 		t.Run(damage, func(t *testing.T) { testRestoreReplayPrefix(t, restoreProgressFiles+1, damage) })
 	}
@@ -136,6 +139,7 @@ func testRestoreReplayPrefix(t *testing.T, prefix int, damage string) {
 }
 
 func TestRestoreProgressCursorSizeIndependentOfInventory(t *testing.T) {
+	t.Parallel()
 	var expected int
 	for _, count := range []int{64, 8192} {
 		restore := &pendingRestore{marker: PendingMarker{StagingDir: t.TempDir()}, completed: 64}
@@ -155,6 +159,7 @@ func TestRestoreProgressCursorSizeIndependentOfInventory(t *testing.T) {
 }
 
 func TestRestoreProgressReplaysUnusableCursor(t *testing.T) {
+	t.Parallel()
 	for _, invalid := range []string{"identity", "count", "version", "absent", "json"} {
 		t.Run(invalid, func(t *testing.T) {
 			restore := &pendingRestore{marker: PendingMarker{StagingDir: t.TempDir(), Files: []PendingFile{{RelPath: "drafts/body"}}}, appliedSet: map[string]struct{}{}}
@@ -183,6 +188,7 @@ func TestRestoreProgressReplaysUnusableCursor(t *testing.T) {
 }
 
 func TestRestoreProgressChecksCheckpointedDeletion(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	restore := &pendingRestore{markerPath: filepath.Join(root, "pending.json"), marker: PendingMarker{StagingDir: t.TempDir(), DeleteRelPaths: []string{"approvals.yaml"}}, appliedSet: map[string]struct{}{}, completed: 1}
 	testutil.FailErr(t, "checkpoint deletion", restore.checkpointProgress())
@@ -199,6 +205,7 @@ func TestRestoreProgressChecksCheckpointedDeletion(t *testing.T) {
 }
 
 func TestRestoreProgressPreservesDeletionInspectionError(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join(t.TempDir(), "not-a-directory")
 	testutil.FailErr(t, "seed invalid destination parent", os.WriteFile(root, []byte("kept"), 0o600))
 	restore := &pendingRestore{markerPath: filepath.Join(root, "pending.json"), marker: PendingMarker{StagingDir: t.TempDir(), DeleteRelPaths: []string{"approvals.yaml"}}, appliedSet: map[string]struct{}{}, completed: 1}

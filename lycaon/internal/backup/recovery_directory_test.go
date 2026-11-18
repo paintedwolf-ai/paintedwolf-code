@@ -15,6 +15,7 @@ import (
 )
 
 func TestRecoveryDirectorySurvivesLiveBodyMutationAndDeletion(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, storeRelPath)
 	database := testdbfixture.OpenPath(t, path)
@@ -55,6 +56,7 @@ func TestRecoveryDirectorySurvivesLiveBodyMutationAndDeletion(t *testing.T) {
 }
 
 func TestRecoveryDirectoryRejectsCorruptBodyBeforePublication(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, storeRelPath)
 	database := testdbfixture.OpenPath(t, path)
@@ -76,6 +78,7 @@ func TestRecoveryDirectoryRejectsCorruptBodyBeforePublication(t *testing.T) {
 }
 
 func TestRecoveryInventoryDoesNotApplyPublicTransferCaps(t *testing.T) {
+	t.Parallel()
 	manifest := Manifest{Files: []FileEntry{{RelPath: storeRelPath, Kind: fileKindRegular, Size: 1}, {RelPath: "drafts/large", Kind: fileKindRegular, Size: 300 << 30}}}
 	inventory, err := manifestInventory(manifest)
 	testutil.FailErr(t, "inventory retained installation over public limits", err)
@@ -99,6 +102,7 @@ func (c *mutateOnReadContext) Err() error {
 }
 
 func TestRecoveryStreamingFallbackRefusesChangingSource(t *testing.T) {
+	t.Parallel()
 	for _, updated := range []string{"short", "changed body!", "longer than the original body"} {
 		t.Run(updated, func(t *testing.T) {
 			root := t.TempDir()

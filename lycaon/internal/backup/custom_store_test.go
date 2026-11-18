@@ -13,6 +13,7 @@ import (
 )
 
 func TestRecoveryRestoreInstallsConfiguredDatabaseAndRetainsItsJournals(t *testing.T) {
+	t.Parallel()
 	source := testdbfixture.Open(t, "store.db")
 	sourceRoot := source.DataDir()
 	_, err := source.ExecContext(t.Context(), `INSERT INTO store_meta(key,value) VALUES('restore-probe','archive')`)
@@ -62,6 +63,7 @@ func TestRecoveryRestoreInstallsConfiguredDatabaseAndRetainsItsJournals(t *testi
 }
 
 func TestFreshStartReplacesConfiguredCustomStore(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, "custom.db")
 	database := testdbfixture.OpenPath(t, path)
