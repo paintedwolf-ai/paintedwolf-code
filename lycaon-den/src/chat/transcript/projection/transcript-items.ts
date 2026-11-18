@@ -1,6 +1,8 @@
 import type { Message } from "../../../api/types.ts";
 import { enrichCheckpointDecision } from "../../checkpoint/approval-display.ts";
 import { blueprintCardViewFromMeta } from "../../../blueprint/blueprint-card-view.ts";
+import { hasLiveCommandActivities } from "../../tool/command-activity-live.ts";
+import { noteToolCallShownInFlight, PROGRAM_ACTIVITY_TOOLS, wasToolCallShownInFlight } from "../../tool/program-tool-visibility.ts";
 import { foldFileEdits } from "../../file-edit/file-edit-fold.ts";
 import { omitIndexWarmingFromTranscript, projectActivitySpans } from "../../tool/activity-span-model.ts";
 import { shouldShowIndexWarmingInTranscript } from "./index-warming-copy.ts";
@@ -26,6 +28,7 @@ function fallbackTranscriptItem(msg: Message): Extract<TranscriptItem, { kind: "
 type TranscriptToolBuildOpts = {
   verboseMode: boolean;
   layout: TranscriptLayout;
+  sessionId?: string;
 };
 
 type ToolMessageIndex = {
@@ -69,7 +72,11 @@ function appendRunningToolsForAssistant(
     const hasResult = index.results.get(msg.id.trim())?.has(wireId);
     if (hasResult) continue;
     if (!call.name?.trim()) continue;
-    if (shouldOmitToolPartFromTranscript(undefined, call.name, opts)) {
+    const sessionId = opts.sessionId;
+    const shownInFlight = sessionId !== undefined && opts.layout === "chat" && !opts.verboseMode &&
+      PROGRAM_ACTIVITY_TOOLS.has(call.name.toLowerCase()) &&
+      (wasToolCallShownInFlight(sessionId, stableId) || hasLiveCommandActivities(sessionId, wireId));
+    if (shouldOmitToolPartFromTranscript(undefined, call.name, { ...opts, shownInFlight })) {
       continue;
     }
     const part = toolPartFromCall(
@@ -79,6 +86,10 @@ function appendRunningToolsForAssistant(
       msg.workflow_run_id,
       { message: msg, index: callIndex },
     );
+    if (sessionId && shownInFlight) {
+      noteToolCallShownInFlight(sessionId, stableId);
+      part.shownInFlight = true;
+    }
     renderedToolKeys.add(stableId);
     items.push({ kind: "tool", key: part.id, part, batchOrder: callIndex });
   }
@@ -110,7 +121,8 @@ function appendToolResultRow(
   const stableId = toolPartStableId(assistantMessageId, call);
   if (renderedToolKeys.has(stableId)) return;
   const decision = msg.tool_result?.checkpoint_decision;
-  if (!shouldOmitToolPartFromTranscript(msg, call.name ?? "", opts)) {
+  const shownInFlight = opts.sessionId !== undefined && wasToolCallShownInFlight(opts.sessionId, stableId);
+  if (!shouldOmitToolPartFromTranscript(msg, call.name, { ...opts, shownInFlight })) {
     const part = toolPartFromCall(
       call,
       msg,
@@ -118,6 +130,7 @@ function appendToolResultRow(
       assistant?.workflow_run_id ?? msg.workflow_run_id,
       assistant && callIndex >= 0 ? { message: assistant, index: callIndex } : undefined,
     );
+    if (shownInFlight) part.shownInFlight = true;
     renderedToolKeys.add(stableId);
     items.push({
       kind: "tool",
@@ -131,7 +144,7 @@ function appendToolResultRow(
       kind: "checkpoint",
       key: `checkpoint:${decision.checkpoint_id}`,
       parentMessageId: assistantMessageId,
-      call: { tool: toolName, index: Math.max(callIndex, 0), resultMessageId: msg.id },
+      call: { tool: toolName, index: Math.max(callIndex, 0), resultMessageId: msg.id, shownInFlight },
       meta: enrichCheckpointDecision(decision, call, msg.tool_result),
     });
   }
@@ -174,6 +187,7 @@ export function messagesToTranscriptItems(
   const toolOpts: TranscriptToolBuildOpts = {
     verboseMode,
     layout,
+    sessionId: opts?.sessionId,
   };
   const orderedMessages = [...messages].sort(
     (a, b) =>

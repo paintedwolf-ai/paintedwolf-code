@@ -188,7 +188,7 @@ Timestamps are display data, not a total order. Arrival order is a transport acc
 
 A row keeps the place it is first drawn at ([`transcript-item-order.ts`](../lycaon-den/src/chat/transcript/projection/transcript-item-order.ts)). Its place is the `ord` of the message that first shows it:
 
-- a call whose tool draws while it runs (`long_running`, or any call in verbose mode and worker transcripts) sits at its assistant row;
+- a call drawn in flight sits at its assistant row. Quiet chat draws program calls there after host progress arrives. Other lifecycle tools, verbose chat, and worker transcripts draw in-flight calls when their assistant row commits;
 - a call drawn once it settles sits at its result;
 - a note sits at the assistant row whose calls it introduces.
 
@@ -261,7 +261,7 @@ Physical message deletion occurs only through the explicit rewind/truncation ope
 
 ## Liveness
 
-Streaming and running status is a runtime projection over the active turn, not a durable claim that survives restart. A settled row is never reopened by a late stream chunk. Active tool calls render before their result classification so current work is intelligible; only settled quiet results may be hidden by the explicit visibility setting.
+Streaming and running status is a runtime projection over the active turn, not a durable claim that survives restart. A settled row is never reopened by a late stream chunk. Quiet chat shows a program call when the host reports command activity or returns a live process handle. A program row shown in flight remains visible when progress clears and the result settles. Quiet chat omits benign results when the call never appeared in flight. Verbose chat and worker transcripts show tool calls as soon as the assistant row commits.
 
 On reconnect, durable content loads first and current operation state reattaches liveness where identities match. Missing runtime state means interrupted or settled according to host reconciliation, not "still running because the last bubble animated."
 

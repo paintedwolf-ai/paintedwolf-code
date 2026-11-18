@@ -130,7 +130,7 @@ export type TranscriptItem =
       key: string;
       parentMessageId: string;
       /** The call it decides for, when this transcript holds it; the row follows that call's. */
-      call?: { tool: string; index: number; resultMessageId?: string };
+      call?: { tool: string; index: number; resultMessageId?: string; shownInFlight?: boolean };
       meta: CheckpointDecisionMeta;
     }
   | {
@@ -190,6 +190,7 @@ export type DisplayTranscriptItem = Exclude<
 >;
 
 export type TranscriptBuildOptions = {
+  sessionId?: string;
   /** Shows benign tool activity when enabled. */
   verboseMode?: boolean;
   /** Controls tool visibility by transcript surface. */

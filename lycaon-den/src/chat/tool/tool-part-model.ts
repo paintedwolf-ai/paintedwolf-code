@@ -24,6 +24,7 @@ import {
   toolCallArgsRedactionField,
   type ToolArgsRedaction,
 } from "../transcript/content/redaction-spans.ts";
+import { PROGRAM_ACTIVITY_TOOLS } from "./program-tool-visibility.ts";
 import { resolveChickletTitle } from "./tool-chicklet-titles.ts";
 import { skillReadResource, skillResourceTitle } from "../skill/skill-read.ts";
 import {
@@ -67,6 +68,8 @@ export interface ToolPartView {
   id: string;
   /** Host tool-call identity. */
   toolCallId: string;
+  /** Host progress first placed this row at the assistant call. */
+  shownInFlight?: true;
   /** Assistant row that issued this call. */
   assistantMessageId: string;
   /** Durable workflow scope for grouping; absent for an ordinary chat batch. */
@@ -153,7 +156,8 @@ export function isTaskToolName(tool: string): boolean {
 
 /** Settled benign results remain visible for lifecycle tools. */
 function isLifecycleVisibleTool(tool: string): boolean {
-  return LONG_RUNNING_TOOL_SET.has(tool.toLowerCase());
+  const name = tool.toLowerCase();
+  return LONG_RUNNING_TOOL_SET.has(name) && !PROGRAM_ACTIVITY_TOOLS.has(name);
 }
 
 /** Membership for parent-chat orientation tools (see shouldHideCoordinatorInternalTool). */
@@ -249,6 +253,7 @@ export function isBenignToolResult(resultMsg?: Message): boolean {
 type ToolPartTranscriptOmitOptions = {
   verboseMode: boolean;
   layout?: TranscriptLayout;
+  shownInFlight?: boolean;
 };
 
 type ToolTranscriptVisibility =
@@ -260,13 +265,15 @@ type ToolTranscriptVisibility =
 function toolTranscriptVisibility(
   resultMsg: Message | undefined,
   toolName: string,
-  layout: TranscriptLayout = "chat",
+  layout: TranscriptLayout,
+  shownInFlight: boolean,
 ): ToolTranscriptVisibility {
   if (shouldHideCoordinatorInternalTool(toolName, layout)) return "hidden";
   if (layout === "worker") return "visible";
-  if (isLifecycleVisibleTool(toolName)) return "visible";
+  if (shownInFlight || isLifecycleVisibleTool(toolName)) return "visible";
   if (!resultMsg) return "verbose_only";
   const result = resultMsg.tool_result;
+  if (withHandle(result?.process)?.running) return "visible";
   if (result?.file_edit_previews?.some((edit) => edit.path.trim() !== "") || (result?.file_edits_omitted ?? 0) > 0) return "visible";
   return isBenignToolResult(resultMsg) ? "verbose_only" : "visible";
 }
@@ -278,13 +285,13 @@ export function shouldOmitToolPartFromTranscript(
   options: ToolPartTranscriptOmitOptions,
 ): boolean {
   const layout = options.layout ?? "chat";
-  const visibility = toolTranscriptVisibility(resultMsg, toolName, layout);
+  const visibility = toolTranscriptVisibility(resultMsg, toolName, layout, options.shownInFlight ?? false);
   if (visibility === "visible") return false;
   if (visibility === "hidden") return true;
   return !options.verboseMode;
 }
 
-/** Whether a tool's row is drawn before its result arrives; fixed per tool and view. */
+/** Whether the row is placed at the assistant call. */
 export function toolDrawsWhileRunning(toolName: string, options: ToolPartTranscriptOmitOptions): boolean {
   return !shouldOmitToolPartFromTranscript(undefined, toolName, options);
 }

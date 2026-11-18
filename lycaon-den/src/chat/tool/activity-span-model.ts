@@ -128,7 +128,7 @@ function activityCandidate(
     headline,
     weight,
     role,
-    drawnBeforeResult: toolDrawsWhileRunning(toolName, {
+    drawnBeforeResult: item.part.shownInFlight || toolDrawsWhileRunning(toolName, {
       verboseMode: opts?.verboseMode ?? false,
       layout: opts?.layout,
     }),

@@ -86,7 +86,8 @@ export function createCommandActivityProjection() {
       if (!FORM_PROGRAM_TOOLS.has(entry.part.tool) || !entry.part.commandProgram) lastRow = undefined;
       let program = preferredCommandProgram(entry.part.commandProgram, live(entry.part));
       const previous = remembered.get(entry.part.toolCallId);
-      if (program && previous?.id === program.id && !program.activities && previous.activities?.length) {
+      const missingFacts = !program?.activities || (entry.part.shownInFlight && program.activities.length === 0);
+      if (program && previous?.id === program.id && missingFacts && previous.activities?.length) {
         program = { ...program, activities: previous.activities.map(fact =>
           fact.state === "running" || fact.state === "waiting"
             ? { ...fact, state: "unknown" as const, outcome: "Outcome unavailable", status_code: undefined }
