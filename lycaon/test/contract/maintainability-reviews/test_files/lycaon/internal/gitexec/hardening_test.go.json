@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/gitexec/hardening_test.go",
+  "kind": "test_suite",
+  "workstream": "shim-audit",
+  "disposition": "retain",
+  "reason": "Retain one adversarial repository and transport contract suite. The tests exercise real Git against executable configuration, nested repositories, configuration edits, identity precedence and explicit launch authority; private invocation resources isolate setup without replacing repository audits or launch decisions.",
+  "reviewed_commit": "e774bb7cfd2a9f5d9633a7e65e2def02d647d0d5",
+  "ceiling": 520,
+  "boundaries": {
+    "lycaon/internal/gitexec/hardening_test.go": "ca2cf9fbf327a2eb4ac204371b5e2def85cd38903cab443a62952931b313f564"
+  }
+}
