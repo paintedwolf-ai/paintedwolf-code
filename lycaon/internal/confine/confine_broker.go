@@ -23,21 +23,24 @@ type brokerPorts struct {
 }
 
 var broker = struct {
-	mu sync.RWMutex
-	// bound reports that a front door is serving, whether real or installed by a test.
-	bound  bool
-	live   *egressproxy.Broker
-	addrs  egressproxy.Addrs
-	failed error
+	mu      sync.RWMutex
+	live    *egressproxy.Broker
+	addrs   egressproxy.Addrs
+	failure brokerFailure
 }{}
+
+type brokerFailure struct {
+	reason string
+	err    error
+}
 
 // StartEgressBroker binds the host's single mediation front door. Its address is
 // the same for every project, action, and invocation, so a confined process's
 // environment follows its boundary rather than the call that produced it.
-func StartEgressBroker(stateRoot string) (egressproxy.Addrs, error) {
+func StartEgressBroker(stateRoot string, listen egressproxy.ListenFunc) (egressproxy.Addrs, error) {
 	broker.mu.Lock()
 	defer broker.mu.Unlock()
-	if broker.bound {
+	if broker.live != nil {
 		return broker.addrs, nil
 	}
 	b := egressproxy.New(egressBroker.decideEndpoint)
@@ -51,20 +54,18 @@ func StartEgressBroker(stateRoot string) (egressproxy.Addrs, error) {
 	b.SetRefusalReporter(egressBroker.reportRefusal)
 
 	recorded := readBrokerPorts(stateRoot)
-	addrs, err := b.Start(egressproxy.Options{HTTPPort: recorded.HTTP, SOCKSPort: recorded.SOCKS})
+	addrs, err := b.Start(egressproxy.Options{HTTPPort: recorded.HTTP, SOCKSPort: recorded.SOCKS, ListenHTTP: listen})
 	if err != nil {
-		broker.failed = err
-		recordEgressDegraded("broker_start_failed", err)
+		setBrokerFailure("broker_start_failed", err)
 		return egressproxy.Addrs{}, fmt.Errorf("start egress broker: %w", err)
 	}
 	if addrs.HTTP == "" || addrs.SOCKS == "" {
 		_ = b.Close()
 		err := fmt.Errorf("egress broker started without both listener addresses")
-		broker.failed = err
-		recordEgressDegraded("broker_empty_addr", err)
+		setBrokerFailure("broker_empty_addr", err)
 		return egressproxy.Addrs{}, err
 	}
-	broker.live, broker.addrs, broker.bound = b, addrs, true
+	broker.live, broker.addrs, broker.failure = b, addrs, brokerFailure{}
 	writeBrokerPorts(stateRoot, addrs)
 	return addrs, nil
 }
@@ -74,7 +75,7 @@ func StartEgressBroker(stateRoot string) (egressproxy.Addrs, error) {
 func StopEgressBroker() error {
 	broker.mu.Lock()
 	live := broker.live
-	broker.live, broker.addrs, broker.bound = nil, egressproxy.Addrs{}, false
+	broker.live, broker.addrs, broker.failure = nil, egressproxy.Addrs{}, brokerFailure{}
 	broker.mu.Unlock()
 	if live == nil {
 		return nil
@@ -85,44 +86,27 @@ func StopEgressBroker() error {
 func brokerAddrs() (egressproxy.Addrs, error) {
 	broker.mu.RLock()
 	defer broker.mu.RUnlock()
-	if !broker.bound {
-		if broker.failed != nil {
-			return egressproxy.Addrs{}, fmt.Errorf("egress broker is unavailable: %w", broker.failed)
+	if broker.live == nil {
+		if broker.failure.err != nil {
+			return egressproxy.Addrs{}, fmt.Errorf("egress broker is unavailable: %w", broker.failure.err)
 		}
 		return egressproxy.Addrs{}, fmt.Errorf("egress broker is not running")
 	}
 	return broker.addrs, nil
 }
 
-// SetBrokerForTest installs a front door without binding real listeners.
-func SetBrokerForTest(b *egressproxy.Broker, addrs egressproxy.Addrs) func() {
-	return setBrokerState(b, addrs, true, nil)
-}
-
-// SetBrokerUnavailableForTest makes mediation fail to start, so a caller can
-// check that an action refuses rather than launching unmediated.
-func SetBrokerUnavailableForTest(cause error) func() {
-	restore := setBrokerState(nil, egressproxy.Addrs{}, false, cause)
-	recordEgressDegraded("broker_start_failed", cause)
-	return restore
-}
-
-func setBrokerState(b *egressproxy.Broker, addrs egressproxy.Addrs, bound bool, failed error) func() {
-	broker.mu.Lock()
-	prevLive, prevAddrs, prevFailed, prevBound := broker.live, broker.addrs, broker.failed, broker.bound
-	broker.live, broker.addrs, broker.failed, broker.bound = b, addrs, failed, bound
-	broker.mu.Unlock()
-	egressDegradedMu.Lock()
-	egressDegraded = nil
-	egressDegradedMu.Unlock()
-	return func() {
-		broker.mu.Lock()
-		broker.live, broker.addrs, broker.failed, broker.bound = prevLive, prevAddrs, prevFailed, prevBound
-		broker.mu.Unlock()
-		egressDegradedMu.Lock()
-		egressDegraded = nil
-		egressDegradedMu.Unlock()
+func setBrokerFailure(reason string, err error) {
+	if broker.failure.err == nil {
+		logBrokerStartFailure(reason, err.Error())
 	}
+	broker.failure = brokerFailure{reason: reason, err: err}
+}
+
+// EgressDegradedState reports the current broker startup failure.
+func EgressDegradedState() (EgressDegraded, bool) {
+	broker.mu.RLock()
+	defer broker.mu.RUnlock()
+	return EgressDegraded{Reason: broker.failure.reason}, broker.failure.err != nil
 }
 
 func brokerPortsPath(stateRoot string) string {

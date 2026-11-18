@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/confinetest"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -137,7 +138,7 @@ func TestFailClosedBrokerStartup(t *testing.T) {
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
-	t.Cleanup(confine.SetBrokerUnavailableForTest(os.ErrInvalid))
+	confinetest.FailBrokerStartup(t, os.ErrInvalid)
 
 	c, ok := confine.DefaultConfinement(confine.Request{Roots: []string{t.TempDir()}})
 	if !confine.Available() {

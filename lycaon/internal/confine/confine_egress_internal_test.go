@@ -3,6 +3,7 @@ package confine
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -122,8 +123,9 @@ func TestBrokerRecordsEgressPerCommand(t *testing.T) {
 }
 
 func TestActionLeaseBindsOnceAndDrainsOnClose(t *testing.T) {
-	restore := SetBrokerForTest(nil, egressproxy.Addrs{HTTP: "127.0.0.1:1", SOCKS: "127.0.0.1:2"})
-	t.Cleanup(restore)
+	_, err := StartEgressBroker(t.TempDir(), net.Listen)
+	testutil.FailErr(t, "start egress broker", err)
+	t.Cleanup(func() { testutil.FailErr(t, "stop egress broker", StopEgressBroker()) })
 	c := &Confinement{Network: NetworkProxyOnly}
 	lease, err := BindAction(c, EgressCommand{SessionID: "s", ProjectID: "p"})
 	if err != nil {
