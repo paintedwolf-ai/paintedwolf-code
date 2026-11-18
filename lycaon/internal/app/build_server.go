@@ -524,7 +524,7 @@ func wireDestinationConfig(b *serveBuilder) error {
 }
 
 func restoreWorkerDrafts(b *serveBuilder, ctx context.Context) error {
-	if b.workerRuntime == nil || b.workerRuntime.Queue == nil {
+	if b.workerRuntime == nil || b.workerRuntime.Promotions == nil {
 		return nil
 	}
 	pending, err := b.workerRuntime.Promotions.ListPendingOverlays(ctx)
