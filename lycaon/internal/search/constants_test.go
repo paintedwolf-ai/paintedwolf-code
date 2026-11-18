@@ -9,12 +9,14 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type schemaLockColumn struct {
 	Name    string `json:"name"`
 	NotNull bool   `json:"not_null"`
+	PK      bool   `json:"pk"`
 }
 
 type schemaLock struct {
@@ -95,6 +97,71 @@ func TestFTSTablesLockMatchesConstants(t *testing.T) {
 		}
 		if !reflect.DeepEqual(fts.Columns, cols) {
 			t.Fatalf("%s columns = %v, want %v", fts.Name, fts.Columns, cols)
+		}
+	}
+}
+
+// The lock describes the schema a fresh store really has: columns in order, their
+// NOT NULL flags, the composite index, and the FTS column sets.
+func TestSchemaLockMatchesLiveSchema(t *testing.T) {
+	lock := loadSchemaLock(t)
+	store := testdbfixture.OpenPath(t, filepath.Join(t.TempDir(), "store.db"))
+
+	type liveColumn struct {
+		name    string
+		notNull bool
+		pk      bool
+	}
+	columns := func(table string) []liveColumn {
+		rows, err := store.QueryContext(t.Context(), "SELECT name, \"notnull\", pk FROM pragma_table_info(?) ORDER BY cid", table)
+		testutil.FailErr(t, "table info "+table, err)
+		defer func() { _ = rows.Close() }()
+		var out []liveColumn
+		for rows.Next() {
+			var c liveColumn
+			testutil.FailErr(t, "scan column", rows.Scan(&c.name, &c.notNull, &c.pk))
+			out = append(out, c)
+		}
+		testutil.FailErr(t, "iterate columns", rows.Err())
+		if len(out) == 0 {
+			t.Fatalf("live schema has no table %s", table)
+		}
+		return out
+	}
+
+	live := columns(lock.Table)
+	if len(live) != len(lock.Columns) {
+		t.Fatalf("live %s has %d columns, lock has %d", lock.Table, len(live), len(lock.Columns))
+	}
+	for i, col := range live {
+		want := lock.Columns[i]
+		// The lock records a primary key by pk alone, not by not_null.
+		if col.name != want.Name || col.pk != want.PK || !col.pk && col.notNull != want.NotNull {
+			t.Fatalf("column %d = %+v, lock %+v", i, col, want)
+		}
+	}
+
+	rows, err := store.QueryContext(t.Context(), "SELECT name FROM pragma_index_info(?) ORDER BY seqno", lock.CompositeIndex.Name)
+	testutil.FailErr(t, "index info", err)
+	defer func() { _ = rows.Close() }()
+	var indexed []string
+	for rows.Next() {
+		var name string
+		testutil.FailErr(t, "scan index column", rows.Scan(&name))
+		indexed = append(indexed, name)
+	}
+	testutil.FailErr(t, "iterate index columns", rows.Err())
+	if !slices.Equal(indexed, lock.CompositeIndex.Columns) {
+		t.Fatalf("live %s = %v, lock %v", lock.CompositeIndex.Name, indexed, lock.CompositeIndex.Columns)
+	}
+
+	for _, fts := range lock.FTSTables {
+		var names []string
+		for _, col := range columns(fts.Name) {
+			names = append(names, col.name)
+		}
+		if !slices.Equal(names, fts.Columns) {
+			t.Fatalf("live %s columns = %v, lock %v", fts.Name, names, fts.Columns)
 		}
 	}
 }

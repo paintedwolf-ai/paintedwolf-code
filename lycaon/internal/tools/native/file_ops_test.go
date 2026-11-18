@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
@@ -96,8 +96,8 @@ func TestCopyToolRejectsSizeExceeded(t *testing.T) {
 	if !errors.As(err, &reject) || reject.Code != "COPY_SIZE_EXCEEDED" {
 		t.Fatalf("err = %v want COPY_SIZE_EXCEEDED", err)
 	}
-	if _, err := os.Stat(filepath.Join(tmpDir, "copy.txt")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("refused copy left a destination: %v", err)
+	if _, err := os.Lstat(filepath.Join(tmpDir, "copy.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("refused copy created its destination (%v)", err)
 	}
 }
 
@@ -178,8 +178,8 @@ func TestMoveToolOverwritesDestination(t *testing.T) {
 	if string(data) != "new" {
 		t.Fatalf("dst = %q", data)
 	}
-	if _, err := os.Stat(filepath.Join(tmpDir, "src.txt")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("moved source still present: %v", err)
+	if _, err := os.Lstat(filepath.Join(tmpDir, "src.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("move left its source behind (%v)", err)
 	}
 }
 
@@ -359,5 +359,22 @@ func TestWriteToolCreatesMissingParentDirs(t *testing.T) {
 	}
 	if !strings.Contains(out, "file.go") {
 		t.Fatalf("out = %q", out)
+	}
+}
+
+func TestMkdirToolRejectsPathEscape(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "project")
+	testutil.FailErr(t, "mkdir project", os.Mkdir(root, 0o755))
+	tool := &MkdirTool{Boundary: nativefixture.Boundary(t)}
+	_, err := tool.Run(context.Background(), map[string]any{
+		"paths": []any{"../outside"},
+	}, nativefixture.Context(root))
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "MKDIR_PATH_DENIED" {
+		t.Fatalf("err = %v want MKDIR_PATH_DENIED", err)
+	}
+	if _, err := os.Lstat(filepath.Join(base, "outside")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("refused mkdir created a directory outside the project (%v)", err)
 	}
 }

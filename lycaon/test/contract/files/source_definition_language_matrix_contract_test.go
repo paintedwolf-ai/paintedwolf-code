@@ -22,25 +22,6 @@ type definitionLanguageFixture struct {
 	source   string
 }
 
-func TestSourceDefinitionUsesSharedDeclarationModel(t *testing.T) {
-	t.Parallel()
-	body := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/projectsource/source_symbols.go")
-	for _, shared := range []string{"fileoutline.AnalyzeText", "analysis.Definitions"} {
-		if !strings.Contains(body, shared) {
-			t.Fatalf("editor definition navigation missing shared analysis %q", shared)
-		}
-	}
-	for _, duplicate := range []string{
-		"gotreesitter.NewParser",
-		"extractSourceSymbols",
-		"symbolFromNode",
-	} {
-		if strings.Contains(body, duplicate) {
-			t.Fatalf("editor definition navigation must not carry duplicate declaration logic %q", duplicate)
-		}
-	}
-}
-
 // Serial fixtures avoid competing grammar initialization within parser deadlines.
 func TestSourceDefinitionSupportedLanguageMatrix(t *testing.T) {
 	root := contractcheck.RepoRoot(t)

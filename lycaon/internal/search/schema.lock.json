@@ -13,6 +13,7 @@
     { "name": "source_ref", "type": "TEXT" },
     { "name": "leg_id", "type": "TEXT" },
     { "name": "handle", "type": "TEXT" },
+    { "name": "tool", "type": "TEXT" },
     { "name": "kind", "type": "TEXT" },
     { "name": "shape", "type": "TEXT" },
     { "name": "role", "type": "TEXT" },

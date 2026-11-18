@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -125,8 +125,8 @@ func TestChownToolRejectsGitPath(t *testing.T) {
 		"owner": "current",
 	}, nativefixture.Context(tmpDir))
 	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
-		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED", err)
+	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" || reject.Data["class"] != "config" {
+		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED for repository config", err)
 	}
 	data, err := os.ReadFile(filepath.Join(tmpDir, ".git", "config"))
 	testutil.FailErr(t, "read refused config", err)

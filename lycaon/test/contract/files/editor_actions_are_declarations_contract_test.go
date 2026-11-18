@@ -1,34 +1,37 @@
 package contract
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/contribframe"
 	"github.com/lycaon/lycaon/internal/contribution"
 	"github.com/lycaon/lycaon/internal/editorturn"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // Every declared preset has a boundary implementation.
 func TestEveryPresetHasABoundary(t *testing.T) {
 	t.Parallel()
 
-	for _, preset := range contribution.PresetIDs() {
+	ids := contribution.PresetIDs()
+	if len(ids) == 0 {
+		t.Fatal("no editor presets declared")
+	}
+	for _, preset := range ids {
 		if _, ok := editorturn.PresetBoundaryFor(preset); !ok {
 			t.Errorf("preset %s has no host boundary implementation", preset)
 		}
 	}
 }
 
-// Stock editor actions reference bundled prompts.
+// Stock editor actions name prompt units that the invoke path finds in the
+// captured frame.
 func TestStockEditorActionPromptsResolve(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	set := stockContributionSet(t)
+	view := stockCatalogView(t)
+	frame := &contribframe.Frame{View: view}
 
-	actions := set.EditorActions()
+	actions := view.Contributions.EditorActions()
 	if len(actions) == 0 {
 		t.Fatal("no stock editor actions compiled")
 	}
@@ -38,11 +41,8 @@ func TestStockEditorActionPromptsResolve(t *testing.T) {
 			t.Errorf("editor action %s declares no prompt_ref", action.ID)
 			continue
 		}
-		path := filepath.Join(root, "lycaon", "config", "packs",
-			"painted-wolf", "platform", filepath.FromSlash(ref)+".md")
-		if _, err := os.Stat(path); err != nil {
-			t.Errorf("editor action %s names prompt %s, which no stock unit provides",
-				action.ID, ref)
+		if len(frame.PromptBody(ref)) == 0 {
+			t.Errorf("editor action %s names prompt %s, which the stock catalog does not load", action.ID, ref)
 		}
 	}
 }

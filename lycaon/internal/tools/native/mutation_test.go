@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -289,10 +289,10 @@ func TestDeleteToolRejectsGitPath(t *testing.T) {
 	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" || reject.Data["class"] != "metadata" {
 		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED for repository metadata", err)
 	}
-	data, err := os.ReadFile(filepath.Join(tmpDir, ".git", "HEAD"))
+	head, err := os.ReadFile(filepath.Join(tmpDir, ".git", "HEAD"))
 	testutil.FailErr(t, "read refused HEAD", err)
-	if string(data) != "ref: refs/heads/main\n" {
-		t.Fatalf("refused delete changed HEAD: %q", data)
+	if string(head) != "ref: refs/heads/main\n" {
+		t.Fatalf("refused delete changed HEAD to %q", head)
 	}
 }
 

@@ -2,6 +2,7 @@ package search
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -93,9 +94,19 @@ func TestParseQueryProjectScopeToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseQuery: %v", err)
 	}
-	and, ok := node.(AndExpr)
-	if !ok || len(and.Exprs) != 2 {
-		t.Fatalf("node = %#v", node)
+	want := AndExpr{Exprs: []Node{
+		FilterExpr{Field: "project", Value: ProjectScopeCurrent, Offset: 0},
+		FilterExpr{Field: "kind", Value: "web", Offset: 16},
+	}}
+	if !reflect.DeepEqual(node, want) {
+		t.Fatalf("node = %#v, want %#v", node, want)
+	}
+
+	// project:current names the origin project, so a query without one is refused.
+	_, err = CompileQuery("project:current kind:web", CompileContext{})
+	pe := &ParseError{}
+	if !errors.As(err, &pe) || pe.Kind != ParseErrInvalidValue || pe.Field != "project" {
+		t.Fatalf("compile without origin = %v, want an invalid project value", err)
 	}
 }
 
