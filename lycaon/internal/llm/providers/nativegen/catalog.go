@@ -71,10 +71,18 @@ func (p *Runtime) DiscoverModels(ctx context.Context) ([]modelinfo.Entry, error)
 		return nil, err
 	}
 	defer release()
-	if err := p.ensureLoaded(ctx, DefaultModelID); err != nil {
+	selection, err := p.config.ModelStore.Selection()
+	if err != nil {
+		return nil, err
+	}
+	if selection.Model == "" || selection.Device != p.config.Backend || !KnownModel(selection.Model) {
+		return nil, nil
+	}
+	if err := p.ensureLoaded(ctx, selection.Model); err != nil {
 		return nil, err
 	}
 	entry := DefaultModelEntry()
+	entry.ID = selection.Model
 	entry.ContextLength = p.ContextWindow()
 	entry.ContextLengthSource = "native-runtime"
 	return []modelinfo.Entry{entry}, nil

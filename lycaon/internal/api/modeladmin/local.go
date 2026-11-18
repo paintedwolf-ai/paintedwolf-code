@@ -1,6 +1,8 @@
 package modeladmin
 
 import (
+	"context"
+	"github.com/lycaon/lycaon/internal/llm"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -29,4 +31,61 @@ func (s *Handler) RepairLocalGeneration(w http.ResponseWriter, r *http.Request) 
 	httpio.WriteJSON(w, http.StatusOK, wire.LocalGenerationRepairResult{
 		OK: err == nil, Status: s.service.Registry.LocalGenerationStatus(),
 	})
+}
+
+func (s *Handler) localProvider(w http.ResponseWriter, r *http.Request) bool {
+	if chi.URLParam(r, "provider_id") != llm.IncludedProviderID {
+		s.responses.Fail(w, wire.ApiErrorCodeProviderNotFound, "unknown local model provider")
+		return false
+	}
+	return true
+}
+
+func (s *Handler) GetLocalModelStatus(w http.ResponseWriter, r *http.Request) {
+	if s.localProvider(w, r) {
+		httpio.WriteJSON(w, http.StatusOK, s.service.Registry.LocalGenerationStatus())
+	}
+}
+
+func (s *Handler) SelectLocalModel(w http.ResponseWriter, r *http.Request) {
+	if !s.localProvider(w, r) {
+		return
+	}
+	var req wire.LocalModelSelectionRequest
+	if err := httpio.DecodeJSON(w, r, &req); err != nil {
+		s.responses.DecodeError(w, r, err)
+		return
+	}
+	ctx := context.WithoutCancel(r.Context())
+	err := s.service.Registry.SelectLocalModel(req, func() {
+		s.service.ResetPlanes()
+		s.publishProviderEvent(ctx, "models_refreshed", llm.IncludedProviderID)
+	})
+	s.modelOperationResponse(w, err)
+}
+
+func (s *Handler) CancelLocalModelTransfer(w http.ResponseWriter, r *http.Request) {
+	if s.localProvider(w, r) {
+		s.modelOperationResponse(w, s.service.Registry.CancelLocalModelTransfer(r.Context()))
+	}
+}
+
+func (s *Handler) RemoveLocalModel(w http.ResponseWriter, r *http.Request) {
+	if !s.localProvider(w, r) {
+		return
+	}
+	err := s.service.Registry.RemoveLocalModel(r.Context())
+	if err == nil {
+		s.service.ResetPlanes()
+		s.publishProviderEvent(r.Context(), "models_refreshed", llm.IncludedProviderID)
+	}
+	s.modelOperationResponse(w, err)
+}
+
+func (s *Handler) modelOperationResponse(w http.ResponseWriter, err error) {
+	if err != nil {
+		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, err.Error())
+		return
+	}
+	httpio.WriteJSON(w, http.StatusOK, s.service.Registry.LocalGenerationStatus())
 }

@@ -53,7 +53,7 @@ func NewService(ctx context.Context, mock modelcall.LLMClient, local *nativegen.
 	if ProviderUtilityCallsEnabled() {
 		refreshCancel, refreshDone = startModelFeedRefresh(ctx, feed)
 	}
-	router := NewStaticModelRouter(policy).WithLocalDefault(registry.IncludedModelAvailable)
+	router := NewStaticModelRouter(policy).WithLocalDefault(registry.IncludedModel)
 
 	svc := &Service{
 		modelFeedRefreshCancel: refreshCancel,

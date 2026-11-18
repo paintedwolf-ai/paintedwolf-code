@@ -533,42 +533,42 @@ func TestLocalDefaultRoleResolution(t *testing.T) {
 
 	// Both unset: both Coordinator and Lite bind to the bundled local model when available.
 	unsetPolicy := ModelPolicy{}
-	if got := CoordinatorRefWithLocalDefault(unsetPolicy, true); got != localRef {
+	if got := CoordinatorRefWithLocalDefault(unsetPolicy, DefaultLocalModelRef().Model); got != localRef {
 		t.Fatalf("unset coordinator with local default = %+v, want %+v", got, localRef)
 	}
-	if got := SummarizerRefWithLocalDefault(unsetPolicy, true); got != localRef {
+	if got := SummarizerRefWithLocalDefault(unsetPolicy, DefaultLocalModelRef().Model); got != localRef {
 		t.Fatalf("unset summarizer with local default = %+v, want %+v", got, localRef)
 	}
-	if !SummarizerSharesCoordinatorWithLocalDefault(unsetPolicy, true) {
+	if !SummarizerSharesCoordinatorWithLocalDefault(unsetPolicy, DefaultLocalModelRef().Model) {
 		t.Fatal("unset roles should share the bundled local provider")
 	}
 
 	// Remote coordinator + unset summarizer: summarizer resolves to local default while coordinator stays remote.
 	remoteCoord := ModelRef{ProviderID: "anthropic", Model: "claude-sonnet-4-6"}
 	hybridPolicy := ModelPolicy{Coordinator: remoteCoord}
-	if got := CoordinatorRefWithLocalDefault(hybridPolicy, true); got != remoteCoord {
+	if got := CoordinatorRefWithLocalDefault(hybridPolicy, DefaultLocalModelRef().Model); got != remoteCoord {
 		t.Fatalf("remote coordinator = %+v, want %+v", got, remoteCoord)
 	}
-	if got := SummarizerRefWithLocalDefault(hybridPolicy, true); got != localRef {
+	if got := SummarizerRefWithLocalDefault(hybridPolicy, DefaultLocalModelRef().Model); got != localRef {
 		t.Fatalf("unset summarizer with remote coordinator = %+v, want %+v", got, localRef)
 	}
-	if SummarizerSharesCoordinatorWithLocalDefault(hybridPolicy, true) {
+	if SummarizerSharesCoordinatorWithLocalDefault(hybridPolicy, DefaultLocalModelRef().Model) {
 		t.Fatal("remote coordinator and local default summarizer do not share provider capacity")
 	}
 
 	// Explicit role selections survive when local model is unavailable.
 	explicitLite := ModelRef{ProviderID: "openai", Model: "gpt-5-mini"}
 	explicitPolicy := ModelPolicy{Coordinator: remoteCoord, Lite: explicitLite}
-	if got := CoordinatorRefWithLocalDefault(explicitPolicy, false); got != remoteCoord {
+	if got := CoordinatorRefWithLocalDefault(explicitPolicy, ""); got != remoteCoord {
 		t.Fatalf("explicit coordinator without local model = %+v, want %+v", got, remoteCoord)
 	}
-	if got := SummarizerRefWithLocalDefault(explicitPolicy, false); got != explicitLite {
+	if got := SummarizerRefWithLocalDefault(explicitPolicy, ""); got != explicitLite {
 		t.Fatalf("explicit summarizer without local model = %+v, want %+v", got, explicitLite)
 	}
 
 	// StaticModelRouter.WithLocalDefault routes unset slots to the bundled local model.
 	store := NewInMemoryPolicyStore(hybridPolicy)
-	router := NewStaticModelRouter(store).WithLocalDefault(func(context.Context) bool { return true })
+	router := NewStaticModelRouter(store).WithLocalDefault(func(context.Context) string { return DefaultLocalModelRef().Model })
 	coordSel, err := router.Coordinator(t.Context())
 	testutil.FailErr(t, "router coordinator", err)
 	if coordSel.ProviderID != remoteCoord.ProviderID || coordSel.Model != remoteCoord.Model {
@@ -618,7 +618,7 @@ func TestServiceStartupRequiresAdmittedIncludedModel(t *testing.T) {
 	if _, ok := svc.Catalog.Get(IncludedProviderID); !ok {
 		t.Fatal("bundled provider missing from supported host catalog")
 	}
-	if svc.Registry.IncludedModelAvailable(t.Context()) {
+	if svc.Registry.IncludedModel(t.Context()) != "" {
 		t.Fatal("environment path substituted for an admitted runtime")
 	}
 	selection, err := svc.Router.Coordinator(t.Context())

@@ -66,10 +66,14 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	store := modelstore.New(options.StoreRoot, authority)
 	decision := options.Decision
 	decision.Resources = resources.Decision
+	physicalBytes := device.TotalBytes
+	if device.UnifiedMemory {
+		physicalBytes = options.PhysicalRAM
+	}
 	return &Runtime{
 		Decision: decision, Store: store, Resources: resources, Backend: inventory.Backend,
 		Generation: nativegen.NewRuntime(nativegen.RuntimeConfig{
-			BinaryPath: options.Binary, MetalLibrary: options.MetalLibrary,
+			PhysicalBytes: physicalBytes, BinaryPath: options.Binary, MetalLibrary: options.MetalLibrary,
 			Backend: inventory.Backend, PhysicalDevice: device.PhysicalDevice,
 			Devices: resources.Devices, HostMemory: resources.GenerationHost,
 			DeviceMemory: resources.GenerationDevice, UnifiedMemory: device.UnifiedMemory,
@@ -80,6 +84,9 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 
 func readAuthority(path string) (authority *modelstore.Authority, resultErr error) {
 	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return modelstore.NewAuthority(nil)
+	}
 	if err != nil {
 		return nil, err
 	}
