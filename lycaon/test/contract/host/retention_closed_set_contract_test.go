@@ -52,10 +52,6 @@ var retentionAnswers = map[string]retentionAnswer{
 	"lycaon/internal/session/promptstate/state.go#Prompt":                      retentionJustified,
 	"lycaon/internal/session/curation/service.go#bySession":                    retentionReleased,
 	"lycaon/internal/session/turnadmission/queue_round_drain.go#bySession":     retentionReleased,
-	"lycaon/internal/session/store/memory.go#sessions":                         retentionJustified,
-	"lycaon/internal/session/store/memory.go#messages":                         retentionJustified,
-	"lycaon/internal/session/store/memory.go#untrustedRecords":                 retentionJustified,
-	"lycaon/internal/session/store/memory.go#secretExposureRecords":            retentionJustified,
 	"lycaon/internal/secretharvest/secretharvest.go#bySession":                 retentionJustified,
 	// Chat approvals: durable projections of chat_grants, released when the chat is disposed.
 	"lycaon/internal/session/approvalstate/sandbox_ask_guard.go#bySession":        retentionReleased,
