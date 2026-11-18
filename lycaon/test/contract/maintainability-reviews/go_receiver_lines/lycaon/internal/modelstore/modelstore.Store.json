@@ -4,10 +4,10 @@
   "kind": "runtime_service",
   "workstream": "local-model-store",
   "disposition": "retain",
-  "reason": "Retain one store transaction owner at 757 receiver lines and 33 methods. Journal activation, revision publication, collection pins and recovery share lock and durability ordering. Payload sealing owns close-before-publication without becoming a separate store lifecycle. Joined IO and cleanup failures remain visible without rolling back committed names. The 117 passing store results cover these failure paths, leases, repair, interrupted publication and recovery. Bundle and journal read boundaries propagate close errors; import pin cleanup preserves activation and releases collection authority on failure.",
-  "reviewed_commit": "72abf438d907b764a268d59dee3e07dd522b053b",
-  "reviewed_shape": "3575cd88a327dc491ef3284ce845a86ce23aa6fe208f52cf90cdef3249adaec4",
-  "ceiling": 757,
+  "reason": "Keep lease checks, artifact pins, disk admission and the activation journal in one store transaction. Exclusive selection and opt-out commit under the same lock that admits runtime leases. Crash recovery and collection use the resulting journal state. The bucket source validates HTTP ranges and the offline reader indexes archives. Both supply bytes to the same signed installation path. Lease, publication, interrupted transfer, low-space replacement and offline import tests cover this boundary.",
+  "reviewed_commit": "e7f685d6debd7c68264e4d88e2d2c3fa18d36e08",
+  "reviewed_shape": "bfe3269b1384a82531c59d04c79b4aa2b77732c5858407e7322fa8534ecd738f",
+  "ceiling": 1213,
   "boundaries": {
     "lycaon/internal/modelstore/lifetime_test.go": "17084815f37662d3f1b72f2ecb0620d7e1a98fc56602eea9b769d259a33d61c7",
     "lycaon/internal/modelstore/repair_test.go": "a1765b6567d7b1522132291452e760685947ea0e1a0c94947e4dbcc9079e097a",
@@ -15,6 +15,9 @@
     "lycaon/internal/modelstore/store_test.go": "3cfe061a36ee32d895db6895377b8078f79f7180f2bde49b4873f5b3834c2f3c",
     "lycaon/internal/modelstore/publication_test.go": "edf6c6187f26ad8d8f3fe2bc74aa8f302e5345199a9bbe5c343574f4c105ffd5",
     "lycaon/internal/modelstore/io_errors_test.go": "a96baf6be0b63f1c75bc60ce2c02ab6395c7f87dab2f349eaf5a7c6e0883bba2",
-    "lycaon/internal/modelstore/platform_unix_test.go": "ab220af53004a294ef4ab3e131cabb82982f9bf0162241d72475d818ad1b0264"
+    "lycaon/internal/modelstore/platform_unix_test.go": "ab220af53004a294ef4ab3e131cabb82982f9bf0162241d72475d818ad1b0264",
+    "lycaon/internal/modelstore/capacity_test.go": "943e757dad6a36bfd81697613d6aae76bf21c00aefeeac790b4e974d67c7f2b5",
+    "lycaon/internal/modelstore/interrupted_test.go": "6ca16d24c30443fc00216401d73379eb145facba6e9da9e4570bcba9bdcb78d8",
+    "lycaon/internal/modelstore/provision_test.go": "55a165854290bf5cac42c4a0e3409c3c48c76ab88d5b4f791036d0d534f45f65"
   }
 }

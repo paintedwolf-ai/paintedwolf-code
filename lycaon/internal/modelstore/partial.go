@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 
@@ -13,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fssync"
 )
 
-func (s *Store) downloadArtifact(ctx context.Context, client *http.Client, url string, a Artifact, progress *transferProgress) (resultErr error) {
+func (s *Store) downloadArtifact(ctx context.Context, source modelBucket, a Artifact, progress *transferProgress) (resultErr error) {
 	root, err := s.openRoot()
 	if err != nil {
 		return err
@@ -39,7 +38,7 @@ func (s *Store) downloadArtifact(ctx context.Context, client *http.Client, url s
 	if err != nil {
 		return err
 	}
-	err = s.fillPartial(ctx, client, url, a, f, progress)
+	err = s.fillPartial(ctx, source, a, f, progress)
 	if err := errors.Join(err, f.Close()); err != nil {
 		return err
 	}
@@ -66,7 +65,7 @@ func (s *Store) publishPartial(ctx context.Context, root *os.Root, name string, 
 	return syncPublicationDirectories(root, filepath.Dir(target), fseffect.SyncDirectory)
 }
 
-func (s *Store) fillPartial(ctx context.Context, client *http.Client, url string, a Artifact, f *os.File, progress *transferProgress) error {
+func (s *Store) fillPartial(ctx context.Context, source modelBucket, a Artifact, f *os.File, progress *transferProgress) (resultErr error) {
 	offset, err := f.Seek(0, io.SeekEnd)
 	if err != nil {
 		return err
@@ -81,48 +80,25 @@ func (s *Store) fillPartial(ctx context.Context, client *http.Client, url string
 		progress.add(offset)
 		return nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	body, start, err := source.openPayload(ctx, a, offset)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Accept-Encoding", "identity")
-	if offset > 0 {
-		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	transferErr := s.copyResponse(ctx, resp, f, a.Bytes, offset, progress)
-	return errors.Join(transferErr, resp.Body.Close())
-}
-
-func (s *Store) copyResponse(ctx context.Context, resp *http.Response, f *os.File, size, offset int64, progress *transferProgress) error {
-	switch resp.StatusCode {
-	case http.StatusOK:
-		offset = 0
-		if err := f.Truncate(0); err != nil {
+	defer func() { resultErr = errors.Join(resultErr, body.Close()) }()
+	if start != offset {
+		if err := f.Truncate(start); err != nil {
 			return err
 		}
-	case http.StatusPartialContent:
-		if offset == 0 || resp.Header.Get("Content-Range") != fmt.Sprintf("bytes %d-%d/%d", offset, size-1, size) {
-			return errors.New("modelstore: inconsistent range response")
-		}
-	default:
-		return fmt.Errorf("modelstore: payload HTTP %d", resp.StatusCode)
 	}
-	missing := size - offset
-	if resp.ContentLength >= 0 && resp.ContentLength != missing {
-		return errors.New("modelstore: payload length differs from manifest")
-	}
+	missing := a.Bytes - start
 	if err := s.CheckSpace(SpaceRequirement{StagingBytes: missing}); err != nil {
 		return err
 	}
-	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+	if _, err := f.Seek(start, io.SeekStart); err != nil {
 		return err
 	}
-	progress.add(offset)
-	n, err := io.Copy(io.MultiWriter(f, progress), contextReader{ctx: ctx, reader: io.LimitReader(resp.Body, missing+1)})
+	progress.add(start)
+	n, err := io.Copy(io.MultiWriter(f, progress), contextReader{ctx: ctx, reader: io.LimitReader(body, missing+1)})
 	if err != nil {
 		return err
 	}
