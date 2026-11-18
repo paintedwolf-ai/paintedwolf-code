@@ -53,7 +53,9 @@ func (s *ComparisonViews) prepareCurrentSource(view *sourceView, p *project.Proj
 	snapshot := &currentSourceSnapshot{document: document, stream: stream}
 	snapshot.users.Store(1)
 	s.installCurrentSource(view, snapshot)
-	s.background.Go(view.ctx, func(ctx context.Context) { s.Watch.ensureWorkspaceWatch(ctx, p) })
+	if source.RootID != p.Outside.ID {
+		s.background.Go(view.ctx, func(ctx context.Context) { s.Watch.ensureWorkspaceWatch(ctx, p) })
+	}
 	return nil
 }
 

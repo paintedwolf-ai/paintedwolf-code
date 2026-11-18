@@ -9,10 +9,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/outsideaccess"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcetree"
@@ -96,6 +98,10 @@ func (s *Views) sourceViewProject(ctx context.Context, p *project.Project, view 
 	if view.comparisonData.comparisonSource.Chat != nil {
 		source = view.comparisonData.comparisonSource.Chat
 	}
+	current := view.comparisonData.comparisonSource.Current
+	if current == nil && view.comparisonData.current != nil {
+		current = &wire.CurrentComparisonSource{RootID: view.comparisonData.current.stream.RootID, Path: view.comparisonData.current.stream.Path}
+	}
 	view.mu.Unlock()
 	if source != nil {
 		if _, err := s.Comparisons.readChatFileEdit(ctx, view.sessionID, source.First); err != nil {
@@ -104,6 +110,13 @@ func (s *Views) sourceViewProject(ctx context.Context, p *project.Project, view 
 		if _, err := s.Comparisons.readChatFileEdit(ctx, view.sessionID, source.Last); err != nil {
 			return nil, errSourceViewEditGone
 		}
+	}
+	if current != nil {
+		admitted, err := outsideaccess.Admit(ctx, s.Workspace.SourceLedger, scope.Project, current.RootID, current.Path)
+		if errors.Is(err, projectsource.ErrSourcePathDenied) {
+			return nil, sourcetree.ErrUnknownRoot
+		}
+		return admitted, err
 	}
 	return scope.Project, nil
 }

@@ -16,33 +16,18 @@ type SourceStream struct {
 	root                   *os.Root
 	info                   os.FileInfo
 	changeTime             [2]int64
+	outsideParentIdentity  string
 }
 
 func OpenProjectSourceStream(p ProjectSource, req SourceReadRequest) (*SourceStream, error) {
 	if req.DecodeAs != "" && req.DecodeAs != textfile.UTF16LE && req.DecodeAs != textfile.UTF16BE {
 		return nil, ErrSourceDecodeAsInvalid
 	}
-	target, err := resolveSourceReadTarget(p, req.Path, req.RootID)
+	stream, err := openSourceStream(p, req)
 	if err != nil {
 		return nil, err
 	}
-	var rootPath string
-	for _, root := range p.SourceRoots() {
-		if root.ID == target.rootID {
-			rootPath = root.Path
-			break
-		}
-	}
-	root, err := os.OpenRoot(rootPath)
-	if err != nil {
-		return nil, err
-	}
-	file, err := root.Open(target.path)
-	if err != nil {
-		_ = root.Close()
-		return nil, err
-	}
-	stream := &SourceStream{File: file, root: root, Path: target.path, RootID: target.rootID}
+	file := stream.File
 	ok := false
 	defer func() {
 		if !ok {
@@ -81,9 +66,44 @@ func OpenProjectSourceStream(p ProjectSource, req SourceReadRequest) (*SourceStr
 	return stream, nil
 }
 
+func openSourceStream(p ProjectSource, req SourceReadRequest) (*SourceStream, error) {
+	if p != nil {
+		for _, root := range p.SourceRoots() {
+			if root.Outside && root.ID == req.RootID {
+				file, identity, err := openOutsideFile(req.Path, "")
+				if err != nil {
+					return nil, err
+				}
+				return &SourceStream{File: file, Path: req.Path, RootID: req.RootID, outsideParentIdentity: identity}, nil
+			}
+		}
+	}
+	target, err := resolveSourceReadTarget(p, req.Path, req.RootID)
+	if err != nil {
+		return nil, err
+	}
+	var rootPath string
+	for _, root := range p.SourceRoots() {
+		if root.ID == target.rootID {
+			rootPath = root.Path
+			break
+		}
+	}
+	root, err := os.OpenRoot(rootPath)
+	if err != nil {
+		return nil, err
+	}
+	file, err := root.Open(target.path)
+	if err != nil {
+		_ = root.Close()
+		return nil, err
+	}
+	return &SourceStream{File: file, root: root, Path: target.path, RootID: target.rootID}, nil
+}
+
 // Current rejects replacement, in-place writes, truncation, and missing paths.
 func (s *SourceStream) Current() bool {
-	current, err := s.root.Stat(s.Path)
+	current, err := s.currentFileInfo()
 	if err != nil || !os.SameFile(s.info, current) || s.info.Size() != current.Size() || !s.info.ModTime().Equal(current.ModTime()) {
 		return false
 	}
@@ -91,7 +111,21 @@ func (s *SourceStream) Current() bool {
 	return err == nil && stamp == s.changeTime
 }
 
+func (s *SourceStream) currentFileInfo() (os.FileInfo, error) {
+	if s.root != nil {
+		return s.root.Stat(s.Path)
+	}
+	file, err := OpenBoundOutsideSourceFile(s.Path, s.outsideParentIdentity)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	return file.Stat()
+}
+
 func (s *SourceStream) Close() {
 	_ = s.File.Close()
-	_ = s.root.Close()
+	if s.root != nil {
+		_ = s.root.Close()
+	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -109,6 +110,45 @@ func TestChatLocationOpenUsesObservedAnchor(t *testing.T) {
 	testutil.FailErr(t, "create another folder at its path", os.Mkdir(dir, 0o700))
 	testutil.FailErr(t, "write replacement file", os.WriteFile(picked, []byte("replacement\n"), 0o600))
 	sourceViewErrorCode(t, response("picked.go"), http.StatusNotFound)
+}
+
+func TestOutsideReaderUsesAHeldFile(t *testing.T) {
+	db := testdbfixture.Open(t, "store.db")
+	sessions := store.NewSQL(db)
+	server := newSourceHandlerFixture(t, func(deps *Deps) {
+		deps.SessionStore, deps.ProjectRegistry = sessions, project.NewSQLRegistry(db)
+		deps.SourceLedger = sourceledger.New(db, t.TempDir())
+	})
+	p := sourceViewFixtureProject(t, server)
+	ctx := testdbseed.OwnerCaller(t, t.Context(), db)
+	chat, err := sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
+	testutil.FailErr(t, "create chat", err)
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve fixture directory", err)
+	file := filepath.Join(dir, "outside.txt")
+	testutil.FailErr(t, "write outside source", os.WriteFile(file, []byte("read me\n"), 0o600))
+	rel, ok := projectroot.OutsideRel(file)
+	if !ok {
+		t.Skip("outside paths require a platform with a single host root")
+	}
+	create := func() *httptest.ResponseRecorder {
+		return callSourceViewHandlerAs(t, ctx, server.Views.HandleCreateSourceView, p.ID, "", wire.SourceComparisonViewCreate{
+			Kind: "comparison", OperationID: uuid.NewString(), ClientID: "window:main",
+			Source: wire.SourceComparisonSelector{Current: &wire.CurrentComparisonSource{Kind: "current", RootID: p.Outside.ID, Path: rel}},
+			Intent: wire.SourceComparisonIntent{Mode: "full"},
+		})
+	}
+	sourceViewErrorCode(t, create(), http.StatusNotFound)
+	readOpenedFile(t, callSourceViewHandlerAs(t, ctx, server.Workspace.HandleOpenOutsideFile, p.ID, "",
+		wire.OpenOutsideFileRequest{SessionID: chat.ID, Path: file}))
+	view := readSourceViewResponse(t, create(), http.StatusCreated).Comparison
+	testutil.WaitFor(t, "outside reader ready", func() bool {
+		current := readSourceViewResponse(t, callSourceViewHandlerAs(t, ctx, server.Views.HandleGetSourceView, p.ID, view.ID, nil), http.StatusOK).Comparison
+		if current.State == "failed" {
+			t.Fatalf("outside reader failed: %+v", current.Failure)
+		}
+		return current.State == "ready"
+	})
 }
 
 func readOpenedFile(t *testing.T, response *httptest.ResponseRecorder) wire.OpenedOutsideFile {

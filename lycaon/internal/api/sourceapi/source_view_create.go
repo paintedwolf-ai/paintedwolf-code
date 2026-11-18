@@ -96,7 +96,8 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 		return true
 	}
 	// The preparation pin protects accepted-state construction.
-	if _, err := s.sourceViewProject(r.Context(), p, view); err != nil {
+	viewProject, err := s.sourceViewProject(r.Context(), p, view)
+	if err != nil {
 		if created {
 			view.cancel()
 			s.sourceViewRegistry().registry.Release(scope, view.id)
@@ -110,7 +111,7 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 		if view.navigation.tree != nil {
 			s.Trees.prepareTreeView(view, release)
 		} else {
-			s.ComparisonViews.prepareComparisonView(view, p, release)
+			s.ComparisonViews.prepareComparisonView(view, viewProject, release)
 		}
 	} else {
 		release()
@@ -176,7 +177,7 @@ func validateSourceViewCreate(p *project.Project, request wire.SourceViewCreate)
 		return rejectedSourceIntent(err.Error())
 	}
 	if source := request.Comparison.Source.Current; source != nil {
-		if err := validateSourceTreeAddress(p, wire.SourceTreeAddress{RootID: source.RootID, Path: source.Path}); err != nil {
+		if err := validateSourceTreeAddress(project.WithOutside(p), wire.SourceTreeAddress{RootID: source.RootID, Path: source.Path}); err != nil {
 			return err
 		}
 		if source.DecodeAs != "" && source.DecodeAs != "utf-16le" && source.DecodeAs != "utf-16be" {
