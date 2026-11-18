@@ -22,7 +22,7 @@ func TestCompletionRetainsBranchUntilBaselineTopologyCanBeLoaded(t *testing.T) {
 	testdbseed.InsertSessionWithRoot(t, database, "parent", testdbseed.DefaultProjectID, primary)
 	queue := NewSQLServices(database, 1).Queue
 	data := testbaseline.DataDir(t, database)
-	queue.SetBaselineStore(workspacebaseline.New(database, sourceblob.New(filepath.Join(data, "source-content")), filepath.Join(data, "worker-baselines")))
+	queue.Branches.SetBaselineStore(workspacebaseline.New(database, sourceblob.New(filepath.Join(data, "source-content")), filepath.Join(data, "worker-baselines")))
 	queue.SetEventOutbox(eventoutbox.New(database, nil))
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ID: "topology", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, AgentType: "implementer", Prompt: "work", Brief: "work", WorkspacePath: primary, Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}})
 	testutil.FailErr(t, "enqueue", err)
