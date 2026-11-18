@@ -761,7 +761,7 @@ type Commands struct {
 type commandsInventoryPort interface {
 	EnsureInventory(ctx context.Context, req InventoryRequest) error
 	InventoryState(ctx context.Context, projectID string, branch sourcebranch.ID, rootsGeneration int) (InventoryState, error)
-	recordOutsideChanges(ctx context.Context, w *openCommandWindow, rootID, startID, endID string) error
+	recordOutsideChanges(ctx context.Context, w *openCommandWindow, rootID string, comparison outsideComparison) error
 }
 
 type commandsGitPort interface {
