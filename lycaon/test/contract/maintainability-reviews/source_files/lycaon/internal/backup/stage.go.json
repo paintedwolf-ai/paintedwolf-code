@@ -4,13 +4,14 @@
   "kind": "runtime_service",
   "workstream": "backup-archive-staging",
   "disposition": "retain",
-  "reason": "Retain the measured 592-line archive staging transaction within 600 lines. Validation, recovery pre-image capture, pending publication and cleanup share one restore boundary. The versioned replacement-scope contract has its own module; splitting transaction steps would obscure recovery ownership. Exact version scopes, retained release schema routes and restore transaction tests preserve rejection and recovery behavior.",
-  "reviewed_commit": "dc67f34672fb71113a899ce880edc1b3df532628",
+  "reason": "Retain the measured 592-line archive staging transaction within 600 lines. Validation, recovery pre-image capture, pending publication and cleanup share one restore boundary. The versioned replacement-scope contract has its own module; splitting transaction steps would obscure recovery ownership. Exact version scopes, retained release schema routes and restore transaction tests preserve rejection and recovery behavior. Local-data fixture review confirms the 592-line transaction remains within the existing 600-line bound. Exact format 1/2/3 scopes, recovery-directory promotion and configured placement reference checks remain intact. Released-archive and restore tests passed with independent secret-path fixtures; no staging logic changed.",
+  "reviewed_commit": "d4df22b743b1b21dc9cc7adce6f624dc9e3f0ce5",
   "ceiling": 600,
   "boundaries": {
-    "lycaon/internal/backup/archive_scope.go": "f2aafccc2d4e2468f172091d03afd838e159e27759d99ae2e1c49ba34c4b8dfc",
-    "lycaon/internal/backup/archive_scope_test.go": "7d69a96c898e8a0ccaf7ddd52de6563c27cd0a66bc0304efebc05ffc5cc15362",
-    "lycaon/internal/backup/released_archive_test.go": "0727b46b5a431724c633e18192096f3f3152065612bb15f580a9f52b97e5c045",
-    "lycaon/internal/backup/restore_transaction_test.go": "186747724478720db309f06469fddcfb1f52292ff82f5e7200edc6276e78d445"
+    "lycaon/internal/backup/archive_scope.go": "992b80891d925c373ac84789f135cc9ea4d2f33a3055634b558449744bd57b6e",
+    "lycaon/internal/backup/archive_scope_test.go": "043dd935290ba988812789b3689091ee6388d9530a4e6d9bb547b89b2284d490",
+    "lycaon/internal/backup/released_archive_test.go": "06d18aae360169514d44e5fcd1a099b40e235c4fbe36bd17ffa7ebd22cfb8e22",
+    "lycaon/internal/backup/restore_transaction_test.go": "186747724478720db309f06469fddcfb1f52292ff82f5e7200edc6276e78d445",
+    "lycaon/internal/testutil/localdatatest/inventory.go": "60f7db05a4a33fddd0d2cf5543bd05cd8b620b9579f31c22227ccd30c1b25add"
   }
 }
