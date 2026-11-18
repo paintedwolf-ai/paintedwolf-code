@@ -4,93 +4,14 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"github.com/lycaon/lycaon/internal/scaffoldvars"
-	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
 	"slices"
-	"sync/atomic"
 	"testing"
 )
-
-type batchRunLoopWF struct {
-	run  *api.WorkflowRun
-	vars map[string]any
-}
-
-func (s batchRunLoopWF) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
-	return s.run, nil
-}
-
-func (s batchRunLoopWF) GetScaffoldVars(context.Context, string) (map[string]any, error) {
-	if s.vars != nil {
-		return s.vars, nil
-	}
-	return map[string]any{}, nil
-}
-
-func (s batchRunLoopWF) HumanApprovalAwaiting(context.Context, string) (bool, error) {
-	return scaffoldvars.HumanApprovalAwaiting(s.vars), nil
-}
-
-func (batchRunLoopWF) HostObligationHeld(context.Context, string) (bool, error) {
-	return false, nil
-}
-
-func (batchRunLoopWF) HostObligationHoldKinds(context.Context, string) []string { return nil }
-
-func TestStackedWakeFactsAreConsumedByOneObservedPrompt(t *testing.T) {
-	engine := loopwake.NewLoopEngine()
-	t.Cleanup(func() { engine.ForgetSession(context.Background(), "s1") })
-	var prompts atomic.Int32
-	sess := &api.Session{ID: "s1", Status: api.SessionStatusBusy, WorkspacePath: t.TempDir()}
-	synthesizeWF := batchRunLoopWF{
-		run: &api.WorkflowRun{ID: "run-batch", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-		vars: map[string]any{
-			"coordinator_batch": map[string]any{
-				"phase": batch.PhaseSynthesize,
-				"seq":   2,
-			},
-		},
-	}
-	deps := loopwake.LoopDeps{
-		IsCoordinatorSession: func(context.Context, *api.Session) bool { return true },
-		Limits:               func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-		WorkerCycleIdle:      func(context.Context, *api.Session, string) (bool, error) { return true, nil },
-		QueueInform:          func(context.Context, string, anchor.ID, anchor.Envelope) {},
-	}
-	deps.GetSession = func(context.Context, string) (*api.Session, error) { return sess, nil }
-	deps.WorkflowSource = &loopwake.WorkflowDomains{Runs: synthesizeWF, Approvals: synthesizeWF, Obligations: synthesizeWF}
-	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
-		engine.Observations.ObservePrompt("s1")(inject.CoordinatorTurnFrame{})
-		prompts.Add(1)
-		return &promptresult.Result{}, nil
-	}
-	engine.SetDeps(deps)
-	finishExecution := engine.Admission.BeginPromptExecution(t.Context(), "s1")
-	// Distinct terminal events arrive while synthesis is still in flight.
-	for _, jobID := range []string{"implementation-job", "verifier-job"} {
-		engine.Nudges.NudgeAfterWorkerJobTerminal(
-			t.Context(), "s1", jobID, anchor.WorkerTaskFinished, anchor.WorkerTaskFinished, "", anchor.Envelope{},
-		)
-	}
-	engine.Nudges.Nudge(context.Background(), "s1", anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
-	if prompts.Load() != 0 {
-		t.Fatalf("prompts = %d want 0 while session busy", prompts.Load())
-	}
-	if _, ok := engine.Nudges.Pending("s1"); !ok {
-		t.Fatal("worker wake should defer while session busy")
-	}
-	finishExecution()
-	engine.Turns.WaitForAsyncTurns(t.Context())
-	if got := prompts.Load(); got != 1 {
-		t.Fatalf("deferred worker wake prompts = %d want 1 after idle drain", got)
-	}
-}
 
 func TestInTurnLatchBlocksSecondSynthesis(t *testing.T) {
 	h := BuildForTest(t)
@@ -104,16 +25,35 @@ func TestInTurnLatchBlocksSecondSynthesis(t *testing.T) {
 
 	h.Sessions.Manager.Coordinator.Batch.BeginTurn(sess.ID)
 	h.Sessions.Manager.Coordinator.Runtime.BeginPromptTurn(sess.ID, anchor.InformRender(anchor.WorkerTaskFinished))
-	h.Sessions.Manager.Coordinator.Batch.AcceptSynthesis(ctx, sess.ID)
+	if code := batchClosedRefusal(t, h, ctx, sess); code == guard.CoordinatorBatchAlreadyClosedCode {
+		t.Fatal("the batch refused a report before any synthesis was accepted")
+	}
 
-	guard := h.Sessions.Manager.Coordinator.Batch.TurnGuard(sess.ID)
-	if !guard.SynthesisAcceptedThisTurn {
-		t.Fatal("first grounded synthesis should set in-turn latch")
+	h.Sessions.Manager.Coordinator.Batch.AcceptSynthesis(ctx, sess.ID)
+	first := h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
+	if first.BatchPhase != batch.PhaseClosed {
+		t.Fatalf("batch_phase = %q want closed after synthesis", first.BatchPhase)
 	}
-	state := h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
-	if state.BatchPhase != batch.PhaseClosed {
-		t.Fatalf("batch_phase = %q want closed after synthesis", state.BatchPhase)
+	if code := batchClosedRefusal(t, h, ctx, sess); code != guard.CoordinatorBatchAlreadyClosedCode {
+		t.Fatalf("second report in the same turn: refusal code = %q, want %s", code, guard.CoordinatorBatchAlreadyClosedCode)
 	}
+
+	h.Sessions.Manager.Coordinator.Batch.AcceptSynthesis(ctx, sess.ID)
+	second := h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
+	if second.BatchPhase != first.BatchPhase || second.BatchSeq != first.BatchSeq {
+		t.Fatalf("second synthesis moved the batch: phase %q seq %d, want %q seq %d", second.BatchPhase, second.BatchSeq, first.BatchPhase, first.BatchSeq)
+	}
+}
+
+// batchClosedRefusal runs the coordinator pre-invoke guard for a board report
+// and returns its typed refusal code, empty when admitted.
+func batchClosedRefusal(t *testing.T, h *Harness, ctx context.Context, sess *api.Session) string {
+	t.Helper()
+	_, _, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "pack_board", map[string]any{})
+	if reject := toolrejection.AsToolReject(err); reject != nil {
+		return reject.Code
+	}
+	return ""
 }
 
 func TestStaleBatchSeqWakeDroppedAfterNewUserMessage(t *testing.T) {

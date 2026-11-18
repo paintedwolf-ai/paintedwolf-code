@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
@@ -16,6 +17,8 @@ import (
 // remote all complete, and the remote receives exactly what was pushed.
 func TestCommandProgramGitRunsUnderTheAgentLaunch(t *testing.T) {
 	gitengine.TestingEnableBundledBinary()
+	confine.TestingSetAutoConfine(t)
+	t.Setenv("LYCAON_SANDBOX", "on")
 	s := newCommandProgramSession(t, strings.Join([]string{
 		"git status --short",
 		"git add notes.txt",
@@ -37,5 +40,9 @@ func TestCommandProgramGitRunsUnderTheAgentLaunch(t *testing.T) {
 	}
 	if state := s.programState(t); state != "completed" {
 		t.Fatalf("program state = %q, result %q", state, result)
+	}
+	t.Logf("executions %v", s.executions(t))
+	if outcome := s.outcome(t, "program-1"); outcome.NativeGaps != 0 {
+		t.Fatalf("git ran as an installed-program gap %d times", outcome.NativeGaps)
 	}
 }

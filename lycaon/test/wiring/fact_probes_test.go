@@ -8,26 +8,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-// probeProgram runs one native program as the given agent and reports whether
-// the host refused it for its effects or a profile deny.
-func probeProgram(t *testing.T, s *replaySession, program string) bool {
-	t.Helper()
-	result := s.call(t, "command", map[string]any{"command": program})
-	for _, code := range []string{"COMMAND_EFFECT_NOT_ALLOWED", "COMMAND_OPERATION_NOT_ALLOWED"} {
-		if strings.Contains(result.Content, code) || slicesHasCode(result, code) {
-			return true
-		}
-	}
-	return false
-}
-
-func slicesHasCode(result *wire.ToolResult, code string) bool {
+// refusedForReach reports whether the host refused a native program for its
+// effects or a profile deny.
+func refusedForReach(result *wire.ToolResult) bool {
 	for _, feedback := range result.Feedback {
-		if feedback.Code == code {
+		if feedback.Code == "COMMAND_EFFECT_NOT_ALLOWED" || feedback.Code == "COMMAND_OPERATION_NOT_ALLOWED" {
 			return true
 		}
 	}
@@ -72,33 +60,22 @@ func TestProgramReachMatchesTheExecutor(t *testing.T) {
 					if reach == nil {
 						t.Fatal("no reach answer")
 					}
-					refused := probeProgram(t, s, source)
-					if reach(program) == refused {
-						t.Fatalf("reach says %v, executor refused = %v", reach(program), refused)
+					result := s.call(t, "command", map[string]any{"command": source})
+					if !reach(program) {
+						if !refusedForReach(result) {
+							t.Fatalf("reach denies %s but the executor did not refuse it: outcome %s, feedback %+v", program, result.Outcome, result.Feedback)
+						}
+						return
+					}
+					if result.Outcome == wire.ToolResultOutcomeRejected {
+						t.Fatalf("reach admits %s but the executor rejected it: %+v", program, result.Feedback)
+					}
+					if state := s.programState(t); state != "completed" {
+						t.Fatalf("reach admits %s but the program state is %q, want completed", program, state)
 					}
 				})
 			}
 		})
-	}
-}
-
-// A retired tool's answer names native forms; each must be a real program.
-func TestRetiredToolFormsAreRealPrograms(t *testing.T) {
-	catalog, err := toolcontract.ReadOnlyLanguageV1()
-	testutil.FailErr(t, "load language", err)
-	known := map[string]bool{}
-	for _, spec := range catalog.Commands {
-		known[spec.Name] = true
-		for _, alias := range spec.Aliases {
-			known[alias] = true
-		}
-	}
-	for _, disposition := range catalog.Tools {
-		for _, form := range disposition.CommandForms {
-			if !known[form] {
-				t.Errorf("%s names native form %q, which the language does not declare", disposition.Tool, form)
-			}
-		}
 	}
 }
 

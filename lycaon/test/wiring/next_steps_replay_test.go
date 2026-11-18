@@ -60,30 +60,17 @@ func nextCalls(t *testing.T, result *wire.ToolResult) []toolreach.Call {
 	return out
 }
 
-// followExactCalls makes every call the host offered complete, and requires each
-// to run. A step the reader must finish is not submitted as written.
-func (s *replaySession) followExactCalls(t *testing.T, calls []toolreach.Call) int {
-	t.Helper()
-	followed := 0
-	for _, call := range calls {
-		if call.Partial {
-			continue
-		}
-		followed++
-		if result := s.call(t, call.Tool, call.Args); result.Outcome == wire.ToolResultOutcomeRejected {
-			t.Errorf("offered call %s was refused: %+v", call.Text(), result.Feedback)
-		}
-	}
-	return followed
-}
-
 func TestOfferedCallsWorkWhenFollowed(t *testing.T) {
 	t.Run("an image call on a directory offers a listing that runs", func(t *testing.T) {
 		s := newReplaySession(t)
 		testutil.FailErr(t, "seed directory", os.Mkdir(filepath.Join(s.dir, "sub.png"), 0o755))
 		result := s.call(t, "view_image", map[string]any{"path": "sub.png"})
-		if s.followExactCalls(t, nextCalls(t, result)) == 0 {
-			t.Fatalf("no exact listing offered: %+v", result.Feedback)
+		calls := nextCalls(t, result)
+		if len(calls) != 1 || calls[0].Partial || calls[0].Tool != toolreach.ProgramTool || calls[0].Program != "ls" || calls[0].Args[toolreach.ProgramTool] != "ls sub.png" {
+			t.Fatalf("next calls = %+v, want one exact listing of sub.png; feedback %+v", calls, result.Feedback)
+		}
+		if ran := s.call(t, calls[0].Tool, calls[0].Args); ran.Outcome != wire.ToolResultOutcomeCompleted {
+			t.Fatalf("offered listing outcome = %s, want completed: %+v", ran.Outcome, ran.Feedback)
 		}
 	})
 	t.Run("a restore with no history offers a history call that runs once finished", func(t *testing.T) {
@@ -95,8 +82,8 @@ func TestOfferedCallsWorkWhenFollowed(t *testing.T) {
 		}
 		args := calls[0].Args
 		args["path"] = "notes.txt"
-		if ran := s.call(t, calls[0].Tool, args); ran.Outcome == wire.ToolResultOutcomeRejected {
-			t.Fatalf("offered call was refused: %+v", ran.Feedback)
+		if ran := s.call(t, calls[0].Tool, args); ran.Outcome != wire.ToolResultOutcomeCompleted {
+			t.Fatalf("offered history call outcome = %s, want completed: %+v", ran.Outcome, ran.Feedback)
 		}
 	})
 }

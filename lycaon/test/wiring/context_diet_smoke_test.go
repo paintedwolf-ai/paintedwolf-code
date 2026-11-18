@@ -37,7 +37,9 @@ func TestContextDietRoutingToTaskDispatch(t *testing.T) {
 	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Map this codebase"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
-	if stage.Load() != 1 {
-		t.Fatal("expected routing turn to dispatch task()")
+	queued, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)
+	testutil.FailErr(t, "list session workers", err)
+	if len(queued) != 1 || queued[0].AgentType != "path-explorer" {
+		t.Fatalf("routing turn dispatched %+v, want one path-explorer worker", queued)
 	}
 }

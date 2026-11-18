@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -86,23 +84,5 @@ func TestHandoffReserveVisibleOnPackBoardAndPeerLegWiring(t *testing.T) {
 	}
 	if peer[0].LegLabel != "timer-leg" {
 		t.Fatalf("leg label = %q", peer[0].LegLabel)
-	}
-}
-
-func TestRenderWorkerLegInjectReservedPaths(t *testing.T) {
-	ctx := context.Background()
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	renderer := prompts.NewInjectRenderer(engine)
-	block, err := inject.RenderWorkerLegInject(ctx, renderer, "sess-inject-test", inject.WorkerLegContext{
-		LegID:     "leg-b",
-		LegTools:  []string{"read"},
-		Checklist: []string{"work"},
-		ReservedPaths: []inject.ReservedPath{{
-			Path: "shellsim/builtins.py", Worker: "timer", LegLabel: "Timer leg",
-		}},
-	})
-	testutil.FailErr(t, "render", err)
-	if !strings.Contains(block, "shellsim/builtins.py") || !strings.Contains(block, "`timer`") {
-		t.Fatalf("block = %q", block)
 	}
 }

@@ -20,6 +20,18 @@ func TestCoordinatorSynthesisWrapupReplay(t *testing.T) {
 	if fix.SessionID == "" {
 		t.Fatal("fixture missing session_id")
 	}
+	if len(fix.Surface) == 0 || len(fix.GuardCases) == 0 {
+		t.Fatalf("fixture has %d surface cases and %d guard cases; both must be non-empty", len(fix.Surface), len(fix.GuardCases))
+	}
+	refusals := 0
+	for _, tc := range fix.GuardCases {
+		if tc.WantCode != "" {
+			refusals++
+		}
+	}
+	if refusals == 0 {
+		t.Fatal("fixture has no guard case that expects a refusal")
+	}
 
 	for _, tc := range fix.Surface {
 		t.Run("surface/"+tc.Name, func(t *testing.T) {

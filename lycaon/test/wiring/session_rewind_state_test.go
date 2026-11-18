@@ -2,15 +2,15 @@ package wiring
 
 import (
 	"context"
-	"os"
-	"path/filepath"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -96,6 +96,12 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 	msgs, err := h.Store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	anchors := visibleUserMessageIDs(t, msgs)
+	if len(anchors) != 2 {
+		t.Fatalf("visible user messages = %d, want 2", len(anchors))
+	}
+	for _, anchorID := range anchors {
+		readCheckpointManifest(t, h.testDir, projectDir, sess.ID, anchorID, h.Store)
+	}
 	WaitForSessionIdleGate(t, h, ctx, sess.ID)
 
 	if _, err := h.Sessions.Manager.Chats.Rewinds.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchors[0], rewindDigest(t, h.Sessions.Manager, ctx, sess.ID, anchors[0])); err != nil {
@@ -108,16 +114,10 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 		t.Fatalf("visible asks remain after rewinding to the first one: %d", len(visibleUserMessageIDs(t, after)))
 	}
 
-	root := filepath.Join(projectDir, settingsoverlay.DirName(), "checkpoints", sess.ID)
-	entries, err := os.ReadDir(root)
-	if err != nil && !os.IsNotExist(err) {
-		testutil.FailErr(t, "read checkpoint dir", err)
-	}
-	for _, e := range entries {
-		for _, anchorID := range anchors {
-			if e.Name() == anchorID {
-				t.Fatalf("checkpoint for rewound anchor %s survived — its ask no longer exists", anchorID)
-			}
+	checkpoints := sessioncheckpoint.New(h.testDir, projectDir, h.Store)
+	for _, anchorID := range anchors {
+		if _, err := checkpoints.Load(ctx, sess.ID, anchorID); !errors.Is(err, sessionstore.ErrCheckpointMissing) {
+			t.Fatalf("checkpoint for rewound anchor %s: err = %v, want ErrCheckpointMissing", anchorID, err)
 		}
 	}
 }

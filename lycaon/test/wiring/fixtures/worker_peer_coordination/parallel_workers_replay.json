@@ -6,7 +6,6 @@
   "note_summary": "config resolver lives in internal/config/resolve.go:40",
   "note_ref": "internal/config/resolve.go:40",
   "prior_run_note_summary": "prior batch finding on legacy.go",
-  "overlay_read_path": "/Users/me/.config/paintedwolf/worker-branches/deadbeef/job-scratch-a/shellsim/builtins.py",
   "promote_overlay_id": "job-line-shift",
   "worker_a": {
     "job_id": "job-scratch-a",

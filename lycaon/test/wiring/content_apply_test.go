@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -177,17 +178,23 @@ func TestContentApplyRejectStructuredError(t *testing.T) {
 }
 
 // Content review must hold every tool on the catalog's mutates_content axis, so
-// the set is read from the catalog rather than listed here. Host-produced
-// identities are skipped: content_apply is the checkpoint this gate raises, not
-// a tool passed into it.
+// the set is read from the manifests rather than listed here, and each must be
+// one the gate classifies as content mutating. Host-produced identities are
+// skipped: content_apply is the checkpoint this gate raises, not a tool passed
+// into it.
 func TestContentApplyHoldsEveryContentMutatingTool(t *testing.T) {
 	cfg, err := nativemanifest.Load()
 	testutil.FailErr(t, "load native tool manifest", err)
 
+	probed := 0
 	for _, tool := range cfg.ContentMutatingTools() {
 		if cfg.HasHostProducedTool(tool) {
 			continue
 		}
+		if !toolcontract.MutatesContent(tool) {
+			t.Fatalf("manifest declares %s as content mutating but the review gate does not classify it so", tool)
+		}
+		probed++
 		t.Run(tool, func(t *testing.T) {
 			h := BuildForTest(t)
 			ctx := h.OwnerCtx(t, context.Background())
@@ -228,9 +235,6 @@ func TestContentApplyHoldsEveryContentMutatingTool(t *testing.T) {
 				}
 				return false
 			})
-			if checkpointID == "" {
-				t.Fatalf("%s wrote past content review — no checkpoint was raised", tool)
-			}
 			if _, err := h.Sessions.Checkpoints.ResolveCheckpoint(ctx, sess.ID, checkpointID,
 				wire.CheckpointKindContentApply, nil, &hitl.ContentApplyResolve{
 					Decision: wire.ContentApplyApprove,
@@ -241,6 +245,9 @@ func TestContentApplyHoldsEveryContentMutatingTool(t *testing.T) {
 				testutil.FailErr(t, "gate should complete after approval", err)
 			}
 		})
+	}
+	if probed == 0 {
+		t.Fatal("no content-mutating tool was probed")
 	}
 }
 
@@ -262,7 +269,18 @@ func TestContentApplyPassesThroughNonAuthoringTools(t *testing.T) {
 	testutil.FailErr(t, "create test session", err)
 	gate := &toolhost.ContentApplyService{Mgr: h.Sessions.Checkpoints, Review: mustReviewStore(t, h.ConfigRoot)}
 
-	for _, tool := range []string{"copy", "move", "extract_archive", "mkdir", "chmod"} {
+	cfg, err := nativemanifest.Load()
+	testutil.FailErr(t, "load native tool manifest", err)
+	authoring := map[string]bool{}
+	for _, tool := range cfg.ContentMutatingTools() {
+		authoring[tool] = true
+	}
+	probed := 0
+	for _, tool := range cfg.PathMutatingTools() {
+		if authoring[tool] {
+			continue
+		}
+		probed++
 		after, err := gate.GateApply(ctx, tool, "reviewed.txt", nil, "bytes", tools.ToolContext{
 			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
 				ActiveRootID: "r1"},
@@ -273,6 +291,14 @@ func TestContentApplyPassesThroughNonAuthoringTools(t *testing.T) {
 		if after != "bytes" {
 			t.Fatalf("%s = %q want passthrough", tool, after)
 		}
+		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, nil)
+		testutil.FailErr(t, "list pending checkpoints", err)
+		if len(pending) != 0 {
+			t.Fatalf("%s raised %d checkpoints: %+v", tool, len(pending), pending)
+		}
+	}
+	if probed == 0 {
+		t.Fatal("no path-mutating, non-authoring tool was probed")
 	}
 }
 

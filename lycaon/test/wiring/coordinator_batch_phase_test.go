@@ -100,4 +100,9 @@ func TestCoordinatorBatchPhaseSynthesizeAfterWorkerDrain(t *testing.T) {
 		state = h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 		return state.BatchPhase == batch.PhaseIntegrate
 	})
+	testutil.FailErr(t, "promote pending write overlays", PromotePendingWriteOverlays(ctx, h, sess.ProjectID, sess.ID))
+	testutil.WaitFor(t, "the batch reaches synthesize", func() bool {
+		state = h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
+		return state.BatchPhase == batch.PhaseSynthesize
+	})
 }

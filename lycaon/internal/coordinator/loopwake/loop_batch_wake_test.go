@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -330,5 +331,52 @@ func TestLoopScheduledRunsWhenObligationsOpenOnClosedBatch(t *testing.T) {
 	engine.Turns.WaitForAsyncTurns(t.Context())
 	if prompts.Load() != 1 {
 		t.Fatalf("prompts = %d want 1 for timer wake with open obligations", prompts.Load())
+	}
+}
+
+// Distinct wake facts that arrive while a synthesis prompt is executing are
+// consumed together by the one prompt that runs once execution ends.
+func TestStackedWakeFactsAreConsumedByOneObservedPrompt(t *testing.T) {
+	engine := NewLoopEngine()
+	t.Cleanup(func() { engine.ForgetSession(context.Background(), "s1") })
+	var prompts atomic.Int32
+	sess := &api.Session{ID: "s1", Status: api.SessionStatusBusy, WorkspacePath: t.TempDir()}
+	deps := loopDepsForTest()
+	deps.GetSession = func(context.Context, string) (*api.Session, error) { return sess, nil }
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
+		run: &api.WorkflowRun{ID: "run-batch", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
+		vars: map[string]any{
+			"coordinator_batch": map[string]any{
+				"phase": batch.PhaseSynthesize,
+				"seq":   2,
+			},
+		},
+	})
+	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
+		engine.Observations.ObservePrompt("s1")(inject.CoordinatorTurnFrame{})
+		prompts.Add(1)
+		return &promptresult.Result{}, nil
+	}
+	engine.SetDeps(deps)
+	finishExecution := engine.Admission.BeginPromptExecution(t.Context(), "s1")
+	for _, jobID := range []string{"implementation-job", "verifier-job"} {
+		engine.Nudges.NudgeAfterWorkerJobTerminal(
+			t.Context(), "s1", jobID, anchor.WorkerTaskFinished, anchor.WorkerTaskFinished, "", anchor.Envelope{},
+		)
+	}
+	engine.Nudges.Nudge(context.Background(), "s1", anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
+	if prompts.Load() != 0 {
+		t.Fatalf("prompts = %d want 0 while session busy", prompts.Load())
+	}
+	if _, ok := engine.Nudges.Pending("s1"); !ok {
+		t.Fatal("worker wake should defer while session busy")
+	}
+	finishExecution()
+	engine.Turns.WaitForAsyncTurns(t.Context())
+	if got := prompts.Load(); got != 1 {
+		t.Fatalf("deferred worker wake prompts = %d want 1 after idle drain", got)
+	}
+	if engine.Nudges.HasPendingLoopWakes("s1") {
+		t.Fatal("stacked wake facts remain pending after the prompt that observed them")
 	}
 }

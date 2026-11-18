@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -87,35 +88,21 @@ func (state *implementLifecycleState) awaitWorker() modelcall.Completion {
 	return modelcall.Completion{Content: MockCoordinatorCloseoutMarkdown("Repair complete.", "main.go")}
 }
 
-func TestImplementLifecycleWaitsForWorkerNotifications(t *testing.T) {
-	for _, stage := range []int32{1, 2} {
-		state := &implementLifecycleState{}
-		state.stage.Store(stage)
-		mock := newImplementLifecycleMock(state)
-		for _, wake := range []string{"[host:loop-wake]", "Phase advanced — review updated run context"} {
-			response, err := mock.Complete(t.Context(), modelcall.CompletionRequest{
-				Messages: []wire.Message{{Role: wire.MessageRoleUser, Content: wake}},
-			})
-			testutil.FailErr(t, "respond to wake before worker completion", err)
-			if len(response.ToolCalls) != 1 || response.ToolCalls[0].Name != "wait" {
-				t.Fatalf("stage %d wake %q returned %+v, want wait", stage, wake, response)
-			}
-			if state.stage.Load() != stage {
-				t.Fatalf("wake advanced stage %d without a worker completion", stage)
-			}
-		}
-	}
+// implementLifecycleRun is a build session driven by the lifecycle mock, with
+// the coordinator loop enabled once its workflow reaches the work phase.
+type implementLifecycleRun struct {
+	h         *Harness
+	sess      *wire.Session
+	dir       string
+	state     *implementLifecycleState
+	recording *llm.RecordingClient
 }
 
-func TestImplementLifecycleSmokePathsForward(t *testing.T) {
+func startImplementLifecycle(t *testing.T) *implementLifecycleRun {
+	t.Helper()
 	state := &implementLifecycleState{}
-	stage := &state.stage
-	workerTaskFinishedCount := &state.workerTaskFinishedCount
-	legFinishedCount := &state.legFinishedCount
-	mock := newImplementLifecycleMock(state)
-
 	// Manual draining keeps worker claims deterministic.
-	recording := llm.NewRecordingClient(mock)
+	recording := llm.NewRecordingClient(newImplementLifecycleMock(state))
 	h := BuildForTest(t, WithLLMClient(recording))
 	limits := &implementLifecycleLimits{}
 	h.Sessions.Manager.Limits.SetProvider(limits)
@@ -149,6 +136,58 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 		t.Fatal("model ran during fixture preparation")
 	}
 	limits.enabled.Store(true)
+	return &implementLifecycleRun{h: h, sess: sess, dir: dir, state: state, recording: recording}
+}
+
+// awaitPendingWorker waits for exactly one pending worker that is not a
+// previously completed job.
+func (r *implementLifecycleRun) awaitPendingWorker(t *testing.T, done ...string) wire.WorkerTask {
+	t.Helper()
+	var pending []wire.WorkerTask
+	testutil.WaitFor(t, "one new worker task is pending", func() bool {
+		var err error
+		pending, err = r.h.Workers.Queue.ListBySession(context.Background(), r.sess.ProjectID, r.sess.ID, wire.WorkerStatusPending)
+		return err == nil && len(pending) == 1 && !slices.Contains(done, pending[0].ID)
+	})
+	return pending[0]
+}
+
+func (r *implementLifecycleRun) awaitIdle(t *testing.T) {
+	t.Helper()
+	testutil.WaitFor(t, "the session is idle", func() bool {
+		got, err := r.h.Store.Get(context.Background(), r.sess.ID)
+		return err == nil && got != nil && got.Status == wire.SessionStatusIdle
+	})
+}
+
+// Before any worker finishes, the coordinator holds the worker in flight and
+// queues nothing further, whatever wakes it.
+func TestImplementLifecycleWaitsForWorkerNotifications(t *testing.T) {
+	r := startImplementLifecycle(t)
+	ctx := context.Background()
+	if _, err := r.h.Sessions.Manager.Submissions.Prompt(ctx, r.sess.ID, "Build the stub and resolve any TODOs."); err != nil {
+		testutil.FailErr(t, "user Prompt", err)
+	}
+	job := r.awaitPendingWorker(t)
+	r.awaitIdle(t)
+
+	all, err := r.h.Workers.Queue.ListBySession(ctx, r.sess.ProjectID, r.sess.ID)
+	testutil.FailErr(t, "list session workers", err)
+	if len(all) != 1 || all[0].ID != job.ID || all[0].Status != wire.WorkerStatusPending {
+		t.Fatalf("session workers = %+v, want only the pending %s", all, job.ID)
+	}
+	if state := implementState(t, r.h, ctx, r.sess.ID); state.WorkersInFlight == 0 {
+		t.Fatalf("workers in flight = 0 while %s is pending", job.ID)
+	}
+}
+
+func TestImplementLifecycleSmokePathsForward(t *testing.T) {
+	r := startImplementLifecycle(t)
+	h, sess, dir := r.h, r.sess, r.dir
+	stage := &r.state.stage
+	workerTaskFinishedCount := &r.state.workerTaskFinishedCount
+	legFinishedCount := &r.state.legFinishedCount
+	ctx := context.Background()
 
 	// Dispatch and complete the first worker.
 	start := time.Now()
@@ -161,7 +200,6 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 		pending, err = h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(pending) == 1
 	})
-	testutil.FailErr(t, "ListBySession pending", err)
 	if len(pending) != 1 {
 		t.Fatalf("pending jobs = %d want 1", len(pending))
 	}
@@ -246,24 +284,32 @@ func (l *implementLifecycleLimits) SessionLimits(string) settings.SessionLimits 
 	return limits
 }
 
-func TestImplementLifecycleConsumesEachOutcomeAcrossWakeTypes(t *testing.T) {
-	state := &implementLifecycleState{}
-	state.stage.Store(1)
-	mock := newImplementLifecycleMock(state)
-	for _, job := range []string{"first", "second"} {
-		before := state.stage.Load()
-		for i, wake := range []string{"[host:loop-wake]", "Worker task finished", "Leg finished", "Phase advanced"} {
-			_, err := mock.Complete(t.Context(), modelcall.CompletionRequest{Messages: []wire.Message{
-				{Role: wire.MessageRoleAssistant, Content: "done", WorkerSummary: &wire.WorkerSummaryMeta{WorkerID: job, Status: "complete"}},
-				{Role: wire.MessageRoleUser, Content: wake},
-			}})
-			testutil.FailErr(t, "consume worker outcome", err)
-			if got := state.stage.Load(); got != before+1 {
-				t.Fatalf("job %s wake %d advanced stage to %d, want %d", job, i, got, before+1)
-			}
+// Two worker outcomes delivered through the drain each reach the coordinator
+// transcript once, and the first one's follow-up queues exactly one more task.
+func TestImplementLifecycleConsumesEachWorkerOutcomeOnce(t *testing.T) {
+	r := startImplementLifecycle(t)
+	ctx := context.Background()
+	if _, err := r.h.Sessions.Manager.Submissions.Prompt(ctx, r.sess.ID, "Build the stub and resolve any TODOs."); err != nil {
+		testutil.FailErr(t, "user Prompt", err)
+	}
+	first := r.awaitPendingWorker(t)
+	completeWorkerWrite(t, r.h, r.sess, first, r.dir, "w1", "package main\n// TODO: resolve later\n", "Wrote main.go")
+	second := r.awaitPendingWorker(t, first.ID)
+	completeWorkerWrite(t, r.h, r.sess, second, r.dir, "w2", "package main\n", "Resolved TODO in main.go")
+	r.awaitIdle(t)
+
+	all, err := r.h.Workers.Queue.ListBySession(ctx, r.sess.ProjectID, r.sess.ID)
+	testutil.FailErr(t, "list session workers", err)
+	if len(all) != 2 {
+		t.Fatalf("session workers = %+v, want the two dispatched tasks", all)
+	}
+	delivered := map[string]int{}
+	for _, msg := range mustMessages(t, r.h, ctx, r.sess.ID) {
+		if msg.WorkerSummary != nil {
+			delivered[msg.WorkerSummary.WorkerID]++
 		}
 	}
-	if got := state.workerTaskFinishedCount.Load(); got != 2 {
-		t.Fatalf("consumed %d worker outcomes, want 2", got)
+	if delivered[first.ID] != 1 || delivered[second.ID] != 1 {
+		t.Fatalf("worker outcome deliveries = %v, want one each for %s and %s", delivered, first.ID, second.ID)
 	}
 }

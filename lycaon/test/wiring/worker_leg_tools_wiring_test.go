@@ -29,7 +29,7 @@ func TestWorkerLegToolsMatchListForPrompt(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
 	policy := h.Sessions.Manager.Coordinator.Guards.Policy()
-	builder := compositeWorkerWithPolicy(h.AgentRegistry, policy)
+	builder := h.Workers.ContextLoader
 
 	for _, agentType := range implementDefaultAgents {
 		t.Run(agentType, func(t *testing.T) {

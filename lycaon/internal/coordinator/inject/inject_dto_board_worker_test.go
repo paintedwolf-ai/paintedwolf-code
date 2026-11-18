@@ -62,6 +62,31 @@ func TestRenderWorkerLegInjectSiblingNotes(t *testing.T) {
 	}
 }
 
+// Reserved paths reach the worker leg block as the supplied values, and only
+// when a sibling holds one.
+func TestRenderWorkerLegInjectReservedPaths(t *testing.T) {
+	hold := ReservedPath{Path: "reserved/sentinel-path.go", Worker: "sentinel-worker", LegLabel: "sentinel-leg-label"}
+	legCtx := WorkerLegContext{LegID: "leg-b", LegTools: []string{"read"}, Checklist: []string{"work"}, ReservedPaths: []ReservedPath{hold}}
+	data := BuildWorkerLegInjectData(legCtx)
+	if len(data.ReservedPaths) != 1 || data.ReservedPaths[0] != (ReservedPathView{Path: hold.Path, Worker: hold.Worker, LegLabel: hold.LegLabel}) {
+		t.Fatalf("reserved paths = %+v", data.ReservedPaths)
+	}
+	renderer := testInjectRenderer(t)
+	block, err := RenderWorkerLegInject(context.Background(), renderer, "sess-inject-test", legCtx)
+	testutil.FailErr(t, "RenderWorkerLegInject failed", err)
+	for _, want := range []string{hold.Path, hold.Worker} {
+		if !strings.Contains(block, want) {
+			t.Fatalf("missing %q in block = %q", want, block)
+		}
+	}
+	legCtx.ReservedPaths = nil
+	block, err = RenderWorkerLegInject(context.Background(), renderer, "sess-inject-test", legCtx)
+	testutil.FailErr(t, "RenderWorkerLegInject without reservations failed", err)
+	if strings.Contains(block, hold.Path) || strings.Contains(block, hold.Worker) {
+		t.Fatalf("reservation rendered with none held: %q", block)
+	}
+}
+
 func TestRenderBoardOrientationInject_NilRenderer(t *testing.T) {
 	_, err := RenderBoardOrientationInject(context.Background(), nil, "sess-inject-test", api.BoardSnapshot{}, packboard.InjectScopeFull, false, true, time.Now())
 	if err == nil {
