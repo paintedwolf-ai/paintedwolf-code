@@ -1,11 +1,11 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )

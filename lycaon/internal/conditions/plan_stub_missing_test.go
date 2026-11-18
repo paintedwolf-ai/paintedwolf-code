@@ -1,11 +1,11 @@
 package conditions_test
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 )
 
 func TestPlanStubMissingRequiredWrongHeadings(t *testing.T) {

@@ -5,7 +5,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/evidence"
-
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,14 +27,10 @@ const PlanWithReviewDepth = PlanWithTasks + "\n\n## Plan review depth\n\nstandar
 
 // DependenciesWithEvidence supplies approved evidence for compound gates.
 func DependenciesWithEvidence() conditions.RegistryDeps {
-	return conditions.RegistryDeps{
-		BlueprintGet: func(_ context.Context, blueprintPath string) (*api.Blueprint, error) {
-			return &api.Blueprint{Path: blueprintPath, Content: PlanWithTasks}, nil
-		},
-		PlanCloseout:   func(context.Context, string) (bool, error) { return true, nil },
-		SessionWorkIDs: func(context.Context, string) ([]string, error) { return []string{"leg-1"}, nil },
-		Evidence:       AlwaysPassEvidence{},
-	}
+	deps := Dependencies()
+	deps.SessionWorkIDs = func(context.Context, string) ([]string, error) { return []string{"leg-1"}, nil }
+	deps.Evidence = AlwaysPassEvidence{}
+	return deps
 }
 
 // Dependencies supplies a plan and completed closeout.

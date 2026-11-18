@@ -1,8 +1,9 @@
 package vocabularytest
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"sort"
+
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 )
 
 // CatalogEntry is one row in schemas/workflow_vocabulary.json.

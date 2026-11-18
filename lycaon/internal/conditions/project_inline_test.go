@@ -1,11 +1,11 @@
 package conditions_test
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 )
 
 func TestRootlessSummarizeRequiresInlineContentOnly(t *testing.T) {

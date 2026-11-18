@@ -1,10 +1,10 @@
 package workflow
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 )
 
 func TestPlanStatusVarAutoAdvances(t *testing.T) {
