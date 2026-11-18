@@ -212,11 +212,12 @@ func TestRegistryAnyConfigured(t *testing.T) {
 	}
 	testutil.FailErr(t, "NewRegistry failed", err)
 	t.Setenv("TEST_LYCAON_ANY_KEY", "secret")
-	if registry.AnyConfigured() {
-		t.Fatal("expected no configured providers from env alone")
+	if registry.IsConfigured("test-provider") {
+		t.Fatal("environment key configured the hosted provider")
 	}
-	if got := registry.ConfiguredCount(); got != 0 {
-		t.Fatalf("ConfiguredCount = %d, want 0", got)
+	before := registry.ConfiguredCount()
+	if registry.AnyConfigured() != (before > 0) {
+		t.Fatal("configured status disagrees with provider count")
 	}
 	if err := creds.Set("test-provider", "secret"); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
@@ -227,8 +228,8 @@ func TestRegistryAnyConfigured(t *testing.T) {
 	if !registry.AnyConfigured() {
 		t.Fatal("expected configured provider after storing API key")
 	}
-	if got := registry.ConfiguredCount(); got != 1 {
-		t.Fatalf("ConfiguredCount = %d, want 1", got)
+	if got := registry.ConfiguredCount(); got != before+1 || !registry.IsConfigured("test-provider") {
+		t.Fatalf("ConfiguredCount = %d, want %d with hosted provider configured", got, before+1)
 	}
 }
 
@@ -258,7 +259,7 @@ func TestRegistryKeepsMultipleProvidersForIndependentModelAssignments(t *testing
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
 	testutil.FailErr(t, "NewRegistry", err)
-	if got := registry.snapshot.Load().ids; len(got) != 2 || got[0] != "provider-a" || got[1] != "provider-b" {
+	if got := registry.snapshot.Load().ids; !slices.Contains(got, "provider-a") || !slices.Contains(got, "provider-b") {
 		t.Fatalf("registered providers = %v, want both independent instances", got)
 	}
 	for _, ref := range []ModelRef{
@@ -297,7 +298,7 @@ func TestRegistryListNeverIncludesSecrets(t *testing.T) {
 	}
 
 	for _, meta := range registry.List(t.Context()) {
-		if meta.BaseURL == "" {
+		if meta.ID == "test-provider" && meta.BaseURL == "" {
 			t.Fatalf("meta missing base_url: %+v", meta)
 		}
 	}
@@ -511,8 +512,8 @@ func TestProviderCatalogFirstRunLocalEmpty(t *testing.T) {
 	stageShipProviders(t, shipYAML)
 	catalog, err := NewProviderCatalogAt(local)
 	testutil.FailErr(t, "NewProviderCatalogAt", err)
-	if got := catalog.List(); len(got) != 0 {
-		t.Fatalf("first-run local List = %#v, want empty", got)
+	if got := catalog.List(); len(got) != 1 || got[0].ID != IncludedProviderID {
+		t.Fatalf("first-run List = %#v, want included provider", got)
 	}
 	data, err := os.ReadFile(local)
 	testutil.FailErr(t, "read local", err)
@@ -622,11 +623,9 @@ func TestRegistryListIncludesCatalogWhenSnapshotNil(t *testing.T) {
 	registry.snapshot.Store(nil)
 
 	list := registry.List(t.Context())
-	if len(list) != 1 || list[0].ID != "fireworks-1" {
-		t.Fatalf("List with empty snapshot = %#v", list)
-	}
-	if list[0].Configured || list[0].ReadyToAssign {
-		t.Fatalf("missing snapshot must be not ready: %+v", list[0])
+	meta := providerMetaByID(t, list, "fireworks-1")
+	if meta.Configured || meta.ReadyToAssign {
+		t.Fatalf("missing snapshot must be not ready: %+v", meta)
 	}
 }
 

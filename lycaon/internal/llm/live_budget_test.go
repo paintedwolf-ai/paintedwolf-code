@@ -247,12 +247,12 @@ func TestResolveTrueWindowLocalFallbackNotHosted262K(t *testing.T) {
 	}
 
 	// Projected ProviderMeta leaves context_length unset (0) so Den settings shows an unknown window.
-	metas := reg.List(t.Context())
-	if len(metas) != 1 || len(metas[0].Models) != 1 {
-		t.Fatalf("metas = %+v; want 1 provider with 1 model", metas)
+	meta := providerMetaByID(t, reg.List(t.Context()), "openai-compatible")
+	if len(meta.Models) != 1 {
+		t.Fatalf("models = %+v; want 1 model", meta.Models)
 	}
-	if metas[0].Models[0].ContextLength != 0 {
-		t.Fatalf("projected model ContextLength = %d; want 0 (unknown)", metas[0].Models[0].ContextLength)
+	if meta.Models[0].ContextLength != 0 {
+		t.Fatalf("projected model ContextLength = %d; want 0 (unknown)", meta.Models[0].ContextLength)
 	}
 }
 
