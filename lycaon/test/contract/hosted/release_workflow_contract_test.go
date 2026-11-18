@@ -83,7 +83,7 @@ func TestReleaseWorkflowValidatesTagAgainstVERSION(t *testing.T) {
 		"./task upgrade:rehearse",
 		"aggregate-release:",
 		"packaging/release-platforms.json",
-		"scripts/release-aggregate.sh",
+		"scripts/release_assembly/aggregate.sh",
 		"publish-immutable:",
 		"activate-updater:",
 		"publish-github-release:",

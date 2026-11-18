@@ -6,7 +6,7 @@ case "${1:-}" in
   --assembly|--macos)
     mode="${1#--}"
     shift
-    exec python3 "${ROOT}/scripts/release_rehearsal.py" "${mode}" "$@"
+    exec python3 "${ROOT}/scripts/release_assembly/rehearsal.py" "${mode}" "$@"
     ;;
 esac
 if [[ "${1:-}" == --r2-nix-cache && $# -eq 1 ]]; then

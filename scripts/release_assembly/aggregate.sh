@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Assemble the updater manifest, public artifact set and casks from every signed platform result.
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ARTIFACTS="" OUTPUT="" PUBLIC="" VERSION="" CHANNEL="" CASK_TOKEN=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -15,7 +15,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ -d "${ARTIFACTS}" && -n "${OUTPUT}" && -n "${PUBLIC}" && -n "${VERSION}" && -n "${CHANNEL}" && -n "${CASK_TOKEN}" ]] || {
-  echo "Usage: release-aggregate.sh --artifacts DIR --output DIR --public DIR --version VERSION --channel CHANNEL --cask-token TOKEN" >&2
+  echo "Usage: aggregate.sh --artifacts DIR --output DIR --public DIR --version VERSION --channel CHANNEL --cask-token TOKEN" >&2
   exit 2
 }
 : "${DOWNLOAD_BASE_URL:?missing DOWNLOAD_BASE_URL}"
@@ -37,7 +37,7 @@ bash scripts/release-validate-updater-manifest.sh --file "${OUTPUT}/latest.json"
 bash scripts/release-validate-bridge.sh "${OUTPUT}/latest.json"
 SHA="$(cat "${ARTIFACTS}/painted-wolf-code_v${VERSION}_darwin-aarch64.dmg.sha256")"
 render() {
-  bash scripts/release-render-cask.sh --token "$1" --channel "$2" --version "${VERSION}" --sha256 "${SHA}" \
+  bash scripts/release_assembly/render-cask.sh --token "$1" --channel "$2" --version "${VERSION}" --sha256 "${SHA}" \
     --base-url "${DOWNLOAD_BASE_URL}" --output "${OUTPUT}/$1.rb"
 }
 render "${CASK_TOKEN}" "${CHANNEL}"

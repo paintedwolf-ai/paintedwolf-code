@@ -208,9 +208,9 @@ func TestReleaseBlastRadiusPublishOrder(t *testing.T) {
 		t.Fatal("the GitHub Release mirror must not gate updater activation")
 	}
 	// Aggregation, which validates the manifest, runs from the shared release script.
-	aggregate := contractcheck.ReadRepoFile(t, root, "scripts/release-aggregate.sh")
-	if !strings.Contains(rel, "bash scripts/release-aggregate.sh") {
-		t.Fatal("release.yml must assemble the updater manifest through scripts/release-aggregate.sh")
+	aggregate := contractcheck.ReadRepoFile(t, root, "scripts/release_assembly/aggregate.sh")
+	if !strings.Contains(rel, "bash scripts/release_assembly/aggregate.sh") {
+		t.Fatal("release.yml must assemble the updater manifest through scripts/release_assembly/aggregate.sh")
 	}
 	for _, needle := range []string{
 		`updates/releases/${VERSION}.json`,

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Render one channel's Homebrew cask from the template.
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TOKEN="" CHANNEL="" VERSION="" SHA="" BASE_URL="" OUTPUT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in

@@ -546,7 +546,7 @@ jobs:
           CASK_TOKEN: ${{ needs.classify.outputs.cask_token }}
           DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
         run: |
-          bash scripts/release-aggregate.sh --artifacts release-artifacts --output aggregate --public public-artifacts \
+          bash scripts/release_assembly/aggregate.sh --artifacts release-artifacts --output aggregate --public public-artifacts \
             --version "${VERSION}" --channel "${CHANNEL}" --cask-token "${CASK_TOKEN}"
 
       - name: Upload aggregate release metadata
