@@ -3,37 +3,28 @@ import type { LycaonClient } from "../../api/client.ts";
 import { createOverlayScopeFocusTrap } from "../../platform/interaction/modal-focus-trap.ts";
 import type { SettingsStore } from "../../store/settings-store.ts";
 import {
-  defaultModelRef,
-  hasDefaultModel,
-  providerRemovalPatch,
-  readyProviders,
+  isIncludedProvider,
   summarizerOverrideRef,
   summarizerPatch,
 } from "../../settings/providers/models-editor-model.ts";
 import { MODELS_SETTINGS_COPY } from "../../settings/providers/models-settings-copy.ts";
 import { showAllModelsPref } from "../../settings/appearance/display-prefs.ts";
-import { CLIENT_NOTICES } from "../../notices/client-notices.generated.ts";
-import { completeFirstRunSetup } from "../../settings/system/onboarding-prefs.ts";
+import { LocalModelSelector } from "../settings/providers/LocalModelSelector.tsx";
+import { completeFirstRunSetup, firstRunSetupCompletedPref } from "../../settings/system/onboarding-prefs.ts";
 import { ChromeDragSurface } from "../shell/ChromeDragSurface.tsx";
 import { soleWindowControls } from "../shell/WindowControls.tsx";
 import { chromeProps } from "../../styling/ui-chrome.ts";
-import { ProvidersSettingsPanel } from "../settings/providers/ProvidersSettingsPanel.tsx";
-import { ProvidersPanel } from "../settings/providers/ProvidersPanel.tsx";
 import { BrandLockup } from "../primitives/BrandLockup.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";
 import { ModelSlotPicker } from "../model/ModelSlotPicker.tsx";
 import {
   ONBOARDING_GATE_STEP_COUNT,
-  needsOnboardingConfig,
   onboardingEscapeTarget,
-  onboardingGatePage,
   onboardingGateStep,
   onboardingNextPage,
   onboardingPreviousPage,
-  onboardingSetupBlocker,
   type OnboardingGatePage,
-  type OnboardingSetupBlocker,
 } from "./onboarding-gate-model.ts";
 import { ONBOARDING_LAYOUT_COPY } from "./onboarding-layout-copy.ts";
 import { setOnboardingWelcomeDismissSink } from "./onboarding-welcome-dismiss.ts";
@@ -48,84 +39,16 @@ type Props = {
   settingsChecked: boolean;
 };
 
-const SETUP_CONTINUE_HINT_ID = "onboarding-setup-continue-hint";
-
-function setupBlockerCopy(blocker: OnboardingSetupBlocker): string {
-  return blocker === "provider"
-    ? MODELS_SETTINGS_COPY.onboardingContinueNeedProvider
-    : MODELS_SETTINGS_COPY.onboardingContinueNeedDefaultModel;
-}
-
 export function OnboardingGate(props: Props) {
-  const effectivePolicy = () => props.settingsStore.state.effectiveModelPolicy ?? props.settingsStore.state.modelPolicy;
-  const initialNeedsConfig = () =>
-    needsOnboardingConfig({
-      readyProviderCount: readyProviders(props.settingsStore.state.providers)
-        .length,
-      hasDefaultModel: hasDefaultModel(effectivePolicy()),
-    });
-
-  let waitingForInitialSettings = props.settingsChecked === false;
-  const [page, setPage] = createSignal<OnboardingGatePage>(
-    waitingForInitialSettings ? "setup" : onboardingGatePage(initialNeedsConfig()),
-  );
-
-  createEffect(() => {
-    if (!waitingForInitialSettings || props.settingsChecked !== true) return;
-    waitingForInitialSettings = false;
-    setPage(onboardingGatePage(initialNeedsConfig()));
-  });
-  const [validating, setValidating] = createSignal(false);
-  const [validationError, setValidationError] = createSignal<
-    string | undefined
-  >();
-  const [continueAnyway, setContinueAnyway] = createSignal(false);
-  let validationAbort: AbortController | undefined;
-  const stopValidation = () => {
-    validationAbort?.abort();
-    validationAbort = undefined;
-  };
-  onCleanup(stopValidation);
+  const upgrade = firstRunSetupCompletedPref();
+  const [page, setPage] = createSignal<OnboardingGatePage>("local_model");
   const [dismissing, setDismissing] = createSignal(false);
   const [summarizerSaving, setSummarizerSaving] = createSignal(false);
-  const [showAddProvider, setShowAddProvider] = createSignal(false);
-  const readyCount = () =>
-    readyProviders(props.settingsStore.state.providers).length;
-  const defaultReady = () =>
-    hasDefaultModel(effectivePolicy());
-  const setupBlocker = () =>
-    onboardingSetupBlocker({
-      readyProviderCount: readyCount(),
-      hasDefaultModel: defaultReady(),
-    });
-  const setupBlockerHint = () => {
-    const blocker = setupBlocker();
-    return blocker ? setupBlockerCopy(blocker) : undefined;
-  };
-
+  const localProvider = () => props.settingsStore.state.providers.find(isIncludedProvider);
   const policy = () => props.settingsStore.state.modelPolicy;
   const summarizerRef = () => {
     const p = policy();
     return p ? summarizerOverrideRef(p) : { provider_id: "", model: "" };
-  };
-
-  const removeProvider = async (id: string) => {
-    const client = props.client;
-    if (!client) return;
-    const current = policy();
-    if (!current) return;
-    const patch = providerRemovalPatch(current, id);
-    if (patch) {
-      try {
-        const updated = await client.updateModelPolicySettings(patch);
-        props.settingsStore.actions.setModelPolicy(updated);
-      } catch (err) {
-        props.settingsStore.actions.setError(
-          err instanceof Error ? err.message : String(err),
-        );
-        throw err;
-      }
-    }
   };
 
   const advance = () => setPage((p) => onboardingNextPage(p) ?? p);
@@ -177,57 +100,6 @@ export function OnboardingGate(props: Props) {
     }
   };
 
-  const runSetupContinue = async () => {
-    setValidationError(undefined);
-    setContinueAnyway(false);
-    const blocker = setupBlocker();
-    if (blocker) {
-      setValidationError(setupBlockerCopy(blocker));
-      return;
-    }
-    const current = effectivePolicy();
-    if (!current || !hasDefaultModel(current)) {
-      setValidationError(setupBlockerCopy("default_model"));
-      return;
-    }
-    const providerId = defaultModelRef(current).provider_id.trim();
-    if (!providerId) {
-      setValidationError(setupBlockerCopy("default_model"));
-      return;
-    }
-    setValidating(true);
-    const abort = new AbortController();
-    validationAbort = abort;
-    try {
-      const client = props.client;
-      if (!client) {
-        setValidationError(MODELS_SETTINGS_COPY.onboardingValidationFailed);
-        setContinueAnyway(true);
-        return;
-      }
-      const res = await client.testProvider(providerId, abort.signal);
-      if (!res.ok) {
-        // Keep rejected credentials editable.
-        setValidationError(
-          res.message?.trim() || MODELS_SETTINGS_COPY.onboardingValidationFailed,
-        );
-        setContinueAnyway(true);
-        return;
-      }
-      const providers = await client.listProviders();
-      props.settingsStore.actions.setProviders(providers);
-      setPage("summarizer");
-    } catch {
-      // Preserve the saved key after an unfinished check.
-      const copy = CLIENT_NOTICES.provider_check_unfinished;
-      setValidationError(`${copy.title} ${copy.message}`);
-      setContinueAnyway(true);
-    } finally {
-      validationAbort = undefined;
-      setValidating(false);
-    }
-  };
-
   const step = () => onboardingGateStep(page());
   const pageTitleId = () => `onboarding-${page()}-title`;
 
@@ -275,119 +147,28 @@ export function OnboardingGate(props: Props) {
             aria-hidden="true"
             data-testid="onboarding-progress"
           >
-            {step()} / {ONBOARDING_GATE_STEP_COUNT}
+            {step()} / {upgrade ? 1 : ONBOARDING_GATE_STEP_COUNT}
           </p>
 
-          <Show when={page() === "setup"}>
-            <OnboardingStepPage
-              data-testid="onboarding-setup"
-              aria-labelledby="onboarding-setup-title"
-            >
+          <Show when={page() === "local_model"}>
+            <OnboardingStepPage data-testid="onboarding-local-model" aria-labelledby="onboarding-local_model-title">
               <header class="onboarding-gate__header">
-                <h1 class="onboarding-gate__title" id="onboarding-setup-title" {...chromeProps()}>
-                  {MODELS_SETTINGS_COPY.onboardingSetupTitle}
-                </h1>
-                <p class="onboarding-gate__lede">
-                  {MODELS_SETTINGS_COPY.onboardingSetupLede}
-                </p>
+                <h1 class="onboarding-gate__title" id="onboarding-local_model-title" {...chromeProps()}>Choose a local model</h1>
+                <p class="onboarding-gate__lede">Run a model on this device. You can change your choice in Settings.</p>
               </header>
               <div class="onboarding-gate__card">
-                {/* Names the providers region between the page title and the
-                    provider group headings inside the panel. */}
-                <h2 class="sr-only">
-                  {MODELS_SETTINGS_COPY.onboardingProvidersHeading}
-                </h2>
-                <Show
-                  when={props.client}
-                  keyed
-                  fallback={
-                    <div
-                      class="onboarding-gate__offline"
-                      data-testid="onboarding-setup-waiting"
-                    >
-                      <p class="onboarding-gate__offline-lede">
-                        {MODELS_SETTINGS_COPY.onboardingWaitingForEngine}
-                      </p>
-                      <p class="onboarding-gate__offline-hint">
-                        {MODELS_SETTINGS_COPY.onboardingWaitingForEngineHint}
-                      </p>
-                    </div>
-                  }
-                >
-                  {(client) => (
-                    <ProvidersSettingsPanel
-                      client={client}
-                      settingsStore={props.settingsStore}
-                      variant="onboarding"
-                    />
-                  )}
+                <Show when={props.client && localProvider()} fallback={
+                  <div>
+                    <p role="status">{props.settingsChecked && props.client ? "Local generation is unavailable on this device." : "Waiting for the local engine…"}</p>
+                    <DenButton variant="primary" onClick={() => upgrade ? void finishOnboarding() : advance()}>Continue without a local model</DenButton>
+                  </div>
+                }>
+                  {provider => <LocalModelSelector client={props.client!} provider={provider()}
+                    onRefresh={async () => {
+                      if (props.client) props.settingsStore.actions.setProviders(await props.client.listProviders());
+                    }}
+                    onContinue={() => upgrade ? void finishOnboarding() : advance()} />}
                 </Show>
-              </div>
-              <div class="onboarding-gate__actions onboarding-gate__actions--split">
-                <Show when={validationError()}>
-                  <p
-                    class="onboarding-gate__action-error den-settings-warn"
-                    role="alert"
-                    data-testid="onboarding-setup-error"
-                  >
-                    {validationError()}
-                  </p>
-                </Show>
-                <DenButton
-                  variant="ghost"
-                  data-testid="onboarding-setup-skip"
-                  disabled={dismissing()}
-                  aria-busy={dismissing()}
-                  onClick={() => void finishOnboarding()}
-                >
-                  {MODELS_SETTINGS_COPY.onboardingSkip}
-                </DenButton>
-                <Show when={validating()}>
-                  <DenButton
-                    variant="ghost"
-                    data-testid="onboarding-setup-stop-check"
-                    onClick={stopValidation}
-                  >
-                    {MODELS_SETTINGS_COPY.onboardingCancelCheck}
-                  </DenButton>
-                </Show>
-                <Show when={continueAnyway() && !validating()}>
-                  <DenButton
-                    variant="secondary"
-                    data-testid="onboarding-setup-continue-anyway"
-                    onClick={() => setPage("summarizer")}
-                  >
-                    {MODELS_SETTINGS_COPY.onboardingContinueAnyway}
-                  </DenButton>
-                </Show>
-                {/* Keep blocked Continue focusable so its reason can be announced. */}
-                <Show when={setupBlockerHint()}>
-                  {(hint) => (
-                    <p
-                      class="onboarding-gate__action-error onboarding-gate__field-hint"
-                      id={SETUP_CONTINUE_HINT_ID}
-                      data-testid="onboarding-setup-continue-hint"
-                    >
-                      {hint()}
-                    </p>
-                  )}
-                </Show>
-                <DenButton
-                  variant="primary"
-                  data-testid="onboarding-setup-continue"
-                  disabled={validating()}
-                  aria-disabled={setupBlockerHint() ? "true" : undefined}
-                  aria-describedby={
-                    setupBlockerHint() ? SETUP_CONTINUE_HINT_ID : undefined
-                  }
-                  data-tip={setupBlockerHint()}
-                  aria-busy={validating()}
-                  onClick={() => void runSetupContinue()}
-                >
-                  {validating()
-                    ? MODELS_SETTINGS_COPY.onboardingContinueValidating
-                    : MODELS_SETTINGS_COPY.onboardingContinue}
-                </DenButton>
               </div>
             </OnboardingStepPage>
           </Show>
@@ -421,41 +202,6 @@ export function OnboardingGate(props: Props) {
                     {MODELS_SETTINGS_COPY.onboardingSummarizerLocalSaveHint}
                   </p>
                 </div>
-
-                <div class="onboarding-gate__add-provider">
-                  <p class="onboarding-gate__field-hint onboarding-gate__add-provider-hint">
-                    {MODELS_SETTINGS_COPY.onboardingSummarizerAddProviderHint}
-                  </p>
-                  <DenButton
-                    variant="secondary"
-                    class="onboarding-gate__add-provider-btn"
-                    data-testid="onboarding-summarizer-add-provider"
-                    onClick={() => setShowAddProvider((open) => !open)}
-                  >
-                    {showAddProvider()
-                      ? MODELS_SETTINGS_COPY.onboardingSummarizerHideProvider
-                      : MODELS_SETTINGS_COPY.onboardingSummarizerAddProvider}
-                  </DenButton>
-                </div>
-
-                <Show when={showAddProvider() && props.client} keyed>
-                  {(client) => (
-                    <div
-                      class="onboarding-gate__provider-embed"
-                      data-testid="onboarding-summarizer-provider-embed"
-                    >
-                      <h2 class="sr-only">
-                        {MODELS_SETTINGS_COPY.onboardingProvidersHeading}
-                      </h2>
-                      <ProvidersPanel
-                        client={client}
-                        settingsStore={props.settingsStore}
-                        providers={props.settingsStore.state.providers}
-                        onRemoveProvider={removeProvider}
-                      />
-                    </div>
-                  )}
-                </Show>
 
                 <div
                   class="den-settings-default-model"

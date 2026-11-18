@@ -7,7 +7,7 @@ import { createSettingsStore } from "../../store/settings-store.ts";
 import type { OnboardingGate } from "../onboarding/OnboardingGate.tsx";
 const seams = vi.hoisted(() => ({ completed: true, prefsReady: true, frameReady: true, dismiss: vi.fn(async () => undefined),
   gate: null as unknown as ComponentProps<typeof OnboardingGate>, providers: vi.fn(async () => []), policy: vi.fn(async () => ({})) }));
-vi.mock("../../settings/system/onboarding-prefs.ts", () => ({ firstRunSetupCompletedPref: () => seams.completed, onboardingPrefsReady: () => seams.prefsReady }));
+vi.mock("../../settings/system/onboarding-prefs.ts", () => ({ localModelOnboardingCompletedPref: () => true, firstRunSetupCompletedPref: () => seams.completed, onboardingPrefsReady: () => seams.prefsReady }));
 vi.mock("../../contributions/contribution-store.ts", () => ({ contributionFrameReady: () => seams.frameReady }));
 vi.mock("../../platform/connection/boot-fallback.ts", () => ({ dismissBootFallback: seams.dismiss }));
 vi.mock("../../platform/connection/app-connection.ts", () => { const client = { listProviders: seams.providers, getModelPolicySettings: seams.policy }; return { getLycaonClient: () => client }; });

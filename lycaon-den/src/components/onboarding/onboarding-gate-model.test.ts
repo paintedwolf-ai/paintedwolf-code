@@ -3,12 +3,10 @@ import {
   ONBOARDING_GATE_STEP_COUNT,
   needsOnboardingConfig,
   onboardingEscapeTarget,
-  onboardingGatePage,
   onboardingGateStep,
   onboardingLayoutChoice,
   onboardingNextPage,
   onboardingPreviousPage,
-  onboardingSetupBlocker,
   onboardingSplitCompanion,
   shouldShowOnboardingHardGate,
   shouldSuppressShellForFirstRun,
@@ -37,7 +35,7 @@ describe("needsOnboardingConfig", () => {
 
 describe("shouldShowOnboardingHardGate", () => {
   const base = {
-    prefsReady: true,
+    prefsReady: true, localModelOnboardingCompleted: true,
     firstRunSetupCompleted: false,
   };
 
@@ -62,7 +60,7 @@ describe("shouldSuppressShellForFirstRun", () => {
   it("suppresses home while unlatched after prefs load", () => {
     expect(
       shouldSuppressShellForFirstRun({
-        prefsReady: true,
+        prefsReady: true, localModelOnboardingCompleted: true,
         firstRunSetupCompleted: false,
       }),
     ).toBe(true);
@@ -71,7 +69,7 @@ describe("shouldSuppressShellForFirstRun", () => {
   it("never suppresses after the latch", () => {
     expect(
       shouldSuppressShellForFirstRun({
-        prefsReady: true,
+        prefsReady: true, localModelOnboardingCompleted: true,
         firstRunSetupCompleted: true,
       }),
     ).toBe(false);
@@ -80,24 +78,17 @@ describe("shouldSuppressShellForFirstRun", () => {
   it("suppresses until prefs load", () => {
     expect(
       shouldSuppressShellForFirstRun({
-        prefsReady: false,
+        prefsReady: false, localModelOnboardingCompleted: false,
         firstRunSetupCompleted: false,
       }),
     ).toBe(true);
   });
 });
 
-describe("onboardingGatePage", () => {
-  it("routes setup vs summarizer from needsConfig (mid-flow → summarizer)", () => {
-    expect(onboardingGatePage(true)).toBe("setup");
-    expect(onboardingGatePage(false)).toBe("summarizer");
-  });
-});
-
 describe("onboarding page order", () => {
   it("counts progress from the page list", () => {
     expect(ONBOARDING_GATE_STEP_COUNT).toBe(4);
-    expect(onboardingGateStep("setup")).toBe(1);
+    expect(onboardingGateStep("local_model")).toBe(1);
     expect(onboardingGateStep("summarizer")).toBe(2);
     expect(onboardingGateStep("layout")).toBe(3);
     expect(onboardingGateStep("welcome")).toBe(4);
@@ -109,11 +100,11 @@ describe("onboarding page order", () => {
     expect(onboardingNextPage("welcome")).toBeNull();
     expect(onboardingPreviousPage("welcome")).toBe("layout");
     expect(onboardingPreviousPage("layout")).toBe("summarizer");
-    expect(onboardingPreviousPage("setup")).toBeNull();
+    expect(onboardingPreviousPage("local_model")).toBeNull();
   });
 
   it("escapes from the ends and steps forward between them", () => {
-    expect(onboardingEscapeTarget("setup")).toBe("finish");
+    expect(onboardingEscapeTarget("local_model")).toBe("finish");
     expect(onboardingEscapeTarget("summarizer")).toBe("layout");
     expect(onboardingEscapeTarget("layout")).toBe("welcome");
     expect(onboardingEscapeTarget("welcome")).toBe("finish");
@@ -136,27 +127,5 @@ describe("onboarding layout choice", () => {
   it("keeps a companion that is already set", () => {
     expect(onboardingSplitCompanion("search")).toBe("search");
     expect(startupCompanionForChoice("split", "search")).toBe("search");
-  });
-});
-
-describe("onboardingSetupBlocker", () => {
-  it("requires both a ready provider and a default model", () => {
-    expect(
-      onboardingSetupBlocker({ readyProviderCount: 1, hasDefaultModel: true }),
-    ).toBeNull();
-  });
-
-  // The gate cannot say what it is waiting for from a bare boolean.
-  it("names which half is missing", () => {
-    expect(
-      onboardingSetupBlocker({ readyProviderCount: 0, hasDefaultModel: true }),
-    ).toBe("provider");
-    expect(
-      onboardingSetupBlocker({ readyProviderCount: 1, hasDefaultModel: false }),
-    ).toBe("default_model");
-    // No ready provider outranks the model choice — it is fixed first.
-    expect(
-      onboardingSetupBlocker({ readyProviderCount: 0, hasDefaultModel: false }),
-    ).toBe("provider");
   });
 });

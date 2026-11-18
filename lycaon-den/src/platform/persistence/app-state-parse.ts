@@ -266,6 +266,9 @@ function parseOnboarding(value: unknown): DenOnboardingPrefs | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const row = value as Partial<DenOnboardingPrefs>;
   const onboarding: DenOnboardingPrefs = {};
+  if (typeof row.localModelOnboardingCompleted === "boolean") {
+    onboarding.localModelOnboardingCompleted = row.localModelOnboardingCompleted;
+  }
   if (typeof row.firstRunSetupCompleted === "boolean") {
     onboarding.firstRunSetupCompleted = row.firstRunSetupCompleted;
   }

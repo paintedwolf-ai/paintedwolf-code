@@ -3,7 +3,7 @@ import { DEFAULT_SPLIT_COMPANION } from "../../shell/stage-placement.ts";
 
 /** Gate pages in walking order; the progress cue counts this list. */
 export const ONBOARDING_GATE_PAGES = [
-  "setup",
+  "local_model",
   "summarizer",
   "layout",
   "welcome",
@@ -23,19 +23,17 @@ export function needsOnboardingConfig(input: {
 export function shouldShowOnboardingHardGate(input: {
   prefsReady: boolean;
   firstRunSetupCompleted: boolean;
+  localModelOnboardingCompleted: boolean;
 }): boolean {
-  return input.prefsReady && !input.firstRunSetupCompleted;
+  return input.prefsReady && !(input.firstRunSetupCompleted && input.localModelOnboardingCompleted);
 }
 
 export function shouldSuppressShellForFirstRun(input: {
   prefsReady: boolean;
   firstRunSetupCompleted: boolean;
+  localModelOnboardingCompleted: boolean;
 }): boolean {
-  return !input.prefsReady || !input.firstRunSetupCompleted;
-}
-
-export function onboardingGatePage(needsConfig: boolean): OnboardingGatePage {
-  return needsConfig ? "setup" : "summarizer";
+  return !input.prefsReady || !(input.firstRunSetupCompleted && input.localModelOnboardingCompleted);
 }
 
 export function onboardingGateStep(page: OnboardingGatePage): number {
@@ -55,28 +53,9 @@ export function onboardingPreviousPage(
   return index > 0 ? (ONBOARDING_GATE_PAGES[index - 1] ?? null) : null;
 }
 
-/**
- * Escape leaves the gate from Setup, where it is the same as Skip, and from
- * the last page; between them it steps forward without latching.
- */
-export function onboardingEscapeTarget(
-  page: OnboardingGatePage,
-): OnboardingGatePage | "finish" {
-  if (page === "setup") return "finish";
+export function onboardingEscapeTarget(page: OnboardingGatePage): OnboardingGatePage | "finish" {
+  if (page === "local_model") return "finish";
   return onboardingNextPage(page) ?? "finish";
-}
-
-/** Which half of the setup step is still missing, in the order it is fixed. */
-export type OnboardingSetupBlocker = "provider" | "default_model";
-
-/** The step the gate is waiting for, or null when Continue may proceed. */
-export function onboardingSetupBlocker(input: {
-  readyProviderCount: number;
-  hasDefaultModel: boolean;
-}): OnboardingSetupBlocker | null {
-  if (input.readyProviderCount === 0) return "provider";
-  if (!input.hasDefaultModel) return "default_model";
-  return null;
 }
 
 /** The two starting layouts first run offers; Settings lists every companion. */

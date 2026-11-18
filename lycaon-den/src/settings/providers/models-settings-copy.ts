@@ -76,8 +76,6 @@ export const MODELS_SETTINGS_COPY = {
   secretScreenTrustRemoteNote: "This endpoint is not on this machine.",
   removeProvider: "Remove AI provider",
   includedProviderBadge: "Included",
-  includedProviderModelSummary:
-    "Gemma 4 E4B",
   includedProviderHint:
     "Runs on this device. No per-token charges.",
   instanceCount: (n: number) => `${n} instance${n === 1 ? "" : "s"}`,
@@ -107,46 +105,20 @@ export const MODELS_SETTINGS_COPY = {
   modelsFound: (n: number) => `${n} model${n === 1 ? "" : "s"} found`,
   defaultModelHint:
     "Must be tool-calling capable — Painted Wolf Code cannot run without it. We recommend GLM 5.3 Flash, Gemini 3.5 Flash, Claude Sonnet, or a similar class model.",
-  /** Shorter hints for the first-run onboarding gate. */
-  onboardingProvidersIntro:
-    "The coordinator needs a high quality model, similar to GLM or better. Smaller models may struggle to successfully call tools and understand what to do.",
   onboardingContinue: CONTINUE_LABEL,
-  onboardingSkip: "Skip",
   onboardingBack: "Back",
-  onboardingContinueValidating: "Checking connection…",
-  /** Identifies the missing connection requirement. */
-  onboardingContinueNeedProvider: `Add an AI provider and save its key — ${CONTINUE_LABEL} unlocks once one is ready.`,
-  onboardingContinueNeedDefaultModel: `Choose a default model — ${CONTINUE_LABEL} unlocks once one is set.`,
-  /** Names the providers region for screen readers; the visible title is the page heading. */
-  onboardingProvidersHeading: "AI providers",
-  onboardingValidationFailed: "Could not verify the provider. Check the endpoint and key, then try again.",
-  /** Cancels the connection check while allowing onboarding to continue. */
-  onboardingCancelCheck: "Stop checking",
-  /** Failed or cancelled checks can continue with the saved credentials. */
-  onboardingContinueAnyway: "Continue anyway",
-  onboardingSetupTitle: "Connect a model",
-  onboardingSetupLede:
-    "Add a provider and choose a default model. You can change this later.",
   onboardingSummarizerTitle: "Add a summarizer",
   onboardingSummarizerOptional: "Optional",
   onboardingSummarizerLede:
     "Optional second model for smaller tasks.",
   onboardingSummarizerLocalSaveHint:
     "You can choose a different model for summaries and other small tasks.",
-  onboardingSummarizerAddProvider: "Add another provider",
-  onboardingSummarizerAddProviderHint:
-    "If you want the summarizer to use a different provider.",
-  onboardingSummarizerHideProvider: "Hide",
   onboardingWelcomeTitle: "You're ready",
   onboardingWelcomeBody:
-    "You can always change your AI providers later.",
+    "To connect additional providers, open Settings and choose AI providers.",
   onboardingWelcomeSettingsHint: "AI providers live here",
   onboardingWelcomeSettingsHintSub: "Change them anytime",
   onboardingWelcomeDismiss: "Get started",
-  // Connection status and recovery actions.
-  onboardingWaitingForEngine: "Still getting ready…",
-  onboardingWaitingForEngineHint:
-    "You can skip this setup and add AI providers later from Settings.",
   // The missing-provider card on Home and in the chat dock: no provider, or no
   // default model (notices/no-provider-card.ts).
   noProviderTitle: "Add an AI provider",

@@ -6,7 +6,12 @@ import { MODELS_SETTINGS_COPY } from "../../../settings/providers/models-setting
 import { DenButton } from "../../primitives/DenButton.tsx";
 import { ProviderSecretTrust } from "./ProviderSecretTrust.tsx";
 
+import { LocalModelSelector } from "./LocalModelSelector.tsx";
+import type { SettingsClient } from "../../../api/http-capabilities/settings.ts";
+
 type Props = {
+  client: SettingsClient;
+  onRefresh: () => Promise<void>;
   provider: Accessor<ProviderMeta>;
   busy: Accessor<boolean>;
   failure: Accessor<string | undefined>;
@@ -37,7 +42,7 @@ export function LocalGenerationCard(props: Props) {
       <div class="den-activity-span" data-testid={`provider-included-summary-${props.provider().id}`}>
         <div class="den-activity-span-chicklet">
           <span class="den-activity-span-chip">
-            <span class="den-activity-span-name">{MODELS_SETTINGS_COPY.includedProviderModelSummary}</span>
+            <span class="den-activity-span-name">{status()?.available_models?.find(t => t.id === status()?.selected_model)?.display_name ?? "Local generation"}</span>
           </span>
           <span class="den-activity-span-hint">{MODELS_SETTINGS_COPY.includedProviderHint}</span>
         </div>
@@ -49,7 +54,7 @@ export function LocalGenerationCard(props: Props) {
         </p>
       </Show>
       <Show when={view().reinstall}>
-        <p class="den-settings-hint">Reinstall Painted Wolf Code to restore its bundled model files.</p>
+        <p class="den-settings-hint">Reinstall Painted Wolf Code to restore its local runtime.</p>
       </Show>
       <Show when={view().action === "retry" || view().action === "repair"}>
         <div class="den-settings-provider-actions">
@@ -68,6 +73,7 @@ export function LocalGenerationCard(props: Props) {
           <Show when={detail()}>{message => <p>{message()}</p>}</Show>
         </details>
       </Show>
+      <LocalModelSelector client={props.client} provider={props.provider()} onRefresh={props.onRefresh} />
       <ProviderSecretTrust
         provider={props.provider}
         saving={props.savingSecretTrust}

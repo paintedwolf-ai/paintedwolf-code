@@ -148,6 +148,7 @@ export type DenContextNavPrefs = {
 export type DenOnboardingPrefs = {
   /** Set true when the OnboardingGate welcome page is dismissed. */
   firstRunSetupCompleted?: boolean;
+  localModelOnboardingCompleted?: boolean;
 };
 
 /** What's New dismiss latch — version whose notes the user acknowledged. */

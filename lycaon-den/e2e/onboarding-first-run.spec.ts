@@ -23,7 +23,8 @@ webE2e.describe("onboarding first-run", () => {
       await expect(page.getByTestId("onboarding-gate")).toBeVisible({
         timeout: 60_000,
       });
-      // A configured profile resumes at the summarizer.
+      await page.getByRole("radio", { name: "Use no local model" }).check();
+      await page.getByRole("button", { name: "Continue without a local model" }).click();
       await expect(page.getByTestId("onboarding-summarizer")).toBeVisible({
         timeout: 30_000,
       });
@@ -92,6 +93,8 @@ webE2e.describe("onboarding first-run", () => {
       await apiEnsureDefaultModel(request);
       await seedFirstRunUnset(page);
       await page.goto("/");
+      await page.getByRole("radio", { name: "Use no local model" }).check();
+      await page.getByRole("button", { name: "Continue without a local model" }).click();
       await expect(page.getByTestId("onboarding-summarizer")).toBeVisible({
         timeout: 60_000,
       });
@@ -130,43 +133,13 @@ webE2e.describe("onboarding first-run", () => {
     },
   );
 
-  webE2e(
-    "den:harness — needsConfig opens setup with Continue gated",
-    async ({ page, request }) => {
-      await apiEnsureDefaultModel(request);
-      await apiClearDefaultModel(request);
-      await seedFirstRunUnset(page);
-      await page.goto("/");
-
-      await expect(page.getByTestId("onboarding-setup")).toBeVisible({
-        timeout: 60_000,
-      });
-      await expect(page.getByTestId("onboarding-summarizer")).toHaveCount(0);
-      await expect(page.getByTestId("onboarding-welcome")).toHaveCount(0);
-      await expect(page.getByTestId("default-model-select")).toBeVisible({
-        timeout: 30_000,
-      });
-      await expect(page.getByTestId("onboarding-setup-continue")).toBeDisabled();
-
-      const addProvider = page.getByTestId("providers-add");
-      await addProvider.focus();
-      await addProvider.click();
-      await expect(page.getByTestId("add-provider-filter")).toBeFocused();
-      await page.keyboard.press("Escape");
-      await expect(page.getByTestId("providers-add-dialog")).toHaveCount(0);
-      await expect(page.getByTestId("onboarding-setup")).toBeVisible();
-      await expect(addProvider).toBeFocused();
-      const latch = await page.evaluate((key) => {
-        const raw = localStorage.getItem(key);
-        if (!raw) return false;
-        const onboarding = JSON.parse(raw) as {
-          firstRunSetupCompleted?: boolean;
-        };
-        return onboarding.firstRunSetupCompleted === true;
-      }, ONBOARDING_STATE_KEY);
-      expect(latch).toBe(false);
-    },
-  );
+  webE2e("an existing installation sees only the model choice", async ({ page }) => {
+    await seedAppState(page, {onboarding: {firstRunSetupCompleted: true, localModelOnboardingCompleted: false}});
+    await page.goto("/");
+    await expect(page.getByTestId("onboarding-progress")).toHaveText("1 / 1");
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("onboarding-gate")).toHaveCount(0);
+  });
 
   webE2e(
     "den:harness — latch + cleared config → provider card only (W8/W12)",

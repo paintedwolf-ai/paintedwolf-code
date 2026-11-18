@@ -574,6 +574,8 @@ export function ProvidersPanel(props: Props) {
                 {(provider) => (
                   <Show when={!isIncludedProvider(provider())} fallback={
                     <LocalGenerationCard
+                      client={props.client}
+                      onRefresh={async () => props.settingsStore.actions.setProviders(await props.client.listProviders())}
                       provider={provider}
                       busy={() => localGeneration.busy(provider().id)}
                       failure={() => localGeneration.error(provider().id)}

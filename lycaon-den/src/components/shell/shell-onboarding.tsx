@@ -10,7 +10,7 @@ import { type SettingsStore } from "../../store/settings-store.ts";
 import { dismissBootFallback } from "../../platform/connection/boot-fallback.ts";
 import { providerConfigGap } from "../../notices/no-provider-card.ts";
 import { hasDefaultModel, readyProviders } from "../../settings/providers/models-editor-model.ts";
-import { firstRunSetupCompletedPref, onboardingPrefsReady } from "../../settings/system/onboarding-prefs.ts";
+import { firstRunSetupCompletedPref, localModelOnboardingCompletedPref, onboardingPrefsReady } from "../../settings/system/onboarding-prefs.ts";
 import { loadSettingsPanel } from "../../settings/settings-actions.ts";
 import { needsOnboardingConfig, shouldShowOnboardingHardGate, shouldSuppressShellForFirstRun } from "../onboarding/onboarding-gate-model.ts";
 
@@ -40,12 +40,14 @@ export function createShellOnboarding(appStore: AppStore, projects: ProjectsStor
   const showOnboardingGate = () =>
     shouldShowOnboardingHardGate({
       prefsReady: onboardingPrefsReady(),
+      localModelOnboardingCompleted: localModelOnboardingCompletedPref(),
       firstRunSetupCompleted: firstRunSetupCompletedPref(),
     });
 
   const suppressShellForFirstRun = () =>
     shouldSuppressShellForFirstRun({
       prefsReady: onboardingPrefsReady(),
+      localModelOnboardingCompleted: localModelOnboardingCompletedPref(),
       firstRunSetupCompleted: firstRunSetupCompletedPref(),
     });
 

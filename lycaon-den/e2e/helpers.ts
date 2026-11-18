@@ -288,7 +288,7 @@ export async function seedAppState(
     /** Device context navigation pins. */
     contextNav?: { visible?: string[] };
     /** Defaults to completed for shell tests. */
-    onboarding?: { firstRunSetupCompleted?: boolean };
+    onboarding?: { firstRunSetupCompleted?: boolean; localModelOnboardingCompleted?: boolean };
     /** Optional What's New latch. */
     whatsNew?: { lastSeenVersion?: string };
     /** Contextual tips default off. */
@@ -298,6 +298,7 @@ export async function seedAppState(
   },
 ) {
   const onboarding = {
+    localModelOnboardingCompleted: partial?.onboarding?.localModelOnboardingCompleted ?? partial?.onboarding?.firstRunSetupCompleted ?? true,
     firstRunSetupCompleted:
       partial?.onboarding?.firstRunSetupCompleted ?? true,
   };
