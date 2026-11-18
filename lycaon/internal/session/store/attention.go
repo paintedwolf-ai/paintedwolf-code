@@ -38,7 +38,7 @@ func (s *sqlSessions) MarkSessionSeen(ctx context.Context, id string, seenAt tim
 		return nil
 	}
 	stamp := db.NullTimePtr(&seenAt)
-	crossed, err := q.SessionSeenCrossesFinish(ctx, db.SessionSeenCrossesFinishParams{
+	crossed, err := q.SessionSeenCrossesLatestFinish(ctx, db.SessionSeenCrossesLatestFinishParams{
 		SessionID: id, PreviousSeenAt: row.SeenAt, SeenAt: stamp,
 	})
 	if err != nil {

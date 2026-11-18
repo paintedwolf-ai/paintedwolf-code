@@ -70,11 +70,16 @@ WHERE id = sqlc.arg(id);
 -- name: MarkSessionSeen :exec
 UPDATE sessions SET seen_at = sqlc.arg(seen_at), updated_at = sqlc.arg(updated_at) WHERE id = sqlc.arg(id);
 
--- name: SessionSeenCrossesFinish :one
+-- name: SessionSeenCrossesLatestFinish :one
+WITH latest_finish AS (
+    SELECT completed_at FROM turns
+    WHERE session_id = sqlc.arg(session_id) AND status = 'complete' AND completed_at IS NOT NULL
+    ORDER BY completed_at DESC
+    LIMIT 1
+)
 SELECT EXISTS (
-    SELECT 1 FROM turns
-    WHERE session_id = sqlc.arg(session_id) AND status = 'complete'
-      AND completed_at > COALESCE(sqlc.narg(previous_seen_at), '')
+    SELECT 1 FROM latest_finish
+    WHERE completed_at > COALESCE(sqlc.narg(previous_seen_at), '')
       AND completed_at <= sqlc.arg(seen_at)
 );
 

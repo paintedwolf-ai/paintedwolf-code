@@ -3228,23 +3228,28 @@ func (q *Queries) SessionHasMessageBeforeOrd(ctx context.Context, arg SessionHas
 	return has_more, err
 }
 
-const sessionSeenCrossesFinish = `-- name: SessionSeenCrossesFinish :one
+const sessionSeenCrossesLatestFinish = `-- name: SessionSeenCrossesLatestFinish :one
+WITH latest_finish AS (
+    SELECT completed_at FROM turns
+    WHERE session_id = ?3 AND status = 'complete' AND completed_at IS NOT NULL
+    ORDER BY completed_at DESC
+    LIMIT 1
+)
 SELECT EXISTS (
-    SELECT 1 FROM turns
-    WHERE session_id = ?1 AND status = 'complete'
-      AND completed_at > COALESCE(?2, '')
-      AND completed_at <= ?3
+    SELECT 1 FROM latest_finish
+    WHERE completed_at > COALESCE(?1, '')
+      AND completed_at <= ?2
 )
 `
 
-type SessionSeenCrossesFinishParams struct {
-	SessionID      string         `json:"session_id"`
+type SessionSeenCrossesLatestFinishParams struct {
 	PreviousSeenAt sql.NullString `json:"previous_seen_at"`
 	SeenAt         sql.NullString `json:"seen_at"`
+	SessionID      string         `json:"session_id"`
 }
 
-func (q *Queries) SessionSeenCrossesFinish(ctx context.Context, arg SessionSeenCrossesFinishParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, sessionSeenCrossesFinish, arg.SessionID, arg.PreviousSeenAt, arg.SeenAt)
+func (q *Queries) SessionSeenCrossesLatestFinish(ctx context.Context, arg SessionSeenCrossesLatestFinishParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, sessionSeenCrossesLatestFinish, arg.PreviousSeenAt, arg.SeenAt, arg.SessionID)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
