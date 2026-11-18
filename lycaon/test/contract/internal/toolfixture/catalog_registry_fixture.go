@@ -137,7 +137,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}
 	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
 	contractcheck.FailErr(t, "load workflow templates", err)
-	sessionWF := workflowdrafts.NewMemory()
+	sessionWF := workflowdrafts.NewSQL(sqlDB)
 	resolver := workflowcatalog.Resolver{SessionStore: sessionWF}
 	if err := workflow.RegisterCatalogSummariesTool(reg, resolver, sessionWF, templates); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterCatalogSummariesTool failed", err)

@@ -32,7 +32,7 @@ func NewComposeTestServer(t *testing.T) (*api.Server, wire.Session, *workflowcom
 	testutil.FailErr(t, "build conditions registry", err)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(t.Context(), agents)
-	sessionStore := workflowdrafts.NewMemory()
+	sessionStore := workflowdrafts.NewSQL(sessionFixture.DB())
 	policy, err := workflowcomposition.LoadComposePolicy()
 	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
 	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))

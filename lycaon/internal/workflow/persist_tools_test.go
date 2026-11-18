@@ -14,7 +14,7 @@ import (
 )
 
 func TestPersistToolRejectsConfirmFalse(t *testing.T) {
-	p, store := testPersister(t)
+	p, store := testPersister(t, "sess-1")
 	reg := tools.NewDefaultRegistry()
 	if err := RegisterPersistTool(reg, p); err != nil {
 		testutil.FailErr(t, "RegisterPersistTool failed", err)

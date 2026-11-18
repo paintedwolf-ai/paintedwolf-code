@@ -6,8 +6,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
@@ -17,9 +15,9 @@ import (
 )
 
 func TestPersistReloadIntegration(t *testing.T) {
-	p, store := testPersister(t)
-	projectDir := t.TempDir()
 	sessionID := "sess-reload"
+	p, store := testPersister(t, sessionID)
+	projectDir := t.TempDir()
 	manifest := `id: hotfix
 version: 1.0.0
 extends: plan@1.0.0
@@ -78,27 +76,10 @@ phases:
 	}
 }
 
-func testPersisterForIntegration(t *testing.T) (*workflowcomposition.Persister, *workflowdrafts.Memory) {
-	t.Helper()
-	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
-	testutil.FailErr(t, "build conditions registry", err)
-	agents := orchestration.NewMemoryAgentRegistry()
-	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	store := workflowdrafts.NewMemory()
-	policy, err := workflowcomposition.LoadComposePolicy()
-	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
-	return &workflowcomposition.Persister{
-		SessionStore: store,
-		Registry:     reg,
-		Agents:       agents,
-		Policy:       policy,
-	}, store
-}
-
 func TestPersistReloadUsesFreshDiskRead(t *testing.T) {
-	p, store := testPersisterForIntegration(t)
-	projectDir := t.TempDir()
 	sessionID := "sess-fresh"
+	p, store := testPersister(t, sessionID)
+	projectDir := t.TempDir()
 	manifest := `id: hotfix
 version: 1.0.0
 extends: plan@1.0.0
