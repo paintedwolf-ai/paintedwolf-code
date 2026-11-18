@@ -82,7 +82,7 @@ func newEngineRoutes(t *testing.T, setting *switchable, policy briefing.Policy) 
 	host := briefinghost.New(context.Background(), database, t.TempDir(), textGenerator{})
 	t.Cleanup(func() { _ = host.Close(context.Background()) })
 	testutil.FailErr(t, "register", host.Registry.Register(fixtureProfile{policy: policy}))
-	files := filebriefing.NewService(context.Background(), filebriefing.Dependencies{Store: filebriefing.NewMemory(), Settings: setting})
+	files := filebriefing.NewService(context.Background(), filebriefing.Dependencies{Store: filebriefing.NewSQL(deps.Core.Database), Settings: setting})
 	t.Cleanup(func() { files.Stop(); files.Wait(context.Background()) })
 	h := briefingadmin.New(&httpio.Responder{Logger: slog.Default()}, briefingadmin.Dependencies{
 		Briefings: briefingadmin.Services{Files: files, Host: host}, ProjectRegistry: deps.Core.Projects, SessionStore: deps.Core.Store,

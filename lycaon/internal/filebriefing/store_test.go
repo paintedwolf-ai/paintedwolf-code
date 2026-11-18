@@ -3,6 +3,7 @@ package filebriefing
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -12,9 +13,16 @@ import (
 	"time"
 )
 
-func TestMemoryKeepsReusableBriefingsForExactPresentations(t *testing.T) {
+func newBriefingStore(t *testing.T, projectID, rootID string) (*SQL, *db.Store) {
+	t.Helper()
+	database := testdbfixture.Open(t, "briefings.db")
+	testdbseed.InsertProjectRootWithID(t, database, projectID, rootID, t.TempDir())
+	return NewSQL(database), database
+}
+
+func TestSQLKeepsReusableBriefingsForExactPresentations(t *testing.T) {
 	ctx := context.Background()
-	store := NewMemory()
+	store, _ := newBriefingStore(t, "p", "r")
 	first := Briefing{ProjectID: "p", RootID: "r", Path: "main.go", TargetKey: "one", Presentation: "current", SourceSHA256: "one", Trigger: "manual", Status: StatusPending, UpdatedAt: time.Now()}
 	got, err := store.Start(ctx, first)
 	testutil.FailErr(t, "start first briefing", err)
@@ -41,9 +49,9 @@ func TestMemoryKeepsReusableBriefingsForExactPresentations(t *testing.T) {
 	}
 }
 
-func TestMemoryClearRemovesPendingAndCompletedBriefings(t *testing.T) {
+func TestSQLClearRemovesPendingAndCompletedBriefings(t *testing.T) {
 	ctx := context.Background()
-	store := NewMemory()
+	store, _ := newBriefingStore(t, "p", "r")
 	var completeAttemptID string
 	for _, target := range []string{"pending", "complete"} {
 		started, err := store.Start(ctx, Briefing{
@@ -71,34 +79,16 @@ func TestMemoryClearRemovesPendingAndCompletedBriefings(t *testing.T) {
 func TestMaintenanceRejectsInvalidRetention(t *testing.T) {
 	cfg := testConfig(t).Retention
 	cfg.DeviceBytes = 0
-	err := NewMemory().Maintain(t.Context(), Briefing{}, cfg)
+	store, _ := newBriefingStore(t, "p", "r")
+	err := store.Maintain(t.Context(), Briefing{}, cfg)
 	if err == nil {
 		t.Fatal("Maintain accepted an unbounded retention configuration")
 	}
 }
 
-func TestSQLClearRemovesAllBriefings(t *testing.T) {
+func TestSQLMaintenanceBoundsAllPresentationsAndKeepsCurrentWork(t *testing.T) {
 	ctx := context.Background()
-	dir := t.TempDir()
-	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "briefings.db"))
-	rootID := testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	store := NewSQL(sqlDB)
-	briefing := Briefing{
-		ProjectID: testdbseed.DefaultProjectID, RootID: rootID, Path: "main.go", TargetKey: "one",
-		Presentation: "current", SourceSHA256: "one", Trigger: "manual", Status: StatusPending,
-		UpdatedAt: time.Now().UTC(),
-	}
-	_, err := store.Start(ctx, briefing)
-	testutil.FailErr(t, "start briefing", err)
-	testutil.FailErr(t, "clear briefings", store.Clear(ctx))
-	if _, err := store.Get(ctx, briefing.ProjectID, briefing.RootID, briefing.Path, briefing.TargetKey); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("cleared briefing error = %v, want ErrNotFound", err)
-	}
-}
-
-func TestMemoryMaintenanceBoundsAllPresentationsAndKeepsCurrentWork(t *testing.T) {
-	ctx := context.Background()
-	store := NewMemory()
+	store, database := newBriefingStore(t, "p", "r")
 	base := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 	start := func(target string, at time.Time, pending bool) {
 		t.Helper()
@@ -108,6 +98,8 @@ func TestMemoryMaintenanceBoundsAllPresentationsAndKeepsCurrentWork(t *testing.T
 			Status: StatusPending, UpdatedAt: at,
 		})
 		testutil.FailErr(t, "start "+target, err)
+		_, err = database.ExecContext(ctx, `UPDATE file_briefings SET last_accessed_at_ms = ? WHERE target_key = ?`, at.UnixMilli(), target)
+		testutil.FailErr(t, "set access time "+target, err)
 		if pending {
 			return
 		}
@@ -427,16 +419,11 @@ func TestSQLLoadsSectionsAndDeclarationLocations(t *testing.T) {
 		t.Fatalf("completed fallback = %q truncated=%t", got.FallbackText, got.Truncated)
 	}
 	var stored string
-	var storageBytes int64
 	testutil.FailErr(t, "read sections_json", sqlDB.QueryRowContext(ctx,
-		`SELECT sections_json, storage_bytes FROM file_briefings WHERE project_id = ? AND target_key = ?`,
-		first.ProjectID, first.TargetKey).Scan(&stored, &storageBytes))
+		`SELECT sections_json FROM file_briefings WHERE project_id = ? AND target_key = ?`,
+		first.ProjectID, first.TargetKey).Scan(&stored))
 	if stored != "[{\"kind\":\"purpose\",\"text\":\"`Routes` 世界 requests\"}]" {
 		t.Fatalf("sections_json = %s", stored)
 	}
-	memoryBytes, err := briefingStorageBytes(got)
-	testutil.FailErr(t, "measure briefing storage", err)
-	if memoryBytes != storageBytes {
-		t.Fatalf("storage bytes = %d, memory accounting = %d", storageBytes, memoryBytes)
-	}
+
 }

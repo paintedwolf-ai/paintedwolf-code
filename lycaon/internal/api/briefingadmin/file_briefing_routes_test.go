@@ -50,7 +50,7 @@ func newBriefingRoutes(t *testing.T, setting *switchable) briefingRoutes {
 
 	cfg, err := filebriefing.LoadConfig()
 	testutil.FailErr(t, "load file briefing config", err)
-	fileDeps := filebriefing.Dependencies{Store: filebriefing.NewMemory(), Config: cfg}
+	fileDeps := filebriefing.Dependencies{Store: filebriefing.NewSQL(deps.Core.Database), Config: cfg}
 	if setting != nil {
 		fileDeps.Settings = setting
 	}

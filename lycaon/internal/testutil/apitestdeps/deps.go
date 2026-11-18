@@ -449,7 +449,7 @@ func fillSources(t *testing.T, d *Deps) {
 		d.EditorDocuments = documents
 	}
 	if d.FileBriefings == nil {
-		briefings := filebriefing.NewService(context.Background(), filebriefing.Dependencies{Store: filebriefing.NewMemory()})
+		briefings := filebriefing.NewService(context.Background(), filebriefing.Dependencies{Store: filebriefing.NewSQL(d.Database)})
 		t.Cleanup(func() { briefings.Stop(); briefings.Wait(context.Background()) })
 		d.FileBriefings = briefings
 	}
