@@ -61,11 +61,6 @@ type TopologyWorkers interface {
 	AbortBatch(ctx context.Context, batchID, reason string) error
 }
 
-// TopologyDirectSettler settles a topology unit synchronously for harness fixtures.
-type TopologyDirectSettler interface {
-	DispatchSettled(ctx context.Context, batchID, unitID string, result api.WorkerResult) (*TopologyUnit, error)
-}
-
 // RunWorkerStore reads the statuses of workers bound to a workflow run.
 type RunWorkerStore interface {
 	WorkflowWorkStatuses(ctx context.Context, workflowRunID string) (map[string]api.LegStatus, error)

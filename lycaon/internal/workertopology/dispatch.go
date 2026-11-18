@@ -7,64 +7,11 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func (r *Runtime) DispatchUnit(ctx context.Context, batchID, unitID string) (*orchestration.TopologyUnit, error) {
-	return r.dispatchWithTarget(ctx, batchID, unitID, api.ExecutionTargetLocal)
-}
-
-func (r *Runtime) DispatchSettled(
-	ctx context.Context,
-	batchID, unitID string,
-	result api.WorkerResult,
-) (*orchestration.TopologyUnit, error) {
-	r.settleMu.Lock()
-	defer r.settleMu.Unlock()
-	unit, err := r.dispatchWithTarget(ctx, batchID, unitID, api.ExecutionTargetRunner)
-	if err != nil {
-		return nil, err
-	}
-	r.mu.Lock()
-	projectID := ""
-	if b := r.batches[batchID]; b != nil {
-		projectID = b.ProjectID
-	}
-	r.mu.Unlock()
-	claimed, err := r.Queue.ClaimNext(ctx, worker.ClaimRequest{
-		ProjectID:       projectID,
-		ClaimedBy:       "topology-harness:" + unit.JobID,
-		ExecutionTarget: api.ExecutionTargetRunner,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if claimed == nil {
-		return nil, fmt.Errorf("topology harness claim missed job %q", unit.JobID)
-	}
-	if strings.TrimSpace(result.Status) == "failed" {
-		msg := strings.TrimSpace(result.Summary)
-		if msg == "" {
-			msg = "topology stage failed"
-		}
-		if _, err := r.Queue.Fail(ctx, claimed, errors.New(msg)); err != nil {
-			return nil, err
-		}
-	} else {
-		if _, err := r.Queue.Complete(ctx, claimed, result); err != nil {
-			return nil, err
-		}
-	}
-	return r.GetUnit(ctx, batchID, unitID)
-}
-
-func (r *Runtime) dispatchWithTarget(
-	ctx context.Context,
-	batchID, unitID string,
-	target api.ExecutionTarget,
-) (*orchestration.TopologyUnit, error) {
 	if r == nil || r.Records == nil || r.Queue == nil {
 		return nil, fmt.Errorf("topology runtime not configured")
 	}
@@ -103,10 +50,6 @@ func (r *Runtime) dispatchWithTarget(
 	} else if strings.TrimSpace(batchCopy.BlueprintPath) != "" {
 		workflowWorkID = unitCopy.WorkID
 	}
-	runnerID := ""
-	if target == api.ExecutionTargetRunner {
-		runnerID = "topology-harness"
-	}
 	prompt := strings.TrimSpace(unitCopy.Prompt)
 	if prompt == "" {
 		prompt = strings.TrimSpace(unitCopy.WorkID)
@@ -131,8 +74,7 @@ func (r *Runtime) dispatchWithTarget(
 		WorkflowWorkID:  workflowWorkID,
 		SpawnReason:     api.SpawnReasonInitial,
 		Status:          api.WorkerStatusHeld,
-		ExecutionTarget: target,
-		RunnerID:        runnerID,
+		ExecutionTarget: api.ExecutionTargetLocal,
 	}
 	jobID, err := r.Queue.Enqueue(ctx, task)
 	if err != nil {
@@ -142,7 +84,7 @@ func (r *Runtime) dispatchWithTarget(
 	roundOp := workerrecords.Op{ID: "topology:" + batchID + ":round:" + unitID}
 	if _, err := r.Records.AdmitRound(ctx, actor, roundOp, unitCopy.WorkerID, workerrecords.RoundSpec{
 		JobID:           jobID,
-		ExecutionTarget: string(target),
+		ExecutionTarget: string(api.ExecutionTargetLocal),
 	}); err != nil {
 		return nil, err
 	}

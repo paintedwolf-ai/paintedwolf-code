@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/workertopologytest"
 	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerrecords"
@@ -72,11 +73,11 @@ func TestRuntimeBatchDispatchReloadAndAbort(t *testing.T) {
 	updated.Prompt = "Scan paths thoroughly"
 	testutil.FailErr(t, "UpdateUnit", rt.UpdateUnit(ctx, batch.ID, updated))
 
-	settledRead, err := rt.DispatchSettled(ctx, batch.ID, units[0].ID, api.WorkerResult{
+	settledRead, err := workertopologytest.DispatchAndSettle(ctx, rt, queue, batch.ID, units[0].ID, api.WorkerResult{
 		Status:  "complete",
 		Summary: "Scanned target tree.",
 	})
-	testutil.FailErr(t, "DispatchSettled complete", err)
+	testutil.FailErr(t, "DispatchAndSettle complete", err)
 	if settledRead.Status != api.LegStatusComplete || settledRead.Summary != "Scanned target tree." {
 		t.Fatalf("settledRead = %+v", settledRead)
 	}
@@ -113,7 +114,7 @@ func TestRuntimeBatchDispatchReloadAndAbort(t *testing.T) {
 	}
 }
 
-func TestRuntimeDispatchSettledFailedStage(t *testing.T) {
+func TestRuntimeDispatchAndSettleFailedStage(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "topology-fail.db")
 	const sessionID = "coord-topo-fail"
 	testdbseed.InsertSession(t, sqlDB, sessionID, testdbseed.DefaultProjectID)
@@ -131,11 +132,11 @@ func TestRuntimeDispatchSettledFailedStage(t *testing.T) {
 	})
 	testutil.FailErr(t, "CreateBatch", err)
 
-	failedUnit, err := rt.DispatchSettled(ctx, batch.ID, units[0].ID, api.WorkerResult{
+	failedUnit, err := workertopologytest.DispatchAndSettle(ctx, rt, queue, batch.ID, units[0].ID, api.WorkerResult{
 		Status:  "failed",
 		Summary: "Probe failed",
 	})
-	testutil.FailErr(t, "DispatchSettled failed", err)
+	testutil.FailErr(t, "DispatchAndSettle failed", err)
 	if failedUnit.Status != api.LegStatusFailed {
 		t.Fatalf("failedUnit = %+v", failedUnit)
 	}

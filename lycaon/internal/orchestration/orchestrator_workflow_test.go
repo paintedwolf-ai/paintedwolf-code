@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
+	"github.com/lycaon/lycaon/internal/testutil/workertopologytest"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workertopology"
@@ -94,6 +95,10 @@ func newWorkflowOrchestrator(t *testing.T, rec *recordingWorkers, spy *spyWorkfl
 		rec = &recordingWorkers{TopologyWorkers: topoRuntime, order: make([]string, 0, 8)}
 	} else {
 		rec.TopologyWorkers = topoRuntime
+	}
+
+	rec.dispatchAndSettle = func(ctx context.Context, batchID, unitID string, result api.WorkerResult) (*orchestration.TopologyUnit, error) {
+		return workertopologytest.DispatchAndSettle(ctx, topoRuntime, queue, batchID, unitID, result)
 	}
 
 	regAgents := loadAgentRegistryFromConfig(t)
