@@ -41,7 +41,6 @@ func TestPersonaContractYAMLValid(t *testing.T) {
 
 func TestEachAgentPersonaRenders(t *testing.T) {
 	contractcheck.ActivateStockCatalog(t)
-	prompts.ResetPersonaContractCache()
 	cfg, err := prompts.LoadPersonaContract()
 	contractcheck.FailErr(t, "prompts.LoadPersonaContract failed", err)
 	engine := contractPersonaEngine(t)
