@@ -36,11 +36,11 @@ func TestHostCorpusMatchesTheContract(t *testing.T) {
 			body = []byte(ex.Text)
 		}
 		// An answer kept as its shape was validated whole by the sweep.
-		if ex.BodyShape != nil {
-			body = nil
-		} else if err := validator.ValidateResponse(t.Context(), ex.Method, ex.Path, ex.Params, ex.Status, header, body); err != nil {
-			line, _, _ := strings.Cut(err.Error(), "\n")
-			t.Errorf("%s %d no longer matches the contract: %s", ex.Operation, ex.Status, line)
+		if ex.BodyShape == nil {
+			if err := validator.ValidateResponse(t.Context(), ex.Method, ex.Path, ex.Params, ex.Status, header, body); err != nil {
+				line, _, _ := strings.Cut(err.Error(), "\n")
+				t.Errorf("%s %d no longer matches the contract: %s", ex.Operation, ex.Status, line)
+			}
 		}
 		if ex.Status/100 == 2 {
 			succeeded[ex.Operation] = true
