@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func newTestBroker() *egressBrokerT {
