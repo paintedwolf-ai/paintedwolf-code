@@ -41,7 +41,13 @@ func TestWorkerLegToolsMatchListForPrompt(t *testing.T) {
 			testutil.FailErr(t, "SpawnChild", err)
 			prof, err := h.AgentRegistry.Get(agentType)
 			testutil.FailErr(t, "agents.Get", err)
-			schema := sortedToolNamesFromMeta(policy.ListForPrompt(ctx, child, prof.ToolProfile))
+			// The fixture project has no skills, so the request withholds skills_read.
+			var schema []string
+			for _, name := range sortedToolNamesFromMeta(policy.ListForPrompt(ctx, child, prof.ToolProfile)) {
+				if name != "skills_read" {
+					schema = append(schema, name)
+				}
+			}
 			leg, err := builder.BuildWorkerPromptContext(workercontext.WithJob(t.Context(), "leg-tools-"+agentType), child.ID, child)
 			testutil.FailErr(t, "BuildWorkerPromptContext", err)
 			got := append([]string(nil), leg.LegTools...)
