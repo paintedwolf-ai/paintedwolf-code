@@ -132,7 +132,7 @@ impl MappedPLE {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use std::io::Write;
     use std::path::PathBuf;
@@ -144,6 +144,11 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_file(&self.0);
         }
+    }
+
+    pub(crate) fn mapped_fixture() -> MappedPLE {
+        let source = fixture(false);
+        MappedPLE::open(&source.0, 4).unwrap()
     }
 
     fn fixture(overlap: bool) -> Fixture {

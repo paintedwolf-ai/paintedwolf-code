@@ -130,7 +130,8 @@ impl Attention {
             let v = fast::rms_norm(values, None, 1e-6)?;
             cache.update(layer, k, v.transpose_axes(&[0, 2, 1, 3])?)?
         } else {
-            cache.get(if sliding { 22 } else { 23 }, step.source_tokens)?
+            let last_owned = self.profile.kv_layers() - 1;
+            cache.get(last_owned - usize::from(sliding), step.source_tokens)?
         };
         let masking = if sliding {
             step.mask.map(fast::ScaledDotProductAttentionMask::Array)

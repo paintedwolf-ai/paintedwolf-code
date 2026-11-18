@@ -7,6 +7,7 @@ pub struct Profile {
     pub sliding_heads: usize,
     pub global_heads: usize,
     pub shared_layers: usize,
+    pub ple_width: usize,
     pub window: usize,
     pub intermediate: usize,
     pub experts: usize,
@@ -20,6 +21,7 @@ pub const E4B: Profile = Profile {
     sliding_heads: 2,
     global_heads: 2,
     shared_layers: 18,
+    ple_width: 256,
     window: 512,
     intermediate: 10240,
     experts: 0,
@@ -32,6 +34,7 @@ pub const DENSE: Profile = Profile {
     sliding_heads: 8,
     global_heads: 1,
     shared_layers: 0,
+    ple_width: 0,
     window: 1024,
     intermediate: 15360,
     experts: 0,
@@ -44,6 +47,7 @@ pub const MOE: Profile = Profile {
     sliding_heads: 8,
     global_heads: 2,
     shared_layers: 0,
+    ple_width: 0,
     window: 1024,
     intermediate: 2112,
     experts: 128,
@@ -60,7 +64,7 @@ impl Profile {
     }
 
     pub fn has_ple(self) -> bool {
-        self == E4B
+        self.ple_width != 0
     }
 
     pub fn kv_heads(self, sliding: bool) -> usize {

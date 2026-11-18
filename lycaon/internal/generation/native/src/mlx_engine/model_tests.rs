@@ -43,8 +43,13 @@ fn layer(profile: Profile, i: usize) -> Layer {
     ] {
         put(&format!("{name}.weight"), &[output, input], 0.001);
     }
-    if sliding {
+    if sliding || profile.has_ple() {
         put("self_attn.v_proj.weight", &[d, h], 0.001);
+    }
+    if profile.has_ple() {
+        put("per_layer_input_gate.weight", &[256, h], 0.001);
+        put("per_layer_projection.weight", &[h, 256], 0.001);
+        put("post_per_layer_input_norm.weight", &[h], 1.);
     }
     if profile.experts != 0 {
         for name in [
@@ -62,21 +67,28 @@ fn layer(profile: Profile, i: usize) -> Layer {
             ("up_proj", 704, h),
             ("down_proj", h, 704),
         ] {
-            put(
-                &format!("experts.switch_glu.{name}.weight"),
-                &[128, output, input],
-                0.001,
-            );
+            let module = format!("{prefix}.experts.switch_glu.{name}");
+            let weights = tensor(&[128, output, input], 0.001);
+            let (packed, scales, biases) = ops::quantize(&weights, 64, 4).unwrap();
+            tensors.insert(format!("{module}.weight"), packed);
+            tensors.insert(format!("{module}.scales"), scales);
+            tensors.insert(format!("{module}.biases"), biases);
         }
     }
     Layer::load(&mut Weights::fixture(tensors), i, profile).unwrap()
 }
 
 #[test]
-fn prefill_builds_every_nonshared_bank_for_dense_and_routed_models() {
-    for architecture in [crate::profile::DENSE, crate::profile::MOE] {
+fn prefill_and_decode_use_each_topologys_owned_kv_banks() {
+    for architecture in [
+        crate::profile::E4B,
+        crate::profile::DENSE,
+        crate::profile::MOE,
+    ] {
+        let shared_layers = if architecture.has_ple() { 6 } else { 0 };
         let profile = Profile {
-            layers: 6,
+            layers: 6 + shared_layers,
+            shared_layers,
             hidden: 64,
             intermediate: 64,
             attention_heads: 2,
@@ -89,9 +101,18 @@ fn prefill_builds_every_nonshared_bank_for_dense_and_routed_models() {
                 weight: tensor(&[128, 64], 0.01),
                 quantization: None,
             },
-            ple: None,
+            ple: profile.has_ple().then(|| {
+                (
+                    ple::tests::mapped_fixture(),
+                    Linear {
+                        weight: tensor(&[profile.layers as i32 * 256, 64], 0.001),
+                        quantization: None,
+                    },
+                    tensor(&[256], 1.),
+                )
+            }),
             profile,
-            layers: (0..6).map(|i| layer(profile, i)).collect(),
+            layers: (0..profile.layers).map(|i| layer(profile, i)).collect(),
             final_norm: tensor(&[64], 1.),
             activation: Activation::new().unwrap(),
         };

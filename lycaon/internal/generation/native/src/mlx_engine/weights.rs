@@ -31,7 +31,7 @@ impl Weights {
     pub(super) fn fixture(tensors: HashMap<String, Array>) -> Self {
         Self {
             tensors,
-            quantization: Value::Null,
+            quantization: serde_json::json!({"bits": 4, "group_size": 64, "mode": "affine"}),
         }
     }
 

@@ -30,10 +30,7 @@ pub fn validate(config: &Value) -> Result<()> {
         ("num_attention_heads", profile.attention_heads),
         ("num_kv_shared_layers", profile.shared_layers),
         ("sliding_window", profile.window),
-        (
-            "hidden_size_per_layer_input",
-            if profile.has_ple() { 256 } else { 0 },
-        ),
+        ("hidden_size_per_layer_input", profile.ple_width),
         ("vocab_size", 262144),
         ("vocab_size_per_layer_input", 262144),
         ("head_dim", 256),
