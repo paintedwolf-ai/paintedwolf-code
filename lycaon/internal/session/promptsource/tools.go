@@ -137,7 +137,7 @@ func (m *Tools) shareCustodyWithChat(ctx context.Context, sessionID, projectDir,
 	if !rec.Custody.External || len(paths) == 0 {
 		return nil
 	}
-	_, err := m.EvidenceStore.CommitProgramHTTPProvenance(ctx, chatID, projectDir, evidence.ProgramHTTPProvenance{
+	_, err := m.EvidenceStore.CommitProgramHTTPProvenance(ctx, evidence.ProgramProvenanceTarget{SessionID: chatID, ProjectDir: projectDir}, evidence.ProgramHTTPProvenance{
 		ObservedURLs: evidence.ObservedURLsForRecord(rec),
 		CustodyPaths: paths,
 	})

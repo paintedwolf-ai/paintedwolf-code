@@ -920,7 +920,7 @@ func chronologySkewCaseB(t *testing.T, ctx context.Context, s *Repositories, reo
 	if bh3 != "http_response#3" {
 		t.Fatalf("bh3 = %q, want http_response#3", bh3)
 	}
-	gh4, err := s.Evidence.CommitProgramHTTPProvenance(ctx, sessB.ID, dir, evidence.ProgramHTTPProvenance{
+	gh4, err := s.Evidence.CommitProgramHTTPProvenance(ctx, evidence.ProgramProvenanceTarget{SessionID: sessB.ID, ProjectDir: dir}, evidence.ProgramHTTPProvenance{
 		ObservedURLs: []string{"https://gamma.external.example/v1/curl.txt"},
 		CustodyPaths: []string{"gamma.txt"},
 	})
@@ -1075,7 +1075,7 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 	}
 	_, err = store.Evidence.CommitProgramObservation(ctx, sess.ID, "command_output", &api.CommandProgramReceipt{ID: "prog_1", ParentReceiptID: "rcpt_1", State: "exited"}, "ok\n")
 	testutil.FailErr(t, "CommitProgramObservation", err)
-	_, err = store.Evidence.CommitProgramHTTPProvenance(ctx, sess.ID, dir, evidence.ProgramHTTPProvenance{
+	_, err = store.Evidence.CommitProgramHTTPProvenance(ctx, evidence.ProgramProvenanceTarget{SessionID: sess.ID, ProjectDir: dir}, evidence.ProgramHTTPProvenance{
 		UntrustedContent: true,
 		ObservedURLs:     []string{"https://inline-curl.external.example/v1/stdout"},
 	})
@@ -1168,7 +1168,7 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 	if _, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "write", map[string]any{"path": "legacy.txt"}, `{"path":"legacy.txt","bytes_written":4}`); err == nil {
 		t.Fatal("whole-file write commit must fail closed when allocating CustodySeq over corrupt custody metadata")
 	}
-	if _, err := store.Evidence.CommitProgramHTTPProvenance(ctx, sess.ID, dir, evidence.ProgramHTTPProvenance{
+	if _, err := store.Evidence.CommitProgramHTTPProvenance(ctx, evidence.ProgramProvenanceTarget{SessionID: sess.ID, ProjectDir: dir}, evidence.ProgramHTTPProvenance{
 		ObservedURLs: []string{"https://blocked.external.example/v1/file.txt"},
 		CustodyPaths: []string{"legacy.txt"},
 	}); err == nil {

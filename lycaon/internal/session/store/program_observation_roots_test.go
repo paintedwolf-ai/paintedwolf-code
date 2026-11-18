@@ -30,7 +30,7 @@ func TestProgramCustodyKeepsRootIdentityOutsideSessionFolder(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 
 	const url = "https://downloads.example/payload.tar"
-	handle, err := sessions.Evidence.CommitProgramHTTPProvenance(t.Context(), sess.ID, session, evidence.ProgramHTTPProvenance{
+	handle, err := sessions.Evidence.CommitProgramHTTPProvenance(t.Context(), evidence.ProgramProvenanceTarget{SessionID: sess.ID, ProjectDir: session}, evidence.ProgramHTTPProvenance{
 		ProgramID:    "program:custody",
 		ObservedURLs: []string{url},
 		CustodyPaths: []string{"@vendor/payload.tar"},

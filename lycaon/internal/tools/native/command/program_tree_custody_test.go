@@ -21,15 +21,15 @@ func TestProgramTreeCustodyReachesLaterReads(t *testing.T) {
 	run.finishOpTracker(t.Context(), clone, outputStreamClass{}, false, outputStreamClass{}, false)
 
 	inside := run.normalizeProvenancePath("", filepath.Join(root, "repo", "src", "main.go"))
-	if urls := run.lookupCustodyURLs(t.Context(), []string{inside}); !slices.Equal(urls, []string{origin}) {
+	if urls := mustLookupCustody(t, run, []string{inside}); !slices.Equal(urls, []string{origin}) {
 		t.Fatalf("file under the cloned tree: custody %v", urls)
 	}
 	outside := run.normalizeProvenancePath("", filepath.Join(root, "other.go"))
-	if urls := run.lookupCustodyURLs(t.Context(), []string{outside}); len(urls) != 0 {
+	if urls := mustLookupCustody(t, run, []string{outside}); len(urls) != 0 {
 		t.Fatalf("file outside the tree held custody %v", urls)
 	}
 	run.clearCustodyFile(inside)
-	if urls := run.lookupCustodyURLs(t.Context(), []string{inside}); len(urls) != 0 {
+	if urls := mustLookupCustody(t, run, []string{inside}); len(urls) != 0 {
 		t.Fatalf("replaced file kept the tree's custody %v", urls)
 	}
 }
@@ -48,7 +48,7 @@ func TestContentFlowCarriesTheStoresCustody(t *testing.T) {
 
 	show := run.beginOpTracker()
 	run.observeContentFlow(t.Context(), show, evidence.ContentFlow{Source: objects})
-	if urls := run.lookupCustodyURLs(t.Context(), show.readPaths); !slices.Equal(urls, []string{origin}) {
+	if urls := mustLookupCustody(t, run, show.readPaths); !slices.Equal(urls, []string{origin}) {
 		t.Fatalf("a read of the fetched store carries custody %v", urls)
 	}
 	run.finishOpTracker(t.Context(), show, outputStreamClass{}, false, outputStreamClass{}, false)
@@ -57,14 +57,14 @@ func TestContentFlowCarriesTheStoresCustody(t *testing.T) {
 	merge := run.beginOpTracker()
 	run.observeContentFlow(t.Context(), merge, evidence.ContentFlow{Source: objects, Files: []string{merged}})
 	run.finishOpTracker(t.Context(), merge, outputStreamClass{}, false, outputStreamClass{}, false)
-	if urls := run.lookupCustodyURLs(t.Context(), []string{run.normalizeProvenancePath("", merged)}); !slices.Equal(urls, []string{origin}) {
+	if urls := mustLookupCustody(t, run, []string{run.normalizeProvenancePath("", merged)}); !slices.Equal(urls, []string{origin}) {
 		t.Fatalf("a file merged from the fetched store: custody %v", urls)
 	}
 
 	local := run.beginOpTracker()
 	run.observeContentFlow(t.Context(), local, evidence.ContentFlow{Source: filepath.Join(root, "own", ".git"), Files: []string{filepath.Join(root, "own", "a.go")}})
 	run.finishOpTracker(t.Context(), local, outputStreamClass{}, false, outputStreamClass{}, false)
-	if urls := run.lookupCustodyURLs(t.Context(), []string{run.normalizeProvenancePath("", filepath.Join(root, "own", "a.go"))}); len(urls) != 0 {
+	if urls := mustLookupCustody(t, run, []string{run.normalizeProvenancePath("", filepath.Join(root, "own", "a.go"))}); len(urls) != 0 {
 		t.Fatalf("a store no network read filled gave custody %v", urls)
 	}
 }
