@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -167,7 +168,7 @@ func NewGitTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, string) 
 	testutil.FailErr(t, "reg.Open", err)
 
 	drafter := func(d *hostapi.Dependencies) {
-		d.Providers.CommitDrafter = compaction.MockSummarizer{Text: "feat: drafted subject"}
+		d.Providers.CommitDrafter = llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "feat: drafted subject"}
 	}
 	srv := NewGitServer(t, reg, append([]TestDeps{drafter}, opts...)...)
 	return srv, p.ID

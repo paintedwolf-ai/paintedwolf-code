@@ -27,6 +27,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
@@ -184,7 +185,7 @@ func TestReconcileCoordinatorBatch_skipsSynthesisReadyWithoutBatchReady(t *testi
 
 type coordinatorPromptFixture struct {
 	mgr   *session.Host
-	rec   *llm.RecordingClient
+	rec   *llmtest.RecordingClient
 	wfMgr *workflow.RunManager
 	sess  *wire.Session
 	brief string
@@ -198,7 +199,7 @@ func setupCoordinatorPromptFixture(t *testing.T) coordinatorPromptFixture {
 
 	store := store.NewSQL(sqlDB)
 	inner := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	rec := llm.NewRecordingClient(inner)
+	rec := llmtest.NewRecordingClient(inner)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	testutil.FailErr(t, "load agent registry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 )
 
 type recoveringReductionSummarizer struct{ calls int }
@@ -15,7 +16,7 @@ func (s *recoveringReductionSummarizer) Summarize(context.Context, string, strin
 	if s.calls == 1 {
 		return "", ErrNoLiteProvider
 	}
-	return mockCompactionSummary(strings.Repeat("A long retained fact. ", 5))
+	return llmtest.SummaryJSON(strings.Repeat("A long retained fact. ", 5))
 }
 
 func TestSummaryFailureDoesNotPoisonTheInsufficientSavingsMemo(t *testing.T) {

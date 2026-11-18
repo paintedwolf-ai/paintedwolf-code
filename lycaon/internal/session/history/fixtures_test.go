@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,7 +24,7 @@ func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Servi
 	workspace := sessionscope.New(data)
 	m := New(data, lifecycle.New(data), workspace, limits.New(settings.DefaultSessionLimits(), workspace), nil, func(context.Context, *api.Session) bool { return false })
 	m.SetDataDir(t.TempDir())
-	m.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "Continue from compacted context."}))
+	m.SetCompactor(compaction.NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "Continue from compacted context."}))
 	t.Cleanup(m.Wait)
 	return m, data
 }

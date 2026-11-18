@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	"gopkg.in/yaml.v3"
@@ -56,7 +57,7 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 	const freshPolicy = "Apply the refreshed scoped guidance marker."
 	testutil.FailErr(t, "write initial guidance", os.WriteFile(policyPath, []byte(firstPolicy), 0o644))
 
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: ".",
 		Text:    "ok",
 	}}}))

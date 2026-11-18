@@ -9,17 +9,17 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/decide"
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestInspectionDeliveryDoesNotRequireSelectedCheck(t *testing.T) {
 	var calls atomic.Int32
-	mock := llm.NewKickDrivenMock(llm.KickDrivenConfig{
-		Fallback: func(_ context.Context, _ llm.Snapshot) modelcall.Completion {
+	mock := llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{
+		Fallback: func(_ context.Context, _ llmtest.Snapshot) modelcall.Completion {
 			switch calls.Add(1) {
 			case 1:
 				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "offer-write", Name: "request_tools", Args: map[string]any{"need": "command"}}}}

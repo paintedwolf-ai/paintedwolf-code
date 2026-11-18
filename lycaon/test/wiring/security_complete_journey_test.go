@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/report"
@@ -23,6 +22,7 @@ import (
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -34,7 +34,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	calls := map[string]int{}
 	reportBody := ""
 	parentID := ""
-	mock := llm.NewKickDrivenMock(llm.KickDrivenConfig{Fallback: func(ctx context.Context, _ llm.Snapshot) modelcall.Completion {
+	mock := llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{Fallback: func(ctx context.Context, _ llmtest.Snapshot) modelcall.Completion {
 		jobID := workercontext.Job(ctx)
 		mu.Lock()
 		calls[jobID]++

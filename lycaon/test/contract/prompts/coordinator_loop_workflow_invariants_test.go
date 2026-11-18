@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -14,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -44,39 +46,48 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 	ctx := context.Background()
 
 	sqlDB := testdbfixture.Open(t, "loop wake-contract.db")
+	dir := t.TempDir()
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
 	store := store.NewSQL(sqlDB)
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ack"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ack"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(ctx, agents))
 	mgr.Profiles.SetAgentRegistry(agents)
 
-	manifestRegistry, err := workflowdef.RegistryFromDirs("")
-	contractcheck.FailErr(t, "workflow.RegistryFromDirs failed", err)
+	manifests := workflowfixture.ContractAllResolvedManifests(t)
+	entries := make(map[string]workflowdef.Manifest, len(manifests))
+	for _, manifest := range manifests {
+		entries[workflowdef.ManifestKey(manifest.ID, manifest.Version)] = manifest
+	}
+	manifestRegistry := workflowdef.NewRegistry(entries)
 	wfStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
+	blueprintMgr := blueprint.NewManager(blueprint.NewFileStore(func(context.Context, string) (string, error) { return dir, nil }))
+	wfMgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(sqlDB)
+	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
+	wfMgr.Blueprints.Getter = blueprintMgr
+	wfMgr.Presentation.BlueprintGetter = blueprintMgr
+	wfMgr.Approvals.Getter = blueprintMgr
+
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 
-	for key, m := range workflowfixture.ContractAllResolvedManifests(t) {
+	for key, m := range manifests {
 		phases := workflowfixture.HumanInputPhases(m)
 		if len(phases) == 0 {
 			continue
 		}
 		for _, phase := range phases {
 			t.Run(key+"/"+phase.ID, func(t *testing.T) {
-				dir := t.TempDir()
-				testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 				sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 				contractcheck.FailErr(t, "create session in store", err)
-				run, err := wfMgr.Starts.Start(ctx, sess.ID, wire.StartWorkflowRunRequest{
+				run, err := wfMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 					WorkflowID:      m.ID,
 					WorkflowVersion: m.Version,
 				})
-				if err != nil {
-					t.Skipf("cannot start run for %s: %v", key, err)
-				}
+				contractcheck.FailErr(t, "start human-input workflow", err)
 				run.CurrentPhase = phase.ID
 				run.Status = wire.WorkflowRunStatusRunning
 				vars, err := workflowphases.ApplyPhaseOnEnter(ctx, workflowphases.PhaseEnterRequest{
