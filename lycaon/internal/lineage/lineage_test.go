@@ -15,8 +15,8 @@ import (
 // sleeper starts a detached descendant holding the lineage descriptor.
 func sleeper(t *testing.T, l *lineage.Lineage, setsid bool) *exec.Cmd {
 	t.Helper()
-	// The shell keeps the inherited descriptor open for its whole run.
-	cmd := exec.Command("/bin/sh", "-c", "sleep 30")
+	// sleep itself holds the inherited descriptor, so the cleanup's kill ends it.
+	cmd := exec.Command("/bin/sleep", "30")
 	cmd.ExtraFiles = []*os.File{l.ChildFile()}
 	if setsid {
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}

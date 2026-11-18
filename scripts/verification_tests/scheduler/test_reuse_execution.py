@@ -1,8 +1,10 @@
 """Recorded Go package results: keys, observed inputs, replay, and early outcomes."""
 
+import importlib.util
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
@@ -224,6 +226,14 @@ if [ -n "$log" ]; then
 fi
 printf '=== RUN   TestFixture\\n'
 if [ "$FIXTURE_MODE" = fork ]; then /usr/bin/true; fi
+# close_fds=False keeps inherited descriptors, as Go's os/exec does.
+if [ "$FIXTURE_MODE" = orphan ]; then
+  python3 -c 'import subprocess; subprocess.Popen(["/bin/sleep", "300"], close_fds=False, start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)'
+fi
+if [ "$FIXTURE_MODE" = holder ]; then /bin/sleep 300 & fi
+if [ "$FIXTURE_MODE" = daemon ]; then
+  python3 -c 'import os; os.fork() or (os.setsid(), os.closerange(0, 256), os.execv("/bin/sleep", ["sleep", "300"]))'
+fi
 if [ "$FIXTURE_MODE" = fail ]; then printf -- '--- FAIL: TestFixture (0.00s)\\nFAIL\\n'; exit 1; fi
 printf -- '--- PASS: TestFixture (0.00s)\\nPASS %s\\n' "$value"
 printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
@@ -263,6 +273,46 @@ printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
         self.assertEqual(event["tests"], ["TestFixture"])
         self.assertIn("--- FAIL: TestFixture", Path(event["output"]).read_text())
         self.assertFalse(event["recorded"])
+
+    @unittest.skipUnless(sys.platform in {"darwin", "linux"}, "process custody requires a supported POSIX host")
+    def test_a_detached_child_fails_the_package(self):
+        result, event = self.run_wrapper("orphan")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(b"package left child processes: fixture/pkg: sleep (pid ", result.stdout)
+        self.assertEqual(event["exit_code"], 1)
+        self.assertFalse(event["recorded"])
+        self.assertGreaterEqual(event["child_scan_seconds"], 0)
+
+    @unittest.skipUnless(sys.platform == "linux", "macOS hides the environment of Apple platform binaries")
+    def test_a_daemon_that_closed_every_descriptor_fails_the_package(self):
+        result, event = self.run_wrapper("daemon")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(b"package left child processes: fixture/pkg: sleep (pid ", result.stdout)
+        self.assertEqual(event["exit_code"], 1)
+
+    @unittest.skipUnless(sys.platform in {"darwin", "linux"}, "process custody requires a supported POSIX host")
+    def test_a_child_holding_the_output_open_fails_the_package_without_delaying_it(self):
+        result, event = self.run_wrapper("holder")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(b"PASS one", result.stdout)
+        self.assertIn(b"package left child processes: fixture/pkg: sleep (pid ", result.stdout)
+        self.assertEqual(event["exit_code"], 1)
+
+    def test_a_process_gone_before_it_is_named_is_not_a_leak(self):
+        spec = importlib.util.spec_from_file_location("go_test_exec", Path(__file__).resolve().parents[2] / "go-test-exec.py")
+        wrapper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(wrapper)
+        births = {11: 100, 12: 200}
+        with tempfile.NamedTemporaryFile() as owner, \
+                patch.object(wrapper.custody, "lease_holders", return_value={11}), \
+                patch.object(wrapper.custody, "carriers", return_value={12}), \
+                patch.object(wrapper.custody, "birth", side_effect=births.get), \
+                patch.object(wrapper.custody, "commands", return_value={12: "sleep"}), \
+                patch.object(wrapper.custody, "carries", return_value=True), \
+                patch.object(wrapper.os, "kill") as kill:
+            leaked = wrapper.settle_package_children(owner, "PW_TEST_PACKAGE_OWNER=1-x")
+        self.assertEqual(leaked, {12: "sleep"})
+        kill.assert_called_once_with(12, signal.SIGKILL)
 
     @unittest.skipUnless(reuse.fork_observable(), "recording requires process fork observation")
     def test_a_recorded_pass_replays_until_an_observed_input_changes(self):

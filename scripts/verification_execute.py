@@ -648,9 +648,14 @@ class Executor:
             if reused:
                 print(f"test execution: {stage_id}: {reused} of {len(packages)} packages reused passing results "
                       "recorded for identical builds and inputs", flush=True)
+            scans = [outcomes[p]["child_scan_seconds"] for p in packages if "child_scan_seconds" in outcomes.get(p, {})]
+            if scans:
+                print(f"test execution: {stage_id}: child process scans took {sum(scans):.1f} s over "
+                      f"{len(scans)} packages", flush=True)
             reuse.record_package_durations(self.queue, key, outcomes)
             result["packages"] = packages
             result["reused_packages"] = reused
+            result["child_scan_seconds"] = round(sum(scans), 3)
         self.history = read_history(self.queue)
         self.stages.append(result)
         write_json(self.directory / "stages.json", self.stages)
