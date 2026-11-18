@@ -24,6 +24,14 @@ func (s *Store) downloadArtifact(ctx context.Context, client *http.Client, url s
 	}
 	name := filepath.Join("partials", a.Digest)
 	f, err := openPartial(root, name)
+	if errors.Is(err, os.ErrPermission) {
+		// A crash can leave a sealed partial awaiting its final rename.
+		if err := s.publishPartial(ctx, root, name, a); err != nil {
+			return err
+		}
+		progress.add(a.Bytes)
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -31,6 +39,10 @@ func (s *Store) downloadArtifact(ctx context.Context, client *http.Client, url s
 	if err = errors.Join(err, f.Close()); err != nil {
 		return err
 	}
+	return s.publishPartial(ctx, root, name, a)
+}
+
+func (s *Store) publishPartial(ctx context.Context, root *os.Root, name string, a Artifact) error {
 	if err := auditFile(ctx, root, name, a); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()

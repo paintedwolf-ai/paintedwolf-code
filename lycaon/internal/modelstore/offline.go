@@ -139,7 +139,7 @@ func (s *Store) ImportFromBundlePath(ctx context.Context, path string, target Sl
 		if s.reusableArtifact(ctx, a) {
 			stageErr = verifyReader(reader, a)
 		} else {
-			stageErr = s.Stage(reader, a)
+			stageErr = s.stage(reader, a)
 		}
 		return errors.Join(stageErr, f.Close())
 	})
