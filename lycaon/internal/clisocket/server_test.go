@@ -201,7 +201,7 @@ func TestListenRoundTripsOverTheSocket(t *testing.T) {
 		proj("p1", "app", time.Now(), root(dir)),
 	}}
 
-	srv, err := Listen(context.Background(), projects, pub)
+	srv, err := Listen(context.Background(), projects, pub, nil)
 	testutil.FailErr(t, "listen", err)
 	t.Cleanup(func() { _ = srv.Close() })
 
@@ -218,7 +218,7 @@ func TestListenRoundTripsOverTheSocket(t *testing.T) {
 // Owner-only mode is the socket's authorization boundary.
 func TestListenSocketIsOwnerOnly(t *testing.T) {
 	shortConfigDir(t)
-	srv, err := Listen(context.Background(), fakeProjects{}, &fakePublisher{})
+	srv, err := Listen(context.Background(), fakeProjects{}, &fakePublisher{}, nil)
 	testutil.FailErr(t, "listen", err)
 	t.Cleanup(func() { _ = srv.Close() })
 
@@ -244,7 +244,7 @@ func TestListenTakesOverASocketLeftByADeadEngine(t *testing.T) {
 	unixListener.SetUnlinkOnClose(false)
 	testutil.FailErr(t, "close stale socket", unixListener.Close())
 
-	srv, err := Listen(context.Background(), fakeProjects{}, &fakePublisher{})
+	srv, err := Listen(context.Background(), fakeProjects{}, &fakePublisher{}, nil)
 	testutil.FailErr(t, "listen over stale socket", err)
 	t.Cleanup(func() { _ = srv.Close() })
 
@@ -256,18 +256,18 @@ func TestListenTakesOverASocketLeftByADeadEngine(t *testing.T) {
 
 func TestListenRefusesWhenAnotherEngineIsLive(t *testing.T) {
 	shortConfigDir(t)
-	first, err := Listen(context.Background(), fakeProjects{}, &fakePublisher{})
+	first, err := Listen(context.Background(), fakeProjects{}, &fakePublisher{}, nil)
 	testutil.FailErr(t, "first listen", err)
 	t.Cleanup(func() { _ = first.Close() })
 
-	if _, err := Listen(context.Background(), fakeProjects{}, &fakePublisher{}); err == nil {
+	if _, err := Listen(context.Background(), fakeProjects{}, &fakePublisher{}, nil); err == nil {
 		t.Fatal("second Listen succeeded, want refusal while the first is live")
 	}
 }
 
 func TestCloseUnlinksTheSocket(t *testing.T) {
 	shortConfigDir(t)
-	srv, err := Listen(context.Background(), fakeProjects{}, &fakePublisher{})
+	srv, err := Listen(context.Background(), fakeProjects{}, &fakePublisher{}, nil)
 	testutil.FailErr(t, "listen", err)
 	path := srv.Path()
 

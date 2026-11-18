@@ -102,7 +102,7 @@ func (h *journalHistory) apply(record journalRecord, signer Signer) error {
 		h.selection = Selection{State: "opted_out"}
 		return nil
 	case record.Version == 2 && record.Selection == "selected":
-	case record.Version == 1 && record.Selection == "":
+	case record.Version == 1 && record.Selection == "" && h.selection.State == "unconfigured":
 	default:
 		return fmt.Errorf("modelstore: unknown journal version or selection %d/%q", record.Version, record.Selection)
 	}
@@ -160,7 +160,10 @@ func (s *Store) history() (journalHistory, error) {
 	return records, err
 }
 
-func (s *Store) readRecords() ([]Manifest, error) { h, err := s.history(); return h.visible, err }
+func (s *Store) readRecords() ([]Manifest, error) {
+	h, err := s.history()
+	return h.visible, err
+}
 
 // Active returns the newest authenticated manifest per model and device.
 func (s *Store) Active() (map[string]Manifest, error) {
