@@ -97,7 +97,8 @@ func TestAPIConformance(t *testing.T) {
 	// hosts are built before the host every other operation runs against.
 	sweep.runTerminal(t)
 
-	h := wiring.BuildForTest(t, wiring.WithChangeDebounce(conformanceDebounce),
+	sweep.hold = newConformanceHold()
+	h := wiring.BuildForTest(t, wiring.WithChangeDebounce(conformanceDebounce), wiring.WithFileOperationHold(sweep.hold.wait),
 		wiring.WithInstalledPack(filepath.Join("testdata", "conformance-pack")),
 		wiring.WithMCPConnector(conformanceMCP()))
 	hub := h.MemoryHub()
@@ -182,7 +183,11 @@ type conformanceSweep struct {
 	notices   *usernotice.Catalog
 	values    *conformanceValues
 	effects   conformanceEffects
-	keyRows   conformanceKeyRows
+	// readEffects are the effects a read may declare with x-read-starts-work.
+	readEffects map[string]readEffect
+	// hold keeps a file operation cancelable for the cancel recipe.
+	hold    *conformanceHold
+	keyRows conformanceKeyRows
 	// readObserved names reads whose answered request has already been checked for effects.
 	readObserved map[string]bool
 	secrets      *conformanceSecrets
@@ -222,7 +227,7 @@ type conformanceOutcomes struct {
 func newConformanceSweep(doc *openapi3.T, validator *openapi.Validator, handler http.Handler, notices *usernotice.Catalog) *conformanceSweep {
 	s := &conformanceSweep{
 		ops: conformanceOperations(doc), validator: validator, handler: handler, notices: notices,
-		values: newConformanceValues(), secrets: &conformanceSecrets{}, findings: newConformanceFindings(),
+		values: newConformanceValues(), secrets: &conformanceSecrets{}, findings: newConformanceFindings(), readEffects: hostReadEffects,
 		children: map[string][]string{}, readObserved: map[string]bool{},
 		outcomes: &conformanceOutcomes{succeeded: map[string]bool{}, lastAnswer: map[string]string{}, created: map[string]bool{}}, corpus: newCorpusRecorder(),
 	}

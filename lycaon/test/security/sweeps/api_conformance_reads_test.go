@@ -2,10 +2,13 @@ package sweeps
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -32,6 +35,47 @@ type conformanceEffects interface {
 	mark(ctx context.Context) (int64, error)
 	// since lists what changed after mark.
 	since(ctx context.Context, mark int64) ([]string, error)
+	// tables digests each table's content, so a commit can be attributed.
+	tables(ctx context.Context) (map[string]string, error)
+}
+
+// readEffect is the work a read may start: the tables it writes and the
+// event topics it publishes.
+type readEffect struct {
+	tables, topics []string
+}
+
+// hostReadEffects are the effects the host's reads may declare.
+var hostReadEffects = map[string]readEffect{
+	"file_briefing": {
+		tables: []string{"file_briefings", "briefing_epochs", "briefing_manifests", "briefing_results", "briefing_records", "briefing_record_sections", "briefing_targets", "briefing_checkpoint_pins"},
+		topics: []string{string(wire.EventTopicFileBriefing)},
+	},
+}
+
+// permit removes the changes the effect accounts for. A commit is permitted
+// only when every table it changed belongs to the effect.
+func (e readEffect) permit(changes []string, before, after map[string]string) []string {
+	var out []string
+	for _, change := range changes {
+		if topic, ok := strings.CutPrefix(change, "event "); ok && slices.Contains(e.topics, topic) {
+			continue
+		}
+		if change == "store commit" {
+			var others []string
+			for _, table := range slices.Sorted(maps.Keys(after)) {
+				if after[table] != before[table] && !slices.Contains(e.tables, table) {
+					others = append(others, table)
+				}
+			}
+			if len(others) == 0 {
+				continue
+			}
+			change = "store commit to " + strings.Join(others, ", ")
+		}
+		out = append(out, change)
+	}
+	return out
 }
 
 // sweepReads sends every GET with fixture parameters, parents before children,
@@ -81,11 +125,30 @@ func (s *conformanceSweep) observedRead(ctx context.Context, req conformanceRequ
 		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not observe host state after %s: %v", s.lastMutation, err)
 		return s.send(ctx, req), nil
 	}
+	effect, declared := s.readEffects[req.op.ReadEffect]
+	if req.op.ReadEffect != "" && !declared {
+		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "declares read effect %q, which names no known work", req.op.ReadEffect)
+	}
+	var before map[string]string
+	if declared {
+		if before, err = s.effects.tables(ctx); err != nil {
+			s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not digest host state: %v", err)
+			return s.send(ctx, req), nil
+		}
+	}
 	ex := s.send(ctx, req)
 	changes, err := s.effects.since(ctx, mark)
 	if err != nil {
 		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not observe host state: %v", err)
 		return ex, nil
+	}
+	if declared {
+		after, err := s.effects.tables(ctx)
+		if err != nil {
+			s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not digest host state: %v", err)
+			return ex, nil
+		}
+		changes = effect.permit(changes, before, after)
 	}
 	slices.Sort(changes)
 	return ex, slices.Compact(changes)
@@ -393,6 +456,62 @@ func (e *hostEffects) quiesce(ctx context.Context) {
 		version = next
 	}
 	e.hub.FlushDebounced()
+}
+
+// tables digests every table's rows.
+func (e *hostEffects) tables(ctx context.Context) (map[string]string, error) {
+	rows, err := e.conn.QueryContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	digests := make(map[string]string, len(names))
+	for _, name := range names {
+		digest, err := e.tableDigest(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+		digests[name] = digest
+	}
+	return digests, nil
+}
+
+func (e *hostEffects) tableDigest(ctx context.Context, table string) (string, error) {
+	rows, err := e.conn.QueryContext(ctx, `SELECT * FROM "`+strings.ReplaceAll(table, `"`, `""`)+`"`)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	columns, err := rows.Columns()
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	values := make([]sql.RawBytes, len(columns))
+	targets := make([]any, len(columns))
+	for i := range values {
+		targets[i] = &values[i]
+	}
+	for rows.Next() {
+		if err := rows.Scan(targets...); err != nil {
+			return "", err
+		}
+		for _, v := range values {
+			_, _ = fmt.Fprintf(h, "%d:%s", len(v), v)
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil)), rows.Err()
 }
 
 func (e *hostEffects) dataVersion(ctx context.Context) (int64, error) {

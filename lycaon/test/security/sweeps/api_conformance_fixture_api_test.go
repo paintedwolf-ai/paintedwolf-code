@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -83,6 +84,7 @@ paths:
       - {name: part_id, in: path, required: true, schema: {type: string, format: uuid}}
     get:
       operationId: getPart
+      x-read-starts-work: widget_index
       responses:
         '200': {description: ok, content: {application/json: {schema: {$ref: '#/components/schemas/Part'}}}}
         '401': {$ref: '#/components/responses/Error'}
@@ -159,6 +161,7 @@ type widgetFaults struct {
 	ignoresLimit     bool // listWidgets answers every row whatever the limit
 	labelsWidget     bool // getWidget answers a label the committed corpus never saw
 	unguardedRoute   bool // getPart is registered without the bearer check
+	writesPastEffect bool // getPart also writes widgets, beyond its declared index
 }
 
 // widgetAPI serves widgetSpec through the production responder.
@@ -166,8 +169,10 @@ type widgetAPI struct {
 	faults    widgetFaults
 	responses httpio.Responder
 	writes    atomic.Int64
-	mu        sync.Mutex
-	token     string
+	// indexed counts writes to widget_index, the work getPart declares.
+	indexed atomic.Int64
+	mu      sync.Mutex
+	token   string
 	// renames holds one row per operation_id: the label it applied.
 	renames []widgetRename
 }
@@ -336,6 +341,11 @@ func (a *widgetAPI) keyRows(_ context.Context, key string) (map[string]int, erro
 }
 
 func (a *widgetAPI) getPart(w http.ResponseWriter, r *http.Request) {
+	// Reading a part indexes it, the work the operation declares.
+	a.indexed.Add(1)
+	if a.faults.writesPastEffect {
+		a.writes.Add(1)
+	}
 	unknownWidget := r.PathValue("id") != fixtureWidgetID
 	unknownPart := r.PathValue("part_id") != fixturePartID
 	switch {
@@ -352,15 +362,24 @@ func (a *widgetAPI) getPart(w http.ResponseWriter, r *http.Request) {
 }
 
 // counterEffects reports a change whenever the widget API counted a write.
-type counterEffects struct{ writes *atomic.Int64 }
+type counterEffects struct{ writes, indexed *atomic.Int64 }
 
-func (c counterEffects) mark(context.Context) (int64, error) { return c.writes.Load(), nil }
+func (c counterEffects) mark(context.Context) (int64, error) {
+	return c.writes.Load() + c.indexed.Load(), nil
+}
 
-func (c counterEffects) since(_ context.Context, mark int64) ([]string, error) {
-	if c.writes.Load() != mark {
+func (c counterEffects) since(ctx context.Context, mark int64) ([]string, error) {
+	if now, _ := c.mark(ctx); now != mark {
 		return []string{"store commit"}, nil
 	}
 	return nil, nil
+}
+
+func (c counterEffects) tables(context.Context) (map[string]string, error) {
+	return map[string]string{
+		"widgets":      strconv.FormatInt(c.writes.Load(), 10),
+		"widget_index": strconv.FormatInt(c.indexed.Load(), 10),
+	}, nil
 }
 
 // widgetNotices is the fixture catalog: every code the widget API answers,
@@ -407,7 +426,8 @@ func newWidgetSweep(t *testing.T, faults widgetFaults) *conformanceSweep {
 	notices := widgetNotices(t)
 	api := &widgetAPI{faults: faults, responses: httpio.Responder{Logger: slog.New(slog.DiscardHandler), Notices: notices}}
 	sweep := newConformanceSweep(doc, validator, api.routes(), notices)
-	sweep.effects = counterEffects{writes: &api.writes}
+	sweep.effects = counterEffects{writes: &api.writes, indexed: &api.indexed}
+	sweep.readEffects = map[string]readEffect{"widget_index": {tables: []string{"widget_index"}}}
 	sweep.keyRows = api
 	sweep.eventSchemas = openapi.NewEventSchemas(widgetEventSchemaDir(t))
 	sweep.values.bind("/v1/widgets/{id}/parts/{part_id}", "part_id", fixturePartID)

@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/mcp"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -33,6 +34,7 @@ var sourceRecipes = map[string]successRecipe{
 	// Source views.
 	// A retained view expires or yields to newer ones over a long sweep, so
 	// each operation on one addresses a view of its own.
+	"cancelSourceOperation":         {prepare: sourceHeldOperationInputs, after: func(s *conformanceSweep) { s.hold.release() }},
 	"createSourceView":              {stage: stageCreate, prepare: sourceCreateViewInputs},
 	"getSourceView":                 {prepare: sourceViewInputs},
 	"applySourceViewIntent":         {prepare: sourceApplyViewIntentInputs},
@@ -1371,4 +1373,56 @@ func sourceGeneration(gen *mcp.ResourceGeneration) string {
 		parts = append(parts, fmt.Sprintf("rejected(%s %s %s)", r.Layer, r.ID, r.Reason))
 	}
 	return strings.Join(parts, " ")
+}
+
+// conformanceHeldPrefix names the files whose operations the hold keeps in
+// their cancelable phase.
+const conformanceHeldPrefix = "conformance-held-"
+
+// conformanceHold keeps a file operation on a held file cancelable until it
+// is canceled or released.
+type conformanceHold struct {
+	mu       sync.Mutex
+	released chan struct{}
+}
+
+func newConformanceHold() *conformanceHold {
+	return &conformanceHold{released: make(chan struct{})}
+}
+
+func (h *conformanceHold) wait(ctx context.Context, r fileops.Request) {
+	if !bytes.Contains(r.Body, []byte(conformanceHeldPrefix)) {
+		return
+	}
+	h.mu.Lock()
+	released := h.released
+	h.mu.Unlock()
+	select {
+	case <-ctx.Done():
+	case <-released:
+	}
+}
+
+// release frees every held operation.
+func (h *conformanceHold) release() {
+	h.mu.Lock()
+	close(h.released)
+	h.released = make(chan struct{})
+	h.mu.Unlock()
+}
+
+// sourceHeldOperationInputs cancels a file creation the hold keeps cancelable.
+func sourceHeldOperationInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	root, err := sourceRootID(s)
+	if err != nil {
+		return successInputs{}, err
+	}
+	id := uuid.NewString()
+	if _, err := s.prerequisite(ctx, "createProjectSourceEntry", successInputs{fields: map[string]any{
+		"operation_id": id, "path": sourceName(s, "held", ".txt"), "kind": "file", "root_id": root,
+	}}); err != nil {
+		s.hold.release()
+		return successInputs{}, err
+	}
+	return successInputs{params: map[string]string{"operation_id": id}}, nil
 }

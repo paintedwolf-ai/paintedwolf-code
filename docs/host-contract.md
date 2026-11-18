@@ -375,6 +375,7 @@ These rules shape every `/v1` route. The mechanically checkable ones are contrac
 - PATCH merges: an absent field is unchanged and `null` resets it to the inherited or default value. That is the only reset idiom. A PATCH body requires nothing except `expected_revision` (optimistic concurrency) and `operation_id` (idempotency).
 - DELETE answers `204` with no body, or `202` with the durable operation's status when the removal continues after the response.
 - A release that succeeds for a handle the host no longer retains sets `x-idempotent-release: true`; its unknown handle answers `204`, not `404`.
+- A read has no effects, except work it declares with `x-read-starts-work: <effect>`. `file_briefing` is the only such effect: reading a pending file briefing starts its generation, which writes only the briefing tables and publishes only `file_briefing` events. Anything else a read commits or publishes is a defect.
 - Every authenticated operation declares `401`; every operation with a request body declares `415`, and `413` where the body is bounded; a rate-limited operation declares `429` and sends `Retry-After`.
 - Request schemas are closed: the body schema and every object schema inside it set `additionalProperties: false` (a composite may use `unevaluatedProperties: false`). A map-typed object declares its value schema in `additionalProperties` instead.
 

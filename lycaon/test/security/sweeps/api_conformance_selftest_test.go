@@ -68,6 +68,8 @@ func TestConformanceSweepDetectsEachBrokenInvariant(t *testing.T) {
 			`listWidgets: foreign cursor: answered 200 (details.param ""), want 400 invalid_page_cursor naming "cursor"`},
 		{"read writes", widgetFaults{writesOnRead: true}, ruleReadsHaveNoEffects,
 			"getWidget: read: changed host state: store commit"},
+		{"read writes past its declared effect", widgetFaults{writesPastEffect: true}, ruleReadsHaveNoEffects,
+			"getPart: read: changed host state: store commit to widgets"},
 		{"secret echoed", widgetFaults{echoesSecret: true}, ruleNoSecretMaterial,
 			"getWidget: read: response body reveals the secret set through createPart.token"},
 		{"raw error text", widgetFaults{rawMessage: true}, ruleMessageIsNoticeCopy,

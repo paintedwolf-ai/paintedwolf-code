@@ -38,6 +38,8 @@ type successRecipe struct {
 	// seed adds rows to a paged list that holds fewer than two, for lists
 	// no create operation posts to.
 	seed func(ctx context.Context, s *conformanceSweep) error
+	// after runs once the success request answered, whatever it answered.
+	after func(s *conformanceSweep)
 }
 
 // successInputs override what the value generator would send.
@@ -131,6 +133,9 @@ func (s *conformanceSweep) probeSuccessPaths(ctx context.Context, stages ...succ
 		}
 		ex := s.send(ctx, req)
 		s.lastMutation = op.ID
+		if after := successRecipes[op.ID].after; after != nil {
+			after(s)
+		}
 		if ex.status/100 != 2 {
 			continue
 		}
