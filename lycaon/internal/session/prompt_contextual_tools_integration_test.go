@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -26,7 +27,7 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 	specFix := setupContextualToolsFixtureWithLLM(t, api.SessionPostureSpec, rec)
 	specManifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
 		ID: "spec-tools", Version: "1.0.0", InitialPosture: "spec",
-		PhaseDefs: []workflowdef.PhaseDef{{ID: "work", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"research_satisfied"}}},
+		PhaseDefs: []workflowdef.PhaseDef{{ID: "work", CompleteWhen: vocabulary.CompleteWhenGatesSatisfied, Gates: []string{"research_satisfied"}}},
 	})
 	specFix.Workflow.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"spec-tools@1.0.0": specManifest})
 	_, err := specFix.Workflow.Starts.StartHuman(t.Context(), specFix.Sess.ID, api.StartWorkflowRunRequest{WorkflowID: specManifest.ID, WorkflowVersion: specManifest.Version})

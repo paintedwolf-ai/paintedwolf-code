@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 )
 
 func TestBundledManifestPhaseGraphIsSimplePath(t *testing.T) {
@@ -52,7 +53,7 @@ func assertPhaseGraph(t *testing.T, manifestKey string, m Manifest) {
 	}
 	// gates_satisfied requires non-empty gates.
 	for _, p := range m.PhaseDefs {
-		if p.CompleteWhen == CompleteWhenGatesSatisfied && len(p.Gates) == 0 {
+		if p.CompleteWhen == vocabulary.CompleteWhenGatesSatisfied && len(p.Gates) == 0 {
 			t.Fatalf("%s: phase %q gates_satisfied without gates", manifestKey, p.ID)
 		}
 	}

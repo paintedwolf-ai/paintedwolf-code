@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
@@ -38,7 +39,7 @@ func TestRequiredSurfaceToolsFromAdvancePolicy(t *testing.T) {
 		PhaseDefs: []workflowdef.PhaseDef{{
 			ID:                 "work",
 			AdvanceWhenGateMet: workflowdef.AdvanceWhenGateMetCoordinator,
-			CompleteWhen:       workflowdef.CompleteWhenGatesSatisfied,
+			CompleteWhen:       vocabulary.CompleteWhenGatesSatisfied,
 			Gates:              []string{"human_approval"},
 		}},
 	})
@@ -58,7 +59,7 @@ func TestValidateResolvedSurfaceToolsHITL(t *testing.T) {
 		PhaseDefs: []workflowdef.PhaseDef{{
 			ID:                 "intake",
 			AdvanceWhenGateMet: workflowdef.AdvanceWhenGateMetCoordinator,
-			CompleteWhen:       workflowdef.CompleteWhenGatesSatisfied,
+			CompleteWhen:       vocabulary.CompleteWhenGatesSatisfied,
 			Gates:              []string{"hitl_consulted:intake"},
 		}},
 	})

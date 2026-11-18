@@ -1,8 +1,6 @@
 package phases_test
 
 import (
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-
 	"context"
 	"testing"
 
@@ -10,6 +8,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -25,7 +25,7 @@ func TestTryAutoAdvanceInvokesPhaseAdvancedHook(t *testing.T) {
 		Version:  "1.0.0",
 		Controls: workflowdef.ManifestControls{PhaseAdvance: workflowdef.PhaseAdvanceHost},
 		PhaseDefs: []workflowdef.PhaseDef{
-			{ID: "stub", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"plan_stub_valid"}, Next: "done"},
+			{ID: "stub", CompleteWhen: vocabulary.CompleteWhenGatesSatisfied, Gates: []string{"plan_stub_valid"}, Next: "done"},
 			{ID: "done"},
 		},
 	})

@@ -1,13 +1,14 @@
 package presentation_test
 
 import (
-	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 )
 
@@ -63,7 +64,7 @@ func TestProjectPhaseExit_ProofGateStates(t *testing.T) {
 	m := workflowdef.Manifest{}
 	phase := workflowdef.PhaseDef{
 		ID:                 "work",
-		CompleteWhen:       workflowdef.CompleteWhenGatesSatisfied,
+		CompleteWhen:       vocabulary.CompleteWhenGatesSatisfied,
 		Gates:              []string{"worker_cycle_ready"},
 		AdvanceWhenGateMet: workflowdef.AdvanceWhenGateMetAuto,
 	}

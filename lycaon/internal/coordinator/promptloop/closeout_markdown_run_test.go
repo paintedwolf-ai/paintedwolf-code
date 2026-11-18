@@ -20,9 +20,9 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -136,7 +136,7 @@ func reportTopology(t *testing.T, message api.Message) bool {
 		ID: "reporttest", Version: "1.0.0",
 		Controls: workflowdef.ManifestControls{PhaseAdvance: workflowdef.PhaseAdvanceHost},
 		PhaseDefs: []workflowdef.PhaseDef{
-			{ID: "report", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"topology_report_delivered"}, Next: "done"},
+			{ID: "report", CompleteWhen: vocabulary.CompleteWhenGatesSatisfied, Gates: []string{"topology_report_delivered"}, Next: "done"},
 			{ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"},
 		},
 	})

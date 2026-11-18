@@ -2,14 +2,15 @@ package workflow
 
 import (
 	"context"
-	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -21,7 +22,7 @@ func topologyReportTestManifest() workflowdef.Manifest {
 		PhaseDefs: []workflowdef.PhaseDef{
 			{
 				ID:           "report",
-				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 				Gates:        []string{"topology_report_delivered"},
 				Next:         "done",
 			},

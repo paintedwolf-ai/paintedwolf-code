@@ -1,13 +1,15 @@
 package presentation_test
 
 import (
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 func topologyReportTestManifest() workflowdef.Manifest {
@@ -18,7 +20,7 @@ func topologyReportTestManifest() workflowdef.Manifest {
 		PhaseDefs: []workflowdef.PhaseDef{
 			{
 				ID:           "report",
-				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 				Gates:        []string{"topology_report_delivered"},
 				Next:         "done",
 			},

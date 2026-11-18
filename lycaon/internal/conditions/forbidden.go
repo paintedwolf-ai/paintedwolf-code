@@ -3,6 +3,7 @@ package conditions
 import (
 	"errors"
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/vocabulary"
 )
 

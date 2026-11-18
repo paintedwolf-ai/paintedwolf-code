@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -41,7 +42,7 @@ func TestNothingCitedReplyInAReportPhaseStillEndsInAReport(t *testing.T) {
 			manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
 				ID: "report-only", Version: "1.0.0", Controls: controls,
 				PhaseDefs: []workflowdef.PhaseDef{
-					{ID: "report", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"topology_report_delivered"}},
+					{ID: "report", CompleteWhen: vocabulary.CompleteWhenGatesSatisfied, Gates: []string{"topology_report_delivered"}},
 					{ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"},
 				},
 			})
@@ -105,7 +106,7 @@ func TestHostAssembledReportLeavesNoFeedbackForTheNextRequest(t *testing.T) {
 		ID: "report-only", Version: "1.0.0",
 		Controls: workflowdef.ManifestControls{PhaseAdvance: workflowdef.PhaseAdvanceHost},
 		PhaseDefs: []workflowdef.PhaseDef{
-			{ID: "report", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"topology_report_delivered"}},
+			{ID: "report", CompleteWhen: vocabulary.CompleteWhenGatesSatisfied, Gates: []string{"topology_report_delivered"}},
 			{ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"},
 		},
 	})

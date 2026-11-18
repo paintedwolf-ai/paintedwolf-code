@@ -9,9 +9,6 @@ import (
 
 func TestGenericGateKitLeavesKnownToRegistry(t *testing.T) {
 	for _, id := range []string{"orchestration_complete", "child_run_complete", "human_approval"} {
-		if id == workflowdef.CompleteWhenGatesSatisfied {
-			continue
-		}
 		if !workflowdef.IsKnownCompleteWhen(id) && !vocabulary.IsPredicate(id) {
 			t.Fatalf("generic gate kit leaf %q not recognized by vocabulary registry", id)
 		}

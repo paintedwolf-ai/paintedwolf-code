@@ -6,12 +6,6 @@ import (
 	"github.com/lycaon/lycaon/internal/vocabulary"
 )
 
-// Built-in complete_when forms evaluated by GateEvaluator without the condition registry.
-const (
-	CompleteWhenGatesSatisfied = "gates_satisfied"
-	CompleteWhenGateSatisfied  = "gate_satisfied:"
-)
-
 func IsKnownCompleteWhen(expr string) bool {
 	leaves, err := CompletionLeaves(expr)
 	if err != nil {

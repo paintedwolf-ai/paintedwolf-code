@@ -5,15 +5,16 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/boolexpr"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 )
 
 // CompletionLeaves unwraps completion forms before resolving their predicates.
 func CompletionLeaves(expr string) ([]string, error) {
 	expr = strings.TrimSpace(expr)
-	if expr == "" || expr == CompleteWhenGatesSatisfied {
+	if expr == "" || expr == vocabulary.CompleteWhenGatesSatisfied {
 		return nil, nil
 	}
-	if leaf, ok := strings.CutPrefix(expr, CompleteWhenGateSatisfied); ok {
+	if leaf, ok := strings.CutPrefix(expr, vocabulary.CompleteWhenGateSatisfied); ok {
 		leaf = strings.TrimSpace(leaf)
 		if leaf == "" {
 			return nil, fmt.Errorf("gate_satisfied requires a gate leaf")

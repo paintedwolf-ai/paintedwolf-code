@@ -66,7 +66,7 @@ func (r Resolver) ForRun(ctx context.Context, run *api.WorkflowRun) (workflowdef
 			if err != nil {
 				return workflowdef.Manifest{}, fmt.Errorf("read stored workflow: %w", err)
 			}
-			if m.ID != run.WorkflowID || m.Version != run.WorkflowVersion {
+			if workflowdef.ManifestKey(m.ID, m.Version) != workflowdef.ManifestKey(run.WorkflowID, run.WorkflowVersion) {
 				return workflowdef.Manifest{}, fmt.Errorf("stored workflow differs from run %s", run.ID)
 			}
 			return m, nil

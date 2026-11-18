@@ -1,9 +1,10 @@
 package workflowdiag
 
 import (
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 func PredicateLeaf(field, id string, allowed func(string) bool, overlay, readiness bool) []api.ComposeValidationError {

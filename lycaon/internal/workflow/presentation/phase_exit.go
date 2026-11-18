@@ -1,13 +1,13 @@
 package presentation
 
 import (
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
-
 	"net/url"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 // Phase exit kinds projected into the active-workflow inject.
@@ -119,7 +119,7 @@ func ProjectPhaseExit(manifest workflowdef.Manifest, phase workflowdef.PhaseDef,
 		out.OpenGates = openProofGates(phase.Gates, gates)
 		out.DormantGates = dormantProofGates(gates)
 		if cw := strings.TrimSpace(phase.CompleteWhen); cw != "" &&
-			cw != workflowdef.CompleteWhenGatesSatisfied && len(phase.Gates) == 0 {
+			cw != vocabulary.CompleteWhenGatesSatisfied && len(phase.Gates) == 0 {
 			out.CompleteWhen = cw
 		}
 	}

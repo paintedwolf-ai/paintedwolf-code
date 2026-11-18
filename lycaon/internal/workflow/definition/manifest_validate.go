@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -130,7 +131,7 @@ func validateVerifyLoopManifest(m Manifest) error {
 
 func validateGatesSatisfiedPhases(m Manifest) error {
 	for _, p := range m.PhaseDefs {
-		if p.CompleteWhen == CompleteWhenGatesSatisfied && len(p.Gates) == 0 {
+		if p.CompleteWhen == vocabulary.CompleteWhenGatesSatisfied && len(p.Gates) == 0 {
 			return fmt.Errorf("workflow manifest %s: phase %q gates_satisfied requires gates", m.ID, p.ID)
 		}
 	}
@@ -138,11 +139,11 @@ func validateGatesSatisfiedPhases(m Manifest) error {
 }
 
 func validatePhaseDef(p PhaseDef) error {
-	if p.CompleteWhen == CompleteWhenGatesSatisfied && len(p.Gates) == 0 {
+	if p.CompleteWhen == vocabulary.CompleteWhenGatesSatisfied && len(p.Gates) == 0 {
 		return fmt.Errorf("phase %q: gates_satisfied requires non-empty gates", p.ID)
 	}
 	if childWhen := strings.TrimSpace(p.ChildCompleteWhen); childWhen != "" {
-		if childWhen == CompleteWhenGatesSatisfied && len(p.ChildGates) == 0 {
+		if childWhen == vocabulary.CompleteWhenGatesSatisfied && len(p.ChildGates) == 0 {
 			return fmt.Errorf("phase %q: child_complete_when gates_satisfied requires child_gates", p.ID)
 		}
 	} else if len(p.ChildGates) > 0 {
@@ -257,7 +258,7 @@ func validatePhaseInvoke(p PhaseDef) error {
 	if p.InvokeWorkflow != nil && strings.TrimSpace(p.EntryWhen) != "" {
 		return fmt.Errorf("phase %q: entry_when cannot combine with invoke_workflow (child handles entry)", p.ID)
 	}
-	if p.CompleteWhen != CompleteWhenGatesSatisfied {
+	if p.CompleteWhen != vocabulary.CompleteWhenGatesSatisfied {
 		return fmt.Errorf("phase %q: invoke_workflow phases must use complete_when: gates_satisfied", p.ID)
 	}
 	hasChildComplete := false
