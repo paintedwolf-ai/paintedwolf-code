@@ -14,8 +14,6 @@ import (
 // Metered like a single skeleton line; no substance windows.
 const KindDirectoryRollup = "directory_rollup"
 
-const rollupTopSymbols = 5
-
 // allocateContextPack divides the budget across a material tree.
 func allocateContextPack(
 	ctx context.Context,
@@ -254,7 +252,7 @@ func emitFanoutTail(
 		Path: fmt.Sprintf("+%d more", n), Kind: SubtreeKindDir,
 		RollupOnly: true, Material: sum,
 	}
-	row := rollupRow(tailNode, nil)
+	row := rollupRow(tailNode)
 	cost := caps.EstimateTokens(rollupSkeletonLine(row))
 	if spent+cost <= budget || stats.ChildrenRolledUp == 0 {
 		pack.Skeleton = append(pack.Skeleton, row)
@@ -328,7 +326,7 @@ func childBudgetShares(
 	}
 	rollupUnit := 1
 	if len(children) > 0 {
-		sample := rollupRow(children[0], nil)
+		sample := rollupRow(children[0])
 		if c := caps.EstimateTokens(rollupSkeletonLine(sample)); c > rollupUnit {
 			rollupUnit = c
 		}
@@ -565,7 +563,7 @@ func emitChildRollup(
 	stats *CuratorStats,
 	spent int,
 ) int {
-	row := rollupRow(c, nil)
+	row := rollupRow(c)
 	cost := caps.EstimateTokens(rollupSkeletonLine(row))
 	if spent+cost <= budget || stats.ChildrenRolledUp+stats.ChildrenDrilled < childCount {
 		pack.Skeleton = append(pack.Skeleton, row)
@@ -831,7 +829,7 @@ func (idx structureIndex) forNode(node *SubtreeNode) []StructureCandidate {
 }
 
 // rollupRow builds a one-line skeleton representation of an undrilled child.
-func rollupRow(child *SubtreeNode, scoped []StructureCandidate) PackSymbol {
+func rollupRow(child *SubtreeNode) PackSymbol {
 	if child == nil {
 		return PackSymbol{Kind: KindDirectoryRollup, Line: 1}
 	}
@@ -839,14 +837,7 @@ func rollupRow(child *SubtreeNode, scoped []StructureCandidate) PackSymbol {
 	if child.UnknownMaterial {
 		detail = "counts pending indexing"
 	}
-	langs := collectLangs(scoped)
-	if langs != "" {
-		detail = fmt.Sprintf("%s · %s", detail, langs)
-	}
-	tops := topSymbolNames(scoped, rollupTopSymbols)
-	if tops != "" {
-		detail = fmt.Sprintf("%s · top: %s", detail, tops)
-	} else if child.Material.Defs > 0 {
+	if child.Material.Defs > 0 {
 		detail = fmt.Sprintf("%s · %d defs", detail, child.Material.Defs)
 	}
 	return PackSymbol{
@@ -859,57 +850,6 @@ func rollupRow(child *SubtreeNode, scoped []StructureCandidate) PackSymbol {
 
 func rollupSkeletonLine(s PackSymbol) string {
 	return fmt.Sprintf("%s %s %s %d", s.Path, s.Kind, s.Name, s.Line)
-}
-
-func collectLangs(scoped []StructureCandidate) string {
-	seen := map[string]bool{}
-	var langs []string
-	for _, s := range scoped {
-		lang := strings.TrimSpace(s.Language)
-		if lang == "" || seen[lang] {
-			continue
-		}
-		seen[lang] = true
-		langs = append(langs, lang)
-	}
-	sort.Strings(langs)
-	if len(langs) > 3 {
-		langs = langs[:3]
-	}
-	return strings.Join(langs, ",")
-}
-
-func topSymbolNames(scoped []StructureCandidate, n int) string {
-	if n <= 0 {
-		return ""
-	}
-	var names []string
-	seen := map[string]bool{}
-	for _, s := range scoped {
-		for _, sym := range s.Symbols {
-			name := strings.TrimSpace(sym.Name)
-			if name == "" || seen[name] {
-				continue
-			}
-			seen[name] = true
-			names = append(names, name)
-			if len(names) >= n {
-				return strings.Join(names, ", ")
-			}
-		}
-		for _, tag := range s.RollupRows {
-			name := strings.TrimSpace(tag)
-			if name == "" || seen[name] {
-				continue
-			}
-			seen[name] = true
-			names = append(names, name)
-			if len(names) >= n {
-				return strings.Join(names, ", ")
-			}
-		}
-	}
-	return strings.Join(names, ", ")
 }
 
 func drillNextAction(child *SubtreeNode, parentPath string) NextAction {

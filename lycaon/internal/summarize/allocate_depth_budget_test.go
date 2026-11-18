@@ -48,7 +48,7 @@ func TestRedistributeRolledUpDepthBudgetConservesAllocation(t *testing.T) {
 		if plan.drill {
 			total += plan.bi
 		} else {
-			total += caps.EstimateTokens(rollupSkeletonLine(rollupRow(plan.child, nil)))
+			total += caps.EstimateTokens(rollupSkeletonLine(rollupRow(plan.child)))
 		}
 	}
 	if total != 1000 || plans[0].bi <= 100 || plans[2].bi <= 200 {
@@ -73,7 +73,7 @@ func TestRedistributeRolledUpDepthBudgetDoesNotDoubleSpendRescue(t *testing.T) {
 		{child: &SubtreeNode{Path: "c.go", Kind: SubtreeKindFile}, bi: 400},
 	}
 	redistributeRolledUpDepthBudget(plans, caps, 1000)
-	coverage := caps.EstimateTokens(rollupSkeletonLine(rollupRow(plans[2].child, nil)))
+	coverage := caps.EstimateTokens(rollupSkeletonLine(rollupRow(plans[2].child)))
 	if got := plans[0].bi + plans[1].bi + coverage; got != 1000 {
 		t.Fatalf("rescue allocation counted twice: %d", got)
 	}

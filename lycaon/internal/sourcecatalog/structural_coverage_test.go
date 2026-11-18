@@ -13,7 +13,7 @@ import (
 
 // subtreeComplete reads current coverage without waiting for a pass.
 func (s *indexStore) subtreeComplete(ctx context.Context, dir string) (bool, error) {
-	navigation, err := openNavigation(ctx, s, headGeneration)
+	navigation, err := openNavigation(ctx, s)
 	if err != nil {
 		return false, err
 	}

@@ -31,7 +31,7 @@ func initDenPerfDebugLog() {
 	if !DenPerfDebugEnabled() {
 		return
 	}
-	log, err := openJSONLDebugLog(true, debugpaths.KindDenPerf)
+	log, err := openJSONLDebugLog(debugpaths.KindDenPerf)
 	if err != nil {
 		slog.Warn("den perf debug logging disabled", "err", err)
 		return

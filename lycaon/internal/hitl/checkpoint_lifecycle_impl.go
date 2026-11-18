@@ -270,7 +270,7 @@ func (m *Checkpoints) resolveCheckpointAdmitted(ctx context.Context, sessionID, 
 	if kind == api.CheckpointKindToolApproval && toolResult != nil && toolResult.Approved {
 		return nil, ErrApprovalOptionRequired
 	}
-	status := decisionStatusFromResolve(kind, toolResult, contentResult)
+	status := decisionStatusFromResult(derefDecisionResult(toolResult))
 	if row.Status != DecisionStatusPending {
 		if row.Status == status && reflect.DeepEqual(row.Result, toolResult) && reflect.DeepEqual(row.ContentResult, contentResult) {
 			return storedToCheckpointResponse(row), nil
