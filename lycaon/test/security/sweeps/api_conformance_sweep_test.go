@@ -479,7 +479,11 @@ func (s *conformanceSweep) recordOutcome(ex conformanceExchange, valid bool) {
 		s.outcomes.succeeded[id] = true
 		return
 	}
-	s.outcomes.lastAnswer[id] = ex.req.probe + " answered " + ex.outcome()
+	answer := ex.req.probe + " answered " + ex.outcome()
+	if ex.apiErr != nil && len(ex.apiErr.Details) > 0 {
+		answer += fmt.Sprintf(" %v", ex.apiErr.Details)
+	}
+	s.outcomes.lastAnswer[id] = answer
 }
 
 // conformanceFixture is the project and chat every sweep starts from, and
