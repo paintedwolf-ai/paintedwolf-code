@@ -51,8 +51,8 @@ func TestCommandServicesComposeProgramParkingAndReceipts(t *testing.T) {
 		} else {
 			original.SourceObserver = nil
 		}
-		if _, err := original.Run(t.Context(), "command", map[string]any{"command": "true"}, tools.ToolContext{}); err == nil {
-			t.Fatalf("program ran without %s", missing)
+		if _, err := original.Run(t.Context(), "command", map[string]any{"command": "true"}, tools.ToolContext{}); err == nil || err.Error() != "command program runtime is not configured" {
+			t.Fatalf("program without %s returned %v", missing, err)
 		}
 	}
 	original.Provenance, original.SourceObserver = provenance, observer
