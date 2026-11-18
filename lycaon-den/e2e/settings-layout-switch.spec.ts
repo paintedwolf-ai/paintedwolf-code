@@ -13,6 +13,11 @@ async function switchSettingsAndLayout(page: Page) {
   const layout = page.getByTestId("layout-dock-btn");
   const tray = page.getByTestId("layout-tray");
 
+  // The dock row is split evenly between its two links.
+  const [settingsBox, layoutBox] = [await settings.boundingBox(), await layout.boundingBox()];
+  expect(Math.abs(settingsBox!.width - layoutBox!.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(settingsBox!.y - layoutBox!.y)).toBeLessThanOrEqual(1);
+
   await settings.click();
   await expect(page.getByTestId("general-settings-panel")).toBeVisible();
   await layout.click();
@@ -55,6 +60,14 @@ webE2e("keeps Layout open when leaving Settings restores a split editor", async 
   await page.getByTestId("files-tree-file").filter({ hasText: "example.md" }).click();
   await expect(page.locator(".cm-content:visible")).toBeVisible();
   await page.getByTestId("layout-dock-btn").click();
+  // The view chooser lays its tiles out two-up.
+  const [inlineBox, splitBox] = [
+    await page.getByTestId("layout-tile-inline").boundingBox(),
+    await page.getByTestId("layout-tile-split").boundingBox(),
+  ];
+  expect(Math.abs(inlineBox!.y - splitBox!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(inlineBox!.width - splitBox!.width)).toBeLessThanOrEqual(1);
+  expect(splitBox!.x).toBeGreaterThan(inlineBox!.x);
   await page.getByTestId("layout-tile-split").click();
   await expect(page.locator(".cm-content:visible")).toBeVisible();
   await switchSettingsAndLayout(page);

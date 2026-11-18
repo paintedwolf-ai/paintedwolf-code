@@ -454,8 +454,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  width: var(--den-transcript-card-width);
-  max-width: 100%;
   padding: 11px 12px 11px 14px;
   border: 1px solid var(--den-line);
   border-radius: var(--den-radius-sm);

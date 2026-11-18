@@ -124,7 +124,7 @@ func promptAnsweringCards(t *testing.T, s *commandProgramSession, prompt string,
 	var cards []wire.CheckpointEvent
 	answered := map[string]bool{}
 	var runErr error
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the prompt ends, answering its cards", func() bool {
 		select {
 		case runErr = <-done:
 			return true
@@ -752,7 +752,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		kind := wire.CheckpointKindToolApproval
 		var card wire.CheckpointEvent
 		approved := map[string]bool{}
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "the tool approval is pending", func() bool {
 			select {
 			case err := <-done:
 				testutil.FailErr(t, promptText, err)
@@ -787,7 +787,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		kind := wire.CheckpointKindToolApproval
 		approved := map[string]bool{}
 		var runErr error
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "the prompt ends, answering its cards", func() bool {
 			select {
 			case runErr = <-done:
 				return true
@@ -851,7 +851,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 	}()
 	kind := wire.CheckpointKindToolApproval
 	answered := map[string]bool{}
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the repeat ends or an approval is pending", func() bool {
 		select {
 		case err := <-done2:
 			testutil.FailErr(t, "step 2 quiet repeat", err)
@@ -1087,7 +1087,7 @@ func TestCommandProgramCurlSecretDeliveryTimingAndUnlockLifecycle(t *testing.T) 
 		}()
 		kind := wire.CheckpointKindToolApproval
 		var card wire.CheckpointEvent
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "the tool approval is pending", func() bool {
 			select {
 			case promptErr := <-done:
 				testutil.FailErr(t, promptText, promptErr)

@@ -2,11 +2,12 @@ package guidance
 
 import (
 	"cmp"
+	"slices"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/noticeerr"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"slices"
-	"strings"
 )
 
 const (

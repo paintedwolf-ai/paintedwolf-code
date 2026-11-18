@@ -299,13 +299,13 @@ func resolveSocketPath(path string, target *targetProcess) (string, bool) {
 // hostSocketCall runs an admitted call on a fresh socket in the host's
 // namespace and, once it succeeds, puts that socket in the target's place.
 func (s *supervisor) hostSocketCall(target *targetProcess, fd, sock int, info socketInfo, req SocketRequest, d Decision) (int64, unix.Errno) {
-	host, err := unix.Socket(info.domain, info.typ|unix.SOCK_CLOEXEC, info.protocol)
+	host, err := unix.Socket(info.domain, info.typ|unix.SOCK_CLOEXEC|unix.SOCK_NONBLOCK, info.protocol)
 	if err != nil {
 		return 0, errnoOf(err, unix.EACCES)
 	}
 	defer func() { _ = unix.Close(host) }()
 	copySocketOptions(sock, host)
-	listener := false
+	listener, inProgress := false, false
 	switch req.Op {
 	case OpBind:
 		family, sa := sockaddrOf(d.Bind)
@@ -326,12 +326,14 @@ func (s *supervisor) hostSocketCall(target *targetProcess, fd, sock int, info so
 		if info.domain == unix.AF_INET6 && req.IP.Addr().Is4() {
 			_, sa = sockaddrOf(netip.AddrPortFrom(netip.AddrFrom16(req.IP.Addr().As16()), req.IP.Port()))
 		}
-		if err := unix.Connect(host, sa); err != nil {
-			return 0, errnoOf(err, unix.ECONNREFUSED)
+		if errno := connectHost(host, sa, target, info.nonblocking); errno == unix.EINPROGRESS {
+			inProgress = true
+		} else if errno != 0 {
+			return 0, errno
 		}
 	}
-	if info.nonblocking {
-		_ = unix.SetNonblock(host, true)
+	if !info.nonblocking {
+		_ = unix.SetNonblock(host, false)
 	}
 	cookie, err := unix.GetsockoptUint64(host, unix.SOL_SOCKET, unix.SO_COOKIE)
 	if err != nil {
@@ -349,7 +351,47 @@ func (s *supervisor) hostSocketCall(target *targetProcess, fd, sock int, info so
 		s.host.forget(cookie)
 		return 0, unix.EINTR
 	}
+	if inProgress {
+		// The installed socket finishes connecting in the target's hands.
+		return 0, unix.EINPROGRESS
+	}
 	return 0, 0
+}
+
+// connectHost starts a connect on the non-blocking host socket. A
+// non-blocking caller gets EINPROGRESS at once, as it would unconfined; a
+// blocking caller waits for the handshake's outcome, or for its own exit.
+func connectHost(host int, sa unix.Sockaddr, target *targetProcess, nonblocking bool) unix.Errno {
+	err := unix.Connect(host, sa)
+	if err == nil {
+		return 0
+	}
+	if !errors.Is(err, unix.EINPROGRESS) {
+		return errnoOf(err, unix.ECONNREFUSED)
+	}
+	if nonblocking {
+		return unix.EINPROGRESS
+	}
+	fds := []unix.PollFd{{Fd: int32(host), Events: unix.POLLOUT}, {Fd: int32(target.pidfd), Events: unix.POLLIN}}
+	for {
+		if _, err := unix.Poll(fds, -1); err != nil {
+			if errors.Is(err, unix.EINTR) {
+				continue
+			}
+			return errnoOf(err, unix.ECONNREFUSED)
+		}
+		if fds[1].Revents != 0 {
+			return unix.EINTR
+		}
+		if fds[0].Revents != 0 {
+			break
+		}
+	}
+	soErr, err := unix.GetsockoptInt(host, unix.SOL_SOCKET, unix.SO_ERROR)
+	if err != nil {
+		return errnoOf(err, unix.ECONNREFUSED)
+	}
+	return unix.Errno(soErr)
 }
 
 // copySocketOptions carries the options a program commonly sets before

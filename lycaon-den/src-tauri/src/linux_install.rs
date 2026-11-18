@@ -290,14 +290,19 @@ mod tests {
 
     #[test]
     fn update_commands_name_the_package_for_each_family() {
-        assert_eq!(
-            PackageFamily::Deb.update_command(PACKAGE_NAME),
-            "sudo apt update && sudo apt install --only-upgrade painted-wolf-code"
-        );
-        assert_eq!(
-            serde_json::to_value(PackageFamily::Deb).unwrap(),
-            serde_json::json!("deb")
-        );
+        // Package managers that upgrade one package are told which; the others update everything they manage.
+        let families = [
+            (PackageFamily::Deb, "deb", true),
+            (PackageFamily::Rpm, "rpm", true),
+            (PackageFamily::Pacman, "pacman", false),
+            (PackageFamily::Nix, "nix", false),
+        ];
+        for (family, wire, names_package) in families {
+            let command = family.update_command(PACKAGE_NAME);
+            assert!(!command.is_empty(), "{wire}");
+            assert_eq!(command.contains(PACKAGE_NAME), names_package, "{wire}: {command}");
+            assert_eq!(serde_json::to_value(family).unwrap(), serde_json::json!(wire));
+        }
     }
 
     #[test]

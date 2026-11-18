@@ -56,7 +56,6 @@ function turnLoadItem(key: string, anchorMessageId: string): RawTranscriptItem {
       role: "tools",
       assistantMessageId: anchorMessageId,
       anchorMessageId,
-      sub: 8,
       load: {
         session_id: "s1", trigger: "turn", opening_message_id: "u1", abstained: false, elapsed_ms: 400,
         engine: { name: "Bialy", label: "Bialy/mmbert-base#turn-load" },
@@ -196,7 +195,7 @@ describe("activity span membership", () => {
     expect(span.entries).toHaveLength(2);
   });
 
-  it("keeps a workflow activity span unified across mid-run progress deltas", () => {
+  it("closes the open span at a plan update, which keeps its own place", () => {
     const projected = projectActivitySpans([
       tool(
         part("r1", "read", "a.go", {
@@ -219,12 +218,27 @@ describe("activity span membership", () => {
       ),
     ]);
 
-    expect(projected.map((item) => item.kind)).toEqual([
-      "activity_span",
-      "progress_update",
-    ]);
-    const span = projected[0] as Extract<TranscriptItem, { kind: "activity_span" }>;
-    expect(span.entries).toHaveLength(2);
+    expect(projected.map((item) => item.key)).toEqual(["r1", "pu-delta-1", "r2"]);
+  });
+
+  it("keeps a command that ran below the diff card above it once it edits a file", () => {
+    const edit = (id: string, path: string) =>
+      tool(
+        part(id, "command", `edit ${path}`, {
+          kind: "command",
+          workflowRunId: "workflow-1",
+          fileEdits: [fileEditPreviewFixture({ path, before: "old", after: "new" })],
+        }),
+      );
+    const running = tool(
+      part("c2", "command", "edit b.go", { kind: "command", workflowRunId: "workflow-1", status: "running" }),
+    );
+
+    const whileRunning = projectActivitySpans([edit("c1", "a.go"), running]);
+    const settled = projectActivitySpans([edit("c1", "a.go"), edit("c2", "b.go")]);
+
+    expect(whileRunning.map((item) => item.key)).toEqual(["c1", "file-edit:c1:0", "c2"]);
+    expect(settled.map((item) => item.key)).toEqual(["c1", "file-edit:c1:0", "c2", "file-edit:c2:0"]);
   });
 
   it("anchors a diff row below the span holding the first write", () => {

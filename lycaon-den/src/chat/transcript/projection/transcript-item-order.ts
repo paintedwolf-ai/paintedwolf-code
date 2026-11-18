@@ -1,147 +1,100 @@
 import type { Message } from "../../../api/types.ts";
-import { type TranscriptItem } from "./transcript-item-model.ts";
+import { activitySpanToolParts } from "../../tool/activity-span-model.ts";
+import { toolDrawsWhileRunning } from "../../tool/tool-part-model.ts";
+import type { ToolPartView } from "../../tool/tool-part-model.ts";
+import type { RawTranscriptItem, TranscriptBuildOptions, TranscriptItem } from "./transcript-item-model.ts";
 
-function messageOrdById(messages: readonly Message[]): Map<string, number> {
-  const index = new Map<string, number>();
-  for (const msg of messages) index.set(msg.id, msg.ord ?? 0);
-  if (!messages.some((msg) => msg.kind === "agent_note")) return index;
-  // A running tool sits at its carrier and a settled one at its result, which
-  // follows the note. Holding the note at the carrier keeps it above both.
-  const ordered = [...messages].sort((a, b) => (a.ord ?? 0) - (b.ord ?? 0));
-  ordered.forEach((msg, at) => {
-    const carrier = ordered[at - 1];
-    if (msg.kind === "agent_note" && carrier?.role === "assistant" && carrier.tool_calls?.length) {
-      index.set(msg.id, carrier.ord ?? 0);
-    }
-  });
-  return index;
-}
-
-/** Maps progress messages to their sub-order. */
-
-function progressSeqById(messages: readonly Message[]): Map<string, number> {
-  const index = new Map<string, number>();
-  for (const msg of messages) {
-    if (msg.progress_update) index.set(msg.id, msg.progress_update.seq ?? 0);
-  }
-  return index;
-}
-
-type OrdIndex = {
-  ordById: Map<string, number>;
-  progressSeqById: Map<string, number>;
+/**
+ * Where rows sit. A row keeps the place it is first drawn at: the ordinal of the message that
+ * first shows it, then its tier within that ordinal.
+ */
+type TranscriptOrder = {
+  ordById: ReadonlyMap<string, number>;
+  /** Notes read above the calls of the assistant row they follow. */
+  noteIds: ReadonlySet<string>;
+  /** Whether a tool's row is drawn before its result arrives. */
+  drawsWhileRunning: (tool: string) => boolean;
 };
 
-export function buildOrdIndex(messages: readonly Message[]): OrdIndex {
-  return {
-    ordById: messageOrdById(messages),
-    progressSeqById: progressSeqById(messages),
-  };
+export function buildTranscriptOrder(
+  messages: readonly Message[],
+  opts: TranscriptBuildOptions = {},
+): TranscriptOrder {
+  const ordById = new Map<string, number>();
+  const noteIds = new Set<string>();
+  for (const msg of messages) ordById.set(msg.id, msg.ord ?? 0);
+  if (messages.some((msg) => msg.kind === "agent_note")) {
+    const ordered = [...messages].sort((a, b) => (a.ord ?? 0) - (b.ord ?? 0));
+    ordered.forEach((msg, at) => {
+      const carrier = ordered[at - 1];
+      if (msg.kind === "agent_note" && carrier?.role === "assistant" && carrier.tool_calls?.length) {
+        ordById.set(msg.id, carrier.ord ?? 0);
+        noteIds.add(msg.id);
+      }
+    });
+  }
+  const view = { verboseMode: opts.verboseMode ?? false, layout: opts.layout ?? "chat" } as const;
+  return { ordById, noteIds, drawsWhileRunning: (tool) => toolDrawsWhileRunning(tool, view) };
 }
 
-/** Tool rows follow prose at the same ordinal. */
-
-const TOOL_SUB_ORDINAL_BASE = 10;
-/** Inline checkpoints follow their tool row. */
-
-const CHECKPOINT_SUB_ORDINAL = TOOL_SUB_ORDINAL_BASE + 1;
-/** Diffs follow tools and checkpoints at their anchor. */
-
-const FILE_EDIT_SUB_ORDINAL = 20;
-/** A day or gap label precedes its row, and a new marker follows the label. */
-
-const TIME_MARKER_SUB_ORDINAL = -2;
-
-const UNREAD_MARKER_SUB_ORDINAL = -1;
-/** A turn's tail follows everything anchored at its last message. */
-
-const TURN_TAIL_SUB_ORDINAL = 1000;
-
-/** Transcript order uses creation and structural ordinals. */
+/** Order within one ordinal. */
+const TIER = {
+  /** The message's own row. */
+  row: 0,
+  note: 1,
+  /** Decision rows precede the calls they decided for. */
+  decision: 2,
+  /** Calls in batch order, each followed by its approval. */
+  call: 3,
+  diff: 4,
+} as const;
 
 export type TranscriptOrdSortKey = {
   ord: number;
-  sub: number;
+  tier: number;
+  /** Position within the tier. */
+  index: number;
 };
 
-function transcriptItemOrdKey(
-  item: TranscriptItem,
-  ordById: Map<string, number>,
-  progressSeqById: Map<string, number>,
-): TranscriptOrdSortKey {
+const UNORDERED = Number.MAX_SAFE_INTEGER;
+
+/** A call's row sits at its assistant row when drawn while running, otherwise at its result. */
+function callOrd(part: ToolPartView, order: TranscriptOrder): number {
+  const id = order.drawsWhileRunning(part.tool) ? part.assistantMessageId : part.messageId;
+  return order.ordById.get(id) ?? UNORDERED;
+}
+
+function transcriptItemOrdKey(item: RawTranscriptItem, order: TranscriptOrder): TranscriptOrdSortKey {
+  const at = (id: string, tier: number, index = 0): TranscriptOrdSortKey => ({
+    ord: order.ordById.get(id) ?? UNORDERED,
+    tier,
+    index,
+  });
   switch (item.kind) {
-    case "pending_user":
-      return { ord: Number.MAX_SAFE_INTEGER, sub: 0 };
     case "user":
     case "assistant":
     case "draft":
     case "progress_complete":
+    case "progress_update":
     case "workflow_feedback":
     case "workflow_explain":
     case "workflow_boundary":
     case "index_warming":
     case "blueprint_card":
     case "fallback":
-      return { ord: ordById.get(item.key) ?? Number.MAX_SAFE_INTEGER, sub: 0 };
-    case "progress_update":
-      return {
-        ord: ordById.get(item.key) ?? Number.MAX_SAFE_INTEGER,
-        sub: progressSeqById.get(item.key) ?? 0,
-      };
+      return at(item.key, order.noteIds.has(item.key) ? TIER.note : TIER.row);
     case "tool":
-      return {
-        ord: ordById.get(item.part.messageId) ?? Number.MAX_SAFE_INTEGER,
-        sub: TOOL_SUB_ORDINAL_BASE + (item.batchOrder ?? 0),
-      };
+      return { ord: callOrd(item.part, order), tier: TIER.call, index: 2 * (item.batchOrder ?? 0) };
+    case "checkpoint": {
+      const call = item.call;
+      if (!call) return at(item.parentMessageId, TIER.call, 1);
+      const atResult = call.resultMessageId !== undefined && !order.drawsWhileRunning(call.tool);
+      return at(atResult ? call.resultMessageId! : item.parentMessageId, TIER.call, 2 * call.index + 1);
+    }
     case "turn_load":
-      return {
-        ord: ordById.get(item.row.anchorMessageId) ?? Number.MAX_SAFE_INTEGER,
-        sub: item.row.sub,
-      };
-    case "checkpoint":
-      return {
-        ord: ordById.get(item.parentMessageId) ?? Number.MAX_SAFE_INTEGER,
-        sub: CHECKPOINT_SUB_ORDINAL,
-      };
-    case "activity_span": {
-      let minOrd = Number.MAX_SAFE_INTEGER;
-      for (const entry of item.entries) {
-        const id = entry.kind === "tool" ? entry.part.messageId
-          : entry.kind === "turn_load" ? entry.row.anchorMessageId : entry.key;
-        const ord = ordById.get(id) ?? Number.MAX_SAFE_INTEGER;
-        if (ord < minOrd) minOrd = ord;
-      }
-      return { ord: minOrd, sub: 0 };
-    }
-    case "worker_group": {
-      let minOrd = Number.MAX_SAFE_INTEGER;
-      for (const part of item.parts) {
-        const ord = ordById.get(part.messageId) ?? Number.MAX_SAFE_INTEGER;
-        if (ord < minOrd) minOrd = ord;
-      }
-      return { ord: minOrd, sub: TOOL_SUB_ORDINAL_BASE };
-    }
+      return at(item.row.anchorMessageId, TIER.decision);
     case "worker_file_edit":
-    case "file_edit":
-      return {
-        ord: ordById.get(item.anchorMessageId) ?? Number.MAX_SAFE_INTEGER,
-        sub: FILE_EDIT_SUB_ORDINAL,
-      };
-    case "time_marker":
-      return {
-        ord: ordById.get(item.anchorMessageId) ?? Number.MAX_SAFE_INTEGER,
-        sub: TIME_MARKER_SUB_ORDINAL,
-      };
-    case "unread_marker":
-      return {
-        ord: ordById.get(item.anchorMessageId) ?? Number.MAX_SAFE_INTEGER,
-        sub: UNREAD_MARKER_SUB_ORDINAL,
-      };
-    case "turn_tail":
-      return {
-        ord: ordById.get(item.anchorMessageId) ?? Number.MAX_SAFE_INTEGER,
-        sub: TURN_TAIL_SUB_ORDINAL,
-      };
+      return at(item.anchorMessageId, TIER.diff);
     default: {
       const _exhaustive: never = item;
       return _exhaustive;
@@ -149,75 +102,87 @@ function transcriptItemOrdKey(
   }
 }
 
-/** The message ordinal a presented row sits at; undefined while the row has no durable ordinal. */
+/** Every message that places a row. */
+export function transcriptRowMessageIds(item: TranscriptItem): string[] {
+  switch (item.kind) {
+    case "tool":
+      return [item.part.messageId];
+    case "checkpoint":
+      return [item.parentMessageId];
+    case "activity_span":
+      return activitySpanToolParts(item.entries).map((part) => part.messageId);
+    case "worker_group":
+      return item.parts.map((part) => part.messageId);
+    case "turn_load":
+      return [item.row.anchorMessageId];
+    case "file_edit":
+    case "worker_file_edit":
+    case "time_marker":
+    case "unread_marker":
+    case "turn_tail":
+      return [item.anchorMessageId];
+    default:
+      return [item.key];
+  }
+}
+
+/** The first message ordinal a presented row holds; undefined while it has no durable ordinal. */
 export function transcriptItemOrd(
   item: TranscriptItem,
   ordById: ReadonlyMap<string, number>,
 ): number | undefined {
-  const { ord } = transcriptItemOrdKey(item, ordById as Map<string, number>, new Map());
-  return ord > 0 && ord < Number.MAX_SAFE_INTEGER ? ord : undefined;
+  let first: number | undefined;
+  for (const id of transcriptRowMessageIds(item)) {
+    const ord = ordById.get(id);
+    if (ord !== undefined && ord > 0 && (first === undefined || ord < first)) first = ord;
+  }
+  return first;
 }
 
-/** Canonical (ord, sub) for rendered transcript order checks. */
-
+/** A row's place, for rendered transcript order checks. */
 export function transcriptItemOrdSortKey(
-  item: TranscriptItem,
+  item: RawTranscriptItem,
   messages: readonly Message[],
+  opts?: TranscriptBuildOptions,
 ): TranscriptOrdSortKey {
-  const index = buildOrdIndex(messages);
-  return transcriptItemOrdKey(
-    item,
-    index.ordById,
-    index.progressSeqById,
-  );
+  return transcriptItemOrdKey(item, buildTranscriptOrder(messages, opts));
 }
 
 export function compareTranscriptOrdSortKeys(
   a: TranscriptOrdSortKey,
   b: TranscriptOrdSortKey,
 ): number {
-  if (a.ord !== b.ord) return a.ord - b.ord;
-  return a.sub - b.sub;
+  return a.ord - b.ord || a.tier - b.tier || a.index - b.index;
 }
 
-/** Sorts by creation order, then structural order. */
-
-export function sortTranscriptItemsByOrd<T extends TranscriptItem>(
+export function sortTranscriptItemsByOrd<T extends RawTranscriptItem>(
   items: readonly T[],
   messages: readonly Message[],
+  opts?: TranscriptBuildOptions,
 ): T[] {
-  return sortItemsWithIndex(items, buildOrdIndex(messages));
+  return sortItemsInOrder(items, buildTranscriptOrder(messages, opts));
 }
 
 /**
- * A row whose message is outside the ord index shares its neighbor's key, so the stable sort keeps
- * it where the span placed it instead of sending it to the tail. A pending send stays last.
+ * A row whose message is outside the order shares its neighbor's key, so the stable sort keeps
+ * it where the span placed it instead of sending it to the tail.
  */
-function holdUnorderedRowsInPlace(rows: { item: TranscriptItem; key: TranscriptOrdSortKey }[]): void {
-  const unordered = (row: (typeof rows)[number]) =>
-    row.key.ord === Number.MAX_SAFE_INTEGER && row.item.kind !== "pending_user";
+function holdUnorderedRowsInPlace(rows: { key: TranscriptOrdSortKey }[]): void {
   let previous: TranscriptOrdSortKey | undefined;
   for (const row of rows) {
-    if (!unordered(row)) previous = row.key;
+    if (row.key.ord !== UNORDERED) previous = row.key;
     else if (previous) row.key = previous;
   }
-  const leading = rows.find((row) => !unordered(row))?.key;
+  const leading = rows.find((row) => row.key.ord !== UNORDERED)?.key;
   if (!leading) return;
   for (const row of rows) {
-    if (!unordered(row)) break;
+    if (row.key.ord !== UNORDERED) break;
     row.key = leading;
   }
 }
 
-export function sortItemsWithIndex<T extends TranscriptItem>(items: readonly T[], index: OrdIndex): T[] {
-  const indexed = items.map((item) => ({
-    item,
-    key: transcriptItemOrdKey(
-      item,
-      index.ordById,
-      index.progressSeqById,
-    ),
-  }));
+export function sortItemsInOrder<T extends RawTranscriptItem>(items: readonly T[], order: TranscriptOrder): T[] {
+  const indexed = items.map((item) => ({ item, key: transcriptItemOrdKey(item, order) }));
   holdUnorderedRowsInPlace(indexed);
   indexed.sort((a, b) => compareTranscriptOrdSortKeys(a.key, b.key));
   return indexed.map((row) => row.item);

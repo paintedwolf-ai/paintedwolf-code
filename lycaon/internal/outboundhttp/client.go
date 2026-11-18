@@ -116,6 +116,15 @@ type Request struct {
 	// that part of the first hop's request leaves host custody.
 	OnFirstHopHeadersDispatched func()
 	OnFirstHopBodyDispatched    func()
+	// clock measures the I/O time charged to Timeout; the wall clock when nil.
+	clock func() time.Time
+}
+
+func (in Request) now() time.Time {
+	if in.clock != nil {
+		return in.clock()
+	}
+	return time.Now()
 }
 
 // HopRequest describes one HTTP hop presented to BeforeHopRequest before
@@ -281,7 +290,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		if remaining <= 0 {
 			return Response{}, context.DeadlineExceeded
 		}
-		ioStarted := time.Now()
+		ioStarted := in.now()
 		// Approval waits use the session-stop context outside the turn deadline.
 		ioCtx, ioCancel := hitl.IOContext(ctx, remaining)
 		transport, dnsElapsed, err := in.transportForHop(ioCtx, current)
@@ -352,8 +361,8 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			return res, finishErr
 		}
 		_ = resp.Body.Close()
-		ioElapsed += time.Since(ioStarted)
-		hopTiming.Total = time.Since(ioStarted).Milliseconds()
+		ioElapsed += in.now().Sub(ioStarted)
+		hopTiming.Total = in.now().Sub(ioStarted).Milliseconds()
 		transport.CloseIdleConnections()
 		ioCancel()
 		dispatch.finish()
@@ -388,8 +397,8 @@ func (in Request) finishResponse(
 ) (Response, error) {
 	tlsInfo := observed.TLS
 	result, readErr := readResponse(resp, method, current.String(), hops, limit, in.TruncateBody, in.DiscardBody, in.StreamBody, hopTiming)
-	ioElapsed += time.Since(ioStarted)
-	hopTiming.Total = time.Since(ioStarted).Milliseconds()
+	ioElapsed += in.now().Sub(ioStarted)
+	hopTiming.Total = in.now().Sub(ioStarted).Milliseconds()
 	transport.CloseIdleConnections()
 	ioCancel()
 	if in.WireHeaders {

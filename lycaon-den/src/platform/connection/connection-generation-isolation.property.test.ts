@@ -115,6 +115,9 @@ function createSessionFixture(id: string, projectId: string): Session {
   };
 }
 
+/** Schedules drawn from the fixed seed; each replays three generations in a different order. */
+const SEEDED_INTERLEAVINGS = 64;
+
 describe("connection generation isolation - domain level invariants", () => {
   it("ConnectionHost enforces strict generation and client fencing on assertCurrent", () => {
     createLycaonClient.mockImplementation(() => stubClient({}));
@@ -456,7 +459,7 @@ describe("connection generation isolation - state purity property", () => {
     expect(perturbedStateJson).toEqual(cleanStateJson);
   });
 
-  it("Property: deterministic pseudo-random interleaving across 3 successive generations preserves state purity and generation fencing", async () => {
+  it("Property: seeded pseudo-random interleavings across 3 successive generations preserve state purity and generation fencing", async () => {
     const mod = await loadModule();
 
     let seed = 0xdeadbeef;
@@ -465,7 +468,7 @@ describe("connection generation isolation - state purity property", () => {
       return seed / 4294967296;
     }
 
-    for (let iteration = 0; iteration < 3; iteration++) {
+    for (let iteration = 0; iteration < SEEDED_INTERLEAVINGS; iteration++) {
       mod.disconnectAppBackend();
       const stores = setupStores(mod);
 

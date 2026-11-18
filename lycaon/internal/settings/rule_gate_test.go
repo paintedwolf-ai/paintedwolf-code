@@ -71,7 +71,7 @@ func TestRuleApprovalGateProjectDeny(t *testing.T) {
 		Pattern:  "write",
 		Effect:   settings.ApprovalEffectDeny,
 	}}}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.PutProject failed", err)
 	}
 	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
 	res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{

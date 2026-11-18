@@ -163,7 +163,6 @@ func TestReconcileOrphanedRunsSkipsSessionsActiveSinceBoot(t *testing.T) {
 	mgr.Recovery.Before = time.Now().UTC()
 
 	// Resumed activity under this process: a turn starts and finishes.
-	time.Sleep(2 * time.Millisecond)
 	execution, err := store.BeginTurn(ctx, sessionstore.TurnStart{
 		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: sessionstore.TurnOriginUser, InputJSON: "{}",
 	})
@@ -196,9 +195,7 @@ func TestReconcileOrphanedRunsInterruptsRunsOfSessionsOnlyTouchedSinceBoot(t *te
 	}
 	testutil.FailErr(t, "create run", mgr.Store.State.CreateState(ctx, run, sess.WorkspacePath, nil))
 
-	time.Sleep(2 * time.Millisecond)
 	mgr.Recovery.Before = time.Now().UTC()
-	time.Sleep(2 * time.Millisecond)
 	testutil.FailErr(t, "SetSessionStatus idle", store.SetSessionStatus(ctx, sess.ID, api.SessionStatusIdle))
 	testutil.FailErr(t, "rename", store.UpdateSession(ctx, sess.ID, func(s *api.Session) {
 		s.Title = "Renamed after restart"
@@ -227,7 +224,6 @@ func TestReconcileOrphanedRunsInterruptsUntouchedPreBootRuns(t *testing.T) {
 	}
 	testutil.FailErr(t, "create run", mgr.Store.State.CreateState(ctx, run, sess.WorkspacePath, nil))
 
-	time.Sleep(2 * time.Millisecond)
 	mgr.Recovery.Before = time.Now().UTC()
 
 	testutil.FailErr(t, "reconcile", mgr.Recovery.ReconcileOrphanedRuns(ctx, sess.ID))
@@ -262,7 +258,6 @@ func TestReconcileOrphanedRunsPreservesPendingUserInput(t *testing.T) {
 	))
 
 	// Model the next sidecar boot: the run and session both predate its cutoff.
-	time.Sleep(2 * time.Millisecond)
 	mgr.Recovery.Before = time.Now().UTC()
 
 	testutil.FailErr(t, "reconcile", mgr.Recovery.ReconcileOrphanedRuns(ctx, sess.ID))
@@ -294,7 +289,6 @@ func TestReconcileOrphanedRunsPreservesHumanApproval(t *testing.T) {
 	mgr.Recovery.Busy = func(context.Context, string) bool { return false }
 
 	// Model the next sidecar boot after the approval bar was already present.
-	time.Sleep(2 * time.Millisecond)
 	mgr.Recovery.Before = time.Now().UTC()
 	testutil.FailErr(t, "reconcile", mgr.Recovery.ReconcileOrphanedRuns(ctx, run.SessionID))
 	got, err := mgr.Store.Runs.Get(ctx, run.ID)

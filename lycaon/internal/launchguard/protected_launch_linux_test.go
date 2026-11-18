@@ -182,7 +182,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	}
 	close(stopProbe)
 	if err := <-probeErr; err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "probe the protected desktop", err)
 	}
 	var facts protectedFacts
 	if err := json.Unmarshal([]byte(line), &facts); err != nil {

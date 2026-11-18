@@ -21,8 +21,9 @@ func TestControlCloseInterruptsDescriptorReceive(t *testing.T) {
 		if err != nil {
 			t.Fatalf("create control pair: %v", err)
 		}
-		if err := parent.SetReadDeadline(time.Now().Add(testutil.Timeout(time.Minute))); err != nil {
-			t.Fatalf("register control deadline: %v", err)
+		// A zero deadline is accepted only by a descriptor the runtime poller owns, which close can wake.
+		if err := parent.SetReadDeadline(time.Time{}); err != nil {
+			t.Fatalf("control endpoint is not pollable: %v", err)
 		}
 		done := make(chan error, 1)
 		started := make(chan struct{})
@@ -46,13 +47,8 @@ func TestControlCloseInterruptsDescriptorReceive(t *testing.T) {
 		if err := parent.Close(); err != nil {
 			t.Fatalf("close control endpoint: %v", err)
 		}
-		select {
-		case err := <-done:
-			if !errors.Is(err, os.ErrClosed) {
-				t.Errorf("closed receive: got %v, want closed file", err)
-			}
-		case <-t.Context().Done():
-			t.Error("control receive outlived its closed endpoint")
+		if err := testutil.Receive(t, "closing the endpoint ends the receive", done); !errors.Is(err, os.ErrClosed) {
+			t.Errorf("closed receive: got %v, want closed file", err)
 		}
 		if err := child.Close(); err != nil {
 			t.Fatalf("close child endpoint: %v", err)

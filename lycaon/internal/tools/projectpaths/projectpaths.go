@@ -359,7 +359,7 @@ func UnionDiscoveryRoots(ctx context.Context, tctx tools.ToolContext, modelPath 
 					return refs, nil
 				}
 			}
-			return []projectroot.RootRef{{ID: "worker-branch", Path: branch, IsPrimary: true}}, nil
+			return []projectroot.RootRef{{ID: projectroot.WorkerBranchRootID, Path: branch, IsPrimary: true}}, nil
 		}
 		return tctx.Source.Roots, nil
 	}

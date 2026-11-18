@@ -6,9 +6,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/oar"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/oar"
 
 	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"

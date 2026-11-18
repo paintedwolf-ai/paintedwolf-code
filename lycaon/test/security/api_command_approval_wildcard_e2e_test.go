@@ -114,7 +114,7 @@ func TestCommandApprovalWildcardAskSSEMetadataE2E(t *testing.T) {
 	}()
 
 	var checkpointID string
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the command approval is pending", func() bool {
 		kind := wire.CheckpointKindToolApproval
 		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, &kind)
 		if err == nil && len(pending) == 1 {
@@ -125,7 +125,7 @@ func TestCommandApprovalWildcardAskSSEMetadataE2E(t *testing.T) {
 	})
 
 	var sawMatch bool
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the checkpoint event arrives", func() bool {
 		select {
 		case envelope, ok := <-ch:
 			if !ok {

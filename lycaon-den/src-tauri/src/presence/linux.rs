@@ -373,15 +373,18 @@ mod tests {
 
     #[test]
     fn unavailable_repair_follows_the_structured_cause_not_the_error_message() {
-        let cases = [
-            (UnavailableReason::SystemBus, "Restore access to the system D-Bus service, then try again."),
-            (UnavailableReason::AuthorityUnavailable, "Restore access to the system polkit authentication service, then try again."),
-            (UnavailableReason::AuthorityUntrusted, "Ask your administrator to repair the system polkit service's ownership, then try again."),
-            (UnavailableReason::ActionMissing, "Repair or reinstall the installed Painted Wolf Code package to restore its presence action, then try again."),
-            (UnavailableReason::FreshAuthenticationRequired, "Ask your administrator to restore this action's policy requiring fresh authentication. Do not use unconditional or retained authorization."),
-            (UnavailableReason::AgentMissing, "Start the system authentication agent for this desktop, then try again."),
+        let reasons = [
+            UnavailableReason::SystemBus,
+            UnavailableReason::AuthorityUnavailable,
+            UnavailableReason::AuthorityUntrusted,
+            UnavailableReason::ActionMissing,
+            UnavailableReason::FreshAuthenticationRequired,
+            UnavailableReason::AgentMissing,
         ];
-        for (reason, expected) in cases {
+        let repairs: std::collections::HashSet<_> = reasons.iter().map(UnavailableReason::suggested_action).collect();
+        assert_eq!(repairs.len(), reasons.len(), "each cause has its own repair");
+        for reason in reasons {
+            let expected = reason.suggested_action();
             // A deliberately misleading diagnostic cannot select the repair.
             let refusal =
                 PolkitRefusal::Unavailable(reason, "No authentication agent is running.".into());

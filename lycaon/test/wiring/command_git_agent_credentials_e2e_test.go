@@ -136,7 +136,7 @@ func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
 		done <- err
 	}()
 	kind := wire.CheckpointKindToolApproval
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the second ls-remote ends or asks", func() bool {
 		select {
 		case err := <-done:
 			testutil.FailErr(t, "second ls-remote", err)
