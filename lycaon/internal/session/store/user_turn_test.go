@@ -70,7 +70,7 @@ func TestTurnNumbersAreNotReusedAfterTranscriptTruncation(t *testing.T) {
 			second := first
 			second.ID = uuid.NewString()
 			testutil.FailErr(t, "append turns", st.Transcript.AppendMessages(ctx, sess.ID, first, second))
-			rewindFrom(t, st.(*Repositories), sess.ID, first.ID)
+			rewindFrom(t, st, sess.ID, first.ID)
 			empty, err := st.Sessions.Get(ctx, sess.ID)
 			testutil.FailErr(t, "read rewound session", err)
 			if empty.CurrentTurn != 0 {
