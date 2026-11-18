@@ -218,7 +218,7 @@ func TestCoordinatorPromptIncludesPackBoardInject(t *testing.T) {
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	testdbseed.BindSessionWorkspace(t, store.DB(), sess.ID, dir)
+	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "plan"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}

@@ -61,7 +61,7 @@ func TestPackParallelProbeDispatch(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
 	_, err = orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -81,7 +81,7 @@ func TestPackFirstValidSkipsFailedProbe(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
 	result, err := orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -106,7 +106,7 @@ func TestPackProbeYamlMockRun(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
 	result, err := orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -132,7 +132,7 @@ func TestPackAllFailReturnsError(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
 	_, err = orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,

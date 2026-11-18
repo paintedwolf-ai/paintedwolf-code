@@ -33,7 +33,7 @@ func TestStateToolsRespectProjectDir(t *testing.T) {
 	dirB := t.TempDir()
 	sess, err := sessStore.Create(context.Background(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "sessStore.Create failed", err)
-	testdbseed.BindSessionWorkspace(t, sessStore.DB(), sess.ID, dirA)
+	testdbseed.BindSessionWorkspace(t, sessStore, sess.ID, dirA)
 
 	_, err = toolReg.Run(context.Background(), "state_query", nil, SecurityToolContext(sess.ID, dirB, ""))
 	if err == nil {
