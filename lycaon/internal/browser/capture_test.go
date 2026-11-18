@@ -18,9 +18,10 @@ import (
 	"github.com/lycaon/lycaon/internal/browserengine"
 	"github.com/lycaon/lycaon/internal/browserengine/browsertest"
 	"github.com/lycaon/lycaon/internal/captureprojection"
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
+
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 )
 
 func fixtureDir(t *testing.T, name string) string {
@@ -545,7 +546,7 @@ func TestCaptureURLReachesHostLoopback(t *testing.T) {
 		t.Skip("browser capture")
 	}
 	browsertest.SkipIfNoBrowser(t)
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

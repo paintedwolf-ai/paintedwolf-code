@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	lexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitexec"
@@ -64,7 +65,7 @@ func TestSelectionRefusesOverLimitWorkWithoutEnforcement(t *testing.T) {
 // The real enforcer selects a mount only after proving denial against one, and a view it verifies
 // stays mounted and usable afterward.
 func TestRealEnforcerSelectsAndVerifiesAMountedView(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	if !confine.Available() {
 		t.Skip("this host applies no confinement")
 	}

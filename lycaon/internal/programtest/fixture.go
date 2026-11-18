@@ -14,7 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -110,7 +110,7 @@ func (p progressFacts) ProgramProgressState(ctx context.Context, id string) (pro
 // New composes the entry. Structured tools exist only as owner identities.
 func New(t testing.TB, options Options) *Fixture {
 	t.Helper()
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
 	t.Setenv("LYCAON_SANDBOX", "on")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 	"github.com/lycaon/lycaon/internal/scan"
 )
 
@@ -12,7 +13,7 @@ func TestBundledScannerConfinementDeniesNetwork(t *testing.T) {
 	if !confine.Available() {
 		t.Skip("OS confinement unavailable")
 	}
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	projectDir := t.TempDir()
