@@ -105,7 +105,7 @@ fn prefill_builds_every_nonshared_bank_for_dense_and_routed_models() {
         cache.evaluate().unwrap();
         assert_eq!(cache.bytes(), 5 * 2 * 256 * 4 + 4 * 512 * 4);
         let next = model
-            .forward(&[4], &mut cache, Logits::Last)
+            .forward(&[4, 5], &mut cache, Logits::Last)
             .unwrap()
             .unwrap();
         assert_eq!(next.shape(), &[1, 1, 128]);

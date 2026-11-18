@@ -342,6 +342,9 @@ impl Model {
         if matches!(output, Logits::None) {
             return Ok(None);
         }
+        if matches!(output, Logits::Last) {
+            h = h.index((.., -1.., ..));
+        }
         let logits = self.embedding.forward(&norm(&h, &self.final_norm)?)?;
         let cap = Array::from_f32(30.0).as_dtype(logits.dtype())?;
         Ok(Some(ops::tanh(logits.divide(&cap)?)?.multiply(&cap)?))
