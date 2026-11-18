@@ -1,11 +1,12 @@
 package guidance
 
 import (
-	"github.com/lycaon/lycaon/internal/evidence"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/evidence"
 )
 
 const FindingUngroundedCode = "FINDING_UNGROUNDED"

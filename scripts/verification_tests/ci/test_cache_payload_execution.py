@@ -109,7 +109,7 @@ class CachePayloadTests(unittest.TestCase):
         import yaml
         root = Path(__file__).resolve().parents[3]
         setup = yaml.safe_load((root / ".github/actions/setup-verification/action.yml").read_text())
-        metadata = {"paths", "go", "analysis", "document", "rust", "decide", "opengrep", "notices", "bun"}
+        metadata = {"paths", "go", "modules", "analysis", "document", "rust", "decide", "generation", "opengrep", "notices", "bun"}
         for step in setup["runs"]["steps"]:
             if step.get("id") not in metadata:
                 self.assertIn("inputs.lookup-only != 'true'", step.get("if", ""), step)
@@ -127,7 +127,7 @@ class CachePayloadTests(unittest.TestCase):
     def test_native_lookup_and_save_have_identical_payload_versions(self):
         import yaml
         root = Path(__file__).resolve().parents[3]
-        for name in ("cache-go", "cache-rust", "cache-decide", "cache-document-core", "cache-release-build",
+        for name in ("cache-go", "cache-rust", "cache-decide", "cache-generation", "cache-document-core", "cache-release-build",
                      "cache-notices-tools", "cache-analysis-tools", "cache-lint-diagnostics", "setup-opengrep",
                      "setup-linux-native", "setup-webkit-atspi-images", "setup-verification"):
             action = yaml.safe_load((root / f".github/actions/{name}/action.yml").read_text())
@@ -147,6 +147,7 @@ class CachePayloadTests(unittest.TestCase):
     def test_compiler_keys_include_their_payload_policy(self):
         root = Path(__file__).resolve().parents[3]
         for family, warm_script in (("decide", "warm-workspace-build.sh"),
+                                    ("generation", "warm-workspace-build.sh"),
                                     ("rust", "warm-workspace-build.sh"),
                                     ("release-build", "warm-release-build.sh")):
             source = (root / f".github/actions/cache-{family}/action.yml").read_text()

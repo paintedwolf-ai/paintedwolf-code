@@ -7,6 +7,7 @@ from unittest.mock import patch
 from ci_policy import ready_scope
 
 CONTRACTS = ['./task', 'test:contract', '--', './test/contract/...']
+INTEGRATION = ['./task', 'test:integration:changes']
 
 
 class ReadyScopeTests(unittest.TestCase):
@@ -23,7 +24,7 @@ class ReadyScopeTests(unittest.TestCase):
             stack.enter_context(patch('coverage_changes.go_packages', return_value=metadata))
             stack.enter_context(patch('coverage_changes.exempt_packages', return_value=['internal/exempt']))
             stack.enter_context(patch.object(ready_scope, 'catalog', return_value=data))
-            return ready_scope.test_phases({'full': selected is None, 'paths': list(changed)})
+            return ready_scope.short_phases({'full': selected is None, 'paths': list(changed)})
 
     def test_contracts_always_run_before_the_affected_short_tests(self):
         selected, packages = self.phases(['./test/contract/host', './internal/foo', './test/smoke'])
@@ -32,7 +33,8 @@ class ReadyScopeTests(unittest.TestCase):
 
     def test_unknown_scope_runs_the_complete_short_recipe(self):
         self.assertEqual(self.phases(None), ([CONTRACTS, ['./task', 'test:short']], None))
-        self.assertEqual(ready_scope.test_phases(None), ([CONTRACTS, ['./task', 'test:short']], None))
+        self.assertEqual(ready_scope.test_phases(None),
+                         ([CONTRACTS, ['./task', 'test:short'], INTEGRATION], None))
 
     def test_empty_affected_go_scope_has_no_empty_invocation(self):
         selected, packages = self.phases(['./test/contract/host'])
@@ -70,10 +72,28 @@ class ReadyScopeTests(unittest.TestCase):
                 self.assertRaises(ValueError):
             ready_scope.test_phases({'full': False, 'paths': ['lycaon/internal/changed/a.go']})
 
+    def test_edited_packages_run_their_integration_tests_after_the_short_tests(self):
+        with patch('ci_policy.impact.go_scope', return_value=['./test/contract/host']):
+            selected, packages = ready_scope.test_phases({'full': False, 'paths': ['lycaon-den/src/ui.ts']})
+        self.assertEqual((selected, packages), ([CONTRACTS, INTEGRATION], []))
+
     def test_checks_run_native_admission_then_early_targets_then_the_rest(self):
         with patch('ci_policy.native_admission.commands', return_value=[['./task', 'native']]):
             self.assertEqual(ready_scope.check_phases(['build', 'budgets', 'docs:links'], {'full': False}, ['budgets', 'absent']),
                              [['./task', 'native'], ['./task', 'budgets'], ['./task', 'build', 'docs:links']])
+
+    def test_cross_platform_build_runs_only_when_go_can_compile_differently(self):
+        targets = ['build', 'build:cross', 'budgets']
+        with patch('ci_policy.native_admission.commands', return_value=[]):
+            for scope in (None, {'full': True, 'paths': []}, {'full': False, 'paths': ['lycaon/internal/a/a.go']},
+                          {'full': True, 'paths': ['lycaon/go.sum']}):
+                with self.subTest(scope=scope):
+                    self.assertEqual(ready_scope.check_phases(targets, scope, ['budgets']),
+                                     [['./task', 'budgets'], ['./task', 'build', 'build:cross']])
+            for paths in (['lycaon-den/src/ui.ts'], ['lycaon/internal/a/testdata/case.json']):
+                with self.subTest(paths=paths):
+                    self.assertEqual(ready_scope.check_phases(targets, {'full': False, 'paths': paths}, ['budgets']),
+                                     [['./task', 'budgets'], ['./task', 'build']])
 
 
 if __name__ == '__main__':

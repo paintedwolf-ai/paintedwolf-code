@@ -67,6 +67,11 @@ webE2e.describe("routed return to the conversation", () => {
     await filesBack(page).click();
     await expect(liveChatStage(page).getByTestId("chat-stream")).toBeVisible();
     await expect(filesBack(page)).toHaveCount(0);
+
+    // Opening Files from the Context rail is a deliberate arrival: it offers no return.
+    await page.getByTestId("project-files-entry").click();
+    await expect(page.getByTestId("files-editor-host")).toBeVisible();
+    await expect(filesBack(page)).toHaveCount(0);
   });
 
   webE2e("a split never offers a return to the conversation beside it", async ({ page, request }) => {

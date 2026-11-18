@@ -2,7 +2,6 @@ package prompts_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -67,17 +67,13 @@ func TestPromptFilesOverlayWins(t *testing.T) {
 
 func TestOverlayCannotDropRequiredPartial(t *testing.T) {
 	site := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(site, "partials"), 0o755); err != nil {
-		testutil.FailErr(t, "create directory", err)
-	}
-	if err := os.WriteFile(filepath.Join(site, "partials", "advisory-vs-gates.md"), []byte("\n"), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	contract, err := prompts.LoadPersonaContract()
-	testutil.FailErr(t, "prompts.LoadPersonaContract failed", err)
-	layers := prompts.PromptLayers{Site: site}
-	if err := prompts.ValidateArchetypePartials(layers, contract); err == nil {
-		t.Fatal("expected overlay empty advisory partial to fail")
+	testutil.FailErr(t, "create directory", os.MkdirAll(filepath.Join(site, "partials"), 0o755))
+	testutil.FailErr(t, "write file", os.WriteFile(filepath.Join(site, "partials", "coordination-loop.md"), []byte("\n"), 0o644))
+	reader, err := prompts.DeclaredReader(nil, "implement")
+	testutil.FailErr(t, "reader", err)
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{Site: site})
+	if _, err := prompts.RenderPersona(context.Background(), engine, "implementer", reader, nil); err == nil || !strings.Contains(err.Error(), "coordination-loop.md") {
+		t.Fatalf("a persona rendered over an emptied required partial: err = %v", err)
 	}
 }
 
@@ -116,15 +112,6 @@ func TestFileTemplateEngineRegisterValidation(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	if err := engine.Register("", "x"); err == nil {
 		t.Fatal("expected empty name error")
-	}
-}
-
-func TestValidateArchetypePartialsPasses(t *testing.T) {
-	contract, err := prompts.LoadPersonaContract()
-	testutil.FailErr(t, "prompts.LoadPersonaContract failed", err)
-	layers := prompts.PromptLayers{}
-	if err := prompts.ValidateArchetypePartials(layers, contract); err != nil {
-		testutil.FailErr(t, "prompts.ValidateArchetypePartials failed", err)
 	}
 }
 

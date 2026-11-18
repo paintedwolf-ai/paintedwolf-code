@@ -92,6 +92,9 @@ class ReleaseGateLaws(unittest.TestCase):
         rehearsal = next(index for index, step in enumerate(validation) if "upgrade:rehearse" in step.tasks())
         self.assertLess(preflight, rehearsal)
         self.assertEqual((validation[rehearsal].condition, validation[rehearsal].continues), ("", False))
+        # A dry run has no frozen corpus; a publishing release cannot skip it.
+        self.assertTrue(truthy(evaluate(validation[preflight].condition or "true", classified("true"))))
+        self.assertFalse(validation[preflight].continues)
 
 
 class ReleaseCheckoutLaws(unittest.TestCase):
@@ -129,8 +132,10 @@ class ReleaseHaltLaws(unittest.TestCase):
     def test_a_halt_is_manual_serialized_with_releases_and_publication_protected(self):
         self.assertEqual(set(self.halt.on), {"workflow_dispatch"})
         self.assertIn("dry_run", self.halt.dispatch_inputs())
+        # A publishing release and a halt queue behind each other; a rehearsal runs apart.
+        publishing = {"github": {"event_name": "push", "run_id": 7}, "inputs": {"rehearsal_run_id": ""}}
         release = workflow("release").raw["concurrency"]
-        self.assertEqual(self.halt.raw["concurrency"]["group"], release["group"])
+        self.assertEqual(render(self.halt.raw["concurrency"]["group"], publishing), render(release["group"], publishing))
         self.assertIs(self.halt.raw["concurrency"]["cancel-in-progress"], False)
         effects = [job for job in self.jobs.values() if any(mutates(step) for step in job.steps)]
         self.assertTrue(effects)

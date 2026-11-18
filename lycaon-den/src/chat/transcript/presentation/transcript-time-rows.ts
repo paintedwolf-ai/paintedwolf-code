@@ -1,8 +1,8 @@
 import type { PendingSend } from "../../send/pending-sends.ts";
 import type { Message, TurnClock } from "../../../api/types.ts";
 import { parseInstant } from "../../../time/time-copy.ts";
-import { activitySpanToolParts } from "../../tool/activity-span-model.ts";
 import type { DisplayTranscriptItem, TranscriptTimeItem } from "../projection/transcript-item-model.ts";
+import { transcriptRowMessageIds } from "../projection/transcript-item-order.ts";
 import { transcriptRowOpensTurn } from "../projection/transcript-turns.ts";
 
 /** Same-day idle interval that gives the next prompt a timestamp. */
@@ -26,34 +26,13 @@ export type TranscriptTimeRowContext = {
 
 type RowAnchor = { message: Message; at: number | null };
 
-/** Every message that places a row; its first by `ord` dates the row. */
-function rowMessageIds(item: DisplayTranscriptItem): string[] {
-  switch (item.kind) {
-    case "tool":
-      return [item.part.messageId];
-    case "checkpoint":
-      return [item.parentMessageId];
-    case "activity_span":
-      return activitySpanToolParts(item.entries).map((part) => part.messageId);
-    case "worker_group":
-      return item.parts.map((part) => part.messageId);
-    case "file_edit":
-    case "worker_file_edit":
-    case "time_marker":
-    case "unread_marker":
-    case "turn_tail":
-      return [item.anchorMessageId];
-    default:
-      return [item.key];
-  }
-}
-
+/** A row's first message by `ord` dates it. */
 function rowAnchor(
   item: DisplayTranscriptItem,
   messageById: ReadonlyMap<string, Message>,
 ): RowAnchor | null {
   let first: Message | undefined;
-  for (const id of rowMessageIds(item)) {
+  for (const id of transcriptRowMessageIds(item)) {
     const message = messageById.get(id);
     if (message && (!first || (message.ord ?? 0) < (first.ord ?? 0))) first = message;
   }
@@ -65,7 +44,7 @@ function lastRowMessageId(
   messageById: ReadonlyMap<string, Message>,
 ): string | null {
   let last: Message | undefined;
-  for (const id of rowMessageIds(item)) {
+  for (const id of transcriptRowMessageIds(item)) {
     const message = messageById.get(id);
     if (message && (!last || (message.ord ?? 0) >= (last.ord ?? 0))) last = message;
   }

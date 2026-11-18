@@ -58,9 +58,7 @@ func TestBrokeredProgramsExecutePassedDescriptorsInPlace(t *testing.T) {
 	testutil.FailErr(t, "start brokered program", err)
 	_ = write.Close()
 	output, _ := io.ReadAll(read)
-	var status syscall.WaitStatus
-	_, err = syscall.Wait4(pid, &status, 0, nil)
-	testutil.FailErr(t, "wait", err)
+	_, status := wait4IgnoringEINTR(t, "wait", pid)
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	if status.ExitStatus() != 0 || len(lines) != 2 || lines[0] != extra.Name() {
 		t.Fatalf("brokered program: status %v, output %q", status, output)
@@ -122,11 +120,7 @@ func TestBrokerOrdersStartedBeforeExitedForImmediateExitChild(t *testing.T) {
 		_ = channel.Close()
 	}
 	testutil.FailErr(t, "close client", client.Close())
-	select {
-	case <-done:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("broker agent did not exit after client closed")
-	}
+	testutil.AwaitClosed(t, "the broker agent exits after its client closes", done)
 }
 
 func TestBrokerBoundsConcurrentActiveCalls(t *testing.T) {
@@ -201,11 +195,7 @@ func TestBrokerDetachedCallDoesNotBlockShutdown(t *testing.T) {
 	_ = direct.Close()
 	testutil.FailErr(t, "close client", client.Close())
 
-	select {
-	case <-done:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("broker agent stayed alive waiting on detached process")
-	}
+	testutil.AwaitClosed(t, "the broker agent exits without waiting on the detached process", done)
 	if _, err := os.Stat("/proc/" + strconv.Itoa(bgPID)); err != nil {
 		t.Fatalf("detached background process %d died when channel/broker closed: %v", bgPID, err)
 	}

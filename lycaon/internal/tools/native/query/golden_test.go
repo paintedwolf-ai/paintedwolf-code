@@ -148,7 +148,7 @@ func TestDifferentialAgainstHostJq(t *testing.T) {
 			if errors.As(err, &exit) {
 				status = exit.ExitCode()
 			} else if err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "run the reference program", err)
 			}
 			r := h.exec(c.stdin, words...)
 			r.expect(t, c.argv, string(out), status)

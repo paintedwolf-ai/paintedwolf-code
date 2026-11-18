@@ -12,37 +12,26 @@ func TestOrchestratorStatusRaceWithCancel(t *testing.T) {
 	const runID = "race-run"
 	orch.registerRun(runID, &runState{runID: runID, phase: "pipeline", active: true})
 
+	// The work is counted, so the detector sees the same interleavings on any host.
+	const rounds = 2000
 	ctx := context.Background()
-	stop := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		for {
-			select {
-			case <-stop:
-				return
-			default:
-			}
+		for range rounds {
 			_ = orch.Cancel(ctx, runID, TerminationReasonHumanAbort)
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		for {
-			select {
-			case <-stop:
-				return
-			default:
-			}
+		for range rounds {
 			if _, err := orch.Status(ctx, runID); err != nil {
 				t.Errorf("Status: %v", err)
 				return
 			}
 		}
 	}()
-	time.Sleep(100 * time.Millisecond)
-	close(stop)
 	wg.Wait()
 }
 

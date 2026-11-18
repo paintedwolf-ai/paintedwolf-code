@@ -5,6 +5,7 @@ import { For, Show, createSignal } from "solid-js";
 import { setupThemedScrollbars } from "./themed-scrollbars.ts";
 import { Scrollport } from "../../components/primitives/Scrollport.tsx";
 import { ProgressStrip } from "../../components/ProgressStrip.tsx";
+import { ProgressSnapshot } from "../../components/transcript/ProgressSnapshot.tsx";
 import type { ProgressStep } from "../../api/types.ts";
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -99,8 +100,8 @@ describe("scrollports keep the DOM their component rendered", () => {
     const view = render(
       () => (
         <>
-          <ProgressStrip
-            created
+          <ProgressSnapshot
+            kind="created"
             steps={[{ state: "pending", label: "Archived plan" }]}
           />
           <ProgressStrip steps={liveSteps} />

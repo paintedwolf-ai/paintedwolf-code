@@ -43,7 +43,7 @@ func ComparisonViewForTest(t *testing.T, server *hostapi.Server, projectID strin
 		response := httptest.NewRecorder()
 		server.ServeHTTP(response, NewAuthedRequest(http.MethodDelete, sourceapi.SourceViewURL(projectID, id), nil))
 	})
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the comparison view is ready", func() bool {
 		response := httptest.NewRecorder()
 		server.ServeHTTP(response, NewAuthedRequest(http.MethodGet, sourceapi.SourceViewURL(projectID, id), nil))
 		state = ReadSourceViewResponse(t, response, http.StatusOK)

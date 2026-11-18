@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/findings"
+	"github.com/lycaon/lycaon/internal/findings/findingstest"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -29,7 +29,7 @@ func (s *stubSiblingQueue) Get(jobID string) (*api.WorkerTask, bool) {
 func TestRecentSiblingNotesExcludesOwnAndAdvancesCursor(t *testing.T) {
 	// The child is its own root.
 	root := "child-self"
-	store := findings.NewMemoryStore()
+	store := findingstest.New(t, root)
 	if _, err := store.Append(context.Background(), root, "job-a", "config in resolve.go:40", "resolve.go:40", ""); err != nil {
 		t.Fatalf("append peer finding: %v", err)
 	}

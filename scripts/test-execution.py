@@ -484,7 +484,8 @@ def run(queue, name, command, spec=EXCLUSIVE):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["task", "run", "holding", "pause", "resume", "status", "cancel",
-                                          "go-arguments", "plan", "batch-supervise", "batch-execute", "job-supervise"])
+                                          "go-arguments", "backstop", "plan", "batch-supervise", "batch-execute",
+                                          "job-supervise"])
     parser.add_argument("--name", default="verification")
     parser.add_argument("--reason", default="Paused by request")
     arguments = sys.argv[1:]
@@ -495,6 +496,10 @@ def main():
         env, bounded = bounded_go_arguments(command, os.environ)
         values = [env[name] for name in ("GO_TEST_P", "GO_TEST_PARALLEL", "GOMAXPROCS")]
         sys.stdout.buffer.write(("\0".join([*values, *bounded]) + "\0").encode())
+        return 0
+    if args.action == "backstop":
+        from verification_plan import backstop_seconds
+        print(backstop_seconds(args.name))
         return 0
     task_request = None
     default_root = Path(tempfile.gettempdir()) / "test-execution" if os.name == "nt" else Path(f"/tmp/test-execution-{os.getuid()}")

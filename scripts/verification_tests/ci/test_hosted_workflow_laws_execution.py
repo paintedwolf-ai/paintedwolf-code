@@ -34,8 +34,8 @@ def is_verdict(step):
 def gate_receives_needs(job):
     """The aggregate hands its dependency results to its verdict step as structured data."""
     needs = {name: {"result": "failure"} for name in job.needs}
-    return any(json.loads(render(value, {"needs": needs})) == needs
-               for step in job.steps for value in step.env.values() if "needs" in value)
+    rendered = [render(value, {"needs": needs}) for step in job.steps for value in step.env.values()]
+    return any(isinstance(value, str) and value.startswith("{") and json.loads(value) == needs for value in rendered)
 
 
 class RequiredAggregateLaws(unittest.TestCase):
@@ -59,7 +59,10 @@ class RequiredAggregateLaws(unittest.TestCase):
         self.assertTrue(execution.needs)
         self.assertEqual(set(jobs), {execution.name, *execution.needs})
         self.assertFalse(any(job.continues for job in jobs.values()))
-        self.assertEqual(execution.condition, "")
+        # Only an empty selection skips execution; anything selected runs.
+        outputs = lambda matrix: {"needs": {plan: {"outputs": {"matrix": matrix}} for plan in execution.needs}}
+        self.assertFalse(truthy(evaluate(execution.condition or "true", outputs('{"include":[]}'))))
+        self.assertTrue(truthy(evaluate(execution.condition or "true", outputs('{"include":[{"lane":"x"}]}'))))
         self.assertIs(execution.raw["strategy"]["fail-fast"], False)
         self.assertFalse(any(step.continues for job in jobs.values() for step in job.steps))
 

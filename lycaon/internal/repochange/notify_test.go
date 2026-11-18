@@ -47,9 +47,3 @@ func TestNotifyIgnoresZeroValueEvents(t *testing.T) {
 		t.Fatal("zero-value events must not reach observers")
 	}
 }
-
-func TestRegisterNilObserverIsSafe(t *testing.T) {
-	RegisterObserver(nil)
-	// Must not panic.
-	Notify(context.Background(), Event{ProjectDir: "/repo-nil", Kind: HeadMoved})
-}

@@ -27,9 +27,7 @@ func startBugcommandRun(t *testing.T, h *orchestrationPipelineHarness) wire.Work
 	run, err := h.workflowMgr.Starts.StartHuman(context.Background(), h.sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "bugbash", WorkflowVersion: "1.1.0",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "h.workflowMgr.Starts.StartHuman failed", err)
 	h.srv.Admin.Workflow.Topology.StartOrchestratedTopologyForRun(context.Background(), h.sess.ID, run)
 	return *run
 }
@@ -66,7 +64,7 @@ func completeActiveChildRun(t *testing.T, h *orchestrationPipelineHarness) {
 
 func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, stage string) {
 	t.Helper()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the topology stage completes", func() bool {
 		vars, err := mgr.Store.Runs.GetScaffoldVars(context.Background(), runID)
 		if err != nil {
 			return false
@@ -80,7 +78,7 @@ func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, st
 
 func waitWorkflowPhase(t *testing.T, mgr *workflow.RunManager, runID, phase string) {
 	t.Helper()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the workflow reaches the phase", func() bool {
 		run, err := mgr.Store.Runs.Get(context.Background(), runID)
 		if err != nil || run == nil {
 			return false

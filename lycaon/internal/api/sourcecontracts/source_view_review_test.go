@@ -33,7 +33,7 @@ func TestSourceViewTreeReviewAndScopeReplacement(t *testing.T) {
 	waitReady := func() *wire.SourceTreeView {
 		t.Helper()
 		var ready *wire.SourceTreeView
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "the source view is ready", func() bool {
 			ready = contractfixture.ReadSourceViewResponse(t, contractfixture.CallSourceViewHandler(t, server.Sources.Views.HandleGetSourceView, p.ID, id, nil), http.StatusOK).Tree
 			return ready.State != "preparing"
 		})

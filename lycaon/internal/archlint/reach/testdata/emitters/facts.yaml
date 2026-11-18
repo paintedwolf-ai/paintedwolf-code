@@ -1,0 +1,7 @@
+host_facts:
+  - name: paintedwolf.live_field
+  - name: paintedwolf.never_field
+  - name: paintedwolf.declared_only
+  - name: paintedwolf.family_observed
+  - name: paintedwolf.provider_fact
+  - name: paintedwolf.derived_member

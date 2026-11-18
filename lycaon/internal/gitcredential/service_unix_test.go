@@ -68,20 +68,27 @@ func TestServiceAnswersOnlyTheBoundInvocation(t *testing.T) {
 	}
 
 	// A service never bound answers nobody once the request deadline passes.
-	unbound, err := Serve(t.Context(), ServeOptions{GitBinary: self, Store: store})
+	unbound, err := serve(t.Context(), ServeOptions{GitBinary: self, Store: store}, func(s *Service) { s.deadline = 500 * time.Millisecond })
 	testutil.FailErr(t, "serve", err)
 	defer func() { _ = unbound.Close() }()
-	unbound.deadline = 500 * time.Millisecond
 	if out := helperChild(t, unbound.Path(), "bound.example"); strings.Contains(out, "password=") {
 		t.Fatalf("unbound service answered: %q", out)
 	}
 
 	// A helper that connects before the bind waits for it.
-	late, err := Serve(t.Context(), ServeOptions{GitBinary: self, Store: store})
+	connected := make(chan struct{}, 1)
+	late, err := serve(t.Context(), ServeOptions{GitBinary: self, Store: store}, func(s *Service) {
+		s.accepted = func() {
+			select {
+			case connected <- struct{}{}:
+			default:
+			}
+		}
+	})
 	testutil.FailErr(t, "serve", err)
 	defer func() { _ = late.Close() }()
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		<-connected
 		_ = late.Bind(os.Getpid())
 	}()
 	if out := helperChild(t, late.Path(), "bound.example"); !strings.Contains(out, "password=secret") {

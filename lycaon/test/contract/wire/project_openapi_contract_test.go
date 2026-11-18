@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -54,7 +53,6 @@ func TestProjectListRecentFirstAndReadModel(t *testing.T) {
 
 	older, err := reg.Create(ctx, project.CreateParams{})
 	contractcheck.FailErr(t, "create older", err)
-	time.Sleep(2 * time.Millisecond)
 	newer, err := reg.Create(ctx, project.CreateParams{})
 	contractcheck.FailErr(t, "create newer", err)
 	name := "named"
