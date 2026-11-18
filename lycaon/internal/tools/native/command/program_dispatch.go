@@ -579,32 +579,6 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	return native.Producer, joinSettle(runErr, d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: native.Producer, OwnerInvoked: native.OwnerInvoked || marker.OwnerStartRecorded, HostStopCode: native.HostStopCode, Conflict: revisionConflict(runErr)}))
 }
 
-// invokeHosted runs an owner whose bound form has no structured tool as the
-// catalog command's own execution: recorded, started and settled like a
-// builtin, on this frame.
-func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.CommandSpecification, prepared NativePrepared, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	if prepared.CheckAdmission != nil {
-		if err := prepared.CheckAdmission(ctx); err != nil {
-			return d.refuseArgv(ctx, spec, request, err, streams)
-		}
-	}
-	request.OperationID = spec.Name
-	if prepared.Mode != "" {
-		request.EffectMode = prepared.Mode
-	}
-	return d.invokeHost(ctx, request, streams, prepared.LaunchesConfined, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-		if err := d.checkPreparedPolicy(ctx, tc, spec, request.EffectMode, request, d.paths.Cwd(), prepared.Review); err != nil {
-			return ownerFailure(err), err
-		}
-		noteJobNative(ctx, request.Argv.Values())
-		res, invokeErr := prepared.Invoke(ctx, tc, streams)
-		if invokeErr == nil && res.Status == 0 {
-			d.run.noteNativeFileMutation(ctx, spec.Name, prepared.Review.PathTargets)
-		}
-		return res, invokeErr
-	})
-}
-
 func absolutePathTargets(cwd, scratch string, targets []commandprogram.PathTarget) []commandprogram.PathTarget {
 	if targets == nil {
 		return nil

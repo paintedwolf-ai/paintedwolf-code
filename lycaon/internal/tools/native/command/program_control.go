@@ -97,6 +97,30 @@ func (d *ProgramDispatcher) InvokeEvaluator(ctx context.Context, request command
 	})
 }
 
+// invokeHosted admits a catalog command without a registered structured owner.
+func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.CommandSpecification, prepared NativePrepared, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if prepared.CheckAdmission != nil {
+		if err := prepared.CheckAdmission(ctx); err != nil {
+			return d.refuseArgv(ctx, spec, request, err, streams)
+		}
+	}
+	request.OperationID = spec.Name
+	if prepared.Mode != "" {
+		request.EffectMode = prepared.Mode
+	}
+	return d.invokeHost(ctx, request, streams, prepared.LaunchesConfined, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		if err := d.checkPreparedPolicy(ctx, tc, spec, request.EffectMode, request, d.paths.Cwd(), prepared.Review); err != nil {
+			return ownerFailure(err), err
+		}
+		noteJobNative(ctx, request.Argv.Values())
+		res, invokeErr := prepared.Invoke(ctx, tc, streams)
+		if invokeErr == nil && res.Status == 0 {
+			d.run.noteNativeFileMutation(ctx, spec.Name, prepared.Review.PathTargets)
+		}
+		return res, invokeErr
+	})
+}
+
 func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, launches bool, body func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
 	spec, ok := d.run.commands[request.OperationID]
 	if !ok {
