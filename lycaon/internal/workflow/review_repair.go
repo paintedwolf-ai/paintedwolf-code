@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/jsonvalue"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
@@ -18,16 +19,28 @@ import (
 
 // ReviewRepairs accounts for refused verdicts and pauses a review whose repair
 // cannot converge, retaining the evidence an incomplete report needs.
-type ReviewRepairs struct{ *RunManager }
-
-// RecordReviewToolResult hands a durable transcript row to review repair accounting.
-func (m *RunManager) RecordReviewToolResult(ctx context.Context, sessionID string, msg api.Message) error {
-	return ReviewRepairs{m}.RecordToolResult(ctx, sessionID, msg)
+type ReviewRepairs struct {
+	Runs        runstate.RunsRepository
+	Vars        *runstate.Variables
+	Resolver    *workflowcatalog.Resolver
+	Sessions    reviewTranscript
+	Coverage    *workflowreview.Coverage
+	Verdicts    *workflowreview.Verdicts
+	Journal     *runstate.Journal
+	Publication reviewPublication
 }
 
-// RecordToolResult accounts for schema and semantic refusals alike, after the
+type reviewTranscript interface {
+	GetMessages(context.Context, string) ([]api.Message, error)
+}
+
+type reviewPublication interface {
+	PublishSession(context.Context, *api.WorkflowRun)
+}
+
+// RecordReviewToolResult accounts for schema and semantic refusals alike, after the
 // screened result is durable. Transcript replay uses the same response id.
-func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, msg api.Message) error {
+func (m *ReviewRepairs) RecordReviewToolResult(ctx context.Context, sessionID string, msg api.Message) error {
 	result := msg.ToolResult
 	if result == nil || result.Tool != "submit_verdict" || result.Outcome != api.ToolResultOutcomeRejected {
 		return nil
@@ -35,13 +48,13 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 	if !runstate.RepairableVerdictCodes(result.Codes) {
 		return nil
 	}
-	run, err := m.Store.Runs.ActiveBySession(ctx, sessionID)
+	run, err := m.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil || run == nil {
 		return err
 	}
 	unlock := m.Vars.Lock(run.ID)
 	defer unlock()
-	run, err = m.Store.Runs.Get(ctx, run.ID)
+	run, err = m.Runs.Get(ctx, run.ID)
 	if err != nil {
 		return err
 	}
@@ -72,7 +85,7 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 	if !ok || phase.ReviewLoop == nil {
 		return nil
 	}
-	vars, err := m.Store.Runs.GetScaffoldVars(ctx, run.ID)
+	vars, err := m.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return err
 	}
@@ -132,11 +145,11 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 
 // Recover closes the crash window between transcript commit and repair
 // accounting. Accepted submissions delimit the current repair sequence.
-func (m ReviewRepairs) Recover(ctx context.Context) error {
+func (m *ReviewRepairs) Recover(ctx context.Context) error {
 	if m.Sessions == nil {
 		return nil
 	}
-	runs, err := m.Store.Runs.ListRunning(ctx)
+	runs, err := m.Runs.ListRunning(ctx)
 	if err != nil {
 		return err
 	}
@@ -155,7 +168,7 @@ func (m ReviewRepairs) Recover(ctx context.Context) error {
 			if msg.WorkflowRunID != run.ID {
 				continue
 			}
-			if err := m.RecordToolResult(ctx, run.SessionID, msg); err != nil {
+			if err := m.RecordReviewToolResult(ctx, run.SessionID, msg); err != nil {
 				return err
 			}
 		}
@@ -203,7 +216,7 @@ func finalReviewResponseResult(messages []api.Message, candidate api.Message) (b
 }
 
 // CaptureSnapshot retains the inputs shared by review assignments and refusal accounting.
-func (m ReviewRepairs) CaptureSnapshot(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, vars map[string]any, candidate map[string]any) runstate.ReviewSnapshot {
+func (m *ReviewRepairs) CaptureSnapshot(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, vars map[string]any, candidate map[string]any) runstate.ReviewSnapshot {
 	snapshot := runstate.ReviewSnapshot{Vars: map[string]any{}, Candidate: jsonvalue.CloneMap(candidate)}
 	// Only report inputs are copied, excluding repair episodes themselves.
 	for _, key := range []string{"fanout_plans"} {
@@ -243,17 +256,17 @@ const reviewContractInvalidCode = "WORKFLOW_REVIEW_CONTRACT_INVALID"
 
 // BlockContract pauses a review whose offered contract cannot accept the
 // host's own facts, before any model attempt is spent.
-func (m ReviewRepairs) BlockContract(ctx context.Context, runID string, cause error) error {
+func (m *ReviewRepairs) BlockContract(ctx context.Context, runID string, cause error) error {
 	unlock := m.Vars.Lock(runID)
 	defer unlock()
-	run, err := m.Store.Runs.Get(ctx, runID)
+	run, err := m.Runs.Get(ctx, runID)
 	if err != nil {
 		return err
 	}
 	if run.Status != api.WorkflowRunStatusRunning {
 		return nil
 	}
-	vars, err := m.Store.Runs.GetScaffoldVars(ctx, runID)
+	vars, err := m.Runs.GetScaffoldVars(ctx, runID)
 	if err != nil {
 		return err
 	}

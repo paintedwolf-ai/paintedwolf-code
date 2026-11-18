@@ -13,7 +13,11 @@ func (m *RunManager) buildReviewDomains(store *runstate.Repository) *workflowrev
 	m.Coverage = &workflowreview.Coverage{Runs: store.Runs, Resolver: &m.Resolver}
 	questions := &workflowreview.Questions{Runs: store.Runs, Resolver: &m.Resolver, Coverage: m.Coverage}
 	m.Verdicts = &workflowreview.Verdicts{Runs: store.Runs, Records: store.Verdicts, Vars: m.Vars, Resolver: &m.Resolver, Sessions: m.Sessions, Coverage: m.Coverage, Questions: questions}
-	m.Repairs = &ReviewRepairs{RunManager: m}
+	m.Repairs = &ReviewRepairs{Runs: store.Runs, Vars: m.Vars, Resolver: &m.Resolver,
+		Sessions: m.Sessions, Coverage: m.Coverage, Verdicts: m.Verdicts,
+		Journal: m.Journal, Publication: m.Publication}
+	m.Inventory = &InventoryAccounting{Runs: store.Runs, Vars: m.Vars, Resolver: &m.Resolver,
+		Sessions: m.Sessions, Coverage: m.Coverage, Verdicts: m.Verdicts}
 	m.Assignments = &workflowreview.Assignments{
 		Runs: store.Runs, Records: store.Assignments, Resolver: &m.Resolver,
 		Coverage: m.Coverage, Verdicts: m.Verdicts,
