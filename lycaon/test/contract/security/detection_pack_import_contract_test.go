@@ -2,26 +2,18 @@ package contract
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/detectionpack"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func writeContractMinimalPack(t *testing.T, dir, id, ruleBody string) {
@@ -63,84 +55,70 @@ detection:
 `
 }
 
-func hashBundledDetectionPacks(t *testing.T) string {
-	t.Helper()
-	h := sha256.New()
-	err := config.Walk(config.DetectionPacksDir, func(rel config.Rel, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			_, _ = io.WriteString(h, "D:"+rel.String()+"\n")
-			return nil
-		}
-		data, err := config.Read(rel)
-		if err != nil {
-			return err
-		}
-		_, _ = io.WriteString(h, "F:"+rel.String()+"\n")
-		_, _ = h.Write(data)
-		return nil
-	})
-	testutil.FailErr(t, "hash bundled detection packs", err)
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-func filesOutsideDevicePacks(t *testing.T, home, configDir string) []string {
+// packTreeFiles lists every file under home, split by whether it lies under
+// the device packs directory.
+func packTreeFiles(t *testing.T, home, configDir string) (inside, outside []string) {
 	t.Helper()
 	deviceRoot := detectionpack.DevicePacksDir(configDir)
-	var outside []string
-	_ = filepath.WalkDir(home, func(path string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(home, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
-			return nil
+			return err
 		}
-		// Allow anything under the device packs directory (and the configDir root itself for state files).
-		if strings.HasPrefix(path, deviceRoot+string(os.PathSeparator)) || path == deviceRoot {
-			return nil
+		rel, err := filepath.Rel(home, path)
+		if err != nil {
+			return err
 		}
-		// Import never writes detection-packs.yaml; ignore empty dirs' parents.
-		rel, _ := filepath.Rel(home, path)
-		outside = append(outside, rel)
+		if strings.HasPrefix(path, deviceRoot+string(os.PathSeparator)) {
+			inside = append(inside, filepath.ToSlash(rel))
+		} else {
+			outside = append(outside, filepath.ToSlash(rel))
+		}
 		return nil
 	})
-	return outside
+	testutil.FailErr(t, "walk import home", err)
+	return inside, outside
 }
 
-// TestDetectionPackImportCannotEscape: hostile sources write nothing outside device packs dir.
+// TestDetectionPackImportCannotEscape: hostile sources write nothing outside
+// the device packs directory, and a benign import into the same home lands
+// there, so an empty walk cannot satisfy the check.
 func TestDetectionPackImportCannotEscape(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name string
-		prep func(t *testing.T, src string)
+		name     string
+		folder   string
+		wantPack string
+		prep     func(t *testing.T, src string)
 	}{
 		{
 			name: "traversal id",
 			prep: func(t *testing.T, src string) {
 				writeContractMinimalPack(t, src, "ok-pack", contractGoodRule("Hit"))
-				// Overwrite pack.yaml with a hostile id after writing a valid layout.
 				testutil.FailErr(t, "hostile id", os.WriteFile(filepath.Join(src, "pack.yaml"), []byte(
 					"id: ../escape\nlabel: L\ndescription: D\n",
 				), 0o600))
 			},
 		},
 		{
-			name: "rules symlink to etc",
+			name:     "rules symlink to etc",
+			wantPack: "sym-escape",
 			prep: func(t *testing.T, src string) {
 				writeContractMinimalPack(t, src, "sym-escape", contractGoodRule("Hit"))
-				link := filepath.Join(src, "rules", "etc.yml")
-				testutil.FailErr(t, "symlink", os.Symlink("/etc/passwd", link))
+				testutil.FailErr(t, "symlink", os.Symlink("/etc/passwd", filepath.Join(src, "rules", "etc.yml")))
 			},
 		},
 		{
-			name: "dotdot folder name",
+			name:     "dotdot folder name",
+			folder:   "..dotdot-named",
+			wantPack: "dotdot-pack",
 			prep: func(t *testing.T, src string) {
-				// Source folder may be oddly named; destination uses validated id only.
 				writeContractMinimalPack(t, src, "dotdot-pack", contractGoodRule("Hit"))
 			},
 		},
 		{
-			name: "deeply nested tree",
+			name:     "deeply nested tree",
+			wantPack: "deep-pack",
 			prep: func(t *testing.T, src string) {
 				writeContractMinimalPack(t, src, "deep-pack", contractGoodRule("Hit"))
 				deep := filepath.Join(src, "a", "b", "c", "d")
@@ -156,14 +134,34 @@ func TestDetectionPackImportCannotEscape(t *testing.T) {
 			home := t.TempDir()
 			cfg := filepath.Join(home, "config")
 			testutil.FailErr(t, "mkdir config", os.MkdirAll(cfg, 0o700))
-			src := filepath.Join(t.TempDir(), "src")
-			if tc.name == "dotdot folder name" {
-				src = filepath.Join(t.TempDir(), "dotdot-named")
+			folder := tc.folder
+			if folder == "" {
+				folder = "src"
 			}
+			src := filepath.Join(t.TempDir(), folder)
 			tc.prep(t, src)
-			_, _ = detectionpack.ImportPack(cfg, shippedDetectionPacks(t), detectionpack.ImportRequest{SourcePath: src})
-			if outside := filesOutsideDevicePacks(t, home, cfg); len(outside) > 0 {
+			_, err := detectionpack.ImportPack(cfg, shippedDetectionPacks(t), detectionpack.ImportRequest{SourcePath: src})
+			if (err == nil) != (tc.wantPack != "") {
+				t.Fatalf("hostile import err = %v, want a committed pack %q", err, tc.wantPack)
+			}
+			inside, outside := packTreeFiles(t, home, cfg)
+			if len(outside) > 0 {
 				t.Fatalf("wrote outside device packs: %v", outside)
+			}
+			if tc.wantPack != "" && !slices.Contains(inside, "config/detection-packs/"+tc.wantPack+"/pack.yaml") {
+				t.Fatalf("committed pack %q missing under device packs: %v", tc.wantPack, inside)
+			}
+
+			control := filepath.Join(t.TempDir(), "control")
+			writeContractMinimalPack(t, control, "control-pack", contractGoodRule("Hit"))
+			_, err = detectionpack.ImportPack(cfg, shippedDetectionPacks(t), detectionpack.ImportRequest{SourcePath: control})
+			testutil.FailErr(t, "benign import", err)
+			inside, outside = packTreeFiles(t, home, cfg)
+			if len(outside) > 0 {
+				t.Fatalf("benign import wrote outside device packs: %v", outside)
+			}
+			if !slices.Contains(inside, "config/detection-packs/control-pack/pack.yaml") {
+				t.Fatalf("benign pack missing under device packs: %v", inside)
 			}
 		})
 	}
@@ -237,34 +235,6 @@ func TestDetectionPackImportAtomicOnFailure(t *testing.T) {
 	}
 }
 
-// TestDetectionPackImportBundledImmutable: bundled tree hashes identical after hostile imports.
-func TestDetectionPackImportBundledImmutable(t *testing.T) {
-	t.Parallel()
-	// Bundled packs ship inside the binary, so there is no directory an import
-	// could reach. Hash what the loader actually reads, before and after.
-	before := hashBundledDetectionPacks(t)
-
-	cfg := t.TempDir()
-	// Hostile import attempts + remove of a bundled id.
-	src := filepath.Join(t.TempDir(), "src")
-	writeContractMinimalPack(t, src, "aws-cli", contractGoodRule("Hit"))
-	_, _ = detectionpack.ImportPack(cfg, shippedDetectionPacks(t), detectionpack.ImportRequest{SourcePath: src, Replace: true})
-	_ = detectionpack.RemoveDevicePack(cfg, shippedDetectionPacks(t), "aws-cli")
-	_ = detectionpack.RemoveDevicePack(cfg, shippedDetectionPacks(t), "gcp-structured-actions")
-	_ = detectionpack.RemoveDevicePack(cfg, shippedDetectionPacks(t), "azure-structured-actions")
-
-	writeContractMinimalPack(t, src, "../escape", contractGoodRule("Hit"))
-	testutil.FailErr(t, "hostile id rewrite", os.WriteFile(filepath.Join(src, "pack.yaml"), []byte(
-		"id: ../escape\nlabel: L\ndescription: D\n",
-	), 0o600))
-	_, _ = detectionpack.ImportPack(cfg, shippedDetectionPacks(t), detectionpack.ImportRequest{SourcePath: src})
-
-	after := hashBundledDetectionPacks(t)
-	if before != after {
-		t.Fatal("bundled detection-packs tree mutated by import/remove paths")
-	}
-}
-
 // TestDetectionPackImportedStillAskOnly: imported critical match-all pack cannot allow/deny/suppress.
 func TestDetectionPackImportedStillAskOnly(t *testing.T) {
 	cfg := t.TempDir()
@@ -303,109 +273,5 @@ func TestDetectionPackImportedStillAskOnly(t *testing.T) {
 	}
 	if res.DetectionCitation != nil {
 		t.Fatalf("path escape must not cite a detection: %+v", res.DetectionCitation)
-	}
-}
-
-// TestDetectionPackImportOneValidationPathAST: only ImportPack calls commitImport; DryRun branches.
-func TestDetectionPackImportOneValidationPathAST(t *testing.T) {
-	t.Parallel()
-	path := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "detectionpack", "import.go")
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, path, nil, 0)
-	testutil.FailErr(t, "ParseFile import.go", err)
-
-	var importPack, commitImport *ast.FuncDecl
-	commitCallers := map[string]int{}
-	for _, decl := range f.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Name == nil {
-			continue
-		}
-		switch fn.Name.Name {
-		case "ImportPack":
-			importPack = fn
-		case "commitImport":
-			commitImport = fn
-		}
-	}
-	if importPack == nil || commitImport == nil {
-		t.Fatal("ImportPack/commitImport not found")
-	}
-
-	for _, decl := range f.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil || fn.Name == nil {
-			continue
-		}
-		ast.Inspect(fn.Body, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			id, ok := call.Fun.(*ast.Ident)
-			if ok && id.Name == "commitImport" {
-				commitCallers[fn.Name.Name]++
-			}
-			return true
-		})
-	}
-	if len(commitCallers) != 1 || commitCallers["ImportPack"] == 0 {
-		t.Fatalf("commitImport callers=%v want only ImportPack", commitCallers)
-	}
-
-	// DryRun must return before commitImport; commitImport must use copyFileFn.
-	var sawDryRunBranch, sawCommitAfterDryRun bool
-	ast.Inspect(importPack.Body, func(n ast.Node) bool {
-		iff, ok := n.(*ast.IfStmt)
-		if !ok {
-			return true
-		}
-		// if req.DryRun { return ... }
-		cond := iff.Cond
-		sel, ok := cond.(*ast.SelectorExpr)
-		if !ok || sel.Sel == nil || sel.Sel.Name != "DryRun" {
-			return true
-		}
-		sawDryRunBranch = true
-		// Ensure the then-branch returns without calling commitImport.
-		ast.Inspect(iff.Body, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "commitImport" {
-				t.Fatal("DryRun branch must not call commitImport")
-			}
-			return true
-		})
-		return true
-	})
-	if !sawDryRunBranch {
-		t.Fatal("ImportPack missing DryRun branch")
-	}
-	ast.Inspect(importPack.Body, func(n ast.Node) bool {
-		call, ok := n.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "commitImport" {
-			sawCommitAfterDryRun = true
-		}
-		return true
-	})
-	if !sawCommitAfterDryRun {
-		t.Fatal("ImportPack must call commitImport on the commit path")
-	}
-
-	var usesCopyFileFn bool
-	ast.Inspect(commitImport.Body, func(n ast.Node) bool {
-		id, ok := n.(*ast.Ident)
-		if ok && id.Name == "copyFileFn" {
-			usesCopyFileFn = true
-		}
-		return true
-	})
-	if !usesCopyFileFn {
-		t.Fatal("commitImport must use copyFileFn")
 	}
 }

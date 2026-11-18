@@ -4,9 +4,11 @@ package wiring
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -67,4 +69,65 @@ func TestNonHTTPContractMandatoryAuthzDetailForSocket(t *testing.T) {
 	if ea.VisibilitySummary != wire.ExternalAccessVisibilitySummaryUnobserved {
 		t.Fatalf("socket visibility = %q", ea.VisibilitySummary)
 	}
+}
+
+// directIPCommandSession starts a session whose one command asks for direct
+// network access; with quieted false it revokes the harness quiets so the
+// direct-IP ask reaches a card.
+func directIPCommandSession(t *testing.T, quieted bool) *commandProgramSession {
+	t.Helper()
+	s := newCommandProgramSessionWithArgs(t, map[string]any{
+		"command":            "go version",
+		"capability_request": map[string]any{"direct_ip": true},
+	}, wire.CreateSessionRequest{}, "")
+	if !quieted {
+		gate := s.h.Server.Admin.Capabilities.Access.Gate
+		for _, q := range gate.ListAskQuiets(s.session) {
+			if !gate.RevokeAskQuiet(q.ID) {
+				t.Fatalf("revoke quiet %+v", q)
+			}
+		}
+	}
+	return s
+}
+
+// requireDirectIPAuthzRows asserts the run left direct_ip_started and
+// direct_ip_completed rows whose detail names unobserved direct access.
+func requireDirectIPAuthzRows(t *testing.T, s *commandProgramSession) {
+	t.Helper()
+	rows := visibilityAuthzRows(t, s)
+	for _, action := range []authzcontext.EventAction{authzcontext.EventActionDirectIPStarted, authzcontext.EventActionDirectIPCompleted} {
+		row := visibilityAuthzRowFor(rows, action)
+		if row == nil {
+			t.Fatalf("no %s row in %+v", action, rows)
+		}
+		ea := row.Detail.ExternalAccess
+		if ea == nil || !slices.Contains(ea.Modes, wire.ExternalAccessModeDirectIP) || ea.VisibilitySummary != wire.ExternalAccessVisibilitySummaryUnobserved {
+			t.Fatalf("%s detail does not name unobserved direct access: %+v", action, ea)
+		}
+	}
+}
+
+// A direct-IP command answered on its card runs and leaves its direct rows.
+func TestNonHTTPContractMandatoryAuthzDetailForDirect(t *testing.T) {
+	s := directIPCommandSession(t, false)
+	cards := runCommandWithApprovals(t, s, "recommended")
+	if cards[0].ToolApproval.Plan.Subject.Kind != wire.ApprovalSubjectKind(hitl.ApprovalSubjectDirectIP) {
+		t.Fatalf("card subject = %q, want direct_ip", cards[0].ToolApproval.Plan.Subject.Kind)
+	}
+	if outcome := s.outcome(t, "program-1"); outcome.Status != 0 {
+		t.Fatalf("direct command failed: %+v", outcome)
+	}
+	requireDirectIPAuthzRows(t, s)
+}
+
+// A quieted direct-IP ask runs the command without a card, as the quiet
+// answers it, and still records the direct rows.
+func TestQuietedDirectIPAskRunsTheCommand(t *testing.T) {
+	s := directIPCommandSession(t, true)
+	runCommandWithApprovals(t, s)
+	if outcome := s.outcome(t, "program-1"); outcome.Status != 0 {
+		t.Fatalf("quieted direct command failed: %+v", outcome)
+	}
+	requireDirectIPAuthzRows(t, s)
 }
