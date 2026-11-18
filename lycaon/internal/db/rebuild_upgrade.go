@@ -127,7 +127,7 @@ func captureRetainedRecovery(ctx context.Context, replacement string, plan migra
 }
 
 func sealRebuiltStore(ctx context.Context, path string) error {
-	database, err := sql.Open("sqlite", fileDSN(path, "_pragma=synchronous(full)"))
+	database, err := openCounted(fileDSN(path, "_pragma=synchronous(full)"))
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func prepareRebuildPublication(path, replacement string, record *rebuildJournal)
 // Keep the inspected reader open until checkpoint completes, retaining its WAL
 // index instead of recovering the large log again on a fresh connection.
 func checkpointRebuildSource(ctx context.Context, path string) (err error) {
-	writer, err := sql.Open("sqlite", fileDSN(path, "_pragma=synchronous(full)"))
+	writer, err := openCounted(fileDSN(path, "_pragma=synchronous(full)"))
 	if err != nil {
 		return err
 	}

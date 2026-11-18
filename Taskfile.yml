@@ -242,7 +242,7 @@ tasks:
         --scale medium {{.CLI_ARGS}}
 
   perf:soak:
-    desc: 'Long sidecar stability run; SOAK defaults to 30m and may be overridden'
+    desc: 'Long sidecar runs: a stability soak (SOAK, default 30m), then bounded work on the 500,000-file scale fixture at two sizes'
     dir: '{{.GO_DIR}}'
     vars:
       SOAK: '{{default "30m" .SOAK}}'
@@ -257,6 +257,11 @@ tasks:
         --binary '{{.BUILD_DIR}}/lycaon-perf-sidecar'
         --output '{{.ARTIFACT_DIR}}/perf/sidecar-soak.json'
         --scale medium --iterations 5 --prompts 2 --soak {{.SOAK}} {{.CLI_ARGS}}
+      - >-
+        go run ./cmd/lycaon-perf scale
+        --binary '{{.BUILD_DIR}}/lycaon-perf-sidecar'
+        --output '{{.ARTIFACT_DIR}}/perf/scale.json'
+        {{if .SCALE_WORK}}--work '{{.SCALE_WORK}}'{{end}}
 
   budgets:
     desc: 'Prompt and code size budgets for what the change touches; PW_BUDGETS_INSPECT="<path>" shows a path''s standing'

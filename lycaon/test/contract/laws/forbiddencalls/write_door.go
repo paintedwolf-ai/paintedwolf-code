@@ -78,6 +78,7 @@ var doorExemptions = []laws.Exemption{
 
 	// Developer tooling writes user-named export files outside any managed tree.
 	{Key: "cmd/lycaon-debug/decide.go", Reason: "offline training exports to a path the developer names; nothing durable in the config tree"},
+	{Key: "internal/scalefixture/tree.go", Reason: "disposable scale and benchmark fixture trees in a directory the caller owns; half a million files need no per-file durability"},
 
 	// The door stages a whole replacement; it cannot express an append.
 	{Key: "internal/blueprint/manager_impl.go", Reason: "append-only critic evidence log"},

@@ -108,7 +108,7 @@ func (r *runtimeResources) performanceGauges() map[string]int64 {
 	}
 	stats := r.db.Stats()
 	analysis := fileoutline.ProcessCacheStats()
-	return map[string]int64{
+	gauges := map[string]int64{
 		"db_reader_open":            int64(stats.Reader.OpenConnections),
 		"db_reader_in_use":          int64(stats.Reader.InUse),
 		"db_reader_idle":            int64(stats.Reader.Idle),
@@ -126,4 +126,11 @@ func (r *runtimeResources) performanceGauges() map[string]int64 {
 		"source_analysis_evictions": analysis.Evictions,
 		"source_analysis_bypasses":  analysis.Bypasses,
 	}
+	for name, value := range db.ProcessWork().Counters() {
+		gauges["store_"+name] = value
+	}
+	for name, value := range r.db.MaintenanceWork() {
+		gauges["store_"+name] = value
+	}
+	return gauges
 }

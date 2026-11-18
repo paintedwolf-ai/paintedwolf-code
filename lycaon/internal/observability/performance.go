@@ -39,6 +39,8 @@ type PerformanceRecord struct {
 	Phases     []PerformancePhase `json:"phases,omitempty"`
 	Dimensions map[string]string  `json:"dimensions,omitempty"`
 	Runtime    *RuntimeSample     `json:"runtime,omitempty"`
+	// Work counts what an operation did; kind "work" records carry only counts.
+	Work map[string]int64 `json:"work,omitempty"`
 }
 
 // RuntimeSample captures process-local resources plus optional subsystem gauges.
@@ -203,6 +205,13 @@ func cloneDimensions(in map[string]string) map[string]string {
 		out[key] = value
 	}
 	return out
+}
+
+// RecordWork writes the counted work of one completed operation.
+func RecordWork(operation string, work map[string]int64) {
+	activePerformanceCapture().record(PerformanceRecord{
+		Time: time.Now().UTC(), Kind: "work", Operation: operation, Work: work,
+	})
 }
 
 // RecordRuntimeSample writes one resource snapshot.

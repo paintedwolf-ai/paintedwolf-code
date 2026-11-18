@@ -19,16 +19,19 @@ import (
 )
 
 func healthyReport() report {
+	metrics := map[string]metricSummary{}
+	for _, name := range measuredScenarios {
+		if name != "restart.ready" {
+			metrics[name] = metricSummary{Count: 1, P95MS: 10}
+		}
+	}
 	return report{
 		Prompts: 2,
-		Metrics: map[string]metricSummary{"startup.ready": {P95MS: 10}},
+		Metrics: metrics,
 		Correctness: correctnessSummary{
 			EventCount: 4, PromptTurnsSettled: 2, StreamReplaysDone: 2, SQLiteQuickCheck: "ok",
 		},
-		Budgets: budgets{
-			LatencyP95MS: map[string]float64{"startup.ready": 20, "restart.ready": 20},
-			Resources:    map[string]float64{"rss_growth_bytes": 1},
-		},
+		Budgets:   budgets{Resources: map[string]float64{"rss_growth_bytes": 1}},
 		Resources: resourceSummary{RSSGrowthBytes: 100},
 	}
 }
@@ -55,10 +58,11 @@ func TestSoakCyclesWaitBetweenCompletedCycles(t *testing.T) {
 	}
 }
 
-func TestHarnessTimeoutIncludesRequestedSoakAndCompletionGrace(t *testing.T) {
-	const soak = 30 * time.Minute
-	if got, want := harnessRunTimeout(soak), soak+harnessCompletionGrace; got != want {
-		t.Fatalf("harness timeout = %s, want %s", got, want)
+func TestLatencyIsReportedButNeverJudged(t *testing.T) {
+	value := healthyReport()
+	value.Metrics["prompt.settle"] = metricSummary{Count: 1, P95MS: 1e9, MaxMS: 1e9}
+	if got := evaluateBudgets(value); len(got) != 0 {
+		t.Fatalf("slow latency violations = %v", got)
 	}
 }
 
@@ -72,7 +76,7 @@ func TestQuickBudgetSkipsGrowthAndRestartOnlyChecks(t *testing.T) {
 func TestSoakBudgetRequiresRecoveredRestart(t *testing.T) {
 	value := healthyReport()
 	value.SoakSeconds = 10
-	value.Metrics["restart.ready"] = metricSummary{P95MS: 10}
+	value.Metrics["restart.ready"] = metricSummary{Count: 1, P95MS: 10}
 	value.Resources.RSSGrowthBytes = 0
 	value.Correctness.PostRestartEvents = 1
 	value.Correctness.SoakCycles = 1
@@ -111,7 +115,11 @@ func TestInstalledRunsAreHeldToReleaseValidBudgets(t *testing.T) {
 	value := healthyReport()
 	value.Mode, value.Prompts = "installed", 0
 	value.Correctness = correctnessSummary{SQLiteQuickCheck: "ok"}
-	value.Budgets.LatencyP95MS["prompt.settle"] = 100
+	for name := range value.Metrics {
+		if strings.HasPrefix(name, "prompt.") {
+			delete(value.Metrics, name)
+		}
+	}
 	if got := evaluateBudgets(value); len(got) != 0 {
 		t.Fatalf("installed violations = %v", got)
 	}
@@ -120,7 +128,7 @@ func TestInstalledRunsAreHeldToReleaseValidBudgets(t *testing.T) {
 		t.Fatalf("installed run without startup = %v", got)
 	}
 	value = healthyReport()
-	value.Budgets.LatencyP95MS["prompt.settle"] = 100
+	delete(value.Metrics, "prompt.settle")
 	if got := evaluateBudgets(value); len(got) != 1 || got[0] != "prompt.settle was not measured" {
 		t.Fatalf("sidecar run without prompts = %v", got)
 	}
