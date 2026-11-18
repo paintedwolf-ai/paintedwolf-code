@@ -78,7 +78,7 @@ func TestResumeReconcilesTopologyCompletedWhilePaused(t *testing.T) {
 }
 
 func TestResumeRetainsUnfinishedPhaseWithoutReenteringIt(t *testing.T) {
-	mgr, repositories, _, _ := testManagerWithRegistry(t)
+	mgr, _, _, _ := testManagerWithRegistry(t)
 	ctx := t.Context()
 	run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
 		WorkflowID: "options", WorkflowVersion: "1.0.0", Request: "Inspect the fixture.",

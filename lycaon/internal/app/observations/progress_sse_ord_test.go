@@ -52,7 +52,7 @@ func TestProgressUpdateSSECarriesMintedOrd(t *testing.T) {
 	testutil.FailErr(t, "hub.Subscribe", err)
 	t.Cleanup(unsub)
 
-	flush := newProgressChangeEmitter(store, pub, fixedActiveRun(runID), prog)
+	flush := newProgressChangeEmitter(store.Sessions, store.Transcript, pub, fixedActiveRun(runID), prog)
 	flush(progress.FlushPayload{
 		SessionID: sessionID,
 		Baseline:  progress.Snapshot{},

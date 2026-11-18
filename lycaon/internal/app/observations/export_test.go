@@ -19,5 +19,5 @@ func emitProgressCompletion(
 	if store == nil || eventPub == nil || progressStore == nil || activeRun == nil {
 		return
 	}
-	emitProgressCompletionFromContent(ctx, store, eventPub, progressStore, activeRun, sessionID, progressStore.Get(ctx, sessionID))
+	emitProgressCompletionFromContent(ctx, store.Sessions, store.Transcript, eventPub, progressStore, activeRun, sessionID, progressStore.Get(ctx, sessionID))
 }

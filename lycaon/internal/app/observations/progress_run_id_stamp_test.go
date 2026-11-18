@@ -59,7 +59,7 @@ func TestProgressUpdateStampedWithActiveRun(t *testing.T) {
 	const runID = "run-update-1"
 	seedWorkflowRun(t, sqlDB, sessionID, runID)
 
-	flush := newProgressChangeEmitter(st, &events.Publisher{}, fixedActiveRun(runID), prog)
+	flush := newProgressChangeEmitter(st.Sessions, st.Transcript, &events.Publisher{}, fixedActiveRun(runID), prog)
 	flush(progress.FlushPayload{
 		SessionID: sessionID,
 		Baseline:  progress.Snapshot{},
@@ -106,7 +106,7 @@ func TestProgressStampIgnoresStaleBoundRunID(t *testing.T) {
 	seedWorkflowRun(t, sqlDB, sessionID, childRun, parentRun)
 	prog.BindRun(sessionID, parentRun)
 
-	flush := newProgressChangeEmitter(st, &events.Publisher{}, fixedActiveRun(childRun), prog)
+	flush := newProgressChangeEmitter(st.Sessions, st.Transcript, &events.Publisher{}, fixedActiveRun(childRun), prog)
 	flush(progress.FlushPayload{
 		SessionID: sessionID,
 		Baseline:  progress.Snapshot{},
@@ -129,7 +129,7 @@ func TestProgressStampIgnoresStaleBoundRunID(t *testing.T) {
 func TestProgressRowsSkippedWhenNoActiveRun(t *testing.T) {
 	st, sessionID, _, prog := newStampStore(t)
 
-	flush := newProgressChangeEmitter(st, &events.Publisher{}, fixedActiveRun(""), prog)
+	flush := newProgressChangeEmitter(st.Sessions, st.Transcript, &events.Publisher{}, fixedActiveRun(""), prog)
 	flush(progress.FlushPayload{
 		SessionID: sessionID,
 		Baseline:  progress.Snapshot{},

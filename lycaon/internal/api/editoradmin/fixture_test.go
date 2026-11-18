@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/credentialstore"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/people/peoplestore"
@@ -71,10 +70,7 @@ func (l *promotionLog) count() int {
 
 type fixtureOption func(*apitestdeps.Deps)
 
-func withSessions(sessions interface {
-	*sessionstore.Repositories
-	DB() db.Handle
-}) fixtureOption {
+func withSessions(sessions *sessionstore.Repositories) fixtureOption {
 	return func(d *apitestdeps.Deps) { d.Store = sessions; d.Database = sessions.DB() }
 }
 
@@ -109,7 +105,7 @@ func newEditorFixture(t *testing.T, opts ...fixtureOption) *editorFixture {
 		MutationGate:    deps.MutationGate,
 		ProjectRegistry: deps.Projects,
 		SecretSpans:     secretspan.New(matcher),
-		SessionStore:    deps.Store,
+		SessionStore:    deps.Store.Sessions,
 		TryRunPromotion: promotions.record,
 	})
 	t.Cleanup(func() {

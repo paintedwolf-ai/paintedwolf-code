@@ -18,7 +18,7 @@ import (
 )
 
 // failingSessions cannot read any chat.
-type failingSessions struct{ *sessionstore.Repositories }
+type failingSessions struct{ sessionstore.SessionRepository }
 
 func (failingSessions) Get(context.Context, string) (*wire.Session, error) {
 	return nil, errors.New("session store offline")
@@ -88,7 +88,9 @@ func TestChangeHistoryRefusesForeignCursorsAndLimits(t *testing.T) {
 }
 
 func TestUnreadableChatStopsAffiliatedCommands(t *testing.T) {
-	f := newEditorFixture(t, withSessions(failingSessions{SQL: storetest.New(t)}))
+	sessions := storetest.New(t)
+	sessions.Sessions = failingSessions{SessionRepository: sessions.Sessions}
+	f := newEditorFixture(t, withSessions(sessions))
 	d := f.open(t, "a.txt", "window")
 	chat := uuid.NewString()
 	command := wire.EditorDocumentCommandRequest{SessionID: chat, OperationID: uuid.NewString(), ClientID: "window", ExpectedRevision: d.Revision}
