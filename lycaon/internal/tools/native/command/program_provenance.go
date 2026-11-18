@@ -14,7 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
-type programHTTPProvenanceStore interface {
+type ProgramProvenance interface {
 	CommitProgramHTTPProvenance(ctx context.Context, sessionID, projectDir string, prov evidence.ProgramHTTPProvenance) (string, error)
 	ExternalCustodyURLsForPaths(ctx context.Context, sessionID, projectDir string, paths []string) ([]string, error)
 }
@@ -373,8 +373,8 @@ func (r *programRun) lookupCustodyURLs(ctx context.Context, normPaths []string) 
 	}
 	r.provenance.mu.Unlock()
 
-	store, ok := r.sessions.(programHTTPProvenanceStore)
-	if !ok || len(storeQueryPaths) == 0 {
+	store := r.custody
+	if store == nil || len(storeQueryPaths) == 0 {
 		return urls
 	}
 	projDir := r.projectDir()
@@ -445,13 +445,10 @@ func (r *programRun) noteNativeFileMutation(ctx context.Context, commandName str
 }
 
 func (r *ProgramRuntime) commitProgramHTTPProvenance(ctx context.Context, run *programRun, hasModelVisibleOutput bool) {
-	if r == nil || run == nil || r.Sessions == nil {
+	if r == nil || run == nil || r.Provenance == nil {
 		return
 	}
-	store, ok := r.Sessions.(programHTTPProvenanceStore)
-	if !ok {
-		return
-	}
+	store := r.Provenance
 	run.provenance.mu.Lock()
 	ingested := run.provenance.directExternalOutput || (run.provenance.pipedExternalOutput && hasModelVisibleOutput)
 	var observedURLs []string

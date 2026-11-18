@@ -108,18 +108,8 @@ func parseOutputSource(sourceID, outputDir string) (programID, stream string, ok
 	return prog, ext, true
 }
 
-func (r *ProgramRuntime) sourceObserver() invocation.ProgramSourceObserver {
-	if r.SourceObserver != nil {
-		return r.SourceObserver
-	}
-	if obs, ok := r.Sessions.(invocation.ProgramSourceObserver); ok {
-		return obs
-	}
-	return nil
-}
-
 func (r *ProgramRuntime) commitStreamSourceDeliveries(ctx context.Context, run *programRun, programID, ref string, screenedBytes []byte, mappings []toolcontract.StreamSourceMapping, ranges [][2]int64) {
-	observer := r.sourceObserver()
+	observer := r.SourceObserver
 	responseID := run.parentReceipt
 	if responseID == "" {
 		responseID = programID
@@ -228,7 +218,7 @@ func tagDelivery(run *programRun, reference, path string, obs evidence.Delivered
 // A window counts only when its rows reached the delivered output as encoded: one
 // screened or cut from the preview was not delivered and stays uncited.
 func (r *ProgramRuntime) commitProgramWindows(ctx context.Context, run *programRun, programID, ref string, parts []deliveredOutputPart) {
-	observer := r.sourceObserver()
+	observer := r.SourceObserver
 	windows := run.windows.Take()
 	if observer == nil || len(windows) == 0 {
 		return

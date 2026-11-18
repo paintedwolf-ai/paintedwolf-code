@@ -35,6 +35,7 @@ import (
 	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	scantoolapi "github.com/lycaon/lycaon/internal/scan/toolapi"
 	"github.com/lycaon/lycaon/internal/secretcap"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -44,7 +45,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
-	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/heldtools"
 	"github.com/lycaon/lycaon/internal/tools/native/page"
 	reporttools "github.com/lycaon/lycaon/internal/tools/native/reporting"
@@ -282,8 +282,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	if err := heldtools.Register(rt.Registry, heldcall.New(nil, nil)); err != nil {
 		contractcheck.FailErr(t, "heldtools.Register failed", err)
 	}
-	memStore := storetest.New(t, testdbseed.DefaultProjectID)
-	wireContractProgramServices(t, rt, sqlDB, memStore.Sessions)
+	wireContractProgramServices(t, rt, sqlDB)
 	if err := native.RegisterRecallTool(rt.Registry, recall.NewService(sqlDB, t.TempDir())); err != nil {
 		contractcheck.FailErr(t, "native.RegisterRecallTool failed", err)
 	}
@@ -302,13 +301,14 @@ func RegisterCatalogToolsForContract(t *testing.T) *tools.DefaultRegistry {
 	return reg
 }
 
-func wireContractProgramServices(t *testing.T, rt *toolhost.Runtime, sqlDB db.Handle, sessions command.SessionOwners) {
+func wireContractProgramServices(t *testing.T, rt *toolhost.Runtime, sqlDB db.ReadHandle) {
 	t.Helper()
+	repositories := store.NewSQL(sqlDB)
 	if err := rt.Commands.SetProgramServices(toolhost.ProgramServices{
 		Recorder:  invocation.NewSQLRecorder(sqlDB),
 		Blobs:     blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(nil, nil),
-		Sessions:  sessions,
+		Sessions:  repositories.Sessions, Provenance: repositories.Evidence, SourceObserver: repositories.Evidence,
 	}); err != nil {
 		contractcheck.FailErr(t, "rt.Commands.SetProgramServices failed", err)
 	}

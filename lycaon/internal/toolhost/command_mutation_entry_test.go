@@ -47,7 +47,7 @@ func composedMutationEntry(t *testing.T) (*programtest.Fixture, *projectsource.S
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	runtime.Authority.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
 	original := fixture.Runtime
-	testutil.FailErr(t, "compose production program services", runtime.Commands.SetProgramServices(ProgramServices{Recorder: fixture.Recorder, Blobs: original.Blobs, Projector: original.Projector, Progress: original.Progress, Sessions: original.Sessions}))
+	testutil.FailErr(t, "compose production program services", runtime.Commands.SetProgramServices(ProgramServices{Recorder: fixture.Recorder, Blobs: original.Blobs, Projector: original.Projector, Progress: original.Progress, Sessions: original.Sessions, Provenance: original.Provenance, SourceObserver: original.SourceObserver}))
 	runtime.Commands.SetBackgroundRegistry(fixture.Background)
 	fixture.Runtime = runtime.Commands.programs()
 	_, err = fixture.Database.ExecContext(t.Context(), `INSERT INTO project_roots (id,project_id,path,label,is_primary,added_at) VALUES ('r1',?,?,'root',1,?)`, testdbseed.DefaultProjectID, root, timelayout.Format(time.Now().UTC()))

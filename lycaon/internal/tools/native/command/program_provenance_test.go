@@ -14,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type fakeProvenanceStore struct {
@@ -32,10 +31,6 @@ func (f *fakeProvenanceStore) seed(sessionID, path string, urls ...string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.custody[sessionID+"\x00"+path] = append([]string(nil), urls...)
-}
-
-func (f *fakeProvenanceStore) Get(context.Context, string) (*api.Session, error) {
-	return nil, nil
 }
 
 func (f *fakeProvenanceStore) CommitProgramHTTPProvenance(_ context.Context, sessionID, _ string, prov evidence.ProgramHTTPProvenance) (string, error) {
@@ -210,8 +205,8 @@ func TestNoteInputRedirectReadRoutesCustody(t *testing.T) {
 	store := newFakeProvenanceStore()
 	store.seed("sess-1", "alpha.txt", "https://ext.example/a.txt")
 	storeRun := &programRun{
-		tc:       tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1", RootSessionID: "chat-9"}},
-		sessions: store,
+		tc:      tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1", RootSessionID: "chat-9"}},
+		custody: store,
 	}
 	storeRun.noteInputRedirectRead(nil, "alpha.txt")
 	if !storeRun.provenance.pipedExternalOutput {
@@ -275,8 +270,8 @@ func TestFinishOpTrackerRouting(t *testing.T) {
 	store := newFakeProvenanceStore()
 	store.seed("sess-1", "alpha.txt", "https://ext.example/a.txt")
 	run := &programRun{
-		tc:       tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1"}},
-		sessions: store,
+		tc:      tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1"}},
+		custody: store,
 	}
 
 	tracker := run.beginOpTracker()
@@ -395,15 +390,15 @@ func TestCustodyFileStateAndLookup(t *testing.T) {
 	store.seed("sess-1", "alpha.txt", "https://ext.example/a.txt")
 	store.seed("chat-9", "beta.txt", "https://ext.example/b.txt")
 	storeRun := &programRun{
-		tc:       tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1", RootSessionID: "chat-9"}},
-		sessions: store,
+		tc:      tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1", RootSessionID: "chat-9"}},
+		custody: store,
 	}
 	got := storeRun.lookupCustodyURLs(context.Background(), []string{"alpha.txt", "beta.txt"})
 	if !slices.Equal(got, []string{"https://ext.example/a.txt", "https://ext.example/b.txt"}) {
 		t.Fatalf("store-backed lookup = %v, want both session and chat custody", got)
 	}
 
-	cleared := &programRun{sessions: store}
+	cleared := &programRun{custody: store}
 	cleared.clearCustodyFile("alpha.txt")
 	if got := cleared.lookupCustodyURLs(context.Background(), []string{"alpha.txt"}); len(got) != 0 {
 		t.Fatalf("cleared path lookup = %v, want empty (cleared paths skip the store)", got)
@@ -417,8 +412,8 @@ func TestNoteNativeFileMutationCustody(t *testing.T) {
 	store := newFakeProvenanceStore()
 	store.seed("sess-1", "src.txt", "https://ext.example/src.txt")
 	rmRun := &programRun{
-		tc:       tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1"}},
-		sessions: store,
+		tc:      tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1"}},
+		custody: store,
 	}
 	rmRun.noteNativeFileMutation(context.Background(), "rm", []commandprogram.PathTarget{{Path: "src.txt"}})
 	if rmRun.provenance.clearedFiles["src.txt"] != true {
@@ -426,8 +421,8 @@ func TestNoteNativeFileMutationCustody(t *testing.T) {
 	}
 
 	cpRun := &programRun{
-		tc:       tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1"}},
-		sessions: store,
+		tc:      tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1"}},
+		custody: store,
 	}
 	cpRun.noteNativeFileMutation(context.Background(), "cp", []commandprogram.PathTarget{
 		{Path: "src.txt"}, {Path: "copy.txt", Write: true},

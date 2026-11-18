@@ -2,14 +2,17 @@
   "category": "go_struct_fields",
   "artifact": "lycaon/internal/tools/native/command/command.programRun",
   "kind": "data_record",
-  "workstream": "shared-verification-runtime",
+  "workstream": "command-evidence-bindings",
   "disposition": "retain",
-  "reason": "Retain one ephemeral program lifetime record. Immutable initiating tool identity accompanies the existing execution frame and source binding; it does not create a separate verification runtime or authority owner. Selected-check receipts and parked-settlement contracts cover those links.",
-  "reviewed_commit": "1da0705c31dcb167e8a38f16761ff8a4b8e1f033",
-  "ceiling": 26,
+  "reason": "Retain one per-invocation frame with its execution identity, memory budget, output windows and synchronized custody state. The provenance capability replaces session identity in this frame without adding fields. Verification, parked settlement, source delivery and custody contracts cover the shared lifetime.",
+  "reviewed_commit": "3f27d5b6a78a222013f4053a94d4de30c15c824c",
+  "ceiling": 30,
   "boundaries": {
-    "lycaon/internal/tools/native/verify_test.go": "30d258e73e5f1fa299b24fe66452ed1a6c2bde65971e3e9da629986d39eb4cad",
-    "lycaon/internal/tools/native/command/verify_program_park_test.go": "7bc32bb756c8e0fec108fb29eff2011839eb2a48eaad0f046ce6c11f1da17338"
+    "lycaon/internal/toolhost/command_parking_test.go": "a5975f77bf7bd3b3941ff86a4387ecf710539d0cd874ecbb15ec58430f9f6a3f",
+    "lycaon/internal/tools/native/command/program_provenance_test.go": "4c7dbb497dff5953712b3296b292850edb2ff4b5bf94d807cfef7551bd2412de",
+    "lycaon/internal/tools/native/command/verify_program_park_test.go": "6132c1a428b7d576743b2e797147fd2d674245d8aefe69998e4a81a356297919",
+    "lycaon/internal/tools/native/verify_test.go": "8116e2ee7eb5ba471215557f875a59bae43d60e131f0d262ead38e2cc365da48",
+    "lycaon/test/wiring/command_curl_data_path_e2e_test.go": "5bb4145d28ec2eff5d35d853e5cb780e54cfb4f5a61d33024abfc43bde274a4e"
   },
-  "reviewed_shape": "1fa7b554c6572434f6f03d4edaf98200797ce8d249bf95deb0a9c5463cd06b1a"
+  "reviewed_shape": "a90e1b5b1d44ccc65daa48fa9662d53092e7647a7f634fb853a613676032e848"
 }

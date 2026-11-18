@@ -279,6 +279,7 @@ func (b *serveBuilder) wireMCP() error {
 			if err := b.execution.Host.Commands.SetProgramServices(toolhost.ProgramServices{
 				Recorder: recorder, Blobs: blobstore.Store{Root: b.storage.Directory}, Projector: captureProjector,
 				Progress: b.sessions.Manager.Coordinator.Guards, Sessions: b.storage.Sessions.Sessions,
+				Provenance: b.storage.Sessions.Evidence, SourceObserver: b.storage.Sessions.Evidence,
 				SourceRuns: b.sessions.Manager.Verification, ExternalHidden: programSettings.ExternalHidden(),
 			}); err != nil {
 				return err
