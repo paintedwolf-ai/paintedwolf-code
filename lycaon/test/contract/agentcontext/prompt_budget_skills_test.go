@@ -16,8 +16,10 @@ func promptBudgetSkillRosterVarsForSet(
 	selector skills.Selector,
 ) map[string]any {
 	t.Helper()
-	loaded, err := extpacks.LoadEffectiveSkills(contractcheck.StockCatalog(t))
-	contractcheck.FailErr(t, "load stock skills", err)
+	loaded, diagnostics := extpacks.LoadEffectiveSkills(contractcheck.StockCatalog(t))
+	if len(diagnostics) != 0 {
+		t.Fatalf("stock skill diagnostics: %v", diagnostics)
+	}
 	if len(loaded) == 0 {
 		return nil
 	}
@@ -59,8 +61,10 @@ func mergePromptBudgetSkillRoster(t *testing.T, vars map[string]any) {
 
 func mergeReachableSkillRoster(t *testing.T, vars map[string]any, reader prompts.Reader) {
 	t.Helper()
-	loaded, err := extpacks.LoadEffectiveSkills(contractcheck.StockCatalog(t))
-	contractcheck.FailErr(t, "load stock skills", err)
+	loaded, diagnostics := extpacks.LoadEffectiveSkills(contractcheck.StockCatalog(t))
+	if len(diagnostics) != 0 {
+		t.Fatalf("stock skill diagnostics: %v", diagnostics)
+	}
 	reachable := make([]skills.Skill, 0, len(loaded))
 	for _, skill := range loaded {
 		if toolvocab.SkillToolsOffered(skill, reader.Held()) {

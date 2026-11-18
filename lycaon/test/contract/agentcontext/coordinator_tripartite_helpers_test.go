@@ -61,8 +61,7 @@ func mergeCoordinatorTemplateVars(t *testing.T) map[string]any {
 	return merged
 }
 
-// mergeFixtureWorkspaceRoot attaches one real folder so the render matches a
-// post-milestone-9 single-root turn: the folder block carries a labeled row.
+// mergeFixtureWorkspaceRoot adds one labeled primary root to the prompt.
 func mergeFixtureWorkspaceRoot(t *testing.T, vars map[string]any, path string) {
 	t.Helper()
 	if strings.TrimSpace(path) == "" {
@@ -170,9 +169,7 @@ func modeTemplateRefs(profile surface.TurnProfile) []string {
 	return out
 }
 
-// mergeWidestUnitBlocks renders the unit slots for the widest turn a surface
-// can produce: every loadable tool counts as offered, so caps cover the
-// prompt a fully loaded turn renders, not only the floor.
+// mergeWidestUnitBlocks includes every unit reachable with all loadable tools.
 func mergeWidestUnitBlocks(t *testing.T, engine prompts.PromptTemplateEngine, surfaceID string, vars map[string]any) {
 	t.Helper()
 	catalog, err := prompts.UnitCatalogForEngine(engine)
