@@ -36,8 +36,6 @@ func externalProgram(binary string, args ...string) string {
 	return strings.Join(words, " ")
 }
 
-// Compare against the real utility under the shared process environment. No
-// expected editor or hook error is synthesized by the command owner.
 func TestProgramGitPreservesOwnEditorAndHookFailures(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -45,7 +43,7 @@ func TestProgramGitPreservesOwnEditorAndHookFailures(t *testing.T) {
 	git := requiredExternal(t, "git")
 	opts, err := lycexec.AgentLaunchOptions(lycexec.HostLaunch("noninteractive fixture"), f.Dir, nil, nil)
 	testutil.FailErr(t, "build process environment", err)
-	environment, err := lycexec.ProcessEnvironment(opts)
+	environment, err := lycexec.FinalProcessEnvironment(opts, nil)
 	testutil.FailErr(t, "resolve process environment", err)
 	base := []string{"-c", "user.name=Fixture", "-c", "user.email=fixture", "-c", "commit.gpgSign=false", "-c", "core.hooksPath=.git/hooks"}
 	runGit := func(args ...string) (string, string, int) {
