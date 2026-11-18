@@ -4,16 +4,16 @@
   "kind": "runtime_service",
   "workstream": "worker-promotion",
   "disposition": "retain",
-  "reason": "Retain 1158 receiver lines, 49 methods and 21 fields for one leased promotion: filesystem apply and journal recovery, source publication, child statuses and coordinator reconciliation. Branch access is now an explicit capability and refuses absent configuration before reconstruction; this accounts for the additional field and three receiver lines. PromotionStore performs the atomic persistence commit. Atomic apply, crash recovery, source publication, lease and relocation contracts support keeping the orchestration together.",
-  "reviewed_commit": "86547fa59f1327199afcdd83a2a01ffd2e5018f7",
+  "reason": "Retain 1194 receiver lines, 49 methods and 22 fields for leased promotion. Checkpoint review, drift validation, journal recovery, source publication and terminal cleanup share the project lock. PromotionStore commits the resulting statuses. The apply, rollback, restart and branch retention contracts cover this boundary.",
+  "reviewed_commit": "07b47cc959482a0f046db388a9cbe7f5c3fb9601",
   "ceiling": 49,
   "boundaries": {
     "lycaon/internal/worker/promote_atomic_test.go": "4801f5cb95a20841c428fb6177c329b1ea6c6a173354ad1846aec634e6860f88",
     "lycaon/internal/worker/promote_transaction_crash_test.go": "52a372fd2182fa939b9a27ed7ac0c5c78dc186e78299c672f6ced80472aca35b",
     "lycaon/internal/worker/promote_source_feed_test.go": "0a391fcd222f3ec3b0b2d57383f8a841d17869afe3ffd618a5fbdb5cfb0e5de1",
     "lycaon/internal/worker/merge_service_test.go": "7f606c96a7ef7d183ebf07f2c620b5626213b9362e92a6d67b8cc74fb53a747a",
-    "lycaon/internal/worker/merge_apply_claim_test.go": "b84e27a49267b699c1d03d7b604370f11d8b0d0bc7faf6686a4fdcd7d5476ea1",
-    "lycaon/internal/worker/branch_retention_e2e_test.go": "f0fe148505a01dc4109ff4f649a0fcf79e2a47bb98bdecb4d5389c3b286be018"
+    "lycaon/internal/worker/merge_apply_claim_test.go": "a518d0dae03e4235405f91d690f61d023bdb4f5cad06522ec73874bdba24e6d1",
+    "lycaon/internal/worker/branch_retention_e2e_test.go": "cd81e16af96c4e26aca2a61f9c26ba50c50830513fd93054bc034cc5a4664957"
   },
-  "reviewed_shape": "cf145fb370e49564343df5e624f366d20ed4a7e5a823e584d31fbe5a6add49b4"
+  "reviewed_shape": "9abe8f35da3e7900021fd3bbc3b3a60d16130cd8165f7ab6c41b24c49620970f"
 }
