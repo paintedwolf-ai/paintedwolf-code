@@ -3,7 +3,10 @@ paths:
     get:
       tags: [projects]
       operationId: listProjectSourceVersions
-      x-multi-stream-list: true
+      x-multi-stream-list:
+        cursor: cursor
+        next: next_cursor
+        bounded: [versions, commits]
       summary: List one file's merged history — retained versions and git lineage
       description: |
         Every retained state of the file, across primary and worker workspaces,

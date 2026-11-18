@@ -307,7 +307,11 @@ func TestAPIConventionListEnvelope(t *testing.T) {
 					violations = append(violations, fmt.Sprintf("%s: list-envelope: %s body declares %q", op.ID, code, banned))
 				}
 			}
-			if !isList || asBool(op.Op[multiStreamListKey]) {
+			if decl := op.Op[multiStreamListKey]; decl != nil {
+				violations = append(violations, multiStreamViolations(op, code, decl, params, props, spec)...)
+				continue
+			}
+			if !isList {
 				continue
 			}
 			var arrays []string
@@ -325,6 +329,32 @@ func TestAPIConventionListEnvelope(t *testing.T) {
 		}
 	}
 	reportConventionViolations(t, violations)
+}
+
+// multiStreamViolations checks an x-multi-stream-list declaration: the query
+// parameter that takes a cursor, the answer field that continues it, and the
+// arrays limit bounds all exist.
+func multiStreamViolations(op conventionOp, code string, decl any, params, props map[string]map[string]any, spec *conventionSpec) []string {
+	fields := asMap(decl)
+	cursor, next := asString(fields["cursor"]), asString(fields["next"])
+	bounded := asSlice(fields["bounded"])
+	var violations []string
+	if params[cursor] == nil {
+		violations = append(violations, fmt.Sprintf("%s: multi-stream: cursor %q is not a query parameter", op.ID, cursor))
+	}
+	if props[next] == nil {
+		violations = append(violations, fmt.Sprintf("%s: multi-stream: %s body has no %q to continue the cursor", op.ID, code, next))
+	}
+	if len(bounded) == 0 {
+		violations = append(violations, fmt.Sprintf("%s: multi-stream: names no array that limit bounds", op.ID))
+	}
+	for _, raw := range bounded {
+		name := asString(raw)
+		if props[name] == nil || !schemaHasType(spec.effective(props[name]), "array") {
+			violations = append(violations, fmt.Sprintf("%s: multi-stream: %s body has no array %q", op.ID, code, name))
+		}
+	}
+	return violations
 }
 
 var forbiddenPageParameters = map[string]bool{
