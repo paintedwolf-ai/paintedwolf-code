@@ -1,9 +1,12 @@
 import { expect } from "@playwright/test";
 import {
   apiGetActiveWorkflowRun,
+  apiGetWorkflowRun,
+  apiTryGetActiveWorkflowRun,
   bootstrapChatSession,
   liveChatStage,
   openWorkflowsTab,
+  sendChatPrompt,
   settledChatSessionId,
   webE2e,
 } from "./helpers.ts";
@@ -38,17 +41,22 @@ webE2e.describe("workflow spans", () => {
     await openWorkflowsTab(page);
     await expect(page.getByTestId("workflow-active-row")).toBeVisible({ timeout: 120_000 });
 
-    await stage.getByTestId("chat-composer").fill("/exit");
-    await stage.getByTestId("composer-send").click();
-    // Exit either resumes the ambient parent or respawns a fresh ambient run.
+    await sendChatPrompt(page, "/exit");
     await expect
-      .poll(async () => (await apiGetActiveWorkflowRun(request, sessionId)).workflow_id, { timeout: 60_000 })
-      .toBe(ambient.workflow_id);
+      .poll(async () => (await apiGetWorkflowRun(request, planRunId)).status, { timeout: 60_000 })
+      .not.toMatch(/^(running|paused|paused_on_child)$/);
     await openWorkflowsTab(page);
     await expect(page.getByTestId("workflows-tab-empty")).toBeVisible({
       timeout: 60_000,
     });
     // Catalog span stays in the transcript as history after /exit.
+    await expect(span).toHaveCount(1);
+
+    // Exit respawns the ambient run, or the next request binds one when the plan ended first.
+    await sendChatPrompt(page, "back to building");
+    await expect
+      .poll(async () => (await apiTryGetActiveWorkflowRun(request, sessionId))?.workflow_id, { timeout: 60_000 })
+      .toBe(ambient.workflow_id);
     await expect(span).toHaveCount(1);
   });
 });
