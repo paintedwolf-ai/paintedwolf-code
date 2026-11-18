@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"strings"
@@ -192,8 +190,6 @@ func framedValue(output, marker string) (string, error) {
 	}
 	return "", errors.New("login shell output was cut off before the closing marker")
 }
-
-func defaultStat(path string) (fs.FileInfo, error) { return os.Stat(path) }
 
 // defaultRun kills the shell and any profile helpers as one group on timeout,
 // after answering, or with the engine; interactive shells ignore SIGTERM.
