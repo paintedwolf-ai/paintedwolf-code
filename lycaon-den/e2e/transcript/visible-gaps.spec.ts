@@ -1,3 +1,4 @@
+import { CHAT_GAPS_PX } from "../../src/chat/transcript/layout/chat-gap-defaults.ts";
 import { expect, type Locator } from "@playwright/test";
 import {
   activateProject, apiSeedSessionTranscript, bootstrapChatSession, expectShellReady, liveChatStage, openSessionRow,
@@ -54,17 +55,18 @@ for (const scale of [1, 53 / 17]) {
     const stage = liveChatStage(page);
     const review = stage.getByTestId("turn-walk-card");
     await expect(review).toBeVisible();
-    const gaps = await page.evaluate(async (value) => {
+    const reserve = await page.evaluate(async (value) => {
       (window as unknown as { __harness: { setTextScale(scale: number): void } }).__harness.setTextScale(value);
       const modulePath = "/src/chat/transcript/layout/transcript-spacing.ts";
-      const { CHAT_GAPS_PX, transcriptActionReservePx, transcriptRootRemPx, transcriptSpacing } =
+      const { transcriptActionReservePx, transcriptRootRemPx, transcriptSpacing } =
         await import(/* @vite-ignore */ modulePath) as typeof import("../../src/chat/transcript/layout/transcript-spacing.ts");
-      return {
-        item: CHAT_GAPS_PX.betweenItems * value,
-        message: CHAT_GAPS_PX.aroundMessages * value,
-        afterActions: Math.max(CHAT_GAPS_PX.aroundMessages * value, transcriptActionReservePx(transcriptSpacing(), transcriptRootRemPx())),
-      };
+      return transcriptActionReservePx(transcriptSpacing(), transcriptRootRemPx());
     }, scale);
+    const gaps = {
+      item: CHAT_GAPS_PX.betweenItems * scale,
+      message: CHAT_GAPS_PX.aroundMessages * scale,
+      afterActions: Math.max(CHAT_GAPS_PX.aroundMessages * scale, reserve),
+    };
     const user = stage.locator(`[data-msg-id="${opening}"] .bubble--user`);
     const second = stage.locator(`[data-msg-id="${next}"] .bubble--user`);
     const prose = stage.locator(`[data-msg-id="${reply}"] .bubble--assistant`);

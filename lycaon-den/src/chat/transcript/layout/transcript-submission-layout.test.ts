@@ -50,5 +50,5 @@ it("keeps a reserved queue send in the same turn through its host echo", () => {
   const after = project([opener, continuation], false);
   expect(before.map(item => item.key)).toEqual(["time:day:opening", "opening", "continued", "turn-tail:opening"]);
   expect(after.map(item => item.key)).toEqual(before.map(item => item.key));
-  expect(transcriptRowSeams(after, { continuation: key => key === continuation.id })).toEqual(transcriptRowSeams(before));
+  expect(transcriptRowSeams(after)).toEqual(transcriptRowSeams(before));
 });

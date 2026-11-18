@@ -1,5 +1,6 @@
+import { CHAT_GAPS_PX } from "./chat-gap-defaults.ts";
 import { afterEach, describe, expect, it } from "vitest";
-import { CHAT_GAPS_PX, DEFAULT_TRANSCRIPT_SPACING, TRANSCRIPT_SPACING, TRANSCRIPT_ROOT_REM_PX, setTranscriptSpacing, transcriptGeometryKey, transcriptInteriorSignature, transcriptSeamPx, transcriptSpacing, transcriptSpacingProperty, transcriptSpacingStyles } from "./transcript-spacing.ts";
+import { DEFAULT_TRANSCRIPT_SPACING, TRANSCRIPT_SPACING, TRANSCRIPT_ROOT_REM_PX, setTranscriptSpacing, transcriptGeometryKey, transcriptInteriorSignature, transcriptSeamPx, transcriptSpacing, transcriptSpacingProperty, transcriptSpacingStyles } from "./transcript-spacing.ts";
 import { presentedVisualsHeight, transcriptRowContentEstimate } from "./transcript-row-content-estimate.ts";
 import { denSourceRoot, loadSourceCorpus } from "../../../test/source-corpus.ts";
 

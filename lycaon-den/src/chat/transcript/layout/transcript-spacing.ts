@@ -1,11 +1,6 @@
 import { createEffect, createRoot, createSignal } from "solid-js";
 import { effectiveTextScale } from "../../../platform/desktop/accessibility-text-size.ts";
-
-/** Visible transcript gaps in pixels at the default text size. */
-export const CHAT_GAPS_PX = {
-  aroundMessages: 48,
-  betweenItems: 16,
-} as const;
+import { CHAT_GAPS_PX } from "./chat-gap-defaults.ts";
 
 /** The root font size Den declares at scale 1. */
 export const TRANSCRIPT_ROOT_REM_PX = 14;
