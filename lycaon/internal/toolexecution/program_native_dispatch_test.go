@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -25,7 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-type nativeProgressFixture struct{ store *progress.MemoryStore }
+type nativeProgressFixture struct{ store progress.Store }
 
 func (p nativeProgressFixture) ProgramProgressState(ctx context.Context, id string) (progress.PrerequisiteState, error) {
 	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.store.Get(ctx, id)}, nil
@@ -73,7 +74,7 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath, modelTool string) {
 	child.Identity.ParentExecutionID = "parent"
 	bound, err := toolcontract.BindOperation(definition, child, "cat", definition.Facts().Commands[0].Effects[0].Mode, nil)
 	testutil.FailErr(t, "bind native read", err)
-	owner := progress.NewMemoryStore()
+	owner := progresstest.New(t, parent.SessionID)
 	testutil.FailErr(t, "set actual progress", owner.Set(parent.SessionID, "- [ ] Inspect"))
 	args := map[string]any{"path": inputPath}
 	prepared, invoked := false, false
@@ -179,7 +180,7 @@ func testNativeOwnerPolicyAfterRecorder(t *testing.T, phases []string) {
 	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "cat input"}}, stageMemory(t, 64<<20))
 	testutil.FailErr(t, "capture native frame", err)
 	t.Cleanup(frame.Close)
-	progressStore := progress.NewMemoryStore()
+	progressStore := progresstest.New(t, parent.SessionID)
 	testutil.FailErr(t, "set current progress", progressStore.Set(parent.SessionID, "- [ ] Inspect"))
 	for _, phase := range phases {
 		t.Run(phase, func(t *testing.T) {
@@ -389,7 +390,7 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 					return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, err
 				}}, nil
 			}
-			owner := progress.NewMemoryStore()
+			owner := progresstest.New(t, parent.SessionID)
 			testutil.FailErr(t, "seed progress", owner.Set(parent.SessionID, "- [ ] Inspect"))
 			memory := stageMemory(t, 64<<20)
 			result, err := executor.InvokeNative(ctx, frame, surface, memory, nativeProgressFixture{owner}, nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {

@@ -93,7 +93,7 @@ func TestFinishPromptExecutionQueuesOverlayIntegrateCompleteKick(t *testing.T) {
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
-	prog := progress.NewMemoryStore()
+	prog := progress.NewSQLStore(store.DB())
 	mgr.SetProgressStore(prog)
 
 	ctx := context.Background()

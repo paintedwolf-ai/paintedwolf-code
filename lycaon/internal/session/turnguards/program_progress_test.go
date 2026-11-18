@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -16,7 +16,7 @@ func (s programSessions) Get(_ context.Context, id string) (*api.Session, error)
 
 func TestProgramProgressUsesLiveRootStoreAndWorkerFacts(t *testing.T) {
 	store := programSessions{"parent": {ID: "parent"}, "child": {ID: "child", ParentSessionID: "parent"}}
-	owner := progress.NewMemoryStore()
+	owner := progresstest.New(t, "parent", "child")
 	testutil.FailErr(t, "set root progress", owner.Set("parent", "- [ ] Root task"))
 	testutil.FailErr(t, "set distinct child progress", owner.Set("child", "- [ ] Child-only task"))
 	svc := &Service{store: store, progress: owner}

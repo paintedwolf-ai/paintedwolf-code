@@ -8,51 +8,10 @@ import (
 	"fmt"
 	"github.com/lycaon/lycaon/internal/timelayout"
 	"slices"
-	"strconv"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 )
-
-func (s *MemoryStore) Snapshot(ctx context.Context, sessionID string) (Snapshot, error) {
-	if err := ctx.Err(); err != nil {
-		return Snapshot{}, err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	record := s.bySess[normalizeKey(sessionID)]
-	return snapshotVersion(record.runID, record.content, record.itemIDs, strconv.FormatUint(record.revision, 10), record.revision), nil
-}
-
-func (s *MemoryStore) Update(ctx context.Context, sessionID string, change func(Snapshot) (Document, error)) (Snapshot, error) {
-	if err := ctx.Err(); err != nil {
-		return Snapshot{}, err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return Snapshot{}, err
-	}
-	key := normalizeKey(sessionID)
-	record := s.bySess[key]
-	current := snapshotVersion(record.runID, record.content, record.itemIDs, strconv.FormatUint(record.revision, 10), record.revision)
-	doc, err := change(current)
-	if err != nil {
-		return current, err
-	}
-	if err := ctx.Err(); err != nil {
-		return current, err
-	}
-	content := clampContent(doc.Content)
-	nextIDs := resolveDocumentItemIDs(current, Document{Content: content, ItemIDs: doc.ItemIDs})
-	if record.content != content || !slices.Equal(record.itemIDs, nextIDs) {
-		record.revision++
-	}
-	record.content = content
-	record.itemIDs = nextIDs
-	s.bySess[key] = record
-	return snapshotVersion(record.runID, record.content, record.itemIDs, strconv.FormatUint(record.revision, 10), record.revision), nil
-}
 
 func querySnapshot(ctx context.Context, queries *db.Queries, key string) (Snapshot, error) {
 	row, err := queries.GetSessionProgressSnapshot(ctx, key)

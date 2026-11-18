@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/session/progressclosure"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -19,7 +20,7 @@ import (
 )
 
 func TestWorkerAcknowledgementDoesNotRequireClosingUnfinishedRows(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "session")
 	testutil.FailErr(t, "seed checklist", store.Set("session", "- [x] Survey\n- [ ] Implement\n- [ ] Verify"))
 	closure := progressclosure.New()
 	closure.SetProgress(store)
@@ -57,7 +58,7 @@ func TestWorkerAcknowledgementDoesNotRequireClosingUnfinishedRows(t *testing.T) 
 }
 
 func TestStaleWorkerAcknowledgementRetainsNewFinishes(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "session")
 	testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Deliver"))
 	closure := progressclosure.New()
 	closure.SetProgress(store)
@@ -88,7 +89,7 @@ func TestReconciliationServiceRejectsTokensWithoutPendingFinishes(t *testing.T) 
 }
 
 func TestDocumentTransitionAndWorkerAcknowledgementRemainDistinct(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "session")
 	testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Deliver\n- [ ] Verify"))
 	closure := progressclosure.New()
 	closure.SetProgress(store)
@@ -122,7 +123,7 @@ func (s interleavingProgressStore) Update(ctx context.Context, id string, change
 }
 
 func TestNewWorkerFinishDuringDocumentCommitRemainsUnacknowledged(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "session")
 	testutil.FailErr(t, "seed pending work", store.Set("session", "- [ ] Deliver\n- [ ] Verify"))
 	closure := progressclosure.New()
 	closure.SetProgress(store)
@@ -157,7 +158,7 @@ func TestNewWorkerFinishDuringDocumentCommitRemainsUnacknowledged(t *testing.T) 
 }
 
 func TestFinishAfterCommitSurvivesAnOlderAcknowledgement(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "session")
 	testutil.FailErr(t, "seed deliverable", store.Set("session", "- [ ] Deliver"))
 	closure := progressclosure.New()
 	closure.SetProgress(store)
@@ -181,7 +182,7 @@ func TestFinishAfterCommitSurvivesAnOlderAcknowledgement(t *testing.T) {
 }
 
 func TestReconciliationTokenBindsTheExactBaselineRevision(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "session")
 	testutil.FailErr(t, "seed pending document", store.Set("session", "- [ ] Deliver"))
 	closure := progressclosure.New()
 	closure.SetProgress(store)
@@ -214,7 +215,7 @@ func (r *recordedAccounts) AccountJobs(_ context.Context, jobs []string) error {
 // Acknowledgement accounts for exactly the listed finishes; a failed record
 // keeps the set armed so the next update can acknowledge it.
 func TestAcknowledgementAccountsForTheListedResults(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "session")
 	testutil.FailErr(t, "seed pending document", store.Set("session", "- [ ] Deliver"))
 	accounts := &recordedAccounts{err: errors.New("database busy")}
 	closure := progressclosure.New()
@@ -238,7 +239,7 @@ func TestAcknowledgementAccountsForTheListedResults(t *testing.T) {
 // An operation that accounts for one finish releases only that finish; the
 // latch clears with the last one.
 func TestReleaseDropsAccountedFinishes(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "session")
 	testutil.FailErr(t, "seed pending document", store.Set("session", "- [ ] Deliver"))
 	closure := progressclosure.New()
 	closure.SetProgress(store)
@@ -266,7 +267,7 @@ func (n finishNames) NamesByJob(_ context.Context, jobID string) (workerrecords.
 // the jobs behind the token stay host identity, and a release keeps the
 // remaining finishes named.
 func TestReconciliationNamesFinishesByWorker(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "session")
 	testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Implement"))
 	closure := progressclosure.New()
 	closure.SetProgress(store)

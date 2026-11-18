@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -46,7 +46,7 @@ func TestProgramEnvelopeValidatesBeforeProgressAndSeparatesCommittedOutcome(t *t
 		return "", nil
 	}))
 	executor := NewExecutor(nil, registry, "fixture")
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "session")
 	proof := &envelopeIdentityFixture{catalog: parent.CatalogDigest}
 	update := &ProgramProgressUpdate{ExecutionID: "progress-execution", Arguments: map[string]any{"content": "- [ ] Create fixture"}}
 	admission := stageMemory(t, 64<<20)
@@ -117,7 +117,7 @@ func TestProgramEnvelopeChecksObservedSnapshotRevision(t *testing.T) {
 				return "", nil
 			}))
 			executor := NewExecutor(nil, registry, "fixture")
-			store := progress.NewMemoryStore()
+			store := progresstest.New(t, "session")
 			testutil.FailErr(t, "seed pending deliverable", store.Set("session", "- [ ] Deliver"))
 			before, err := store.Snapshot(t.Context(), "session")
 			testutil.FailErr(t, "observe current revision", err)

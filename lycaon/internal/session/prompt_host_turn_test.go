@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/postturn"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
@@ -254,7 +255,7 @@ func (s postHookWorkflowContext) BuildCoordinatorTurnFrame(_ context.Context, _ 
 
 func TestProgressMissingNudgesOnDispatchWithoutPlan(t *testing.T) {
 	mgr := newPostHookManager(t)
-	mgr.SetProgressStore(progress.NewMemoryStore())
+	mgr.SetProgressStore(progresstest.New(t, "root-1"))
 
 	mgr.Runner.PostTurn.ProgressMissing(t.Context(), "root-1", []string{"task"})
 	if !pendingProgressMissingNudge(mgr, "root-1") {
@@ -264,7 +265,7 @@ func TestProgressMissingNudgesOnDispatchWithoutPlan(t *testing.T) {
 
 func TestProgressMissingSkipsAfterRejectedDispatchTurn(t *testing.T) {
 	mgr := newPostHookManager(t)
-	mgr.SetProgressStore(progress.NewMemoryStore())
+	mgr.SetProgressStore(progresstest.New(t, "root-1"))
 
 	mgr.Runner.PostTurn.ProgressMissing(t.Context(), "root-1", []string{"list_dir"})
 	if pendingProgressMissingNudge(mgr, "root-1") {
@@ -282,7 +283,7 @@ func TestProgressMissingSkipsWorkerChild(t *testing.T) {
 	testutil.FailErr(t, "CreateChild", err)
 	mgr.Coordinator.Context.Sessions = sessionStore.Sessions
 	mgr.Runner.PostTurn = postturn.New(sessionStore.Sessions, sessionStore.Transcript, mgr.Coordinator.Guidance)
-	mgr.SetProgressStore(progress.NewMemoryStore())
+	mgr.SetProgressStore(progress.NewSQLStore(sessionStore.DB()))
 
 	mgr.Runner.PostTurn.ProgressMissing(ctx, child.ID, []string{"task"})
 	if pendingProgressMissingNudge(mgr, child.ID) {
@@ -303,7 +304,7 @@ func TestProgressMissingSkipsSpecWorkflowArtifacts(t *testing.T) {
 	testutil.FailErr(t, "Create session", err)
 	mgr.Coordinator.Context.Sessions = sessionStore.Sessions
 	mgr.Runner.PostTurn = postturn.New(sessionStore.Sessions, sessionStore.Transcript, mgr.Coordinator.Guidance)
-	mgr.SetProgressStore(progress.NewMemoryStore())
+	mgr.SetProgressStore(progress.NewSQLStore(sessionStore.DB()))
 
 	mgr.Runner.PostTurn.ProgressMissing(t.Context(), sess.ID, []string{"write"})
 	if pendingProgressMissingNudge(mgr, sess.ID) {

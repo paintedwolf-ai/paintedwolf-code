@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -46,60 +47,51 @@ func TestSQLProgressRevisionSurvivesReopenAndRejectsStaleABA(t *testing.T) {
 	}
 }
 
-func TestProgressStoresKeepAtomicSnapshotOnRejectedOrCanceledUpdates(t *testing.T) {
-	for _, name := range []string{"memory", "sql"} {
-		t.Run(name, func(t *testing.T) {
-			var store progress.Store = progress.NewMemoryStore()
-			if name == "sql" {
-				database := testdbfixture.Open(t, "progress-store-atomic")
-				testdbseed.InsertSession(t, database, "session", testdbseed.DefaultProjectID)
-				store = progress.NewSQLStore(database)
-			}
-			empty, err := store.Snapshot(t.Context(), "session")
-			testutil.FailErr(t, "read empty progress", err)
-			if empty.Content != "" || empty.Revision == "" {
-				t.Fatalf("empty snapshot: %+v", empty)
-			}
-			testutil.FailErr(t, "seed complete progress", store.Set("session", "- [ ] Preserve"))
-			before, err := store.Snapshot(t.Context(), "session")
-			testutil.FailErr(t, "read progress", err)
-			refusal := errors.New("replacement refused")
-			_, err = store.Update(t.Context(), "session", func(s progress.Snapshot) (progress.Document, error) {
-				return progress.Document{Content: "- [x] Preserve", ItemIDs: s.ItemIDs}, refusal
-			})
-			if !errors.Is(err, refusal) {
-				t.Fatalf("replacement rejection: %v", err)
-			}
-			after, err := store.Snapshot(t.Context(), "session")
-			testutil.FailErr(t, "read rejected replacement", err)
-			if !before.Equal(after) {
-				t.Fatal("rejected replacement changed snapshot")
-			}
-			during, cancelDuring := context.WithCancel(t.Context())
-			_, err = store.Update(during, "session", func(s progress.Snapshot) (progress.Document, error) {
-				cancelDuring()
-				return progress.Document{Content: "- [x] Preserve", ItemIDs: s.ItemIDs}, nil
-			})
-			if !errors.Is(err, context.Canceled) {
-				t.Fatalf("cancellation during publication: %v", err)
-			}
-			after, err = store.Snapshot(t.Context(), "session")
-			testutil.FailErr(t, "read canceled publication", err)
-			if !before.Equal(after) {
-				t.Fatal("canceled publication changed snapshot")
-			}
-			ctx, cancel := context.WithCancel(t.Context())
-			cancel()
-			if _, err = store.Snapshot(ctx, "session"); !errors.Is(err, context.Canceled) {
-				t.Fatalf("canceled snapshot: %v", err)
-			}
-			_, err = store.Update(ctx, "session", func(progress.Snapshot) (progress.Document, error) {
-				t.Error("canceled update entered publication")
-				return progress.Document{}, nil
-			})
-			if !errors.Is(err, context.Canceled) {
-				t.Fatalf("canceled update: %v", err)
-			}
-		})
+func TestSQLProgressKeepsAtomicSnapshotOnRejectedOrCanceledUpdates(t *testing.T) {
+	store := progresstest.New(t, "session")
+	empty, err := store.Snapshot(t.Context(), "session")
+	testutil.FailErr(t, "read empty progress", err)
+	if empty.Content != "" || empty.Revision == "" {
+		t.Fatalf("empty snapshot: %+v", empty)
+	}
+	testutil.FailErr(t, "seed complete progress", store.Set("session", "- [ ] Preserve"))
+	before, err := store.Snapshot(t.Context(), "session")
+	testutil.FailErr(t, "read progress", err)
+	refusal := errors.New("replacement refused")
+	_, err = store.Update(t.Context(), "session", func(s progress.Snapshot) (progress.Document, error) {
+		return progress.Document{Content: "- [x] Preserve", ItemIDs: s.ItemIDs}, refusal
+	})
+	if !errors.Is(err, refusal) {
+		t.Fatalf("replacement rejection: %v", err)
+	}
+	after, err := store.Snapshot(t.Context(), "session")
+	testutil.FailErr(t, "read rejected replacement", err)
+	if !before.Equal(after) {
+		t.Fatal("rejected replacement changed snapshot")
+	}
+	during, cancelDuring := context.WithCancel(t.Context())
+	_, err = store.Update(during, "session", func(s progress.Snapshot) (progress.Document, error) {
+		cancelDuring()
+		return progress.Document{Content: "- [x] Preserve", ItemIDs: s.ItemIDs}, nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation during publication: %v", err)
+	}
+	after, err = store.Snapshot(t.Context(), "session")
+	testutil.FailErr(t, "read canceled publication", err)
+	if !before.Equal(after) {
+		t.Fatal("canceled publication changed snapshot")
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err = store.Snapshot(ctx, "session"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled snapshot: %v", err)
+	}
+	_, err = store.Update(ctx, "session", func(progress.Snapshot) (progress.Document, error) {
+		t.Error("canceled update entered publication")
+		return progress.Document{}, nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled update: %v", err)
 	}
 }
