@@ -224,8 +224,13 @@ if [ -n "$log" ]; then
 fi
 printf '=== RUN   TestFixture\\n'
 if [ "$FIXTURE_MODE" = fork ]; then /usr/bin/true; fi
+# close_fds=False keeps inherited descriptors, as Go's os/exec does.
 if [ "$FIXTURE_MODE" = orphan ]; then
   python3 -c 'import subprocess; subprocess.Popen(["/bin/sleep", "300"], close_fds=False, start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)'
+fi
+if [ "$FIXTURE_MODE" = holder ]; then /bin/sleep 300 & fi
+if [ "$FIXTURE_MODE" = daemon ]; then
+  python3 -c 'import os; os.fork() or (os.setsid(), os.closerange(0, 256), os.execv("/bin/sleep", ["sleep", "300"]))'
 fi
 if [ "$FIXTURE_MODE" = fail ]; then printf -- '--- FAIL: TestFixture (0.00s)\\nFAIL\\n'; exit 1; fi
 printf -- '--- PASS: TestFixture (0.00s)\\nPASS %s\\n' "$value"
@@ -274,6 +279,22 @@ printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
         self.assertIn(b"package left child processes: fixture/pkg: sleep (pid ", result.stdout)
         self.assertEqual(event["exit_code"], 1)
         self.assertFalse(event["recorded"])
+        self.assertGreaterEqual(event["child_scan_seconds"], 0)
+
+    @unittest.skipUnless(sys.platform == "linux", "macOS hides the environment of Apple platform binaries")
+    def test_a_daemon_that_closed_every_descriptor_fails_the_package(self):
+        result, event = self.run_wrapper("daemon")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(b"package left child processes: fixture/pkg: sleep (pid ", result.stdout)
+        self.assertEqual(event["exit_code"], 1)
+
+    @unittest.skipUnless(sys.platform in {"darwin", "linux"}, "process custody requires a supported POSIX host")
+    def test_a_child_holding_the_output_open_fails_the_package_without_delaying_it(self):
+        result, event = self.run_wrapper("holder")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(b"PASS one", result.stdout)
+        self.assertIn(b"package left child processes: fixture/pkg: sleep (pid ", result.stdout)
+        self.assertEqual(event["exit_code"], 1)
 
     @unittest.skipUnless(reuse.fork_observable(), "recording requires process fork observation")
     def test_a_recorded_pass_replays_until_an_observed_input_changes(self):
