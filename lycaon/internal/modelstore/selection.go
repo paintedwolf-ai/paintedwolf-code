@@ -39,7 +39,7 @@ func (s *Store) checkEvictable(history []Manifest, keep *Manifest) error {
 			return err
 		}
 		ok, err := filelock.TryExclusive(f)
-		if err = errors.Join(err, f.Close()); err != nil {
+		if err := errors.Join(err, f.Close()); err != nil {
 			return err
 		}
 		if !ok {

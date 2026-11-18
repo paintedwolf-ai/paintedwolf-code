@@ -45,7 +45,7 @@ func indexBundleTar(ctx context.Context, file *os.File) (offlineBundle, error) {
 			return nil, err
 		}
 		h, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return b, nil
 		}
 		if err != nil {

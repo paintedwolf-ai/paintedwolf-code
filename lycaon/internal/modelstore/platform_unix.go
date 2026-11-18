@@ -53,7 +53,7 @@ func openPartial(root *os.Root, name string) (*os.File, error) {
 
 func reclaimableBlocks(info os.FileInfo, links int) int64 {
 	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || !info.Mode().IsRegular() || uint64(stat.Nlink) != uint64(links) {
+	if !ok || !info.Mode().IsRegular() || links < 1 || uint64(stat.Nlink) != uint64(links) {
 		return 0
 	}
 	return min(info.Size(), stat.Blocks*512)

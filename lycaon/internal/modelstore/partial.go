@@ -40,7 +40,7 @@ func (s *Store) downloadArtifact(ctx context.Context, client *http.Client, url s
 		return err
 	}
 	err = s.fillPartial(ctx, client, url, a, f, progress)
-	if err = errors.Join(err, f.Close()); err != nil {
+	if err := errors.Join(err, f.Close()); err != nil {
 		return err
 	}
 	return s.publishPartial(ctx, root, name, a)
