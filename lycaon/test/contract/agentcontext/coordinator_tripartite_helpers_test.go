@@ -89,7 +89,6 @@ func mergeCoordinatorPromptVarsForTripartite(
 	err := prompts.MergeCoordinatorPromptVars(
 		profile.SurfaceID,
 		prompts.ExecutionModePromptTransition{
-			ExecutionMode:         transition.ExecutionMode,
 			ExecutionModePrevious: transition.ExecutionModePrevious,
 			ExecutionModeEntered:  transition.ExecutionModeEntered,
 			ExecutionModeLeft:     transition.ExecutionModeLeft,

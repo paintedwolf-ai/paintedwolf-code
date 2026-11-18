@@ -138,8 +138,7 @@ func renderCoordinatorTripartiteForRunContextWithRoots(
 	transition := surface.ComputeModeTransition("", surface.ExecutionModeFamily(profile.SurfaceID), nil)
 	vars := mergeCoordinatorSurfaceVars(t, profile.SurfaceID)
 	prompts.MergeWorkspaceRootsVars(vars, roots, "")
-	err := prompts.MergeCoordinatorPromptVars(profile.SurfaceID, prompts.ExecutionModePromptTransition{
-		ExecutionMode: transition.ExecutionMode, ExecutionModePrevious: transition.ExecutionModePrevious,
+	err := prompts.MergeCoordinatorPromptVars(profile.SurfaceID, prompts.ExecutionModePromptTransition{ExecutionModePrevious: transition.ExecutionModePrevious,
 		ExecutionModeEntered: transition.ExecutionModeEntered, ExecutionModeLeft: transition.ExecutionModeLeft,
 	}, "", vars)
 	contractcheck.FailErr(t, "merge coordinator prompt vars", err)

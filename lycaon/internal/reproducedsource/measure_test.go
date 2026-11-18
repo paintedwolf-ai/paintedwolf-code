@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/reproducedsource"
 )
 
-// Trailing report json fences, diff/patch fences, and caller-excluded spans never contribute.
+// Trailing JSON reports and diff/patch fences never contribute.
 func TestMeasureExcludedFences(t *testing.T) {
 	candidates := []reproducedsource.Candidate{
 		{
@@ -33,10 +33,9 @@ func TestMeasureExcludedFences(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		markdown  string
-		excludeFn func(citationmd.Document) []citationmd.Span
-		want      reproducedsource.Result
+		name     string
+		markdown string
+		want     reproducedsource.Result
 	}{
 		{
 			name:     "trailing_closed_report_json_fence_excluded",
@@ -96,24 +95,12 @@ func TestMeasureExcludedFences(t *testing.T) {
 			markdown: "```Patch\npackage app\nfunc Run() error {\n\treturn startEngine()\n}\n```\n",
 			want:     reproducedsource.Result{},
 		},
-		{
-			name:     "caller_excluded_span_skipped",
-			markdown: "```go\nfunc Run() error {\n\treturn startEngine()\n}\n```\n",
-			excludeFn: func(doc citationmd.Document) []citationmd.Span {
-				return []citationmd.Span{doc.Zones[0].Span}
-			},
-			want: reproducedsource.Result{},
-		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := parseDoc(tc.markdown)
-			var excluded []citationmd.Span
-			if tc.excludeFn != nil {
-				excluded = tc.excludeFn(doc)
-			}
-			got := reproducedsource.Measure(doc, excluded, candidates)
+			got := reproducedsource.Measure(doc, candidates)
 			if got != tc.want {
 				t.Fatalf("Measure() = %+v, want %+v", got, tc.want)
 			}
@@ -269,7 +256,7 @@ func TestMeasureLineSpansNormalizationAndTieBreaking(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := reproducedsource.Measure(parseDoc(tc.markdown), nil, tc.candidates)
+			got := reproducedsource.Measure(parseDoc(tc.markdown), tc.candidates)
 			if got != tc.want {
 				t.Fatalf("Measure() = %+v, want %+v", got, tc.want)
 			}

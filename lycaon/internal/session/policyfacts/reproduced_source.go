@@ -66,7 +66,7 @@ func (m *Service) measureReproducedSource(ctx context.Context, sess *api.Session
 		return reproducedsource.Result{}
 	}
 	doc := citationmd.Parse(content, citationmd.Options{})
-	if !reproducedsource.HasMeasurableFence(doc, nil) {
+	if !reproducedsource.HasMeasurableFence(doc) {
 		return reproducedsource.Result{}
 	}
 	if m.workspace == nil {
@@ -115,7 +115,7 @@ func (m *Service) measureReproducedSource(ctx context.Context, sess *api.Session
 	if len(candidates) == 0 {
 		return reproducedsource.Result{}
 	}
-	return reproducedsource.Measure(doc, nil, candidates)
+	return reproducedsource.Measure(doc, candidates)
 }
 
 func readConfinedCandidate(_ context.Context, root projectroot.RootRef, relPath string, maxBytes int) ([]byte, bool, error) {

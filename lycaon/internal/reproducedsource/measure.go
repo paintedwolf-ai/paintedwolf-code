@@ -35,8 +35,8 @@ type parsedFence struct {
 	substantivePos map[string][]int
 }
 
-// ReportFenceSpan returns the span of a closed top-level trailing json report fence.
-func ReportFenceSpan(doc citationmd.Document) (citationmd.Span, bool) {
+// reportFenceSpan returns the span of a closed top-level trailing json report fence.
+func reportFenceSpan(doc citationmd.Document) (citationmd.Span, bool) {
 	if len(doc.Zones) == 0 {
 		return citationmd.Span{}, false
 	}
@@ -57,17 +57,17 @@ func ReportFenceSpan(doc citationmd.Document) (citationmd.Span, bool) {
 
 // HasMeasurableFence reports whether doc contains at least one non-excluded code
 // block with a line of four or more non-space characters.
-func HasMeasurableFence(doc citationmd.Document, excluded []citationmd.Span) bool {
-	return len(extractFences(doc, excluded)) > 0
+func HasMeasurableFence(doc citationmd.Document) bool {
+	return len(extractFences(doc)) > 0
 }
 
 // Measure finds the longest consecutive run of normalized non-blank lines shared
 // between any non-excluded code block in doc and any candidate file.
-func Measure(doc citationmd.Document, excluded []citationmd.Span, files []Candidate) Result {
+func Measure(doc citationmd.Document, files []Candidate) Result {
 	if len(files) == 0 {
 		return Result{}
 	}
-	fences := extractFences(doc, excluded)
+	fences := extractFences(doc)
 	if len(fences) == 0 {
 		return Result{}
 	}
@@ -178,14 +178,11 @@ func Measure(doc citationmd.Document, excluded []citationmd.Span, files []Candid
 	}
 }
 
-func extractFences(doc citationmd.Document, excluded []citationmd.Span) []parsedFence {
+func extractFences(doc citationmd.Document) []parsedFence {
 	if len(doc.Zones) == 0 {
 		return nil
 	}
-	allExcluded := excluded
-	if reportSpan, ok := ReportFenceSpan(doc); ok {
-		allExcluded = append(append([]citationmd.Span(nil), excluded...), reportSpan)
-	}
+	reportSpan, hasReport := reportFenceSpan(doc)
 	var out []parsedFence
 	for _, z := range doc.Zones {
 		if z.Kind != citationmd.ZoneFence && z.Kind != citationmd.ZoneIndented {
@@ -194,7 +191,7 @@ func extractFences(doc citationmd.Document, excluded []citationmd.Span) []parsed
 		if z.Span.Start < 0 || z.Span.End > len(doc.Source) || z.Span.Start >= z.Span.End {
 			continue
 		}
-		if spanOverlaps(z.Span, allExcluded) {
+		if hasReport && reportSpan.Start < z.Span.End && z.Span.Start < reportSpan.End {
 			continue
 		}
 		raw := doc.Source[z.Span.Start:z.Span.End]
@@ -215,15 +212,6 @@ func extractFences(doc citationmd.Document, excluded []citationmd.Span) []parsed
 		out = append(out, parsedFence{lines: lines, substantivePos: pos})
 	}
 	return out
-}
-
-func spanOverlaps(target citationmd.Span, spans []citationmd.Span) bool {
-	for _, s := range spans {
-		if s.Start < target.End && target.Start < s.End {
-			return true
-		}
-	}
-	return false
 }
 
 func isExcludedFenceLang(lang string) bool {
