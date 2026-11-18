@@ -4,10 +4,10 @@
   "kind": "test_suite",
   "workstream": "shim-audit",
   "disposition": "retain",
-  "reason": "Retain the shared real-Git fixtures and hardened invocation contracts: environment, hook neutralization, metadata, tool paths and host configuration. Each configured resource now belongs to its test invocation; helper fixtures retain common filesystem setup without process-wide callback mutation.",
-  "reviewed_commit": "e774bb7cfd2a9f5d9633a7e65e2def02d647d0d5",
+  "reason": "Keep the shared real Git suite for invocation environments, hook neutralization, tool paths, metadata and host configuration. TestMain selects staged Git once. Each test isolates user configuration and repository contents.",
+  "reviewed_commit": "8568866534616465f7947804a4db22645cfb9895",
   "ceiling": 489,
   "boundaries": {
-    "lycaon/internal/gitexec/gitexec_test.go": "5f511fcb241a3b18b9e4608230814e3e3da50a1b1c8f5a93ac12c4fa1fefcf47"
+    "lycaon/internal/gitexec/gitexec_test.go": "48c5597da63a2ebaf1cc2f306d1825573c107b3070ec3cd2ffc015fb4f4927fb"
   }
 }
