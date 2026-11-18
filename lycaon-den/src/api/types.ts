@@ -15665,6 +15665,8 @@ export interface components {
             target_model?: string;
             downloaded_bytes?: number;
             total_bytes?: number;
+            /** @description This installation was packaged with an explicitly selected offline tier. */
+            offline_installer?: boolean;
             /** @description Tier contained in the packaged offline seed. */
             seed_model?: string;
             seed_available?: boolean;

@@ -83,4 +83,7 @@ def stage_seed(verifier, bundle, authority, resources, backend, model):
             shutil.rmtree(destination)
         os.replace(payload, destination)
         os.replace(keys, resources / "release-keys.json")
+        marker = staged / "offline-model"
+        marker.write_text(model + "\n", encoding="ascii")
+        os.replace(marker, resources / marker.name)
     return signed

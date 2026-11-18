@@ -31,6 +31,7 @@ stdenvNoCC.mkDerivation {
     ${verifier}/bin/model-bundle -bundle "$bundle" \
       -authority "$out/engine-root/generation/release-keys.json" \
       -model ${lib.escapeShellArg signed.manifest.model} -device vulkan > "$out/verified-manifest.json"
+    echo ${lib.escapeShellArg signed.manifest.model} > "$out/engine-root/generation/offline-model"
     runHook postInstall
   '';
   meta = {
