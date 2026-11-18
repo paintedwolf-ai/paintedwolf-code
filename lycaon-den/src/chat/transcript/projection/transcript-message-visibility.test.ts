@@ -5,10 +5,11 @@ import { createTranscriptDisplayProjector } from "./transcript-display-projectio
 
 describe("transcript-items", () => {
 
-  it("projects no item for an internal user or assistant row", () => {
+  // A live internal assistant row is the coordinator's draft slot; a settled one is not.
+  it("projects no item for an internal user or settled assistant row", () => {
     const rows = {
       user: { role: "user", origin: "user", authority: "user" },
-      assistant: { role: "assistant", origin: "model", authority: "none" },
+      assistant: { role: "assistant", origin: "model", authority: "none", draft_status: "committed" },
     } as const;
     for (const [name, author] of Object.entries(rows)) {
       const row = (visibility: Message["visibility"]): Message => ({
