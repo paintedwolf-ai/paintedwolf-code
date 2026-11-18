@@ -154,6 +154,7 @@ export function SessionTranscript(props: Props) {
     rowDays,
     itemByKey,
     seamForItem,
+    tailSeam,
     rowInsetsByItemKey,
     rowInsetPx,
     taskMatches,
@@ -185,10 +186,9 @@ export function SessionTranscript(props: Props) {
     rowGeometry,
   });
 
-  // A tail row opens its own reading unit below the last row; further ones sit with it.
   const tailSlotSeam = (id: string): TranscriptSeam | undefined => {
-    if (tailSlots()[0]?.id !== id) return "row";
-    return items().length > 0 ? "section" : undefined;
+    if (tailSlots()[0]?.id !== id) return "item";
+    return tailSeam();
   };
 
   createEffect(() => {

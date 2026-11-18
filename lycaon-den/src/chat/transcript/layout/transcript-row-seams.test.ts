@@ -1,129 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { transcriptRowSeams } from "./transcript-row-seams.ts";
 import type { DisplayTranscriptItem } from "../projection/transcript-item-model.ts";
+import { transcriptRowSeams, transcriptSeamBelow } from "./transcript-row-seams.ts";
 
-const user = (key: string): DisplayTranscriptItem => ({ kind: "user", key, text: "ask" });
-const prose = (key: string): DisplayTranscriptItem => ({ kind: "assistant", key, text: "answer" });
-const span = (key: string): DisplayTranscriptItem =>
-  ({ kind: "activity_span", key, label: "Read files", entries: [] });
-const diff = (key: string): DisplayTranscriptItem =>
-  ({ kind: "file_edit", key, folds: [], anchorMessageId: key });
-const day = (key: string): DisplayTranscriptItem =>
-  ({ kind: "time_marker", key, variant: "day", at: 0, anchorMessageId: key });
-const unread = (key: string): DisplayTranscriptItem =>
-  ({ kind: "unread_marker", key, seenAt: 0, anchorMessageId: key });
-const tail = (key: string): DisplayTranscriptItem => ({
-  kind: "turn_tail",
-  key,
-  openingMessageId: "u1",
-  anchorMessageId: key,
-  startedAt: 0,
-  settledAt: 1,
-  activeMs: 1,
-  workMs: 1,
-});
-const pending = (key: string, kind: "prompt" | "queue_send"): DisplayTranscriptItem => ({
-  kind: "pending_user",
-  key,
-  text: "queued",
-  pending: { kind, operationId: key, text: "queued", createdAt: 0, state: "sending" },
-});
+const messages = ["user", "pending_user", "assistant", "fallback"] as const;
+const cards = ["draft", "workflow_feedback", "workflow_explain", "progress_complete", "progress_update",
+  "tool", "activity_span", "worker_group", "worker_file_edit", "file_edit", "blueprint_card",
+  "checkpoint", "workflow_boundary", "turn_tail"] as const;
+type Kind = DisplayTranscriptItem["kind"];
+const row = (kind: Kind, key: string) => ({ kind, key });
 
 describe("transcript row seams", () => {
-  it("gives the first row no seam and the turn rung to every later prompt", () => {
-    const seams = transcriptRowSeams([user("u1"), prose("a1"), user("u2"), prose("a2")]);
-
-    expect(seams.get("u1")).toBeUndefined();
-    expect(seams.get("a1")).toBe("section");
-    expect(seams.get("u2")).toBe("turn");
-    expect(seams.get("a2")).toBe("section");
+  it("spaces adjacent visible edges and external tail slots", () => {
+    for (const upper of [...messages, ...cards]) {
+      for (const lower of [...messages, ...cards]) {
+        for (const actions of [false, true]) {
+          for (const card of [false, true]) {
+            const context = { hasActions: () => actions, closesWithCard: () => card };
+            const rows = [row(upper, "upper"), row(lower, "lower")];
+            const seams = transcriptRowSeams(rows, context);
+            const upperMessage = messages.some((kind) => kind === upper) && !card;
+            const lowerMessage = messages.some((kind) => kind === lower);
+            const afterUpper = upperMessage ? actions ? "message-reserved" : "message" : "item";
+            expect(seams.has("upper")).toBe(false);
+            expect(seams.get("lower")).toBe(upperMessage || !lowerMessage ? afterUpper : "message");
+            expect(transcriptSeamBelow(rows.slice(0, 1), context)).toBe(afterUpper);
+          }
+        }
+      }
+    }
+    expect(transcriptSeamBelow([])).toBeUndefined();
   });
 
-  it("keeps consecutive rows of one kind on the row rung", () => {
-    const seams = transcriptRowSeams([user("u1"), span("s1"), span("s2"), diff("d1"), diff("d2")]);
-
-    expect(seams.get("s1")).toBe("section");
-    expect(seams.get("s2")).toBe("row");
-    expect(seams.get("d1")).toBe("part");
-    expect(seams.get("d2")).toBe("row");
-  });
-
-  it("holds a diff to the activity it reports on, but not across a catalog span edge", () => {
-    const sameSpan = transcriptRowSeams([user("u1"), span("s1"), diff("d1"), prose("a1")]);
-    expect(sameSpan.get("d1")).toBe("part");
-    expect(sameSpan.get("a1")).toBe("section");
-
-    const afterProse = transcriptRowSeams([user("u1"), prose("a1"), diff("d1")]);
-    expect(afterProse.get("d1")).toBe("section");
-
-    const acrossSpans = transcriptRowSeams(
-      [user("u1"), span("s1"), diff("d1")],
-      { spanKeyOf: (key) => (key === "s1" ? "run-a" : undefined) },
-    );
-    expect(acrossSpans.get("d1")).toBe("section");
-  });
-
-  it("holds a queue send inside the open turn, unlike an ordinary prompt", () => {
-    const continued = transcriptRowSeams(
-      [user("u1"), prose("a1"), user("u2")],
-      { continuation: (key) => key === "u2" },
-    );
-    expect(continued.get("u2")).toBe("section");
-
-    const sends = transcriptRowSeams([user("u1"), prose("a1"), pending("p1", "queue_send")]);
-    expect(sends.get("p1")).toBe("section");
-
-    const prompts = transcriptRowSeams([user("u1"), prose("a1"), pending("p2", "prompt")]);
-    expect(prompts.get("p2")).toBe("turn");
-  });
-
-  it("settles the tail with the turn above it and the seam below it", () => {
-    const seams = transcriptRowSeams([user("u1"), prose("a1"), tail("t1"), user("u2")]);
-
-    expect(seams.get("t1")).toBe("row");
-    expect(seams.get("u2")).toBe("turn");
-  });
-
-  it("hands a marker the seam of the row it dates", () => {
-    const seams = transcriptRowSeams([user("u1"), prose("a1"), tail("t1"), day("day"), user("u2")]);
-
-    expect(seams.get("day")).toBe("turn");
-    expect(seams.get("u2")).toBe("row");
-  });
-
-  it("leaves a leading marker without a seam and keeps a marker run tight", () => {
-    const seams = transcriptRowSeams([day("day"), unread("unread"), user("u1")]);
-
-    expect(seams.get("day")).toBeUndefined();
-    expect(seams.get("unread")).toBe("row");
-    expect(seams.get("u1")).toBe("row");
-  });
-
-  it("separates a trailing marker from the rows above it", () => {
-    const seams = transcriptRowSeams([user("u1"), prose("a1"), unread("unread")]);
-
-    expect(seams.get("unread")).toBe("section");
-  });
-
-  it("marks both edges of a catalog span", () => {
-    const runs = new Map([["s1", "run-a"], ["s2", "run-a"]]);
-    const seams = transcriptRowSeams(
-      [user("u1"), span("s1"), span("s2"), span("s3")],
-      { spanKeyOf: (key) => runs.get(key) },
-    );
-
-    expect(seams.get("s1")).toBe("section");
-    expect(seams.get("s2")).toBe("row");
-    expect(seams.get("s3")).toBe("section");
-  });
-
-  it("never adds a span edge to a turn boundary", () => {
-    const seams = transcriptRowSeams(
-      [prose("a1"), user("u2"), prose("a2")],
-      { spanKeyOf: (key) => (key === "a1" ? undefined : "run-a") },
-    );
-
-    // One seam, one rung: the turn wins rather than compounding with the span edge.
-    expect(seams.get("u2")).toBe("turn");
+  it("places markers with the row they date", () => {
+    const markers = [row("time_marker", "day"), row("unread_marker", "unread")];
+    const rows = [row("user", "prompt"), ...markers, row("tool", "activity")];
+    expect([...transcriptRowSeams(rows, { hasActions: () => true })].sort()).toEqual([
+      ["activity", "item"], ["day", "message-reserved"], ["unread", "item"],
+    ]);
+    expect(transcriptRowSeams(markers).has("day")).toBe(false);
+    expect(transcriptRowSeams(rows.slice(0, -1)).get("day")).toBe("message");
+    expect(transcriptSeamBelow(markers)).toBe("item");
   });
 });

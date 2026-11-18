@@ -11,6 +11,7 @@ import {
 } from "../../files/walk/walk-preview.ts";
 
 type Props = {
+  seam?: "message" | "message-reserved";
   projectId: string;
   sessionId: string;
   messageId: string;
@@ -63,6 +64,7 @@ export function TurnWalkCard(props: Props) {
   return (
     <Show when={summary()?.steps ? summary() : null}>
       {(value) => (
+        <div class="den-seam den-seam--in-row" data-seam={props.seam}>
         <aside class="den-transcript-card den-turn-walk" data-testid="turn-walk-card">
           <div class="den-turn-walk__copy">
             <strong>Changes in this turn</strong>
@@ -88,6 +90,7 @@ export function TurnWalkCard(props: Props) {
             </button>
           </div>
         </aside>
+        </div>
       )}
     </Show>
   );

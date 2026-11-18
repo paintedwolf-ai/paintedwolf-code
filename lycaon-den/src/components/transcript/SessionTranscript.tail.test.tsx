@@ -114,7 +114,7 @@ describe("SessionTranscript tail", () => {
       container
         .querySelector("[data-transcript-tail=pending-sends]")
         ?.getAttribute("data-seam"),
-    ).toBe("section");
+    ).toBe("message");
     // The row's day label is the first row, so it takes the seat.
     expect(
       container

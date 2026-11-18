@@ -1,23 +1,12 @@
 import { createEffect, createRoot, createSignal } from "solid-js";
 import { effectiveTextScale } from "../../../platform/desktop/accessibility-text-size.ts";
 
-/** The rungs a vertical seam in the stream may take. */
-export type TranscriptSeam = "part" | "row" | "section" | "turn";
+export type TranscriptSeam = "item" | "message" | "message-reserved";
 
-/**
- * Shared CSS lengths and estimate inputs.
- *
- * Four rungs carry every vertical seam: `partGap` inside one row and above
- * a row that reports on the one before it, then the three `*Gap` placement
- * rungs between rows. Placement never invalidates interior heights. Lengths
- * that separate or surround text are rem, so they follow the accessibility
- * text scale the root font size carries; content maxima stay px.
- */
 export const TRANSCRIPT_SPACING = {
   partGap: { value: 0.5714, unit: "rem", affects: "row" },
-  rowGap: { value: 0.8571, unit: "rem", affects: "placement" },
-  sectionGap: { value: 2, unit: "rem", affects: "placement" },
-  turnGap: { value: 5.1429, unit: "rem", affects: "placement" },
+  itemGap: { value: 1.1429, unit: "rem", affects: "placement" },
+  messageGap: { value: 3.4286, unit: "rem", affects: "placement" },
   userWidth: { value: 78, unit: "%", affects: "row" },
   userPaddingX: { value: 0.9286, unit: "rem", affects: "row" },
   userPaddingY: { value: 0.6429, unit: "rem", affects: "row" },
@@ -56,13 +45,6 @@ export const TRANSCRIPT_SPACING = {
   messageTimeGap: { value: 0.2857, unit: "rem", affects: "row" },
 } as const;
 
-const SEAM_RUNG = {
-  part: "partGap",
-  row: "rowGap",
-  section: "sectionGap",
-  turn: "turnGap",
-} as const satisfies Record<TranscriptSeam, keyof typeof TRANSCRIPT_SPACING>;
-
 export type TranscriptSpacing = { readonly [K in keyof typeof TRANSCRIPT_SPACING]: number };
 export const DEFAULT_TRANSCRIPT_SPACING: TranscriptSpacing = Object.freeze(Object.fromEntries(
   Object.entries(TRANSCRIPT_SPACING).map(([key, spec]) => [key, spec.value]),
@@ -81,13 +63,19 @@ export function publishTranscriptRootRemPx(px: number): void {
   if (Number.isFinite(px) && px > 0 && px !== rootRemPx()) setRootRemPx(px);
 }
 
-/** A seam's height in px, or zero for the first row, which has no seam above it. */
+export function transcriptActionReservePx(values: TranscriptSpacing, remPx: number): number {
+  return 4 + (1.5 + values.messageTimeGap) * remPx;
+}
+
 export function transcriptSeamPx(
   seam: TranscriptSeam | undefined,
   values: TranscriptSpacing = spacing(),
   remPx: number = rootRemPx(),
 ): number {
-  return seam ? values[SEAM_RUNG[seam]] * remPx : 0;
+  if (!seam) return 0;
+  if (seam === "item") return values.itemGap * remPx;
+  const gap = values.messageGap * remPx;
+  return seam === "message-reserved" ? Math.max(0, gap - transcriptActionReservePx(values, remPx)) : gap;
 }
 
 export function transcriptSpacingProperty(key: keyof TranscriptSpacing): string {

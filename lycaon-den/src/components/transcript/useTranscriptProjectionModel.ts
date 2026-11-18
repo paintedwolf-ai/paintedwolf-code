@@ -11,8 +11,10 @@ import {
 import { transcriptRowHeightForScope, type TranscriptRowHeightKey } from "../../chat/transcript/layout/transcript-row-heights-persist.ts";
 import { transcriptRowContentRevision } from "../../chat/transcript/layout/transcript-row-revision.ts";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
-import { transcriptRowSeams } from "../../chat/transcript/layout/transcript-row-seams.ts";
+import { hasWalkPreviewCard } from "../../files/walk/walk-preview.ts";
+import { transcriptRowSeams, transcriptSeamBelow } from "../../chat/transcript/layout/transcript-row-seams.ts";
 import {
+  transcriptActionReservePx,
   transcriptRootRemPx,
   transcriptSeamPx,
   transcriptSpacing,
@@ -46,7 +48,7 @@ import {
 } from "../../chat/visual/visual-artifact-canonical.ts";
 import type { WorkerTranscriptCache } from "../../chat/worker/worker-transcript.ts";
 import { taskWorkerMatchesForTranscript } from "../../chat/worker/workers-model.ts";
-import { isCatalogSpan, type ChatSpanBlock } from "../../chat/workflow/workflow-spans.ts";
+import type { ChatSpanBlock } from "../../chat/workflow/workflow-spans.ts";
 import { messageTimesPref } from "../../settings/chat/chat-prefs.ts";
 import { verboseModePref } from "../../settings/system/debug-prefs.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
@@ -244,37 +246,18 @@ export function useTranscriptProjectionModel(options: UseTranscriptProjectionMod
     return map;
   });
 
-  // A catalog span's edges are seams, so rows carry their run identity.
-  const catalogSpanKeyOf = (itemKey: string): string | undefined => {
-    const spans = options.transcriptSpans();
-    if (!spans) return undefined;
-    const index = spanIndexByItemKey().get(itemKey);
-    if (index === undefined) return undefined;
-    const span = spans[index];
-    return span && isCatalogSpan(span) ? span.runId || `span-${index}` : undefined;
+  const hasActions = (row: Pick<DisplayTranscriptItem, "kind">) =>
+    options.layout() === "chat" && options.hasMessageActions() &&
+    (row.kind === "user" || row.kind === "pending_user" || row.kind === "assistant");
+  const closesWithCard = (row: Pick<DisplayTranscriptItem, "key">) => {
+    const turn = reviewTurns().get(row.key);
+    return Boolean(turn && options.layout() === "chat" &&
+      hasWalkPreviewCard(options.projectId()?.trim() ?? "", options.sessionId()?.trim() ?? "", turn));
   };
-
-  const continuationKeys = createMemo(
-    () => {
-      const keys = new Set<string>();
-      for (const message of options.messages()) {
-        if (message.kind === "user_continuation") keys.add(message.id);
-      }
-      return keys;
-    },
-    undefined,
-    {
-      equals: (before, after) =>
-        before?.size === after.size && [...after].every((key) => before.has(key)),
-    },
-  );
-
+  const seamContext = { hasActions, closesWithCard };
+  const tailSeam = () => transcriptSeamBelow(items(), seamContext);
   const rowSeams = createMemo(
-    () =>
-      transcriptRowSeams(items(), {
-        spanKeyOf: catalogSpanKeyOf,
-        continuation: (key) => continuationKeys().has(key),
-      }),
+    () => transcriptRowSeams(items(), seamContext),
     undefined,
     { equals: sameMapEntries },
   );
@@ -403,12 +386,7 @@ export function useTranscriptProjectionModel(options: UseTranscriptProjectionMod
     if (estimate === undefined || options.layout() !== "chat") return estimate;
     const remPx = transcriptRootRemPx();
     const gapPx = transcriptSpacing().messageTimeGap * remPx;
-    if (
-      options.hasMessageActions() &&
-      (item.kind === "user" || item.kind === "pending_user" || item.kind === "assistant")
-    ) {
-      return estimate + 4 + 1.5 * remPx + gapPx;
-    }
+    if (hasActions(item)) return estimate + transcriptActionReservePx(transcriptSpacing(), remPx);
     return (item.kind === "user" || item.kind === "pending_user") &&
       messageTimesPref() === "always"
       ? estimate + 16 + gapPx
@@ -418,18 +396,14 @@ export function useTranscriptProjectionModel(options: UseTranscriptProjectionMod
   // Below-bubble chrome changes the row's height.
   const rowPresentation = (item: DisplayTranscriptItem): string => {
     const presentation = transcriptRowPresentation(item, options.disclosureOpen);
-    const actionsTag =
-      options.layout() === "chat" &&
-      options.hasMessageActions() &&
-      (item.kind === "user" || item.kind === "pending_user" || item.kind === "assistant")
-        ? "+actions"
-        : "";
+    const actionsTag = hasActions(item) ? "+actions" : "";
+    const cardTag = closesWithCard(item) ? "+review" : "";
     const timeTag =
       (item.kind === "user" || item.kind === "pending_user") &&
       messageTimesPref() === "always"
         ? "+time-below"
         : "";
-    return `${presentation}${actionsTag}${timeTag}`;
+    return `${presentation}${actionsTag}${timeTag}${cardTag}`;
   };
 
   /** A remembered height is reused only for the same content, geometry, and presentation. */
@@ -470,6 +444,7 @@ export function useTranscriptProjectionModel(options: UseTranscriptProjectionMod
     rowDays,
     itemByKey,
     seamForItem,
+    tailSeam,
     rowInsetsByItemKey,
     rowInsetPx,
     taskMatches,

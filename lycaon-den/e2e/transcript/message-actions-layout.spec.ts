@@ -260,7 +260,7 @@ test.describe("message actions layout", () => {
       const { transcriptRowContentEstimate } = (await import(
         /* @vite-ignore */ estimateModUrl
       )) as typeof import("../../src/chat/transcript/layout/transcript-row-content-estimate.ts");
-      const { transcriptRootRemPx, transcriptSpacing } = (await import(
+      const { transcriptRootRemPx, transcriptSpacing, transcriptActionReservePx } = (await import(
         /* @vite-ignore */ spacingModUrl
       )) as typeof import("../../src/chat/transcript/layout/transcript-spacing.ts");
 
@@ -278,7 +278,7 @@ test.describe("message actions layout", () => {
       const bodySample = assistantRow.querySelector<HTMLElement>(".bubble--assistant") ?? assistantRow;
       const bodyPx = Number.parseFloat(getComputedStyle(bodySample).fontSize);
       const metrics = { widthPx: userRow.getBoundingClientRect().width, remPx, bodyPx, spacing };
-      const actionChromePx = 4 + 1.5 * remPx + spacing.messageTimeGap * remPx;
+      const actionChromePx = transcriptActionReservePx(spacing, remPx);
       const userText = userRow.querySelector(".bubble--user")?.textContent ?? "";
       const assistantText = assistantRow.querySelector(".bubble--assistant")?.textContent ?? "";
 

@@ -229,6 +229,7 @@ export function TranscriptItemRow(props: {
               <Show when={reviewTurn()} keyed>
                 {(turn) => (
                   <TurnWalkCard
+                    seam={props.recovery ? "message-reserved" : "message"}
                     projectId={props.projectId ?? ""}
                     sessionId={props.sessionId ?? ""}
                     messageId={turn}

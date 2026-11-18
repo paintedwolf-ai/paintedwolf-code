@@ -13,32 +13,34 @@ describe("transcript spacing", () => {
     for (const [name, spec] of Object.entries(TRANSCRIPT_SPACING)) {
       expect(styles[transcriptSpacingProperty(name as keyof typeof TRANSCRIPT_SPACING)]).toBe(`${spec.value}${spec.unit}`);
     }
-    expect(styles["--transcript-row-gap"]).toBe("0.8571rem");
+    expect(styles["--transcript-item-gap"]).toBe("1.1429rem");
     expect(styles["--transcript-paragraph-gap"]).toBe("0.9em");
   });
   it("carries every seam rung in rem so it follows the text scale", () => {
-    for (const rung of ["partGap", "rowGap", "sectionGap", "turnGap"] as const) {
+    for (const rung of ["partGap", "itemGap", "messageGap"] as const) {
       expect(TRANSCRIPT_SPACING[rung].unit, rung).toBe("rem");
     }
-    // The rungs climb; two claims on one seam resolve by precedence, never by adding up.
-    expect(DEFAULT_TRANSCRIPT_SPACING.partGap).toBeLessThan(DEFAULT_TRANSCRIPT_SPACING.rowGap);
-    expect(DEFAULT_TRANSCRIPT_SPACING.rowGap).toBeLessThan(DEFAULT_TRANSCRIPT_SPACING.sectionGap);
-    expect(DEFAULT_TRANSCRIPT_SPACING.sectionGap).toBeLessThan(DEFAULT_TRANSCRIPT_SPACING.turnGap);
+    expect(DEFAULT_TRANSCRIPT_SPACING.partGap).toBeLessThan(DEFAULT_TRANSCRIPT_SPACING.itemGap);
+    expect(DEFAULT_TRANSCRIPT_SPACING.itemGap).toBeLessThan(DEFAULT_TRANSCRIPT_SPACING.messageGap);
   });
   it("resolves a seam against the live root size, and the first row to nothing", () => {
     const at = (remPx: number) => [
-      transcriptSeamPx("part", DEFAULT_TRANSCRIPT_SPACING, remPx),
-      transcriptSeamPx("row", DEFAULT_TRANSCRIPT_SPACING, remPx),
-      transcriptSeamPx("section", DEFAULT_TRANSCRIPT_SPACING, remPx),
-      transcriptSeamPx("turn", DEFAULT_TRANSCRIPT_SPACING, remPx),
+      transcriptSeamPx("item", DEFAULT_TRANSCRIPT_SPACING, remPx),
+      transcriptSeamPx("message", DEFAULT_TRANSCRIPT_SPACING, remPx),
+      transcriptSeamPx("message-reserved", DEFAULT_TRANSCRIPT_SPACING, remPx),
     ].map((px) => Math.round(px));
-    expect(at(TRANSCRIPT_ROOT_REM_PX)).toEqual([8, 12, 28, 72]);
-    expect(at(TRANSCRIPT_ROOT_REM_PX * 2)).toEqual([16, 24, 56, 144]);
+    expect(at(TRANSCRIPT_ROOT_REM_PX)).toEqual([16, 48, 19]);
+    expect(at(TRANSCRIPT_ROOT_REM_PX * 2)).toEqual([32, 96, 42]);
     expect(transcriptSeamPx(undefined, DEFAULT_TRANSCRIPT_SPACING, TRANSCRIPT_ROOT_REM_PX)).toBe(0);
+  });
+  it("clamps the seam when the reserved bar fills the gap", () => {
+    for (const messageGap of [0, 1]) {
+      expect(transcriptSeamPx("message-reserved", { ...DEFAULT_TRANSCRIPT_SPACING, messageGap }, 14)).toBe(0);
+    }
   });
   it("retains interior measurements when only row placement changes", () => {
     const before = transcriptInteriorSignature(DEFAULT_TRANSCRIPT_SPACING);
-    const next = { ...DEFAULT_TRANSCRIPT_SPACING, rowGap: 1.9375, sectionGap: 2.5, turnGap: 4 };
+    const next = { ...DEFAULT_TRANSCRIPT_SPACING, itemGap: 1.9375, messageGap: 4 };
     expect(transcriptInteriorSignature(next)).toBe(before);
   });
   it("changes cache identity for every interior length", () => {
@@ -61,7 +63,7 @@ describe("transcript spacing", () => {
     const previous = transcriptSpacing();
     setTranscriptSpacing({ ...previous });
     expect(transcriptSpacing()).toBe(previous);
-    expect(() => setTranscriptSpacing({ ...previous, rowGap: Number.NaN })).toThrow();
+    expect(() => setTranscriptSpacing({ ...previous, itemGap: Number.NaN })).toThrow();
     expect(() => setTranscriptSpacing({ ...previous, userPaddingY: -1 })).toThrow();
     expect(transcriptSpacing()).toBe(previous);
   });

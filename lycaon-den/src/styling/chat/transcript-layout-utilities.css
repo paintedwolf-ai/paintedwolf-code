@@ -95,6 +95,7 @@ position: relative;
 
 /* A disclosure card that rests as a link; its surface and outline appear when it opens. */
 @utility den-transcript-disclosure-link {
+  margin-block: calc(-1 * var(--den-transcript-link-inset-y));
   position: relative;
   overflow: hidden;
   border-radius: var(--den-radius);
@@ -140,12 +141,8 @@ position: relative;
     border-color: var(--den-line);
   }
 
-  & > .den-transcript-disclosure-header {
-    border-bottom: 1px solid transparent;
-  }
-
   &[data-expanded="true"]:not([data-closing]) > .den-transcript-disclosure-header {
-    border-bottom-color: color-mix(in srgb, var(--den-line) 55%, transparent);
+    box-shadow: inset 0 -1px color-mix(in srgb, var(--den-line) 55%, transparent);
     color: var(--den-text);
   }
 
