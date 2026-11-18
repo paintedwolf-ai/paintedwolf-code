@@ -34,26 +34,8 @@ func DefaultSlot() (credentialstore.Slot, error) {
 	}, nil
 }
 
-// NewCredentialStore loads credentials from the platform's store, accepting the
-// slots cat declares.
-func NewCredentialStore(cat *Catalog) (*CredentialStore, error) {
-	slot, err := DefaultSlot()
-	if err != nil {
-		return nil, err
-	}
-	return openCredentialStore(slot, cat)
-}
-
-// NewCredentialStoreAt opens an empty store at path with a development identity file.
-func NewCredentialStoreAt(path string, cat *Catalog) *CredentialStore {
-	wrapper := &CredentialStore{catalog: cat}
-	wrapper.store = credentialstore.NewEmpty(credentialstore.Slot{
-		Path: path, Namespace: credentialstore.NamespaceWebResearch, Context: credentialContext,
-	}, wrapper.ValidID)
-	return wrapper
-}
-
-func openCredentialStore(slot credentialstore.Slot, cat *Catalog) (*CredentialStore, error) {
+// OpenCredentialStore loads the encrypted namespace using catalog-declared slots.
+func OpenCredentialStore(slot credentialstore.Slot, cat *Catalog) (*CredentialStore, error) {
 	wrapper := &CredentialStore{catalog: cat}
 	inner, err := credentialstore.Open(slot, wrapper.ValidID)
 	if err != nil {

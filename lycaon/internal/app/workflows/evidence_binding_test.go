@@ -119,7 +119,8 @@ func TestBuildEvidenceResolutionFailsBeforePublishing(t *testing.T) {
 func TestWorkflowRuntimeBlueprintsUseRegisteredRootAndReviewRosterRespectsWebPreference(t *testing.T) {
 	f := buildEvidenceFixture(t)
 	f.deps.Projects = project.NewSQLRegistry(f.deps.Database)
-	webPrefs := webresearch.NewConfigStoreAt(filepath.Join(t.TempDir(), "web-research.yaml"))
+	webPrefs, openErr := webresearch.OpenConfigStore(filepath.Join(t.TempDir(), "web-research.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	off := false
 	testutil.FailErr(t, "disable external search", webPrefs.ApplyPrefs(nil, nil, &off, nil))
 	f.deps.WebResearchConfig = webPrefs

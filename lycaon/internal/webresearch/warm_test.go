@@ -95,7 +95,8 @@ func TestWarmSearchAsyncIngestsFromHitHosts(t *testing.T) {
 	srv := warmTestSite(t)
 	index := testIndex(t)
 
-	cfg := NewConfigStoreAt(filepath.Join(t.TempDir(), "cfg.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
 	w := NewWarmer(index, nil, nil, cfg)
@@ -135,7 +136,8 @@ func TestWarmDeclaredURLCrawlIngestsWithWarmedOrigin(t *testing.T) {
 	index.QueuePage(t.Context(), webindex.Page{URL: srv.URL + "/old", Title: "widget frobnicator archive", Verified: true})
 	index.Flush()
 
-	cfg := NewConfigStoreAt(filepath.Join(t.TempDir(), "cfg.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
 	w := NewWarmer(index, nil, nil, cfg) // crawl tier only
@@ -282,7 +284,8 @@ func TestPreSlottedCrawlerNeverDoubleAcquires(t *testing.T) {
 func TestWarmOffModeIsInert(t *testing.T) {
 	resetDirectState(2)
 	index := testIndex(t)
-	cfg := NewConfigStoreAt(filepath.Join(t.TempDir(), "cfg.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	warming := false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, nil, nil, nil))
 	w := NewWarmer(index, nil, nil, cfg)
@@ -310,7 +313,9 @@ func TestWarmTopicHelpers(t *testing.T) {
 // warmTestCfg returns a store with the default full-warming policy.
 func warmTestCfg(t *testing.T) *ConfigStore {
 	t.Helper()
-	return NewConfigStoreAt(filepath.Join(t.TempDir(), "warm-cfg.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "warm-cfg.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
+	return cfg
 }
 
 func TestWarmPageURLsExtractsAndCaps(t *testing.T) {
@@ -353,7 +358,8 @@ func TestWarmDeclaredURLCrawlsItsHost(t *testing.T) {
 	srv := warmTestSite(t)
 	index := testIndex(t)
 
-	cfg := NewConfigStoreAt(filepath.Join(t.TempDir(), "cfg.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
 	w := NewWarmer(index, nil, nil, cfg)
@@ -373,7 +379,8 @@ func TestWarmSearchResidualPagesProbed(t *testing.T) {
 	srv := warmTestSite(t)
 	index := testIndex(t)
 
-	cfg := NewConfigStoreAt(filepath.Join(t.TempDir(), "cfg.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
 	w := NewWarmer(index, nil, nil, cfg)

@@ -53,7 +53,8 @@ func TestWarmQueryUnderfilledSearchSeedSkipsWithoutModel(t *testing.T) {
 func TestWarmQueryFilledSearchDoesNotSeed(t *testing.T) {
 	resetDirectState(1)
 	index := testIndex(t)
-	cfg := NewConfigStoreAt(filepath.Join(t.TempDir(), "cfg.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, true
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
 	w := NewWarmer(index, nil, nil, cfg)

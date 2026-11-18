@@ -54,7 +54,8 @@ func TestWebSearchFiresSearchWarmHook(t *testing.T) {
 
 func TestWebSearchDisabledWhenSettingsOff(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
-	cfg := NewConfigStoreAt(filepath.Join(t.TempDir(), "web-research-config.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "web-research-config.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	disabled := false
 	testutil.FailErr(t, "ApplyPrefs", cfg.ApplyPrefs(nil, nil, &disabled, nil))
 	deps := ToolDeps{Config: cfg}

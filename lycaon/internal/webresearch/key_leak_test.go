@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"net"
 	"net/http"
@@ -32,10 +33,12 @@ func TestWebResearchKeyLeakInvariant(t *testing.T) {
 	testutil.FailErr(t, "RegisterCatalogProviders", RegisterCatalogProviders(t.Context(), reg))
 
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	cfg := NewConfigStoreAt(cfgPath)
+	cfg, openErr := OpenConfigStore(cfgPath)
+	testutil.FailErr(t, "open web research store", openErr)
 
 	credPath := filepath.Join(t.TempDir(), "creds.age")
-	creds := NewCredentialStoreAt(credPath, cat)
+	creds, openErr := OpenCredentialStore(credentialstore.Slot{Path: credPath, Namespace: credentialstore.NamespaceWebResearch, Context: "web research"}, cat)
+	testutil.FailErr(t, "open web research store", openErr)
 
 	for _, entry := range cat.Entries() {
 		if entry.CredentialSlot != "" {
