@@ -60,7 +60,7 @@ func TestFanOutUnknownProfileFails(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 
 	_, err = orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -88,7 +88,7 @@ func TestFanOutParallelDispatch(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 
 	_, err = orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -113,7 +113,7 @@ func TestFanOutReconYamlMockRun(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 
 	result, err := orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -138,7 +138,7 @@ func TestFanOutLateCancelPreservesCompletedBatch(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 
 	result, err := orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -177,7 +177,7 @@ func TestFanOutCancelAbortsActiveBatch(t *testing.T) {
 	orch, mem, sessMgr, sessStore := newFanOutTestOrchestrator(t, rec)
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "create orchestration session", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 	finished := make(chan error, 1)
 	go func() {
 		_, runErr := orch.Run(ctx, orchestration.RunRequest{
@@ -241,7 +241,7 @@ func TestFanOutCancelAfterSettlementBeforeReturnPreservesDone(t *testing.T) {
 	orch, mem, sessMgr, sessStore := newFanOutTestOrchestrator(t, rec)
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "create session", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 	finished := make(chan error, 1)
 	go func() {
 		_, runErr := orch.Run(ctx, orchestration.RunRequest{SessionID: sess.ID, Topology: fanOutSpec("a", "b"), Input: map[string]any{"project_dir": projectDir, "project_id": testdbseed.DefaultProjectID}})
@@ -298,7 +298,7 @@ func TestFanOutCancellationDuringSetupAbortsBeforeDispatch(t *testing.T) {
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{Workers: blocked, Agents: orchestrationtest.Registry(t)})
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "create session", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 	finished := make(chan error, 1)
 	go func() {
 		_, runErr := orch.Run(ctx, orchestration.RunRequest{SessionID: sess.ID, Topology: fanOutSpec("a", "b"), Input: map[string]any{"project_dir": projectDir, "project_id": testdbseed.DefaultProjectID}})
