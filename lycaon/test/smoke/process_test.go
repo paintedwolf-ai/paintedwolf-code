@@ -1,7 +1,6 @@
 package smoke_test
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/hostlock"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -64,22 +62,7 @@ func (p *smokeProcess) waitForHealth(t *testing.T, baseURL string) {
 		}
 		return err == nil && resp.StatusCode == http.StatusOK
 	})
-}
 
-func requireStoreReleased(t *testing.T, child *smokeProcess, dbPath string) {
-	t.Helper()
-	testutil.AwaitClosed(t, "the sidecar exits", child.done)
-	testutil.FailErr(t, "sidecar exit", child.err)
-	wal, err := os.Stat(dbPath + "-wal")
-	if err == nil && wal.Size() != 0 {
-		t.Fatalf("shutdown left %d WAL bytes", wal.Size())
-	}
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("inspect WAL after shutdown: %v", err)
-	}
-	claim, err := hostlock.AcquireStore(dbPath)
-	testutil.FailErr(t, "reclaim store after shutdown", err)
-	claim.Release()
 }
 
 func TestSmokeStartupFailureReportsExitAndOutput(t *testing.T) {

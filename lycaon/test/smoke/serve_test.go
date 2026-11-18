@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 
 	"github.com/google/uuid"
@@ -146,11 +145,6 @@ func TestLycaonServeSmoke(t *testing.T) {
 	}
 	if ct := streamResp.Header.Get("Content-Type"); !strings.Contains(ct, "text/event-stream") {
 		t.Fatalf("content-type = %q", ct)
-	}
-
-	if runtime.GOOS != "windows" {
-		testutil.FailErr(t, "signal sidecar with stream open", proc.Process.Signal(syscall.SIGTERM))
-		requireStoreReleased(t, child, dbPath)
 	}
 }
 

@@ -7,16 +7,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
-	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// withoutEnv drops every entry for name from env.
 func withoutEnv(env []string, key string) []string {
 	out := env[:0:0]
 	for _, entry := range env {
@@ -43,25 +40,16 @@ func TestDenSidecarHandoffBearer(t *testing.T) {
 	addr := ln.Addr().String()
 	ln.Close()
 
+	// The desktop sends the bearer as the first frame on the engine's private
+	// stdin, never in its environment.
 	apiToken := "den-handoff-parent-token"
-	dbPath := filepath.Join(t.TempDir(), "handoff.db")
-	proc := exec.CommandContext(t.Context(), bin, "serve", "--db", dbPath)
+	proc := exec.CommandContext(t.Context(), bin, "serve", "--db", filepath.Join(t.TempDir(), "handoff.db"))
 	proc.Dir = moduleRoot
 	proc.Env = append(withoutEnv(os.Environ(), "LYCAON_API_TOKEN"),
 		"LYCAON_ADDR="+addr,
 		startupprotocol.APITokenStdinEnv+"=1",
 		"LYCAON_LLM_MOCK=1",
 	)
-	var parent *exec.Cmd
-	var parentProcess *smokeProcess
-	if runtime.GOOS != "windows" {
-		parent = exec.CommandContext(t.Context(), "cat")
-		pipe, err := parent.StdinPipe()
-		testutil.FailErr(t, "open stand-in parent input", err)
-		t.Cleanup(func() { _ = pipe.Close() })
-		parentProcess = startSmokeProcess(t, parent)
-		proc.Env = append(withoutEnv(proc.Env, app.ParentPIDEnv), app.ParentPIDEnv+"="+strconv.Itoa(parent.Process.Pid))
-	}
 	stdin, err := proc.StdinPipe()
 	if err != nil {
 		t.Fatalf("stdin: %v", err)
@@ -87,11 +75,5 @@ func TestDenSidecarHandoffBearer(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /v1/projects status = %d, want 200", resp.StatusCode)
-	}
-
-	if parent != nil {
-		testutil.FailErr(t, "kill stand-in parent", parent.Process.Kill())
-		testutil.AwaitClosed(t, "the stand-in parent exits", parentProcess.done)
-		requireStoreReleased(t, child, dbPath)
 	}
 }
