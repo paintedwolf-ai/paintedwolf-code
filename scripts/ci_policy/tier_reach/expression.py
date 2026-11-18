@@ -77,6 +77,8 @@ class Expression:
         arguments, start, depth = [], self.position, 0
         while True:
             text = self.peek()
+            if text is None:
+                raise ValueError("unclosed argument list")
             if text in {"(", "[", "{"}:
                 depth += 1
             elif text in {")", "]", "}"}:
@@ -102,11 +104,11 @@ class Expression:
             tree = self.disjunction()
             if self.take().text != ")":
                 raise ValueError("unbalanced parenthesis")
-            return self.postfix(tree, None)
+            return self.postfix(tree)
         if token.kind == "string":
             return ("str", token.value)
         if token.kind != "ident":
-            return self.postfix(UNKNOWN, None)
+            return self.postfix(UNKNOWN)
         if token.text in {"true", "false"}:
             return ("bool", token.text == "true")
         if self.peek() == "." and token.text in self.file.imports and self.position + 1 < len(self.items):
@@ -114,24 +116,24 @@ class Expression:
             return self.qualified(self.file.imports[token.text], token.text, self.take().text)
         if self.peek() == "(":
             arguments = self.arguments()
-            return self.postfix(self.helper(None, token.text, arguments), None)
+            return self.postfix(self.helper(None, token.text, arguments))
         if token.text in self.bindings:
             position, value = self.bindings[token.text]
             bound = self.nested(value)
             if position is not None:
                 bound = ("index", position, bound)
-            return self.postfix(bound, None)
+            return self.postfix(bound)
         constant = self.index.constant(self.file, token.text)
-        return self.postfix(("str", constant) if constant is not None else UNKNOWN, None)
+        return self.postfix(("str", constant) if constant is not None else UNKNOWN)
 
     def qualified(self, path, alias, name):
         if path == "runtime" and name in {"GOOS", "GOARCH"}:
-            return self.postfix((name.lower(),), None)
+            return self.postfix((name.lower(),))
         if self.peek() != "(":
             for file in self.index.imported_files(self.file, alias):
                 if name in file.constants:
-                    return self.postfix(("str", file.constants[name]), None)
-            return self.postfix(UNKNOWN, None)
+                    return self.postfix(("str", file.constants[name]))
+            return self.postfix(UNKNOWN)
         arguments = self.arguments()
         if path == "testing" and name == "Short":
             return ("short",)
@@ -142,7 +144,7 @@ class Expression:
             return ("env", key[1]) if name == "Getenv" else ("lookup", key[1])
         if path == "strings" and name in STRING_FUNCTIONS and len(arguments) == 1:
             return ("apply", name, self.nested(arguments[0]))
-        return self.postfix(self.helper(alias, name, arguments), None)
+        return self.postfix(self.helper(alias, name, arguments))
 
     def helper(self, qualifier, name, arguments):
         """A module function whose body is bindings then one return is read as that expression."""
@@ -160,7 +162,7 @@ class Expression:
             walker.bind(statement)
         return self.nested(statements[-1][1:], definitions[0].file, walker.bindings)
 
-    def postfix(self, tree, _):
+    def postfix(self, tree):
         while self.peek() in {".", "(", "["}:
             if self.peek() == "(":
                 self.arguments()
@@ -168,6 +170,8 @@ class Expression:
                 self.take()
                 depth = 0
                 while not (self.peek() == "]" and depth == 0):
+                    if self.peek() is None:
+                        raise ValueError("unclosed index")
                     depth += self.peek() == "["
                     depth -= self.peek() == "]"
                     self.position += 1

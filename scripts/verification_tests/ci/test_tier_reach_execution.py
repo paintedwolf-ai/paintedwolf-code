@@ -10,6 +10,7 @@ from unittest.mock import patch
 from ci_policy import tier_reach
 from ci_policy.tier_reach import runs as tier_runs
 from ci_policy.tier_reach.conditions import Index
+from ci_policy.tier_reach.expression import Expression, evaluate
 from ci_policy.tier_reach.source import name_matches, parse_file, satisfied, tokens
 import verification_plan as planning
 
@@ -213,6 +214,37 @@ class TierReachTests(unittest.TestCase):
         braces = [t.text for t in tokens('x := "{"\ny := 1\n')]
         self.assertEqual(braces.count("{"), 0)
         self.assertEqual(braces.count(";"), 2)
+
+    def test_conditions_decide_only_what_a_run_fixes(self):
+        files = {f.path.name: f for f in self.index.files}
+        lane = run("linux", environment={"EXAMPLE_GATE": "YES", "EXAMPLE_REQUIRED": "1", "UNSET_VALUE": None})
+        cases = [
+            ("pkg_test.go", 'runtime.GOARCH == "arm64"', {}, False),
+            ("pkg_test.go", 'runtime.GOOS != "darwin" && !testing.Short()', {}, True),
+            ("pkg_test.go", 'gate.EnvRequired == "EXAMPLE_REQUIRED"', {}, True),
+            ("pkg_test.go", 'os.Getenv(envFixture) == ""', {}, True),
+            ("pkg_test.go", 'os.Getenv("UNSET_VALUE") == "1"', {}, None),
+            ("gate.go", 'strings.ToLower(os.Getenv("EXAMPLE_GATE")) == "yes"', {}, True),
+            ("gate.go", 'required() || false', {}, True),
+            ("gate.go", '!(true && false) || os.Getenv("MISSING") != ""', {}, True),
+            ("gate.go", 'Require(t, true)', {}, None),
+            ("gate.go", 'count > 3', {}, None),
+            ("gate.go", 'a + b == ""', {}, None),
+            ("gate.go", '-limit == 0', {}, None),
+            ("gate.go", 'items[0] == "a"', {}, None),
+            ("gate.go", 'value.Field.Method() == "a"', {}, None),
+            ("gate.go", '(os.Getenv("X") == "1"', {}, None),
+            ("gate.go", 'os.Getenv(1) == ""', {}, None),
+            ("gate.go", '42 == 42', {}, None),
+            ("gate.go", 'loop == ""', {"loop": (None, tokens("loop"))}, None),
+            ("gate.go", 'present', {"present": (1, tokens('os.LookupEnv("EXAMPLE_GATE")'))}, True),
+            ("gate.go", 'value == "YES"', {"value": (0, tokens('os.LookupEnv("EXAMPLE_GATE")'))}, True),
+            ("gate.go", 'strings.TrimSpace(other) == ""', {"other": (0, tokens("pair()"))}, None),
+        ]
+        for name, text, bindings, want in cases:
+            with self.subTest(text=text):
+                tree = Expression(self.index, files[name], bindings).parse(tokens(text))
+                self.assertEqual(evaluate(tree, lane), want)
 
     def test_runs_select_packages_names_and_scripted_digests(self):
         selected = tier_runs.Run("r", "linux", "amd64", frozenset(), False, {}, ["./..."],
