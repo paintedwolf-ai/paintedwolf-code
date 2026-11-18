@@ -22,8 +22,11 @@ beforeEach(() => {
 async function open(path: string, content: string) {
   const appStore = createAppStore();
   appStore.actions.setSidecarStatus("connected");
-  loadedBuffer({ path, content });
-  render(() => <ProjectFilesView projectId={PROJECT} appStore={appStore} roots={ROOTS} client={getLycaonClient()} />);
+  const client = getLycaonClient()!;
+  const source = await client.getProjectSource(PROJECT, path, { rootId: "r1" });
+  vi.spyOn(client, "getProjectSource").mockResolvedValue({ ...source, content, size_bytes: content.length });
+  loadedBuffer({ path, content, sha256: source.sha256 });
+  render(() => <ProjectFilesView projectId={PROJECT} appStore={appStore} roots={ROOTS} client={client} />);
   const host = await screen.findByTestId("files-editor-host");
   await waitFor(() => expect(host.querySelector(".cm-content")).toBeTruthy());
   return EditorView.findFromDOM(host)!;
