@@ -47,6 +47,7 @@ type PipelineStageOutcome struct {
 type PipelineOutcome struct {
 	Status                        int
 	Complete, PublicationEligible bool
+	PublicationBasis              toolcontract.PublicationBasis
 	PipeStatuses                  []int
 }
 
@@ -153,6 +154,7 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 		}
 		if effective.Status != 0 {
 			out.Status = effective.Status
+			out.PublicationBasis = effective.PublicationBasis
 		}
 		out.Complete = out.Complete && effective.Complete && inputComplete
 		out.PublicationEligible = out.PublicationEligible && effective.PublicationEligible

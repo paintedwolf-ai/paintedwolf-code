@@ -28,7 +28,8 @@ type activityGroup struct {
 func readActivityCounts(ctx context.Context, tx *sql.Tx, program string) (groups []activityGroup, err error) {
 	rows, err := tx.QueryContext(ctx, `SELECT min(ordinal),count(*),
  sum(state IN ('prepared','running')),sum(state='waiting'),
- sum(state='failed' OR (state='completed' AND COALESCE(status_code,0)<>0)),
+ sum(state='failed' OR (state='completed' AND COALESCE(status_code,0)<>0
+     AND NOT (complete=1 AND publication_eligible=1))),
  sum(state='interrupted'),sum(state='refused'),
  sum(effect_certainty IN ('unknown','attempted')),sum(effect_certainty='completed')
  FROM invocation_program_executions WHERE program_id=?

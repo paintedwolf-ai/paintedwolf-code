@@ -158,7 +158,10 @@ func (f *frame) settlePipeline(ctx context.Context, run *childRun, stages []comm
 	f.publish.mark(out.PublicationEligible)
 	f.state.pipeStatus = out.PipeStatuses
 	f.state.vars.SetPipeStatus(out.PipeStatuses)
-	aggregate := toolcontract.ProducerResult{Status: out.Status, Terminal: toolcontract.ProducerCompleted, Complete: out.Complete, EffectCertainty: toolcontract.NoEffect}
+	aggregate := toolcontract.ProducerResult{
+		Status: out.Status, Terminal: toolcontract.ProducerCompleted, EffectCertainty: toolcontract.NoEffect,
+		Complete: out.Complete, PublicationEligible: out.PublicationEligible, PublicationBasis: out.PublicationBasis,
+	}
 	if stop, ok := f.state.latch.Stop(); ok {
 		aggregate = stop.Result
 	}
