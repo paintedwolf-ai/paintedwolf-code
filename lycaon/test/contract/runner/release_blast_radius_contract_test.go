@@ -207,12 +207,17 @@ func TestReleaseBlastRadiusPublishOrder(t *testing.T) {
 	if strings.Contains(extractYAMLJob(rel, "activate-updater"), "publish-github-release") {
 		t.Fatal("the GitHub Release mirror must not gate updater activation")
 	}
+	// Aggregation, which validates the manifest, runs from the shared release script.
+	aggregate := contractcheck.ReadRepoFile(t, root, "scripts/release-aggregate.sh")
+	if !strings.Contains(rel, "bash scripts/release-aggregate.sh") {
+		t.Fatal("release.yml must assemble the updater manifest through scripts/release-aggregate.sh")
+	}
 	for _, needle := range []string{
 		`updates/releases/${VERSION}.json`,
 		`release-metadata/${VERSION}/$(basename "${cask}")`,
 		"release-validate-updater-manifest.sh",
 	} {
-		if !strings.Contains(rel, needle) {
+		if !strings.Contains(rel+aggregate, needle) {
 			t.Fatalf("release.yml must deposit a validated immutable updater manifest (%q missing)", needle)
 		}
 	}

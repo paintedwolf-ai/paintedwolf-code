@@ -223,7 +223,8 @@ func TestReleaseChannelsHaveIndependentPointersAndPackageTokens(t *testing.T) {
 		t.Fatalf("updater generation policy: %v\n%s", err, output)
 	}
 	workflow := contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml")
-	if !strings.Contains(workflow, "painted-wolf-code@preview") ||
+	aggregate := contractcheck.ReadRepoFile(t, root, "scripts/release-aggregate.sh")
+	if !strings.Contains(aggregate, "render painted-wolf-code@preview preview") ||
 		!strings.Contains(workflow, "--channel \"${selected}\"") ||
 		!strings.Contains(workflow, "--advance-if-newer") ||
 		!strings.Contains(extractYAMLJob(workflow, "update-cask"), `scripts/release_distribution.py casks --source release-metadata --tap tap --channel "${CHANNEL}"`) {

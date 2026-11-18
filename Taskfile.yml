@@ -1880,7 +1880,7 @@ tasks:
       - python3 -m scripts.linux_release.candidate_diagnostics {{.CLI_ARGS}}
 
   release:live-test:
-    desc: 'Isolated release rehearsal; --assembly, --macos and local Nix modes use disposable keys, default uses test R2 credentials'
+    desc: 'Isolated release:live-test rehearsal; --assembly, --macos and local Nix modes use disposable keys, default uses test R2 credentials'
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh {{.CLI_ARGS}}
 
