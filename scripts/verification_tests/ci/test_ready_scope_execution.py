@@ -77,10 +77,10 @@ class ReadyScopeTests(unittest.TestCase):
             selected, packages = ready_scope.test_phases({'full': False, 'paths': ['lycaon-den/src/ui.ts']})
         self.assertEqual((selected, packages), ([CONTRACTS, INTEGRATION], []))
 
-    def test_checks_run_native_admission_then_early_targets_then_the_rest(self):
+    def test_checks_run_native_admission_then_the_checks(self):
         with patch('ci_policy.native_admission.commands', return_value=[['./task', 'native']]):
-            self.assertEqual(ready_scope.check_phases(['build', 'budgets', 'docs:links'], {'full': False}, ['budgets', 'absent']),
-                             [['./task', 'native'], ['./task', 'budgets'], ['./task', 'build', 'docs:links']])
+            self.assertEqual(ready_scope.check_phases(['build', 'budgets', 'docs:links'], {'full': False}),
+                             [['./task', 'native'], ['./task', 'build', 'budgets', 'docs:links']])
 
     def test_cross_platform_build_runs_only_when_go_can_compile_differently(self):
         targets = ['build', 'build:cross', 'budgets']
@@ -88,12 +88,12 @@ class ReadyScopeTests(unittest.TestCase):
             for scope in (None, {'full': True, 'paths': []}, {'full': False, 'paths': ['lycaon/internal/a/a.go']},
                           {'full': True, 'paths': ['lycaon/go.sum']}):
                 with self.subTest(scope=scope):
-                    self.assertEqual(ready_scope.check_phases(targets, scope, ['budgets']),
-                                     [['./task', 'budgets'], ['./task', 'build', 'build:cross']])
+                    self.assertEqual(ready_scope.check_phases(targets, scope),
+                                     [['./task', 'build', 'build:cross', 'budgets']])
             for paths in (['lycaon-den/src/ui.ts'], ['lycaon/internal/a/testdata/case.json']):
                 with self.subTest(paths=paths):
-                    self.assertEqual(ready_scope.check_phases(targets, {'full': False, 'paths': paths}, ['budgets']),
-                                     [['./task', 'budgets'], ['./task', 'build']])
+                    self.assertEqual(ready_scope.check_phases(targets, {'full': False, 'paths': paths}),
+                                     [['./task', 'build', 'budgets']])
 
 
 if __name__ == '__main__':

@@ -12,7 +12,7 @@ import sys
 
 import change_report
 from ci_policy.impact import module_tree
-from verification_plan import GO_MODULE, catalog, within
+from verification_plan import GO_MODULE, catalog, flag_tags, within
 
 ROOT = GO_MODULE.parent
 TARGET = "test:integration"
@@ -33,11 +33,11 @@ def edited_packages(paths, declared):
     return sorted(packages)
 
 
-def host_packages(packages, flags):
+def host_packages(packages, tags):
     """Drop packages whose Go files are all excluded by OS/arch build constraints on this host."""
     if not packages:
         return []
-    tag_flags = [flag for flag in flags if flag.startswith("-tags=")]
+    tag_flags = [f"-tags={','.join(sorted(tags))}"] if tags else []
     result = subprocess.run(
         ["go", "list", "-e", "-f", "{{.Dir}}\t{{with .Error}}{{.Err}}{{end}}", *tag_flags, *packages],
         cwd=GO_MODULE, text=True, capture_output=True, check=True,
@@ -53,7 +53,8 @@ def main():
         print(f"{TARGET}:changes: no main branch is reachable, so there is no change to test", file=sys.stderr)
         return 2 if os.environ.get("GITHUB_ACTIONS") == "true" else 0
     recipe = catalog()["go"][TARGET]
-    packages = host_packages(edited_packages(scope.paths, recipe["packages"]), recipe.get("flags", []))
+    packages = host_packages(edited_packages(scope.paths, recipe["packages"]),
+                             flag_tags(recipe["options"], recipe.get("flags", [])))
     print(f"{TARGET}:changes: {scope.describe()}; {len(packages)} edited package(s)", file=sys.stderr)
     if not packages:
         return 0

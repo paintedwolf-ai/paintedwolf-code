@@ -35,15 +35,12 @@ class LaneRuleTests(unittest.TestCase):
                 self.refused(ci=lanes(tests={**lane("test:short"), **change}))
         self.refused(ci={"Tests": lane("test:short"), "stress": lanes()["stress"]})
 
-    def test_arguments_early_targets_and_contract_order_belong_to_their_targets(self):
+    def test_arguments_and_admission_checks_belong_to_their_targets(self):
         gate = dict(check=("test:short", "lint:fast"), fast=("test:short", "lint:fast"))
         for change in ({"arguments": []}, {"arguments": [""]}, {"arguments": ["x"]},
-                       {"early_targets": ["test:race"]}, {"early_targets": ["lint:fast", "lint:fast"]},
-                       {"contract_first": True}, {"admission_checks": [["test:confine:linux", "--", "supervisor"]]}):
+                       {"admission_checks": [["test:confine:linux", "--", "supervisor"]]}):
             with self.subTest(change=change):
                 self.refused(ci=lanes(tests={**lane("test:short", "lint:fast"), **change}), **gate)
-        with plan(ci=lanes(tests=lane("test:short", "lint:fast", early_targets=["lint:fast"])), **gate):
-            self.assertIn("tests", rows("check"))
 
     def test_setups_refuse_targets_their_toolchains_cannot_run(self):
         for setup in ("frontend", "analysis"):
