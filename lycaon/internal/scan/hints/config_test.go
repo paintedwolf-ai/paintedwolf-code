@@ -43,7 +43,7 @@ default_hint: SCAN_BASE
 rule_hints:
   project.rule: SCAN_PROJECT
 `), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	cfg, err := hints.LoadMergedForRoots("", []string{projectDir})
 	testutil.FailErr(t, "hints.LoadMergedForRoots failed", err)

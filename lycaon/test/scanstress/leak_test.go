@@ -14,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -59,15 +60,9 @@ func TestRepeatedInterruptsStayBounded(t *testing.T) {
 	go func() {
 		_, _ = scanner.Run(warmCtx, scan.ScanRequest{ProjectDir: project, Categories: []api.ScanCategory{api.ScanCategorySAST}})
 	}()
-	if !awaitEngineRunning(t) {
-		warmCancel()
-		warmObs.finish()
-		t.Fatal("engine never started during warm-up")
-	}
+	awaitEngineRunning(t)
 	warmCancel()
-	if _, survivors := awaitNoEngineProcesses(t); len(survivors) > 0 {
-		t.Fatalf("warm-up left engine processes: %+v", survivors)
-	}
+	awaitNoEngineProcesses(t)
 	warmObs.finish()
 	runtime.GC()
 
@@ -83,26 +78,24 @@ func TestRepeatedInterruptsStayBounded(t *testing.T) {
 			_, err := scanner.Run(ctx, scan.ScanRequest{ProjectDir: project, Categories: []api.ScanCategory{api.ScanCategorySAST}})
 			done <- err
 		}()
-		if !awaitEngineRunning(t) {
-			cancel()
-			<-done
-			obs.finish()
-			t.Fatalf("iteration %d: engine never started", i)
-		}
+		awaitEngineRunning(t)
+		awaitEngineWorking(t, os.Getpid())
 		cancel()
 		if err := <-done; !errors.Is(err, context.Canceled) {
 			t.Errorf("iteration %d: canceled scan returned %v, want context.Canceled", i, err)
 		}
-		if drain, survivors := awaitNoEngineProcesses(t); len(survivors) > 0 {
-			t.Errorf("iteration %d: engine survived cancellation after %s: %+v", i, drain, survivors)
-		}
+		awaitNoEngineProcesses(t)
 		allRunDirs = append(allRunDirs, obs.seenRunDirs()...)
 		obs.finish()
 	}
 
-	runtime.GC()
-	endGoroutines := runtime.NumGoroutine()
-	endFDs := openFDs(t)
+	// Sampling goroutines wind down after their observers finish; a leak never does.
+	var endGoroutines, endFDs int
+	testutil.WaitFor(t, "goroutines and descriptors return to under one per run", func() bool {
+		runtime.GC()
+		endGoroutines, endFDs = runtime.NumGoroutine(), openFDs(t)
+		return endGoroutines-baseGoroutines < repeatCount() && endFDs-baseFDs < repeatCount()
+	})
 
 	leaked := survivingDirs(allRunDirs)
 	if len(leaked) > 0 {

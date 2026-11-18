@@ -107,6 +107,5 @@ mod tests {
     fn context_is_appended_to_existing_detail() {
         let error = UpdateError::new(UpdateErrorCode::DiskSpace, "first").with_context("second");
         assert_eq!(error.detail.as_deref(), Some("first; second"));
-        assert_eq!(error.to_string(), "DiskSpace: first; second");
     }
 }

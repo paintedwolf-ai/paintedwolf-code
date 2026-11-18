@@ -124,7 +124,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	}()
 
 	var decisionID string
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the approval is pending", func() bool {
 		select {
 		case err := <-done:
 			t.Fatalf("prompt completed before approval: %v", err)
@@ -247,7 +247,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	}()
 
 	var decisionID string
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the approval is pending", func() bool {
 		select {
 		case err := <-done:
 			t.Fatalf("prompt completed before approval: %v", err)

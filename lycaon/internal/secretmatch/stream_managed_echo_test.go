@@ -139,3 +139,11 @@ func TestStreamManagedEchoScanRespectsWorkLimit(t *testing.T) {
 		t.Fatalf("linear scan escaped work bound: err=%v output=%d", err, output.Len())
 	}
 }
+
+func TestStreamScreensAShortMultiLineManagedValue(t *testing.T) {
+	const secret = "a bλ\nc dλ\ne fλ\ng hλ"
+	out := screenManagedEcho(t, []HarvestedValue{managedValue(secret, testReference)}, strings.NewReader("before "+secret+" after"), StreamPolicy{ManagedEchoes: true})
+	if strings.Contains(out, "c dλ") || !strings.HasPrefix(out, "before ") {
+		t.Fatalf("multi-line value survived: %q", out)
+	}
+}

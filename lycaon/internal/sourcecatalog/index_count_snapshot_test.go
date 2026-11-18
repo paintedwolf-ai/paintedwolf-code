@@ -24,7 +24,7 @@ func TestFileCountReturnsUnknownWhileDiscoveryContinues(t *testing.T) {
 		t.Fatalf("blocked discovery invented a measurement: %+v", files)
 	}
 	release()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the file count is measured", func() bool {
 		files, err = c.Trees.RootFileCount(t.Context(), "p", root, scope, 0)
 		return err == nil && files.Measured
 	})

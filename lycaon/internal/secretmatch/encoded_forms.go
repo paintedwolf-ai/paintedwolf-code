@@ -8,6 +8,15 @@ import (
 	"strings"
 )
 
+// EncodedForms returns at most maxEncodedForms spellings. None is longer than
+// maxEncodedExpansion bytes per source byte plus base64Padding: escaping a
+// byte as \u00XX inside a further JSON string takes seven.
+const (
+	maxEncodedForms     = 16
+	maxEncodedExpansion = 7
+	base64Padding       = 4
+)
+
 // EncodedForms lists the spellings a serializer gives value on its way into a
 // transcript, request, or file: percent-encoded for a URL, escaped inside a
 // JSON string with and without HTML-safe escaping, each of those inside one

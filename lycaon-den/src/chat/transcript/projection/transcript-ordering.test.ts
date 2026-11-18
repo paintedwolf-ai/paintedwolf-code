@@ -57,7 +57,7 @@ describe("transcript-items", () => {
   it("sortTranscriptItemsByOrd orders by immutable ord, not wire ts or arrival index", () => {
     const sharedTs = "2026-01-01T00:00:02.000Z";
     const messages = [
-      { id: "u1", ord: 1, role: "user" as const, origin: "user" as const, authority: "user" as const, trust_tier: "trusted" as const, content: "go", created_at: "2026-01-01T00:00:00.000Z" },
+      { id: "u1", ord: 1, role: "user" as const, origin: "user" as const, authority: "user" as const, trust_tier: "trusted" as const, content: "go", created_at: "2026-01-01T00:00:09.000Z" },
       {
         id: "a1",
         ord: 2,
@@ -88,9 +88,11 @@ describe("transcript-items", () => {
         created_at: sharedTs,
       },
     ];
-    // Tied timestamps leave ord (2/3/4) as the ordering fact.
+    // The first row carries the latest timestamp and the rest tie, so only ord can order them.
     const items = sortTranscriptItemsByOrd(messagesToTranscriptItems(messages), messages);
     const keys = items.map((item) => item.key);
+    expect(keys[0]).toBe("u1");
+    expect(createTranscriptDisplayProjector()(messages, undefined, { verboseMode: true })[0]![0]!.key).toBe("u1");
     expect(keys.indexOf("a1")).toBeLessThan(keys.indexOf("a1:tc1"));
     expect(keys.indexOf("a1:tc1")).toBeLessThan(keys.indexOf("pu1"));
   });

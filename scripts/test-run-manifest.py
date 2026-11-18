@@ -32,7 +32,6 @@ _ENV_KEYS = (
     "OPENGREP_STAGE_DIR",
     "PATH",
     "PW_GO_TEST_TIMEOUT_SECONDS",
-    "PW_TEST_TIMEOUT_SCALE",
     "TZ",
 )
 

@@ -74,11 +74,24 @@ func (s *VerifyStore) Get(scope llm.SettingsScope, projectDir string) VerifyConf
 	if scope == llm.SettingsScopeProject && projectDir != "" {
 		if cached, ok := s.projectCache[projectDir]; ok {
 			cfg = mergeVerifyConfig(cfg, cached)
-		} else if proj, err := loadVerifyFile(projectVerifyPath(projectDir)); err == nil {
+		} else if proj, ok, _ := readProjectFile(projectDir, settingsoverlay.BasenameVerify, loadVerifyFile); ok {
 			cfg = mergeVerifyConfig(cfg, proj)
 		}
 	}
 	return cfg
+}
+
+// ProjectRejected reports a project verify.yaml the host could not apply; no
+// test command is declared while it stands.
+func (s *VerifyStore) ProjectRejected(projectDir string) []ProjectRejection {
+	s.mu.RLock()
+	_, cached := s.projectCache[projectDir]
+	s.mu.RUnlock()
+	if cached || projectDir == "" {
+		return nil
+	}
+	_, _, rejected := readProjectFile(projectDir, settingsoverlay.BasenameVerify, loadVerifyFile)
+	return rejections(rejected)
 }
 
 // VerifyTestCommand returns the project's declared test command, or "" if undeclared.
@@ -92,6 +105,9 @@ func (s *VerifyStore) VerifyTestCommand(projectDir string) string {
 
 // PutProject persists a project verify overlay at <overlay>/verify.yaml.
 func (s *VerifyStore) PutProject(projectDir string, cfg VerifyConfig) error {
+	if len(s.ProjectRejected(projectDir)) > 0 {
+		return ErrProjectSettingsNeedRepair
+	}
 	cfg = normalizeVerifyConfig(cfg)
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
@@ -125,7 +141,7 @@ func loadVerifyFile(path string) (VerifyConfig, error) {
 		return VerifyConfig{}, err
 	}
 	var cfg VerifyConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := decodeProjectFile(data, &cfg); err != nil {
 		return VerifyConfig{}, err
 	}
 	return normalizeVerifyConfig(cfg), nil

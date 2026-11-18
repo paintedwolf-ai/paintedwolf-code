@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -12,7 +13,7 @@ from verification_tests.distribution.test_bundle_upgrade_prepare_execution impor
 
 
 class CaseTests(unittest.TestCase):
-    def exercise(self, fault=None):
+    def exercise(self, fault=None, failing_phase=None):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name).resolve()
@@ -58,11 +59,21 @@ class CaseTests(unittest.TestCase):
         installation.launch.side_effect = launch
         installation.healthy.side_effect = lambda version: {"health": {"version": version, "status": "ok",
             "schema_version": 6 if fault == "schema" and version == "1.1.0" else 5}, "port": 1234}
+        def run(arguments, stdout=None, **_):
+            if stdout is None:
+                return
+            # The semantic verifier is the only command given a log.
+            phase = Path(stdout.name).stem.removeprefix("semantics-")
+            stdout.write(f"{phase} verified against {arguments[arguments.index('--base') + 1]}\n".encode())
+            if phase == failing_phase:
+                raise subprocess.CalledProcessError(1, arguments)
         with patch.object(driver, "materialize", side_effect=lambda *_: config.mkdir()), \
-             patch.object(driver.subprocess, "run"), \
-             patch.object(driver, "Installation", return_value=installation), \
-             patch.object(driver, "verify_semantics") as semantics:
-            if fault:
+             patch.object(driver.subprocess, "run", side_effect=run), \
+             patch.object(driver, "Installation", return_value=installation):
+            if failing_phase:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    driver.run_case(case, plan, root, work, config, evidence)
+            elif fault:
                 message = {"channel": "unexpected release", "exchange": "did not exchange",
                            "hash": "executable differs", "schema": "unexpected schema"}[fault]
                 with self.assertRaisesRegex(ValueError, message):
@@ -74,10 +85,20 @@ class CaseTests(unittest.TestCase):
                 self.assertEqual(len(launches), 3)
                 self.assertEqual(result["activation_trigger"], "startup_after_staging")
                 installation.stop.assert_any_call(crash_app=True)
-                self.assertEqual(semantics.call_count, 3)
                 self.assertTrue((evidence / "1.1.0-transaction.json").exists())
                 self.assertEqual(json.loads((evidence / "startup-observation.json").read_text()), {"state": "healthy"})
             self.assertGreaterEqual(installation.stop.call_count, 1)
+        return {path.name: path.read_text() for path in evidence.glob("semantics-*.log")}
+
+    def test_every_semantic_phase_keeps_its_own_log(self):
+        passed = self.exercise()
+        self.assertEqual(passed, {f"semantics-{phase}.log": f"{phase} verified against http://127.0.0.1:1234\n"
+                                  for phase in ("prior", "activated", "restarted")})
+        for phase, retained in (("activated", ("prior", "activated")), ("restarted", ("prior", "activated", "restarted"))):
+            failed = self.exercise(failing_phase=phase)
+            self.assertEqual(set(failed), {f"semantics-{name}.log" for name in retained})
+            for name in retained[:-1]:
+                self.assertEqual(failed[f"semantics-{name}.log"], passed[f"semantics-{name}.log"])
 
     def test_activation_requires_a_complete_native_transition_and_another_restart(self):
         self.exercise()
@@ -126,7 +147,7 @@ class CaseTests(unittest.TestCase):
             outputs = [unittest.mock.Mock(stdout="/Applications/Painted Wolf Code.app/Contents/MacOS/pw serve LYCAON_ADDR=127.0.0.1:0 LYCAON_API_TOKEN=desktop-bearer-token\n"),
                        unittest.mock.Mock()]
             with patch.object(driver.subprocess, "run", side_effect=outputs) as calls:
-                driver.verify_semantics(config, fixture, {"engine_pid": 42, "port": 1234}, evidence)
+                driver.verify_semantics(config, fixture, {"engine_pid": 42, "port": 1234}, evidence, "prior")
             self.assertEqual((config / "api.token").read_text(), "desktop-bearer-token")
             self.assertEqual((config / "api.token").stat().st_mode & 0o777, 0o600)
             self.assertEqual(calls.call_count, 2)

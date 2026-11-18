@@ -35,7 +35,7 @@ class LaneProofTests(unittest.TestCase):
         with patch.object(lane_proof.subprocess, "check_output", side_effect=["a" * 40, self.tree]), \
                 patch.object(lane_proof.subprocess, "run"):
             self.assertEqual(lane_proof.seal(Path("/source"), self.record, recovered)["source_tree"], self.tree)
-        for changes in ({"status": "failed"}, {"lane": "limits"}, {"packages": ["./internal/foo"]}, {"execution_error": "failure"}):
+        for changes in ({"status": "failed"}, {"lane": "build"}, {"packages": ["./internal/foo"]}, {"execution_error": "failure"}):
             self.assertIsNone(lane_proof.seal(Path("/source"), {**self.record, **changes}, self.environment))
         self.assertIsNone(lane_proof.seal(Path("/source"), self.record, {**self.environment, "GITHUB_EVENT_NAME": "pull_request"}))
         self.assertIsNone(lane_proof.seal(Path("/source"), self.record,
@@ -56,7 +56,7 @@ class LaneProofTests(unittest.TestCase):
         remaining, reused = proof_reuse.select(self.rows, [first, second], self.run, "org/repo", self.tree)
         self.assertEqual(len(reused), 2)
         self.assertFalse(any(row["lane"] == "behavior" for row in remaining["include"]))
-        self.assertTrue(any(row["lane"] == "limits" for row in remaining["include"]))
+        self.assertTrue(any(row["lane"] == "build" for row in remaining["include"]))
 
     def test_source_recipe_platform_and_provenance_mismatches_never_grant_reuse(self):
         proof = self.proof("lint", "")

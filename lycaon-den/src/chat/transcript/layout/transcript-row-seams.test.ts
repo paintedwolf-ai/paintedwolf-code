@@ -44,8 +44,23 @@ describe("transcript row seams", () => {
 
     expect(seams.get("s1")).toBe("section");
     expect(seams.get("s2")).toBe("row");
-    expect(seams.get("d1")).toBe("section");
+    expect(seams.get("d1")).toBe("part");
     expect(seams.get("d2")).toBe("row");
+  });
+
+  it("holds a diff to the activity it reports on, but not across a catalog span edge", () => {
+    const sameSpan = transcriptRowSeams([user("u1"), span("s1"), diff("d1"), prose("a1")]);
+    expect(sameSpan.get("d1")).toBe("part");
+    expect(sameSpan.get("a1")).toBe("section");
+
+    const afterProse = transcriptRowSeams([user("u1"), prose("a1"), diff("d1")]);
+    expect(afterProse.get("d1")).toBe("section");
+
+    const acrossSpans = transcriptRowSeams(
+      [user("u1"), span("s1"), diff("d1")],
+      { spanKeyOf: (key) => (key === "s1" ? "run-a" : undefined) },
+    );
+    expect(acrossSpans.get("d1")).toBe("section");
   });
 
   it("holds a queue send inside the open turn, unlike an ordinary prompt", () => {

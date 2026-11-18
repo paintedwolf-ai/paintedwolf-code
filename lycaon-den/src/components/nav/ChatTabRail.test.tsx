@@ -45,7 +45,7 @@ function mountRail(appStore = createAppStore()) {
   render(() => (
     <PresentationProvider preparation={preparation}>
       <ChatTabChromeProvider sessionKey="s1">
-        <ChatTabRail appStore={appStore} sessionId="s1" onOpenWorker={() => {}} />
+        <ChatTabRail appStore={appStore} sessionId="s1" onOpenWorker={() => {}} worklogOpen={false} onOpenWorklog={() => {}} />
       </ChatTabChromeProvider>
     </PresentationProvider>
   ));

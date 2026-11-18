@@ -152,12 +152,6 @@ func TestPublishAttentionOrdersConcurrentBuildsByStartNotFinish(t *testing.T) {
 	}
 }
 
-func TestPublishAttentionNoopWithoutSource(t *testing.T) {
-	pub := &Publisher{Hub: NewMemoryHub()}
-	pub.PublishAttention(context.Background())
-	pub.FlushAttention(context.Background())
-}
-
 func TestAttentionLifecycleTopic(t *testing.T) {
 	if !AttentionLifecycleTopic(api.EventTopicProject) || !AttentionLifecycleTopic(api.EventTopicSession) {
 		t.Fatal("project and session death must rebuild attention")

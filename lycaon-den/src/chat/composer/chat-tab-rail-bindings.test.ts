@@ -2,12 +2,14 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   chatTabRailBindings,
+  chatTabRailSessionId,
   setChatTabRailBindings,
   type ChatTabRailBindings,
 } from "./chat-tab-rail-bindings.ts";
 
-function makeBindings(): ChatTabRailBindings {
+function makeBindings(sessionId = "s1"): ChatTabRailBindings {
   return {
+    sessionId,
     workflows: {
       workflowPickerOpen: () => false,
       workflowError: () => null,
@@ -56,9 +58,6 @@ function makeBindings(): ChatTabRailBindings {
       }),
       onUnbindWorktree: async () => {},
     },
-    onOpenWorklog: () => {},
-    onCloseWorklog: () => {},
-    worklogOpen: () => false,
     onCancelWorker: () => {},
     cancellingWorkerId: () => null,
   };
@@ -106,6 +105,19 @@ describe("setChatTabRailBindings claims", () => {
     expect(chatTabRailBindings()).toBe(secondBindings);
     setChatTabRailBindings(firstBindings, first);
     expect(chatTabRailBindings()).toBe(firstBindings);
+  });
+
+  it("names the session whose chat holds the claim", () => {
+    const first = {};
+    const second = {};
+    expect(chatTabRailSessionId()).toBeNull();
+    setChatTabRailBindings(makeBindings("first"), first);
+    expect(chatTabRailSessionId()).toBe("first");
+    setChatTabRailBindings(makeBindings("second"), second);
+    setChatTabRailBindings(null, first);
+    expect(chatTabRailSessionId()).toBe("second");
+    setChatTabRailBindings(null, second);
+    expect(chatTabRailSessionId()).toBeNull();
   });
 
   it("the current claimant can release after superseding a previous claimant", () => {

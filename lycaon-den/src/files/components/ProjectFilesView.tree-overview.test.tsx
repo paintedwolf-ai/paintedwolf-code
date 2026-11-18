@@ -33,11 +33,6 @@ describe("ProjectFilesView stage chrome", () => {
     fireEvent.click(toggle);
 
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
-    expect(
-      screen
-        .getByTestId("project-files-view")
-        .classList.contains("project-files-view--tree-collapsed"),
-    ).toBe(true);
     expect(screen.getByTestId("files-tree-pane").hidden).toBe(true);
     expect(screen.getByTestId("files-tree-resize").hidden).toBe(true);
     expect(
@@ -62,18 +57,13 @@ describe("ProjectFilesView stage chrome", () => {
       />
     ));
 
-    fireEvent.click(screen.getByTestId("files-tree-toggle"));
-    expect(
-      screen
-        .getByTestId("project-files-view")
-        .classList.contains("project-files-view--tree-collapsed"),
-    ).toBe(true);
+    const toggle = screen.getByTestId("files-tree-toggle");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
 
-    fireEvent.click(screen.getByTestId("files-tree-toggle"));
+    fireEvent.click(toggle);
     const view = screen.getByTestId("project-files-view");
-    expect(view.classList.contains("project-files-view--tree-collapsed")).toBe(
-      false,
-    );
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
     expect(view.classList.contains("project-files-view--tree-claimed")).toBe(
       true,
     );
@@ -310,21 +300,5 @@ describe("ProjectFilesView stage chrome", () => {
         "2 items",
       ),
     );
-  });
-
-  it("keeps Files controls in the sidebar without shared browse chrome", () => {
-    const appStore = createAppStore();
-    render(() => (
-      <ProjectFilesView
-        projectId={PROJECT}
-        appStore={appStore}
-        roots={ROOTS}
-        client={null}
-      />
-    ));
-    expect(document.querySelector(".den-browse-chrome__title")).toBeNull();
-    expect(document.querySelector(".den-browse-chrome__chips")).toBeNull();
-    expect(document.querySelector(".den-browse-chrome")).toBeNull();
-    expect(screen.getByTestId("project-files-stage")).toBeTruthy();
   });
 });

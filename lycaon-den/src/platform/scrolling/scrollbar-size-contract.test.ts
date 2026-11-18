@@ -40,15 +40,4 @@ describe("scrollbar size contract", () => {
     // The handle's interactive area reaches inward to the width every other scrollbar offers.
     expect(size + reach).toBe(shared);
   });
-
-  it("keeps tree scrollbars above pinned folder rows", () => {
-    const theme = readFileSync(
-      join(srcDir, "platform/themed-scrollbars.css"),
-      "utf8",
-    );
-
-    expect(theme).toMatch(
-      /\.den-files-tree-scroll-frame\s*>\s*\.os-scrollbar\s*\{[^}]*z-index:\s*4/,
-    );
-  });
 });

@@ -157,6 +157,10 @@ webE2e.describe("worker activity paging", () => {
     await expect(page.getByRole("button", { name: /^(Earlier|Later|Latest) activity$/ })).toHaveCount(0);
     // Rows scroll with the drawer rather than inside a box of their own.
     await expect(activity.locator("[data-den-scrollport]")).toHaveCount(0);
+    // The drawer's sections scroll in a scrollport frame whose thumb sits outside the scrolled content.
+    expect(await drawerViewport(page).evaluate((viewport) =>
+      !!viewport.parentElement?.matches("[data-den-scrollport]") && !viewport.querySelector(".os-scrollbar")
+      && !!viewport.parentElement.querySelector(":scope > .os-scrollbar"))).toBe(true);
 
     // Reading forward loads pages below, and past the page budget evicts the oldest ones
     // above, without moving the reader.
@@ -190,5 +194,24 @@ webE2e.describe("worker activity paging", () => {
 
     // Returning upward reloads evicted history above the reader without moving them.
     await expectReadingRowHeldAcross(page, gates, "before", -2);
+  });
+
+  webE2e("opens a worker drawer from the stage title bar with the conversation closed", async ({ page }) => {
+    await installWorkerRoutes(page);
+    await bootstrapChatSession(page);
+    await page
+      .getByTestId("focused-project-nav")
+      .getByRole("button", { name: "Files", exact: true })
+      .click();
+    await expect(page.getByTestId("files-tree")).toBeVisible();
+
+    await page.getByTestId("stage-tab-workers").click();
+    const panel = page.getByTestId("stage-tabs-panel");
+    await panel.getByTestId("workers-tab-row").first().getByRole("button").first().click();
+    await expect(page.getByTestId("worker-activity")).toBeVisible();
+    await expect(page.getByTestId("worker-activity").locator("[data-worker-item-key]").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("chat-view")).toBeHidden();
+    await expect(page.getByTestId("files-tree")).toBeVisible();
+    await expect(page.getByTestId("stage-tab-workers")).toBeVisible();
   });
 });
