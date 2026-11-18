@@ -78,12 +78,16 @@ type Repositories struct {
 	Rewind      RewindRepository
 }
 
-func (s *sqlCore) lockMutation(id string) func() {
+func mutationShard(id string) uint {
 	var shard uint
 	for i := 0; i < len(id); i++ {
 		shard = shard*33 + uint(id[i])
 	}
-	lock := &s.mutationLocks[shard%uint(len(s.mutationLocks))]
+	return shard
+}
+
+func (s *sqlCore) lockMutation(id string) func() {
+	lock := &s.mutationLocks[mutationShard(id)%uint(len(s.mutationLocks))]
 	lock.Lock()
 	return lock.Unlock
 }

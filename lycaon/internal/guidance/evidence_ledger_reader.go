@@ -21,7 +21,7 @@ type EvidenceLedgerWriter interface {
 	CommitVisualEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content, artifactID string) (handle string, patchedContent string, err error)
 	// CommitProgramHTTPProvenance records what network reads delivered and the
 	// workspace custody they placed.
-	CommitProgramHTTPProvenance(ctx context.Context, sessionID, projectDir string, prov evidence.ProgramHTTPProvenance) (string, error)
+	CommitProgramHTTPProvenance(ctx context.Context, target evidence.ProgramProvenanceTarget, prov evidence.ProgramHTTPProvenance) (string, error)
 }
 
 // EvidenceLedgerStore combines read and write paths for the session evidence ledger.

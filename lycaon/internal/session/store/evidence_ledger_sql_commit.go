@@ -125,7 +125,22 @@ func nextCustodySeq(ctx context.Context, q *db.Queries, sessionID string) (int, 
 			maxSeq = s
 		}
 	}
-	return max(custodyCount+1, maxSeq+1), nil
+	return nextCustodySeqAfterStagedPrograms(ctx, q, sessionID, max(custodyCount, maxSeq))
+}
+
+func nextCustodySeqAfterStagedPrograms(ctx context.Context, q *db.Queries, sessionID string, maxSeq int) (int, error) {
+	primary, err := q.MaxPrimaryStagedProgramCustodyStart(ctx, sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("read staged program custody: %w", err)
+	}
+	shared, err := q.MaxSharedStagedProgramCustodyStart(ctx, sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("read shared staged program custody: %w", err)
+	}
+	if start := max(primary, shared); start > 0 {
+		maxSeq = max(maxSeq, int(start)+programCustodyRecordSlots-1)
+	}
+	return maxSeq + 1, nil
 }
 
 // loadCommitLedgers reads live path bindings, custody metadata, and nextCustodySeq in a single query pass.
@@ -207,7 +222,10 @@ func loadCommitLedgers(ctx context.Context, q *db.Queries, sessionID string, roo
 	}
 	nextSeq := 0
 	if needCustodySeq {
-		nextSeq = max(custodyCount+1, maxSeq+1)
+		nextSeq, err = nextCustodySeqAfterStagedPrograms(ctx, q, sessionID, max(custodyCount, maxSeq))
+		if err != nil {
+			return evidence.Ledger{}, evidence.Ledger{}, 0, err
+		}
 	}
 	return bindings, custody, nextSeq, nil
 }
