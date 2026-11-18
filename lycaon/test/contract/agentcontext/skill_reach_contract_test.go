@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/lycaon/lycaon/test/contract/laws/promptrender"
+	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/skills"

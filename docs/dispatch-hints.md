@@ -54,7 +54,7 @@ Tool-output compaction and routing branch on tool identity and chunk role, never
 | `compaction/chunk_compactor.go` `strategyFor` | `strings.Contains(content, hostmarker.CompactionBannerOpen)` | idempotency for already-compacted chunks, using the named constant the compactor wrote |
 | `compaction/overlay_promote_diet.go` | tool identity and overlay id | retains latest overlay assessments and board snapshots; source reads use shared budget fitting |
 
-Content-substring routers are forbidden outside these sites. Guards: [`forbidden-calls/no-content-substring-tool-routing`](../lycaon/test/contract/laws/forbiddencalls/tool_output.go) blocks new content-sniff routers, and `TestCompactChunkRoutesOverlayPromoteByToolIdentity` in [`internal/llm/compaction/chunk_route_test.go`](../lycaon/internal/llm/compaction/chunk_route_test.go) keeps summarize output away from the promote preserver.
+Content-substring routers are forbidden outside these sites. Guards: [`forbidden-calls/no-content-substring-tool-routing`](../lycaon/test/contract/invariants/forbiddencalls/tool_output.go) blocks new content-sniff routers, and `TestCompactChunkRoutesOverlayPromoteByToolIdentity` in [`internal/llm/compaction/chunk_route_test.go`](../lycaon/internal/llm/compaction/chunk_route_test.go) keeps summarize output away from the promote preserver.
 
 ### Host markers
 

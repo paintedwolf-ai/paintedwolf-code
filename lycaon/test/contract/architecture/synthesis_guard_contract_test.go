@@ -5,7 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/laws/catalogload"
+	"github.com/lycaon/lycaon/test/contract/invariants/catalogload"
 )
 
 func TestSynthesisGroundingCodePairingClosure(t *testing.T) {

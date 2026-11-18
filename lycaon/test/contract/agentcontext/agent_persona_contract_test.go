@@ -7,7 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/laws/promptrender"
+	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 )
 
 func contractPersonaEngine(t *testing.T) *prompts.FileTemplateEngine {

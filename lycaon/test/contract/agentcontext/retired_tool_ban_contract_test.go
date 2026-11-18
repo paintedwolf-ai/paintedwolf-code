@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/test/contract/laws/promptrender"
+	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
