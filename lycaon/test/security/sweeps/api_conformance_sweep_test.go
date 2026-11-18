@@ -188,8 +188,10 @@ type conformanceSweep struct {
 	// hold keeps a file operation cancelable for the cancel recipe.
 	hold *conformanceHold
 	// memo keeps what recipes made, once per sweep.
-	memo    *sweepMemo
-	keyRows conformanceKeyRows
+	memo *sweepMemo
+	// firstUseOp is the side-effecting keyed operation whose first use races.
+	firstUseOp string
+	keyRows    conformanceKeyRows
 	// readObserved names reads whose answered request has already been checked for effects.
 	readObserved map[string]bool
 	secrets      *conformanceSecrets
@@ -229,8 +231,10 @@ func newConformanceSweep(doc *openapi3.T, validator *openapi.Validator, handler 
 	s := &conformanceSweep{
 		ops: conformanceOperations(doc), validator: validator, handler: handler, notices: notices,
 		values: newConformanceValues(), secrets: &conformanceSecrets{}, findings: newConformanceFindings(), readEffects: hostReadEffects, memo: &sweepMemo{},
-		children: map[string][]string{}, readObserved: map[string]bool{},
-		outcomes: &conformanceOutcomes{succeeded: map[string]bool{}, lastAnswer: map[string]string{}, created: map[string]bool{}}, corpus: newCorpusRecorder(),
+		// A file operation admits through one durable request row per key.
+		firstUseOp: "createProjectSourceEntry",
+		children:   map[string][]string{}, readObserved: map[string]bool{},
+		outcomes: &conformanceOutcomes{succeeded: map[string]bool{}, lastAnswer: map[string]string{}, created: map[string]bool{}}, corpus: newCorpusRecorder(corpusRead),
 	}
 	seen := map[string]bool{}
 	for _, op := range s.ops {
