@@ -36,7 +36,7 @@ type recoveryFixture struct {
 	cpStore    *checkpoint.Store
 	gitMgr     *privategit.Manager
 	coord      *recovery.Coordinator
-	mountedAdp *adapter.MountedAdapter
+	mountedAdp *adaptertest.Mounted
 }
 
 func newRecoveryFixture(t *testing.T) *recoveryFixture {

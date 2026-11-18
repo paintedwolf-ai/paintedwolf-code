@@ -115,7 +115,7 @@ func assertSelectionRow(t *testing.T, entries, fileBytes int, clonable bool, mou
 		if !choice.Facts.DeclaredCost.Partial {
 			t.Fatalf("bounded survey must not be replaced by a full fallback scan: %+v", choice.Facts.DeclaredCost)
 		}
-	case mount.reason == ReasonNone:
+	case mount.reason == adapter.ReasonNone:
 		testutil.FailErr(t, "Choose", err)
 		if choice.Adapter.ID() != adapter.AdapterFUSELinux || choice.Facts.Reason != adapter.SelectionOverBudgetMounted || choice.CopyBudget != nil {
 			t.Fatalf("over budget with a working mount must mount: %+v", choice)
@@ -206,7 +206,13 @@ func TestAStaleEstimateOverrunsAndMovesOnToTheMount(t *testing.T) {
 	testutil.FailErr(t, "sibling Prepare", err)
 	_, err = first.Adapter.Prepare(t.Context(), adapter.PrepareRequest{
 		ViewID: "overrun-view", RuntimeDir: runtimeDir, Grants: grants, CopyBudget: first.CopyBudget,
-		TargetRootDirs: map[string]string{"r": target}, CloneFile: copyingClone,
+		TargetRootDirs: map[string]string{"r": target}, CloneFile: func(src, dst string) (bool, error) {
+			raw, err := os.ReadFile(src)
+			if err != nil {
+				return false, err
+			}
+			return true, os.WriteFile(dst, raw, 0o600)
+		},
 	})
 	var overrun *adapter.BudgetOverrunError
 	if !errors.As(err, &overrun) || overrun.Entries != 51 {
