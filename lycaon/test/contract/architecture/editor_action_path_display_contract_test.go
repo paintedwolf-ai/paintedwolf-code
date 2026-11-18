@@ -143,17 +143,22 @@ func TestEditorActionPathDisplayMatchesAttachmentFence(t *testing.T) {
 				t.Fatal("invoke accepted without a message id")
 			}
 
-			contractfixture.WaitForSessionIdle(t, baseURL, sess.ID)
-			msgs := contractfixture.ListMessagesAtURL(t, baseURL, sess.ID)
+			// The invoke admits its prompt after it answers, so idle alone can precede the turn.
+			var msgs []wire.Message
 			var prompt *wire.Message
-			for i := range msgs {
-				if msgs[i].ID == accepted.MessageID {
-					prompt = &msgs[i]
+			testutil.WaitFor(t, "the admitted prompt's turn finishes", func() bool {
+				if s := contractfixture.GetSessionAtURL(t, baseURL, sess.ID); s.Status != wire.SessionStatusIdle || s.PromptPending {
+					return false
 				}
-			}
-			if prompt == nil {
-				t.Fatalf("admitted prompt %s missing from transcript", accepted.MessageID)
-			}
+				msgs = contractfixture.ListMessagesAtURL(t, baseURL, sess.ID)
+				for i := range msgs {
+					if msgs[i].ID == accepted.MessageID {
+						prompt = &msgs[i]
+						return true
+					}
+				}
+				return false
+			})
 			if !strings.Contains(prompt.Content, tc.wantPrompt) {
 				t.Fatalf("prompt text missing canonical spelling %q:\n%s", tc.wantPrompt, prompt.Content)
 			}
