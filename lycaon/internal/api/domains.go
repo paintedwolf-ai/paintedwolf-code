@@ -1,6 +1,8 @@
 package api
 
 import (
+	"time"
+
 	"context"
 	"net/http"
 
@@ -43,24 +45,25 @@ import (
 )
 
 type Activity struct {
-	attachmentCaps      promptattach.Caps
-	ShuttingDown        func() <-chan struct{}
-	editorClients       *editordoc.ClientLiveness
-	agentPresence       *agentpresence.Tracker
-	attention           *attention.Source
-	costTracker         cost.CostTracker
-	dataDir             string
-	events              events.ReplayHub
-	healthPayload       func() healthResponse
-	hostIdentity        hostidentity.Identity
-	hostResources       *hostresources.Service
-	preflightEnv        preflight.Env
-	projectLiveness     *projectliveness.Tracker
-	projectRegistry     project.Registry
-	responses           *httpio.Responder
-	scheduleSourceWatch func(context.Context, string)
-	sessionStore        sessionstore.SessionRepository
-	settingsSvc         *settings.Service
+	attachmentCaps         promptattach.Caps
+	ShuttingDown           func() <-chan struct{}
+	editorClients          *editordoc.ClientLiveness
+	agentPresence          *agentpresence.Tracker
+	attention              *attention.Source
+	costTracker            cost.CostTracker
+	dataDir                string
+	events                 events.ReplayHub
+	eventHeartbeatInterval time.Duration
+	healthPayload          func() healthResponse
+	hostIdentity           hostidentity.Identity
+	hostResources          *hostresources.Service
+	preflightEnv           preflight.Env
+	projectLiveness        *projectliveness.Tracker
+	projectRegistry        project.Registry
+	responses              *httpio.Responder
+	scheduleSourceWatch    func(context.Context, string)
+	sessionStore           sessionstore.SessionRepository
+	settingsSvc            *settings.Service
 }
 
 type Artifacts struct {
@@ -163,7 +166,7 @@ type Workers struct {
 }
 
 func composeDomains(s *Server, deps Dependencies) {
-	s.Routes.Activity = &Activity{attachmentCaps: s.Admin.Prompt.Submission.Caps, ShuttingDown: s.ShuttingDown, editorClients: s.Sources.Editor.EditorClients, agentPresence: deps.Source.AgentPresence, attention: deps.Host.Attention, costTracker: deps.Providers.CostTracker, dataDir: s.dataDir, events: s.events, healthPayload: s.healthPayload, hostIdentity: deps.Host.HostIdentity, hostResources: deps.Host.HostResources, preflightEnv: deps.Host.PreflightEnv, projectLiveness: deps.Source.ProjectLiveness, projectRegistry: deps.Core.Projects, responses: &s.responses, scheduleSourceWatch: s.Sources.Watch.ScheduleSourceWatch, sessionStore: deps.Core.Store.Sessions, settingsSvc: deps.Core.Settings}
+	s.Routes.Activity = &Activity{attachmentCaps: s.Admin.Prompt.Submission.Caps, ShuttingDown: s.ShuttingDown, editorClients: s.Sources.Editor.EditorClients, agentPresence: deps.Source.AgentPresence, attention: deps.Host.Attention, costTracker: deps.Providers.CostTracker, dataDir: s.dataDir, events: s.events, eventHeartbeatInterval: deps.Host.EventHeartbeatInterval, healthPayload: s.healthPayload, hostIdentity: deps.Host.HostIdentity, hostResources: deps.Host.HostResources, preflightEnv: deps.Host.PreflightEnv, projectLiveness: deps.Source.ProjectLiveness, projectRegistry: deps.Core.Projects, responses: &s.responses, scheduleSourceWatch: s.Sources.Watch.ScheduleSourceWatch, sessionStore: deps.Core.Store.Sessions, settingsSvc: deps.Core.Settings}
 	s.Routes.Artifacts = &Artifacts{projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: deps.Core.Store.Sessions, transcriptStore: deps.Core.Store.Transcript, visualStore: deps.Source.VisualStore}
 	s.Routes.Conversation = &Conversation{ShuttingDown: s.ShuttingDown, preview: deps.Host.Preview, progressStore: deps.Source.ProgressStore, responses: &s.responses, sessionStore: deps.Core.Store.Sessions, transcriptStore: deps.Core.Store.Transcript, sessions: s.sessions}
 	var findingIgnores *scancadence.IgnoreService

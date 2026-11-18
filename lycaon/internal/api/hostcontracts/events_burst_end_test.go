@@ -23,9 +23,6 @@ import (
 // A reader that holds a read's tail until more bytes arrive gets an event without waiting for the heartbeat.
 func TestEventStreamEndsBurstWithComment(t *testing.T) {
 	sessionFixture := storetest.New(t)
-
-	restore := events.SetHeartbeatIntervalForTests(time.Hour)
-	defer restore()
 	hub := events.NewMemoryHub()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
@@ -33,7 +30,7 @@ func TestEventStreamEndsBurstWithComment(t *testing.T) {
 
 	sessionStore := sessionFixture
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: sessionStore, Projects: reg, Sessions: session.NewHost(sessionStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
+		Store: sessionStore, Projects: reg, Sessions: session.NewHost(sessionStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{Events: hub, EventHeartbeatInterval: time.Hour}}), nil, hostapi.TestAPIToken)
 
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	testutil.FailErr(t, "net.Listen failed", err)

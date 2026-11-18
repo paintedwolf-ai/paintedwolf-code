@@ -1,6 +1,8 @@
 package api
 
 import (
+	"time"
+
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api/briefingadmin"
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
@@ -99,16 +101,17 @@ type ProvidersDependencies struct {
 }
 
 type HostDependencies struct {
-	Events         events.ReplayHub
-	EventPublisher *events.Publisher
-	Presence       *events.Presence
-	HostIdentity   hostidentity.Identity
-	HostResources  *hostresources.Service
-	HostPower      *hostpower.Controller
-	Pricing        *settings.PricingHost
-	Preview        *preview.Controller
-	PreflightEnv   preflight.Env
-	Attention      *attention.Source
+	Events                 events.ReplayHub
+	EventHeartbeatInterval time.Duration
+	EventPublisher         *events.Publisher
+	Presence               *events.Presence
+	HostIdentity           hostidentity.Identity
+	HostResources          *hostresources.Service
+	HostPower              *hostpower.Controller
+	Pricing                *settings.PricingHost
+	Preview                *preview.Controller
+	PreflightEnv           preflight.Env
+	Attention              *attention.Source
 }
 
 type StorageDependencies struct {

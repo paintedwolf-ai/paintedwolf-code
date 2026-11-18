@@ -228,9 +228,6 @@ func TestSSEReplayErrorCarriesRecoveryBoundary(t *testing.T) {
 func TestSSEHeartbeat(t *testing.T) {
 	sessionFixture := storetest.New(t)
 
-	restore := events.SetHeartbeatIntervalForTests(50 * time.Millisecond)
-	defer restore()
-
 	hub := events.NewMemoryHub()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
 	ctx := context.Background()
@@ -239,7 +236,7 @@ func TestSSEHeartbeat(t *testing.T) {
 
 	store := sessionFixture
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
+		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{Events: hub, EventHeartbeatInterval: 50 * time.Millisecond}}), nil, hostapi.TestAPIToken)
 
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	testutil.FailErr(t, "net.Listen failed", err)
