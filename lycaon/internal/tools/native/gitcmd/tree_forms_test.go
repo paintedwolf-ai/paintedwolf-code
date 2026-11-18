@@ -212,6 +212,9 @@ func TestGitKeepsDraftsWhenWorktreeAdmissionFails(t *testing.T) {
 		{"git", "-C", "absent", "status"},
 		{"git", "add", "--", "../outside"},
 		{"git", "commit", "-m", "example", "--", "../outside"},
+		{"git", "switch", "missing-branch"},
+		{"git", "merge", "missing-ref"},
+		{"git", "reset", "--hard", "missing-ref"},
 		{"git", "grep", "-E", "["},
 		{"git", "bisect", "start", "missing-ref"},
 	} {

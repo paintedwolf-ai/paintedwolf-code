@@ -66,11 +66,7 @@ func (m GitMutations) Operate(ctx context.Context, tc tools.ToolContext, req git
 	if managed {
 		target = cwd
 	}
-	if m.BeforeWorktree != nil {
-		if err := m.BeforeWorktree(ctx); err != nil {
-			return git.OperationResult{}, err
-		}
-	}
+	req.BeforeWorktree = m.BeforeWorktree
 	result, err := m.Git.Operate(ctx, target, req)
 	if err != nil && !result.Attempted {
 		var precondition *git.OperationError
