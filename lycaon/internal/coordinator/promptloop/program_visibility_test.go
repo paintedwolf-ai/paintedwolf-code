@@ -24,6 +24,9 @@ func TestProgramRefusalVisibilitySharesDirectClassificationBeforeAdmission(t *te
 		{"SURVEY_PATH_ESCAPE", api.ToolResultUiVisibilityBenign},
 		{"TOOL_ARGS_INVALID", api.ToolResultUiVisibilityBenign},
 		{approvaloutcome.CodeApprovalDenied, api.ToolResultUiVisibilityNormal},
+		{approvaloutcome.CodeApprovalExpired, api.ToolResultUiVisibilityNormal},
+		{approvaloutcome.CodeApprovalCanceled, api.ToolResultUiVisibilityNormal},
+		{"APPROVAL_RULE_DENIED", api.ToolResultUiVisibilityNormal},
 	}
 	for _, name := range []string{"command", "verify", "summarize", "survey_repo", "code_rewrite"} {
 		t.Run(name, func(t *testing.T) {

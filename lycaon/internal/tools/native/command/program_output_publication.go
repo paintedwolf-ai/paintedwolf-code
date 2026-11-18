@@ -57,9 +57,6 @@ func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination command
 		effect := toolexecution.NativeEffect{Operation: bound, Argv: &review, Inspection: d.run.capture,
 			Stage: toolcontract.ExecutionStage{ExecutionID: destination.Invocation.Identity.ExecutionID, OperationID: definition.Operation.Facts().Identity, Argv: []string{destination.Redirect.Operator, path}},
 			PrepareReviewed: func(ctx context.Context, values map[string]any, tc tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
-				if err := checkProgress(ctx); err != nil {
-					return toolexecution.PreparedNativeEffect{}, err
-				}
 				reviewed, err := tc.Invocation.NativeInputs.Reviewed()
 				if err != nil {
 					return toolexecution.PreparedNativeEffect{}, err
@@ -75,7 +72,7 @@ func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination command
 				if resolved.ArgumentsDigest() != child.review.ArgumentsDigest() {
 					return toolexecution.PreparedNativeEffect{}, &toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode, FailureClass: "owner_error", OwnerRef: definition.Operation.Facts().Contract.Owner, Data: map[string]any{"tool": definition.Operation.Facts().Identity, "path": path, "reviewed_inputs_changed": true}}
 				}
-				return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+				return toolexecution.PreparedNativeEffect{Operation: bound, CheckAdmission: checkProgress, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
 					var err error
 					published, err = apply(ctx, tc)
 					if err != nil {

@@ -132,7 +132,7 @@ type Prepared struct {
 
 // Prepare binds a reached command through the catalog option grammar. It
 // performs no read; paths is the invocation's logical cwd.
-func (o *Owners) Prepare(ctx context.Context, paths *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (Prepared, error) {
+func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (Prepared, error) {
 	if err := request.Validate(); err != nil {
 		return Prepared{}, err
 	}
@@ -144,11 +144,6 @@ func (o *Owners) Prepare(ctx context.Context, paths *projectpaths.ProgramPaths, 
 	bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
 	if err != nil {
 		return Prepared{}, argvRejection(err, spec)
-	}
-	if command == "repo-map" && !bound.Help {
-		if err := validateRepoMapPath(ctx, paths, bound, request.Invocation.Span); err != nil {
-			return Prepared{}, err
-		}
 	}
 	review := bound.Review(o.ops[command])
 	review.PathTargets = []commandprogram.PathTarget{}
@@ -166,6 +161,14 @@ func (o *Owners) Prepare(ctx context.Context, paths *projectpaths.ProgramPaths, 
 		}
 	}
 	return Prepared{Operation: o.ops[command], Argv: bound, Review: review, owners: o, paths: paths, request: request, spec: spec, run: utilities[command]}, nil
+}
+
+// CheckAdmission validates repo-map paths using the invocation's admitted roots.
+func (p Prepared) CheckAdmission(ctx context.Context) error {
+	if p.spec.Name == "repo-map" && !p.Argv.Help {
+		return validateRepoMapPath(ctx, p.paths, p.Argv, p.request.Invocation.Span)
+	}
+	return nil
 }
 
 // InvokeOwner runs the bound utility once and settles its producer outcome.

@@ -47,8 +47,10 @@ type NativeAdmissionObserver interface {
 // typed owner operation. Preparation parses/binds only; it performs no program
 // mutation, external launch or egress. Embedded programs are classified here.
 type PreparedNativeEffect struct {
-	Operation   toolcontract.BoundOperation
-	InvokeOwner func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
+	Operation toolcontract.BoundOperation
+	// CheckAdmission validates reviewed inputs without touching owner data.
+	CheckAdmission func(context.Context) error
+	InvokeOwner    func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
 	// DisclosedArgv is the one concrete source-disclosure transition. The
 	// source was admitted for reading; newly parsed path targets still require
 	// their own boundary before this owner can run.
@@ -91,7 +93,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		if !ownerStarted || result.Producer.Terminal == toolcontract.ProducerRefused {
 			completeNativeRejection(bound, err)
 		}
-		if !ownerStarted {
+		if !ownerStarted && result.Producer.Terminal == "" {
 			certainty := toolcontract.NoEffect
 			if boundaryStarted {
 				certainty = toolcontract.EffectUnknown
@@ -290,6 +292,12 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		return result, err
 	}
 	ctx = hitl.WithCheckpointWaitNotification(ctx, nil)
+	if prepared.CheckAdmission != nil {
+		if err := prepared.CheckAdmission(ctx); err != nil {
+			result.Producer = nativeAdmissionFailure(err, toolcontract.NoEffect)
+			return result, err
+		}
+	}
 	if err := observer.BeforeNativeOwner(ctx, bound, tc.Identity.ToolCallID, reviewed); err != nil {
 		return result, err
 	}

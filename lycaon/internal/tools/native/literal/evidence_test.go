@@ -120,7 +120,7 @@ func TestCancellationInterrupts(t *testing.T) {
 	h := formHarness(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	prepared, err := h.owners.Prepare(t.Context(), mustPaths(t, h), requestFor(h, "cat", "input"))
+	prepared, err := h.owners.Prepare(mustPaths(t, h), requestFor(h, "cat", "input"))
 	testutil.FailErr(t, "prepare native literal command", err)
 	result, err := prepared.InvokeOwner(ctx, h.tc, streamsFor(""))
 	if err == nil || result.Terminal != toolcontract.ProducerInterrupted || result.PublicationEligible {

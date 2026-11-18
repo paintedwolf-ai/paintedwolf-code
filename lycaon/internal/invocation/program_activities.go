@@ -59,7 +59,7 @@ func readProgramActivities(ctx context.Context, tx *sql.Tx, program api.CommandP
 }
 
 // admittedProgramExecution excludes execution rows that only record preparation or refusal.
-const admittedProgramExecution = `(state NOT IN ('prepared','refused') OR owner_started=1 OR effect_certainty IN ('completed','unknown','attempted'))`
+const admittedProgramExecution = `(state NOT IN ('prepared','refused') OR owner_started=1 OR approval_ref<>'' OR effect_certainty IN ('completed','unknown','attempted'))`
 
 // ActivitySummary reads complete counts without paging execution bodies.
 func (r *SQLRecorder) ActivitySummary(ctx context.Context, session, program string) (api.CommandProgramReceipt, error) {

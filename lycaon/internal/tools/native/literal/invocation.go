@@ -185,7 +185,7 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 // Invoke prepares and runs one request, settling a binding refusal as the
 // producer outcome so callers without a separate review step see one result.
 func (o *Owners) Invoke(ctx context.Context, tc tools.ToolContext, paths *projectpaths.ProgramPaths, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	prepared, err := o.Prepare(ctx, paths, request)
+	prepared, err := o.Prepare(paths, request)
 	if err != nil {
 		result := toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}
 		if reject := toolrejection.AsToolReject(err); reject != nil {
