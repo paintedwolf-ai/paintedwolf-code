@@ -46,26 +46,17 @@ func (s *sqlSessions) CreateChild(ctx context.Context, parent *api.Session, req 
 		WorkspaceRootID: parent.WorkspaceRootID,
 		Posture:         mode,
 	}
-	sess, err := createSession(ctx, s.core, parent.OwnerPersonID, childReq, parent.ProjectID, parent.ID, req.AgentType, api.SessionStatusIdle)
-	if err != nil {
-		return nil, err
-	}
+	var initialMessages []api.Message
 	if strings.TrimSpace(req.Prompt) != "" {
-		userMsg := api.Message{
-			ID:        uuid.NewString(),
-			Role:      api.MessageRoleUser,
-			Content:   req.Prompt,
-			WorkerID:  strings.TrimSpace(req.WorkerJobID),
-			CreatedAt: time.Now().UTC(),
-		}
-		if err := (&sqlTranscript{core: s.core}).AppendMessages(ctx, sess.ID, userMsg); err != nil {
-			return nil, err
-		}
+		initialMessages = append(initialMessages, api.Message{
+			ID: uuid.NewString(), Role: api.MessageRoleUser, Content: req.Prompt,
+			WorkerID: strings.TrimSpace(req.WorkerJobID), CreatedAt: time.Now().UTC(),
+		})
 	}
-	return sess, nil
+	return createSession(ctx, s.core, parent.OwnerPersonID, childReq, parent.ProjectID, parent.ID, req.AgentType, api.SessionStatusIdle, initialMessages...)
 }
 
-func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req api.CreateSessionRequest, projectID, parentID, agentType string, status api.SessionStatus) (*api.Session, error) {
+func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req api.CreateSessionRequest, projectID, parentID, agentType string, status api.SessionStatus, initialMessages ...api.Message) (*api.Session, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -144,6 +135,11 @@ func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req ap
 	}
 	if err := enqueueSessionEvent(ctx, s, tx, sess, api.SessionEventActionCreated); err != nil {
 		return nil, err
+	}
+	if len(initialMessages) > 0 {
+		if err := appendMessagesTx(ctx, s, tx, sess.ID, initialMessages...); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit session create: %w", err)
