@@ -25,13 +25,14 @@ func TestScanPackRejectsLintWithStructuredCode(t *testing.T) {
 	reg := &fanOutMockRegistry{scanners: []scanbase.CodeScanner{
 		&scanbase.MockScanner{IDVal: "lycaon-sca", CategoryList: []api.ScanCategory{api.ScanCategorySCA}},
 	}}
-	coord := newTestCoordinator(t, scanbase.NewSQLStore(sqlDB), nil)
+	scanStore := scanbase.NewSQLStore(sqlDB)
+	coord := newTestCoordinator(t, scanStore, nil)
 	toolReg := tools.NewDefaultRegistry()
 	cfg, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfig", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	rejectFmt := guidance.NewStaticRejectFormatter(cfg)
-	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, reg, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, reg, nil, scancfg.DefaultGatesConfig(), nil), rejectFmt, nil, nil))
+	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, scantoolapi.ResultViews{Reads: scanStore.Reads, FullPasses: scanStore.FullPasses}, reg, scancadence.New(scanStore, coord, reg, nil, scancfg.DefaultGatesConfig(), nil), rejectFmt, nil, nil))
 
 	_, err = toolReg.Run(context.Background(), "scan_pack", map[string]any{
 		"categories": []any{string(api.ScanCategorySecret)},

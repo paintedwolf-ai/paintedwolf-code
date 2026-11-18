@@ -30,10 +30,10 @@ func ResolveProjectScanID(ctx context.Context, coord ScanCoordinator, projectDir
 
 // ResolveID finds at most two indexed ids without loading scan evidence.
 func (c *CoordinatorImpl) ResolveID(ctx context.Context, canonicalPath, prefix string) (string, error) {
-	if c == nil || c.Store == nil {
+	if c == nil || c.reads == nil {
 		return "", nil
 	}
-	ids, err := c.Store.queries.ResolveCodeScanIDsByPrefix(ctx, db.ResolveCodeScanIDsByPrefixParams{
+	ids, err := c.reads.tx.queries.ResolveCodeScanIDsByPrefix(ctx, db.ResolveCodeScanIDsByPrefixParams{
 		CanonicalPath: canonicalPath,
 		Prefix:        prefix,
 		PrefixEnd:     prefix + "~",

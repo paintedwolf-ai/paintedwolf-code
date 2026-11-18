@@ -74,7 +74,7 @@ func (c *CoordinatorImpl) BoardComparison(ctx context.Context, oldScan, newScan 
 	if err := validateComparison(&oldScan, &newScan); err != nil {
 		return nil, err
 	}
-	raw, err := c.Store.queries.GetBoardComparison(ctx, db.GetBoardComparisonParams{
+	raw, err := c.reads.tx.queries.GetBoardComparison(ctx, db.GetBoardComparisonParams{
 		OldSetID: oldScan.FindingSetID, NewSetID: newScan.FindingSetID,
 	})
 	if err != nil {

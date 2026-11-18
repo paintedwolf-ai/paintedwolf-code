@@ -79,12 +79,12 @@ func seedFindingEntryQuery(t *testing.T, findings []api.SecurityFinding) (*SQLSt
 	scan := authorityScan("query", "assessment", t.TempDir(), "snapshot", "sast", api.ScanTargetFull, nil)
 	testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), scan, nil, ""))
 	completeNextScan(t, store)
-	stored, err := (&CoordinatorImpl{Store: store}).Summary(t.Context(), scan.ID)
+	stored, err := (&CoordinatorImpl{reads: store.Reads, runs: store.Runs, findings: store.Findings}).Summary(t.Context(), scan.ID)
 	testutil.FailErr(t, "read summary", err)
 	for i, finding := range findings {
 		raw, err := json.Marshal(finding)
 		testutil.FailErr(t, "marshal finding", err)
-		testutil.FailErr(t, "insert finding", store.queries.InsertFindingEntry(t.Context(), db.InsertFindingEntryParams{
+		testutil.FailErr(t, "insert finding", store.tx.queries.InsertFindingEntry(t.Context(), db.InsertFindingEntryParams{
 			FindingSetID: stored.FindingSetID, Ordinal: int64(i), FindingJson: string(raw),
 		}))
 	}

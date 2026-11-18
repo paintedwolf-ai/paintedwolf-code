@@ -40,7 +40,7 @@ func TestBoardProjectionRetainsAuthorityBeyondFailedHistory(t *testing.T) {
 	if len(view.Current[0].Findings) != 0 || len(view.Current[0].Result) != 0 {
 		t.Fatal("board read hydrated full scan evidence")
 	}
-	comparison, err := (&CoordinatorImpl{Store: store}).BoardComparison(t.Context(), view.Previous[0], view.Current[0])
+	comparison, err := (&CoordinatorImpl{reads: store.Reads, runs: store.Runs, findings: store.Findings}).BoardComparison(t.Context(), view.Previous[0], view.Current[0])
 	testutil.FailErr(t, "read persisted comparison", err)
 	if comparison.PersistedCount != 1 {
 		t.Fatalf("comparison = %+v", comparison)
@@ -148,7 +148,7 @@ func TestOpeningProjectionsKeepEvidenceAndWarningCounts(t *testing.T) {
 	if row.FindingsCount != 1 || len(row.TopLocations) != 1 || row.TopLocations[0].URI != "src/main.go" || len(row.WarningSummary) != 1 {
 		t.Fatalf("list lost summary facts: %+v", row)
 	}
-	lines := WorkerScanDigest(t.Context(), &CoordinatorImpl{Store: store}, root, time.Now())
+	lines := WorkerScanDigest(t.Context(), &CoordinatorImpl{reads: store.Reads, runs: store.Runs, findings: store.Findings}, root, time.Now())
 	if !strings.Contains(strings.Join(lines, "\n"), "src/main.go") {
 		t.Fatalf("worker lost finding locations: %v", lines)
 	}

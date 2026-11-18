@@ -132,8 +132,7 @@ func (d rootDispatcher) enqueueCohort(ctx context.Context, generation dispatchGe
 
 // Full-pass assessments cover every requested scanner; delta cohorts get fresh assessments.
 func (d rootDispatcher) ensureCohortAssessment(ctx context.Context, generation dispatchGeneration, cohort dispatchCohort) (cohortAssessment, error) {
-	concrete, recorded := d.c.Coordinator.(*scanbase.CoordinatorImpl)
-	recorded = recorded && concrete != nil
+	recorded := d.c.runs != nil
 	if cohort.passID != "" {
 		request, err := d.c.fullPasses.ReadFullPassRequest(ctx, cohort.passID)
 		if err != nil {
@@ -148,7 +147,7 @@ func (d rootDispatcher) ensureCohortAssessment(ctx context.Context, generation d
 			RequiredScanners: assessment.required, Target: scanbase.FullTargetSelection(generation.snapshot),
 			Trigger: request.Trigger,
 		}
-		_, err = concrete.Store.Runs.EnsureAssessment(ctx, *assessment.draft)
+		_, err = d.c.runs.EnsureAssessment(ctx, *assessment.draft)
 		return assessment, err
 	}
 	if !recorded {
@@ -164,6 +163,6 @@ func (d rootDispatcher) ensureCohortAssessment(ctx context.Context, generation d
 		RequiredScanners: required, Target: assessmentTarget(generation.snapshot, cohort.rows, generation.selections),
 		Trigger: assessment.trigger,
 	}
-	_, err := concrete.Store.Runs.EnsureAssessment(ctx, *assessment.draft)
+	_, err := d.c.runs.EnsureAssessment(ctx, *assessment.draft)
 	return assessment, err
 }

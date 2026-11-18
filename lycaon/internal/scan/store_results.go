@@ -31,7 +31,7 @@ func (s *FindingStore) SaveIngest(ctx context.Context, id string, rec evidence.R
 }
 
 // LoadPaths reads paths_json for a scan id.
-func (s *FindingStore) LoadPaths(ctx context.Context, id string) ([]string, error) {
+func (s *ReadStore) LoadPaths(ctx context.Context, id string) ([]string, error) {
 	pathsJSON, err := s.tx.queries.GetScanPathsJSON(ctx, id)
 	if db.IsNoRows(err) {
 		return nil, nil

@@ -212,7 +212,7 @@ func TestCompareRejectsIncompatibleAuthorities(t *testing.T) {
 			testutil.FailErr(t, "insert new", store.Runs.Insert(t.Context(), newScan, nil, ""))
 			completeNextScan(t, store)
 
-			_, err := (&CoordinatorImpl{Store: store}).Compare(t.Context(), oldScan.ID, newScan.ID)
+			_, err := (&CoordinatorImpl{reads: store.Reads, runs: store.Runs, findings: store.Findings}).Compare(t.Context(), oldScan.ID, newScan.ID)
 			var reject *CompareReject
 			if !errors.As(err, &reject) || reject.Code != tc.wantCode {
 				t.Fatalf("compare error = %v, want %s", err, tc.wantCode)

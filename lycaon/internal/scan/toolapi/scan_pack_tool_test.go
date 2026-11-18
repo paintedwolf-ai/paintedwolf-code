@@ -52,7 +52,7 @@ func TestScanPackToolReturnsEnqueueReceipt(t *testing.T) {
 			Result:       &scanoutput.Result{FindingsCount: 0},
 		},
 	}}
-	if err := scantoolapi.RegisterScanTools(toolReg, coord, scannerReg, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, scannerReg, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
+	if err := scantoolapi.RegisterScanTools(toolReg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, scannerReg, scancadence.New(store, coord, scannerReg, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
 		testutil.FailErr(t, "scan.RegisterScanTools failed", err)
 	}
 
@@ -101,7 +101,7 @@ func TestScanPackToolCanWaitForSummary(t *testing.T) {
 		},
 	}}
 	toolReg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, scannerReg, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, scannerReg, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
+	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, scannerReg, scancadence.New(store, coord, scannerReg, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
 
 	runnerConfig := scancfg.DefaultRunnerConfig()
 	runner := scanexecution.NewRunner(store, scannerReg, scanbase.NoopIngester{}, runnerConfig, nil)
@@ -141,7 +141,7 @@ func TestScanQueryAggregatesPackAcrossEnginesByPackage(t *testing.T) {
 	registry := &fanOutMockRegistry{scanners: []scanbase.CodeScanner{
 		&scanbase.MockScanner{IDVal: "scanner-a", CategoryList: []api.ScanCategory{api.ScanCategorySCA}},
 	}}
-	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, registry, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, registry, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
+	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, registry, scancadence.New(store, coord, registry, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
 
 	ids := []string{"pack-scan-a", "pack-scan-b"}
 	for index, id := range ids {

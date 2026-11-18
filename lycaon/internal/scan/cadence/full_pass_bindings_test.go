@@ -75,16 +75,17 @@ func TestFullPassRequestNeedsARunnableScanner(t *testing.T) {
 
 func TestFullPassReceiptReadsMembersThatHaveNotStarted(t *testing.T) {
 	cadence, store, dir, canonical := attachedCadence(t)
+	views := scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}
 	occupyScanner(t, store, canonical, "lycaon-sast")
 	pass, err := cadence.RequestFull(t.Context(), dir, nil, api.ScanTriggerScanPack, scanbase.FullScanContext{})
 	testutil.FailErr(t, "request full", err)
 
 	for _, read := range []func() (string, error){
 		func() (string, error) {
-			return scantoolapi.FullPassReceipt(t.Context(), cadence.Coordinator, pass, scantoolapi.ReceiptOptions{})
+			return views.FullPassReceipt(t.Context(), pass, scantoolapi.ReceiptOptions{})
 		},
 		func() (string, error) {
-			return scantoolapi.SummarizeFullPass(t.Context(), cadence.Coordinator, pass.ID, "summary", nil)
+			return views.SummarizeFullPass(t.Context(), pass.ID, "summary", nil)
 		},
 	} {
 		out, err := read()
@@ -107,7 +108,7 @@ func TestFullPassReceiptReadsMembersThatHaveNotStarted(t *testing.T) {
 		}
 	}
 
-	_, err = scantoolapi.SummarizeFullPass(t.Context(), cadence.Coordinator, "missing-pass", "summary", nil)
+	_, err = views.SummarizeFullPass(t.Context(), "missing-pass", "summary", nil)
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != scanbase.DrilldownRejectPassNotFound || reject.Data["pass_id"] != "missing-pass" {
 		t.Fatalf("unknown pass = %v, want %s", err, scanbase.DrilldownRejectPassNotFound)

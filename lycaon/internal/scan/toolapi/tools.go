@@ -32,12 +32,12 @@ type InventoryAccounting interface {
 }
 
 // RegisterScanTools registers scan_pack and drill-down tools.
-func RegisterScanTools(reg *tools.DefaultRegistry, coord scanbase.ScanCoordinator, scannerReg scanbase.CodeScannerRegistry, full scanbase.FullScanRequester, rejectFmt *guidance.StaticRejectFormatter, secStore *settings.SecurityScannersStore, accounting InventoryAccounting) error {
+func RegisterScanTools(reg *tools.DefaultRegistry, coord scanbase.ScanCoordinator, results ResultViews, scannerReg scanbase.CodeScannerRegistry, full scanbase.FullScanRequester, rejectFmt *guidance.StaticRejectFormatter, secStore *settings.SecurityScannersStore, accounting InventoryAccounting) error {
 	if reg == nil || coord == nil || scannerReg == nil || full == nil {
 		return fmt.Errorf("registry, coordinator, scan registry, and full scan requester required")
 	}
 	if err := reg.Register("scan_pack", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		return runScanPack(ctx, args, tctx, coord, scannerReg, full, rejectFmt, secStore)
+		return results.runScanPack(ctx, args, tctx, coord, scannerReg, full, rejectFmt, secStore)
 	}); err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func RegisterScanTools(reg *tools.DefaultRegistry, coord scanbase.ScanCoordinato
 		if securityScannersOff(secStore) {
 			return "", securityDisabledReject(rejectFmt)
 		}
-		return runScanSummary(ctx, args, tctx, coord, rejectFmt)
+		return results.runScanSummary(ctx, args, tctx, coord, rejectFmt)
 	}); err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func RegisterScanTools(reg *tools.DefaultRegistry, coord scanbase.ScanCoordinato
 			}
 			return accounting.QueryWorkflowInventory(ctx, tctx.Identity.SessionID, args)
 		}
-		return runScanQuery(ctx, args, tctx, coord, rejectFmt)
+		return results.runScanQuery(ctx, args, tctx, coord, rejectFmt)
 	}); err != nil {
 		return err
 	}

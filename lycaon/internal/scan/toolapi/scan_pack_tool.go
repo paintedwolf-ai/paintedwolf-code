@@ -21,7 +21,7 @@ const (
 	maxScanPackWait     = 30 * time.Minute
 )
 
-func runScanPack(
+func (v ResultViews) runScanPack(
 	ctx context.Context,
 	args map[string]any,
 	tctx tools.ToolContext,
@@ -77,9 +77,9 @@ func runScanPack(
 			tctx.Effects.Out.OwnerRef = ids[0]
 		}
 		if !waits {
-			return scanPackReceipt(ctx, coord, ids, ReceiptOptions{})
+			return v.scanPackReceipt(ctx, ids, ReceiptOptions{})
 		}
-		return waitForScanPackReceipt(ctx, coord, ids, scanPackWaitDuration(args["timeout_ms"]))
+		return v.waitForScanPackReceipt(ctx, ids, scanPackWaitDuration(args["timeout_ms"]))
 	}
 	pass, err := requestScanPackPass(ctx, scannerReg, full, projectDir, categories, sessionID)
 	if err != nil {
@@ -89,9 +89,9 @@ func runScanPack(
 		tctx.Effects.Out.OwnerRef = pass.ID
 	}
 	if !waits {
-		return FullPassReceipt(ctx, coord, pass, ReceiptOptions{})
+		return v.FullPassReceipt(ctx, pass, ReceiptOptions{})
 	}
-	return waitForFullPassReceipt(ctx, coord, pass, scanPackWaitDuration(args["timeout_ms"]))
+	return waitForv.FullPassReceipt(ctx, pass, scanPackWaitDuration(args["timeout_ms"]))
 }
 
 // scanRootDisplay renders the scan root the way the model addresses the
@@ -105,12 +105,12 @@ func scanRootDisplay(tctx tools.ToolContext) string {
 	return "@" + active.Label
 }
 
-func waitForFullPassReceipt(ctx context.Context, coord scanbase.ScanCoordinator, pass scanbase.FullPass, timeout time.Duration) (string, error) {
+func (v ResultViews) waitForFullPassReceipt(ctx context.Context, pass scanbase.FullPass, timeout time.Duration) (string, error) {
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
-	latest, waitErr := waitForFullPass(waitCtx, coord, pass.ID)
+	latest, waitErr := v.waitForFullPass(waitCtx, pass.ID)
 	cancel()
 	if waitErr == nil {
-		return FullPassReceipt(ctx, coord, latest, ReceiptOptions{})
+		return v.FullPassReceipt(ctx, latest, ReceiptOptions{})
 	}
 	if ctx.Err() != nil {
 		return "", ctx.Err()
@@ -119,26 +119,26 @@ func waitForFullPassReceipt(ctx context.Context, coord scanbase.ScanCoordinator,
 		if latest.ID == "" {
 			latest = pass
 		}
-		return FullPassReceipt(ctx, coord, latest, ReceiptOptions{waitTimedOut: true})
+		return v.FullPassReceipt(ctx, latest, ReceiptOptions{waitTimedOut: true})
 	}
 	return "", waitErr
 }
 
-func waitForScanPackReceipt(ctx context.Context, coord scanbase.ScanCoordinator, ids []string, timeout time.Duration) (string, error) {
+func (v ResultViews) waitForScanPackReceipt(ctx context.Context, ids []string, timeout time.Duration) (string, error) {
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
-	completedIDs, waitErr := waitForScanPack(waitCtx, coord, ids)
+	completedIDs, waitErr := v.waitForScanPack(waitCtx, ids)
 	cancel()
 	if len(completedIDs) > 0 {
 		ids = completedIDs
 	}
 	if waitErr == nil {
-		return scanPackReceipt(ctx, coord, ids, ReceiptOptions{})
+		return v.scanPackReceipt(ctx, ids, ReceiptOptions{})
 	}
 	if ctx.Err() != nil {
 		return "", ctx.Err()
 	}
 	if errors.Is(waitErr, context.DeadlineExceeded) || errors.Is(waitErr, context.Canceled) {
-		return scanPackReceipt(ctx, coord, ids, ReceiptOptions{waitTimedOut: true})
+		return v.scanPackReceipt(ctx, ids, ReceiptOptions{waitTimedOut: true})
 	}
 	return "", waitErr
 }

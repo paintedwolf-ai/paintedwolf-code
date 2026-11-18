@@ -55,7 +55,7 @@ type QueryRequest struct {
 
 // Query filters persisted findings and their attached guidance for a completed scan.
 func (c *CoordinatorImpl) Query(ctx context.Context, req QueryRequest) (*api.ScanQueryResponse, error) {
-	if c == nil || c.Store == nil {
+	if c == nil || c.reads == nil {
 		return nil, fmt.Errorf("scan coordinator not configured")
 	}
 	scanID := strings.TrimSpace(req.ScanID)
@@ -85,14 +85,14 @@ func (c *CoordinatorImpl) Query(ctx context.Context, req QueryRequest) (*api.Sca
 		var out *api.ScanQueryResponse
 		if req.IntroducedSince != nil {
 			// Introduction filters require history stored separately from the finding index.
-			out, err = c.Store.Findings.queryIntroducedSince(ctx, scan, req)
+			out, err = c.findings.queryIntroducedSince(ctx, scan, req)
 		} else {
-			out, err = c.Store.Findings.queryFindingEntries(ctx, scan, req)
+			out, err = c.findings.queryFindingEntries(ctx, scan, req)
 		}
 		if err != nil {
 			return nil, err
 		}
-		return c.Store.Findings.attachFixedSince(ctx, scan, req, out)
+		return c.findings.attachFixedSince(ctx, scan, req, out)
 	}
 	filtered := filterGuidance(scan.Guidance, req)
 	if req.Dedupe {
@@ -102,7 +102,7 @@ func (c *CoordinatorImpl) Query(ctx context.Context, req QueryRequest) (*api.Sca
 	if err != nil {
 		return nil, err
 	}
-	return c.Store.Findings.attachFixedSince(ctx, scan, req, out)
+	return c.findings.attachFixedSince(ctx, scan, req, out)
 }
 
 func QuerySecurityFindings(scanID string, findings []api.SecurityFinding, guidance []api.ScanGuidanceSummary, req QueryRequest) (*api.ScanQueryResponse, error) {

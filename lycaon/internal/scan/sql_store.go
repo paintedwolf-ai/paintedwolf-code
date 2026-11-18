@@ -24,7 +24,6 @@ type SQLStore struct {
 	Ignores    *IgnoreStore
 	FullPasses *FullPassStore
 	Series     *SeriesStore
-	db         db.Handle
 	tx         *transactions
 }
 
@@ -86,17 +85,16 @@ func NewSQLStore(database db.Handle) *SQLStore {
 		Ignores:    &IgnoreStore{tx: tx},
 		FullPasses: &FullPassStore{tx: tx, series: series},
 		Series:     series,
-		db:         database,
 		tx:         tx,
 	}
 }
 
 // DB returns the underlying database handle.
 func (s *SQLStore) DB() db.Handle {
-	if s == nil {
+	if s == nil || s.tx == nil {
 		return nil
 	}
-	return s.db
+	return s.tx.db
 }
 
 // Insert stores a code scan row.

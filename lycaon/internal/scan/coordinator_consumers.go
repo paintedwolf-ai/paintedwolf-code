@@ -31,7 +31,7 @@ func (c *CoordinatorImpl) bindContexts(ctx context.Context, rec *api.CodeScan, a
 	if assessmentID == "" && workflowRunID == "" && sessionID == "" {
 		return rec, nil
 	}
-	return c.Store.Runs.BindContexts(ctx, rec.ID, assessmentID, workflowRunID, sessionID)
+	return c.runs.BindContexts(ctx, rec.ID, assessmentID, workflowRunID, sessionID)
 }
 
 func projectScanContexts(rec *api.CodeScan, assessmentID, workflowRunID, sessionID string) *api.CodeScan {

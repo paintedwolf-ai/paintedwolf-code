@@ -196,8 +196,9 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	registerCatalogToolsOnto(t, rt.Registry)
 
 	sqlDB := testdbfixture.Open(t, "scan-boot.db")
-	coord := scantest.Coordinator(t, scan.NewSQLStore(sqlDB), nil)
-	if err := scantoolapi.RegisterScanTools(rt.Registry, coord, &scan.MockRegistry{Scanner: &scan.MockScanner{}}, scancadence.New(scan.StoreFromCoordinator(coord), coord, &scan.MockRegistry{Scanner: &scan.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
+	scanStore := scan.NewSQLStore(sqlDB)
+	coord := scantest.Coordinator(t, scanStore, nil)
+	if err := scantoolapi.RegisterScanTools(rt.Registry, coord, scantoolapi.ResultViews{Reads: scanStore.Reads, FullPasses: scanStore.FullPasses}, &scan.MockRegistry{Scanner: &scan.MockScanner{}}, scancadence.New(scanStore, coord, &scan.MockRegistry{Scanner: &scan.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
 		contractcheck.FailErr(t, "scan.RegisterScanTools failed", err)
 	}
 	secretValues := credentialstore.NewEmpty(credentialstore.Slot{

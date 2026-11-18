@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -29,7 +29,7 @@ func TestFindingHistoryAndLedgerRollBackWithoutTheirEvent(t *testing.T) {
 	}
 	open, err := store.Findings.OpenFindings(t.Context(), root, "sast")
 	testutil.FailErr(t, "read rolled-back history", err)
-	subjects, err := store.queries.ListScanFindingLedgerSubjects(t.Context(), root)
+	subjects, err := store.tx.queries.ListScanFindingLedgerSubjects(t.Context(), root)
 	testutil.FailErr(t, "read rolled-back ledger", err)
 	if len(open) != 0 || len(subjects) != 0 {
 		t.Fatalf("event failure committed history or ledger: %d/%d", len(open), len(subjects))
@@ -160,7 +160,7 @@ func TestBlobFindingsCacheRoundTrip(t *testing.T) {
 
 func TestBlobFindingsReportsCorruptCache(t *testing.T) {
 	store := authorityTestStore(t)
-	testutil.FailErr(t, "seed corrupt cache", store.queries.UpsertScanBlobFindings(t.Context(), db.UpsertScanBlobFindingsParams{
+	testutil.FailErr(t, "seed corrupt cache", store.tx.queries.UpsertScanBlobFindings(t.Context(), db.UpsertScanBlobFindingsParams{
 		ExecutionFingerprint: "fp", ContentID: "sha", TargetPath: "a.go", FindingsJson: "{}", CreatedAt: timelayout.Format(time.Now()),
 	}))
 	findings, present, err := store.Findings.BlobFindings(t.Context(), "fp", "sha", "a.go")

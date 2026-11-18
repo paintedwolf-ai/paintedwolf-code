@@ -10,7 +10,7 @@ import (
 
 func TestAssessmentMemberAdmissionPreservesGroupBoundary(t *testing.T) {
 	store := authorityTestStore(t)
-	coordinator := &CoordinatorImpl{Store: store}
+	coordinator := &CoordinatorImpl{reads: store.Reads, runs: store.Runs, findings: store.Findings}
 	group := AssessmentDraft{
 		ID: "group", CanonicalPath: t.TempDir(), SourceSnapshotID: "source",
 		RequiredScanners: []string{"sast", "sca"}, Trigger: api.ScanTriggerWriteBurst,

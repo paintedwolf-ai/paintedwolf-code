@@ -227,10 +227,10 @@ func aggregateAssessmentStatus(statuses map[api.CodeScanStatus]bool) api.CodeSca
 
 // LatestAssessmentForPaths exposes the aggregate view to board projections.
 func (c *CoordinatorImpl) LatestAssessmentForPaths(ctx context.Context, canonicalPaths []string) (AssessmentView, error) {
-	if c == nil || c.Store == nil {
+	if c == nil || c.reads == nil {
 		return AssessmentView{}, fmt.Errorf("scan coordinator not configured")
 	}
-	return c.Store.Findings.AssessmentView(ctx, canonicalPaths)
+	return c.findings.AssessmentView(ctx, canonicalPaths)
 }
 
 // coverageRank orders coverage from what proves least to what proves most;

@@ -67,7 +67,7 @@ func TestWorkflowInventoryPaginationUsesTheSameGroupsAsScanQuery(t *testing.T) {
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: t.TempDir(), IsPrimary: true}},
 			ActiveRootID: "root"},
 	}
-	raw, err = runScanQuery(t.Context(), map[string]any{"scan_ids": first.ScanIDs, "view": "groups", "kind": "sca", "level": "unknown", "offset": first.NextOffset}, tctx, ledger, nil)
+	raw, err = (ResultViews{}).runScanQuery(t.Context(), map[string]any{"scan_ids": first.ScanIDs, "view": "groups", "kind": "sca", "level": "unknown", "offset": first.NextOffset}, tctx, ledger, nil)
 	testutil.FailErr(t, "next page", err)
 	var page struct {
 		Groups     []scanfindings.FindingGroup
@@ -85,12 +85,12 @@ func TestWorkflowInventoryPaginationUsesTheSameGroupsAsScanQuery(t *testing.T) {
 		}
 		seen[g.ID] = true
 	}
-	_, err = runScanQuery(t.Context(), map[string]any{"scan_ids": []string{"complete"}, "kind": "sca", "advisory_id": "CVE-2026-12345", "fingerprint": "fp"}, tctx, ledger, nil)
+	_, err = (ResultViews{}).runScanQuery(t.Context(), map[string]any{"scan_ids": []string{"complete"}, "kind": "sca", "advisory_id": "CVE-2026-12345", "fingerprint": "fp"}, tctx, ledger, nil)
 	testutil.FailErr(t, "filtered query", err)
 	if ledger.request.Kind != "sca" || ledger.request.AdvisoryID != "CVE-2026-12345" || ledger.request.Fingerprint != "fp" {
 		t.Fatalf("filters=%#v", ledger.request)
 	}
-	_, err = runScanQuery(t.Context(), map[string]any{"scan_ids": []string{"failed"}, "view": "groups"}, tctx, ledger, nil)
+	_, err = (ResultViews{}).runScanQuery(t.Context(), map[string]any{"scan_ids": []string{"failed"}, "view": "groups"}, tctx, ledger, nil)
 	if err == nil {
 		t.Fatal("failed scan was represented as a completed empty inventory")
 	}
@@ -101,7 +101,7 @@ func TestWorkflowInventoryPaginationUsesTheSameGroupsAsScanQuery(t *testing.T) {
 func TestScanQueryGroupsRefuseAStaleInventoryRevision(t *testing.T) {
 	ledger := &inventoryLedger{scans: []api.CodeScan{{ID: "complete", Status: api.CodeScanStatusComplete}}}
 	tctx := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: t.TempDir(), IsPrimary: true}}, ActiveRootID: "root"}}
-	raw, err := runScanQuery(t.Context(), map[string]any{"scan_ids": []string{"complete"}, "view": "groups"}, tctx, ledger, nil)
+	raw, err := (ResultViews{}).runScanQuery(t.Context(), map[string]any{"scan_ids": []string{"complete"}, "view": "groups"}, tctx, ledger, nil)
 	testutil.FailErr(t, "first page", err)
 	var page struct {
 		Revision string `json:"inventory_revision"`
@@ -112,11 +112,11 @@ func TestScanQueryGroupsRefuseAStaleInventoryRevision(t *testing.T) {
 	if page.Revision != want {
 		t.Fatalf("page revision = %q", page.Revision)
 	}
-	_, err = runScanQuery(t.Context(), map[string]any{"scan_ids": []string{"complete"}, "view": "groups", "inventory_revision": page.Revision}, tctx, ledger, nil)
+	_, err = (ResultViews{}).runScanQuery(t.Context(), map[string]any{"scan_ids": []string{"complete"}, "view": "groups", "inventory_revision": page.Revision}, tctx, ledger, nil)
 	testutil.FailErr(t, "page at the current revision", err)
 
 	var reject *toolrejection.ToolReject
-	_, err = runScanQuery(t.Context(), map[string]any{"scan_ids": []string{"complete"}, "view": "groups", "inventory_revision": "stale"}, tctx, ledger, nil)
+	_, err = (ResultViews{}).runScanQuery(t.Context(), map[string]any{"scan_ids": []string{"complete"}, "view": "groups", "inventory_revision": "stale"}, tctx, ledger, nil)
 	if !errors.As(err, &reject) || reject.Code != "SCAN_INVENTORY_STALE" || reject.Data["inventory_revision"] != page.Revision {
 		t.Fatalf("stale revision err = %v", err)
 	}
@@ -124,7 +124,7 @@ func TestScanQueryGroupsRefuseAStaleInventoryRevision(t *testing.T) {
 		"selector":           {"scan_ids": []string{"complete"}, "selector": map[string]any{"scanner": "sca", "paths": []any{"x"}}},
 		"inventory_revision": {"scan_ids": []string{"complete"}, "inventory_revision": page.Revision},
 	} {
-		_, err := runScanQuery(t.Context(), args, tctx, ledger, nil)
+		_, err := (ResultViews{}).runScanQuery(t.Context(), args, tctx, ledger, nil)
 		if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" || reject.Data["field"] != field {
 			t.Fatalf("%s outside its view: err = %v", field, err)
 		}
@@ -151,7 +151,7 @@ func TestScanQueryAccountingViewReadsWorkflowAccounting(t *testing.T) {
 	accounting := &recordingAccounting{}
 	scanners := &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register", RegisterScanTools(reg, ledger, scanners, noFullScans{}, nil, nil, accounting))
+	testutil.FailErr(t, "register", RegisterScanTools(reg, ledger, ResultViews{}, scanners, noFullScans{}, nil, nil, accounting))
 	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: t.TempDir(), IsPrimary: true}}, ActiveRootID: "root"}}
 	out, err := reg.Run(t.Context(), toolScanQuery, map[string]any{"scan_ids": []any{"s"}, "view": "accounting"}, tctx)
 	testutil.FailErr(t, "accounting view", err)
@@ -160,7 +160,7 @@ func TestScanQueryAccountingViewReadsWorkflowAccounting(t *testing.T) {
 	}
 
 	unwired := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register unwired", RegisterScanTools(unwired, ledger, scanners, noFullScans{}, nil, nil, nil))
+	testutil.FailErr(t, "register unwired", RegisterScanTools(unwired, ledger, ResultViews{}, scanners, noFullScans{}, nil, nil, nil))
 	if _, err := unwired.Run(t.Context(), toolScanQuery, map[string]any{"scan_ids": []any{"s"}, "view": "accounting"}, tctx); err == nil {
 		t.Fatal("accounting view answered without workflow accounting")
 	}

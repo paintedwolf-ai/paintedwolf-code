@@ -21,7 +21,7 @@ func (c *CoordinatorImpl) ensureEnqueueAssessment(ctx context.Context, req Enque
 			return fmt.Errorf("%w: %s member %s", ErrAssessmentIdentityMismatch, draft.ID, req.ScannerID)
 		}
 	}
-	_, err := c.Store.Runs.EnsureAssessment(ctx, draft)
+	_, err := c.runs.EnsureAssessment(ctx, draft)
 	return err
 }
 

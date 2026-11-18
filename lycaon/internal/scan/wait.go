@@ -51,14 +51,6 @@ func WaitForScanID(ctx context.Context, store *ReadStore, scanID string, poll ti
 	}
 }
 
-// StoreFromCoordinator returns the SQL store when c is a wired CoordinatorImpl.
-func StoreFromCoordinator(c ScanCoordinator) *SQLStore {
-	if impl, ok := c.(*CoordinatorImpl); ok && impl != nil {
-		return impl.Store
-	}
-	return nil
-}
-
 // StatusTerminal reports whether a scan has stopped for good.
 func StatusTerminal(status api.CodeScanStatus) bool {
 	switch status {

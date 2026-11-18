@@ -87,7 +87,7 @@ func TestAssessmentRecencyBreaksTimestampTiesByAdmission(t *testing.T) {
 				t.Fatalf("assessment order = latest %s, current %s, previous %s", view.LatestAttemptID, view.CurrentID, view.PreviousID)
 			}
 			if !multipleRoots {
-				comparison, err := (&CoordinatorImpl{Store: store}).BoardComparison(t.Context(), view.Previous[0], view.Current[0])
+				comparison, err := (&CoordinatorImpl{reads: store.Reads, runs: store.Runs, findings: store.Findings}).BoardComparison(t.Context(), view.Previous[0], view.Current[0])
 				testutil.FailErr(t, "read forward comparison", err)
 				if comparison.NewCount != 1 || comparison.ResolvedCount != 1 {
 					t.Fatalf("comparison = %+v, want the newest transition", comparison)

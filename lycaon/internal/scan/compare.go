@@ -77,7 +77,7 @@ func ResolveCompareBaseline(ctx context.Context, coord ScanCoordinator, oldScanI
 
 // Compare returns finding-set differences between compatible complete scans.
 func (c *CoordinatorImpl) Compare(ctx context.Context, oldScanID, newScanID string) (*Comparison, error) {
-	if c == nil || c.Store == nil {
+	if c == nil || c.reads == nil {
 		return nil, fmt.Errorf("scan coordinator not configured")
 	}
 	oldScanID = strings.TrimSpace(oldScanID)
@@ -89,7 +89,7 @@ func (c *CoordinatorImpl) Compare(ctx context.Context, oldScanID, newScanID stri
 		return nil, &CompareReject{Code: CompareRejectSameScan}
 	}
 
-	metadata, err := c.Store.Findings.metadata(ctx, []string{oldScanID, newScanID})
+	metadata, err := c.findings.metadata(ctx, []string{oldScanID, newScanID})
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (c *CoordinatorImpl) Compare(ctx context.Context, oldScanID, newScanID stri
 	if err := c.validateBoundedComparison(ctx, oldScan, newScan); err != nil {
 		return nil, err
 	}
-	if raw, err := c.Store.queries.GetScanComparison(ctx, db.GetScanComparisonParams{OldSetID: oldScan.FindingSetID, NewSetID: newScan.FindingSetID}); err == nil {
+	if raw, err := c.reads.tx.queries.GetScanComparison(ctx, db.GetScanComparisonParams{OldSetID: oldScan.FindingSetID, NewSetID: newScan.FindingSetID}); err == nil {
 		var cached Comparison
 		err := json.Unmarshal([]byte(raw), &cached)
 		return &cached, err
@@ -122,7 +122,7 @@ func (c *CoordinatorImpl) Compare(ctx context.Context, oldScanID, newScanID stri
 		return nil, err
 	}
 	var response *Comparison
-	err = c.Store.inTx(ctx, func(q *db.Queries, _ *sql.Tx) error {
+	err = c.findings.tx.inTx(ctx, func(q *db.Queries, _ *sql.Tx) error {
 		var err error
 		response, err = comparisonProjection(ctx, q, oldScan, newScan)
 		return err
@@ -239,10 +239,10 @@ func buildComparison(oldScanID, newScanID string, oldFindings, newFindings []api
 // PreviousComplete returns the prior comparable complete scan, within latest's
 // delegation when it has one, or nil when none.
 func (c *CoordinatorImpl) PreviousComplete(ctx context.Context, latest api.CodeScan) (*api.CodeScan, error) {
-	if c == nil || c.Store == nil {
+	if c == nil || c.reads == nil {
 		return nil, fmt.Errorf("scan coordinator not configured")
 	}
-	return c.Store.Reads.PreviousComplete(ctx, latest)
+	return c.reads.PreviousComplete(ctx, latest)
 }
 
 type compareMatchIndex struct {
@@ -357,7 +357,7 @@ func (c *CoordinatorImpl) validateBoundedComparison(ctx context.Context, oldScan
 }
 
 func (c *CoordinatorImpl) unobservedBoundaries(ctx context.Context, snapshotID string) ([]string, error) {
-	rows, err := c.Store.queries.ListSourceSnapshotBoundaries(ctx, snapshotID)
+	rows, err := c.reads.tx.queries.ListSourceSnapshotBoundaries(ctx, snapshotID)
 	if err != nil {
 		return nil, err
 	}

@@ -19,6 +19,7 @@ type Service struct {
 	series      *scanbase.SeriesStore
 	fullPasses  *scanbase.FullPassStore
 	reads       *scanbase.ReadStore
+	runs        *scanbase.RunStore
 	findings    *scanbase.FindingStore
 	Coordinator scanbase.ScanCoordinator
 	Registry    scanbase.CodeScannerRegistry
@@ -47,6 +48,7 @@ func New(store *scanbase.SQLStore, coord scanbase.ScanCoordinator, registry scan
 		service.series = store.Series
 		service.fullPasses = store.FullPasses
 		service.reads = store.Reads
+		service.runs = store.Runs
 		service.findings = store.Findings
 		service.Ignores = &IgnoreService{Store: store.Ignores}
 	}

@@ -32,7 +32,7 @@ func (r *Runner) execute(ctx context.Context, job *api.CodeScan) {
 		r.cancel(ctx, job, scannersDisabledReason)
 		return
 	}
-	livePaths, err := r.findings.LoadPaths(ctx, job.ID)
+	livePaths, err := r.reads.LoadPaths(ctx, job.ID)
 	if err != nil {
 		r.failWithCode(ctx, job, scanbase.FailurePathsUnavailable, err)
 		return

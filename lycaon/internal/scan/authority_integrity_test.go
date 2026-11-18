@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -41,7 +41,7 @@ func TestIncrementalBaseBreaksTimestampTiesByAdmission(t *testing.T) {
 		record.Status = api.CodeScanStatusComplete
 		record.CoverageStatus = api.ScanCoverageComplete
 		testutil.FailErr(t, "insert completed base scan", store.Runs.Insert(t.Context(), record, nil, ""))
-		testutil.FailErr(t, "insert tied finding set", store.queries.InsertScanFindingSet(t.Context(), db.InsertScanFindingSetParams{
+		testutil.FailErr(t, "insert tied finding set", store.tx.queries.InsertScanFindingSet(t.Context(), db.InsertScanFindingSetParams{
 			ID: id, ScanID: record.ID, CanonicalPath: root, ScannerID: record.ScannerID,
 			SourceSnapshotID: record.SourceSnapshotID, ExecutionFingerprint: record.ExecutionFingerprint,
 			FingerprintScheme: record.FingerprintScheme, CoverageStatus: string(record.CoverageStatus),
@@ -50,19 +50,19 @@ func TestIncrementalBaseBreaksTimestampTiesByAdmission(t *testing.T) {
 		finding := scanfindings.FixtureFinding(id, api.FindingLevelHigh, id, "untouched.go", 1)
 		raw, err := json.Marshal(finding)
 		testutil.FailErr(t, "encode base finding", err)
-		testutil.FailErr(t, "insert base finding", store.queries.InsertFindingEntry(t.Context(), db.InsertFindingEntryParams{
+		testutil.FailErr(t, "insert base finding", store.tx.queries.InsertFindingEntry(t.Context(), db.InsertFindingEntryParams{
 			FindingSetID: id, FindingJson: string(raw),
 		}))
-		_, err = store.queries.BindScanFindingSet(t.Context(), db.BindScanFindingSetParams{
+		_, err = store.tx.queries.BindScanFindingSet(t.Context(), db.BindScanFindingSetParams{
 			FindingSetID: id, CoverageStatus: string(record.CoverageStatus), ScanID: record.ID,
 		})
 		testutil.FailErr(t, "bind base finding set", err)
 		rollup, err := json.Marshal(rollupFindings([]api.SecurityFinding{finding}))
 		testutil.FailErr(t, "encode base rollup", err)
-		testutil.FailErr(t, "store base rollup", store.queries.PutFindingRollup(t.Context(), db.PutFindingRollupParams{
+		testutil.FailErr(t, "store base rollup", store.tx.queries.PutFindingRollup(t.Context(), db.PutFindingRollupParams{
 			FindingSetID: id, RollupJson: string(rollup),
 		}))
-		testutil.FailErr(t, "refresh base assessment", refreshAssessmentRollup(t.Context(), store.queries, record.AssessmentID))
+		testutil.FailErr(t, "refresh base assessment", refreshAssessmentRollup(t.Context(), store.tx.queries, record.AssessmentID))
 	}
 	increment := authorityScan("increment", "assessment-increment", root, "snapshot-next", "sast", api.ScanTargetPaths, nil)
 	testutil.FailErr(t, "insert incremental scan", store.Runs.Insert(t.Context(), increment, []string{"changed.go"}, "snapshot-base"))
@@ -116,7 +116,7 @@ func TestClaimNextRollsBackMissingAuthorityFacts(t *testing.T) {
 	if claimed != nil || !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("claim missing authority = %+v, %v; want missing-row error", claimed, err)
 	}
-	row, err := store.queries.GetCodeScan(t.Context(), record.ID)
+	row, err := store.tx.queries.GetCodeScan(t.Context(), record.ID)
 	testutil.FailErr(t, "read scan after rejected claim", err)
 	if row.Status != string(api.CodeScanStatusPending) || row.Attempt != 0 ||
 		row.ClaimToken.Valid || row.ClaimedBy.Valid || row.HeartbeatAt.Valid || row.LeaseExpiresAt.Valid {

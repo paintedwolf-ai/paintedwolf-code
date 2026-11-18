@@ -75,8 +75,7 @@ func newCompareFixture(t *testing.T) (*scan.SQLStore, *scan.CoordinatorImpl, str
 }
 
 func TestCompareNewResolvedPersisted(t *testing.T) {
-	_, coord, projectDir := newCompareFixture(t)
-	store := coord.Store
+	store, coord, projectDir := newCompareFixture(t)
 
 	oldID := seedCompareScan(t, store, compareSeedOpts{
 		projectDir: projectDir,
@@ -116,8 +115,7 @@ func TestCompareNewResolvedPersisted(t *testing.T) {
 }
 
 func TestCompareSCAAdvisoryPersistedDifferentPath(t *testing.T) {
-	_, coord, projectDir := newCompareFixture(t)
-	store := coord.Store
+	store, coord, projectDir := newCompareFixture(t)
 	cve := "CVE-2024-7777"
 	oldFinding := scanfindings.BuildSecurityFinding(scanfindings.FindingBuildOpts{
 		DriverID: "trivy",
@@ -157,8 +155,7 @@ func TestCompareSCAAdvisoryPersistedDifferentPath(t *testing.T) {
 }
 
 func TestComparePartialFixInOneFile(t *testing.T) {
-	_, coord, projectDir := newCompareFixture(t)
-	store := coord.Store
+	store, coord, projectDir := newCompareFixture(t)
 
 	oldID := seedCompareScan(t, store, compareSeedOpts{
 		projectDir: projectDir,
@@ -185,8 +182,7 @@ func TestComparePartialFixInOneFile(t *testing.T) {
 }
 
 func TestCompareTruncatedOnlyAtPresentationLimit(t *testing.T) {
-	_, coord, projectDir := newCompareFixture(t)
-	store := coord.Store
+	store, coord, projectDir := newCompareFixture(t)
 	oldID := seedCompareScan(t, store, compareSeedOpts{projectDir: projectDir})
 	findings := make([]api.SecurityFinding, 0, scancfg.DefaultAgentBudget().MaxGuidanceFindings+1)
 	for idx := 0; idx <= scancfg.DefaultAgentBudget().MaxGuidanceFindings; idx++ {
@@ -210,8 +206,7 @@ func TestCompareTruncatedOnlyAtPresentationLimit(t *testing.T) {
 }
 
 func TestCompareEmptyScans(t *testing.T) {
-	_, coord, projectDir := newCompareFixture(t)
-	store := coord.Store
+	store, coord, projectDir := newCompareFixture(t)
 
 	oldID := seedCompareScan(t, store, compareSeedOpts{projectDir: projectDir})
 	newID := seedCompareScan(t, store, compareSeedOpts{projectDir: projectDir})
@@ -227,8 +222,8 @@ func TestCompareEmptyScans(t *testing.T) {
 }
 
 func TestCompareRejectSameScan(t *testing.T) {
-	_, coord, projectDir := newCompareFixture(t)
-	id := seedCompareScan(t, coord.Store, compareSeedOpts{projectDir: projectDir})
+	store, coord, projectDir := newCompareFixture(t)
+	id := seedCompareScan(t, store, compareSeedOpts{projectDir: projectDir})
 
 	_, err := coord.Compare(context.Background(), id, id)
 	var reject *scan.CompareReject
@@ -238,8 +233,7 @@ func TestCompareRejectSameScan(t *testing.T) {
 }
 
 func TestCompareRejectProjectMismatch(t *testing.T) {
-	_, coord, _ := newCompareFixture(t)
-	store := coord.Store
+	store, coord, _ := newCompareFixture(t)
 
 	oldID := seedCompareScan(t, store, compareSeedOpts{projectDir: t.TempDir()})
 	newID := seedCompareScan(t, store, compareSeedOpts{projectDir: t.TempDir()})
@@ -252,8 +246,7 @@ func TestCompareRejectProjectMismatch(t *testing.T) {
 }
 
 func TestCompareSortsNewFindingsCriticalFirst(t *testing.T) {
-	_, coord, projectDir := newCompareFixture(t)
-	store := coord.Store
+	store, coord, projectDir := newCompareFixture(t)
 
 	oldID := seedCompareScan(t, store, compareSeedOpts{projectDir: projectDir})
 	newID := seedCompareScan(t, store, compareSeedOpts{
@@ -276,8 +269,7 @@ func TestCompareSortsNewFindingsCriticalFirst(t *testing.T) {
 }
 
 func TestPreviousCompleteDelegationPreferred(t *testing.T) {
-	_, coord, projectDir := newCompareFixture(t)
-	store := coord.Store
+	store, coord, projectDir := newCompareFixture(t)
 	categories := []api.ScanCategory{api.ScanCategorySecurity, api.ScanCategorySecret}
 
 	first := seedCompareScan(t, store, compareSeedOpts{
@@ -301,8 +293,7 @@ func TestPreviousCompleteDelegationPreferred(t *testing.T) {
 }
 
 func TestPreviousCompleteProjectFallbackSkipsOtherCategories(t *testing.T) {
-	_, coord, projectDir := newCompareFixture(t)
-	store := coord.Store
+	store, coord, projectDir := newCompareFixture(t)
 
 	securityOld := seedCompareScan(t, store, compareSeedOpts{
 		projectDir: projectDir,
@@ -328,8 +319,7 @@ func TestPreviousCompleteProjectFallbackSkipsOtherCategories(t *testing.T) {
 }
 
 func TestPreviousCompleteNilWhenOnlyScan(t *testing.T) {
-	_, coord, projectDir := newCompareFixture(t)
-	store := coord.Store
+	store, coord, projectDir := newCompareFixture(t)
 
 	only := seedCompareScan(t, store, compareSeedOpts{projectDir: projectDir})
 	latest, err := store.Reads.Get(context.Background(), only)
