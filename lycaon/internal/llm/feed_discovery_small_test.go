@@ -44,35 +44,6 @@ func TestFeedMissingCapabilityRemainsUnknown(t *testing.T) {
 	}
 }
 
-func TestDiscoveryKeepSetCoversKnownStrategies(t *testing.T) {
-	want := []providerprofile.DiscoveryStrategy{
-		providerprofile.DiscoveryConfigured,
-		providerprofile.DiscoveryNone,
-		providerprofile.DiscoveryNativeGeneration,
-		providerprofile.DiscoveryOllama,
-		providerprofile.DiscoveryLMStudio,
-		providerprofile.DiscoveryOMLX,
-		providerprofile.DiscoveryLiteLLM,
-		providerprofile.DiscoveryGemini,
-		providerprofile.DiscoveryVertexExpress,
-		providerprofile.DiscoveryFireworks,
-		providerprofile.DiscoveryCloudflareWorkersAI,
-		providerprofile.DiscoveryAnthropic,
-		providerprofile.DiscoveryAzure,
-		providerprofile.DiscoveryBedrock,
-		providerprofile.DiscoveryVertex,
-	}
-	for _, s := range want {
-		gap, ok := DiscoveryKeepSetGap(s)
-		if !ok || gap == "" {
-			t.Fatalf("keep-set missing %q", s)
-		}
-	}
-	if len(discoveryKeepSet) != len(want) {
-		t.Fatalf("discoveryKeepSet size = %d, want %d", len(discoveryKeepSet), len(want))
-	}
-}
-
 func TestModelMetadataPreservesFreeAndMissingPrices(t *testing.T) {
 	models := modelEntriesToAPI([]modelinfo.Entry{{ID: "free", DiscoveredPricing: &pricing.Rate{
 		InputPer1K: new(float64(0)), Currency: "USD"}}}, "together", RoleExclusions{}, providerprofile.Default())

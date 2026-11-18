@@ -65,17 +65,6 @@ const GuidanceGateFeedbackDir = "gate-feedback"
 // GateFeedbackUnitIDPrefix namespaces the gate-feedback provide units.
 const GateFeedbackUnitIDPrefix = "guidance/" + GuidanceGateFeedbackDir + "/"
 
-// ContributionKindRoots returns the contribution inventory roots in declaration order.
-func ContributionKindRoots() []string {
-	var out []string
-	for _, root := range inventoryKindRoots {
-		if strings.HasPrefix(root, ContributionRootPrefix) {
-			out = append(out, root)
-		}
-	}
-	return out
-}
-
 // ProjectScopeClass is how a kind root may participate when a project enables a pack.
 type ProjectScopeClass uint8
 

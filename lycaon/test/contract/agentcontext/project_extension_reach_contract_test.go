@@ -498,9 +498,9 @@ func uniqueDisableDesired(i int) extpacks.DesiredState {
 	case 4:
 		d.Disabled = []string{extpacks.PolicyUnitID("DOOM_LOOP_REPEAT_WARN")}
 	case 5:
-		d.Disabled = []string{extpacks.WorkflowUnitID("plan")}
+		d.Disabled = []string{"workflows/plan"}
 	case 6:
-		d.Disabled = []string{extpacks.WorkflowUnitID("implement")}
+		d.Disabled = []string{"workflows/implement"}
 	case 7:
 		d.Disabled = []string{extpacks.GuidanceUnitID("coordinator-gate-blocked"), extpacks.PolicyUnitID("WRITE_SCOPE_DENIED")}
 	default:

@@ -75,11 +75,6 @@ func GuidanceUnitID(stem string) string {
 // WorkflowUnitIDPrefix includes manifests, templates, and topologies.
 const WorkflowUnitIDPrefix = "workflows/"
 
-// WorkflowUnitID returns the public unit id for a workflow id.
-func WorkflowUnitID(id string) string {
-	return WorkflowUnitIDPrefix + id
-}
-
 // MCPBindingUnitID returns the public unit id for an mcp_bindings document stem.
 func MCPBindingUnitID(id string) string {
 	return "mcp_bindings/" + id

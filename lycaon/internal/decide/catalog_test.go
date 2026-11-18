@@ -1,19 +1,18 @@
-package decide_test
+package decide
 
 import (
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestShippedCatalogDeclaresEverySite(t *testing.T) {
 	t.Parallel()
-	catalog, err := decide.LoadCatalog()
+	catalog, err := LoadCatalog()
 	testutil.FailErr(t, "load catalog", err)
-	for _, site := range decide.Sites() {
+	for _, site := range sites {
 		p, ok := catalog.Policies[site]
 		if !ok {
 			t.Fatalf("site %s missing from the shipped catalog", site)
@@ -29,7 +28,7 @@ func TestShippedCatalogDeclaresEverySite(t *testing.T) {
 
 func TestParseCatalogRejectsUnknownAndMissingSites(t *testing.T) {
 	t.Parallel()
-	_, err := decide.ParseCatalog([]byte("version: 3\nengine:\n  reference_ms: 1\nrerank:\n  nowhere:\n    enabled: true\n    deadline_ms: 1\n    max_candidates: 1\n    chunk: 1\n    weight: 1\n"))
+	_, err := ParseCatalog([]byte("version: 3\nengine:\n  reference_ms: 1\nrerank:\n  nowhere:\n    enabled: true\n    deadline_ms: 1\n    max_candidates: 1\n    chunk: 1\n    weight: 1\n"))
 	if err == nil {
 		t.Fatal("unknown site must fail")
 	}
@@ -44,7 +43,7 @@ func TestParseCatalogRejectsUnknownAndMissingSites(t *testing.T) {
 func catalogWith(referenceMS, deadlineMS string) string {
 	var b strings.Builder
 	b.WriteString("version: 3\nengine:\n  reference_ms: " + referenceMS + "\nrerank:\n")
-	for _, site := range decide.Sites() {
+	for _, site := range sites {
 		b.WriteString("  " + string(site) + ":\n    enabled: true\n    deadline_ms: " + deadlineMS + "\n    max_candidates: 8\n    chunk: 4\n    weight: 0.5\n")
 	}
 	return b.String()
@@ -53,33 +52,33 @@ func catalogWith(referenceMS, deadlineMS string) string {
 func TestParseCatalogValidatesBudgets(t *testing.T) {
 	t.Parallel()
 	good := catalogWith("50", "100")
-	catalog, err := decide.ParseCatalog([]byte(good))
+	catalog, err := ParseCatalog([]byte(good))
 	testutil.FailErr(t, "parse valid catalog", err)
-	if p := catalog.Policies.For(decide.SiteRepomapTags); p.Deadline != 100*time.Millisecond || p.MaxCandidates != 8 || p.Chunk != 4 || p.Weight != 0.5 || !p.Enabled {
+	if p := catalog.Policies.For(SiteRepomapTags); p.Deadline != 100*time.Millisecond || p.MaxCandidates != 8 || p.Chunk != 4 || p.Weight != 0.5 || !p.Enabled {
 		t.Fatalf("policy = %+v", p)
 	}
 	if catalog.Engine.Reference != 50*time.Millisecond {
 		t.Fatalf("engine = %+v", catalog.Engine)
 	}
 	bad := strings.Replace(good, "chunk: 4", "chunk: 9", 1)
-	if _, err := decide.ParseCatalog([]byte(bad)); err == nil || !strings.Contains(err.Error(), "chunk must be in (0, max_candidates]") {
+	if _, err := ParseCatalog([]byte(bad)); err == nil || !strings.Contains(err.Error(), "chunk must be in (0, max_candidates]") {
 		t.Fatalf("oversized chunk accepted: %v", err)
 	}
-	if _, err := decide.ParseCatalog([]byte(strings.Replace(good, "version: 3", "version: 2", 1))); err == nil {
+	if _, err := ParseCatalog([]byte(strings.Replace(good, "version: 3", "version: 2", 1))); err == nil {
 		t.Fatal("wrong version accepted")
 	}
-	if _, err := decide.ParseCatalog([]byte(good + "extra: 1\n")); err == nil {
+	if _, err := ParseCatalog([]byte(good + "extra: 1\n")); err == nil {
 		t.Fatal("unknown top-level key accepted")
 	}
-	if _, err := decide.ParseCatalog([]byte(catalogWith("0", "100"))); err == nil || !strings.Contains(err.Error(), "engine.reference_ms must be positive") {
+	if _, err := ParseCatalog([]byte(catalogWith("0", "100"))); err == nil || !strings.Contains(err.Error(), "engine.reference_ms must be positive") {
 		t.Fatalf("missing requirement accepted: %v", err)
 	}
 }
 
 func TestPoliciesForUndeclaredSiteIsDisabled(t *testing.T) {
 	t.Parallel()
-	var none decide.Policies
-	if none.For(decide.SiteWebPages).Enabled {
+	var none Policies
+	if none.For(SiteWebPages).Enabled {
 		t.Fatal("nil policies must disable every site")
 	}
 }

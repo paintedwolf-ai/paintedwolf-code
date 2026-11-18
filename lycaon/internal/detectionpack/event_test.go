@@ -502,7 +502,7 @@ detection:
 func TestLevelEscalates(t *testing.T) {
 	t.Parallel()
 	levels := []Level{LevelInformational, LevelLow, LevelMedium, LevelHigh, LevelCritical}
-	postures := gate.Postures()
+	postures := []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict}
 	for _, level := range levels {
 		for _, posture := range postures {
 			got := Escalates(level, posture)
