@@ -122,9 +122,7 @@ Use the narrow fixture at the boundary being exercised:
 Host tests are split by family so no one package bounds a behavior shard:
 `test/wiring` (the harness and the remaining wiring tests), `test/wiring/commands`,
 `test/wiring/workflows`, `test/wiring/workers`, `test/security` (journeys and
-their HTTP helpers), `test/security/auth`, `test/security/scans` and
-`test/security/sweeps`, which holds only the API conformance sweep because its
-host warms every process cache. A host
+their HTTP helpers), `test/security/scans` and `test/security/sweeps`. A host
 reads process-wide state, so tests in one package run one at a time; a test
 that asks the same host many questions builds it once and gives each question
 its own session.
