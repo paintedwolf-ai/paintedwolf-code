@@ -140,9 +140,9 @@ func TestReaderReadsLegacyDisplayManifest(t *testing.T) {
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("legacy change set = %+v, want %+v", got, want)
 	}
-	compared, err := legacy.ComparePath(t.Context(), roots, branch, "@shared/same.txt")
+	compared, err := legacy.ComparePath(t.Context(), roots, branch, "same.txt")
 	testutil.FailErr(t, "compare released manifest", err)
-	if compared.Before != "shared" || compared.After != "changed\n" {
+	if compared.Before != "app" || compared.After != "changed\n" {
 		t.Fatalf("released comparison = %+v", compared)
 	}
 

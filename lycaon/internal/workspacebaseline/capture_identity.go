@@ -8,9 +8,16 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
-func validateIdentity(rootID, scopeRel string) error {
+func validateRootID(rootID string) error {
 	if rootID == "" || strings.TrimSpace(rootID) != rootID || strings.ContainsRune(rootID, '\x00') {
 		return fmt.Errorf("invalid workspace baseline root identity %q", rootID)
+	}
+	return nil
+}
+
+func validateIdentity(rootID, scopeRel string) error {
+	if err := validateRootID(rootID); err != nil {
+		return err
 	}
 	if scopeRel == "" || scopeRel == "." || path.IsAbs(scopeRel) || path.Clean(scopeRel) != scopeRel || strings.HasPrefix(scopeRel, "../") || scopeRel == ".." || strings.ContainsRune(scopeRel, '\x00') {
 		return fmt.Errorf("invalid workspace baseline root-relative path %q", scopeRel)
@@ -24,8 +31,8 @@ func validateRoots(roots []projectroot.RootRef) error {
 	}
 	seen := make(map[string]bool, len(roots))
 	for _, root := range roots {
-		if _, err := projectroot.BranchDirForID(root.ID); err != nil {
-			return fmt.Errorf("workspace baseline root identity: %w", err)
+		if err := validateRootID(root.ID); err != nil {
+			return err
 		}
 		if seen[root.ID] {
 			return fmt.Errorf("duplicate workspace baseline root identity %q", root.ID)

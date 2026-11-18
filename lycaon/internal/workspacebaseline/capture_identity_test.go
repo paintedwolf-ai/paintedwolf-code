@@ -22,6 +22,8 @@ func TestCaptureRequiresTopologyBeforePublishing(t *testing.T) {
 	}{
 		{name: "missing"},
 		{name: "missing identity", roots: []projectroot.RootRef{{IsPrimary: true}}},
+		{name: "padded identity", roots: []projectroot.RootRef{{ID: " root ", IsPrimary: true}}},
+		{name: "nul identity", roots: []projectroot.RootRef{{ID: "root\x00", IsPrimary: true}}},
 		{name: "missing primary", roots: []projectroot.RootRef{{ID: "root"}}},
 		{name: "duplicate", roots: []projectroot.RootRef{{ID: "root", IsPrimary: true}, {ID: "root"}}},
 	} {

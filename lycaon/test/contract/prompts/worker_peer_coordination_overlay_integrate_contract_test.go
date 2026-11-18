@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -41,7 +42,7 @@ func TestPromoteAtomicResolutionContractP4(t *testing.T) {
 		MergeStatus:           api.WorkerMergeStatusPending,
 		AgentType:             "implementer",
 		Scope:                 &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"safe.go", "shifted.py"}},
-		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"safe.go": {}, "shifted.py": {Content: base}}),
+		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"shifted.py": {Content: base}}),
 		Status:                api.WorkerStatusComplete,
 	}
 	testbaseline.RecordBranch(t, "root", dir, branch)
@@ -60,8 +61,8 @@ func TestPromoteAtomicResolutionContractP4(t *testing.T) {
 			}},
 		}},
 	})
-	if mergeErr == nil {
-		t.Fatal("expected atomic promote to reject invalid resolution")
+	if mergeErr == nil || !strings.Contains(mergeErr.Error(), "hunk range 1000000-1000000") {
+		t.Fatalf("expected invalid hunk range, got %v", mergeErr)
 	}
 	if _, statErr := os.Stat(filepath.Join(dir, "safe.go")); !os.IsNotExist(statErr) {
 		t.Fatalf("rejected promote changed safe.go: %v", statErr)

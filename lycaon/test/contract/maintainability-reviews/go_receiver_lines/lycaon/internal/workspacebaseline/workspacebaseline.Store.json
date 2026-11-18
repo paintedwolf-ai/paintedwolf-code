@@ -8,7 +8,7 @@
   "reviewed_commit": "a501fd13148126bf153a78e52d18ec520422d0df",
   "ceiling": 400,
   "boundaries": {
-    "lycaon/internal/workspacebaseline/capture_identity_test.go": "c3e74c2b567de9bbe3fd01098e32acc5abf41f23645be221f41978590a013200",
+    "lycaon/internal/workspacebaseline/capture_identity_test.go": "0b90485b4c5e220e675cbc045884d828cb219563da7ad5e10eb8d131b2783ccd",
     "lycaon/internal/workspacebaseline/store_test.go": "65af1ac5fbd98b02b66587404b72a87f123955d6a6e185914475c8d1092b5176",
     "lycaon/internal/workspacebaseline/overlay_test.go": "7b5eb15b2a126861c5337ce03540c5916b836707cdf2aaf1e46ee557ee2897e8"
   },

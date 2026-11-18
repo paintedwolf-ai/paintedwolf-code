@@ -567,7 +567,7 @@ func lineShiftMergeFixture(t *testing.T) (context.Context, string, *api.WorkerTa
 	testutil.FailErr(t, "WriteFile shifted.py branch", os.WriteFile(filepath.Join(branch, "shifted.py"), []byte(branchBody), 0o644))
 	testutil.FailErr(t, "WriteFile shifted.py primary", os.WriteFile(filepath.Join(dir, "shifted.py"), []byte(primary), 0o644))
 
-	baseline := testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"safe.go": {Content: ""}, "shifted.py": {Content: base}})
+	baseline := testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"shifted.py": {Content: base}})
 	task := &api.WorkerTask{
 		ID:                    "job-shift",
 		ParentSessionID:       "parent-1",
