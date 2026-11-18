@@ -90,6 +90,20 @@ func (r *Registry) SetOutboundSecretScreen(screen OutboundSecretScreen) {
 	r.screenMu.Unlock()
 }
 
+// ScreenOutbound applies the final plaintext screen a provider request passes.
+func (r *Registry) ScreenOutbound(ctx context.Context, destination ScreenDestination, req modelcall.CompletionRequest) (modelcall.CompletionRequest, error) {
+	return r.outboundScreen().Screen(ctx, destination, req)
+}
+
+func (r *Registry) outboundScreen() OutboundSecretScreen {
+	r.screenMu.RLock()
+	defer r.screenMu.RUnlock()
+	if r.outboundSecretScreen == nil {
+		return unwiredSecretScreen{}
+	}
+	return r.outboundSecretScreen
+}
+
 // ProviderKind returns the kind for a catalog instance.
 func (r *registryCore) ProviderKind(instanceID string) (string, bool) {
 	if r == nil {
@@ -246,12 +260,7 @@ func (r *Registry) decorateProvider(snapshot *providerRegistrySnapshot, p modelc
 		p = &responseRetryProvider{inner: p, policy: entry.HTTPRetry.Clone()}
 	}
 	p = &dispatchProvider{Provider: &budgetedProvider{inner: p}}
-	r.screenMu.RLock()
-	screen := r.outboundSecretScreen
-	r.screenMu.RUnlock()
-	if screen == nil {
-		screen = unwiredSecretScreen{}
-	}
+	screen := r.outboundScreen()
 	destination := ScreenDestination{ID: p.ID()}
 	if hasEntry {
 		destination = ScreenDestination{

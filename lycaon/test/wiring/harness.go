@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
@@ -124,17 +125,27 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 		cfg.TestOrchestrator = autoCompleteOrchestrator
 	}
 	var recording *llm.RecordingClient
+	var sa *app.ServeApp
 	switch {
 	case o.llmClient != nil:
 		cfg.TestLLMClient = o.llmClient
 	case o.recording:
-		recording = llm.NewRecordingClient(llm.NewMockProvider(loadMockConfig(t)))
-		cfg.TestLLMClient = recording
+		// Mock routing bypasses the provider registry, so the recorder sits behind
+		// the registry's outbound screen as a provider request would.
+		script := o.recordedScript
+		if script == nil {
+			script = loadMockConfig(t)
+		}
+		recording = llm.NewRecordingClient(llm.NewMockProvider(script))
+		cfg.TestLLMClient = &screenedClient{next: recording, registry: func() *llm.Registry {
+			return sa.Sessions.Manager.Coordinator.Model.LLMService.Registry
+		}}
 	default:
 		cfg.TestLLMClient = llm.NewMockProvider(loadMockConfig(t))
 	}
 
-	sa, err := app.Build(t.Context(), cfg)
+	var err error
+	sa, err = app.Build(t.Context(), cfg)
 	testutil.FailErr(t, "build app", err)
 	t.Cleanup(func() { testutil.FailErr(t, "close test app", sa.Close()) })
 
@@ -357,4 +368,30 @@ func restoreTreePermissions(root string) {
 		}
 		return nil
 	})
+}
+
+// screenedClient screens each request with the built host's outbound screen
+// before the next client sees it.
+type screenedClient struct {
+	next     modelcall.LLMClient
+	registry func() *llm.Registry
+}
+
+// mockDestination is the screen destination the harness model stands for.
+var mockDestination = llm.ScreenDestination{ID: "mock", Label: "Mock model"}
+
+func (c *screenedClient) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
+	screened, err := c.registry().ScreenOutbound(ctx, mockDestination, req)
+	if err != nil {
+		return nil, err
+	}
+	return c.next.Complete(ctx, screened)
+}
+
+func (c *screenedClient) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
+	screened, err := c.registry().ScreenOutbound(ctx, mockDestination, req)
+	if err != nil {
+		return nil, err
+	}
+	return c.next.Stream(ctx, screened)
 }

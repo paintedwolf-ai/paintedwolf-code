@@ -79,3 +79,28 @@ func TestKingfisherKeywordsAreSafeAndBroadlyAvailable(t *testing.T) {
 		}
 	}
 }
+
+// A rule's secret is its named secret group, or the first group an alternative fills.
+func TestKingfisherCaptureSelectsTheSecretGroup(t *testing.T) {
+	catalog, err := bundledKingfisherCatalog()
+	testutil.FailErr(t, "load bundled Kingfisher catalog", err)
+	const cosmosKey = "oqb4TdY9T0hphvktd5fJnMiHuQqzVy1jd5sSuOpAbGkaoqTlrHl0BOJN2okcasinVLOJzfDbZo1L+ASt68RAhA=="
+	for _, tc := range []struct{ rule, text, secret string }{
+		{"kingfisher.aws.2", `aws_secret_access_key = 3lyTWqHMt5UySny2drdPYheRTEzrNux8Cn5JWFHL`, "3lyTWqHMt5UySny2drdPYheRTEzrNux8Cn5JWFHL"},
+		{"kingfisher.azurecosmosdb.2", "AccountEndpoint=https://acct.documents.azure.com:443/;AccountKey=" + cosmosKey + ";", cosmosKey},
+		{"kingfisher.slack.2", "token xoxe-1-" + strings.Repeat("Ab3", 48), "xoxe-1-" + strings.Repeat("Ab3", 48)},
+	} {
+		rule, ok := catalogRuleByID(catalog.rules, tc.rule)
+		if !ok {
+			t.Fatalf("%s is not imported", tc.rule)
+		}
+		if got, ok := rule.capture(tc.text); !ok || got != tc.secret {
+			t.Errorf("%s captured %q, want %q", tc.rule, got, tc.secret)
+		}
+		gitleaks, err := rule.gitleaksRule()
+		testutil.FailErr(t, "convert "+tc.rule, err)
+		if gitleaks.SecretGroup != max(rule.secretGroup, 0) {
+			t.Errorf("%s scanner group = %d, want %d", tc.rule, gitleaks.SecretGroup, rule.secretGroup)
+		}
+	}
+}

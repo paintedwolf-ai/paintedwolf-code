@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/fileops"
+	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -17,6 +18,7 @@ type options struct {
 	llmClient               modelcall.LLMClient
 	decider                 decide.Decider
 	recording               bool
+	recordedScript          *llm.MockConfig
 	autoCompleteLegs        bool
 	replaceManifests        map[string]workflowdef.Manifest
 	useBundledScanners      bool
@@ -52,10 +54,18 @@ func WithInstalledPack(dirs ...string) Option {
 	return func(o *options) { o.installedPackDirs = append(o.installedPackDirs, dirs...) }
 }
 
-// WithRecordingLLM wraps the mock provider in a RecordingClient exposed on Harness.Recording.
+// WithRecordingLLM wraps the mock provider in a RecordingClient exposed on
+// Harness.Recording. It records each request after the outbound secret screen.
 func WithRecordingLLM() Option {
 	return func(o *options) {
 		o.recording = true
+	}
+}
+
+// WithRecordedScript records like WithRecordingLLM with script as the model.
+func WithRecordedScript(script *llm.MockConfig) Option {
+	return func(o *options) {
+		o.recording, o.recordedScript = true, script
 	}
 }
 
