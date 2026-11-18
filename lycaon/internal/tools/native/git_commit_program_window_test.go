@@ -2,7 +2,6 @@ package native
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"

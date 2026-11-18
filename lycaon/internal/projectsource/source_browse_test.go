@@ -2,12 +2,12 @@ package projectsource
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/watchfd"

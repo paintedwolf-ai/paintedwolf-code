@@ -8,18 +8,18 @@ import (
 var watcherLifetimes struct {
 	sync.Mutex
 	leases  int
-	current *WatcherRegistry
+	current *watcherRegistry
 }
 
-func processWatchers() *WatcherRegistry {
+func processWatchers() *watcherRegistry {
 	watcherLifetimes.Lock()
 	defer watcherLifetimes.Unlock()
 	return processWatchersLocked()
 }
 
-func processWatchersLocked() *WatcherRegistry {
+func processWatchersLocked() *watcherRegistry {
 	if watcherLifetimes.current == nil {
-		watcherLifetimes.current = NewWatcherRegistry()
+		watcherLifetimes.current = newwatcherRegistry()
 	}
 	return watcherLifetimes.current
 }
@@ -31,7 +31,7 @@ func AcquireWatcherLifetime() func(context.Context) error {
 	watcherLifetimes.leases++
 	watcherLifetimes.Unlock()
 	var once sync.Once
-	var retired *WatcherRegistry
+	var retired *watcherRegistry
 	return func(ctx context.Context) error {
 		once.Do(func() {
 			watcherLifetimes.Lock()

@@ -16,8 +16,8 @@ import (
 	"github.com/lycaon/lycaon/internal/workscope"
 )
 
-// WatcherRegistry tracks per-project-dir worktree watchers.
-type WatcherRegistry struct {
+// watcherRegistry tracks per-project-dir worktree watchers.
+type watcherRegistry struct {
 	mu      sync.Mutex
 	byDir   map[string]*worktreeWatcher
 	maxDirs int
@@ -28,9 +28,9 @@ type WatcherRegistry struct {
 	debounce *debouncer
 }
 
-// NewWatcherRegistry returns an empty registry.
-func NewWatcherRegistry() *WatcherRegistry {
-	return &WatcherRegistry{
+// newwatcherRegistry returns an empty registry.
+func newwatcherRegistry() *watcherRegistry {
+	return &watcherRegistry{
 		byDir:    map[string]*worktreeWatcher{},
 		maxDirs:  watchfd.MaxDirs,
 		budget:   watchfd.NewProcessBudget(),
@@ -87,7 +87,7 @@ type WatchCoverage struct {
 func Coverage(root string) WatchCoverage { return processWatchers().Coverage(root) }
 
 // Coverage reports one root's watch registration state.
-func (r *WatcherRegistry) Coverage(root string) WatchCoverage {
+func (r *watcherRegistry) Coverage(root string) WatchCoverage {
 	key := canonicalDir(root)
 	out := WatchCoverage{Root: key}
 	if r == nil || key == "" {
@@ -107,7 +107,7 @@ func DirWatched(root, dir string) bool { return processWatchers().DirWatched(roo
 
 // DirWatched reports whether one root-relative directory holds a live watch
 // registration.
-func (r *WatcherRegistry) DirWatched(root, dir string) bool {
+func (r *watcherRegistry) DirWatched(root, dir string) bool {
 	if r == nil {
 		return false
 	}
@@ -141,7 +141,7 @@ func watchTarget(root, dir string) string {
 }
 
 // Ensure starts watching projectDir if not already.
-func (r *WatcherRegistry) Ensure(ctx context.Context, projectDir string) {
+func (r *watcherRegistry) Ensure(ctx context.Context, projectDir string) {
 	if r == nil {
 		return
 	}
@@ -195,7 +195,7 @@ func (r *WatcherRegistry) Ensure(ctx context.Context, projectDir string) {
 // Seed extends an existing root watcher from deterministic catalog metadata.
 // Each pass recomputes the root's truncation from what it could register, so
 // coverage heals on a later pass once capacity frees.
-func (r *WatcherRegistry) Seed(ctx context.Context, root string, directories []WatchDirectory) {
+func (r *watcherRegistry) Seed(ctx context.Context, root string, directories []WatchDirectory) {
 	if r == nil {
 		return
 	}
@@ -303,7 +303,7 @@ func pathDepth(relSlash string) int {
 }
 
 // CloseAll releases every watcher.
-func (r *WatcherRegistry) CloseAll() {
+func (r *watcherRegistry) CloseAll() {
 	if r == nil {
 		return
 	}
@@ -318,7 +318,7 @@ func (r *WatcherRegistry) CloseAll() {
 }
 
 // CloseRoot releases one root's watcher and descriptor budget.
-func (r *WatcherRegistry) CloseRoot(root string) {
+func (r *watcherRegistry) CloseRoot(root string) {
 	if r == nil {
 		return
 	}

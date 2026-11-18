@@ -1,6 +1,8 @@
 package git
 
 import (
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,7 +15,6 @@ import (
 	lyexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/gitengine"
-	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
 )

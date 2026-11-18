@@ -1,6 +1,8 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"context"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
@@ -24,7 +26,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/profiles"

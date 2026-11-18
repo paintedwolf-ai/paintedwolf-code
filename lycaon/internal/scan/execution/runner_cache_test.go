@@ -2,6 +2,7 @@ package execution
 
 import (
 	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"os"
 	"path/filepath"

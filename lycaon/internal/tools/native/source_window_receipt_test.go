@@ -1,8 +1,9 @@
 package native
 
 import (
-	"encoding/json"
 	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
+	"encoding/json"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/hostcmd"

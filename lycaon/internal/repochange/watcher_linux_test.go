@@ -20,7 +20,7 @@ import (
 type inotifyRoot struct {
 	t        *testing.T
 	root     string
-	registry *WatcherRegistry
+	registry *watcherRegistry
 	mu       sync.Mutex
 	changes  []WorktreeChange
 }
@@ -30,7 +30,7 @@ func newInotifyRoot(t *testing.T, maxDirs int) *inotifyRoot {
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve root", err)
 	testutil.FailErr(t, "mkdir .git", os.Mkdir(filepath.Join(root, ".git"), 0o755))
-	fixture := &inotifyRoot{t: t, root: root, registry: &WatcherRegistry{byDir: map[string]*worktreeWatcher{}, maxDirs: maxDirs, budget: watchfd.NewBudget(maxDirs)}}
+	fixture := &inotifyRoot{t: t, root: root, registry: &watcherRegistry{byDir: map[string]*worktreeWatcher{}, maxDirs: maxDirs, budget: watchfd.NewBudget(maxDirs)}}
 	t.Cleanup(fixture.registry.CloseAll)
 	unbind := RegisterObserver(func(_ context.Context, event Event) {
 		if event.ProjectDir != root || event.Kind != WorktreeChanged || event.Source != SourceWatcher {

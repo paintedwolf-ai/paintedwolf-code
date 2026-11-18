@@ -2,7 +2,6 @@ package repochange_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -10,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 

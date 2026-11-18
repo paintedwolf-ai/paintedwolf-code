@@ -2,7 +2,6 @@ package sourcecatalog
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 

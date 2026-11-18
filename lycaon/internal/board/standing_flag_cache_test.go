@@ -2,12 +2,12 @@ package board
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"strconv"
 	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/standingpatterns"
 )
 

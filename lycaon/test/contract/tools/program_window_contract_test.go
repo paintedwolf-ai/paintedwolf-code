@@ -1,9 +1,10 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"os"
 	"path/filepath"
 	"sync/atomic"

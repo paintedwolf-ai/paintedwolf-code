@@ -14,8 +14,8 @@ import (
 )
 
 // newBudgetedRegistry returns a registry capped at `descriptors`.
-func newBudgetedRegistry(descriptors int) *WatcherRegistry {
-	return &WatcherRegistry{
+func newBudgetedRegistry(descriptors int) *watcherRegistry {
+	return &watcherRegistry{
 		byDir:   map[string]*worktreeWatcher{},
 		maxDirs: watchfd.MaxDirs,
 		budget:  watchfd.NewBudget(descriptors),
@@ -47,7 +47,7 @@ func fanoutWorktree(t *testing.T, dirs, filesPerDir int) string {
 	return root
 }
 
-func (r *WatcherRegistry) spentForTest() int {
+func (r *watcherRegistry) spentForTest() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	total := 0
@@ -435,7 +435,7 @@ func TestCoverageShortfallDoesNotPublishMutation(t *testing.T) {
 
 func TestWatchCoverageSeparatesLazyPolicyFromTruncation(t *testing.T) {
 	root := t.TempDir()
-	reg := NewWatcherRegistry()
+	reg := newwatcherRegistry()
 	t.Cleanup(reg.CloseAll)
 	if err := os.MkdirAll(filepath.Join(root, "node_modules", "library"), 0700); err != nil {
 		t.Fatalf("create lazy library: %v", err)

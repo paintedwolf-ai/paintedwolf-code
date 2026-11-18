@@ -2,6 +2,7 @@ package coordinator
 
 import (
 	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	anchortestsetup "github.com/lycaon/lycaon/internal/testsetup/anchor"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"

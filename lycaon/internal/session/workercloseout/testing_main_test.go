@@ -1,12 +1,13 @@
 package workercloseout
 
 import (
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"context"
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	anchortestsetup "github.com/lycaon/lycaon/internal/testsetup/anchor"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"

@@ -28,7 +28,7 @@ func TestRecursiveWatchIsCompleteBeyondTheDirectoryCap(t *testing.T) {
 	const dirs = 12
 	root := fanoutWorktree(t, dirs, 2)
 
-	reg := &WatcherRegistry{
+	reg := &watcherRegistry{
 		byDir:   map[string]*worktreeWatcher{},
 		maxDirs: 2,
 		budget:  watchfd.NewBudget(0),
