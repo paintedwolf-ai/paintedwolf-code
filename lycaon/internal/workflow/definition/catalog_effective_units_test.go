@@ -21,6 +21,7 @@ func catalogWorkflowIDs(t *testing.T, catalog *extpacks.EffectiveCatalog) map[st
 }
 
 func TestCatalogWorkflowsHonorDisabledPack(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	stock, err := extpackstest.Resolve(t.Context(), extpacks.EmptyDesired(), nil)
 	testutil.FailErr(t, "resolve enabled catalog", err)
 
@@ -40,7 +41,7 @@ func TestCatalogWorkflowsHonorDisabledPack(t *testing.T) {
 }
 
 func TestCatalogWorkflowsHonorDisabledUnit(t *testing.T) {
-
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	desired := extpacks.DesiredState{
 		Format:   extpacks.DesiredFormat,
 		Disabled: []string{extpacks.WorkflowUnitID("options")},

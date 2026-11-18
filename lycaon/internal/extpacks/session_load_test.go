@@ -17,6 +17,7 @@ import (
 )
 
 func TestSessionLoadUsesEffectiveCatalog(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	root := configlayout.FindModuleRoot()
 
 	eff, err := extpackstest.Resolve(t.Context(), extpackstest.Disabled("painted-wolf/security"), nil)

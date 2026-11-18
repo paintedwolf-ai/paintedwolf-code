@@ -10,7 +10,7 @@ import (
 
 const startupCase = "PAINTEDWOLF_TEST_STARTUP_CASE"
 
-// Startup returns true only in the fresh process running this test.
+// Startup prepares durable state before restarting; only the child returns true.
 func Startup(t *testing.T, prepare func()) bool {
 	t.Helper()
 	if os.Getenv(startupCase) == t.Name() {

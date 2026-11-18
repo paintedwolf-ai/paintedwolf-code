@@ -66,7 +66,6 @@ func TestDiscoverEffectiveNilFailsClosedOnMissingLinkedPack(t *testing.T) {
 		if err := os.RemoveAll(authorDir); err != nil {
 			testutil.FailErr(t, "os.RemoveAll failed", err)
 		}
-
 	}) {
 		return
 	}
