@@ -83,11 +83,13 @@ func TestSourceLabelIsBoundedDetachedAndCharged(t *testing.T) {
 	named, err := commandsurface.ParseAdmitted(t.Context(), memory, []byte("true"), commandsurface.ParseOptions{SourceName: label})
 	testutil.FailErr(t, "parse detached label", err)
 	defer named.Close()
-	snapshot := named.Snapshot()
-	if snapshot.SourceName != label || unsafe.StringData(snapshot.SourceName) == unsafe.StringData(label) {
+	snapshot, err := named.SnapshotWithMemory(t.Context(), memory)
+	testutil.FailErr(t, "take label snapshot", err)
+	defer snapshot.Close()
+	if snapshot.Plan.SourceName != label || unsafe.StringData(snapshot.Plan.SourceName) == unsafe.StringData(label) {
 		t.Fatal("source label retains caller backing allocation")
 	}
-	if memory.InUse().State != plainCharge+int64(len(label)) {
+	if memory.InUse().State != 2*(plainCharge+int64(len(label))) {
 		t.Fatal("source label bypassed retained-state admission")
 	}
 	if plan, err := commandsurface.ParseAdmitted(t.Context(), memory, []byte("true"), commandsurface.ParseOptions{SourceName: backing}); plan != nil || err == nil {
