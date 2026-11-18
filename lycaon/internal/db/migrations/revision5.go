@@ -19,16 +19,13 @@ type Part struct {
 	Writes func(ctx context.Context, store DBTX, storeBytes uint64) (uint64, error)
 }
 
-// revision5Checksum identifies the composed revision-5 source.
-const revision5Checksum = "988c9c1c31cc93a28367f6b69c4e322568fda1e65dbd2405f7c655e67987d1ae"
-
 // Revision5 is the single step from the shipped revision-4 shape. Until a build
 // holding revision 5 is published, release candidates included, schema changes
 // join these parts instead of advancing SchemaVersion.
 func Revision5(target Baseline) Step {
 	return composeStep(Step{
 		ID:       "source-manifests-and-command-records",
-		Checksum: revision5Checksum,
+		Checksum: "988c9c1c31cc93a28367f6b69c4e322568fda1e65dbd2405f7c655e67987d1ae",
 		From:     manifestLayoutSource, To: target,
 	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords(), VersionReclaimProbe())
 }
