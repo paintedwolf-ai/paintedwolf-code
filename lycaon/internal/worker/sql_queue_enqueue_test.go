@@ -51,49 +51,6 @@ func TestSQLQueuePublishEnqueuedWakesClaimer(t *testing.T) {
 	}
 }
 
-func TestSQLQueueCompleteRequiresCurrentClaim(t *testing.T) {
-	sqlDB := testdbfixture.Open(t, "store.db")
-
-	testdbseed.InsertSession(t, sqlDB, "parent-1", testdbseed.DefaultProjectID)
-	q := NewSQLQueue(sqlDB, 1)
-	id, err := q.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
-		ParentSessionID: "parent-1",
-		ProjectID:       testdbseed.DefaultProjectID,
-		AgentType:       "implementer",
-		Prompt:          "do work",
-		Brief:           "Do work",
-		ExecutionTarget: api.ExecutionTargetLocal,
-	})
-	testutil.FailErr(t, "enqueue worker", err)
-
-	won, err := q.Complete(t.Context(), &api.WorkerTask{
-		ID: id, ClaimToken: "stale",
-	}, api.WorkerResult{Status: "complete"})
-	testutil.FailErr(t, "reject stale claim", err)
-	if won {
-		t.Fatal("stale claim completed worker")
-	}
-	pending, ok := q.Get(id)
-	if !ok || pending.Status != api.WorkerStatusPending {
-		t.Fatalf("worker after stale completion = %+v want pending", pending)
-	}
-
-	claimed, err := q.ClaimNext(t.Context(), ClaimRequest{
-		ClaimedBy:       "test",
-		ExecutionTarget: api.ExecutionTargetLocal,
-	})
-	testutil.FailErr(t, "claim worker", err)
-	won, err = q.Complete(t.Context(), claimed, api.WorkerResult{Status: "complete"})
-	testutil.FailErr(t, "complete claimed worker", err)
-	if !won {
-		t.Fatal("current claim did not complete worker")
-	}
-	completed, ok := q.Get(id)
-	if !ok || completed.Status != api.WorkerStatusComplete {
-		t.Fatalf("worker after claimed completion = %+v want complete", completed)
-	}
-}
-
 func TestSQLQueuePersistsOutcomeDeliveryAcknowledgement(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)

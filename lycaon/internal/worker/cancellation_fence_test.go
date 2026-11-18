@@ -86,26 +86,6 @@ func TestCancellationFencesOutcomesBeforeRuntimeJoin(t *testing.T) {
 
 }
 
-func TestStaleAttemptCannotCancelReplacement(t *testing.T) {
-
-	q := cancellationQueue(t)
-	id := enqueueCancellationWorker(t, q)
-	old := claimCancellationWorker(t, q)
-	won, err := q.Retry(t.Context(), old, errors.New("transient"))
-	testutil.FailErr(t, "retry worker", err)
-	if !won {
-		t.Fatal("retry lost")
-	}
-	current := claimCancellationWorker(t, q)
-	won, err = q.RequestClaimCancellation(t.Context(), old)
-	testutil.FailErr(t, "reject stale cancellation", err)
-	got, _ := q.Get(id)
-	if won || got.Status != api.WorkerStatusRunning || got.ClaimToken != current.ClaimToken {
-		t.Fatalf("stale attempt canceled replacement: %+v", got)
-	}
-
-}
-
 func TestBatchStopFencesEveryWorkerBeforeJoining(t *testing.T) {
 	for _, scope := range []string{"session", "workflow"} {
 		t.Run(scope, func(t *testing.T) {

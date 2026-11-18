@@ -17,51 +17,36 @@ func TestUserContinuationKeepsCurrentTurn(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 
-	stores := []struct {
-		name  string
-		store interface {
-			Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
-			AppendMessages(ctx context.Context, id string, msgs ...api.Message) error
-			ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
-			GetMessage(context.Context, string, string) (api.Message, error)
-		}
-	}{
-
-		{name: "sql", store: NewSQL(database)},
+	st := NewSQL(database)
+	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "append user messages", st.AppendMessages(ctx, sess.ID,
+		api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "start"},
+		api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Kind: api.MessageKindUserContinuation, Content: "adjust"},
+	))
+	turnSource, err := st.ReadSourceTurn(ctx, sess.ID, 0)
+	turn := turnSource.Number
+	testutil.FailErr(t, "read user turn ordinal", err)
+	if turn != 1 {
+		t.Fatalf("user turn ordinal = %d want 1", turn)
 	}
-	for _, test := range stores {
-		t.Run(test.name, func(t *testing.T) {
-			sess, err := test.store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
-			testutil.FailErr(t, "create session", err)
-			testutil.FailErr(t, "append user messages", test.store.AppendMessages(ctx, sess.ID,
-				api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "start"},
-				api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Kind: api.MessageKindUserContinuation, Content: "adjust"},
-			))
-			turnSource, err := test.store.ReadSourceTurn(ctx, sess.ID, 0)
-			turn := turnSource.Number
-			testutil.FailErr(t, "read user turn ordinal", err)
-			if turn != 1 {
-				t.Fatalf("user turn ordinal = %d want 1", turn)
-			}
-			testutil.FailErr(t, "append assistant observation", test.store.AppendMessages(ctx, sess.ID,
-				api.Message{ID: uuid.NewString(), Role: api.MessageRoleAssistant, Content: "observed"},
-				api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Content: "second instruction"}))
-			second, err := test.store.ReadSourceTurn(ctx, sess.ID, 2)
-			testutil.FailErr(t, "resolve source turn identity", err)
-			opener, err := test.store.GetMessage(ctx, sess.ID, second.OpeningMessageID)
-			testutil.FailErr(t, "resolve source turn opener", err)
-			if opener.Content != "second instruction" || opener.Ord != 4 {
-				t.Fatal("source turn identity was treated as a transcript ordinal")
-			}
-			if _, err := test.store.ReadSourceTurn(ctx, sess.ID, -1); err == nil {
-				t.Fatal("negative source turn accepted")
-			}
-			missing, err := test.store.ReadSourceTurn(ctx, sess.ID, 999)
-			testutil.FailErr(t, "read absent source turn", err)
-			if missing.OpeningMessageID != "" {
-				t.Fatal("absent source turn returned an opener")
-			}
-		})
+	testutil.FailErr(t, "append assistant observation", st.AppendMessages(ctx, sess.ID,
+		api.Message{ID: uuid.NewString(), Role: api.MessageRoleAssistant, Content: "observed"},
+		api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Content: "second instruction"}))
+	second, err := st.ReadSourceTurn(ctx, sess.ID, 2)
+	testutil.FailErr(t, "resolve source turn identity", err)
+	opener, err := st.GetMessage(ctx, sess.ID, second.OpeningMessageID)
+	testutil.FailErr(t, "resolve source turn opener", err)
+	if opener.Content != "second instruction" || opener.Ord != 4 {
+		t.Fatal("source turn identity was treated as a transcript ordinal")
+	}
+	if _, err := st.ReadSourceTurn(ctx, sess.ID, -1); err == nil {
+		t.Fatal("negative source turn accepted")
+	}
+	missing, err := st.ReadSourceTurn(ctx, sess.ID, 999)
+	testutil.FailErr(t, "read absent source turn", err)
+	if missing.OpeningMessageID != "" {
+		t.Fatal("absent source turn returned an opener")
 	}
 }
 
