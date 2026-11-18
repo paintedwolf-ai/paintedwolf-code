@@ -203,6 +203,10 @@ The `overlay` field in [the workflow vocabulary](../schemas/workflow_vocabulary.
 
 The catalog distinguishes evaluator-backed predicates, completion forms, host-only names, and reserved names. Each executable exact name or family binds to a Go evaluator. The catalog reserves `permission_denied`. Use `approval_denied` to test whether the host recorded a denied approval for the session.
 
+New project files published by the host declare `workflow_format: 2`. The host checks the predicates written in that file before resolving `extends`, so a project can inherit a bundled phase and override another phase with a generic gate. Session drafts retain both the authored YAML and the resolved definition. A failed publication leaves the draft available for correction. Unversioned project files and resolved-only drafts follow the released grammar.
+
+Each new root or child run stores its resolved definition in the same transaction that admits the run. Later edits to a workflow apply to future admissions. Runs created before snapshot storage resolve their recorded workflow ID and version through the catalog.
+
 Session composition is bounded to one-off sequencing. Reusable behavior belongs in a project or extension workflow where it can be validated and reviewed as content.
 
 Diagnostics carry stable codes and structured fields. Copy may change; callers branch on the code.

@@ -11,8 +11,8 @@ type CatalogEntry struct {
 	Domain        string `json:"domain"`
 	Status        string `json:"status"`
 	Parameterized bool   `json:"parameterized"`
-	Kind string `json:"kind"`
- Overlay       bool   `json:"overlay"`
+	Kind          string `json:"kind"`
+	Overlay       bool   `json:"overlay"`
 }
 
 func ExportCatalog() []CatalogEntry {
@@ -27,9 +27,9 @@ func ExportCatalog() []CatalogEntry {
 			status = "catalog"
 		}
 		rows = append(rows, CatalogEntry{
- ID:id, Layer:layer, Domain:d.domain, Status:status, Parameterized:strings.HasSuffix(id,":*"),
- Kind:d.usage.kind(), Overlay:d.usage==overlayPredicate || d.usage==completionForm,
- })
+			ID: id, Layer: layer, Domain: d.domain, Status: status, Parameterized: strings.HasSuffix(id, ":*"),
+			Kind: d.usage.kind(), Overlay: d.usage == overlayPredicate || d.usage == completionForm,
+		})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
 	return rows

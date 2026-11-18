@@ -34,7 +34,7 @@ func assertReviewApplicable(t *testing.T, mgr *workflow.RunManager, run *api.Wor
 	}
 }
 
-func reviewAssignmentDatabaseFixture(t *testing.T) (*workflow.RunManager, *api.WorkflowRun, workflowdef.Manifest, db.Handle) {
+func reviewAssignmentDatabaseFixture(t *testing.T, configure ...func(*workflowdef.Manifest)) (*workflow.RunManager, *api.WorkflowRun, workflowdef.Manifest, db.Handle) {
 	t.Helper()
 	mgr, blueprints, sqlDB := receiptManager(t)
 	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
@@ -47,6 +47,9 @@ func reviewAssignmentDatabaseFixture(t *testing.T) (*workflow.RunManager, *api.W
 	judge := manifest.PhaseDefs[0]
 	judge.ReviewLoop = &workflowdef.ReviewLoopDef{EvidenceKey: "rl_key", ReconcilesPhase: "candidate", RequiredAgents: []string{"auditor"}, CoverageReviewers: []string{"auditor"}, VerdictSchema: map[string]string{"verdict": "SELECTED", "coverage": workflowdef.VerdictCoverageType}}
 	manifest.PhaseDefs = []workflowdef.PhaseDef{candidate, judge, manifest.PhaseDefs[1]}
+	for _, edit := range configure {
+		edit(&manifest)
+	}
 	manifest = workflowdef.FinalizeManifest(manifest)
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rltest@1.0.0": manifest})
 	mgr.Coverage.Inventory = fakeInventory{}
@@ -57,7 +60,11 @@ func reviewAssignmentDatabaseFixture(t *testing.T) (*workflow.RunManager, *api.W
 	testutil.FailErr(t, "load candidate scope", err)
 	raw, err := json.Marshal(api.CoverageReview{Revision: facts.Revision, Assessments: []api.CoverageAssessment{}})
 	testutil.FailErr(t, "encode candidate", err)
-	out, err := mgr.Verdicts.RecordReviewLoopVerdict(t.Context(), "sess-1", map[string]string{"verdict": "SELECTED", "coverage": string(raw)}, nil, nil)
+	verdict := map[string]string{"verdict": "SELECTED", "coverage": string(raw)}
+	if _, ok := manifest.PhaseDefs[0].ReviewLoop.VerdictSchema["claims"]; ok {
+		verdict["claims"] = "[]"
+	}
+	out, err := mgr.Verdicts.RecordReviewLoopVerdict(t.Context(), "sess-1", verdict, nil, nil)
 	testutil.FailErr(t, "record candidate", err)
 	if !out.Terminal {
 		t.Fatalf("candidate did not settle: %+v", out)

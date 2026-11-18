@@ -36,7 +36,7 @@ func validateManifestSchema(m Manifest) error {
 	if err != nil {
 		return err
 	}
-	if err := m.checkPredicates(false); err != nil {
+	if err := m.checkPredicates(m.WorkflowFormat == ProjectWorkflowFormat); err != nil {
 		return err
 	}
 	return validateManifestSurfaceBinding(m, knownSurfaces, knownProfiles)

@@ -28,7 +28,7 @@ func TestPublishAuthoredWorkflowAndReopen(t *testing.T) {
 			c.Policy = nil
 			p.Policy = nil
 			const id = "custom-source"
-			source := "id: " + id + "\nversion: 1.0.0\nextends: plan@1.0.0\nphases:\n  - id: research\n    activity_label: Researching\n    complete_when: " + tc.leaf + "\n"
+			source := "id: " + id + "\nversion: 1.0.0\nextends: plan@1.0.0\nphases:\n  - id: research\n    activity_label: Researching\n    next: build\n    complete_when: " + tc.leaf + "\n"
 			_, err := c.Compose(ctx, workflowcomposition.ComposeRequest{SessionID: "s", ManifestYAML: []byte(source), CreatedBy: workflowdrafts.Coordinator})
 			testutil.FailErr(t, "compose workflow", err)
 			draft, err := store.Get(ctx, "s", id, "1.0.0")

@@ -105,11 +105,11 @@ func (e RegistryGateEvaluator) ExpressionMet(ctx context.Context, expr string, d
 	if err != nil {
 		return false, workflowgates.GateCheckResult{Reason: "invalid complete_when: " + expr, FailedGate: expr, FailedLeaves: []string{expr}}, nil //nolint:nilerr // parse failure becomes a structured gate-deny reason rather than a fatal error
 	}
-	env := func(name string) bool {
-		ok, err := reg.Evaluate(name, ec)
-		return err == nil && ok
+	matched, err := reg.EvaluateExpression(node, ec)
+	if err != nil {
+		return false, workflowgates.GateCheckResult{}, err
 	}
-	if boolexpr.Eval(node, env) {
+	if matched {
 		return true, workflowgates.GateCheckResult{}, nil
 	}
 	failed, err := collectFailedLeavesFromExpr(reg, ec, node)

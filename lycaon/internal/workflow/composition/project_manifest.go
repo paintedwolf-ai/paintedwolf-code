@@ -2,6 +2,7 @@ package composition
 
 import (
 	"fmt"
+	"strconv"
 
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
@@ -18,7 +19,7 @@ func projectManifestYAML(authored, trigger string, effective workflowdef.Manifes
 		return "", err
 	}
 	mapping := doc.Content[0]
-	setProjectField(mapping, "workflow_format", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: "2"})
+	setProjectField(mapping, "workflow_format", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: strconv.Itoa(workflowdef.ProjectWorkflowFormat)})
 	if trigger != "" {
 		setProjectField(mapping, "trigger", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: trigger})
 	}

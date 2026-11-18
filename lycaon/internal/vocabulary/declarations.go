@@ -11,12 +11,16 @@ const (
 )
 
 func (u usage) kind() string {
- switch u {
- case completionForm:return "completion_form"
- case catalogOnly:return "reserved"
- case hostOnly:return "host_only"
- default:return "predicate"
- }
+	switch u {
+	case completionForm:
+		return "completion_form"
+	case catalogOnly:
+		return "reserved"
+	case hostOnly:
+		return "host_only"
+	default:
+		return "predicate"
+	}
 }
 
 type declaration struct {

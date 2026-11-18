@@ -14,6 +14,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const ProjectWorkflowFormat = 2
+
 // LoadManifestFromFile reads one unresolved workflow manifest.
 func LoadManifestFromFile(path string) (Manifest, error) {
 	data, err := os.ReadFile(path)
@@ -31,7 +33,7 @@ func ParseManifestYAML(data []byte) (Manifest, error) {
 	if err := decoder.Decode(&wf); err != nil {
 		return Manifest{}, err
 	}
-	if wf.WorkflowFormat != nil && *wf.WorkflowFormat != 2 {
+	if wf.WorkflowFormat != nil && *wf.WorkflowFormat != ProjectWorkflowFormat {
 		return Manifest{}, fmt.Errorf("unsupported workflow_format %d", *wf.WorkflowFormat)
 	}
 	if err := validateWorkflowFileHeader(wf); err != nil {
@@ -110,9 +112,7 @@ func ParseManifestYAML(data []byte) (Manifest, error) {
 	}
 	if wf.WorkflowFormat != nil {
 		m.WorkflowFormat = *wf.WorkflowFormat
-		if err := m.checkPredicates(true); err != nil {
-			return Manifest{}, err
-		}
+
 	}
 	if err := validateManifestSchema(m); err != nil {
 		return Manifest{}, err

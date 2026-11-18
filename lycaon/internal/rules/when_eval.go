@@ -98,8 +98,8 @@ func ValidateWhenExpr(reg *conditions.ConditionRegistry, expr string) error {
 	if reg == nil {
 		return fmt.Errorf("nil condition registry")
 	}
-	 _,err:=reg.ParseExpression(expr)
- return err
+	_, err := reg.ParseExpression(expr)
+	return err
 }
 
 // registryEnv adapts the condition registry to boolexpr's name→bool environment.

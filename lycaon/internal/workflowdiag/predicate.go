@@ -13,8 +13,10 @@ func PredicateLeaf(field, id string, allowed func(string) bool, overlay, readine
 		return []api.ComposeValidationError{EmitDefault(MustCode("forbidden_predicate"), field,
 			map[string]any{"leaf": id, "replacement_hint": hint})}
 	}
-	if vocabulary.IsHostOnlyCondition(id){return []api.ComposeValidationError{EmitDefault(MustCode("forbidden_predicate"),field,map[string]any{"leaf":id,"replacement_hint":"use a readable condition"})}}
- if vocabulary.IsCatalogOnly(id) {
+	if vocabulary.IsHostOnlyCondition(id) {
+		return []api.ComposeValidationError{EmitDefault(MustCode("forbidden_predicate"), field, map[string]any{"leaf": id, "replacement_hint": "use a readable condition"})}
+	}
+	if vocabulary.IsCatalogOnly(id) {
 		return []api.ComposeValidationError{EmitDefault(MustCode("catalog_only_predicate"), field,
 			map[string]any{"leaf": id})}
 	}
