@@ -70,9 +70,21 @@ type programEvaluation struct {
 
 // programEnding is a program's result once evaluation and settlement end.
 type programEnding struct {
-	done   chan struct{}
-	result string
-	err    error
+	done       chan struct{}
+	outcome    ProgramOutcome
+	err        error
+	finishedAt time.Time
+}
+
+func (e *programEnding) content() (string, error) {
+	if e.err != nil {
+		return "", e.err
+	}
+	out, err := surveyjson.Marshal(e.outcome)
+	if err != nil {
+		return "", fmt.Errorf("command program encode: %w", err)
+	}
+	return string(out), nil
 }
 
 // attend returns completion, parks an explicit wait, or exposes a running
@@ -87,9 +99,11 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	expired := budget.Expired()
 	e.waits = &programWaits{budget: budget}
 	e.ctx = hitl.WithHumanWaitObserver(e.ctx, e.waits)
+	startedAt := e.ports.Clock.Now()
 	//nolint:contextcheck // Detached evaluation outlives a parked call.
 	go func() {
-		ending.result, ending.err = r.finish(e)
+		ending.outcome, ending.err = r.finish(e)
+		ending.finishedAt = e.ports.Clock.Now()
 		close(ending.done)
 	}()
 	for waiting := true; waiting; {
@@ -102,7 +116,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 				waiting = false
 			default:
 				if callCtx.Err() == nil {
-					return r.continueProgram(callCtx, e, ending)
+					return r.continueProgram(callCtx, e, ending, startedAt)
 				}
 				expired = nil
 			}
@@ -119,7 +133,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 		out.CommandProgram, out.SourceRun = program.CommandProgram, program.SourceRun
 	}
 	stateGitNoRepository(e)
-	return ending.result, ending.err
+	return ending.content()
 }
 
 // stateGitNoRepository puts the program's write-leg Git miss on the call's
@@ -166,7 +180,8 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 		<-ending.done
 		r.recordParkedRun(settleCtx, run)
 		r.recordDetachedEffects(settleCtx, run)
-		parked.Settle(settleCtx, ending.result, ending.err)
+		content, err := ending.content()
+		parked.Settle(settleCtx, content, err)
 	}()
 	if out := e.callTC.Effects.Out; out != nil {
 		out.MergeChild(run.tc.Effects.Out.TakeCommitted(), tools.MergeProgram)
@@ -199,8 +214,8 @@ func (r *ProgramRuntime) interruptProgram(ctx context.Context, run *programRun, 
 	defer stop()
 	select {
 	case <-ending.done:
-		if ending.err == nil {
-			return ending.result
+		if content, err := ending.content(); err == nil {
+			return content
 		}
 	case <-ctx.Done():
 	case <-expired:
@@ -267,7 +282,7 @@ func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID
 
 // finish evaluates the program under supervision, settles it and returns its
 // bounded result, whether the call still holds it or it parked.
-func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
+func (r *ProgramRuntime) finish(e *programEvaluation) (ProgramOutcome, error) {
 	run, ctx := e.run, e.ctx
 	defer e.call.end()
 	var evaluated commandprogram.ProgramOutcome
@@ -303,13 +318,13 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	refusal, releaseFeedback, feedbackErr := r.feedback(feedbackCtx, run, e.dispatcher, e.stderr, evalErr)
 	defer releaseFeedback()
 	if feedbackErr != nil || settleErr != nil {
-		return "", errors.Join(feedbackErr, settleErr)
+		return ProgramOutcome{}, errors.Join(feedbackErr, settleErr)
 	}
 	// Settlement and bounded result projection survive cancellation; they cannot
 	// start another program operation.
 	outcome, err := r.outcome(context.WithoutCancel(ctx), run, e.outputs, result, e.stdout, e.stderr, e.scope)
 	if err != nil {
-		return "", err
+		return ProgramOutcome{}, err
 	}
 	outcome.Stderr = e.documents.appendNotes(outcome.Stderr)
 	outcome.Refusal = refusal
@@ -326,11 +341,7 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	if run.tool == "verify" {
 		outcome.ResultVersion = 2
 	}
-	out, err := surveyjson.Marshal(outcome)
-	if err != nil {
-		return "", fmt.Errorf("command program encode: %w", err)
-	}
-	return string(out), nil
+	return outcome, nil
 }
 
 // programLifetime releases a program's plan and frame once both the tool call

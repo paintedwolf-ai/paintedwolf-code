@@ -8,10 +8,16 @@ import (
 	"testing"
 	"time"
 
+	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/programtest"
+	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -22,8 +28,16 @@ import (
 func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 	for _, stop := range []bool{false, true} {
 		t.Run(fmt.Sprint("stop=", stop), func(t *testing.T) {
-			f := programtest.New(t, programtest.Options{})
+			completed := make(chan bgprocess.Completion, 1)
+			registry := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{
+				Complete: func(_ context.Context, completion bgprocess.Completion) { completed <- completion },
+			})
+			registry.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+			t.Cleanup(func() { _ = registry.Lifecycle.Close(context.Background()) })
+			f := programtest.New(t, programtest.Options{Background: registry})
 			clock := programtest.NewManualClock()
+			startedAt := clock.Now()
+			approval := &programApprovalPoller{entered: make(chan context.Context, 1), answer: make(chan struct{})}
 			f.Runtime.Clock = clock
 			out := &tools.ToolInvocationOut{}
 			f.Configure = func(tc *tools.ToolContext) { tc.Effects.Out = out }
@@ -31,6 +45,9 @@ func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 			f.Runtime.SourceRuns = runs
 			entered, release, later := make(chan struct{}), make(chan struct{}), make(chan struct{})
 			f.Runtime.Evaluate = func(ctx context.Context, _ commandsurface.ProgramSnapshot, ports commandprogram.EvaluationPorts) (commandprogram.ProgramOutcome, error) {
+				if _, err := hitl.WaitForCheckpoint(ctx, approval, "approval"); err != nil {
+					return commandprogram.ProgramOutcome{Status: 130}, err
+				}
 				fmt.Fprint(ports.Streams.Output, "listening\n")
 				close(entered)
 				select {
@@ -50,6 +67,10 @@ func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 				s, e := f.CallArgs(t, caller, map[string]any{"command": "server; later"})
 				done <- callResult{s, e}
 			}()
+			<-approval.entered
+			const approvalWait = 50 * time.Second
+			clock.Advance(approvalWait)
+			close(approval.answer)
 			<-entered
 			clock.Advance(command.ProgramInlineWait - time.Second)
 			select {
@@ -82,6 +103,8 @@ func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 			if snap.HasExit || snap.Output != "stdout: listening\n" {
 				t.Fatalf("live snapshot %+v", snap)
 			}
+			const backgroundTime = 5 * time.Second
+			clock.Advance(backgroundTime)
 			if stop {
 				_, err = f.Background.Lifecycle.Stop(f.Session, running.Handle, bgprocess.TerminationStoppedByAgent)
 				testutil.FailErr(t, "stop original program", err)
@@ -105,6 +128,19 @@ func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 			}
 			if stderr != wantStderr {
 				t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+			}
+			completion := testutil.Receive(t, "job completion", completed)
+			if !completion.StartedAt.Equal(startedAt) || completion.PersonWait != approvalWait || completion.RunTime() != command.ProgramInlineWait+backgroundTime {
+				t.Fatalf("job timing start=%v waited=%v run=%v", completion.StartedAt, completion.PersonWait, completion.RunTime())
+			}
+			if completion.ExitCode != status || completion.Tail != snap.Output {
+				t.Fatalf("job completion exit=%d tail=%q, snapshot exit=%d output=%q", completion.ExitCode, completion.Tail, status, snap.Output)
+			}
+			report := processcontrol.CommandCompletionDigest(completion)
+			wait := loopwake.WaitEndedText(awaitstore.Condition{Kind: "process_done", Outcome: "satisfied", Report: report})
+			tail := strings.TrimSpace(snap.Output)
+			if !strings.HasSuffix(report, "\ntail:\n"+tail) || !strings.HasSuffix(wait, "\n\n"+report) {
+				t.Fatalf("completion tail=%q report=%q wait=%q", tail, report, wait)
 			}
 			if out.SourceRun != nil || out.CommandProgram.State != "running" {
 				t.Fatal("completion changed returned call effects")

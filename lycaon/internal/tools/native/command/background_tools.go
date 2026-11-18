@@ -43,7 +43,6 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 		}
 		return "", err
 	}
-	t.Registry.Observe(tctx.Identity.SessionID, handle)
 	out := commandOutputOf(snapshot.Output, snapshot.TerminationReason)
 	capBackgroundOutput(&out, 0)
 	payload := observeBackgroundOutput(tctx, out, snapshot.Confinement, snapshot.TerminationReason)
@@ -52,6 +51,9 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 	encoded, err := surveyjson.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("command_output encode: %w", err)
+	}
+	if snapshot.Output.ExitCode != nil {
+		t.Registry.Observe(tctx.Identity.SessionID, handle)
 	}
 	return string(encoded), nil
 }
@@ -147,6 +149,9 @@ func (t *CommandStopTool) Run(ctx context.Context, args map[string]any, tctx too
 	})
 	if err != nil {
 		return "", fmt.Errorf("command_stop encode: %w", err)
+	}
+	if out.ExitCode != nil {
+		t.Registry.Observe(tctx.Identity.SessionID, handle)
 	}
 	return string(encoded), nil
 }

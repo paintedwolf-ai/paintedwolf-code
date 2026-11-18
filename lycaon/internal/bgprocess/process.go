@@ -56,10 +56,11 @@ type processRuntimeState struct {
 	cancel            context.CancelFunc
 	async             *exec.AsyncPipeline
 	// personWaits counts open waits on a person; personWaited sums the closed ones.
-	personWaits     int
-	personWaitSince time.Time
-	personWaited    time.Duration
-	// observed records that the agent read, waited on or was told of the job's state.
+	personWaits         int
+	personWaitSince     time.Time
+	personWaited        time.Duration
+	completedPersonWait *time.Duration
+	// observed records delivery of the exit.
 	observed bool
 }
 

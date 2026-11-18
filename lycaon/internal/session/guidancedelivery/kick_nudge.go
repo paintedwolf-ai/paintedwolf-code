@@ -62,6 +62,9 @@ func (m *Service) cleared(ctx context.Context, sessionID string) kick.KickSkip {
 		if anchor.SameInform(id, anchor.ReviewLoopContinue) || anchor.SameInform(id, anchor.ReviewLoopDecide) {
 			return m.workflows != nil && !m.workflows.Policy.ActiveReviewVerdictPending(ctx, sessionID)
 		}
+		if anchor.SameInform(id, anchor.ProcessFinished) {
+			return m.processes != nil && m.processes.Observed(sessionID, subject)
+		}
 		if id == roundNotice {
 			return !m.rounds.RoundRunning(subject)
 		}
@@ -110,8 +113,15 @@ func (m *Service) DeliverPending(ctx context.Context, sessionID string) error {
 		if !ok {
 			continue
 		}
+		subject, staged := kicks.PendingNudgeSubject(sessionID, lease)
+		if !staged {
+			continue
+		}
 		if _, err := m.appendHostKickMessage(ctx, sessionID, kickID, nudge); err != nil {
 			return err
+		}
+		if m.processes != nil && anchor.SameInform(kickID, anchor.ProcessFinished) {
+			m.processes.Observe(sessionID, subject)
 		}
 		kicks.AckPendingNudge(sessionID, lease)
 	}

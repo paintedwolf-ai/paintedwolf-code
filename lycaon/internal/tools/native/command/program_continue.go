@@ -2,7 +2,6 @@ package command
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"time"
@@ -22,13 +21,13 @@ type RunningProgramResult struct {
 	Handle    string `json:"handle"`
 }
 
-func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluation, ending *programEnding) (string, error) {
+func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluation, ending *programEnding, startedAt time.Time) (string, error) {
 	run := e.run
 	attached := make(chan error, 1)
 	handle, err := r.Supervisor.Background.StartProgram(ctx, bgprocess.ProgramJobSpec{
 		SessionID: run.tc.Identity.SessionID, RootSessionID: run.tc.ChatSessionID(),
 		ProjectID: run.tc.Identity.ProjectID, Cwd: e.paths.Cwd().DisplayPath,
-		CommandLine: run.source, OriginTool: run.tool, ToolCallID: run.tc.Identity.ToolCallID,
+		CommandLine: run.source, OriginTool: run.tool, ToolCallID: run.tc.Identity.ToolCallID, StartedAt: startedAt,
 		Run: func(jobCtx context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
 			stop := context.AfterFunc(jobCtx, func() { r.Supervisor.Interrupt(run.root.Identity.ProgramID) })
 			defer stop()
@@ -40,13 +39,14 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 			<-ending.done
 			r.recordParkedRun(context.WithoutCancel(ctx), run)
 			r.recordDetachedEffects(context.WithoutCancel(ctx), run)
-			var outcome ProgramOutcome
-			decodeErr := json.Unmarshal([]byte(ending.result), &outcome)
-			status := outcome.Status
-			if decodeErr != nil || (ending.err != nil && status == 0) {
+			status := ending.outcome.Status
+			if ending.err != nil && status == 0 {
 				status = 1
 			}
-			return bgprocess.ProgramJobResult{ExitCode: status}, errors.Join(ending.err, decodeErr, attachErr)
+			waited := e.waits.personWait(ending.finishedAt)
+			return bgprocess.ProgramJobResult{
+				ExitCode: status, FinishedAt: ending.finishedAt, PersonWait: &waited,
+			}, errors.Join(ending.err, attachErr)
 		},
 	})
 	if err != nil {
@@ -56,10 +56,8 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 	if err := <-attached; err != nil {
 		return "", err
 	}
-	if e.waits != nil {
-		session := run.tc.Identity.SessionID
-		e.waits.promoted(func() func() { return r.Supervisor.Background.BeginPersonWait(session, handle) })
-	}
+	session := run.tc.Identity.SessionID
+	e.waits.promoted(func() func() { return r.Supervisor.Background.BeginPersonWait(session, handle) })
 	e.call.detach()
 	if out := e.callTC.Effects.Out; out != nil {
 		out.MergeChild(run.tc.Effects.Out.TakeCommitted(), tools.MergeProgram)

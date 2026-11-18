@@ -26,13 +26,17 @@ type ProgramJobSpec struct {
 	CommandLine   string
 	OriginTool    string
 	ToolCallID    string
+	StartedAt     time.Time
 	Run           func(ctx context.Context, stdout, stderr io.Writer) (ProgramJobResult, error)
 }
 
 // ProgramJobResult carries host notice facts separately from command bytes.
 // The producing program collects them before releasing its lifetime hold.
 type ProgramJobResult struct {
-	ExitCode             int
+	ExitCode   int
+	FinishedAt time.Time
+	// PersonWait includes any waits before the registry took over the job.
+	PersonWait           *time.Duration
 	UnsavedDocumentPaths []string
 	ReleaseNotices       func()
 }
@@ -47,12 +51,16 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 	if sessionID == "" || spec.Run == nil {
 		return "", fmt.Errorf("program job requires session and body")
 	}
+	startedAt := spec.StartedAt
+	if startedAt.IsZero() {
+		startedAt = time.Now().UTC()
+	}
 	handle := uuid.NewString()
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	proc := &Process{
 		Handle: handle, SessionID: sessionID, ProjectID: strings.TrimSpace(spec.ProjectID), RootSessionID: strings.TrimSpace(spec.RootSessionID),
 		running: true, mode: JobModeBackground, kind: processKindProgram,
-		processRuntimeState:     processRuntimeState{done: make(chan struct{}), cancel: cancel, startedAt: time.Now().UTC()},
+		processRuntimeState:     processRuntimeState{done: make(chan struct{}), cancel: cancel, startedAt: startedAt},
 		processIOState:          processIOState{buffer: NewRingBuffer(r.ringBufferBytes), originTool: strings.TrimSpace(spec.OriginTool), toolCallID: strings.TrimSpace(spec.ToolCallID)},
 		processConfinementState: processConfinementState{cwd: spec.Cwd},
 		Stages:                  []hostcmd.StageResult{{Command: spec.CommandLine}},
@@ -101,7 +109,13 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 		proc.resources.releaseNotices = settled.ReleaseNotices
 		proc.Stages[0].ExitCode, proc.Stages[0].Failed = &exitCode, exitCode != 0
 		proc.failure = hostcmd.ExecFailureOf(err)
-		proc.finishedAt = time.Now().UTC()
+		proc.finishedAt = settled.FinishedAt
+		if proc.finishedAt.IsZero() {
+			proc.finishedAt = time.Now().UTC()
+		}
+		if settled.PersonWait != nil {
+			proc.completedPersonWait = settled.PersonWait
+		}
 		if !proc.stopped {
 			proc.reason = TerminationExited
 		}

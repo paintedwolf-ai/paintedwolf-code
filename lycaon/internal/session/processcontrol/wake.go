@@ -75,7 +75,8 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 	if m.nudgeProcessWait(ctx, completion.SessionID, completion.Handle, anchor.ProcessFinished, env) {
 		return
 	}
-	if completion.TerminationReason == bgprocess.TerminationStoppedByAgent {
+	if completion.TerminationReason == bgprocess.TerminationStoppedByAgent ||
+		m.Observed(completion.SessionID, completion.Handle) {
 		return
 	}
 	if sess == nil || !sess.IsWorkerChild() {

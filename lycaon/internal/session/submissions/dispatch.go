@@ -44,7 +44,7 @@ func (m *Service) PromptWorkerResume(ctx context.Context, id, jobID, leaseID str
 	return m.HostTurnWithAdmission(ctx, id, store.PromptSubmissionOriginLoopWake, promptinput.Input{
 		SubmissionID: strings.TrimSpace(leaseID), WorkerJobID: strings.TrimSpace(jobID), Text: loopwake.WaitEndedText(winner),
 		HostSignal: &promptinput.HostSignal{Kind: api.MessageKindHostLoopWake, ID: string(anchor.LoopWake)},
-	}, onAdmitted)
+	}, m.waitObservation(id, winner, onAdmitted))
 }
 
 func (m *Service) WaitResume(ctx context.Context, id string, delivery loopwake.WaitDelivery) (*promptresult.Result, error) {
@@ -60,7 +60,19 @@ func (m *Service) WaitResume(ctx context.Context, id string, delivery loopwake.W
 	return m.HostTurnWithAdmission(ctx, id, store.PromptSubmissionOriginLoopWake, promptinput.Input{
 		SubmissionID: strings.TrimSpace(delivery.LeaseID), Text: loopwake.WaitEndedText(delivery.Condition),
 		HostSignal: &promptinput.HostSignal{Kind: api.MessageKindHostLoopWake, ID: string(anchor.LoopWake)},
-	}, delivery.Admitted)
+	}, m.waitObservation(id, delivery.Condition, delivery.Admitted))
+}
+
+func (m *Service) waitObservation(sessionID string, winner awaitstore.Condition, acknowledge func() error) func() error {
+	return func() error {
+		if acknowledge != nil {
+			if err := acknowledge(); err != nil {
+				return err
+			}
+		}
+		loopwake.ObserveProcessWait(sessionID, winner, m.observeProcess)
+		return nil
+	}
 }
 
 func (m *Service) LoopWake(ctx context.Context, id string) (*promptresult.Result, error) {

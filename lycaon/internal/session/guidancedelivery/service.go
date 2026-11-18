@@ -28,6 +28,10 @@ type CycleState interface {
 	ForSession(context.Context, *api.Session) surface.ImplementSessionState
 }
 type RoundNotices interface{ RoundRunning(string) bool }
+type ProcessObservations interface {
+	Observe(sessionID, handle string)
+	Observed(sessionID, handle string) bool
+}
 type WorkflowDomains struct {
 	Policy WorkflowPolicy
 	Runs   WorkflowRuns
@@ -52,6 +56,7 @@ type Service struct {
 	transcript   Transcript
 	state        CycleState
 	rounds       RoundNotices
+	processes    ProcessObservations
 	workers      workeroutcomes.CycleLedger
 	workflows    *WorkflowDomains
 	frame        inject.CoordinatorTurnFrameSource
@@ -71,6 +76,8 @@ func (m *Service) Bind(kicks *kick.KickEngine, anchors *anchor.Bus) {
 	m.kicks = kicks
 	m.anchors = anchors
 }
+func (m *Service) SetProcessObservations(processes ProcessObservations) { m.processes = processes }
+
 func (m *Service) SetWorkers(workers workeroutcomes.CycleLedger)     { m.workers = workers }
 func (m *Service) SetWorkflow(workflows *WorkflowDomains)            { m.workflows = workflows }
 func (m *Service) SetFrame(frame inject.CoordinatorTurnFrameSource)  { m.frame = frame }

@@ -222,6 +222,15 @@ func (k *KickEngine) RenderPendingNudge(ctx context.Context, sessionID string, l
 	return item.nudge, item.lease, item.nudge != "", nil
 }
 
+// PendingNudgeSubject returns the subject bound to a staged lease.
+func (k *KickEngine) PendingNudgeSubject(sessionID string, lease uint64) (string, bool) {
+	item := k.sessionKickQueue(sessionID).stagedItem()
+	if item == nil || item.lease != lease {
+		return "", false
+	}
+	return item.subject, true
+}
+
 // HasLatest reports whether a kick is held under latestKey.
 func (k *KickEngine) HasLatest(sessionID, latestKey string) bool {
 	if k == nil || strings.TrimSpace(sessionID) == "" || strings.TrimSpace(latestKey) == "" {

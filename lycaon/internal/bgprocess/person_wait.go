@@ -36,6 +36,9 @@ func (r *Registry) BeginPersonWait(sessionID, handle string) func() {
 
 // personWaitedLocked is the job's time waiting on a person up to at.
 func (p *Process) personWaitedLocked(at time.Time) time.Duration {
+	if p.completedPersonWait != nil {
+		return *p.completedPersonWait
+	}
 	waited := p.personWaited
 	if p.personWaits > 0 && at.After(p.personWaitSince) {
 		waited += at.Sub(p.personWaitSince)

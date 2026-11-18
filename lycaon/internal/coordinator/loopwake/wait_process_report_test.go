@@ -121,6 +121,8 @@ func TestTimedProcessWaitReturnsPublishedFailure(t *testing.T) {
 	deps.ProcessState = func(string, string) (bool, bool) { return true, false }
 	const report = "handle=command-1 termination=exited exit_code=1 output=command#16"
 	deps.ProcessReport = func(string, string) (string, bool) { return report, true }
+	var observed []string
+	deps.ObserveProcess = func(sessionID, handle string) { observed = append(observed, sessionID, handle) }
 	loop.SetDeps(deps)
 	args := completionWaitArgs()
 	delete(args, "until_complete")
@@ -131,6 +133,9 @@ func TestTimedProcessWaitReturnsPublishedFailure(t *testing.T) {
 	testutil.FailErr(t, "decode wait outcome", json.Unmarshal([]byte(out), &result))
 	if result.Status != "process_done" || len(result.Conditions) != 1 || result.Conditions[0].Report != report {
 		t.Fatalf("terminal failure was lost: %+v", result)
+	}
+	if len(observed) != 2 || observed[0] != "s1" || observed[1] != result.Conditions[0].Handles[0] {
+		t.Fatalf("observed exits = %v", observed)
 	}
 	active, err := store.Active(t.Context())
 	testutil.FailErr(t, "read leases", err)
@@ -143,6 +148,7 @@ func TestTimedProcessWaitReportsUnavailableHandle(t *testing.T) {
 	loop, _, reg := completionWaitFixture(t)
 	deps := loopDepsSnapshotForTest(loop)
 	deps.ProcessState = func(string, string) (bool, bool) { return false, false }
+	deps.ObserveProcess = func(_, handle string) { t.Errorf("observed unavailable job %q", handle) }
 	loop.SetDeps(deps)
 	args := completionWaitArgs()
 	delete(args, "until_complete")

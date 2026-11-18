@@ -40,17 +40,26 @@ func (r *Registry) LedgerJobs(sessionID string) []JobSnapshot {
 	return out
 }
 
-// Observe records that the agent saw the job's state: it read the job's
-// output, waited on it, or a result reported its exit.
+// Observe records delivery of a job's terminal state.
 func (r *Registry) Observe(sessionID, handle string) {
 	if r == nil {
 		return
 	}
-	proc, err := r.jobs.lookup(sessionID, handle)
-	if err != nil {
-		return
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
+	proc := r.jobs.sessions[strings.TrimSpace(sessionID)][strings.TrimSpace(handle)]
+	if proc != nil && proc.hasExit {
+		proc.observed = true
+	}
+}
+
+// Observed reports whether the agent has received this job's terminal state.
+func (r *Registry) Observed(sessionID, handle string) bool {
+	if r == nil {
+		return false
 	}
 	r.jobs.mu.Lock()
-	proc.observed = true
-	r.jobs.mu.Unlock()
+	defer r.jobs.mu.Unlock()
+	proc := r.jobs.sessions[strings.TrimSpace(sessionID)][strings.TrimSpace(handle)]
+	return proc != nil && proc.observed
 }
