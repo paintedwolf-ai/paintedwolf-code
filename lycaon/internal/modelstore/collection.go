@@ -21,7 +21,7 @@ func (s *Store) Collect() (removed []string, resultErr error) {
 	if err := s.recoverJournal(); err != nil {
 		return nil, err
 	}
-	records, err := s.readRecords()
+	history, err := s.history()
 	if err != nil {
 		return nil, err
 	}
@@ -31,8 +31,8 @@ func (s *Store) Collect() (removed []string, resultErr error) {
 		previous *Manifest
 	}
 	slots := map[string]*slotHistory{}
-	for i := range records {
-		m := records[i]
+	for i := range history.visible {
+		m := history.visible[i]
 		key := m.Model + "/" + m.Device
 		sh := slots[key]
 		if sh == nil {
@@ -64,7 +64,7 @@ func (s *Store) Collect() (removed []string, resultErr error) {
 		keepManifest(sh.previous)
 	}
 
-	for _, m := range records {
+	for _, m := range history.all {
 		f, err := s.revisionLock(m)
 		if err != nil {
 			return nil, err
@@ -81,7 +81,7 @@ func (s *Store) Collect() (removed []string, resultErr error) {
 		}
 	}
 
-	for _, m := range records {
+	for _, m := range history.all {
 		rel := s.revisionRel(m)
 		if !keepRevisions[rel] {
 			root, err := s.openRoot()

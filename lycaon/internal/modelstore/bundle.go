@@ -53,7 +53,11 @@ func readBundleManifest(root *os.Root) (signed SignedManifest, resultErr error) 
 		return signed, err
 	}
 	defer func() { resultErr = errors.Join(resultErr, f.Close()) }()
-	decoder := json.NewDecoder(io.LimitReader(f, maxBundleManifestBytes+1))
+	return decodeBundleManifest(f)
+}
+
+func decodeBundleManifest(r io.Reader) (signed SignedManifest, err error) {
+	decoder := json.NewDecoder(io.LimitReader(r, maxBundleManifestBytes+1))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&signed); err != nil {
 		return signed, fmt.Errorf("modelstore: decode bundle manifest: %w", err)

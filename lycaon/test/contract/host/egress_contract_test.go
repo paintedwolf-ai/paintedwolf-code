@@ -77,6 +77,7 @@ func TestEgressClassesMatchInventory(t *testing.T) {
 		"decide_model_download",
 		"extension_pack_git",
 		"llm_provider_request",
+		"local_model_download",
 		"mcp_remote_http",
 		"model_metadata_refresh",
 		"osv_advisory_download",
