@@ -127,6 +127,14 @@ class BudgetReportTests(unittest.TestCase):
         self.assertIn("admitted up to 50 because: composition root", lines[1].text)
         self.assertIn("3 artifact(s) past their limit were not touched", lines[2].text)
 
+    def test_a_warning_only_category_reports_its_warning_without_a_limit(self):
+        value = report([finding("over_warn", "big_test.go", 15, 10)])
+        value["categories"]["files"]["limit"] = None
+        lines, failed = budgets.suite_findings("maintainability", value)
+        self.assertFalse(failed)
+        self.assertEqual([f.level for f in lines], ["warning"])
+        self.assertIn("warning 10, no hard limit", lines[0].text)
+
     def test_exception_changes_and_headroom_are_reported(self):
         findings = [finding("exception_added", "big.go", 40, 0, reason="one table per dialect", previous=30),
                     finding("unneeded", "small.go", 12, 20, reason="r")]
