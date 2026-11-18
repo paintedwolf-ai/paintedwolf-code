@@ -11,7 +11,7 @@ import (
 func (s *Trees) watchTreeView(view *sourceView, p *project.Project) {
 	wake := make(chan struct{}, 1)
 	unsubscribe := sourcefeed.Subscribe(p.ID, p.WorkspaceID(), func(notice sourcefeed.Notice) {
-		if len(view.navigation.outside) > 0 {
+		if len(view.outsideLocations()) > 0 {
 			s.background.Go(view.ctx, func(ctx context.Context) { s.refreshChatLocations(ctx, view, p.Outside.ID, notice.Changed) })
 		}
 		if notice.FileWritesOnly {

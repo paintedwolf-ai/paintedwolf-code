@@ -10,8 +10,8 @@ const [locationsByProject, setLocationsByProject] = createSignal<ReadonlyMap<str
 const [epochs, setEpochs] = createSignal<ReadonlyMap<string, number>>(new Map());
 
 export function recordChatLocations(projectId: string, locations: readonly SourceChatLocation[]): void {
-  const current = locationsByProject().get(projectId);
-  if (current && JSON.stringify(current) === JSON.stringify(locations)) return;
+  const current = chatLocations(projectId);
+  if (current === locations || JSON.stringify(current) === JSON.stringify(locations)) return;
   const next = new Map(locationsByProject());
   next.set(projectId, locations);
   setLocationsByProject(next);

@@ -154,7 +154,10 @@ func (s *Trees) loadTreeReview(ctx context.Context, view *sourceView, scope *wir
 	}
 	baseline.RootBranches = workspaceSourceBranches(p)
 	baseline.WithoutUserEdits = scope.MarkUserEdits != nil && !*scope.MarkUserEdits
+	view.mu.Lock()
+	locations := view.navigation.outside
 	builder := view.navigation.tree.ReviewBuilder(ctx)
+	view.mu.Unlock()
 	defer builder.Close()
 	if baseline.Kind == sourceledger.BaselineCommit {
 		if err := s.addCommitReviewPaths(ctx, p, builder); err != nil {
@@ -169,7 +172,7 @@ func (s *Trees) loadTreeReview(ctx context.Context, view *sourceView, scope *wir
 			}
 			for _, path := range page.Paths {
 				if path.RootID == p.Outside.ID {
-					if err := addAbsentLocationPath(view.navigation.outside, builder, path.Path); err != nil {
+					if err := addAbsentLocationPath(locations, builder, path.Path); err != nil {
 						return nil, err
 					}
 					continue

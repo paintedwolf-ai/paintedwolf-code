@@ -14,13 +14,16 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/projectsource"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -51,15 +54,26 @@ func chatLocationRoot(dto wire.SourceChatLocation) sourcetree.Root {
 	return sourcetree.Root{Root: root, Label: dto.Label}
 }
 
-// chatLocations are the visible locations of sessionID's chat.
-func (s *Trees) chatLocations(ctx context.Context, p *project.Project, sessionID string) []wire.SourceChatLocation {
-	if s.SourceLedger == nil || p.Outside.ID == "" || strings.TrimSpace(sessionID) == "" {
-		return nil
+func (s *Trees) chatLocations(ctx context.Context, scope pagedview.Scope, p *project.Project, chatID string) ([]wire.SourceChatLocation, error) {
+	if chatID == "" {
+		return nil, nil
 	}
-	locations, err := s.SourceLedger.ChatLocations(ctx, sessionID)
+	if _, err := uuid.Parse(chatID); err != nil {
+		return nil, rejectedSourceIntent("chat_id must be a UUID.")
+	}
+	chat, err := s.Views.SessionStore.Get(ctx, chatID)
 	if err != nil {
-		slog.Warn("Chat locations could not be read", "session", sessionID, "error", err)
-		return nil
+		return nil, err
+	}
+	if chat.ProjectID != scope.Project || chat.OwnerPersonID != scope.Person || chat.ParentSessionID != "" {
+		return nil, store.ErrSessionNotFound
+	}
+	if s.SourceLedger == nil || p.Outside.ID == "" {
+		return nil, nil
+	}
+	locations, err := s.SourceLedger.ChatLocations(ctx, chatID)
+	if err != nil {
+		return nil, err
 	}
 	out := make([]wire.SourceChatLocation, 0, len(locations))
 	for _, location := range locations {
@@ -67,7 +81,7 @@ func (s *Trees) chatLocations(ctx context.Context, p *project.Project, sessionID
 			out = append(out, chatLocationDTO(p, location))
 		}
 	}
-	return out
+	return out, nil
 }
 
 func (n sourceReadNavigation) outsideLocations() []wire.SourceChatLocation {
@@ -80,7 +94,7 @@ func (n sourceReadNavigation) outsideLocations() []wire.SourceChatLocation {
 // refreshChatLocations re-reads the folders of the view's locations that
 // changes landed in, since no watcher covers them.
 func (s *Trees) refreshChatLocations(ctx context.Context, view *sourceView, outsideRootID string, changed []sourcefeed.Address) {
-	for _, location := range view.navigation.outside {
+	for _, location := range view.outsideLocations() {
 		root := chatLocationRoot(location)
 		var dirs []string
 		for _, address := range changed {
@@ -140,7 +154,7 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 		return
 	}
 	sess, err := s.SessionStore.Get(r.Context(), strings.TrimSpace(req.SessionID))
-	if err != nil || sess.ProjectID != p.ID || sess.ParentSessionID != "" {
+	if err != nil || sess.ProjectID != p.ID || sess.ParentSessionID != "" || sess.OwnerPersonID != requestscope.Caller(r).ID {
 		s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found in this project")
 		return
 	}

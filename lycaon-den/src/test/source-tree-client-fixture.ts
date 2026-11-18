@@ -102,8 +102,9 @@ export function sourceTreeClientFixture(client: () => LycaonClient, workspaceRea
       }
       if (command.kind === "filter") held.view.intent = { ...held.view.intent, filter: command.query };
       if (command.kind === "review") held.view.intent = { ...held.view.intent, review: command.scope };
+      if (command.kind === "select_chat") held.view.intent = { ...held.view.intent, chat_id: command.chat_id };
       held.view = { ...held.view, intent_revision: String(Number(held.view.intent_revision) + 1), projection_revision: String(Number(held.view.projection_revision) + 1) };
-      await populate(held);
+      if (command.kind !== "select_chat") await populate(held);
       return held.view;
     },
     async locateSourceView(_project, id, query) {

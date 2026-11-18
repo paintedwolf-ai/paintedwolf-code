@@ -38,7 +38,8 @@ export function FilesNavigationPane(props: Props) {
   const toTree = <T extends { rootId: string; path: string }>(value: T | null | undefined): T | null => {
     if (!value) return null;
     const address = treeAddress(props.projectId, outsideRootId(props.projectId), value.rootId, value.path);
-    return address ? { ...value, ...address } : null;
+    if (!address) return null;
+    return address.rootId === value.rootId && address.path === value.path ? value : { ...value, ...address };
   };
   const selectedTreeEntry = () => {
     const selected = props.selectedEntry;
@@ -92,7 +93,7 @@ export function FilesNavigationPane(props: Props) {
         />
       }
       tree={
-        <Show when={props.roots.length > 0} fallback={
+        <Show when={props.roots.length > 0 || props.chatId} fallback={
           <p class="den-files-empty" data-testid="files-tree-no-roots">Attach a folder to browse its files.</p>
         }>
           <FilesTree

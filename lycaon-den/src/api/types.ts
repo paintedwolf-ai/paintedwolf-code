@@ -16739,6 +16739,11 @@ export interface components {
             disclosures?: components["schemas"]["SourceTreeDisclosure"][];
             filter?: string;
             review?: components["schemas"]["SourceTreeReviewScope"];
+            /**
+             * Format: uuid
+             * @description Chat whose outside locations are shown. Omit for project folders only.
+             */
+            chat_id?: string;
         };
         SourceTreeViewCreate: {
             /**
@@ -16752,11 +16757,6 @@ export interface components {
             client_id: string;
             /** Format: uuid */
             session_id?: string;
-            /**
-             * Format: uuid
-             * @description The chat whose locations outside the project the view lists after the project's roots. Omitted, the view lists none.
-             */
-            chat_id?: string;
             workspace_id: string;
             intent: components["schemas"]["SourceTreeIntent"];
         };
@@ -17054,6 +17054,18 @@ export interface components {
             /** @description One digest per requested source, in request order. */
             digests: components["schemas"]["SourceComparisonDigest"][];
         };
+        SourceTreeSelectChat: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "select_chat";
+            /**
+             * Format: uuid
+             * @description Chat whose outside locations are shown. Omit for project folders only.
+             */
+            chat_id?: string;
+        };
         SourceTreeToggle: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -17097,7 +17109,7 @@ export interface components {
             kind: "review";
             scope?: components["schemas"]["SourceTreeReviewScope"];
         };
-        SourceTreeCommand: components["schemas"]["SourceTreeToggle"] | components["schemas"]["SourceTreeDisclose"] | components["schemas"]["SourceTreeReveal"] | components["schemas"]["SourceTreeFilter"] | components["schemas"]["SourceTreeReview"];
+        SourceTreeCommand: components["schemas"]["SourceTreeToggle"] | components["schemas"]["SourceTreeDisclose"] | components["schemas"]["SourceTreeReveal"] | components["schemas"]["SourceTreeFilter"] | components["schemas"]["SourceTreeReview"] | components["schemas"]["SourceTreeSelectChat"];
         SourceTreeViewUpdate: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -31978,6 +31990,7 @@ export type SourceView = components["schemas"]["SourceView"];
 export type SourceComparisonDigestRequest = components["schemas"]["SourceComparisonDigestRequest"];
 export type SourceComparisonDigest = components["schemas"]["SourceComparisonDigest"];
 export type SourceComparisonDigests = components["schemas"]["SourceComparisonDigests"];
+export type SourceTreeSelectChat = components["schemas"]["SourceTreeSelectChat"];
 export type SourceTreeToggle = components["schemas"]["SourceTreeToggle"];
 export type SourceTreeDisclose = components["schemas"]["SourceTreeDisclose"];
 export type SourceTreeReveal = components["schemas"]["SourceTreeReveal"];

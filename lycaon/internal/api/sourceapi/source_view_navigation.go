@@ -17,7 +17,7 @@ func (s *Trees) applySourceTreeUpdate(r *http.Request, view *sourceView, request
 		if _, err := uuid.Parse(request.BasePresentationID); err != nil {
 			return nil, rejectedSourceIntent("base_presentation_id must be a UUID.")
 		}
-		if request.Command.Filter != nil || request.Command.Review != nil {
+		if request.Command.Filter != nil || request.Command.Review != nil || request.Command.SelectChat != nil {
 			return nil, rejectedSourceIntent("A presentation basis requires a navigation command.")
 		}
 		presentation, release, err := s.Presentation.acquireBasisPresentation(view, request.BasePresentationID)

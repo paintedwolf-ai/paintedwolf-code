@@ -134,6 +134,8 @@ func (s *Trees) applySourceTreeCommand(r *http.Request, view *sourceView, basis 
 		previous := view.changeTreeFilter(command.Filter.Query)
 		view.mu.Unlock()
 		return previous, nil
+	case command.SelectChat != nil:
+		return s.selectTreeChat(r.Context(), view, command.SelectChat.ChatID)
 	case command.Review != nil:
 		if err := validateTreeReview(command.Review.Scope); err != nil {
 			return nil, err

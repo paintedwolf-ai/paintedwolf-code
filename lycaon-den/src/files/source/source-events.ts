@@ -52,6 +52,7 @@ export function requestSourceProjectionResync(projectId: string): void {
   const pid = projectId.trim();
   if (!pid) return;
   requestSourceTreeResync(pid);
+  refreshChatLocations(pid);
   applyBufferSourceResync(pid);
   requestSourceRefresh(pid, { watchCoverage: true });
   requestWalkRefresh(pid);

@@ -7,13 +7,10 @@ import { saveFilesTreeIntent } from "./files-tree-intent-state.ts";
 import { clientIdentity } from "../../platform/connection/client-identity.ts";
 import { SourceViewSession } from "../../ui/paged-view/source-view-session.ts";
 
-/** The chat whose locations a tree lists, and how many times they changed. */
-export type FilesTreeChat = { chat: string | undefined; epoch: number };
-
 export class FilesTreeSession extends SourceViewSession<"tree"> {
-  constructor(client: SourceViewsClient, project: string, workspace: string, session: string | undefined, chat: string | undefined, intent: SourceTreeIntent) {
+  constructor(client: SourceViewsClient, project: string, workspace: string, session: string | undefined, intent: SourceTreeIntent) {
     super(client, project, { kind: "tree", client_id: clientIdentity(), operation_id: crypto.randomUUID(),
-      workspace_id: workspace, session_id: session, ...(chat ? { chat_id: chat } : {}), intent }, frame => ({ rows: frame.rows.length, bytes: new TextEncoder().encode(JSON.stringify(frame)).byteLength }), { rows: 4_000 });
+      workspace_id: workspace, session_id: session, intent }, frame => ({ rows: frame.rows.length, bytes: new TextEncoder().encode(JSON.stringify(frame)).byteLength }), { rows: 4_000 });
   }
 
   protected override validateFrame(frame: SourceTreeFrame): void {
@@ -66,7 +63,7 @@ export class FilesTreeSession extends SourceViewSession<"tree"> {
     let attempted = false;
     return this.mutate(state => {
       // A basis applies once, inside the view that presented it.
-      const basis = !attempted && command.kind !== "filter" && command.kind !== "review" && this.presentationOf(base, state.id) ? base : undefined;
+      const basis = !attempted && command.kind !== "filter" && command.kind !== "review" && command.kind !== "select_chat" && this.presentationOf(base, state.id) ? base : undefined;
       attempted = true;
       return this.client.applySourceViewIntent(this.projectId, state.id,
         { kind: "tree", operation_id, expected_intent_revision: state.intent_revision, command, base_presentation_id: basis ?? undefined });
@@ -140,14 +137,14 @@ const clients = new WeakMap<SourceViewsClient, Map<string, Retained>>();
 
 /** Resident stages and remounts share a bounded set of host presentations. */
 export function retainFilesTreeSession(client: SourceViewsClient, project: string, workspace: string,
-  session: string | undefined, chat: FilesTreeChat, intent: SourceTreeIntent): { view: FilesTreeSession; release(): void } {
+  session: string | undefined, intent: SourceTreeIntent): { view: FilesTreeSession; release(): void } {
   let views = clients.get(client);
   if (!views) { views = new Map(); clients.set(client, views); }
-  const key = JSON.stringify([project, workspace, session, chat.chat, chat.epoch]);
+  const key = JSON.stringify([project, workspace, session]);
   let held = views.get(key);
   // A released view (its chat was deleted, or it closed) is never handed out again.
   if (!held || held.session.isReleased()) {
-    held = { session: new FilesTreeSession(client, project, workspace, session, chat.chat, intent), users: 0, lastUsed: Date.now() };
+    held = { session: new FilesTreeSession(client, project, workspace, session, intent), users: 0, lastUsed: Date.now() };
     views.set(key, held);
   }
   clearTimeout(held.timer); held.users++; held.lastUsed = Date.now();

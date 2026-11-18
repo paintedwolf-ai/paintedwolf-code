@@ -117,6 +117,7 @@ export function treeViewFixture(initial = [treeRow(".", "directory", true), tree
       if (command.kind === "disclose") intent = { ...intent, disclosures: [...(intent.disclosures ?? []), ...command.disclosures] };
       if (command.kind === "filter") intent = { ...intent, filter: command.query };
       if (command.kind === "review") intent = { ...intent, review: command.scope };
+      if (command.kind === "select_chat") intent = { ...intent, chat_id: command.chat_id };
       await update?.(command);
 
       intentRevision++; revision++;

@@ -59,6 +59,10 @@ components:
         review:
           $ref: "#/components/schemas/SourceTreeReviewScope"
           x-go-pointer: true
+        chat_id:
+          type: "string"
+          format: "uuid"
+          description: "Chat whose outside locations are shown. Omit for project folders only."
     SourceTreeViewCreate:
       x-go-generate: true
       type: "object"
@@ -86,12 +90,6 @@ components:
         session_id:
           type: "string"
           format: "uuid"
-        chat_id:
-          type: "string"
-          format: "uuid"
-          description: >
-            The chat whose locations outside the project the view lists after
-            the project's roots. Omitted, the view lists none.
         workspace_id:
           type: "string"
           pattern: '^ws_[0-9a-f]{32}$'
@@ -242,6 +240,21 @@ components:
         scope:
           $ref: "#/components/schemas/SourceTreeReviewScope"
           x-go-pointer: true
+    SourceTreeSelectChat:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "select_chat"
+        chat_id:
+          type: "string"
+          format: "uuid"
+          description: "Chat whose outside locations are shown. Omit for project folders only."
     SourceTreeCommand:
       oneOf:
         -
@@ -254,9 +267,12 @@ components:
           $ref: "#/components/schemas/SourceTreeFilter"
         -
           $ref: "#/components/schemas/SourceTreeReview"
+        -
+          $ref: "#/components/schemas/SourceTreeSelectChat"
       discriminator:
         propertyName: "kind"
         mapping:
+          select_chat: "#/components/schemas/SourceTreeSelectChat"
           toggle: "#/components/schemas/SourceTreeToggle"
           disclose: "#/components/schemas/SourceTreeDisclose"
           reveal: "#/components/schemas/SourceTreeReveal"

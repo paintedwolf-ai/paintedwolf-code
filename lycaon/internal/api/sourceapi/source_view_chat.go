@@ -1,0 +1,46 @@
+package sourceapi
+
+import (
+	"context"
+	"slices"
+
+	"github.com/lycaon/lycaon/internal/sourcetree"
+	wire "github.com/lycaon/lycaon/pkg/api"
+)
+
+func (view *sourceView) outsideLocations() []wire.SourceChatLocation {
+	view.mu.Lock()
+	defer view.mu.Unlock()
+	return view.navigation.outside
+}
+
+// selectTreeChat replaces the appended roots under the current intent journal.
+func (s *Trees) selectTreeChat(ctx context.Context, view *sourceView, chatID string) (*sourcetree.Filtered, error) {
+	project, err := s.ProjectRegistry.Get(ctx, view.scope.Project)
+	if err != nil {
+		return nil, err
+	}
+	locations, err := s.chatLocations(ctx, view.scope, project, chatID)
+	if err != nil {
+		return nil, err
+	}
+	view.mu.Lock()
+	defer view.mu.Unlock()
+	if slices.Equal(view.navigation.outside, locations) {
+		view.navigation.treeIntent.ChatID = chatID
+		return nil, nil
+	}
+	roots := make([]sourcetree.Root, 0, len(locations))
+	for _, location := range locations {
+		roots = append(roots, chatLocationRoot(location))
+	}
+	if _, err := view.navigation.tree.ReplaceOnDemandRoots(ctx, roots); err != nil {
+		return nil, err
+	}
+	view.navigation.treeIntent.ChatID = chatID
+	view.navigation.outside = locations
+	if view.navigation.treeIntent.Review != nil {
+		return view.changeTreeReview(view.navigation.treeIntent.Review), nil
+	}
+	return view.changeTreeFilter(view.navigation.treeIntent.Filter), nil
+}

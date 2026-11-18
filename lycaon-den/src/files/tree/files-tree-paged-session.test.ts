@@ -12,7 +12,7 @@ vi.mock("./files-tree-intent-state.ts", () => ({ saveFilesTreeIntent: vi.fn(asyn
 it.each([200, 399])("prepares fold context across a cold page boundary at row %i", async start => {
   const host = treeViewFixture();
   host.large(1_000, index => treeRow(index ? `file-${index}.ts` : ".", index ? "file" : "directory", !index));
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     await session.range(start, start + 1, new AbortController().signal);
@@ -30,7 +30,7 @@ it("waits for coalesced revalidation instead of retrying stale row reads in a lo
     attempts++;
     if (attempts === 1) throw Object.assign(new Error("Changed projection"), { code: "source_view_revision_changed" });
   });
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     await session.refresh();
@@ -63,7 +63,7 @@ it.each(["expand", "folder"])("recovers an expired view for %s commands", async 
     return current as T;
   });
   const intent = { filter: "src" };
-  const session = new FilesTreeSession(client, "project", "workspace", undefined, undefined, intent);
+  const session = new FilesTreeSession(client, "project", "workspace", undefined, intent);
   await session.open();
   expired = true;
   try {
@@ -111,7 +111,7 @@ function scriptedHost(options: { command?: (path: string) => void } = {}) {
 
 it("reads a replacement view even where the expired view's rows are still painted", async () => {
   const host = treeViewFixture();
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     await session.range(0, 2, new AbortController().signal);
@@ -128,7 +128,7 @@ it("reads a replacement view even where the expired view's rows are still painte
 
 it("keeps its view when a command names something absent", async () => {
   const host = scriptedHost({ command: () => { throw Object.assign(new Error("Not found"), { code: "not_found" }); } });
-  const session = new FilesTreeSession(host.client, "project", "workspace", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "workspace", undefined, {});
   try {
     await session.open();
     await expect(session.command({ kind: "disclose", disclosures: [{ address: { root_id: "root", path: "gone" }, open: true, recursive: false }] }))
@@ -140,7 +140,7 @@ it("keeps its view when a command names something absent", async () => {
 
 it("sends a displayed basis only to the view that presented it, and only once", async () => {
   const host = scriptedHost();
-  const session = new FilesTreeSession(host.client, "project", "workspace", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "workspace", undefined, {});
   const disclose: SourceTreeCommand = { kind: "disclose", disclosures: [{ address: { root_id: "root", path: "src" }, open: true, recursive: false }] };
   const detach = session.attach();
   try {
@@ -162,7 +162,7 @@ it("sends a displayed basis only to the view that presented it, and only once", 
 
 it("uses a strict basis for the first page of an offset range", async () => {
   const host = treeViewFixture();
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     await session.range(0, 2, new AbortController().signal);
@@ -187,7 +187,7 @@ it("waits for a replacement review projection when preparation races a frame", a
     const state = await host.client.getSourceView(...args);
     return preparing ? { ...state, state: "preparing" as const, extent: { rows: 0, complete: false } } : state;
   } };
-  const session = new FilesTreeSession(client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     let settled = false;
@@ -212,7 +212,7 @@ it("keeps a strict read in its declared coordinates while the head publishes beh
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(signal?.aborted).toBe(false);
   });
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     const interest = new AbortController();
@@ -245,7 +245,7 @@ it.each([false, true])("recovers failed preparation and preserves recursive disc
     if (init?.method === "DELETE") released.push(path);
     return current as T;
   });
-  const session = new FilesTreeSession(client, "project", "workspace", undefined, undefined, intent);
+  const session = new FilesTreeSession(client, "project", "workspace", undefined, intent);
   const detach = session.attach();
   await expect(session.ready()).rejects.toThrow("Saved expansion");
   expect(creates).toHaveLength(1);
@@ -265,7 +265,7 @@ it("abandons rejected read-ahead without refreshing or retrying", async () => {
   const host = treeViewFixture();
   const read = vi.fn(async () => { throw Object.assign(new Error("Changed projection"), { code: "source_view_revision_changed" }); });
   host.read(read);
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     await session.refresh();
@@ -288,7 +288,7 @@ it.each([true, false])("retains cached positions only with host validation (%s)"
     return { ...frame, prefix: { end: frame.span.end, fingerprint: "a".repeat(64) },
       retained_prefix: accept ? args[2].retain?.[0] : undefined };
   } };
-  const session = new FilesTreeSession(client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     await session.frameAt({ root_id: "r1", path: "." });
@@ -310,7 +310,7 @@ it("read-ahead fills the presented coordinates while discovery publishes a large
   const host = treeViewFixture();
   const rowAt = (index: number) => treeRow(index ? `file-${index}.ts` : ".", index ? "file" : "directory", !index);
   host.large(300, rowAt);
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     const first = await session.frameAt({ root_id: "r1", path: "." });
@@ -334,7 +334,7 @@ it("follows the head only through an anchored read, which declares the presented
   const host = treeViewFixture();
   const rowAt = (index: number) => treeRow(index ? `file-${index}.ts` : ".", index ? "file" : "directory", !index);
   host.large(300, rowAt);
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     const first = await session.frameAt({ root_id: "r1", path: "." });
@@ -355,7 +355,7 @@ it("locates in the presented coordinates and reads the row strictly there", asyn
   const host = treeViewFixture();
   const rowAt = (index: number) => treeRow(index ? `file-${index}.ts` : ".", index ? "file" : "directory", !index);
   host.large(300, rowAt);
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     const first = await session.frameAt({ root_id: "r1", path: "." });
@@ -384,7 +384,7 @@ it.each(["locate", "anchor"])("resumes %s when review preparation races navigati
     if (operation === "anchor" && firstFrame) { firstFrame = false; preparing = true; throw conflict(); }
   });
   const client = { ...host.client, locateSourceView: locate };
-  const session = new FilesTreeSession(client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     await session.refresh();
@@ -404,7 +404,7 @@ it("bounds retries and cancels a navigation whose host remains preparing", async
   vi.useFakeTimers();
   const host = treeViewFixture();
   const locate = vi.fn(async () => { throw Object.assign(new Error("Preparing review"), { code: "source_view_preparing" }); });
-  const session = new FilesTreeSession({ ...host.client, locateSourceView: locate }, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession({ ...host.client, locateSourceView: locate }, "project", "ws1", undefined, {});
   const detach = session.attach();
   const abort = new AbortController();
   try {
@@ -425,7 +425,7 @@ it("bounds retries and cancels a navigation whose host remains preparing", async
 
 it("publishes accepted disclosure only after its immutable configuration is saved", async () => {
   const host = treeViewFixture();
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const detach = session.attach();
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
@@ -449,7 +449,7 @@ it("publishes accepted disclosure only after its immutable configuration is save
 it("dispatches folder toggles while accepted expansion prepares and keeps the complete presentation", async () => {
   const rows = [treeRow(".", "directory", true), treeRow("src", "directory"), treeRow("README.md")];
   const host = treeViewFixture(rows);
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     await session.range(0, rows.length, new AbortController().signal);
@@ -486,7 +486,7 @@ it("dispatches folder toggles while accepted expansion prepares and keeps the co
 
 it("keeps an unsaved acceptance unpublished and saves it before the next command", async () => {
   const host = treeViewFixture();
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const detach = session.attach();
   vi.mocked(saveFilesTreeIntent).mockRejectedValueOnce(new Error("Disk unavailable"));
   try {
@@ -512,7 +512,7 @@ it.each([
 ])("buffers either side of an anchored viewport at $start", async ({ at, before, offset, start }) => {
   const host = treeViewFixture();
   host.rows(Array.from({ length: 10_000 }, (_, index) => treeRow(index === 0 ? "." : `file-${index}`)));
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     const result = await session.viewport({ address: { root_id: "r1", path: at === 0 ? "." : `file-${at}` }, before, offset }, 40, new AbortController().signal);
@@ -525,7 +525,7 @@ it.each([
 
 it("does not restart an anchored read after its presenter has detached", async () => {
   const host = treeViewFixture();
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   try {
     await expect(session.frameAt({ root_id: "r1", path: "." })).rejects.toMatchObject({ name: "AbortError" });
     await expect(session.range(0, 1, new AbortController().signal)).rejects.toMatchObject({ name: "AbortError" });
@@ -543,7 +543,7 @@ it("orders expand before a later collapse even while a refresh is stalled", asyn
   const client = { ...host.client, getSourceView: async (...args: Parameters<typeof host.client.getSourceView>) => {
     await delayed; return host.client.getSourceView(...args);
   } };
-  const session = new FilesTreeSession(client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(client, "project", "ws1", undefined, {});
   try {
     await session.open();
     const expanding = session.expand([{ root_id: "r1", path: "." }]);
@@ -558,7 +558,7 @@ it("discards a superseded reveal before dispatch and lets collapse proceed", asy
   let release!: () => void;
   const held = new Promise<void>(resolve => { release = resolve; });
   host.update(async command => { if (command.kind === "filter") await held; });
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   try {
     const first = session.command({ kind: "filter", query: "src" });
     await expect.poll(() => host.commands.length).toBe(1);
@@ -574,7 +574,7 @@ it("discards a superseded reveal before dispatch and lets collapse proceed", asy
 
 it("settles readers on a failed acceptance and explicitly retries its persistence", async () => {
   const host = treeViewFixture();
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     await session.ready();
@@ -594,7 +594,7 @@ it("persists a dispatched reveal after its caller cancels before applying the ne
   let release!: () => void;
   const held = new Promise<void>(resolve => { release = resolve; });
   host.update(async command => { if (command.kind === "reveal") await held; });
-  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
   const releasePresentation = vi.fn();
   vi.spyOn(session, "retainPresentation").mockReturnValue(releasePresentation);
   try {
@@ -620,7 +620,7 @@ it("refuses incomplete host frames without replacing its complete presentation",
     const frame = await host.client.getSourceViewRows(...args) as SourceTreeFrame;
     return incomplete ? { ...frame, rows: frame.rows.slice(1) } : frame;
   } };
-  const session = new FilesTreeSession(client, "project", "ws1", undefined, undefined, {});
+  const session = new FilesTreeSession(client, "project", "ws1", undefined, {});
   const detach = session.attach();
   try {
     await session.frame(0);

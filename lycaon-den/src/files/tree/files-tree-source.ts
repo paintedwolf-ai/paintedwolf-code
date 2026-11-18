@@ -98,18 +98,18 @@ export function createFilesTreeSource(props: SourceProps, deps: {
   function observeSession() {
     createEffect(() => {
       const current = state();
-      if (current) recordChatLocations(props.projectId, current.outside_locations);
+      const chat = props.chatId;
+      const project = props.projectId;
+      untrack(() => recordChatLocations(project, current?.intent.chat_id === chat ? current?.outside_locations ?? [] : []));
     });
     createEffect(() => {
       const project = props.projectId;
       const workspace = props.workspaceId;
       const client = props.client;
       const session = props.sessionId;
-      const chat = props.chatId;
-      const locations = chatLocationsEpoch(project);
       if (!project || !workspace || !client) { setSourceView(undefined); return; }
-      const held = untrack(() => retainFilesTreeSession(client, project, workspace, session, { chat, epoch: locations }, {
-        disclosures: restoredFilesTreeDisclosures(workspace), filter: props.filterQuery, review: props.reviewScope,
+      const held = untrack(() => retainFilesTreeSession(client, project, workspace, session, {
+        chat_id: props.chatId, disclosures: restoredFilesTreeDisclosures(workspace), filter: props.filterQuery, review: props.reviewScope,
       }));
       if (seededWorkspaceKey !== workspace) {
         seededWorkspaceKey = workspace; deps.setDirStates({});
@@ -140,6 +140,26 @@ export function createFilesTreeSource(props: SourceProps, deps: {
       }).catch(reportTreeError).finally(() => {
         if (!abort.signal.aborted) props.onInitialLoadSettled?.(workspace);
       }).catch(() => undefined);
+    });
+    let previous: { view: FilesTreeSession; chat?: string; epoch: number } | undefined;
+    createEffect(() => {
+      const view = sourceView();
+      const live = deps.surfaceLive();
+      const chat = props.chatId;
+      const epoch = chatLocationsEpoch(props.projectId);
+      if (!view || !live) return;
+      const earlier = previous;
+      previous = { view, chat, epoch };
+      const abort = new AbortController();
+      onCleanup(() => abort.abort());
+      untrack(() => {
+        void view.open().then(current => {
+          if (abort.signal.aborted || current.intent.chat_id === chat && (earlier?.view !== view || earlier.epoch === epoch || !chat)) return;
+          return view.command({ kind: "select_chat", chat_id: chat }, undefined, abort.signal);
+        }).catch(error => {
+          if (!abort.signal.aborted) reportTreeError(error);
+        });
+      });
     });
     // Workspace refreshes can finish after the first frame arrives.
     createEffect(() => {
