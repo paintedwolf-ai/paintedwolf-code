@@ -105,6 +105,10 @@ func TestOverlayCaptureCanRetryWithRecordedTopology(t *testing.T) {
 	if _, exists, err := reader.LookupIdentity(t.Context(), nil, "root", "file"); err != nil || !exists {
 		t.Fatalf("recorded identity = %v, %v", exists, err)
 	}
+	if _, exists, err := reader.LookupIdentity(t.Context(), nil, "", "file"); err == nil || exists {
+		t.Fatalf("identityless lookup = %v, %v", exists, err)
+	}
+
 }
 
 func TestOverlayIdentitySurvivesLabelChangesAndRootOrder(t *testing.T) {

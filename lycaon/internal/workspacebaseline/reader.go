@@ -91,14 +91,15 @@ func Open(ctx context.Context, path string, blobs *sourceblob.Store) (*Reader, e
 	}
 	if format == 2 {
 		var invalid bool
-		err := d.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM files WHERE root_id IS NULL OR trim(root_id) = '' OR scope_rel IS NULL OR scope_rel = '')").Scan(&invalid)
+		// The primary-key probe keeps opening independent of manifest size.
+		err := d.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM files WHERE root_id = '')").Scan(&invalid)
 		if err != nil {
 			_ = d.Close()
 			return nil, fmt.Errorf("validate workspace manifest identities: %w", err)
 		}
 		if invalid {
 			_ = d.Close()
-			return nil, fmt.Errorf("workspace manifest contains an entry without a root identity or root-relative path")
+			return nil, fmt.Errorf("workspace manifest contains an entry without a root identity")
 		}
 	}
 	return &Reader{db: d, blobs: blobs, format: format}, nil
@@ -130,6 +131,9 @@ func (r *Reader) Lookup(ctx context.Context, path string) (File, bool, error) {
 // out the way capture wrote it.
 func (r *Reader) LookupIdentity(ctx context.Context, roots []projectroot.RootRef, rootID, scopeRel string) (File, bool, error) {
 	if r.format == 2 {
+		if err := validateIdentity(rootID, scopeRel); err != nil {
+			return File{}, false, err
+		}
 		var f File
 		row := r.db.QueryRowContext(ctx, "SELECT "+fileColumns+" FROM files WHERE root_id = ? AND scope_rel = ?", rootID, scopeRel)
 		err := scanFile(row.Scan, &f)
