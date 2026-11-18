@@ -115,6 +115,14 @@ func TestWebResearchProviderMembershipFollowsCatalogE2E(t *testing.T) {
 }
 
 func TestProviderSettingsSurvivePartialUpdatesE2E(t *testing.T) {
+	// Bedrock's ambient chain must not read machine AWS files or reach EC2 metadata.
+	awsDir := t.TempDir()
+	t.Setenv("AWS_CONFIG_FILE", awsDir+"/config")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", awsDir+"/credentials")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
+	t.Setenv("AWS_PROFILE", "")
 	base := settingsControlsBase(t)
 	const providerPath = "/v1/providers/{provider_id}"
 	update := func(id string, req wire.UpdateProviderRequest) wire.ProviderMeta {
