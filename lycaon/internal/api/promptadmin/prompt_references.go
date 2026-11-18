@@ -183,8 +183,8 @@ func (s *References) lookupReferenceArtifact(ctx context.Context, sessionID, art
 }
 
 func (s *References) lookupReferenceEvidence(ctx context.Context, projectID, sourceRef, hitKind, sessionID string) (promptattach.ReferenceEvidence, error) {
-	sqlStore, ok := s.Store
-	if !ok || sqlStore == nil || sqlStore.DB() == nil {
+	sqlStore := s.Store
+	if sqlStore == nil || sqlStore.DB() == nil {
 		return promptattach.ReferenceEvidence{}, search.ErrEvidenceNotFound
 	}
 	row, err := search.LookupBySourceRef(ctx, sqlStore.DB(), projectID, sourceRef, hitKind, sessionID)

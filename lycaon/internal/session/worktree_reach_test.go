@@ -369,7 +369,7 @@ func TestWorktreeReach_staleRefusesTurn(t *testing.T) {
 }
 
 type getFailStore struct {
-	*store.Repositories
+	store.SessionRepository
 	failGet bool
 }
 
@@ -377,7 +377,7 @@ func (s *getFailStore) GetWorktreeBinding(ctx context.Context, sessionID string)
 	if s.failGet {
 		return nil, false, errors.New("injected get failure")
 	}
-	return s.Store.GetWorktreeBinding(ctx, sessionID)
+	return s.SessionRepository.GetWorktreeBinding(ctx, sessionID)
 }
 
 func TestWorktreeReach_getFailureRefuses(t *testing.T) {
@@ -385,9 +385,10 @@ func TestWorktreeReach_getFailureRefuses(t *testing.T) {
 
 	repoDir := initReachRepo(t)
 	sessionStore := sessionFixture
-	failing := &getFailStore{Store: sessionStore, failGet: true}
+	failing := &getFailStore{SessionRepository: sessionStore.Sessions, failGet: true}
+	sessionStore.Sessions = failing
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	mgr := NewHost(failing, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	mgr := NewHost(sessionStore, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, repoDir)
 	testutil.FailErr(t, "CreateWithRoot", err)

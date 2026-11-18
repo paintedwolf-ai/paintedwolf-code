@@ -266,7 +266,7 @@ func TestPromptHistorySeeksAfterCompactionWatermark(t *testing.T) {
 }
 
 type promptHistoryReadProbe struct {
-	*store.Repositories
+	store.TranscriptRepository
 	fullReads int
 }
 
@@ -288,8 +288,9 @@ func TestPromptHistoryOverflowNeverLoadsFullTranscript(t *testing.T) {
 	testutil.FailErr(t, "append long history", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, rows...))
 	sess, err = sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read active turn identity", err)
-	probe := &promptHistoryReadProbe{Store: sessionStore}
-	mgr := NewHost(probe, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	probe := &promptHistoryReadProbe{TranscriptRepository: sessionStore.Transcript}
+	sessionStore.Transcript = probe
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	loaded, err := mgr.Runner.History.Load(t.Context(), sess)
 	testutil.FailErr(t, "load bounded history", err)

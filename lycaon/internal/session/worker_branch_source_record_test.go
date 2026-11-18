@@ -189,7 +189,7 @@ func (noopWorkerBranchClaim) ClaimWorkerBranch(context.Context, string) (*api.Wo
 }
 
 type failingWorkerModelStore struct {
-	*store.Repositories
+	store.SessionRepository
 	err error
 }
 
@@ -198,11 +198,13 @@ func (s *failingWorkerModelStore) UpdateSession(context.Context, string, func(*a
 }
 
 func TestWorkerModelSaveFailureRemovesPartialChild(t *testing.T) {
-	st := &failingWorkerModelStore{SQL: storetest.New(t, testdbseed.DefaultProjectID), err: errors.New("model save failed")}
+	repositories := storetest.New(t, testdbseed.DefaultProjectID)
+	st := &failingWorkerModelStore{SessionRepository: repositories.Sessions, err: errors.New("model save failed")}
+	repositories.Sessions = st
 	policy := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "fixture", Model: "fixture"},
 	})
-	manager := NewHost(st, Models{Client: nil, Provider: &llm.Service{Router: llm.NewStaticModelRouter(policy)}, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	manager := NewHost(repositories, Models{Client: nil, Provider: &llm.Service{Router: llm.NewStaticModelRouter(policy)}, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create worker parent", err)
 	child, err := manager.Workers.SpawnChild(t.Context(), parent.ID, api.SpawnChildRequest{AgentType: "implement"})

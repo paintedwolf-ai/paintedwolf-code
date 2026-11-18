@@ -137,7 +137,7 @@ func TestSweepRevisitsRowsStampedByAnEarlierRun(t *testing.T) {
 
 // failingUpdateStore refuses to rewrite one row.
 type failingUpdateStore struct {
-	*store.Repositories
+	store.TranscriptRepository
 	messageID string
 }
 
@@ -145,14 +145,15 @@ func (s *failingUpdateStore) UpdateMessage(ctx context.Context, sessionID, messa
 	if messageID == s.messageID {
 		return api.Message{}, errors.New("row is locked")
 	}
-	return s.SQL.UpdateMessage(ctx, sessionID, messageID, msg)
+	return s.TranscriptRepository.UpdateMessage(ctx, sessionID, messageID, msg)
 }
 
 func TestSweepContinuesPastARowTheStoreRefuses(t *testing.T) {
 	ctx := context.Background()
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	blocked := &failingUpdateStore{SQL: sessionStore, messageID: "tool-1"}
-	mgr := NewHost(blocked, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	blocked := &failingUpdateStore{TranscriptRepository: sessionStore.Transcript, messageID: "tool-1"}
+	sessionStore.Transcript = blocked
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.Runner.Transcript.SetRedactor((&growingRedactor{known: true}).redact)
 	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)

@@ -111,7 +111,7 @@ postures:
 }
 
 type feedbackReadFailureStore struct {
-	*sessionstore.Repositories
+	sessionstore.TranscriptRepository
 	failRead bool
 }
 
@@ -120,13 +120,14 @@ func (s *feedbackReadFailureStore) GetMessage(ctx context.Context, sessionID, me
 		s.failRead = false
 		return api.Message{}, errors.New("injected feedback read failure")
 	}
-	return s.Store.GetMessage(ctx, sessionID, messageID)
+	return s.TranscriptRepository.GetMessage(ctx, sessionID, messageID)
 }
 
 func TestPolicyFeedbackRetriesRenderingAndPersistenceWithoutLoss(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	storage := &feedbackReadFailureStore{Store: sessionStore}
-	mgr := NewHost(storage, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	storage := &feedbackReadFailureStore{TranscriptRepository: sessionStore.Transcript}
+	sessionStore.Transcript = storage
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	decision := &oar.Decision{Effect: oar.EffectNudge, Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "frozen observation"}}

@@ -20,7 +20,7 @@ import (
 )
 
 type failSecondMessageReadStore struct {
-	*store.Repositories
+	store.TranscriptRepository
 	reads int
 }
 
@@ -29,7 +29,7 @@ func (s *failSecondMessageReadStore) GetMessage(ctx context.Context, sessionID, 
 	if s.reads > 1 {
 		return wire.Message{}, errors.New("read projection unavailable")
 	}
-	return s.Store.GetMessage(ctx, sessionID, messageID)
+	return s.TranscriptRepository.GetMessage(ctx, sessionID, messageID)
 }
 
 func TestUpdateMessageDoesNotConfirmCommittedCommandThroughReadProjection(t *testing.T) {
@@ -40,8 +40,9 @@ func TestUpdateMessageDoesNotConfirmCommittedCommandThroughReadProjection(t *tes
 	testutil.FailErr(t, "append message", base.Transcript.AppendMessages(ctx, sess.ID, wire.Message{
 		ID: "assistant-1", Role: wire.MessageRoleAssistant, Content: "draft", CreatedAt: time.Now().UTC(),
 	}))
-	wrapped := &failSecondMessageReadStore{Store: base}
-	mgr := NewHost(wrapped, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	wrapped := &failSecondMessageReadStore{TranscriptRepository: base.Transcript}
+	base.Transcript = wrapped
+	mgr := NewHost(base, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	err = mgr.Runner.Transcript.Update(ctx, sess.ID, "assistant-1", wire.Message{
 		ID: "assistant-1", Role: wire.MessageRoleAssistant, Content: "settled",
 	})

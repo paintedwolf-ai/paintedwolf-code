@@ -28,18 +28,18 @@ type queueRoundWorkerQueue struct {
 }
 
 type batchClaimFailStore struct {
-	*store.Repositories
+	store.SubmissionRepository
 	err error
 }
 
 type receiptTransitionStore struct {
-	*store.Repositories
+	store.SubmissionRepository
 	mu          sync.Mutex
 	transitions []string
 }
 
 func (s *receiptTransitionStore) ClaimPromptSubmission(ctx context.Context, id string) (*store.PromptSubmission, bool, error) {
-	row, claimed, err := s.SQL.ClaimPromptSubmission(ctx, id)
+	row, claimed, err := s.SubmissionRepository.ClaimPromptSubmission(ctx, id)
 	if claimed {
 		s.recordTransition("claim:" + id)
 	}
@@ -47,7 +47,7 @@ func (s *receiptTransitionStore) ClaimPromptSubmission(ctx context.Context, id s
 }
 
 func (s *receiptTransitionStore) ClaimPromptSubmissions(ctx context.Context, ids []string) ([]store.PromptSubmission, bool, error) {
-	rows, claimed, err := s.SQL.ClaimPromptSubmissions(ctx, ids)
+	rows, claimed, err := s.SubmissionRepository.ClaimPromptSubmissions(ctx, ids)
 	if claimed {
 		for _, id := range ids {
 			s.recordTransition("claim:" + id)
@@ -57,7 +57,7 @@ func (s *receiptTransitionStore) ClaimPromptSubmissions(ctx context.Context, ids
 }
 
 func (s *receiptTransitionStore) FinishPromptSubmission(ctx context.Context, id, token string, status store.PromptSubmissionStatus, result string, failure store.PromptSubmissionFailure) error {
-	err := s.SQL.FinishPromptSubmission(ctx, id, token, status, result, failure)
+	err := s.SubmissionRepository.FinishPromptSubmission(ctx, id, token, status, result, failure)
 	if err == nil {
 		s.recordTransition("finish:" + id)
 	}
@@ -182,13 +182,15 @@ func TestRunPromptSubmissionRoutesConcurrentReceiptsInAdmissionOrder(t *testing.
 
 func TestNextReceiptClaimsOnlyAfterPriorReceiptIsTerminal(t *testing.T) {
 	ctx := context.Background()
-	st := &receiptTransitionStore{SQL: storetest.New(t, testdbseed.DefaultProjectID)}
+	repositories := storetest.New(t, testdbseed.DefaultProjectID)
+	st := &receiptTransitionStore{SubmissionRepository: repositories.Submissions}
+	repositories.Submissions = st
 	registry := toolstest.NewRegistry()
-	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
+	mgr := NewHost(repositories, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 	mgr.SetDataDir(t.TempDir())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := repositories.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	firstInput := promptinput.Input{ContentParts: []api.MessageContentPart{{
 		Content: "first", Origin: api.MessageOriginUser,
@@ -218,13 +220,15 @@ func TestNextReceiptClaimsOnlyAfterPriorReceiptIsTerminal(t *testing.T) {
 
 func TestMalformedReceiptFailsThenDispatcherRunsNextReceipt(t *testing.T) {
 	ctx := context.Background()
-	st := &receiptTransitionStore{SQL: storetest.New(t, testdbseed.DefaultProjectID)}
+	repositories := storetest.New(t, testdbseed.DefaultProjectID)
+	st := &receiptTransitionStore{SubmissionRepository: repositories.Submissions}
+	repositories.Submissions = st
 	registry := toolstest.NewRegistry()
-	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
+	mgr := NewHost(repositories, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 	mgr.SetDataDir(t.TempDir())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := repositories.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	firstID := uuid.NewString()
 	first, _, err := st.PutPromptSubmission(ctx, store.PromptSubmission{
@@ -576,9 +580,11 @@ func TestDrainQueueRetainsItemWithoutReceipt(t *testing.T) {
 func TestDrainQueueRetainsDraftWhenReceiptClaimFails(t *testing.T) {
 	ctx := context.Background()
 	wantErr := errors.New("receipt store unavailable")
-	st := &batchClaimFailStore{SQL: storetest.New(t, testdbseed.DefaultProjectID), err: wantErr}
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	repositories := storetest.New(t, testdbseed.DefaultProjectID)
+	st := &batchClaimFailStore{SubmissionRepository: repositories.Submissions, err: wantErr}
+	repositories.Submissions = st
+	mgr := NewHost(repositories, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sess, err := repositories.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "queued work", promptinput.Input{Text: "queued work"})
 	testutil.FailErr(t, "admit prompt", err)

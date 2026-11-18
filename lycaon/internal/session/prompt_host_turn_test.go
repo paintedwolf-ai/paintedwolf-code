@@ -31,13 +31,14 @@ import (
 
 // receiptRecorder records admitted receipt ids. Host turns mint their own operation id.
 type receiptRecorder struct {
-	*store.Repositories
-	mu  sync.Mutex
-	ids []string
+	store.SubmissionRepository
+	repositories *store.Repositories
+	mu           sync.Mutex
+	ids          []string
 }
 
 func (r *receiptRecorder) PutPromptSubmission(ctx context.Context, in store.PromptSubmission) (*store.PromptSubmission, bool, error) {
-	row, created, err := r.SQL.PutPromptSubmission(ctx, in)
+	row, created, err := r.SubmissionRepository.PutPromptSubmission(ctx, in)
 	if err == nil && created {
 		r.mu.Lock()
 		r.ids = append(r.ids, row.ID)
@@ -54,9 +55,11 @@ func (r *receiptRecorder) admitted() []string {
 
 func newReceiptTestManager(t *testing.T) (*Host, *receiptRecorder) {
 	t.Helper()
-	recorder := &receiptRecorder{SQL: storetest.New(t, testdbseed.DefaultProjectID)}
+	repositories := storetest.New(t, testdbseed.DefaultProjectID)
+	recorder := &receiptRecorder{SubmissionRepository: repositories.Submissions, repositories: repositories}
+	repositories.Submissions = recorder
 	registry := toolstest.NewRegistry()
-	mgr := NewHost(recorder, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
+	mgr := NewHost(repositories, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 	return mgr, recorder
@@ -64,7 +67,7 @@ func newReceiptTestManager(t *testing.T) (*Host, *receiptRecorder) {
 
 func newReceiptTestSession(t *testing.T, mgr *Host, sessions *receiptRecorder) *api.Session {
 	t.Helper()
-	sess, err := sessions.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := sessions.repositories.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -76,7 +79,7 @@ func TestHostTurnWritesReceipt(t *testing.T) {
 	mgr, sessions := newReceiptTestManager(t)
 	ctx := workercontext.WithJob(context.Background(), "worker-job-1")
 	sess := newReceiptTestSession(t, mgr, sessions)
-	testdbseed.InsertWorkerJob(t, sessions.DB(), "worker-job-1", sess.ID)
+	testdbseed.InsertWorkerJob(t, sessions.repositories.DB(), "worker-job-1", sess.ID)
 
 	_, err := mgr.Submissions.PromptHostTurn(ctx, sess.ID, store.PromptSubmissionOriginWorkerCloseout, "closeout kick")
 	testutil.FailErr(t, "run host turn", err)
@@ -109,7 +112,7 @@ func TestHostTurnWritesReceipt(t *testing.T) {
 		t.Fatal("worker closeout must persist ProseFinish so replay gates invocation")
 	}
 
-	msgs, err := sessions.GetMessages(ctx, sess.ID)
+	msgs, err := sessions.repositories.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	var kick api.Message
 	for _, msg := range msgs {

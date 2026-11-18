@@ -22,7 +22,7 @@ import (
 )
 
 type sessionStatusFailStore struct {
-	*store.Repositories
+	store.SessionRepository
 	err error
 }
 
@@ -43,11 +43,13 @@ func (s *sessionStatusFailStore) SetSessionStatus(context.Context, string, api.S
 func TestFinishPromptExecutionPropagatesIdlePersistenceFailure(t *testing.T) {
 	ctx := context.Background()
 	wantErr := errors.New("status store unavailable")
-	st := &sessionStatusFailStore{SQL: storetest.New(t, testdbseed.DefaultProjectID), err: wantErr}
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	repositories := storetest.New(t, testdbseed.DefaultProjectID)
+	st := &sessionStatusFailStore{SessionRepository: repositories.Sessions, err: wantErr}
+	repositories.Sessions = st
+	mgr := NewHost(repositories, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "mark visible turn busy", st.SQL.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark visible turn busy", st.SessionRepository.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 	mgr.Runner.Settlement.Begin(sess.ID, "")
 
 	testutil.FailErr(t, "finish prompt execution", mgr.Runner.Settlement.Finish(ctx, sess.ID, true, false, ""))

@@ -196,7 +196,7 @@ func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	}
 }
 
-type failingSecretInheritanceStore struct{ *store.Repositories }
+type failingSecretInheritanceStore struct{ store.EvidenceRepository }
 
 func (*failingSecretInheritanceStore) SeedSecretExposure(context.Context, string) error {
 	return errors.New("evidence store unavailable")
@@ -266,8 +266,9 @@ func TestSpawnChildRollsBackWhenSecurityInheritanceFails(t *testing.T) {
 	parent, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	testutil.FailErr(t, "seed parent", sessionStore.Evidence.SeedSecretExposure(ctx, parent.ID))
-	failing := &failingSecretInheritanceStore{SQL: sessionStore}
-	mgr := session.NewHost(failing, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	failing := &failingSecretInheritanceStore{EvidenceRepository: sessionStore.Evidence}
+	sessionStore.Evidence = failing
+	mgr := session.NewHost(sessionStore, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 
 	if _, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "implementer"}); err == nil {
 		t.Fatal("SpawnChild succeeded without inheriting secret exposure")
