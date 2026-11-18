@@ -5,6 +5,7 @@ package sourceoutage
 import (
 	"bufio"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -142,6 +143,24 @@ func (f changeFS) Chtimes(name string, atime, mtime time.Time) error {
 }
 func (f changeFS) path(name string) string { return filepath.Join(f.root, name) }
 
+// OpenFile lets the owner write a file whose mode forbids it, as NFS servers
+// do: a client creates a read-only file and then writes its bytes.
+func (f changeFS) OpenFile(name string, flag int, perm os.FileMode) (billy.File, error) {
+	file, err := f.Filesystem.OpenFile(name, flag, perm)
+	if !errors.Is(err, os.ErrPermission) || flag&(os.O_WRONLY|os.O_RDWR) == 0 {
+		return file, err
+	}
+	info, statErr := os.Lstat(f.path(name))
+	if statErr != nil || !info.Mode().IsRegular() {
+		return file, err
+	}
+	if chmodErr := os.Chmod(f.path(name), info.Mode().Perm()|0o200); chmodErr != nil {
+		return file, err
+	}
+	defer func() { _ = os.Chmod(f.path(name), info.Mode().Perm()) }()
+	return f.Filesystem.OpenFile(name, flag, perm)
+}
+
 type relay struct {
 	server   string
 	listener net.Listener
@@ -211,17 +230,22 @@ func pipe(to, from net.Conn) {
 
 func (r *relay) hold(h *heldConn) {
 	for {
-		record, call, err := readRecord(h.client)
+		record, kind, err := readRecord(h.client)
 		if err != nil {
 			_ = h.client.Close()
 			return
 		}
 		r.mu.Lock()
-		if h.server != nil {
+		switch {
+		case h.server != nil:
 			_, err = h.server.Write(record)
-		} else {
+		case kind == ping:
+			// The client probes a reconnected server before it sends calls; an
+			// unanswered probe marks the whole mount unresponsive.
+			_, err = h.client.Write(nullReply(record))
+		default:
 			h.pending = append(h.pending, record...)
-			if call && !r.called {
+			if kind == nfsCall && !r.called {
 				r.called = true
 				close(r.call)
 			}
@@ -234,31 +258,50 @@ func (r *relay) hold(h *heldConn) {
 	}
 }
 
-// readRecord reads one RPC record and reports whether it carries an NFS call
-// other than the NULL ping.
-func readRecord(conn net.Conn) ([]byte, bool, error) {
+type recordKind int
+
+const (
+	otherRecord recordKind = iota
+	ping
+	nfsCall
+)
+
+// readRecord reads one RPC record and classifies the call it carries: the
+// NFS NULL procedure is the client's ping; any other NFS procedure is a call.
+func readRecord(conn net.Conn) ([]byte, recordKind, error) {
 	var record []byte
-	var call bool
+	kind := otherRecord
 	for first := true; ; first = false {
 		var mark [4]byte
 		if _, err := io.ReadFull(conn, mark[:]); err != nil {
-			return nil, false, err
+			return nil, otherRecord, err
 		}
 		header := binary.BigEndian.Uint32(mark[:])
 		fragment := make([]byte, header&0x7fffffff)
 		if _, err := io.ReadFull(conn, fragment); err != nil {
-			return nil, false, err
+			return nil, otherRecord, err
 		}
-		if first && len(fragment) >= 24 {
-			call = binary.BigEndian.Uint32(fragment[4:8]) == 0 &&
-				binary.BigEndian.Uint32(fragment[12:16]) == 100003 &&
-				binary.BigEndian.Uint32(fragment[20:24]) != 0
+		if first && len(fragment) >= 24 && binary.BigEndian.Uint32(fragment[4:8]) == 0 &&
+			binary.BigEndian.Uint32(fragment[12:16]) == 100003 {
+			kind = nfsCall
+			if binary.BigEndian.Uint32(fragment[20:24]) == 0 {
+				kind = ping
+			}
 		}
 		record = append(append(record, mark[:]...), fragment...)
 		if header&0x80000000 != 0 {
-			return record, call, nil
+			return record, kind, nil
 		}
 	}
+}
+
+// nullReply answers a NULL call: accepted, no verifier, success (RFC 5531).
+func nullReply(call []byte) []byte {
+	reply := make([]byte, 4+24)
+	binary.BigEndian.PutUint32(reply[0:4], 0x80000000|24)
+	copy(reply[4:8], call[4:8])
+	binary.BigEndian.PutUint32(reply[8:12], 1)
+	return reply
 }
 
 func (r *relay) stop() {
