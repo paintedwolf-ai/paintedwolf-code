@@ -73,7 +73,7 @@ func scannerFaultCleared(row scanbase.SeriesRow, currentIdentity string) bool {
 func markUnavailableDispatch(ctx context.Context, c *Service, claimed scanbase.SeriesRow, fault *scancatalog.ConfigFaultError) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	row, err := c.Store.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
+	row, err := c.series.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
 	if err != nil {
 		slog.WarnContext(ctx, "read scan dispatch for unavailable mark", "scanner_id", claimed.ScannerID, "error", err)
 		return
@@ -94,7 +94,7 @@ func markUnavailableDispatch(ctx context.Context, c *Service, claimed scanbase.S
 	row.UnavailableDetail = fault.Error()
 	row.UnavailableContractIdentity = currentScannerFaultIdentity(ctx, c.Registry, row.CanonicalPath, row.ScannerID, row.Categories...)
 	row.UpdatedAt = nowUTC(c)
-	if err := c.Store.UpsertSeries(ctx, *row); err != nil {
+	if err := c.series.UpsertSeries(ctx, *row); err != nil {
 		slog.WarnContext(ctx, "mark scan series unavailable", "scanner_id", row.ScannerID, "error", err)
 	}
 }
@@ -117,7 +117,7 @@ func refreshAvailabilityLocked(ctx context.Context, c *Service, row *scanbase.Se
 		(seriesPlanner{c: c}).arm(row, now, 0)
 	}
 	row.UpdatedAt = now
-	if err := c.Store.UpsertSeries(ctx, *row); err != nil {
+	if err := c.series.UpsertSeries(ctx, *row); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -127,14 +127,14 @@ func reconcileUnavailable(ctx context.Context, c *Service) {
 	if !configured(c) {
 		return
 	}
-	paths := scanbase.UnavailableSeriesPaths(c.Store)
+	paths := scanbase.UnavailableSeriesPaths(c.series)
 	for _, canonical := range paths {
 		c.mu.Lock()
 		if c.roots.isRetired(canonical) {
 			c.mu.Unlock()
 			continue
 		}
-		rows, err := c.Store.ListSeriesForPath(ctx, canonical)
+		rows, err := c.series.ListSeriesForPath(ctx, canonical)
 		if err != nil {
 			c.mu.Unlock()
 			continue

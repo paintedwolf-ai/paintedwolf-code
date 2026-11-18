@@ -14,7 +14,7 @@ func (b *serveBuilder) wireScan() error {
 	}
 	b.sessions.Manager.Coordinator.Scans.Wait = coordinatorcontrol.ScanWaitState{
 		InFlight: func(ctx context.Context, sessionID string) bool {
-			requested, qErr := b.scanning.Store.ListBySessionID(ctx, sessionID)
+			requested, qErr := b.scanning.Store.Reads.ListBySessionID(ctx, sessionID)
 			if qErr != nil {
 				return true
 			}
@@ -23,11 +23,11 @@ func (b *serveBuilder) wireScan() error {
 					return true
 				}
 			}
-			owed, oErr := b.scanning.Store.FullPassOwedForSession(ctx, sessionID)
+			owed, oErr := b.scanning.Store.FullPasses.FullPassOwedForSession(ctx, sessionID)
 			return oErr != nil || owed
 		},
 		Requested: func(ctx context.Context, sessionID, scanID string) bool {
-			requested, qErr := b.scanning.Store.ListBySessionID(ctx, sessionID)
+			requested, qErr := b.scanning.Store.Reads.ListBySessionID(ctx, sessionID)
 			if qErr != nil {
 				return false
 			}

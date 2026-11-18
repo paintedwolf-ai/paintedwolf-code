@@ -18,7 +18,7 @@ func writeScanSource(t *testing.T, root, rel, content string) {
 }
 
 func TestDiffSourceGenerationsDerivesExactUpsertsAndDeletions(t *testing.T) {
-	store := NewSQLStore(testdbfixture.Open(t, "store.db"))
+	store := NewSQLStore(testdbfixture.Open(t, "store.DB()"))
 	snapshots := testSnapshots(t, store)
 	root := t.TempDir()
 	writeScanSource(t, root, "changed.go", "old")
@@ -47,7 +47,7 @@ func TestDiffSourceGenerationsDerivesExactUpsertsAndDeletions(t *testing.T) {
 }
 
 func TestValidateSnapshotTargetsUsesManifestNotFilesystem(t *testing.T) {
-	store := NewSQLStore(testdbfixture.Open(t, "store.db"))
+	store := NewSQLStore(testdbfixture.Open(t, "store.DB()"))
 	snapshots := testSnapshots(t, store)
 	root := t.TempDir()
 	writeScanSource(t, root, "pkg/present.go", "present")

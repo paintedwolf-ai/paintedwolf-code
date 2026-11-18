@@ -105,7 +105,7 @@ func (*slowSuccessScanner) Categories() []api.ScanCategory {
 
 func (s *slowSuccessScanner) Run(ctx context.Context, _ scan.ScanRequest) (*scanoutput.Result, error) {
 	for ctx.Err() == nil {
-		if rec, err := s.store.Get(ctx, s.scanID); err == nil && rec != nil && rec.LongRunning {
+		if rec, err := s.store.Reads.Get(ctx, s.scanID); err == nil && rec != nil && rec.LongRunning {
 			return &scanoutput.Result{}, nil
 		}
 		time.Sleep(10 * time.Millisecond)

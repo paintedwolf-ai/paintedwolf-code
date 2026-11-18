@@ -20,7 +20,7 @@ import (
 func TestRunnerRecoversLeaseAtItsDeadline(t *testing.T) {
 	store := scanbase.NewSQLStore(testdbfixture.Open(t, "scan.db"))
 	expiry := time.Now().Add(200 * time.Millisecond)
-	testutil.FailErr(t, "insert abandoned execution", store.Insert(t.Context(), api.CodeScan{
+	testutil.FailErr(t, "insert abandoned execution", store.Runs.Insert(t.Context(), api.CodeScan{
 		ID: "abandoned", CanonicalPath: t.TempDir(), ScannerID: "mock",
 		Status: api.CodeScanStatusRunning, Categories: []api.ScanCategory{api.ScanCategorySecurity},
 		SourceSnapshotID: "snapshot", ClaimToken: "lost-host", LeaseExpiresAt: &expiry,
@@ -56,7 +56,7 @@ func TestSettingsDisableCancelsClaimBeforeEngineAdmission(t *testing.T) {
 	testutil.FailErr(t, "occupy CPU admission", err)
 	defer release()
 	root := t.TempDir()
-	testutil.FailErr(t, "insert waiting scan", store.Insert(t.Context(), api.CodeScan{
+	testutil.FailErr(t, "insert waiting scan", store.Runs.Insert(t.Context(), api.CodeScan{
 		ID: "waiting-for-admission", CanonicalPath: root, ScannerID: probe.ID(),
 		Status: api.CodeScanStatusPending, Categories: probe.Categories(),
 		SourceSnapshotID: publishTestSnapshot(t, runner.Snapshots, root),
@@ -65,7 +65,7 @@ func TestSettingsDisableCancelsClaimBeforeEngineAdmission(t *testing.T) {
 	runner.OnTerminal = func(_ context.Context, scan api.CodeScan) { terminal <- scan }
 	scantest.RunService(t, runner.Run)
 	testutil.WaitFor(t, "one scan is running", func() bool {
-		count, err := store.CountRunning(t.Context())
+		count, err := store.Runs.CountRunning(t.Context())
 		return err == nil && count == 1
 	})
 	off := false

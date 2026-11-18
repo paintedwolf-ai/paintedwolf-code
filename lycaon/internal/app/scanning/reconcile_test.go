@@ -18,9 +18,9 @@ func TestScanTerminalAcknowledgementSurvivesFailedWorkflowDelivery(t *testing.T)
 	for _, run := range []string{"first", "second"} {
 		testdbseed.InsertWorkflowRun(t, database, run, run+"-session", testdbseed.DefaultProjectID)
 	}
-	testutil.FailErr(t, "insert completed scan", store.Insert(t.Context(), api.CodeScan{ID: "scan", CanonicalPath: "/fixture", ScannerID: "fixture", Status: api.CodeScanStatusComplete}, nil, ""))
+	testutil.FailErr(t, "insert completed scan", store.Runs.Insert(t.Context(), api.CodeScan{ID: "scan", CanonicalPath: "/fixture", ScannerID: "fixture", Status: api.CodeScanStatusComplete}, nil, ""))
 	for _, run := range []string{"first", "second"} {
-		testutil.FailErr(t, "bind scan to workflow", store.BindWorkflowRun(t.Context(), "scan", run))
+		testutil.FailErr(t, "bind scan to workflow", store.Runs.BindWorkflowRun(t.Context(), "scan", run))
 	}
 	failure := errors.New("workflow store unavailable")
 	err := ReconcileTerminals(t.Context(), store, "scan", func(_ context.Context, run, kind string) error {
@@ -35,7 +35,7 @@ func TestScanTerminalAcknowledgementSurvivesFailedWorkflowDelivery(t *testing.T)
 	if !errors.Is(err, failure) {
 		t.Fatalf("terminal delivery=%v", err)
 	}
-	pending, err := store.PendingTerminalWorkflowBindings(t.Context(), "scan", 10)
+	pending, err := store.Runs.PendingTerminalWorkflowBindings(t.Context(), "scan", 10)
 	testutil.FailErr(t, "read retryable delivery", err)
 	if len(pending) != 1 || pending[0].WorkflowRunID != "first" {
 		t.Fatalf("pending delivery=%+v", pending)
@@ -48,7 +48,7 @@ func TestScanTerminalAcknowledgementSurvivesFailedWorkflowDelivery(t *testing.T)
 		}
 		return nil
 	}))
-	pending, err = store.PendingTerminalWorkflowBindings(t.Context(), "scan", 10)
+	pending, err = store.Runs.PendingTerminalWorkflowBindings(t.Context(), "scan", 10)
 	testutil.FailErr(t, "read acknowledged delivery", err)
 	if calls != 1 || len(pending) != 0 {
 		t.Fatalf("retry calls=%d pending=%+v", calls, pending)

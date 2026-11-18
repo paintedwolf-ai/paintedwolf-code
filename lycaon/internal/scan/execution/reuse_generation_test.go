@@ -14,7 +14,7 @@ import (
 func TestReturningToEarlierSourceGetsAFreshLedgerObservation(t *testing.T) {
 	root := ledgerRoot(t)
 	store := ledgerFixture(t, root, "sast", "execution-1")
-	runner := &Runner{Store: store}
+	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
 	finding := findingstest.Finding("cycle", api.FindingLevelHigh, "cycle", "a.go", 1)
 	for index, present := range []bool{true, false, true, false, true, false} {
 		findings := []api.SecurityFinding{}
@@ -23,12 +23,12 @@ func TestReturningToEarlierSourceGetsAFreshLedgerObservation(t *testing.T) {
 		}
 		id := fmt.Sprintf("cycle-%d", index)
 		pending := authorityScan(id, "assessment-"+id, root, fmt.Sprintf("snapshot-%t", present), "sast", api.ScanTargetFull, nil)
-		testutil.FailErr(t, "insert repeated source scan", store.Insert(t.Context(), pending, []string{"a.go"}, ""))
+		testutil.FailErr(t, "insert repeated source scan", store.Runs.Insert(t.Context(), pending, []string{"a.go"}, ""))
 		job := completeNextScan(t, store, findings...)
 		job.CoverageStatus = api.ScanCoverageComplete
 		job.ExecutionFingerprint = "execution-1"
 		runner.recordFindingHistory(t.Context(), &job)
-		open, err := store.OpenFindings(t.Context(), root, "sast")
+		open, err := store.Findings.OpenFindings(t.Context(), root, "sast")
 		testutil.FailErr(t, "read current presence", err)
 		if _, found := open[scanbase.FindingIdentity(finding)]; found != present {
 			t.Fatalf("step %d presence = %t, want %t", index, found, present)

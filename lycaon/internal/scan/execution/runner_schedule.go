@@ -26,7 +26,7 @@ func (r *Runner) nextWake(ctx context.Context) time.Duration {
 	if delay <= 0 {
 		delay = scancfg.DefaultRunnerConfig().ReconcileInterval()
 	}
-	expiry, err := r.Store.NextLeaseExpiry(ctx)
+	expiry, err := r.runs.NextLeaseExpiry(ctx)
 	if err != nil {
 		slog.WarnContext(ctx, "read scan lease deadline", "error", err)
 		return min(delay, r.retryDelay())
@@ -38,7 +38,7 @@ func (r *Runner) nextWake(ctx context.Context) time.Duration {
 	if r.Coordinator == nil {
 		return delay
 	}
-	ids, err := r.Store.WarmingObligationIDs(ctx, 8)
+	ids, err := r.runs.WarmingObligationIDs(ctx, 8)
 	if err != nil {
 		slog.WarnContext(ctx, "read warming scan deadlines", "error", err)
 		return min(delay, r.retryDelay())

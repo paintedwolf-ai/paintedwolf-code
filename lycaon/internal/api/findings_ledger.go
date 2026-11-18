@@ -29,7 +29,7 @@ func (s *Findings) handleQueryProjectFindings(w http.ResponseWriter, r *http.Req
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	out, err := s.scanCadence.FindingLedger(r.Context(), root, req)
+	out, err := s.findingIgnores.FindingLedger(r.Context(), root, req)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -46,7 +46,7 @@ func (s *Findings) handleListProjectFindingIgnores(w http.ResponseWriter, r *htt
 	if !ok {
 		return
 	}
-	out, err := s.scanCadence.ListIgnores(r.Context(), root)
+	out, err := s.findingIgnores.ListIgnores(r.Context(), root)
 	if err != nil {
 		s.writeIgnoreError(w, r, err)
 		return
@@ -65,7 +65,7 @@ func (s *Findings) handleCreateProjectFindingIgnore(w http.ResponseWriter, r *ht
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	out, err := s.scanCadence.AddIgnore(r.Context(), root, entry)
+	out, err := s.findingIgnores.AddIgnore(r.Context(), root, entry)
 	if err != nil {
 		s.writeIgnoreError(w, r, err)
 		return
@@ -79,7 +79,7 @@ func (s *Findings) handleDeleteProjectFindingIgnore(w http.ResponseWriter, r *ht
 	if !ok {
 		return
 	}
-	if _, err := s.scanCadence.RemoveIgnore(r.Context(), root, chi.URLParam(r, "entry_id")); err != nil {
+	if _, err := s.findingIgnores.RemoveIgnore(r.Context(), root, chi.URLParam(r, "entry_id")); err != nil {
 		s.writeIgnoreError(w, r, err)
 		return
 	}
@@ -99,7 +99,7 @@ func (s *Findings) handleExportProjectFindings(w http.ResponseWriter, r *http.Re
 	query := req.Query
 	query.Cursor = ""
 	query.Limit = ledgerExportLimit
-	page, err := s.scanCadence.FindingLedger(r.Context(), root, query)
+	page, err := s.findingIgnores.FindingLedger(r.Context(), root, query)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return

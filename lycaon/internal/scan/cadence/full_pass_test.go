@@ -17,23 +17,23 @@ func occupyScanner(t *testing.T, store *scanbase.SQLStore, canonical, scannerID 
 	t.Helper()
 	busy := authorityScan("busy-"+scannerID, "busy-"+scannerID, canonical, "busy-snapshot", scannerID, api.ScanTargetPaths, nil)
 	busy.Trigger = api.ScanTriggerWriteBurst
-	testutil.FailErr(t, "occupy "+scannerID, store.Insert(t.Context(), busy, []string{"main.go"}, ""))
+	testutil.FailErr(t, "occupy "+scannerID, store.Runs.Insert(t.Context(), busy, []string{"main.go"}, ""))
 	return busy.ID
 }
 
 func finishBusyScan(t *testing.T, cadence *Service, store *scanbase.SQLStore, scanID string) {
 	t.Helper()
-	claimed, err := store.ClaimNext(t.Context())
+	claimed, err := store.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "claim busy scan", err)
 	if claimed.ID != scanID {
 		t.Fatalf("claimed %s, want the busy scan %s", claimed.ID, scanID)
 	}
-	won, err := store.MarkComplete(t.Context(), claimed, &scanoutput.Result{})
+	won, err := store.Runs.MarkComplete(t.Context(), claimed, &scanoutput.Result{})
 	testutil.FailErr(t, "complete busy scan", err)
 	if !won {
 		t.Fatalf("busy scan %s completion lost", scanID)
 	}
-	completed, err := store.Get(t.Context(), scanID)
+	completed, err := store.Reads.Get(t.Context(), scanID)
 	testutil.FailErr(t, "read busy scan", err)
 	cadence.OnTerminal(t.Context(), *completed)
 	cadence.Tick(t.Context())
@@ -96,7 +96,7 @@ func TestFullPassWaitsForABusyScannerThenStartsTogether(t *testing.T) {
 		got["lycaon-sca"] != want["lycaon-sca"] || got["lycaon-secrets"] != want["lycaon-secrets"] {
 		t.Fatalf("waiting phases = %v, want %v", got, want)
 	}
-	due, err := store.NextSeriesDue(t.Context())
+	due, err := store.Series.NextSeriesDue(t.Context())
 	testutil.FailErr(t, "next due", err)
 	if !due.IsZero() {
 		t.Fatalf("a waiting pass reads as due at %q; the cadence would spin", due)
@@ -106,14 +106,14 @@ func TestFullPassWaitsForABusyScannerThenStartsTogether(t *testing.T) {
 	if waiting.Running == nil || waiting.Running.AssessmentID != pass.ID || waiting.Running.StartedAt != nil {
 		t.Fatalf("overview while waiting = %+v", waiting.Running)
 	}
-	owed, err := store.FullPassOwed(t.Context(), canonical)
+	owed, err := store.FullPasses.FullPassOwed(t.Context(), canonical)
 	testutil.FailErr(t, "pass owed", err)
 	if !owed {
 		t.Fatal("a waiting pass must keep scan_done from reading as settled")
 	}
 
 	finishBusyScan(t, cadence, store, busy)
-	started, err := store.FullPass(t.Context(), pass.ID)
+	started, err := store.FullPasses.FullPass(t.Context(), pass.ID)
 	testutil.FailErr(t, "read started pass", err)
 	if !started.Started() || len(started.ScanIDs()) != 3 {
 		t.Fatalf("pass after the busy scanner finished = %+v, want every member started", started)
@@ -126,7 +126,7 @@ func TestFullPassWaitsForABusyScannerThenStartsTogether(t *testing.T) {
 	if after.Running != nil || after.LastFull == nil || after.LastFull.AssessmentID != pass.ID || after.LastFull.CompletedAt == nil {
 		t.Fatalf("overview after the pass = running %+v last %+v", after.Running, after.LastFull)
 	}
-	owed, err = store.FullPassOwed(t.Context(), canonical)
+	owed, err = store.FullPasses.FullPassOwed(t.Context(), canonical)
 	testutil.FailErr(t, "pass owed after", err)
 	if owed {
 		t.Fatal("a finished pass is still owed")
@@ -149,7 +149,7 @@ func TestFullPassRequestWidensAPassThatHasNotStarted(t *testing.T) {
 	}
 
 	finishBusyScan(t, cadence, store, busy)
-	started, err := store.FullPass(t.Context(), first.ID)
+	started, err := store.FullPasses.FullPass(t.Context(), first.ID)
 	testutil.FailErr(t, "read widened pass", err)
 	requireOneGeneration(t, *started)
 	for _, member := range started.Members {
@@ -188,7 +188,7 @@ func TestFullPassRequestBeyondAStartedPassRecordsAnotherThatWaits(t *testing.T) 
 	}
 
 	completeCadenceScans(t, cadence, store)
-	finished, err := store.FullPass(t.Context(), second.ID)
+	finished, err := store.FullPasses.FullPass(t.Context(), second.ID)
 	testutil.FailErr(t, "read second pass", err)
 	if !finished.Finished() {
 		t.Fatalf("second pass did not finish: %+v", finished)
@@ -199,7 +199,7 @@ func TestFullPassRequestBeyondAStartedPassRecordsAnotherThatWaits(t *testing.T) 
 			t.Fatalf("unchanged source reran sast: %s, want reused scan %s", member.Scan.ID, first.ScanIDs()[0])
 		}
 	}
-	original, err := store.Get(t.Context(), first.ScanIDs()[0])
+	original, err := store.Reads.Get(t.Context(), first.ScanIDs()[0])
 	testutil.FailErr(t, "read reused execution provenance", err)
 	if original.AssessmentID != first.ID {
 		t.Fatalf("stored execution assessment = %s, want original %s", original.AssessmentID, first.ID)
@@ -223,7 +223,7 @@ func TestFullPassGoesOnWithoutAMemberDeselectedWhileWaiting(t *testing.T) {
 	finishBusyScan(t, cadence, store, busy)
 	completeCadenceScans(t, cadence, store)
 
-	finished, err := store.FullPass(t.Context(), pass.ID)
+	finished, err := store.FullPasses.FullPass(t.Context(), pass.ID)
 	testutil.FailErr(t, "read pass", err)
 	phases := memberPhases(*finished)
 	if phases["lycaon-sca"] != api.FullPassMemberNotStarted ||

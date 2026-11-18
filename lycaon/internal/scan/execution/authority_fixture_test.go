@@ -41,14 +41,14 @@ func authorityScan(id, assessmentID, root, snapshot, scanner string, target api.
 
 func completeNextScan(t *testing.T, store *scanbase.SQLStore, findings ...api.SecurityFinding) api.CodeScan {
 	t.Helper()
-	claimed, err := store.ClaimNext(t.Context())
+	claimed, err := store.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "ClaimNext", err)
-	won, err := store.MarkComplete(t.Context(), claimed, &scanoutput.Result{FindingsCount: len(findings), Findings: findings})
+	won, err := store.Runs.MarkComplete(t.Context(), claimed, &scanoutput.Result{FindingsCount: len(findings), Findings: findings})
 	testutil.FailErr(t, "MarkComplete", err)
 	if !won {
 		t.Fatalf("scan %s lost completion claim", claimed.ID)
 	}
-	completed, err := store.Get(t.Context(), claimed.ID)
+	completed, err := store.Reads.Get(t.Context(), claimed.ID)
 	testutil.FailErr(t, "Get completed", err)
 	return *completed
 }

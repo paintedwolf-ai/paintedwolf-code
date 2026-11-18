@@ -81,7 +81,7 @@ func commitRequiredLanding(t *testing.T, sqlDB db.Handle, projectDir, delegation
 	scanStore := scan.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, scanStore, staticHead{sha: "head-1"})
 	testutil.FailErr(t, "PublishPending", coord.PublishPending(ctx, plan.ScanID))
-	rec, err := scanStore.Get(ctx, plan.ScanID)
+	rec, err := scanStore.Reads.Get(ctx, plan.ScanID)
 	testutil.FailErr(t, "Get scan", err)
 	if rec == nil {
 		t.Fatal("scan obligation missing")
@@ -102,7 +102,7 @@ func completeSecurityEvidence(
 		result = &scanoutput.Result{}
 	}
 	claimed := claimScan(t, store, rec.ID)
-	won, err := store.MarkComplete(t.Context(), claimed, result)
+	won, err := store.Runs.MarkComplete(t.Context(), claimed, result)
 	testutil.FailErr(t, "MarkComplete", err)
 	if !won {
 		t.Fatalf("scan %s was not open for completion", rec.ID)
@@ -126,5 +126,5 @@ func completeSecurityEvidence(
 		Categories:       rec.Categories,
 	}))
 	testutil.FailErr(t, "Ingest", err)
-	testutil.FailErr(t, "SaveIngest", store.SaveIngest(t.Context(), rec.ID, evidenceRec))
+	testutil.FailErr(t, "SaveIngest", store.Findings.SaveIngest(t.Context(), rec.ID, evidenceRec))
 }

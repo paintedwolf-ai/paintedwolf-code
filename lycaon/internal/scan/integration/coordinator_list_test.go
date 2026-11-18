@@ -26,7 +26,7 @@ func TestCoordinatorListByCanonicalPath(t *testing.T) {
 			Status:        api.CodeScanStatusComplete,
 			CreatedAt:     time.Now().UTC().Add(time.Duration(i) * time.Second),
 		}
-		if err := store.Insert(context.Background(), rec, nil, ""); err != nil {
+		if err := store.Runs.Insert(context.Background(), rec, nil, ""); err != nil {
 			testutil.FailErr(t, "store.Insert failed", err)
 		}
 	}

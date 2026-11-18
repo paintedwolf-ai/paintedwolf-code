@@ -40,7 +40,7 @@ func TestCadenceAssessmentMembersKeepTheirOwnDeltaAndTrigger(t *testing.T) {
 			testutil.FailErr(t, "write newer file", os.WriteFile(filepath.Join(dir, "newer.go"), []byte("package newer\n"), 0o644))
 			testutil.FailErr(t, "notify newer file", noteCadenceWrites(ctx, cadence, dir, []string{"newer.go"}))
 			for _, scanner := range []string{"lycaon-sca", "lycaon-secrets"} {
-				row, err := store.GetSeries(ctx, canonical, scanner)
+				row, err := store.Series.GetSeries(ctx, canonical, scanner)
 				testutil.FailErr(t, "read scanner series", err)
 				if tc.differentBase {
 					row.LastCoveredSnapshotID = intermediate.ID
@@ -48,7 +48,7 @@ func TestCadenceAssessmentMembersKeepTheirOwnDeltaAndTrigger(t *testing.T) {
 				if tc.differentTrigger && scanner == "lycaon-secrets" {
 					row.DesiredTrigger = api.ScanTriggerAuthorityRefresh
 				}
-				testutil.FailErr(t, "retain scanner state", store.UpsertSeries(ctx, *row))
+				testutil.FailErr(t, "retain scanner state", store.Series.UpsertSeries(ctx, *row))
 			}
 			clock.Advance(5 * time.Second)
 			records, failures := (rootDispatcher{c: cadence}).dispatchRoot(ctx, canonical)
@@ -81,7 +81,7 @@ func TestCadenceAssessmentMembersKeepTheirOwnDeltaAndTrigger(t *testing.T) {
 			if len(assessments) != 1 {
 				t.Fatalf("assessment count=%d, want the complete scanner group in one assessment", len(assessments))
 			}
-			view, err := store.AssessmentView(ctx, []string{canonical})
+			view, err := store.Findings.AssessmentView(ctx, []string{canonical})
 			testutil.FailErr(t, "read combined assessment", err)
 			if len(view.LatestAttempt) != 3 {
 				t.Fatalf("combined assessment retained %d scanners, want all three", len(view.LatestAttempt))

@@ -27,7 +27,7 @@ func registerNativeScanTools(t *testing.T) (*tools.DefaultRegistry, scanbase.Sca
 	store := scanbase.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, nil)
 	reg := tools.NewDefaultRegistry()
-	if err := scantoolapi.RegisterScanTools(reg, coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
+	if err := scantoolapi.RegisterScanTools(reg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scancadence.New(store, coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
 		testutil.FailErr(t, "RegisterScanTools failed", err)
 	}
 	return reg, coord, store, projectDir
@@ -35,7 +35,7 @@ func registerNativeScanTools(t *testing.T) (*tools.DefaultRegistry, scanbase.Sca
 
 func TestNativeScanListReturnsProjectScans(t *testing.T) {
 	reg, _, store, projectDir := registerNativeScanTools(t)
-	if err := store.Insert(context.Background(), wire.CodeScan{
+	if err := store.Runs.Insert(context.Background(), wire.CodeScan{
 		ID:            "scan-sca-1",
 		CanonicalPath: projectDir,
 		ScannerID:     "lycaon-sca",
@@ -61,7 +61,7 @@ func TestNativeScanListReturnsProjectScans(t *testing.T) {
 
 func TestNativeScanListOmitsGuidance(t *testing.T) {
 	reg, _, store, projectDir := registerNativeScanTools(t)
-	if err := store.Insert(context.Background(), wire.CodeScan{
+	if err := store.Runs.Insert(context.Background(), wire.CodeScan{
 		ID:            "scan-sca-guide",
 		CanonicalPath: projectDir,
 		ScannerID:     "lycaon-sca",
@@ -72,7 +72,7 @@ func TestNativeScanListOmitsGuidance(t *testing.T) {
 	}, nil, ""); err != nil {
 		testutil.FailErr(t, "store.Insert failed", err)
 	}
-	if err := store.SaveIngest(context.Background(), "scan-sca-guide", evidence.Record{
+	if err := store.Findings.SaveIngest(context.Background(), "scan-sca-guide", evidence.Record{
 		GateVerdict: string(evidence.GateVerdictPassed),
 		Artifacts: map[string]any{
 			"findings": []wire.SecurityFinding{},
@@ -115,7 +115,7 @@ func TestNativeScanListEmptyHint(t *testing.T) {
 
 func TestNativeScanSummaryAndErrors(t *testing.T) {
 	reg, _, store, projectDir := registerNativeScanTools(t)
-	if err := store.Insert(context.Background(), wire.CodeScan{
+	if err := store.Runs.Insert(context.Background(), wire.CodeScan{
 		ID:            "scan-sca-1",
 		CanonicalPath: projectDir,
 		ScannerID:     "lycaon-sca",
@@ -204,7 +204,7 @@ func TestNativeScanQueryRequiresScanIDs(t *testing.T) {
 
 func TestNativeScanQueryOnCompleteScan(t *testing.T) {
 	reg, _, store, projectDir := registerNativeScanTools(t)
-	if err := store.Insert(context.Background(), wire.CodeScan{
+	if err := store.Runs.Insert(context.Background(), wire.CodeScan{
 		ID:            "scan-sca-1",
 		CanonicalPath: projectDir,
 		ScannerID:     "lycaon-sca",

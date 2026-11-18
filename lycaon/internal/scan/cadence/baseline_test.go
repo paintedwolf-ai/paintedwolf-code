@@ -49,7 +49,7 @@ func requireSeriesBased(t *testing.T, cadence *Service, projectDir string) []sca
 	t.Helper()
 	canonical, err := scanbase.CanonicalPath(projectDir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	series, err := cadence.Store.ListSeriesForPath(t.Context(), canonical)
+	series, err := cadence.series.ListSeriesForPath(t.Context(), canonical)
 	testutil.FailErr(t, "ListSeriesForPath", err)
 	if len(series) == 0 {
 		t.Fatal("scan series missing")
@@ -77,7 +77,7 @@ func TestAttachRecordsEveryScannersBaseWithoutScanning(t *testing.T) {
 	testutil.FailErr(t, "BaselineRoot", cadence.BaselineRoot(context.Background(), projectDir))
 	canonical, err := scanbase.CanonicalPath(projectDir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	if len(scans) != 0 {
 		t.Fatalf("attach scanned %d rows; automatic scanning is incremental only", len(scans))
@@ -136,7 +136,7 @@ func TestRequestFullScansEveryAdmittedFileOnce(t *testing.T) {
 	}
 	canonical, err := scanbase.CanonicalPath(projectDir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	if len(scans) != len(registry.List()) {
 		t.Fatalf("scan rows = %d, want the one running pass", len(scans))

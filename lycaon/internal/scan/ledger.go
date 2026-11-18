@@ -20,7 +20,7 @@ const (
 
 var findingLedgerPages = pagecursor.For[int]("finding_ledger")
 
-func (s *sqlIgnoreStore) FindingLedger(ctx context.Context, canonicalPath string, req api.FindingLedgerQueryRequest) (*api.FindingLedgerResponse, error) {
+func (s *IgnoreStore) FindingLedger(ctx context.Context, canonicalPath string, req api.FindingLedgerQueryRequest) (*api.FindingLedgerResponse, error) {
 	if s == nil {
 		return nil, fmt.Errorf("scan store not configured")
 	}
@@ -75,20 +75,20 @@ func (s *sqlIgnoreStore) FindingLedger(ctx context.Context, canonicalPath string
 	return out, nil
 }
 
-func (s *sqlIgnoreStore) countLedger(ctx context.Context, filter db.CountFindingLedgerParams) (int, error) {
-	total, err := s.queries.CountFindingLedger(ctx, filter)
+func (s *IgnoreStore) countLedger(ctx context.Context, filter db.CountFindingLedgerParams) (int, error) {
+	total, err := s.tx.queries.CountFindingLedger(ctx, filter)
 	if err != nil {
 		return 0, fmt.Errorf("count finding ledger: %w", err)
 	}
 	return int(total), nil
 }
 
-func (s *sqlIgnoreStore) ledgerPage(ctx context.Context, filter db.CountFindingLedgerParams, order ledgerOrder, limit, offset int) ([]api.FindingLedgerEntry, error) {
+func (s *IgnoreStore) ledgerPage(ctx context.Context, filter db.CountFindingLedgerParams, order ledgerOrder, limit, offset int) ([]api.FindingLedgerEntry, error) {
 	descending := int64(0)
 	if order.descending {
 		descending = 1
 	}
-	rows, err := s.queries.ListFindingLedger(ctx, db.ListFindingLedgerParams{
+	rows, err := s.tx.queries.ListFindingLedger(ctx, db.ListFindingLedgerParams{
 		CanonicalPath: filter.CanonicalPath, FilterJson: filter.FilterJson,
 		SortKey: string(order.key), SortDescending: descending,
 		PageLimit: int64(limit), PageOffset: int64(offset),
@@ -178,14 +178,14 @@ func ledgerIgnoreFrom(row db.ListFindingLedgerRow) *api.FindingIgnore {
 }
 
 // ledgerTotals counts the whole ledger, regardless of the query's filters.
-func (s *sqlIgnoreStore) ledgerTotals(ctx context.Context, canonicalPath string) (api.FindingLedgerCounts, map[string]int, error) {
+func (s *IgnoreStore) ledgerTotals(ctx context.Context, canonicalPath string) (api.FindingLedgerCounts, map[string]int, error) {
 	counts := api.FindingLedgerCounts{}
 	byLevel := make(map[string]int, len(api.AllFindingLevelValues()))
 	for _, level := range api.AllFindingLevelValues() {
 		byLevel[string(level)] = 0
 	}
 
-	rows, err := s.queries.CountFindingLedgerTotals(ctx, canonicalPath)
+	rows, err := s.tx.queries.CountFindingLedgerTotals(ctx, canonicalPath)
 	if err != nil {
 		return counts, nil, fmt.Errorf("count finding ledger totals: %w", err)
 	}

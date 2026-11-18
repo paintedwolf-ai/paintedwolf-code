@@ -20,16 +20,16 @@ func TestClaimNextPrefersNonSAST(t *testing.T) {
 	ctx := context.Background()
 
 	// Non-SAST scans claim before older SAST scans.
-	testutil.FailErr(t, "insert sast", store.Insert(ctx, api.CodeScan{
+	testutil.FailErr(t, "insert sast", store.Runs.Insert(ctx, api.CodeScan{
 		ID: "sast-1", CanonicalPath: dir, Status: api.CodeScanStatusPending,
 		ScannerID: "lycaon-sast", Categories: []api.ScanCategory{api.ScanCategorySAST},
 	}, nil, ""))
-	testutil.FailErr(t, "insert secrets", store.Insert(ctx, api.CodeScan{
+	testutil.FailErr(t, "insert secrets", store.Runs.Insert(ctx, api.CodeScan{
 		ID: "sec-1", CanonicalPath: dir, Status: api.CodeScanStatusPending,
 		ScannerID: "lycaon-secrets", Categories: []api.ScanCategory{api.ScanCategorySecret},
 	}, nil, ""))
 
-	got, err := store.ClaimNext(ctx)
+	got, err := store.Runs.ClaimNext(ctx)
 	testutil.FailErr(t, "ClaimNext", err)
 	if got.ScannerID != "lycaon-secrets" {
 		t.Fatalf("claimed %q want lycaon-secrets (soft stagger)", got.ScannerID)

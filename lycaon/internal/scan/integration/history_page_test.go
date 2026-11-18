@@ -19,7 +19,7 @@ func TestScanHistoryPagesSortGloballyAndResolveOldPrefixes(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	for i := 0; i < 130; i++ {
 		id := fmt.Sprintf("%08x-0000-4000-8000-000000000000", i)
-		testutil.FailErr(t, "insert scan", store.Insert(t.Context(), api.CodeScan{ID: id, CanonicalPath: root, ScannerID: fmt.Sprintf("engine-%d", i%3), Status: api.CodeScanStatusComplete, CreatedAt: base.Add(time.Duration(i) * time.Second), Categories: []api.ScanCategory{api.ScanCategorySecurity}}, nil, ""))
+		testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), api.CodeScan{ID: id, CanonicalPath: root, ScannerID: fmt.Sprintf("engine-%d", i%3), Status: api.CodeScanStatusComplete, CreatedAt: base.Add(time.Duration(i) * time.Second), Categories: []api.ScanCategory{api.ScanCategorySecurity}}, nil, ""))
 	}
 	for _, key := range []string{"date", "engine", "status"} {
 		for _, order := range []string{"asc", "desc"} {
@@ -28,7 +28,7 @@ func TestScanHistoryPagesSortGloballyAndResolveOldPrefixes(t *testing.T) {
 				seen := make(map[string]bool)
 				var previous string
 				for {
-					page, err := store.ListPageByCanonicalPaths(t.Context(), []string{root}, query)
+					page, err := store.Findings.ListPageByCanonicalPaths(t.Context(), []string{root}, query)
 					testutil.FailErr(t, "read page", err)
 					if len(page.Scans) > 7 {
 						t.Fatalf("page has %d scans", len(page.Scans))

@@ -15,7 +15,7 @@ func (r *Runtime) RegisterTools(reg *tools.DefaultRegistry, rejections *guidance
 	if settingsSvc != nil {
 		scannerSettings = settingsSvc.SecurityScanners
 	}
-	if err := scantoolapi.RegisterScanTools(reg, r.Coordinator, r.Registry, r.Cadence, rejections, scannerSettings, accounting); err != nil {
+	if err := scantoolapi.RegisterScanTools(reg, r.Coordinator, scantoolapi.ResultViews{Reads: r.Store.Reads, FullPasses: r.Store.FullPasses}, r.Registry, r.Cadence, rejections, scannerSettings, accounting); err != nil {
 		return fmt.Errorf("scan tools: %w", err)
 	}
 	return nil

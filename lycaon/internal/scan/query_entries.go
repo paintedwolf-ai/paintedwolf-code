@@ -10,7 +10,7 @@ import (
 )
 
 // queryFindingEntries selects ordinals before loading the page's finding bodies.
-func (s *sqlFindingStore) queryFindingEntries(ctx context.Context, scan *api.CodeScan, req QueryRequest) (*api.ScanQueryResponse, error) {
+func (s *FindingStore) queryFindingEntries(ctx context.Context, scan *api.CodeScan, req QueryRequest) (*api.ScanQueryResponse, error) {
 	if req.ScanID == "" && scan != nil {
 		req.ScanID = scan.ID
 	}
@@ -24,7 +24,7 @@ func (s *sqlFindingStore) queryFindingEntries(ctx context.Context, scan *api.Cod
               COALESCE(json_extract(finding_json, '$.locations[0].start_line'), 0))`
 	}
 	var total int
-	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM ("+selection+")", args...).Scan(&total); err != nil {
+	if err := s.tx.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM ("+selection+")", args...).Scan(&total); err != nil {
 		return nil, err
 	}
 	scope := queryScope(req)
@@ -46,7 +46,7 @@ func (s *sqlFindingStore) queryFindingEntries(ctx context.Context, scan *api.Cod
         WHERE finding_set_id = ? AND ordinal IN (` + selection + ` ORDER BY ordinal LIMIT ? OFFSET ?) ORDER BY ordinal`
 	pageArgs := append([]any{scan.FindingSetID}, args...)
 	pageArgs = append(pageArgs, limit, offset)
-	rows, err := s.db.QueryContext(ctx, query, pageArgs...)
+	rows, err := s.tx.db.QueryContext(ctx, query, pageArgs...)
 	if err != nil {
 		return nil, err
 	}

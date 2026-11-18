@@ -11,10 +11,10 @@ import (
 )
 
 func (r *Runner) publishWarming(ctx context.Context) {
-	if r == nil || r.Store == nil || r.Coordinator == nil {
+	if r == nil || r.runs == nil || r.Coordinator == nil {
 		return
 	}
-	ids, err := r.Store.WarmingObligationIDs(ctx, 8)
+	ids, err := r.runs.WarmingObligationIDs(ctx, 8)
 	if err != nil {
 		slog.WarnContext(ctx, "list warming scan obligations", "error", err)
 		return
@@ -39,9 +39,9 @@ func (r *Runner) publishWarming(ctx context.Context) {
 			continue
 		}
 		r.clearPublishAttempts(id)
-		if rec, getErr := r.Store.Get(ctx, id); getErr == nil && rec != nil {
+		if rec, getErr := r.reads.Get(ctx, id); getErr == nil && rec != nil {
 			message := fmt.Sprintf("publish source snapshot: %v", err)
-			won, markErr := r.Store.FinalizePendingFailure(ctx, id, scanbase.FailureSourceUnavailable, message)
+			won, markErr := r.runs.FinalizePendingFailure(ctx, id, scanbase.FailureSourceUnavailable, message)
 			if markErr != nil || !won {
 				continue
 			}

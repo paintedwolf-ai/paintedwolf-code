@@ -24,14 +24,14 @@ func TestIncrementalFindingSetRequiresExactAncestor(t *testing.T) {
 			store := authorityTestStore(t)
 			root := t.TempDir()
 			first := authorityScan("first", "first-assessment", root, "snapshot-1", "sast", api.ScanTargetFull, nil)
-			testutil.FailErr(t, "insert ancestor", store.Insert(t.Context(), first, nil, ""))
+			testutil.FailErr(t, "insert ancestor", store.Runs.Insert(t.Context(), first, nil, ""))
 			original := findingstest.Finding("original", api.FindingLevelHigh, "original", "keep.go", 1)
 			completeNextScan(t, store, original)
 			unrelated := authorityScan("unrelated", "other-assessment", root, "snapshot-other", "sast", api.ScanTargetFull, nil)
-			testutil.FailErr(t, "insert unrelated base", store.Insert(t.Context(), unrelated, nil, ""))
+			testutil.FailErr(t, "insert unrelated base", store.Runs.Insert(t.Context(), unrelated, nil, ""))
 			completeNextScan(t, store, findingstest.Finding("stale", api.FindingLevelHigh, "stale", "deleted.go", 1))
 			changed := authorityScan("changed", "changed-assessment", root, "snapshot-2", "sast", api.ScanTargetPaths, nil)
-			testutil.FailErr(t, "insert target", store.Insert(t.Context(), changed, []string{"a.go"}, baseID))
+			testutil.FailErr(t, "insert target", store.Runs.Insert(t.Context(), changed, []string{"a.go"}, baseID))
 			result := completeNextScan(t, store, findingstest.Finding("new", api.FindingLevelHigh, "new", "a.go", 1))
 			wantCount, wantCoverage := 1, api.ScanCoveragePartial
 			if baseID == "snapshot-1" {
@@ -68,18 +68,18 @@ func TestCadenceExecutionChangeKeepsDeltasAndReportsStaleAuthority(t *testing.T)
 		testutil.FailErr(t, "note change", noteCadenceWrites(t.Context(), cadence, root, []string{"changed.go"}))
 		clock.Advance(time.Minute)
 		cadence.Tick(t.Context())
-		series, err := store.GetSeries(t.Context(), root, "lycaon-sast")
+		series, err := store.Series.GetSeries(t.Context(), root, "lycaon-sast")
 		testutil.FailErr(t, "read series", err)
 		if series == nil || series.ActiveScanID == "" {
 			t.Fatal("source change did not schedule a scan")
 		}
-		active, err := store.Get(t.Context(), series.ActiveScanID)
+		active, err := store.Reads.Get(t.Context(), series.ActiveScanID)
 		testutil.FailErr(t, "read dispatched scan", err)
 		if active.TargetKind != api.ScanTargetPaths {
 			t.Fatalf("change %d scanned %q, want the delta", i, active.TargetKind)
 		}
 		completeCadenceScans(t, cadence, store)
-		completed, err := store.Get(t.Context(), active.ID)
+		completed, err := store.Reads.Get(t.Context(), active.ID)
 		testutil.FailErr(t, "read completed generation", err)
 		return completed
 	}
@@ -91,7 +91,7 @@ func TestCadenceExecutionChangeKeepsDeltasAndReportsStaleAuthority(t *testing.T)
 	if stale.CoverageStatus != api.ScanCoveragePartial {
 		t.Fatalf("delta after an execution change reports %q, want partial", stale.CoverageStatus)
 	}
-	series, err := store.GetSeries(t.Context(), root, "lycaon-sast")
+	series, err := store.Series.GetSeries(t.Context(), root, "lycaon-sast")
 	testutil.FailErr(t, "read settled series", err)
 	if series.LastCoveredExecutionFingerprint != stale.ExecutionFingerprint {
 		t.Fatal("settled identity did not advance with the delta")
@@ -181,7 +181,7 @@ func TestCadenceBoundedGenerationBasesTheNextDelta(t *testing.T) {
 	coord := cadence.Coordinator.(*scanbase.CoordinatorImpl)
 	coord.SnapshotStore().SetScopes(boundedScopes{directoryEntries: 4})
 	testutil.FailErr(t, "attach", cadence.BaselineRoot(t.Context(), root))
-	series, err := store.GetSeries(t.Context(), root, "lycaon-sast")
+	series, err := store.Series.GetSeries(t.Context(), root, "lycaon-sast")
 	testutil.FailErr(t, "read series", err)
 	if series == nil || series.LastCoveredSnapshotID == "" {
 		t.Fatalf("a bounded generation did not establish the scanner's base: %+v", series)
@@ -189,7 +189,7 @@ func TestCadenceBoundedGenerationBasesTheNextDelta(t *testing.T) {
 	full, err := cadence.RequestFull(t.Context(), root, []string{"lycaon-sast"}, api.ScanTriggerManual, scanbase.FullScanContext{})
 	testutil.FailErr(t, "full pass", err)
 	completeCadenceScans(t, cadence, store)
-	completed, err := store.Get(t.Context(), full.ScanIDs()[0])
+	completed, err := store.Reads.Get(t.Context(), full.ScanIDs()[0])
 	testutil.FailErr(t, "read full pass", err)
 	if completed.CoverageStatus != api.ScanCoverageBounded {
 		t.Fatalf("full pass coverage = %q, want bounded", completed.CoverageStatus)
@@ -200,12 +200,12 @@ func TestCadenceBoundedGenerationBasesTheNextDelta(t *testing.T) {
 	testutil.FailErr(t, "note change", noteCadenceWrites(t.Context(), cadence, root, []string{"changed.go"}))
 	clock.Advance(time.Minute)
 	cadence.Tick(t.Context())
-	series, err = store.GetSeries(t.Context(), root, "lycaon-sast")
+	series, err = store.Series.GetSeries(t.Context(), root, "lycaon-sast")
 	testutil.FailErr(t, "read armed series", err)
 	if series == nil || series.ActiveScanID == "" {
 		t.Fatal("the write did not dispatch a scan")
 	}
-	active, err := store.Get(t.Context(), series.ActiveScanID)
+	active, err := store.Reads.Get(t.Context(), series.ActiveScanID)
 	testutil.FailErr(t, "read dispatched scan", err)
 	if active.TargetKind != api.ScanTargetPaths || len(active.TargetPaths) != 1 {
 		t.Fatalf("bounded repo rescanned %q with %d paths, want the one-file delta", active.TargetKind, len(active.TargetPaths))

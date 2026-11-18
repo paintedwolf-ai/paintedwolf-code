@@ -28,7 +28,7 @@ func (r *Runner) compareWithBase(ctx context.Context, job *api.CodeScan, contrac
 	if job == nil || result == nil || job.TargetKind != api.ScanTargetPaths || r.Snapshots == nil || !explicitTargets(contract) {
 		return nil
 	}
-	baseID, err := r.Store.BaseSnapshotID(ctx, job.ID)
+	baseID, err := r.runs.BaseSnapshotID(ctx, job.ID)
 	if err != nil || baseID == "" {
 		return nil
 	}
@@ -75,7 +75,7 @@ func (r *Runner) recordUnavailableDelta(ctx context.Context, job *api.CodeScan, 
 }
 
 func (r *Runner) recordDelta(ctx context.Context, job *api.CodeScan, delta api.ScanDelta) {
-	if err := r.Store.MarkDelta(ctx, job, delta); err != nil {
+	if err := r.runs.MarkDelta(ctx, job, delta); err != nil {
 		slog.WarnContext(ctx, "record scan delta", "scan_id", job.ID, "error", err)
 	}
 }
@@ -219,7 +219,7 @@ func (w *fileFindingCacheWriter) flush(ctx context.Context) error {
 	if len(w.pending) == 0 {
 		return ctx.Err()
 	}
-	err := w.runner.Store.SaveBlobFindings(ctx, w.fingerprint, w.pending, time.Now().UTC())
+	err := w.runner.findings.SaveBlobFindings(ctx, w.fingerprint, w.pending, time.Now().UTC())
 	w.pending = w.pending[:0]
 	return err
 }
@@ -293,14 +293,14 @@ func (r *Runner) recordFindingHistory(ctx context.Context, job *api.CodeScan) {
 	if job == nil || job.Status != api.CodeScanStatusComplete || strings.TrimSpace(job.ScannerID) == "" {
 		return
 	}
-	if err := r.Store.InvalidateIgnoreDigest(ctx, job.CanonicalPath); err != nil {
+	if err := r.ignores.InvalidateIgnoreDigest(ctx, job.CanonicalPath); err != nil {
 		slog.WarnContext(ctx, "invalidate scan decisions", "scan_id", job.ID, "error", err)
 	}
 	introduced, fixed, ok := r.findingHistoryDelta(ctx, job)
 	if !ok {
 		return
 	}
-	if err := r.Store.RecordFindingEvents(ctx, job, introduced, fixed, time.Now().UTC()); err != nil {
+	if err := r.findings.RecordFindingEvents(ctx, job, introduced, fixed, time.Now().UTC()); err != nil {
 		slog.WarnContext(ctx, "record finding history", "scan_id", job.ID, "error", err)
 	}
 	if r.OnDelta != nil && (len(introduced) > 0 || len(fixed) > 0) {
@@ -310,7 +310,7 @@ func (r *Runner) recordFindingHistory(ctx context.Context, job *api.CodeScan) {
 
 // Ledger presence determines transitions independently of snapshot reuse.
 func (r *Runner) findingHistoryDelta(ctx context.Context, job *api.CodeScan) (introduced, fixed []api.SecurityFinding, ok bool) {
-	open, err := r.Store.OpenFindings(ctx, job.CanonicalPath, job.ScannerID)
+	open, err := r.findings.OpenFindings(ctx, job.CanonicalPath, job.ScannerID)
 	if err != nil {
 		slog.WarnContext(ctx, "read open findings", "scan_id", job.ID, "error", err)
 		return nil, nil, false
@@ -320,7 +320,7 @@ func (r *Runner) findingHistoryDelta(ctx context.Context, job *api.CodeScan) (in
 	if job.TargetKind != api.ScanTargetFull && len(scope) == 0 {
 		return introduced, nil, true
 	}
-	unconfirmed, err := r.Store.FindingsNeedingConfirmation(ctx, job)
+	unconfirmed, err := r.findings.FindingsNeedingConfirmation(ctx, job)
 	if err != nil {
 		slog.WarnContext(ctx, "read unconfirmed findings", "scan_id", job.ID, "error", err)
 		return nil, nil, false
