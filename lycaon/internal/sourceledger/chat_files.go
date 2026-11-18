@@ -35,6 +35,22 @@ func (s *Store) outsideRootID(ctx context.Context, q *db.Queries, projectID stri
 	return id, nil
 }
 
+// Outside worker effects land in the chat's workspace and keep the worker job ID.
+func (s *Store) outsideOperationSession(ctx context.Context, q *db.Queries, in RecordInput) (string, error) {
+	if in.JobID == "" || in.SessionID == "" || in.BranchID.IsWorker() {
+		return in.SessionID, nil
+	}
+	outsideID, err := s.outsideRootID(ctx, q, in.ProjectID)
+	if err != nil || outsideID == "" || (in.RootID != outsideID && in.FromRootID != outsideID) {
+		return in.SessionID, err
+	}
+	chatID, err := q.GetRootSessionID(ctx, in.SessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return in.SessionID, nil
+	}
+	return chatID, err
+}
+
 func (s *Store) referenceMutationChatFile(ctx context.Context, q *db.Queries, in RecordInput, fileID string) error {
 	if err := s.referenceChatFile(ctx, q, in.ProjectID, in.RootID, in.SessionID, fileID, ChatFileChanged, in.TS); err != nil {
 		return err
