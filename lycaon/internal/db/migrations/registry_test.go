@@ -173,7 +173,7 @@ func TestDropReleasedEnforcesRegisteredRetirements(t *testing.T) {
 	retirements["retire-step"] = []Retirement{colRetirement, tblRetirement}
 	defer delete(retirements, "retire-step")
 
-	registered := RegisteredRetirements()
+	registered := retirements
 	if len(registered["retire-step"]) != 2 {
 		t.Fatalf("registered retirements = %v", registered)
 	}

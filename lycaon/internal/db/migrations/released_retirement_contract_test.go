@@ -1,4 +1,4 @@
-package db
+package migrations_test
 
 import (
 	"database/sql"
@@ -10,11 +10,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/db/migrations"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/releasedstore"
 )
 
-const retirementCorpus = "../../testdata/upgrade-corpus"
+const retirementCorpus = "../../../testdata/upgrade-corpus"
 
 // shippedRawDrops are the drops released steps made before DropReleased
 // existed. Their sources are checksummed and cannot change.
@@ -99,7 +101,7 @@ func corpusColumns(t *testing.T, database *sql.DB) map[string][]string {
 // apart from the shipped drops above.
 func TestMigrationsDropReleasedNamesOnlyThroughTheHelper(t *testing.T) {
 	released := releasedNames(t)
-	sources, err := filepath.Glob("migrations/*")
+	sources, err := filepath.Glob("*")
 	testutil.FailErr(t, "list migration sources", err)
 	var checked []string
 	for _, source := range sources {
@@ -155,7 +157,7 @@ func TestRegisteredRetirementsReproduceReleasedCorpusRows(t *testing.T) {
 						continue
 					}
 					if r.Table == "delegations" || r.Table == "delegation_legs" {
-						seedReleasedDelegations(t, database)
+						releasedstore.SeedDelegations(t, database)
 					}
 					captured := retirementRows(t, database, r.Capture)
 					var file string
@@ -165,8 +167,8 @@ func TestRegisteredRetirementsReproduceReleasedCorpusRows(t *testing.T) {
 						continue
 					}
 					populated++
-					testutil.FailErr(t, "upgrade corpus store", UpgradeStaged(t.Context(), file))
-					upgraded, err := OpenReadOnly(t.Context(), file)
+					testutil.FailErr(t, "upgrade corpus store", db.UpgradeStaged(t.Context(), file))
+					upgraded, err := db.OpenReadOnly(t.Context(), file)
 					testutil.FailErr(t, "open upgraded store", err)
 					rebuilt := retirementRows(t, upgraded, r.Rebuild)
 					testutil.FailErr(t, "close upgraded store", upgraded.Close())
@@ -200,8 +202,8 @@ func requireDiscarded(t *testing.T, r migrations.Retirement) {
 			continue
 		}
 		upgraded++
-		testutil.FailErr(t, "upgrade corpus store", UpgradeStaged(t.Context(), file))
-		after, err := OpenReadOnly(t.Context(), file)
+		testutil.FailErr(t, "upgrade corpus store", db.UpgradeStaged(t.Context(), file))
+		after, err := db.OpenReadOnly(t.Context(), file)
 		testutil.FailErr(t, "open upgraded store", err)
 		remaining := corpusColumns(t, after)
 		testutil.FailErr(t, "close upgraded store", after.Close())
