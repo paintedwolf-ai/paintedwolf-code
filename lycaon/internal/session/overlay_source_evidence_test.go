@@ -374,6 +374,9 @@ func TestAppendWorkerSummaryCarriesStructuredDecisionRequest(t *testing.T) {
 	kicks := &kick.KickEngine{}
 	kicks.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	kicks.QueueDeferred(parent.ID, "coordinator-worker-task-finished", anchorEnv.KickOptions()...)
+	if id := kicks.TakePendingKickIDUnless(parent.ID, nil); id != "coordinator-worker-task-finished" {
+		t.Fatalf("staged worker decision guidance = %q", id)
+	}
 	nudge, _, ok, err := kicks.RenderPendingNudge(ctx, parent.ID, kick.CoordinatorKickRenderContext{})
 	testutil.FailErr(t, "render worker decision", err)
 	if !ok {
