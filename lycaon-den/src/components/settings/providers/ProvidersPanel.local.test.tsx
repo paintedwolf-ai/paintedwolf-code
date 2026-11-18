@@ -47,6 +47,6 @@ describe("included local model settings", () => {
     expect(repair).toHaveBeenCalledTimes(1);
     expect(within(screen.getByTestId("provider-card-nativegen")).getByRole("status").getAttribute("data-configured")).toBe("true");
     expect(screen.queryByRole("button", { name: "Repair model" })).toBeNull();
-    expect(screen.getByTestId(`providers-row-${remote.id}`)).toBeTruthy();
+    expect(store.state.providers.map((provider) => provider.id)).toContain(remote.id);
   });
 });
