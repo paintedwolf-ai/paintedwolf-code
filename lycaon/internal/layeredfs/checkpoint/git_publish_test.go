@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
 func runGitTestCmdErr(t *testing.T, dir string, args ...string) (string, error) {
@@ -127,7 +128,7 @@ func TestPublicationLeavesUnrelatedObjectsBehind(t *testing.T) {
 	f := newPublishFixture(t, 2)
 	tip := f.commit(t, 1)
 	dir := f.export(t, "chk", tip)
-	loose, err := WriteLooseGitObject(dir, "blob", []byte("unrelated loose object\n"))
+	loose, err := gittest.WriteLooseObject(dir, "blob", []byte("unrelated loose object\n"))
 	testutil.FailErr(t, "write loose", err)
 	other := t.TempDir()
 	runGitTestCmd(t, other, "init", "-q")

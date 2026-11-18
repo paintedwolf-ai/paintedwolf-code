@@ -2,7 +2,6 @@ package checkpoint
 
 import (
 	"context"
-	"crypto/sha1" // #nosec G505 -- SHA-1 is the object identifier in the admitted Git repository format.
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -483,10 +482,6 @@ func readBoundedFile(path string, maxBytes int64) ([]byte, error) {
 	return data, nil
 }
 
-func hexObjSHA1(b []byte) string {
-	s := sha1.Sum(b) /* #nosec G401 -- Standard Git object identifier. */
-	return hex.EncodeToString(s[:])
-}
 func isHexOID(s string) bool {
 	_, err := hex.DecodeString(s)
 	return err == nil && (len(s) == 40 || len(s) == 64)

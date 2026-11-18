@@ -88,8 +88,7 @@ func TestSourceBranchScopeAndWorkerDivergenceUseLayeredConsumerEngine(t *testing
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
-	consumer.RegisterBranchEngine(mountDir, eng)
-	t.Cleanup(func() { consumer.UnregisterBranchEngine(mountDir) })
+	t.Cleanup(func() { consumer.UnregisterEngine(eng) })
 
 	proj := &project.Project{
 		ID:    "p1",

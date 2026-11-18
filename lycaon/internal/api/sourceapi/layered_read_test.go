@@ -49,7 +49,6 @@ func TestWorkerSourceReadGoesThroughTheViewOrItsCheckpoint(t *testing.T) {
 		BackingDir: filepath.Join(tmp, "backing"), Core: core, CheckpointStore: store,
 	})
 	testutil.FailErr(t, "new engine", err)
-	consumer.RegisterBranchEngine(mount, engine)
 	t.Cleanup(func() { consumer.UnregisterEngine(engine) })
 
 	database := testdbfixture.Open(t, "store.db")

@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gitexec"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
 func TestMain(m *testing.M) {
@@ -108,7 +109,7 @@ func TestCheckpointGitImportRefusesMalformedObjectsAndInvalidRefNames(t *testing
 		"chk-bad-1": {"commit", "tree x\nauthor A <a@b.c> 1 +0000\ncommitter A <a@b.c> 1 +0000\n\nmsg\n"},
 		"chk-bad-2": {"tag", "object y\ntype commit\ntag v1\ntagger A <a@b.c> 1 +0000\n\nmsg\n"},
 	} {
-		oid, err := WriteLooseGitObject(CheckpointGitObjectsDir(storeDir, id, ""), object.kind, []byte(object.body))
+		oid, err := gittest.WriteLooseObject(CheckpointGitObjectsDir(storeDir, id, ""), object.kind, []byte(object.body))
 		testutil.FailErr(t, "write "+object.kind, err)
 		_, err = ImportAndValidateCheckpointGitRefs(
 			t.Context(), GitObjectSources{StoreDir: storeDir}, id, "w-bad",
@@ -150,10 +151,10 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 
 	var oidA, oidB string
 	for _, id := range []string{"chk-auth", "chk-packed-conflict", "chk-crash"} {
-		oidA, err = WriteLooseGitObject(CheckpointGitObjectsDir(storeDir, id, ""), "blob", []byte("blob-A\n"))
+		oidA, err = gittest.WriteLooseObject(CheckpointGitObjectsDir(storeDir, id, ""), "blob", []byte("blob-A\n"))
 		testutil.FailErr(t, "write oidA", err)
 	}
-	oidB, err = WriteLooseGitObject(CheckpointGitObjectsDir(storeDir, "chk-seed-b", ""), "blob", []byte("blob-B\n"))
+	oidB, err = gittest.WriteLooseObject(CheckpointGitObjectsDir(storeDir, "chk-seed-b", ""), "blob", []byte("blob-B\n"))
 	testutil.FailErr(t, "write oidB", err)
 
 	// 1. Unauthorized external gitdir/commondir must fail with ErrUnauthorizedGitDir.
@@ -168,7 +169,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 
 	// 2. Objects outside the checkpoint's own are never a source.
 	siblingObjs := filepath.Join(storeParent, ".git", "objects")
-	siblingOID, err := WriteLooseGitObject(siblingObjs, "blob", []byte("sibling-only\n"))
+	siblingOID, err := gittest.WriteLooseObject(siblingObjs, "blob", []byte("sibling-only\n"))
 	testutil.FailErr(t, "write sibling blob", err)
 	if _, err := ImportAndValidateCheckpointGitRefs(
 		t.Context(), GitObjectSources{StoreDir: storeDir}, "chk-sib", "w-1",
