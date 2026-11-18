@@ -11,6 +11,11 @@ describe("parseAppState onboarding", () => {
     expect(state.onboarding).toEqual({ firstRunSetupCompleted: true });
   });
 
+  it("preserves the local model choice latch", () => {
+    const onboarding = {firstRunSetupCompleted: true, localModelOnboardingCompleted: true};
+    expect(parseAppState({version: 1, recents: [], onboarding}).onboarding).toEqual(onboarding);
+  });
+
   it("drops non-boolean latch values", () => {
     const state = parseAppState({
       version: 1,

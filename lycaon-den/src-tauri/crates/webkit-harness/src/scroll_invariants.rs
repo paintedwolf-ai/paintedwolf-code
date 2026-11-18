@@ -20,7 +20,7 @@ use crate::driver::Driver;
 const PAGE: &str = include_str!("scroll_thread_page.js");
 /// A person who finished first-run setup and turned tips off, so nothing covers the chat.
 const RETURNING_PERSON: &str = r#"try {
-  localStorage.setItem("paintedwolf.app-state.v1.onboarding", JSON.stringify({ firstRunSetupCompleted: true }));
+  localStorage.setItem("paintedwolf.app-state.v1.onboarding", JSON.stringify({ firstRunSetupCompleted: true, localModelOnboardingCompleted: true }));
   localStorage.setItem("paintedwolf.app-state.v1.firstTimeTips", JSON.stringify({ enabled: false }));
 } catch {}"#;
 const WINDOW: NSSize = NSSize::new(1100.0, 720.0);

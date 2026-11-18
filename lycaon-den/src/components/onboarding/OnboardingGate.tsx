@@ -44,6 +44,7 @@ export function OnboardingGate(props: Props) {
   const [page, setPage] = createSignal<OnboardingGatePage>("local_model");
   const [dismissing, setDismissing] = createSignal(false);
   const [summarizerSaving, setSummarizerSaving] = createSignal(false);
+  const [summarizerError, setSummarizerError] = createSignal("");
   const localProvider = () => props.settingsStore.state.providers.find(isIncludedProvider);
   const policy = () => props.settingsStore.state.modelPolicy;
   const summarizerRef = () => {
@@ -54,7 +55,6 @@ export function OnboardingGate(props: Props) {
   const advance = () => setPage((p) => onboardingNextPage(p) ?? p);
   const goBack = () => setPage((p) => onboardingPreviousPage(p) ?? p);
 
-  // Persist completion before closing.
   const finishOnboarding = async () => {
     if (dismissing()) return;
     setDismissing(true);
@@ -82,19 +82,13 @@ export function OnboardingGate(props: Props) {
     if (!client) return;
     const p = policy();
     if (!p) return;
-    const updated = await client.updateModelPolicySettings(summarizerPatch(ref));
-    props.settingsStore.actions.setModelPolicy(updated);
-  };
-
-  const runSummarizerContinue = async () => {
     setSummarizerSaving(true);
+    setSummarizerError("");
     try {
-      await applySummarizerRef(summarizerRef());
-      advance();
+      const updated = await client.updateModelPolicySettings(summarizerPatch(ref));
+      props.settingsStore.actions.setModelPolicy(updated);
     } catch (err) {
-      props.settingsStore.actions.setError(
-        err instanceof Error ? err.message : String(err),
-      );
+      setSummarizerError(err instanceof Error ? err.message : String(err));
     } finally {
       setSummarizerSaving(false);
     }
@@ -103,9 +97,8 @@ export function OnboardingGate(props: Props) {
   const step = () => onboardingGateStep(page());
   const pageTitleId = () => `onboarding-${page()}-title`;
 
-  // Focus the step container on entry and page changes so its label is announced.
   let gateRef: HTMLDivElement | undefined;
-  // The scrolling viewport takes focus so the keyboard scrolls the step.
+  // Focus the viewport so keyboard scrolling follows the active step.
   let gateViewport: HTMLDivElement | undefined;
   // Overlay scope leaves Escape available to the dismissal chain.
   createOverlayScopeFocusTrap(() => true, () => gateRef, { autoFocus: false });
@@ -221,6 +214,7 @@ export function OnboardingGate(props: Props) {
                     id="onboarding-summarizer-select"
                     label={MODELS_SETTINGS_COPY.defaultSummarizerModelLabel}
                     providers={props.settingsStore.state.providers}
+                    disabled={summarizerSaving()}
                     roleSlot="lite"
                     showAllModels={showAllModelsPref()}
                     value={summarizerRef()}
@@ -229,6 +223,7 @@ export function OnboardingGate(props: Props) {
                   />
                 </div>
               </div>
+              <Show when={summarizerError()}><p class="den-settings-warn" role="alert">{summarizerError()}</p></Show>
               <div class="onboarding-gate__actions onboarding-gate__actions--split">
                 <DenButton
                   variant="ghost"
@@ -242,7 +237,7 @@ export function OnboardingGate(props: Props) {
                   data-testid="onboarding-summarizer-continue"
                   disabled={summarizerSaving()}
                   aria-busy={summarizerSaving()}
-                  onClick={() => void runSummarizerContinue()}
+                  onClick={advance}
                 >
                   {MODELS_SETTINGS_COPY.onboardingContinue}
                 </DenButton>

@@ -25,6 +25,7 @@ vi.mock("../../store/app-state-snapshot.ts", () => ({
 import {
   completeFirstRunSetup,
   firstRunSetupCompletedPref,
+  localModelOnboardingCompletedPref,
   syncOnboardingPrefsFromSnapshot,
 } from "./onboarding-prefs.ts";
 
@@ -44,5 +45,6 @@ describe("onboarding prefs durability", () => {
     state.resolveWrite?.();
     await saving;
     expect(firstRunSetupCompletedPref()).toBe(true);
+    expect(localModelOnboardingCompletedPref()).toBe(true);
   });
 });
