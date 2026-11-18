@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -39,7 +40,9 @@ func (s *sqlSessions) MarkSessionSeen(ctx context.Context, id string, seenAt tim
 	if err != nil {
 		return err
 	}
-	if err := q.MarkSessionSeen(ctx, db.MarkSessionSeenParams{ID: id, SeenAt: stamp}); err != nil {
+	if err := q.MarkSessionSeen(ctx, db.MarkSessionSeenParams{
+		ID: id, SeenAt: stamp, UpdatedAt: timelayout.Format(time.Now()),
+	}); err != nil {
 		return err
 	}
 	if crossed != 0 {
@@ -74,6 +77,7 @@ func (s *memorySessions) MarkSessionSeen(ctx context.Context, id string, seenAt 
 	if sess.SeenAt == nil || seenAt.After(*sess.SeenAt) {
 		utc := seenAt.UTC()
 		sess.SeenAt = &utc
+		sess.UpdatedAt = time.Now().UTC()
 	}
 	return nil
 }

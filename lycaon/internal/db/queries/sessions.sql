@@ -68,7 +68,7 @@ UPDATE sessions SET
 WHERE id = sqlc.arg(id);
 
 -- name: MarkSessionSeen :exec
-UPDATE sessions SET seen_at = sqlc.arg(seen_at) WHERE id = sqlc.arg(id);
+UPDATE sessions SET seen_at = sqlc.arg(seen_at), updated_at = sqlc.arg(updated_at) WHERE id = sqlc.arg(id);
 
 -- name: SessionSeenCrossesFinish :one
 SELECT EXISTS (

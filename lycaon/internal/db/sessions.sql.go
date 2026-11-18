@@ -2964,16 +2964,17 @@ func (q *Queries) ListWorkerJobMessagesTail(ctx context.Context, arg ListWorkerJ
 }
 
 const markSessionSeen = `-- name: MarkSessionSeen :exec
-UPDATE sessions SET seen_at = ?1 WHERE id = ?2
+UPDATE sessions SET seen_at = ?1, updated_at = ?2 WHERE id = ?3
 `
 
 type MarkSessionSeenParams struct {
-	SeenAt sql.NullString `json:"seen_at"`
-	ID     string         `json:"id"`
+	SeenAt    sql.NullString `json:"seen_at"`
+	UpdatedAt string         `json:"updated_at"`
+	ID        string         `json:"id"`
 }
 
 func (q *Queries) MarkSessionSeen(ctx context.Context, arg MarkSessionSeenParams) error {
-	_, err := q.db.ExecContext(ctx, markSessionSeen, arg.SeenAt, arg.ID)
+	_, err := q.db.ExecContext(ctx, markSessionSeen, arg.SeenAt, arg.UpdatedAt, arg.ID)
 	return err
 }
 
