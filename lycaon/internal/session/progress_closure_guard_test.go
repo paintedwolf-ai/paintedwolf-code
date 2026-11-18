@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -64,7 +65,7 @@ func closureGuardPreInvoke(t *testing.T, mgr *Host, sess *api.Session, rootID, t
 }
 
 func TestProgressClosureRejectWhenArmedAndNothingClosed(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b\n- [ ] step c")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
@@ -93,7 +94,7 @@ func TestProgressClosureRejectWhenArmedAndNothingClosed(t *testing.T) {
 
 // Every finish remains named until its exact set is acknowledged.
 func TestProgressClosureAccumulatesCompletedWork(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [ ] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
@@ -106,7 +107,7 @@ func TestProgressClosureAccumulatesCompletedWork(t *testing.T) {
 }
 
 func TestProgressClosureRejectAllowsWriteWhenArmed(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [ ] step a")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
@@ -118,7 +119,7 @@ func TestProgressClosureRejectAllowsWriteWhenArmed(t *testing.T) {
 }
 
 func TestProgressClosureRejectAllowsReadWhenArmed(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [ ] step a")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
@@ -130,7 +131,7 @@ func TestProgressClosureRejectAllowsReadWhenArmed(t *testing.T) {
 }
 
 func TestProgressClosureAllowsDispatchAfterAcknowledgement(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
@@ -151,7 +152,7 @@ func TestProgressClosureAllowsDispatchAfterAcknowledgement(t *testing.T) {
 }
 
 func TestProgressClosureAcknowledgesAlreadyRepresentedFinish(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [x] survey\n- [ ] challenge claims\n- [ ] report")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
@@ -170,7 +171,7 @@ func TestProgressClosureAcknowledgesAlreadyRepresentedFinish(t *testing.T) {
 }
 
 func TestProgressClosureAcknowledgesFinishAfterDocumentCloses(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [ ] step a")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
@@ -191,7 +192,7 @@ func TestProgressClosureAcknowledgesFinishAfterDocumentCloses(t *testing.T) {
 }
 
 func TestProgressClosureRejectSilentWhenUnarmed(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [ ] step a")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
@@ -202,7 +203,7 @@ func TestProgressClosureRejectSilentWhenUnarmed(t *testing.T) {
 }
 
 func TestProgressClosureArmSkipsWhenNothingPending(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [x] done\n- [>] note")
 	mgr := newClosureGuardManager(t, store)
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
@@ -212,7 +213,7 @@ func TestProgressClosureArmSkipsWhenNothingPending(t *testing.T) {
 }
 
 func TestProgressClosureRejectSkipsWorkerChild(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [ ] step a")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "child-1", ParentSessionID: "root-1"}
@@ -224,7 +225,7 @@ func TestProgressClosureRejectSkipsWorkerChild(t *testing.T) {
 }
 
 func TestProgressClosureAcknowledgesFinishAfterDescope(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [ ] step a\n- [ ] step b\n- [ ] step c")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
@@ -245,7 +246,7 @@ func TestProgressClosureAcknowledgesFinishAfterDescope(t *testing.T) {
 }
 
 func TestProgressClosureReArmKeepsOriginalBaseline(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [ ] step a\n- [ ] step b\n- [ ] step c")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
@@ -268,7 +269,7 @@ func TestProgressClosureReArmKeepsOriginalBaseline(t *testing.T) {
 }
 
 func TestProgressClosureTerminalWriteDoesNotAcknowledgeFinish(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [ ] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
@@ -279,7 +280,7 @@ func TestProgressClosureTerminalWriteDoesNotAcknowledgeFinish(t *testing.T) {
 }
 
 func TestProgressClosureLabelWriteDoesNotClear(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
@@ -290,7 +291,7 @@ func TestProgressClosureLabelWriteDoesNotClear(t *testing.T) {
 }
 
 func TestProgressClosureUnchangedDoesNotClear(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [ ] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")

@@ -44,7 +44,7 @@ func newSynthesisDelayManager(t *testing.T) (*Host, *api.Session, *sessionstore.
 	testutil.FailErr(t, "create coordinator session", err)
 	rejectFmt := guidance.NewStaticRejectFormatter(hints)
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	mgr.SetProgressStore(progress.NewMemoryStore())
+	mgr.SetProgressStore(progress.NewSQLStore(store.DB()))
 	mgr.SetRejectFormatter(rejectFmt)
 	schemaDir := filepath.Join("..", "..", "..", "schemas")
 	loader, err := oar.NewLoader(schemaDir)

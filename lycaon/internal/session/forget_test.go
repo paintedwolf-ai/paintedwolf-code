@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/profiles"
@@ -58,7 +59,7 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	}))
 
 	const sid = "sess-1"
-	progressStore := progress.NewMemoryStore()
+	progressStore := progresstest.New(t, sid)
 	progressStore.Set(sid, "- [ ] task")
 	m.SetProgressStore(progressStore)
 	m.Coordinator.ProgressClosure.Arm(t.Context(), sid, "job-closure")

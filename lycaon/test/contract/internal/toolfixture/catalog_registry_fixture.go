@@ -112,7 +112,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterWorkerTools failed", err)
 	}
-	if err := native.RegisterUpdateProgressTool(reg, progress.NewMemoryStore(), func(_ context.Context, id string) string {
+	if err := native.RegisterUpdateProgressTool(reg, progress.NewSQLStore(sqlDB), func(_ context.Context, id string) string {
 		return id
 	}, nil); err != nil {
 		contractcheck.FailErr(t, "native.RegisterUpdateProgressTool failed", err)

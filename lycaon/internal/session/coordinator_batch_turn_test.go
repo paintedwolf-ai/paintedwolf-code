@@ -240,7 +240,7 @@ func TestPromptDoesNotQueueGreenfieldBuildKickForPlanReviewPolicyPrompt(t *testi
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	mgr.SetProgressStore(progress.NewMemoryStore())
+	mgr.SetProgressStore(progress.NewSQLStore(store.DB()))
 	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 
 	ctx := context.Background()

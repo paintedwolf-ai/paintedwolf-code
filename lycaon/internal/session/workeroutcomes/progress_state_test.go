@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/session/progressclosure"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -28,7 +29,7 @@ func (p *progressSessions) GetMessages(context.Context, string) ([]api.Message, 
 }
 
 func TestCurrentProgressSnapshotUsesRootStoreIndependentlyOfHistory(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root", "child")
 	testutil.FailErr(t, "seed root checklist", store.Set("root", "- [ ] Deliver\n- [ ] Verify"))
 	testutil.FailErr(t, "seed unrelated child state", store.Set("child", "- [ ] Wrong scope"))
 	closure := progressclosure.New()
@@ -64,7 +65,7 @@ func TestCurrentProgressSnapshotUsesRootStoreIndependentlyOfHistory(t *testing.T
 }
 
 func TestEmptyProgressExplicitlyRequiresInitialization(t *testing.T) {
-	state := workeroutcomes.NewState(workeroutcomes.StatePorts{SessionStore: &progressSessions{}, TranscriptStore: &progressSessions{}, Progress: progress.NewMemoryStore()})
+	state := workeroutcomes.NewState(workeroutcomes.StatePorts{SessionStore: &progressSessions{}, TranscriptStore: &progressSessions{}, Progress: progresstest.New(t, "root", "child")})
 	current := state.ForSession(t.Context(), &api.Session{ID: "child", ParentSessionID: "root"})
 	var snapshot progress.RequestSnapshot
 	testutil.FailErr(t, "decode empty checklist", json.Unmarshal([]byte(current.ProgressSnapshot), &snapshot))

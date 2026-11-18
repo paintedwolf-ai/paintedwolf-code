@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -86,7 +87,7 @@ func TestProgramAdmissionPreservesActualFirstCreationAndMissingProgress(t *testi
 	testutil.FailErr(t, "bind catalogued mutation", err)
 	surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{definition})
 	testutil.FailErr(t, "capture actual profile", err)
-	owner := progress.NewMemoryStore()
+	owner := progresstest.New(t, "s1")
 	facts := programDoorProgress{owner}
 	marker := &programDoorStart{}
 	memory := programDoorMemory(t)
