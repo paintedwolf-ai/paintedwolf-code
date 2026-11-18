@@ -63,6 +63,7 @@ func newWindowFixture(t *testing.T) *windowFixture {
 		configure(tc)
 		tc.Source.Commands = opener
 	}
+	f.Runtime.ParkThreshold = time.Hour
 	return &windowFixture{Fixture: f, ledger: ledger, opener: opener}
 }
 
@@ -70,7 +71,25 @@ func (f *windowFixture) run(t *testing.T, source string) command.ProgramOutcome 
 	t.Helper()
 	out, err := f.Call(t, t.Context(), source)
 	testutil.FailErr(t, "run program", err)
+	var running command.RunningProgramResult
+	if json.Unmarshal([]byte(out), &running) == nil && running.State == "running" && running.Handle != "" {
+		return f.continued(t, running.Handle)
+	}
 	return decodeOutcome(t, out)
+}
+
+// continued follows a program that outlasted its call to the outcome its job
+// writes as its last line.
+func (f *windowFixture) continued(t *testing.T, handle string) command.ProgramOutcome {
+	t.Helper()
+	testutil.WaitFor(t, "the continued program ends", func() bool {
+		_, running := f.Background.State(f.Session, handle)
+		return !running
+	})
+	snap, err := f.Background.Snapshot(t.Context(), f.Session, handle, 1<<20)
+	testutil.FailErr(t, "read continued program", err)
+	lines := strings.Split(strings.TrimRight(snap.Output, "\n"), "\n")
+	return decodeOutcome(t, lines[len(lines)-1])
 }
 
 // effects reads the session's recorded effects by path.
@@ -143,7 +162,6 @@ func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
 // A job the program waits on is part of evaluation, however long it runs.
 func TestProgramWindowACCW03JobTheProgramWaitsOnIsObserved(t *testing.T) {
 	f := newWindowFixture(t)
-	f.Runtime.ParkThreshold = time.Hour
 	done := make(chan callResult, 1)
 	go func() {
 		content, err := f.Call(t, t.Context(), `external -- /bin/sh -c 'echo job > job.txt; until test -e release; do sleep 0.01; done; echo end > after.txt' &
@@ -422,7 +440,7 @@ func (c durationClock) AfterFunc(d time.Duration, fire func()) func() bool {
 func TestTimeoutDoesNotReportExpiryForALaunchTheOpenDelayed(t *testing.T) {
 	f := newWindowFixture(t)
 	clock := durationClock{ManualClock: programtest.NewManualClock(), requested: make(chan time.Duration, 16)}
-	f.Runtime.Clock, f.Runtime.ParkThreshold = clock, time.Hour
+	f.Runtime.Clock = clock
 	release := make(chan struct{})
 	f.opener.before = func(ctx context.Context) error {
 		select {
@@ -463,7 +481,7 @@ func TestTimeoutDoesNotReportExpiryForALaunchTheOpenDelayed(t *testing.T) {
 // A launch that ran with no window watching it says so.
 func TestProgramResultStatesWhenObservationNeverStarted(t *testing.T) {
 	f := newWindowFixture(t)
-	f.opener.before = func(context.Context) error { return sourceledger.ErrWindowStartPending }
+	f.opener.before = func(context.Context) error { return errors.New("window open failed") }
 	raw, err := f.Call(t, t.Context(), writeGen)
 	testutil.FailErr(t, "run program", err)
 	var result struct {
@@ -491,7 +509,6 @@ func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newWindowFixture(t)
-			f.Runtime.ParkThreshold = time.Hour
 			idled := make(chan string, 4)
 			gate := make(chan time.Time)
 			f.ledger.Commands.SetWindowSettleGateForTest(gate)
@@ -681,7 +698,6 @@ func TestOutsideEditDuringAParkIsNotAttributedToTheProgram(t *testing.T) {
 // A process that starts after a gap brings the window back without taking the gap.
 func TestLaunchAfterAGapDoesNotClaimTheGap(t *testing.T) {
 	f := newWindowFixture(t)
-	f.Runtime.ParkThreshold = time.Hour
 	gate := make(chan time.Time)
 	f.ledger.Commands.SetWindowSettleGateForTest(gate)
 	idled := make(chan string, 2)

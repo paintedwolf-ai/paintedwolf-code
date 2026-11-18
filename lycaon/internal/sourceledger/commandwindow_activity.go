@@ -70,15 +70,13 @@ func (s *Commands) holdWindow(ctx context.Context, w *openCommandWindow) (func()
 }
 
 // reanchorWindow moves an idle window's start to the present before it claims
-// again; anything earlier was the gap. It runs detached and bounded, so a launch
-// that stops waiting does not cost later launches their window.
+// again; anything earlier was the gap. It runs detached, so a launch that stops
+// waiting does not cost later launches their window.
 func (s *Commands) reanchorWindow(ctx context.Context, w *openCommandWindow, anchor *windowAnchor) {
-	budget, cancel := context.WithTimeout(ctx, s.observationBudget)
-	defer cancel()
-	snapshotID, err := s.anchorStart(budget, w.projectID, w.roots, false)
+	snapshotID, err := s.anchorStart(ctx, w.projectID, w.roots)
 	if err == nil {
 		w.moveStart(snapshotID)
-		if retainErr := s.retention.Retain(budget, w.id, snapshotID); retainErr != nil {
+		if retainErr := s.retention.Retain(ctx, w.id, snapshotID); retainErr != nil {
 			slog.WarnContext(ctx, "command window start retention", "window_id", w.id, "err", retainErr)
 		}
 	}

@@ -1,68 +1,47 @@
 package sourceledger
 
 import (
-	"context"
-	"errors"
-	"path/filepath"
 	"testing"
-	"time"
 
-	"github.com/lycaon/lycaon/internal/backgroundwork"
-	"github.com/lycaon/lycaon/internal/sourcesnapshot"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestCommandObservationDoesNotWaitIndefinitelyForOtherProjects(t *testing.T) {
-	t.Parallel()
-	for _, operation := range []string{"verification", "command window"} {
-		t.Run(operation, func(t *testing.T) {
-			t.Parallel()
-			ledger := openDiskLedger(t)
-			// An empty root never needs the content I/O lane.
-			writeRootFile(t, ledger.root, "source.txt", "source to observe\n")
-			broker := backgroundwork.New(map[backgroundwork.Resource]backgroundwork.Limits{
-				backgroundwork.ResourceIO: {Total: 1},
-			})
-			// An unrelated project's inventory holds the shared I/O resource.
-			release, err := broker.Acquire(t.Context(), backgroundwork.Request{
-				Key: "other-project", Resources: []backgroundwork.Resource{backgroundwork.ResourceIO},
-			})
-			testutil.FailErr(t, "occupy snapshot I/O", err)
-			defer release()
-			testutil.FailErr(t, "close original snapshot store", ledger.store.Snapshots.Close())
-			ledger.store.Snapshots = sourcesnapshot.New(ledger.sqlDB, ledger.store.Content,
-				filepath.Join(t.TempDir(), "observations.db"), broker)
-			ledger.store.Inventory.snapshots = ledger.store.Snapshots
-			ledger.store.Commands.retention.snapshots = ledger.store.Snapshots
-			t.Cleanup(func() {
-				testutil.FailErr(t, "close snapshot store", ledger.store.Snapshots.Close())
-			})
-			// The caller's context never ends here, so only the budget can end the wait.
-			ledger.store.Inventory.observationBudget = 500 * time.Millisecond
-			ledger.store.Commands.observationBudget = ledger.store.Inventory.observationBudget
-			ctx := t.Context()
-			if operation == "verification" {
-				revision, root := VerificationState(ctx, ledger.store.Inventory, ledger.root)
-				if revision != "" || root != "" {
-					t.Fatal("unobserved source produced verification evidence")
-				}
-			} else {
-				window, err := ledger.store.Commands.OpenCommandWindow(ctx, CommandWindowInput{
-					ProjectID: "p1", Roots: onDiskRoots(ledger.root), ToolName: "command",
-				})
-				if window != nil || !errors.Is(err, context.DeadlineExceeded) {
-					t.Fatalf("blocked observation = %v, %v; want no window and deadline", window, err)
-				}
-			}
-			// Timing out one observation must leave the store usable. Recovery is a
-			// cold capture, so it runs under the production budget rather than the
-			// shortened one that only bounded the blocked wait.
-			release()
-			ledger.store.Inventory.observationBudget = commandObservationBudget
-			revision, root := VerificationState(t.Context(), ledger.store.Inventory, ledger.root)
-			if revision == "" || root == "" {
-				t.Fatal("source observation did not recover after capacity became available")
-			}
+// Opening a window waits for its start inventory however long that takes, so a
+// slow machine still attributes the command's changes to its window.
+func TestSlowWindowStartStillAttributesTheCommand(t *testing.T) {
+	repochange.DisableWatchersForTest()
+	t.Cleanup(repochange.ResetWatchersForTest)
+	store, ctx, root := openLedgerOnDisk(t)
+	writeRootFile(t, root, "out.txt", "before\n")
+	real := store.Commands.inventory
+	release, entered := make(chan struct{}), make(chan struct{}, 1)
+	store.Commands.inventory = &gatedInventory{commandsInventoryPort: real, release: release, entered: entered}
+
+	type opened struct {
+		window *OpenCommandWindow
+		err    error
+	}
+	done := make(chan opened, 1)
+	go func() {
+		window, err := store.Commands.OpenCommandWindow(ctx, CommandWindowInput{
+			ProjectID: "p1", Roots: onDiskRoots(root), SessionID: "s1", Turn: 3,
+			ToolCallID: "call-1", ToolName: "command", CommandLine: "make",
 		})
+		done <- opened{window, err}
+	}()
+	testutil.Receive(t, "the start inventory is held", entered)
+	close(release)
+	got := testutil.Receive(t, "the window opens", done)
+	testutil.FailErr(t, "open a window behind a slow inventory", got.err)
+	store.Commands.inventory = real
+
+	writeRootFile(t, root, "out.txt", "after\n")
+	deliverWrites(ctx, root, "out.txt")
+	closeAndSettle(t, ctx, got.window)
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{}, 50, 0, CommitLens{})
+	testutil.FailErr(t, "query walk", err)
+	if effect := effectsByPath(walk)["out.txt"]; effect.CommandWindowID != got.window.ID || effect.Cause != CauseCommandWindow {
+		t.Fatalf("command's change = %+v, want window %s", effect, got.window.ID)
 	}
 }
