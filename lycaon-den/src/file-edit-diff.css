@@ -255,8 +255,12 @@
   background: var(--den-tint-1);
 }
 
+/* The footer link is an action, so it takes the card's text rather than a path's. */
 .den-file-edit-diff-footer > .den-source-path-link {
   margin-inline-end: auto;
+  font-family: inherit;
+  font-size: var(--text-den-hint);
+  font-weight: 500;
 }
 
 .den-diff-group-stat {
