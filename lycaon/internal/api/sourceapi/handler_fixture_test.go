@@ -63,7 +63,7 @@ func newSourceHandlerFixture(t *testing.T, opts ...func(*Deps)) *Handler {
 		Store: deps.SessionStore, Projects: deps.ProjectRegistry, EditorDocuments: deps.EditorDocuments,
 		FileBriefings: deps.Briefings.Files, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate,
 		SourceLedger: deps.SourceLedger, SourceMutations: deps.SourceMutations, FileOperations: deps.FileOperations,
-		Workers: deps.Workers,
+		Workers: deps.Workers, Branches: deps.Branches,
 	}
 	apitestdeps.Fill(t, &required)
 	deps.EditorDocuments, deps.Briefings.Files, deps.ManagedSecrets = required.EditorDocuments, required.FileBriefings, required.ManagedSecrets
