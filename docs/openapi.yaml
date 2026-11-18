@@ -41550,8 +41550,6 @@ components:
     UpdateHostResourceRequest:
       x-go-generate: true
       type: object
-      required:
-        - access
       properties:
         access:
           $ref: '#/components/schemas/HostResourceAccessSetting'
