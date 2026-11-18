@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"time"
 
@@ -46,9 +45,6 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 			status := outcome.Status
 			if decodeErr != nil || (ending.err != nil && status == 0) {
 				status = 1
-			}
-			if ending.result != "" {
-				_, _ = fmt.Fprintln(stderr, ending.result)
 			}
 			return bgprocess.ProgramJobResult{ExitCode: status}, errors.Join(ending.err, decodeErr, attachErr)
 		},

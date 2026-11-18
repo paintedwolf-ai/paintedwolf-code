@@ -40,6 +40,7 @@ func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 				}
 				close(later)
 				fmt.Fprint(ports.Streams.Output, "later statement\n")
+				fmt.Fprint(ports.Streams.Error, "statement error\n")
 				return commandprogram.ProgramOutcome{Status: 7}, nil
 			}
 			caller, cancel := context.WithCancel(t.Context())
@@ -98,10 +99,12 @@ func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 			if !snap.OutputScreened || (!stop && stdout != "listening\nlater statement\n") {
 				t.Fatalf("screened=%t stdout=%q", snap.OutputScreened, stdout)
 			}
-			var final command.ProgramOutcome
-			testutil.FailErr(t, "read final outcome", json.Unmarshal([]byte(stderr), &final))
-			if final.ProgramID != running.ProgramID || (!stop && final.Status != 7) {
-				t.Fatalf("final outcome %+v", final)
+			wantStderr := ""
+			if !stop {
+				wantStderr = "statement error\n"
+			}
+			if stderr != wantStderr {
+				t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
 			}
 			if out.SourceRun != nil || out.CommandProgram.State != "running" {
 				t.Fatal("completion changed returned call effects")
