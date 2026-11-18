@@ -135,7 +135,4 @@ func (s *Commands) quiesceWindow(ctx context.Context, w *openCommandWindow, quie
 		w.incomplete = true
 		slog.WarnContext(ctx, "command window settle grace", "window_id", w.id, "pass_err", passErr, "lock_err", lockErr)
 	}
-	if s.windowIdled != nil {
-		s.windowIdled(w.id)
-	}
 }
