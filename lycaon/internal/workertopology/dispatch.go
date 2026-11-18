@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
