@@ -47,7 +47,7 @@ func newDraftFixture(t *testing.T, primary, branch map[string][]byte) draftFixtu
 		writeFixtureFile(t, f.primary, path, string(content))
 		writeFixtureFile(t, f.branch, path, string(content))
 	}
-	baseline := testbaseline.Capture(t, f.primary)
+	baseline := testbaseline.Capture(t, f.rootID, f.primary)
 	for path, content := range branch {
 		if content == nil {
 			testutil.FailErr(t, "delete "+path, os.Remove(filepath.Join(f.branch, filepath.FromSlash(path))))

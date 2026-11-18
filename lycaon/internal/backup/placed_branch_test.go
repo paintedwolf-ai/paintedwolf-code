@@ -38,7 +38,9 @@ func newPlacedJob(t *testing.T) placedJob {
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
 	_, err := database.ExecContext(t.Context(), `INSERT INTO worker_jobs(id,project_id,agent_type,prompt,brief,created_at) VALUES('job',?,'implementer','work','work','2026-01-01T00:00:00Z')`, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "insert worker", err)
-	manifest := testbaseline.Durable(t, database, "job", t.TempDir())
+	baselineTree := t.TempDir()
+	testutil.FailErr(t, "seed baseline", os.WriteFile(filepath.Join(baselineTree, "base.txt"), []byte("original"), 0o600))
+	manifest := testbaseline.Durable(t, "primary", database, "job", baselineTree)
 	id, err := workspacebaseline.ID(manifest)
 	testutil.FailErr(t, "resolve baseline", err)
 	_, err = database.ExecContext(t.Context(), `UPDATE worker_jobs SET workspace_baseline_id=?,workspace_relpath=? WHERE id='job'`, id, "worker-branches/"+placedKey+"/job")
@@ -95,6 +97,20 @@ func TestBackupCarriesAPlacedUnsealedTreeToItsLogicalAddress(t *testing.T) {
 	if !workspace.BranchTreePresent(tree) {
 		t.Fatal("the real layout record did not travel with the tree")
 	}
+	var baselineID string
+	testutil.FailErr(t, "read baseline identity", job.database.QueryRowContext(t.Context(), "SELECT workspace_baseline_id FROM worker_jobs WHERE id='job'").Scan(&baselineID))
+	baselinePath, err := workspacebaseline.Path(restored, baselineID)
+	testutil.FailErr(t, "resolve restored baseline", err)
+	reader, err := workspacebaseline.Open(t.Context(), baselinePath, workspacebaseline.ContentStore(baselinePath))
+	testutil.FailErr(t, "open restored baseline", err)
+	defer func() { _ = reader.Close() }()
+	if _, exists, err := reader.LookupIdentity(t.Context(), nil, "primary", "base.txt"); err != nil || !exists {
+		t.Fatalf("restored identity exists=%v err=%v", exists, err)
+	}
+	if _, exists, err := reader.LookupIdentity(t.Context(), nil, "other", "base.txt"); err != nil || exists {
+		t.Fatalf("restored identity miss exists=%v err=%v", exists, err)
+	}
+
 	if _, err := os.Stat(filepath.Join(restored, enginepaths.WorkerPlacementsFileName)); !os.IsNotExist(err) {
 		t.Fatalf("this device's registry travelled: %v", err)
 	}

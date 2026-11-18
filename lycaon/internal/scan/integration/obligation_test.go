@@ -45,7 +45,7 @@ func commitRequiredLanding(t *testing.T, sqlDB db.Handle, projectDir, delegation
 		ExecutionTarget: api.ExecutionTargetLocal,
 		Status:          api.WorkerStatusComplete,
 	}))
-	bound, err := workerStore.SetWorkerWorkspace(ctx, jobID, filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", jobID), testbaseline.Durable(t, sqlDB, jobID, t.TempDir()))
+	bound, err := workerStore.SetWorkerWorkspace(ctx, jobID, filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", jobID), testbaseline.Durable(t, "root", sqlDB, jobID, t.TempDir()))
 	testutil.FailErr(t, "SetWorkerWorkspace", err)
 	if !bound {
 		t.Fatal("expected workspace root CAS to win on a fresh job")

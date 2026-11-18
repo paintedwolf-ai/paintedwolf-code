@@ -51,7 +51,7 @@ func TestOverlayCaptureRebuildsTheBranchExactly(t *testing.T) {
 	}
 	testutil.FailErr(t, "symlink", os.Symlink("keep.txt", filepath.Join(branch, "alias")))
 	testutil.FailErr(t, "project symlink", os.Symlink("keep.txt", filepath.Join(project, "alias")))
-	baseline, err := store.Capture(t.Context(), "job", workspacebaseline.Branch(nil, branch))
+	baseline, err := store.Capture(t.Context(), "job", workspacebaseline.Branch(singleRoots(), branch))
 	testutil.FailErr(t, "capture baseline", err)
 
 	// The worker's changes: an edit, a large edit, a deletion, a new file, a
@@ -67,7 +67,7 @@ func TestOverlayCaptureRebuildsTheBranchExactly(t *testing.T) {
 	testutil.FailErr(t, "retarget", os.Remove(filepath.Join(branch, "alias")))
 	testutil.FailErr(t, "retarget", os.Symlink("edit.txt", filepath.Join(branch, "alias")))
 
-	captured, err := store.CaptureOverlay(t.Context(), "job", baseline, nil, branch)
+	captured, err := store.CaptureOverlay(t.Context(), "job", baseline, singleRoots(), branch)
 	testutil.FailErr(t, "capture overlay", err)
 	if captured.Changed != 5 || captured.Deleted != 1 {
 		t.Fatalf("overlay = %+v want 5 changed, 1 deleted", captured)
@@ -76,7 +76,7 @@ func TestOverlayCaptureRebuildsTheBranchExactly(t *testing.T) {
 
 	testutil.FailErr(t, "drop tree", os.RemoveAll(branch))
 	current := func(path string) string { return filepath.Join(project, filepath.FromSlash(path)) }
-	report, err := workspacebaseline.Materialize(t.Context(), baseline, captured.Path, workspacebaseline.ContentStore(baseline), nil, branch, current)
+	report, err := workspacebaseline.Materialize(t.Context(), baseline, captured.Path, workspacebaseline.ContentStore(baseline), singleRoots(), branch, current)
 	testutil.FailErr(t, "materialize", err)
 	if len(report.Unavailable) != 0 || report.Deleted != 1 {
 		t.Fatalf("report = %+v", report)
@@ -112,11 +112,11 @@ func TestMaterializeReportsMissingStandIns(t *testing.T) {
 	store := workspacebaseline.New(nil, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "manifests"))
 	writeFile(t, filepath.Join(branch, "big.bin"), bytes.Repeat([]byte("B"), workspacebaseline.MaxContentBytes+1), 0o644)
 	writeFile(t, filepath.Join(branch, "small.txt"), []byte("small\n"), 0o644)
-	baseline, err := store.Capture(t.Context(), "job", workspacebaseline.Branch(nil, branch))
+	baseline, err := store.Capture(t.Context(), "job", workspacebaseline.Branch(singleRoots(), branch))
 	testutil.FailErr(t, "capture baseline", err)
 	testutil.FailErr(t, "drop tree", os.RemoveAll(branch))
 
-	report, err := workspacebaseline.Materialize(t.Context(), baseline, "", workspacebaseline.ContentStore(baseline), nil, branch, func(string) string { return "" })
+	report, err := workspacebaseline.Materialize(t.Context(), baseline, "", workspacebaseline.ContentStore(baseline), singleRoots(), branch, func(string) string { return "" })
 	testutil.FailErr(t, "materialize", err)
 	if len(report.Unavailable) != 1 || report.Unavailable[0] != "big.bin" {
 		t.Fatalf("unavailable = %v", report.Unavailable)
@@ -203,7 +203,7 @@ func changedPaths(t *testing.T, baselinePath, branch string) []string {
 	reader, err := workspacebaseline.Open(t.Context(), baselinePath, workspacebaseline.ContentStore(baselinePath))
 	testutil.FailErr(t, "open baseline", err)
 	defer func() { _ = reader.Close() }()
-	changed, err := reader.Changes(t.Context(), nil, branch)
+	changed, err := reader.Changes(t.Context(), singleRoots(), branch)
 	testutil.FailErr(t, "changes", err)
 	sort.Strings(changed)
 	return changed
@@ -240,14 +240,14 @@ func TestOverlayCaptureIncludesGitignoredFiles(t *testing.T) {
 	writeFile(t, filepath.Join(branch, ".gitignore"), []byte("build/\nvendor/\n"), 0o644)
 	writeFile(t, filepath.Join(branch, "keep.txt"), []byte("keep\n"), 0o644)
 
-	baseline, err := store.Capture(t.Context(), "job", workspacebaseline.Branch(nil, branch))
+	baseline, err := store.Capture(t.Context(), "job", workspacebaseline.Branch(singleRoots(), branch))
 	testutil.FailErr(t, "capture baseline", err)
 
 	// Worker creates files under build/ and modifies keep.txt.
 	writeFile(t, filepath.Join(branch, "build/bundle.js"), []byte("console.log(1);\n"), 0o644)
 	writeFile(t, filepath.Join(branch, "keep.txt"), []byte("keep changed\n"), 0o644)
 
-	captured, err := store.CaptureOverlay(t.Context(), "job", baseline, nil, branch)
+	captured, err := store.CaptureOverlay(t.Context(), "job", baseline, singleRoots(), branch)
 	testutil.FailErr(t, "capture overlay", err)
 
 	// Both build/bundle.js and keep.txt must be included; overlay capture does not exclude gitignore.
@@ -272,7 +272,7 @@ func TestOverlayCaptureParallelCorrectness(t *testing.T) {
 		writeFile(t, filepath.Join(branch, fmt.Sprintf("pkg/file-%d.txt", i)), []byte(fmt.Sprintf("initial %d\n", i)), 0o644)
 	}
 
-	baseline, err := store.Capture(t.Context(), "job", workspacebaseline.Branch(nil, branch))
+	baseline, err := store.Capture(t.Context(), "job", workspacebaseline.Branch(singleRoots(), branch))
 	testutil.FailErr(t, "capture baseline", err)
 
 	// In branch, modify 25 files, delete 10 files, and add 25 new files.
@@ -286,7 +286,7 @@ func TestOverlayCaptureParallelCorrectness(t *testing.T) {
 		writeFile(t, filepath.Join(branch, fmt.Sprintf("pkg/new-%d.txt", i)), []byte(fmt.Sprintf("new %d\n", i)), 0o644)
 	}
 
-	captured, err := store.CaptureOverlay(t.Context(), "job", baseline, nil, branch)
+	captured, err := store.CaptureOverlay(t.Context(), "job", baseline, singleRoots(), branch)
 	testutil.FailErr(t, "capture overlay", err)
 
 	if captured.Changed != 50 || captured.Deleted != 10 {
@@ -328,7 +328,7 @@ func TestBranchBaselineSkipsGitlinkFiles(t *testing.T) {
 	writeFile(t, filepath.Join(branch, "worktree", ".git"), []byte("gitdir: /real/repo/.git/worktrees/wt\n"), 0o644)
 	writeFile(t, filepath.Join(branch, "submodule", ".git"), []byte("gitdir: ../.git/modules/submodule\n"), 0o644)
 
-	baseline, err := store.Capture(t.Context(), "gitlink-job", workspacebaseline.Branch(nil, branch))
+	baseline, err := store.Capture(t.Context(), "gitlink-job", workspacebaseline.Branch(singleRoots(), branch))
 	testutil.FailErr(t, "capture baseline", err)
 
 	reader, err := workspacebaseline.Open(t.Context(), baseline, blobs)

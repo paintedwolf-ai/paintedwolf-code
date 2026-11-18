@@ -59,7 +59,7 @@ func commitSecurityLanding(t *testing.T, sqlDB db.Handle, projectDir, delegation
 		Status: wire.WorkerStatusComplete,
 	}))
 	branch := enginepaths.JobBranchDir(enginepaths.WorkerBranchesRootUnder(testbaseline.DataDir(t, sqlDB)), projectDir, jobID)
-	bound, err := workerStore.SetWorkerWorkspace(t.Context(), jobID, branch, testbaseline.Durable(t, sqlDB, jobID, t.TempDir()))
+	bound, err := workerStore.SetWorkerWorkspace(t.Context(), jobID, branch, testbaseline.Durable(t, "root", sqlDB, jobID, t.TempDir()))
 	testutil.FailErr(t, "SetWorkerWorkspace", err)
 	if !bound {
 		t.Fatal("expected workspace root CAS to win on a fresh job")

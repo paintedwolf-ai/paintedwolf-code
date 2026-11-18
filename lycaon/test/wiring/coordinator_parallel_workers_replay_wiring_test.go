@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/worker"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/promotefix"
@@ -125,9 +127,10 @@ func TestCoordinatorParallelWorkersReplayLineShiftAtomicRejection(t *testing.T) 
 		MergeStatus:           wire.WorkerMergeStatusPending,
 		AgentType:             "implementer",
 		Scope:                 &wire.TaskScope{Mode: wire.TaskScopeModeWrite, Paths: []string{"safe.go", "shifted.py"}},
-		WorkspaceBaselinePath: testbaseline.FromFiles(t, map[string]testbaseline.File{"safe.go": {}, "shifted.py": {Content: base}}),
+		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"shifted.py": {Content: base}}),
 		Status:                wire.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", dir, branch)
 	svc := &worker.MergeService{
 		Queue:  replayMergeQueue{task: task},
 		Reject: rejectFmt,
@@ -143,8 +146,13 @@ func TestCoordinatorParallelWorkersReplayLineShiftAtomicRejection(t *testing.T) 
 			}},
 		}},
 	})
-	if mergeErr == nil {
-		t.Fatal("expected atomic promote to reject invalid resolution")
+	var reject *toolrejection.ToolReject
+	if !errors.As(mergeErr, &reject) || reject.Code != worker.OverlayPromoteResolutionsRequiredCode {
+		t.Fatalf("expected resolution rejection, got %v", mergeErr)
+	}
+	reason, _ := reject.Data["reason"].(string)
+	if !strings.Contains(reason, "hunk range 1000000-1000000") {
+		t.Fatalf("expected invalid hunk range, got %+v", reject.Data)
 	}
 	if _, statErr := os.Stat(filepath.Join(dir, "safe.go")); !os.IsNotExist(statErr) {
 		t.Fatalf("rejected promote changed safe.go: %v", statErr)

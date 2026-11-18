@@ -47,6 +47,13 @@ The local `store.db.upgrade.json` journal (or the configured database filename p
 
 The reviewed revision-4 retained route inventories only primary trees needed by its frozen transformation; row-reconstruction fallback surveys the remaining source/index trees before its bulk index work and reuses already measured facts. Sort reservations distinguish manifest roots, root lists, metadata, later populated indexes, and bounded checkpoint batches. Blocking structural and foreign-key checks use a 64 MiB cache on one held connection, restoring the prior setting before sorting or commit; the migration's sorter configuration stays unchanged. Private work disables journaling and remains discardable. Capacity reserves bounded single-threaded FILE-sort work on eligible temporary volumes, separately accounts existing-original sharing and canonical recovery cloning or copying, and measures available space again after each allocating phase. One full remaining replacement divergence covers immutable clone readers; earlier divergence is already consumed in the fresh measurement. SQLite's admitted page limit charges actual records, indexes, overflow, free-list, and pointer-map growth. Publication still requires sealing, file/directory sync, and atomic exchange; normal activation opens the published store in WAL mode. The resource proof pins the complete reviewed route and SQLite source identity, including the separately reviewed authority-decoder correction; unreviewed routes retain conservative admission.
 
+Worker baseline manifests keep their own format. Published v1.0.2 wrote Format 1,
+which keys entries by display path; its reader remains supported. Format 2 is
+unreleased and keys entries by root identity and root-relative path. Its capture
+contract requires the recorded topology; an unavailable topology leaves the
+worker's branch retained for retry. Display labels cannot substitute for a missing
+Format-2 identity or reinterpret a sealed entry after a label changes.
+
 The SQL registry transforms database contents only. Archive manifests, local recovery manifests, worker manifests, committed overlays, and device files have their own format versions and decoder owners. A release that changes one of those formats, or the exact backup replacement scope, supplies its versioned decoder and staged transformer with a released fixture proving the conversion. Unsupported versions are refused without mutation; no reader ships for a shape that no release wrote.
 
 Archive format 2 adds `command-programs.yaml` to the complete replacement

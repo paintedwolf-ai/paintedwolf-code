@@ -59,7 +59,7 @@ func TestEachChangeStopsOnTheVisitorsError(t *testing.T) {
 	rewrite(t, filepath.Join(branch, "b.txt"), "changed b\n")
 	stop := errors.New("stop")
 	visits := 0
-	err := reader.EachChange(t.Context(), nil, branch, func(string) error {
+	err := reader.EachChange(t.Context(), singleRoots(), branch, func(string) error {
 		visits++
 		return stop
 	})

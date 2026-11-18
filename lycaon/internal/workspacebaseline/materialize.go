@@ -28,6 +28,9 @@ type MaterializeReport struct {
 // exactly the overlay's changes. Opaque baseline bodies are not pinned; current
 // names the file that stands in for one, or "" when nothing can.
 func Materialize(ctx context.Context, baselinePath, overlayPath string, blobs *sourceblob.Store, roots []projectroot.RootRef, branch string, current func(path string) string) (MaterializeReport, error) {
+	if err := validateRoots(roots); err != nil {
+		return MaterializeReport{}, err
+	}
 	baseline, err := Open(ctx, baselinePath, blobs)
 	if err != nil {
 		return MaterializeReport{}, err
@@ -41,6 +44,9 @@ func Materialize(ctx context.Context, baselinePath, overlayPath string, blobs *s
 		}
 		defer func() { _ = reader.Close() }()
 		err = reader.EachIdentity(ctx, roots, func(entry Entry) error {
+			if err := requireRoot(roots, entry.RootID); err != nil {
+				return err
+			}
 			overlay[identityKey(entry.RootID, entry.ScopeRel)] = overlayEntry{entry: entry}
 			return nil
 		})
@@ -50,6 +56,9 @@ func Materialize(ctx context.Context, baselinePath, overlayPath string, blobs *s
 	}
 	m := materializer{ctx: ctx, roots: roots, branch: branch, blobs: baseline.blobs}
 	err = baseline.EachIdentity(ctx, roots, func(entry Entry) error {
+		if err := requireRoot(roots, entry.RootID); err != nil {
+			return err
+		}
 		if _, changed := overlay[identityKey(entry.RootID, entry.ScopeRel)]; changed {
 			return nil
 		}
@@ -58,7 +67,7 @@ func Materialize(ctx context.Context, baselinePath, overlayPath string, blobs *s
 		}
 		src := ""
 		if current != nil {
-			src = current(entry.Path)
+			src = current(projectroot.BaselineDisplayPath(roots, entry.RootID, entry.ScopeRel))
 		}
 		if src == "" {
 			m.report.Unavailable = append(m.report.Unavailable, entry.Path)

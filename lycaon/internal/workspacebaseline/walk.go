@@ -13,32 +13,22 @@ import (
 
 // Branch walks the prepared workspace with the worker's file inclusion policy.
 // Git ignore rules and scanner admission do not participate.
-//
-// Each captured file carries its structured identity: the root it lives under
-// and the path relative to that root. Single-root workspaces keep the legacy
-// spelling where the identity is the display path itself.
+
 func Branch(roots []projectroot.RootRef, branch string) Walk {
 	return func(ctx context.Context, visit func(CaptureFile) error) error {
-		if len(roots) <= 1 {
-			rootID := ""
-			if len(roots) == 1 {
-				rootID = roots[0].ID
-			}
-			return walkRoot(ctx, branch, rootID, func(rel string) string { return rel }, visit)
-		}
-		primary, err := projectroot.PrimaryRoot(roots)
-		if err != nil {
+		if err := validateRoots(roots); err != nil {
 			return err
+		}
+		if len(roots) == 1 {
+			return walkRoot(ctx, branch, roots[0].ID, func(rel string) string { return projectroot.BaselineDisplayPath(roots, roots[0].ID, rel) }, visit)
 		}
 		for _, root := range roots {
 			dir, err := projectroot.BranchDirForID(root.ID)
 			if err != nil {
 				return err
 			}
-			// Display paths stay primary-relative: readers parse them with
-			// primary-relative semantics.
 			qualify := func(path string) string {
-				return projectroot.Qualify(roots, primary.ID, root, filepath.Join(root.Path, filepath.FromSlash(path)))
+				return projectroot.BaselineDisplayPath(roots, root.ID, path)
 			}
 			if err := walkRoot(ctx, filepath.Join(branch, dir), root.ID, qualify, visit); err != nil {
 				return err

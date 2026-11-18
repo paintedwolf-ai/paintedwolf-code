@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
@@ -20,7 +21,7 @@ func TestWorkerBaselineSurvivesBranchRemovalAndBlobSweep(t *testing.T) {
 	branch := t.TempDir()
 	body := "original branch content\n"
 	testutil.FailErr(t, "write baseline source", os.WriteFile(filepath.Join(branch, "a.txt"), []byte(body), 0o600))
-	ref, err := store.Baselines.Capture(ctx, "baseline-job", workspacebaseline.Branch(nil, branch))
+	ref, err := store.Baselines.Capture(ctx, "baseline-job", workspacebaseline.Branch([]projectroot.RootRef{{ID: "root", Path: branch, IsPrimary: true}}, branch))
 	testutil.FailErr(t, "capture worker baseline", err)
 	_, err = store.sqlDB.ExecContext(ctx, "UPDATE worker_jobs SET workspace_baseline_id=? WHERE id='baseline-job'", strings.TrimSuffix(filepath.Base(ref), ".db"))
 	testutil.FailErr(t, "attach baseline", err)
