@@ -17,19 +17,19 @@ func TestGitManagerLastTouchByPath(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
+	initCmd.Env = lyexec.InheritedEnviron()
 	if out, err := initCmd.CombinedOutput(); err != nil {
 		t.Skipf("git init: %v %s", err, out)
 	}
 	commitAt := func(rel, content, msg, date string) {
 		testutil.FailErr(t, "write "+rel, os.WriteFile(filepath.Join(dir, rel), []byte(content), 0o644))
 		add := exec.CommandContext(ctx, "git", "-C", dir, "add", rel)
-		add.Env = lyexec.LocalGitEnv()
+		add.Env = lyexec.InheritedEnviron()
 		if out, err := add.CombinedOutput(); err != nil {
 			t.Fatalf("git add %s: %v %s", rel, err, out)
 		}
 		commit := exec.CommandContext(ctx, "git", "-C", dir, "commit", "-m", msg)
-		commit.Env = lyexec.LocalGitEnv(
+		commit.Env = append(lyexec.InheritedEnviron(),
 			"GIT_AUTHOR_DATE="+date, "GIT_COMMITTER_DATE="+date,
 			"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@example.com",
 			"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@example.com",

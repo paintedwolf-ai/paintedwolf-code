@@ -93,17 +93,6 @@ var ErrOutputTruncated = errors.New("subprocess output truncated")
 // ErrTimeout is returned when a subprocess was killed for exceeding its deadline.
 var ErrTimeout = errors.New("subprocess timed out")
 
-// LocalGitEnv filters inherited state before appending explicit values.
-func LocalGitEnv(extra ...string) []string {
-	env := InheritedEnviron()
-	for _, e := range extra {
-		if strings.TrimSpace(e) != "" {
-			env = append(env, e)
-		}
-	}
-	return env
-}
-
 // Run executes name and arguments without a shell.
 func Run(ctx context.Context, name string, args []string, opts ExecOpts) ([]byte, int, error) {
 	if strings.TrimSpace(name) == "" {

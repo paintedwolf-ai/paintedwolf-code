@@ -106,7 +106,7 @@ func TestCompactionNoGlobalLLMSemaphoreContract(t *testing.T) {
 		`globalLLM|llmInFlight|LLMInFlight|llmSemaphore`,
 		"--", "lycaon/internal/llm/")
 	cmd.Dir = root
-	cmd.Env = lyexec.LocalGitEnv()
+	cmd.Env = lyexec.InheritedEnviron()
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("unexpected global LLM semaphore tokens in internal/llm:\n%s", string(out))
@@ -263,7 +263,7 @@ func TestCompactionTokenObservationWiredContract(t *testing.T) {
 		"lycaon/internal/session/promptsource/model.go",
 	)
 	cmd.Dir = root
-	cmd.Env = lyexec.LocalGitEnv()
+	cmd.Env = lyexec.InheritedEnviron()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("RecordCompactionTokenObservation must be wired through prompt loop:\n%s", string(out))

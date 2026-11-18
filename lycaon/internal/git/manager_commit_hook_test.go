@@ -17,13 +17,13 @@ func TestGitManagerCommitIgnoresRepoHooksPath(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
+	initCmd.Env = lyexec.InheritedEnviron()
 	if out, err := initCmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v %s", err, out)
 	}
 	gitCfg := func(args ...string) {
 		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
@@ -60,14 +60,14 @@ func TestGitManagerCommitKeepsUserIdentity(t *testing.T) {
 	// Serial: uses t.Setenv for HOME, XDG_CONFIG_HOME, and GIT_CONFIG_GLOBAL.
 	dir := t.TempDir()
 	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
+	initCmd.Env = lyexec.InheritedEnviron()
 	if out, err := initCmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v %s", err, out)
 	}
 	runRef := func(args ...string) {
 		t.Helper()
 		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
@@ -88,7 +88,7 @@ func TestGitManagerCommitKeepsUserIdentity(t *testing.T) {
 	}
 
 	log := exec.CommandContext(t.Context(), "git", "-C", dir, "log", "-1", "--format=%an <%ae>")
-	log.Env = lyexec.LocalGitEnv()
+	log.Env = lyexec.InheritedEnviron()
 	out, err := log.CombinedOutput()
 	testutil.FailErr(t, "git log", err)
 	if got := strings.TrimSpace(string(out)); got != "Repo Author <repo.author@example.com>" {

@@ -63,7 +63,7 @@ func TestFastRead_HeadSHAAndBranchParity(t *testing.T) {
 
 	// Direct rev-parse for independence from Manager fast-path.
 	cmd := exec.Command("git", "-C", dir, "rev-parse", "HEAD")
-	cmd.Env = lyexec.LocalGitEnv()
+	cmd.Env = lyexec.InheritedEnviron()
 	out, err := cmd.Output()
 	testutil.FailErr(t, "rev-parse", err)
 	want := strings.TrimSpace(string(out))

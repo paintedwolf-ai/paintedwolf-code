@@ -82,13 +82,13 @@ func contractGitRepo(t *testing.T) string {
 	git := func(args ...string) {
 		t.Helper()
 		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Skipf("git %v: %v %s", args, err, out)
 		}
 	}
 	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
+	initCmd.Env = lyexec.InheritedEnviron()
 	if out, err := initCmd.CombinedOutput(); err != nil {
 		t.Skipf("git init: %v %s", err, out)
 	}

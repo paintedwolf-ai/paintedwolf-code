@@ -41,7 +41,7 @@ func TestGitManagerShowAndRef(t *testing.T) {
 	testutil.FailErr(t, "write README", os.WriteFile(path, []byte("hello\n"), 0o644))
 	gitCmd := func(args ...string) {
 		cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
@@ -72,7 +72,7 @@ func TestGitManagerBlameAndLogPath(t *testing.T) {
 	testutil.FailErr(t, "write src", os.WriteFile(path, []byte("package main\n"), 0o644))
 	gitCmd := func(args ...string) {
 		cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
@@ -103,7 +103,7 @@ func TestGitManagerDiffStagedAndRestore(t *testing.T) {
 	testutil.FailErr(t, "write file", os.WriteFile(path, []byte("v1\n"), 0o644))
 	gitCmd := func(args ...string) {
 		cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
@@ -140,7 +140,7 @@ func TestGitManagerRestoreDefaultsToWorktreeFromIndex(t *testing.T) {
 	testutil.FailErr(t, "write original", os.WriteFile(path, []byte("v1\n"), 0o644))
 	gitCmd := func(args ...string) {
 		cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
@@ -174,7 +174,7 @@ func TestGitManagerBranches(t *testing.T) {
 	testutil.FailErr(t, "write README", os.WriteFile(path, []byte("x\n"), 0o644))
 	gitCmd := func(args ...string) {
 		cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
@@ -198,7 +198,7 @@ func TestGitManagerShowStat(t *testing.T) {
 	testutil.FailErr(t, "write README", os.WriteFile(path, []byte("hello\n"), 0o644))
 	gitCmd := func(args ...string) {
 		cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
