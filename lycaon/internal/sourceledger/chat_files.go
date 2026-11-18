@@ -93,7 +93,7 @@ func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID,
 	if rel == "" {
 		return nil
 	}
-	return placeChatLocation(ctx, q, chat, rel, ts)
+	return placeChatLocation(ctx, q, chat, rel, relation, ts)
 }
 
 // OutsideFileHeld checks chat references to the current file at rel.

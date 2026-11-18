@@ -95,17 +95,20 @@ func (s *Workspace) trackOpenedOutsideFile(w http.ResponseWriter, r *http.Reques
 		s.writeSourceReadError(w, r, err)
 		return
 	}
-	covering, found, err := s.SourceLedger.ChatLocationCovering(r.Context(), chatID, rel)
-	if err != nil {
-		s.writeSourceReadError(w, r, err)
-		return
-	}
-	if !found {
-		s.responses.InternalError(w, r, errors.New("opened outside file has no location"))
-		return
+	if location == nil {
+		covering, found, err := s.SourceLedger.ChatLocationCovering(r.Context(), chatID, rel)
+		if err != nil {
+			s.writeSourceReadError(w, r, err)
+			return
+		}
+		if !found {
+			s.writeOutsideFileOpenError(w, r, projectsource.ErrSourceNotFound)
+			return
+		}
+		location = &covering
 	}
 	notifyChatLocationChange(r, p)
-	httpio.WriteJSON(w, http.StatusOK, wire.OpenedOutsideFile{RootID: p.Outside.ID, Path: rel, FileID: tracked.FileID, Location: chatLocationDTO(p, covering)})
+	httpio.WriteJSON(w, http.StatusOK, wire.OpenedOutsideFile{RootID: p.Outside.ID, Path: rel, FileID: tracked.FileID, Location: chatLocationDTO(p, *location)})
 }
 
 // Large files contribute a hash without retained bytes.
