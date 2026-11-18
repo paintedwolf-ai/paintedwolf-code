@@ -30,7 +30,7 @@ func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 		{Tool: "command", MessageID: "t2"},
 	}
 
-	withRecall, err := renderContinuation(context.Background(), summary, sources, true, nil, 0)
+	withRecall, err := renderContinuation(context.Background(), summary, sources, true, nil, 0, false)
 	testutil.FailErr(t, "render continuation record with recall", err)
 	for _, want := range []string{"- registry listens on 127.0.0.1:8200", "### Completed", "### Pending", "- config.toml (read#4) before editing the registry block", "- `read#4` (read)", "- command, message `t2`", `recall(query="handle:read#4")`, "### Constraints", "- no pushes"} {
 		if !strings.Contains(withRecall, want) {
@@ -38,7 +38,7 @@ func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 		}
 	}
 
-	withoutRecall, err := renderContinuation(context.Background(), summary, sources, false, nil, 0)
+	withoutRecall, err := renderContinuation(context.Background(), summary, sources, false, nil, 0, false)
 	testutil.FailErr(t, "render continuation record without recall", err)
 	if strings.Contains(withoutRecall, "recall") {
 		t.Fatalf("a profile without recall must not be told to call it:\n%s", withoutRecall)

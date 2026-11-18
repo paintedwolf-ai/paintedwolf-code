@@ -161,7 +161,8 @@ func (m *Service) publishSynthesis(ctx context.Context, info compaction.SessionI
 func (m *Service) replaceContinuation(ctx context.Context, info compaction.SessionInfo, view *store.CompactionView, messages []api.Message, index int, enriched *messageview.Continuation) error {
 	row := messages[index]
 	budget := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI([]api.Message{row}))
-	text, err := compaction.RenderContinuation(ctx, enriched, info.RecallAvailable, max(1, budget))
+	enriched.RenderTokens = max(1, budget)
+	text, err := compaction.RenderContinuation(ctx, enriched, info.RecallAvailable, 0)
 	if err != nil {
 		return err
 	}
@@ -173,7 +174,7 @@ func (m *Service) replaceContinuation(ctx context.Context, info compaction.Sessi
 	if err != nil {
 		return err
 	}
-	if !fits {
+	if !fits || enriched.Level == "references" {
 		return synthesisWouldGrow
 	}
 	view.Messages = messages

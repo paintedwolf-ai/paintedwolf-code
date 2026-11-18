@@ -157,16 +157,16 @@ func continuationFor(info SessionInfo, removed []ContextMessage, summary compact
 			record.RemovedRows++
 		}
 	}
-	if summaryErr != nil {
-		record.Reason = "references_only"
-	}
 	for _, source := range sources {
-		if hasRecordedDetail(source) && (info.PriorContinuation == nil || source.Ord > info.PriorContinuation.ThroughOrd) {
+		if source.HasRecordedDetail() && (info.PriorContinuation == nil || source.Ord > info.PriorContinuation.ThroughOrd) {
 			record.RecordedRows++
 		}
 		if source.Disposition != "reference" && source.Ord > record.SummaryThroughOrd {
 			record.SummaryThroughOrd = source.Ord
 		}
+	}
+	if summaryErr != nil || record.SummaryThroughOrd < record.ThroughOrd {
+		record.Reason = "references_only"
 	}
 	record.Summary = messageview.ContinuationSummary{Facts: summary.Facts, Completed: summary.Completed,
 		Pending: summary.Pending, Reacquire: summary.Reacquire, Constraints: summary.Constraints}

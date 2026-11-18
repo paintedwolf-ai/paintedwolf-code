@@ -130,6 +130,18 @@ func testSynthesisOutcome(t *testing.T, state, reason string, calls int) {
 		t.Fatalf("expected one outcome, got %+v", logs)
 	}
 	log := logs[0]
+	if log.Outcome == "published" {
+		view, ok, err := mem.GetCompactionView(t.Context(), sess.ID)
+		testutil.FailErr(t, "load enriched continuation", err)
+		if !ok || view.Continuation.RenderTokens == 0 {
+			t.Fatal("the accepted projection did not keep its display budget")
+		}
+		rendered, err := compaction.RenderContinuation(t.Context(), view.Continuation, info.RecallAvailable, 0)
+		testutil.FailErr(t, "rerender accepted continuation", err)
+		if rendered != view.Messages[0].Content {
+			t.Fatal("rerendering changed the accepted projection")
+		}
+	}
 	if log.Outcome != expected || log.Reason != reason || log.Calls != calls || model.calls != calls ||
 		log.Generation != 1 || log.AfterOrd != 0 || log.ThroughOrd != second.Ord ||
 		(log.Error != "") != (reason == "error") {

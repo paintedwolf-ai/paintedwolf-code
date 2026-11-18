@@ -28,7 +28,7 @@ func (c *SimpleCompactor) sessionRevision(ctx context.Context, info SessionInfo,
 	if err != nil {
 		return "", err
 	}
-	record, err := renderContinuation(ctx, compactionSummary{Facts: []string{"revision"}, Completed: []string{"revision"}, Pending: []string{"revision"}, Reacquire: []string{"revision"}, Constraints: []string{"revision"}}, compactedSources(messages, nil), info.RecallAvailable, nil, 0)
+	record, err := renderContinuation(ctx, compactionSummary{Facts: []string{"revision"}, Completed: []string{"revision"}, Pending: []string{"revision"}, Reacquire: []string{"revision"}, Constraints: []string{"revision"}}, compactedSources(messages, nil), info.RecallAvailable, nil, 0, false)
 	if err != nil {
 		return "", err
 	}

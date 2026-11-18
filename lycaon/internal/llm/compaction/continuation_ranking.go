@@ -36,7 +36,7 @@ func mergeContinuationSources(prior *messageview.Continuation, current []message
 	selected := make(map[string]bool)
 	var out []messageview.ContinuationSource
 	for _, row := range rows {
-		if hasRecordedDetail(row) {
+		if row.HasRecordedDetail() {
 			selected[row.MessageID] = true
 			out = append(out, row)
 			if len(out) == maxRecordedDetails {

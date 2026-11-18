@@ -132,7 +132,7 @@ func (s CompactedSource) templateVars() map[string]any {
 }
 
 // renderContinuation renders the selected facts and their recovery addresses.
-func renderContinuation(ctx context.Context, summary compactionSummary, sources []CompactedSource, recallAvailable bool, details []map[string]any, omitted int) (string, error) {
+func renderContinuation(ctx context.Context, summary compactionSummary, sources []CompactedSource, recallAvailable bool, details []map[string]any, omitted int, clipped bool) (string, error) {
 	rows := make([]map[string]any, 0, len(sources))
 	for _, s := range sources {
 		rows = append(rows, s.templateVars())
@@ -150,6 +150,7 @@ func renderContinuation(ctx context.Context, summary compactionSummary, sources 
 		"compacted_sources":   rows,
 		"recorded_details":    details,
 		"recorded_omitted":    omitted,
+		"recorded_clipped":    clipped,
 		"recall_available":    recallAvailable,
 	})
 	if err != nil {

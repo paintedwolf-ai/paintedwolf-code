@@ -14,6 +14,9 @@ const maxRecordedDetails = 16
 // RenderContinuation selects a representation within the receiver's budget.
 func RenderContinuation(ctx context.Context, record *messageview.Continuation, recall bool, tokens int) (string, error) {
 	budget := min(4096, max(192, record.Window/8))
+	if record.RenderTokens > 0 {
+		budget = min(budget, record.RenderTokens)
+	}
 	if tokens > 0 {
 		budget = min(budget, tokens)
 	}
@@ -40,6 +43,7 @@ type continuationDisplay struct {
 	sources []CompactedSource
 	details []map[string]any
 	total   int
+	clipped bool
 }
 
 func continuationDisplayFor(record *messageview.Continuation, level string, details []map[string]any) continuationDisplay {
@@ -63,7 +67,7 @@ func continuationDisplayFor(record *messageview.Continuation, level string, deta
 	}
 	return continuationDisplay{
 		summary: summary, sources: recoverySources(record.Sources, limit),
-		details: details, total: max(record.RecordedRows, len(details)),
+		details: details, total: max(record.RecordedRows, len(details)), clipped: record.RecordedRowsClipped,
 	}
 }
 
@@ -101,13 +105,13 @@ func (d continuationDisplay) fit(ctx context.Context, recall bool, budget int) (
 }
 
 func (d continuationDisplay) render(ctx context.Context, recall bool, count int) (string, error) {
-	return renderContinuation(ctx, d.summary, d.sources, recall, d.details[:count], d.total-count)
+	return renderContinuation(ctx, d.summary, d.sources, recall, d.details[:count], d.total-count, d.clipped)
 }
 
 func recordedDetails(sources []messageview.ContinuationSource) []map[string]any {
 	var recorded []messageview.ContinuationSource
 	for _, source := range sources {
-		if hasRecordedDetail(source) {
+		if source.HasRecordedDetail() {
 			recorded = append(recorded, source)
 		}
 	}

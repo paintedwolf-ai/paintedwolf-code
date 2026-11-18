@@ -34,5 +34,5 @@ Canonical observations through ordinal {{ through_ord }} remain on record. {% if
 {% if recorded_details %}
 ### Recorded observations
 {% for detail in recorded_details %}- {% if detail.handle %}`{{ detail.handle }}`{% else %}message `{{ detail.message_id }}`{% endif %}{% if detail.conclusion %} · completion report: {{ detail.conclusion }}{% else %}{% if detail.command %} · command: {{ detail.command }}{% endif %}{% if detail.exit_code %} · exit {{ detail.exit_code }}{% endif %}{% if detail.verdict %} · verification verdict: {{ detail.verdict }}{% endif %}{% if detail.program_state %} · program state: {{ detail.program_state }}{% endif %}{% if detail.stop_code %} · stop code: {{ detail.stop_code }}{% endif %}{% endif %}
-{% endfor %}{% endif %}{% if recorded_omitted %}Recorded observations omitted from this view: {{ recorded_omitted }}.
+{% endfor %}{% endif %}{% if recorded_omitted %}Recorded observations omitted from this view: {% if recorded_clipped %}at least {% endif %}{{ recorded_omitted }}.
 {% endif %}

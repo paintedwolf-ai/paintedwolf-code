@@ -3,8 +3,6 @@ package compaction
 import (
 	"strings"
 	"unicode/utf8"
-
-	"github.com/lycaon/lycaon/internal/messageview"
 )
 
 const continuationExcerptBytes = 192
@@ -34,8 +32,4 @@ func continuationExcerpt(text string) string {
 		end--
 	}
 	return text[:end] + "…"
-}
-
-func hasRecordedDetail(source messageview.ContinuationSource) bool {
-	return source.Conclusion != "" || source.Command != "" || source.Tool == "command" && source.Execution != nil
 }
