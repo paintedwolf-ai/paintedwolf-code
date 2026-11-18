@@ -10,8 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestMemoryRegistryCreateAndGet(t *testing.T) {
-	reg := NewMemoryRegistry()
+func TestProjectRegistryCreateAndGet(t *testing.T) {
+	reg := newProjectRegistry(t)
 	ctx := context.Background()
 	dir := t.TempDir()
 
@@ -38,8 +38,8 @@ func TestMemoryRegistryCreateAndGet(t *testing.T) {
 	}
 }
 
-func TestMemoryRegistryCreateNoRoots(t *testing.T) {
-	reg := NewMemoryRegistry()
+func TestProjectRegistryCreateNoRoots(t *testing.T) {
+	reg := newProjectRegistry(t)
 	p, err := reg.Create(context.Background(), CreateParams{})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -49,9 +49,9 @@ func TestMemoryRegistryCreateNoRoots(t *testing.T) {
 	}
 }
 
-func TestMemoryRegistryCreateDraftThenPromote(t *testing.T) {
+func TestProjectRegistryCreateDraftThenPromote(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	reg := NewMemoryRegistry()
+	reg := newProjectRegistry(t)
 	ctx := context.Background()
 
 	draft, err := reg.Create(ctx, CreateParams{Draft: true})
@@ -85,9 +85,9 @@ func TestMemoryRegistryCreateDraftThenPromote(t *testing.T) {
 	}
 }
 
-func TestMemoryRegistryPatchAppliesMetadataSet(t *testing.T) {
+func TestProjectRegistryPatchAppliesMetadataSet(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	reg := NewMemoryRegistry()
+	reg := newProjectRegistry(t)
 	ctx := t.Context()
 	draft, err := reg.Create(ctx, CreateParams{Draft: true})
 	testutil.FailErr(t, "create draft", err)
@@ -103,8 +103,8 @@ func TestMemoryRegistryPatchAppliesMetadataSet(t *testing.T) {
 	}
 }
 
-func TestMemoryRegistryAttachDuplicatePath(t *testing.T) {
-	reg := NewMemoryRegistry()
+func TestProjectRegistryAttachDuplicatePath(t *testing.T) {
+	reg := newProjectRegistry(t)
 	ctx := context.Background()
 	dir := t.TempDir()
 	p, err := CreateWithRoot(ctx, reg, dir)
@@ -117,8 +117,8 @@ func TestMemoryRegistryAttachDuplicatePath(t *testing.T) {
 	}
 }
 
-func TestMemoryRegistryListRecentFirst(t *testing.T) {
-	reg := NewMemoryRegistry()
+func TestProjectRegistryListRecentFirst(t *testing.T) {
+	reg := newProjectRegistry(t)
 	ctx := context.Background()
 	first, err := reg.Create(ctx, CreateParams{})
 	if err != nil {

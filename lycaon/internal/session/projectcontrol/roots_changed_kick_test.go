@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/profiles"
@@ -23,7 +24,7 @@ import (
 
 func TestEnqueueRootsChangedKickExtendsPendingNoticeBeforeNextTurn(t *testing.T) {
 	ctx := t.Context()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	apiDir, webDir, docsDir := t.TempDir(), t.TempDir(), t.TempDir()
 	created, err := reg.Create(ctx, project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: apiDir, Label: "api"}, {Path: webDir, Label: "web"}},
@@ -203,7 +204,7 @@ func TestEnqueuePostureChangedKickCoalescesAndDropsNoOp(t *testing.T) {
 
 func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *testing.T) {
 	ctx := t.Context()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	projectDir := t.TempDir()
 	created, err := reg.Create(ctx, project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: projectDir, Label: "app"}},
@@ -336,7 +337,7 @@ func newRootsKickHarness(t *testing.T, projectID, rootID string) (*Service, *kic
 // notifies nothing, because the model-visible (id, label) set is unchanged.
 func TestEnqueueRootsChangedKickSkipsPathOnlyMove(t *testing.T) {
 	ctx := t.Context()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	apiDir, webDir := t.TempDir(), t.TempDir()
 	created, err := reg.Create(ctx, project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: apiDir, Label: "api"}, {Path: webDir, Label: "web"}},
@@ -368,7 +369,7 @@ func TestEnqueueRootsChangedKickSkipsPathOnlyMove(t *testing.T) {
 // session folder change, both label-only.
 func TestEnqueueRootsChangedKickNamesSessionFolderRename(t *testing.T) {
 	ctx := t.Context()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	apiDir, webDir := t.TempDir(), t.TempDir()
 	created, err := reg.Create(ctx, project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: apiDir, Label: "api"}, {Path: webDir, Label: "web"}},
@@ -408,7 +409,7 @@ func TestEnqueueRootsChangedKickNamesSessionFolderRename(t *testing.T) {
 // primary fallback as the session folder.
 func TestEnqueueRootsChangedKickSessionFolderFallsBackAfterDetach(t *testing.T) {
 	ctx := t.Context()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	apiDir, webDir := t.TempDir(), t.TempDir()
 	created, err := reg.Create(ctx, project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: apiDir, Label: "api"}, {Path: webDir, Label: "web"}},
@@ -442,7 +443,7 @@ func TestEnqueueRootsChangedKickSessionFolderFallsBackAfterDetach(t *testing.T) 
 func TestPromotionCommitEnqueuesRootsChangedKick(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	ctx := t.Context()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	created, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create draft", err)
 	svc, kicks, _ := newRootsKickHarness(t, created.ID, created.Roots[0].ID)

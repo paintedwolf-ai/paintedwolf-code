@@ -14,7 +14,7 @@ import (
 func TestPromotionEngineCompletesWithoutDeletingSourceEarly(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	ctx := t.Context()
-	reg := NewMemoryRegistry()
+	reg := newProjectRegistry(t)
 	p, err := reg.Create(ctx, CreateParams{Draft: true})
 	testutil.FailErr(t, "create draft", err)
 	source := p.Roots[0].Path
@@ -51,7 +51,7 @@ func TestPromotionCommitNamesOnlyAnUnnamedDraft(t *testing.T) {
 		{name: "explicit", draft: "Research notes", wantName: func(string) string { return "Research notes" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			reg := NewMemoryRegistry()
+			reg := newProjectRegistry(t)
 			p, err := reg.Create(ctx, CreateParams{Draft: true, Name: tc.draft})
 			testutil.FailErr(t, "create draft", err)
 			destination := t.TempDir()
@@ -70,7 +70,7 @@ func TestPromotionCommitNamesOnlyAnUnnamedDraft(t *testing.T) {
 func TestPromotionEngineRecoversInterruptedInstall(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	ctx := context.Background()
-	reg := NewMemoryRegistry()
+	reg := newProjectRegistry(t)
 	p, err := reg.Create(ctx, CreateParams{Draft: true})
 	testutil.FailErr(t, "create draft", err)
 	testutil.FailErr(t, "write draft", os.WriteFile(filepath.Join(p.Roots[0].Path, "idea.txt"), []byte("recover"), 0o600))
@@ -99,7 +99,7 @@ func TestPromotionEngineRecoversInterruptedInstall(t *testing.T) {
 func TestPromotionEngineRecoversAfterDestinationReservation(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	ctx := t.Context()
-	reg := NewMemoryRegistry()
+	reg := newProjectRegistry(t)
 	p, err := reg.Create(ctx, CreateParams{Draft: true})
 	testutil.FailErr(t, "create draft", err)
 	testutil.FailErr(t, "write draft", os.WriteFile(filepath.Join(p.Roots[0].Path, "idea.txt"), []byte("resume rename"), 0o600))
@@ -125,7 +125,7 @@ func TestPromotionEngineRecoversAfterDestinationReservation(t *testing.T) {
 func TestPromotionEngineLeavesIntentAndSourceOnStageFailure(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	ctx := t.Context()
-	reg := NewMemoryRegistry()
+	reg := newProjectRegistry(t)
 	p, err := reg.Create(ctx, CreateParams{Draft: true})
 	testutil.FailErr(t, "create draft", err)
 	destination := t.TempDir()
@@ -203,7 +203,7 @@ func TestSQLPromotionRecoversCommittedCleanupAfterRestart(t *testing.T) {
 func TestPromotionCancelRollsInstalledTreeBackToDraft(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	ctx := t.Context()
-	reg := NewMemoryRegistry()
+	reg := newProjectRegistry(t)
 	p, err := reg.Create(ctx, CreateParams{Draft: true})
 	testutil.FailErr(t, "create draft", err)
 	testutil.FailErr(t, "write draft", os.WriteFile(filepath.Join(p.Roots[0].Path, "idea.txt"), []byte("cancel"), 0o600))
@@ -233,7 +233,7 @@ func TestPromotionCancelRollsInstalledTreeBackToDraft(t *testing.T) {
 func TestPromotionCancelPreservesDraftChangedAfterInstall(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	ctx := t.Context()
-	reg := NewMemoryRegistry()
+	reg := newProjectRegistry(t)
 	p, err := reg.Create(ctx, CreateParams{Draft: true})
 	testutil.FailErr(t, "create draft", err)
 	sourceFile := filepath.Join(p.Roots[0].Path, "idea.txt")
@@ -283,7 +283,7 @@ func TestPromotionAllowsDestinationUnderPreviouslyRestrictedDirectories(t *testi
 		filepath.Join(cfgDir, "promoted-device-config-project"),
 	}
 	ctx := t.Context()
-	reg := NewMemoryRegistry()
+	reg := newProjectRegistry(t)
 	engine := NewPromotionEngine(reg, nil)
 
 	for _, dest := range destinations {

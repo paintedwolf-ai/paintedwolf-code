@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -27,7 +28,7 @@ func replaceFixture(t *testing.T) (*project.Project, string) {
 		abs := filepath.Join(dir, rel)
 		testutil.FailErr(t, "write "+rel, os.WriteFile(abs, []byte(body), 0o644))
 	}
-	p, err := project.CreateWithRoot(context.Background(), project.NewMemoryRegistry(), dir)
+	p, err := project.CreateWithRoot(context.Background(), projecttest.NewRegistry(t), dir)
 	testutil.FailErr(t, "create project", err)
 	return p, dir
 }

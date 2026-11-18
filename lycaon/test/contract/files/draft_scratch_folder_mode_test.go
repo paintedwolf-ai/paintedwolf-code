@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/spawn"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -17,7 +18,7 @@ func TestDraftScratchUnlocksFolderModeCapabilities(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	contractcheck.FailErr(t, "create draft project", err)
 	if len(p.Roots) != 1 {

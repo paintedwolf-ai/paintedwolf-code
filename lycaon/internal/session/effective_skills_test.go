@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -64,7 +65,7 @@ func TestEffectiveSkillsGateMatrix(t *testing.T) {
 			if err := surfaces.PutEnabled(map[string]bool{projectcontrib.SurfaceSkills: tc.deviceOn}); err != nil {
 				testutil.FailErr(t, "PutEnabled", err)
 			}
-			reg := project.NewMemoryRegistry()
+			reg := projecttest.NewRegistry(t)
 			p, err := project.CreateWithRoot(ctx, reg, root)
 			testutil.FailErr(t, "CreateWithRoot", err)
 			if !tc.projectOn {
@@ -122,7 +123,7 @@ func TestEffectiveSkillsGateOffReadsNothing(t *testing.T) {
 	if err := surfaces.PutEnabled(map[string]bool{projectcontrib.SurfaceSkills: false}); err != nil {
 		testutil.FailErr(t, "PutEnabled", err)
 	}
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := project.CreateWithRoot(ctx, reg, root)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	m.SetProjectRegistry(reg)
@@ -164,7 +165,7 @@ func TestEffectiveSkillsShadowsStock(t *testing.T) {
 	m := newSkillsTestManager(t)
 	surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "cs.yaml"))
 	testutil.FailErr(t, "surfaces", err)
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := project.CreateWithRoot(ctx, reg, root)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	m.SetProjectRegistry(reg)

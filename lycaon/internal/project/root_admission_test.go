@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourceworkspace"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -33,7 +34,7 @@ func TestAgentReadingsHoldAdmittedRootsOnly(t *testing.T) {
 	for _, root := range facts.EditorOnly()[1:] {
 		params.Roots = append(params.Roots, project.AttachRootParams{Path: root.Path})
 	}
-	p, err := project.NewMemoryRegistry().Create(t.Context(), params)
+	p, err := projecttest.NewRegistry(t).Create(t.Context(), params)
 	testutil.FailErr(t, "create project", err)
 	work := rootByPath(t, p, facts.Work)
 
@@ -73,7 +74,7 @@ func TestProjectWireStatesAdmission(t *testing.T) {
 	for _, root := range facts.EditorOnly() {
 		params.Roots = append(params.Roots, project.AttachRootParams{Path: root.Path})
 	}
-	p, err := project.NewMemoryRegistry().Create(t.Context(), params)
+	p, err := projecttest.NewRegistry(t).Create(t.Context(), params)
 	testutil.FailErr(t, "create project", err)
 	want := map[string]string{facts.Work: ""}
 	for _, root := range facts.EditorOnly() {
@@ -97,7 +98,7 @@ func TestAllAdmittedProjectReadingsAgree(t *testing.T) {
 	facts := rootfacts.Install(t)
 	other := facts.Work + "-other"
 	testutil.FailErr(t, "mkdir", os.MkdirAll(other, 0o700))
-	p, err := project.NewMemoryRegistry().Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: facts.Work}, {Path: other}}})
+	p, err := projecttest.NewRegistry(t).Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: facts.Work}, {Path: other}}})
 	testutil.FailErr(t, "create project", err)
 	if !slices.Equal(project.RootRefsFrom(p), p.SourceRoots()) {
 		t.Fatalf("RootRefsFrom = %+v, SourceRoots = %+v; an all-admitted project must read the same", project.RootRefsFrom(p), p.SourceRoots())

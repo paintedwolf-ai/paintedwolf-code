@@ -134,8 +134,12 @@ func (r *relabelOnFirstRead) Get(ctx context.Context, id string) (*project.Proje
 }
 
 func TestSourceViewCreatedAcrossARootChangeUsesTheChangedFolders(t *testing.T) {
-	registry := &relabelOnFirstRead{Registry: project.NewMemoryRegistry()}
-	server := newSourceHandlerFixture(t, func(deps *Deps) { deps.ProjectRegistry = registry })
+	sessions := storetest.New(t)
+	registry := &relabelOnFirstRead{Registry: project.NewSQLRegistry(sessions.DB())}
+	server := newSourceHandlerFixture(t, func(deps *Deps) {
+		deps.ProjectRegistry = registry
+		deps.SessionStore = sessions
+	})
 	p := sourceViewFixtureProject(t, server)
 	label := "renamed-root"
 	registry.change = func() {
