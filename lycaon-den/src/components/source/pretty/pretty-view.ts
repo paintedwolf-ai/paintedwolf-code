@@ -35,30 +35,20 @@ function isBreakElement(node: Node): boolean {
   return node instanceof HTMLElement && node.classList.contains(BREAK_CLASS);
 }
 
-function lastTextRect(node: Node): DOMRect | null {
-  if (node.nodeType === Node.TEXT_NODE) {
-    const length = node.nodeValue?.length ?? 0;
-    if (length === 0) return null;
-    const range = document.createRange();
-    range.setStart(node, length - 1);
-    range.setEnd(node, length);
-    const rects = range.getClientRects();
-    return rects[rects.length - 1] ?? null;
-  }
-  if (isBreakElement(node)) return null;
-  for (let child = node.lastChild; child; child = child.previousSibling) {
-    const rect = lastTextRect(child);
-    if (rect && rect.height > 0) return rect;
-  }
-  return null;
-}
-
-// The end of a visual line is the right edge of its last character, found by
-// walking back from the break; elements without text are passed over.
+/** The trailing character on the same visual line as the break. */
 function rightEdgeBefore(dom: HTMLElement): Rect | null {
-  for (let node = dom.previousSibling; node; node = node.previousSibling) {
-    if (isBreakElement(node)) continue;
-    const rect = lastTextRect(node);
+  const parent = dom.parentNode;
+  if (!parent) return null;
+  const walker = dom.ownerDocument.createTreeWalker(parent, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+  walker.currentNode = dom;
+  for (let node = walker.previousNode(); node && node !== parent; node = walker.previousNode()) {
+    if (isBreakElement(node)) return null;
+    if (!(node instanceof Text) || !node.length) continue;
+    const range = dom.ownerDocument.createRange();
+    range.setStart(node, node.length - 1);
+    range.setEnd(node, node.length);
+    const rects = range.getClientRects();
+    const rect = rects[rects.length - 1];
     if (rect && rect.height > 0) {
       return { left: rect.right, right: rect.right, top: rect.top, bottom: rect.bottom };
     }
@@ -108,17 +98,21 @@ export function prettyIndentDecoration(columns: number): Decoration {
   return mark;
 }
 
-// The content security policy refuses style attributes, so each indentation
-// width is a class.
+// Keep twenty columns available for text when the pane can fit them.
 function indentRules(): Record<string, Record<string, string>> {
   const rules: Record<string, Record<string, string>> = {
-    [`.${LINE_CLASS}`]: { display: "inline-block", verticalAlign: "top" },
+    [`.${LINE_CLASS}`]: {
+      display: "inline-block",
+      verticalAlign: "top",
+      "--pw-pretty-indent": "min(var(--pw-pretty-columns), max(0px, 100% - 20ch))",
+      marginLeft: "var(--pw-pretty-indent)",
+      maxWidth: "calc(100% - var(--pw-pretty-indent))",
+    },
     [`.${BREAK_CLASS}`]: { userSelect: "none" },
   };
   for (let columns = 1; columns <= PRETTY_MAX_INDENT_COLUMNS; columns++) {
     rules[`.${LINE_CLASS}-${columns}`] = {
-      marginLeft: `${columns}ch`,
-      maxWidth: `calc(100% - ${columns}ch)`,
+      "--pw-pretty-columns": `${columns}ch`,
     };
   }
   return rules;
@@ -207,7 +201,7 @@ function boundaryMotion(forward: boolean, extend: boolean) {
       if (moved.head === range.head || (forward ? moved.head > visual.to : moved.head < visual.from)) {
         moved = EditorSelection.cursor(forward ? visual.to : visual.from, forward ? -1 : 1);
       }
-      return extend ? EditorSelection.range(range.anchor, moved.head) : moved;
+      return extend ? EditorSelection.range(range.anchor, moved.head, undefined, moved.bidiLevel ?? undefined, moved.assoc) : moved;
     };
     const selection = EditorSelection.create(
       view.state.selection.ranges.map(move),
@@ -220,21 +214,21 @@ function boundaryMotion(forward: boolean, extend: boolean) {
 
 type LineKey = { forward: boolean; extend: boolean };
 
-// Line keys of every editing style: Home and End, Cmd+Left and Cmd+Right on
-// macOS, and Control+A and Control+E on macOS outside Vim, where Control+A
-// adjusts a number.
+// Only intercept chords bound to line motion by the active editing style.
 function lineKey(event: KeyboardEvent, state: EditorState): LineKey | null {
   const extend = event.shiftKey;
   if (event.altKey) return null;
   if (!event.ctrlKey && !event.metaKey && (event.key === "Home" || event.key === "End")) {
     return { forward: event.key === "End", extend };
   }
-  if (shortcutPlatform() !== "macos") return null;
-  if (event.metaKey && !event.ctrlKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+  const mac = shortcutPlatform() === "macos";
+  if (mac && event.metaKey && !event.ctrlKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
     return { forward: event.key === "ArrowRight", extend };
   }
+  const style = state.facet(installedEditingStyle);
+  const controlLineKeys = style === "emacs" || (mac && style !== "vim");
   const letter = event.key.toLowerCase();
-  if (event.ctrlKey && !event.metaKey && (letter === "a" || letter === "e") && state.facet(installedEditingStyle) !== "vim") {
+  if (event.ctrlKey && !event.metaKey && (letter === "a" || letter === "e") && controlLineKeys) {
     return { forward: letter === "e", extend };
   }
   return null;
