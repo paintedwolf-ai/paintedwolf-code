@@ -1,5 +1,5 @@
 import { Show, createEffect, createMemo, createSignal, type Accessor } from "solid-js";
-import { ActivitySummary, type ActivitySummaryState } from "../../briefing/ActivitySummary.tsx";
+import { ActivitySummary, type ActivitySummaryState, type ActivitySummaryText } from "../../briefing/ActivitySummary.tsx";
 import { BriefingEvidenceLink } from "../../briefing/BriefingSummary.tsx";
 import { retryBriefing, useBriefing, type BriefingTarget, type BriefingView } from "../../briefing/briefing-live.ts";
 import { fileSummariesEnabled, fileSummariesSettingKnown } from "../../settings/editor/file-summary-settings.ts";
@@ -36,27 +36,27 @@ export function activityBriefingTarget(part: ToolPartView, sessionId: string | u
   };
 }
 
-/** Text a card has shown; kept while a newer revision of the same card is asked for. */
-type HeldSummaryText = { purpose?: string; recordId?: string };
+function summarySection(view: BriefingView, id: string): ActivitySummaryText | undefined {
+  return view.snapshot?.result?.summary.find((section) => section.section_id === id && section.text);
+}
 
-function sectionText(view: BriefingView, id: string): string | undefined {
-  return view.snapshot?.result?.summary.find((section) => section.section_id === id)?.text || undefined;
+function summaryPending(view: BriefingView): boolean {
+  return view.snapshot?.status === "pending" && !view.stalled &&
+    view.snapshot.pending_sections.some((id) => id === "purpose" || id === "change");
 }
 
 /** Maps the host's answer, and text held from an earlier revision, to what the region shows. */
-function activitySummaryState(view: BriefingView, held: HeldSummaryText | null): ActivitySummaryState {
+function activitySummaryState(view: BriefingView, heldPurpose: ActivitySummaryText | undefined): ActivitySummaryState {
   const snapshot = view.snapshot;
-  const purpose = sectionText(view, "purpose");
-  const change = sectionText(view, "change");
+  const purpose = summarySection(view, "purpose");
+  const change = summarySection(view, "change");
   // A settled answer with no summary text counts as not arrived.
   const ended = view.stalled || snapshot?.status === "failed" || snapshot?.status === "complete";
   const recordId = snapshot?.result?.evidence_ref.record_id;
-  if ((purpose || change) && recordId) {
-    const changePending = snapshot?.status === "pending" && !view.stalled && snapshot.pending_sections.includes("change");
-    return { kind: "ready", purpose, change, recordId, changePending };
+  if ((purpose || change) && recordId && !summaryPending(view)) {
+    return { kind: "ready", purpose: purpose ?? heldPurpose, change, recordId };
   }
-  const earlier = held?.purpose;
-  return ended ? { kind: "missing", purpose: earlier } : { kind: "pending", purpose: earlier };
+  return ended ? { kind: "missing", purpose: heldPurpose } : { kind: "pending", purpose: heldPurpose };
 }
 
 type Args = {
@@ -76,12 +76,12 @@ export function useActivityBriefingSlots(args: Args): ToolBriefingSlots {
     return activityBriefingTarget(args.part(), args.sessionId());
   }, null, { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) });
   const view = useBriefing(args.projectId, target);
-  const [held, setHeld] = createSignal<HeldSummaryText | null>(null);
+  const [heldPurpose, setHeldPurpose] = createSignal<ActivitySummaryText>();
   createEffect(() => {
-    const purpose = sectionText(view(), "purpose");
-    if (purpose) setHeld({ purpose, recordId: view().snapshot?.result?.evidence_ref.record_id });
+    const purpose = summarySection(view(), "purpose");
+    if (purpose && !summaryPending(view())) setHeldPurpose(purpose);
   });
-  const state = createMemo(() => activitySummaryState(view(), held()));
+  const state = createMemo(() => activitySummaryState(view(), heldPurpose()));
   const running = () => {
     const activity = args.part().commandActivity;
     return activity ? activity.fact.state === "running" : args.part().status === "running";
@@ -92,7 +92,7 @@ export function useActivityBriefingSlots(args: Args): ToolBriefingSlots {
     if (projectId && wanted) retryBriefing(projectId, wanted);
   };
   const reference = () => (state().kind === "ready" ? view().snapshot?.result?.evidence_ref : undefined);
-  const summaryElement = <ActivitySummary state={state()} running={running()} onRetry={retry} />;
+  const summaryElement = <Show when={target()}><ActivitySummary state={state()} running={running()} onRetry={retry} /></Show>;
   const evidenceElement = <Show when={reference()} keyed>{(ref) => <BriefingEvidenceLink reference={ref} />}</Show>;
   return {
     get summary() {

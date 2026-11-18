@@ -37,8 +37,12 @@ describe("FileSummaryPanel", () => {
     clearSummaryFades();
   });
 
-  it("fades sections in once when they arrive while the panel watches", () => {
-    const settled = { ...briefing, evidence_ref: { project_id: "p1", record_id: "rec-fade" } };
+  it("reveals all sections together in one fade after generation settles", () => {
+    const settled: LiveFileBriefing = { ...briefing, evidence_ref: { project_id: "p1", record_id: "rec-fade" }, sections: [
+      ...briefing.sections,
+      { kind: "structure", text: "Exports the review builder." },
+      { kind: "key_behavior", text: "Opens a review." },
+    ] };
     const [summary, setSummary] = createSignal<LiveFileBriefing>({ ...briefing, status: "pending", sections: [] });
     const panel = () => (
       <FileSummaryPanel
@@ -48,15 +52,20 @@ describe("FileSummaryPanel", () => {
       />
     );
     const watching = render(panel);
+    setSummary({ ...settled, status: "pending", sections: [settled.sections[0]!] });
+    expect(screen.getByTestId("file-summary-summarizing").querySelectorAll('[data-state="waiting"]')).toHaveLength(3);
+    expect(screen.queryByTestId("file-summary-sections")).toBeNull();
     setSummary(settled);
     const arrived = screen.getByTestId("file-summary-sections");
-    expect(arrived.querySelectorAll(`.${SUMMARY_FADE_CLASS}`)).toHaveLength(1);
+    expect(arrived.classList.contains(SUMMARY_FADE_CLASS)).toBe(true);
+    expect(arrived.querySelectorAll(`.${SUMMARY_FADE_CLASS}`)).toHaveLength(0);
+    expect(arrived.querySelectorAll(".den-file-summary__section")).toHaveLength(3);
     expect(arrived.textContent).toContain("Builds the buildReview surface.");
     expect(screen.getByTestId("file-summary-location")).toBeTruthy();
     watching.unmount();
 
     render(panel);
-    expect(screen.getByTestId("file-summary-sections").querySelector(`.${SUMMARY_FADE_CLASS}`)).toBeNull();
+    expect(screen.getByTestId("file-summary-sections").classList.contains(SUMMARY_FADE_CLASS)).toBe(false);
   });
 
   it("marks settled sections as AI-written and links their evidence", () => {

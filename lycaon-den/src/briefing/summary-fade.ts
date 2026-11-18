@@ -1,9 +1,11 @@
+import { createMemo, type Accessor } from "solid-js";
+
 /** Den's entry fade; reduced motion collapses it globally. */
 export const SUMMARY_FADE_CLASS = "den-enter-fade";
 
 const FADE_LIMIT = 256;
 
-/** Summary sections already shown, so remounts and reopens skip the fade. */
+/** Summaries and sections already shown, so remounts and reopens skip the fade. */
 const shown = new Set<string>();
 
 function normalize(key: string | undefined): string {
@@ -15,7 +17,7 @@ function remember(key: string): void {
   shown.add(key);
 }
 
-/** True the first time a section is shown, which is when it fades in. */
+/** Claims the first reveal of summary text. */
 export function claimSummaryFade(key: string | undefined): boolean {
   const normalized = normalize(key);
   if (!normalized || shown.has(normalized)) return false;
@@ -23,7 +25,7 @@ export function claimSummaryFade(key: string | undefined): boolean {
   return true;
 }
 
-/** Records a section shown without arriving, such as text settled on open. */
+/** Records text already available when the view opens. */
 export function markSummaryShown(key: string | undefined): void {
   const normalized = normalize(key);
   if (normalized) remember(normalized);
@@ -31,4 +33,11 @@ export function markSummaryShown(key: string | undefined): void {
 
 export function clearSummaryFades(): void {
   shown.clear();
+}
+
+/** A completed summary fades as one group, once, only if it arrives while open. */
+export function createSummaryFade(key: Accessor<string | undefined>): Accessor<boolean> {
+  const identity = createMemo(key);
+  markSummaryShown(identity());
+  return createMemo(() => claimSummaryFade(identity()));
 }

@@ -171,6 +171,14 @@ four lines; copying it copies all of it.
 
 An expanded activity is an action card: its descriptor comes from the activity's typed receipt facts (exit status, executions, failures, host stop, interruption, background job), never from command text or output prose. The preview reads up to four lines of output from the activity's execution receipts when the card opens: the end of a failure, refusal or running action, and the start otherwise. Records load on demand in Files; cards contain no record paging controls.
 
+Activity summaries have two labelled sections: **Intent** explains why the
+activity ran; **Outcome** explains what happened. Each section keeps its own
+pending space, AI mark, inline code, and **Show all** control. The sections
+reveal together with one fade when summary generation settles. A running activity
+says its outcome comes after settlement; unavailable sections offer a retry
+without hiding available text. Intent remains visible while settlement requests
+a new summary. **Summary evidence** opens the supporting record in Files.
+
 The projection records each row's receipt scopes as it folds calls: a program
 and the host activity that produced the row, or the whole program when the
 activity names no executions, in first-seen order. **Receipt** appears whenever
