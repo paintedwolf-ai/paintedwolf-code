@@ -13,7 +13,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -87,7 +87,7 @@ exit 2
 
 func TestSelectedScannerCannotQualifyAnEmptySuccessfulReport(t *testing.T) {
 	manifest, root := selectedFixture(t)
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	report, err := VerifyArtifact(t.Context(), root, manifest)

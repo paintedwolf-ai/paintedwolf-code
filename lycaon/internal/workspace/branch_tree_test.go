@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
@@ -30,7 +31,7 @@ func TestBranchTreeAnswersFromTheViewOnEveryProvider(t *testing.T) {
 			return workspace.NewManager(enginepaths.WorkerBranchesRootUnder(state), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 		}, adapter.PreparationMaterialized},
 		{"mounted", func(t *testing.T, state string) *workspace.Manager {
-			confine.TestingSetAutoConfine(t)
+			admissionfixture.Enable(t)
 			if !confine.Available() {
 				t.Skip("this host applies no confinement")
 			}

@@ -11,7 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 	bundleddriver "github.com/lycaon/lycaon/internal/scan/drivers/bundled"
@@ -24,7 +24,7 @@ func TestOpenGrepEmbeddedSourceRecovery(t *testing.T) {
 	if testing.Short() {
 		t.Skip("embedded scanner integration skipped in -short")
 	}
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	manifest, err := bundled.LoadManifest()
 	testutil.FailErr(t, "load scanner manifest", err)
 	home, err := configdir.UserConfigDir()
