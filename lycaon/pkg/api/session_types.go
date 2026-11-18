@@ -333,47 +333,6 @@ const (
 	MessageRoleSystem    MessageRole = "system"
 )
 
-// MessageKind tags special message rows (e.g. workflow span boundaries).
-type MessageKind string
-
-const (
-	MessageKindWorkflowBoundary MessageKind = "workflow_boundary"
-	MessageKindProgressComplete MessageKind = "progress_complete"
-	MessageKindProgressUpdate   MessageKind = "progress_update"
-	MessageKindWorkflowFeedback MessageKind = "workflow_feedback"
-	// MessageKindWorkflowExplain tags the host's note for a phase it holds.
-	MessageKindWorkflowExplain MessageKind = "workflow_explain"
-	// MessageKindDraft tags coordinator orchestration prose, rendered apart from the answer.
-	MessageKindDraft MessageKind = "draft"
-	// MessageKindIndexWarming tags a host-initiated warming row.
-	MessageKindIndexWarming MessageKind = "index_warming"
-	// MessageKindSuperseded tags a replaced worker completion report.
-	MessageKindSuperseded MessageKind = "superseded"
-	// MessageKindBlueprint tags a blueprint proposal card.
-	MessageKindBlueprint MessageKind = "blueprint"
-	// MessageKindAgentNote tags a user-visible grounded note.
-	MessageKindAgentNote MessageKind = "agent_note"
-	// MessageKindCompletionReport tags an accepted grounded report.
-	MessageKindCompletionReport MessageKind = "completion_report"
-	// MessageKindIterationCapCloseout tags an exhausted tool-loop budget.
-	MessageKindIterationCapCloseout MessageKind = "iteration_cap_closeout"
-	// MessageKindHostKick tags a rendered coordinator kick. HostSignalID identifies
-	// the catalog anchor that produced the text.
-	MessageKindHostKick MessageKind = "host_kick"
-	// MessageKindCoordinatorGuidance tags a structured guidance retry. HostSignalID
-	// carries the registered guidance Code.
-	MessageKindCoordinatorGuidance MessageKind = "coordinator_guidance"
-	// MessageKindHostNudge tags host-authored steering without a catalog anchor.
-	MessageKindHostNudge MessageKind = "host_nudge"
-	// MessageKindHostLoopWake tags the exact host loop re-entry row.
-	MessageKindHostLoopWake MessageKind = "host_loop_wake"
-	// MessageKindHostSecretRedactionNotice tags the transient model instruction
-	// projected from durable host-secret-redaction provenance.
-	MessageKindHostSecretRedactionNotice MessageKind = "host_secret_redaction_notice"
-	// MessageKindUserContinuation keeps mid-turn direction in the visible turn.
-	MessageKindUserContinuation MessageKind = "user_continuation"
-)
-
 // BlueprintTranscriptStatus is the lifecycle state of a blueprint transcript row.
 type BlueprintTranscriptStatus string
 
@@ -401,41 +360,6 @@ const (
 	BlueprintCardPhaseRejected BlueprintCardPhase = "rejected"
 )
 
-// CompletionReportScope is the report boundary stored with a message.
-type CompletionReportScope string
-
-const (
-	// CompletionReportScopeSession covers one chat session.
-	CompletionReportScopeSession CompletionReportScope = "session"
-	// CompletionReportScopePhase covers one workflow phase.
-	CompletionReportScopePhase CompletionReportScope = "phase"
-	// CompletionReportScopeRun covers one workflow run.
-	CompletionReportScopeRun CompletionReportScope = "run"
-)
-
-// CompletionReportFindingDisposition is what a report finding asks for.
-type CompletionReportFindingDisposition string
-
-const (
-	// CompletionReportFindingDispositionAct needs work.
-	CompletionReportFindingDispositionAct CompletionReportFindingDisposition = "act"
-	// CompletionReportFindingDispositionAccept is an accepted risk.
-	CompletionReportFindingDispositionAccept CompletionReportFindingDisposition = "accept"
-	// CompletionReportFindingDispositionHeld is a surface found sound.
-	CompletionReportFindingDispositionHeld CompletionReportFindingDisposition = "held"
-	// CompletionReportFindingDispositionUnresolved is an unanswered review question.
-	CompletionReportFindingDispositionUnresolved CompletionReportFindingDisposition = "unresolved"
-)
-
-// CompletionReportAskEffort is how much work a report's ask commits to.
-type CompletionReportAskEffort string
-
-const (
-	CompletionReportAskEffortSmall  CompletionReportAskEffort = "small"
-	CompletionReportAskEffortMedium CompletionReportAskEffort = "medium"
-	CompletionReportAskEffortLarge  CompletionReportAskEffort = "large"
-)
-
 // CompletionReportDefectCode is the rejection code of a document requirement
 // a stored run report failed.
 type CompletionReportDefectCode string
@@ -445,33 +369,6 @@ const (
 	CompletionReportDefectCodeDocumentInvalid      CompletionReportDefectCode = "REPORT_DOCUMENT_INVALID"
 	CompletionReportDefectCodeClaimUnreported      CompletionReportDefectCode = "REPORT_CLAIM_UNREPORTED"
 	CompletionReportDefectCodeInventoryUnaccounted CompletionReportDefectCode = "REPORT_INVENTORY_UNACCOUNTED"
-)
-
-// DraftStatus is the terminal or live state of a coordinator draft slot.
-type DraftStatus string
-
-const (
-	DraftStatusLive      DraftStatus = "live"
-	DraftStatusCommitted DraftStatus = "committed"
-	DraftStatusWithdrawn DraftStatus = "withdrawn"
-	// DraftStatusRejected retains rejected coordinator attempts with internal visibility.
-	DraftStatusRejected DraftStatus = "rejected"
-)
-
-// MessageLiveStatus is derived from the active turn at query or SSE time.
-type MessageLiveStatus string
-
-const (
-	MessageLiveStatusStreaming MessageLiveStatus = "streaming"
-	MessageLiveStatusComplete  MessageLiveStatus = "complete"
-)
-
-// MessageVisibility controls whether a message row appears in Den chat transcript.
-type MessageVisibility string
-
-const (
-	MessageVisibilityTranscript MessageVisibility = "transcript"
-	MessageVisibilityInternal   MessageVisibility = "internal"
 )
 
 // PromptCacheTier names the stable boundary a prompt-cache breakpoint closes.
@@ -487,21 +384,6 @@ const (
 	PromptCacheTierHistory PromptCacheTier = "history"
 )
 
-// WorkflowBoundaryKind is the event discriminator on workflow_boundary messages.
-type WorkflowBoundaryKind string
-
-const (
-	WorkflowBoundaryKindStarted       WorkflowBoundaryKind = "started"
-	WorkflowBoundaryKindExited        WorkflowBoundaryKind = "exited"
-	WorkflowBoundaryKindCanceled      WorkflowBoundaryKind = "canceled"
-	WorkflowBoundaryKindCompleted     WorkflowBoundaryKind = "completed"
-	WorkflowBoundaryKindFailed        WorkflowBoundaryKind = "failed"
-	WorkflowBoundaryKindPaused        WorkflowBoundaryKind = "paused"
-	WorkflowBoundaryKindResumed       WorkflowBoundaryKind = "resumed"
-	WorkflowBoundaryKindPausedOnChild WorkflowBoundaryKind = "paused_on_child"
-	WorkflowBoundaryKindInterrupted   WorkflowBoundaryKind = "interrupted"
-)
-
 // FeedbackResponseType selects the workflow feedback input shape.
 type FeedbackResponseType string
 
@@ -510,14 +392,6 @@ const (
 	FeedbackResponseSingleChoice FeedbackResponseType = "single_choice"
 	FeedbackResponseMultiChoice  FeedbackResponseType = "multi_choice"
 	FeedbackResponseSecret       FeedbackResponseType = "secret"
-)
-
-// NavigationEntryKind identifies the host-validated project entry type.
-type NavigationEntryKind string
-
-const (
-	NavigationEntryKindFile   NavigationEntryKind = "file"
-	NavigationEntryKindFolder NavigationEntryKind = "folder"
 )
 
 // MaxMessageNavigationRefs bounds durable interaction metadata per message.
@@ -750,19 +624,6 @@ func (q TranscriptPageQuery) EffectiveLimit() int {
 	}
 	return q.Limit
 }
-
-// WorkerSummaryStatus is the worker state on parent messages.
-type WorkerSummaryStatus string
-
-const (
-	WorkerSummaryStatusComplete      WorkerSummaryStatus = "complete"
-	WorkerSummaryStatusPartial       WorkerSummaryStatus = "partial"
-	WorkerSummaryStatusFailed        WorkerSummaryStatus = "failed"
-	WorkerSummaryStatusCanceled      WorkerSummaryStatus = "canceled"
-	WorkerSummaryStatusHeld          WorkerSummaryStatus = "held"
-	WorkerSummaryStatusOpen          WorkerSummaryStatus = "open"
-	WorkerSummaryStatusNeedsDecision WorkerSummaryStatus = "needs_decision"
-)
 
 // WorkerSummaryLegSucceeded reports output eligible for synthesis or merge.
 func WorkerSummaryLegSucceeded(status WorkerSummaryStatus) bool {

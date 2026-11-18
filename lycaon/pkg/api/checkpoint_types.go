@@ -17,17 +17,6 @@ const (
 	ContentApplyApprovePartial ContentApplyDecision = "approve_partial"
 )
 
-// CheckpointStatus is the lifecycle state of a checkpoint.
-type CheckpointStatus string
-
-const (
-	CheckpointStatusPending  CheckpointStatus = "pending"
-	CheckpointStatusApproved CheckpointStatus = "approved"
-	CheckpointStatusRejected CheckpointStatus = "rejected"
-	CheckpointStatusExpired  CheckpointStatus = "expired"
-	CheckpointStatusCanceled CheckpointStatus = "canceled"
-)
-
 // SocketCapabilityAuthority is the effective authority for an AF_UNIX grant.
 type SocketCapabilityAuthority string
 

@@ -102,7 +102,7 @@ func drawMessageRole(t *rapid.T) wire.MessageRole {
 }
 
 func drawMessageKind(t *rapid.T) wire.MessageKind {
-	kinds := append([]wire.MessageKind{""}, wire.AllMessageKinds()...)
+	kinds := append([]wire.MessageKind{""}, wire.AllMessageKindValues()...)
 	return rapid.SampledFrom(kinds).Draw(t, "kind")
 }
 

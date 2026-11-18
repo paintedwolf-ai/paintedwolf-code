@@ -79,8 +79,8 @@ func (s *RunControl) HandleListSessionWorkflowRuns(w http.ResponseWriter, r *htt
 	}
 	var statusFilter []string
 	if raw := strings.TrimSpace(r.URL.Query().Get("status")); raw != "" {
-		validStatuses := make(map[string]struct{}, len(wire.AllWorkflowRunStatuses()))
-		for _, status := range wire.AllWorkflowRunStatuses() {
+		validStatuses := make(map[string]struct{}, len(wire.AllWorkflowRunStatusValues()))
+		for _, status := range wire.AllWorkflowRunStatusValues() {
 			validStatuses[string(status)] = struct{}{}
 		}
 		for _, st := range strings.Split(raw, ",") {

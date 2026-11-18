@@ -12,7 +12,7 @@ import (
 
 func TestWorkerResultStatusReactableClosesOverSummaryEnum(t *testing.T) {
 	t.Parallel()
-	for _, status := range api.AllWorkerSummaryStatuses() {
+	for _, status := range api.AllWorkerSummaryStatusValues() {
 		got := api.WorkerResultStatusReactable(string(status))
 		switch status {
 		case api.WorkerSummaryStatusCanceled, api.WorkerSummaryStatusHeld:

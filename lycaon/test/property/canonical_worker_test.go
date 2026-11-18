@@ -38,7 +38,7 @@ func TestOneCanonicalWorkerCardAndSupersedeInPlace(t *testing.T) {
 		}))
 		canonicalOrd := mustFindMessage(t, ctx, store, sess.ID, canonicalID).Ord
 
-		statusGen := rapid.SampledFrom(api.AllWorkerSummaryStatuses())
+		statusGen := rapid.SampledFrom(api.AllWorkerSummaryStatusValues())
 		stepCount := rapid.IntRange(1, 6).Draw(t, "steps")
 		var lastStatus api.WorkerSummaryStatus
 		var lastEnvelope string

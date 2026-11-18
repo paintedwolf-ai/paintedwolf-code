@@ -217,15 +217,7 @@ components:
         deletions:
           type: integer
     WorkerStatus:
-      type: string
-      enum:
-      - pending
-      - running
-      - waiting
-      - complete
-      - failed
-      - canceled
-      - held
+      $ref: worker-status.generated.yaml#/components/schemas/WorkerStatus
     WorkerState:
       type: string
       description: A worker's derived state.

@@ -1,0 +1,10 @@
+name: WorkerSummaryStatus
+go_const_prefix: WorkerSummaryStatus
+values:
+  - id: complete
+  - id: partial
+  - id: failed
+  - id: canceled
+  - id: held
+  - id: open
+  - id: needs_decision

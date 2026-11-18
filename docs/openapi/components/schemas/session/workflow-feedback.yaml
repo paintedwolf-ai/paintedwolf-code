@@ -20,17 +20,7 @@ components:
         reason:
           type: string
     WorkflowBoundaryKind:
-      type: string
-      enum:
-      - started
-      - exited
-      - canceled
-      - completed
-      - failed
-      - paused
-      - resumed
-      - paused_on_child
-      - interrupted
+      $ref: ../workflow-boundary-kind.generated.yaml#/components/schemas/WorkflowBoundaryKind
     FeedbackResponseType:
       type: string
       enum:

@@ -22,8 +22,8 @@ func TestAllStatusEnumsAreDistinct(t *testing.T) {
 	// WorkerStatus and WorkerSummaryStatus have canonical All…() registries;
 	// derive from them so a newly added constant can't skip the distinctness
 	// check by being forgotten in a hand-maintained list here.
-	assertDistinct(t, "WorkerSummaryStatus", enumStrings(api.AllWorkerSummaryStatuses()))
-	assertDistinct(t, "WorkerStatus", enumStrings(api.AllWorkerStatuses()))
+	assertDistinct(t, "WorkerSummaryStatus", enumStrings(api.AllWorkerSummaryStatusValues()))
+	assertDistinct(t, "WorkerStatus", enumStrings(api.AllWorkerStatusValues()))
 	assertDistinct(t, "LegStatus", []string{
 		string(api.LegStatusPending),
 		string(api.LegStatusDispatched),

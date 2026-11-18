@@ -1,0 +1,7 @@
+name: CompletionReportAskEffort
+description: How much work saying yes commits the team to.
+go_const_prefix: CompletionReportAskEffort
+values:
+  - id: small
+  - id: medium
+  - id: large

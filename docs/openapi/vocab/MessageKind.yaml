@@ -1,0 +1,35 @@
+name: MessageKind
+go_const_prefix: MessageKind
+values:
+  - id: workflow_boundary
+  - id: progress_complete
+  - id: progress_update
+  - id: workflow_feedback
+  - id: workflow_explain
+    comment: "tags the host's note for a phase it holds."
+  - id: draft
+    comment: "tags coordinator orchestration prose, rendered apart from the answer."
+  - id: index_warming
+    comment: "tags a host-initiated warming row."
+  - id: superseded
+    comment: "tags a replaced worker completion report."
+  - id: blueprint
+    comment: "tags a blueprint proposal card."
+  - id: agent_note
+    comment: "tags a user-visible grounded note."
+  - id: completion_report
+    comment: "tags an accepted grounded report."
+  - id: iteration_cap_closeout
+    comment: "tags an exhausted tool-loop budget."
+  - id: host_kick
+    comment: "tags a rendered coordinator kick. HostSignalID identifies the catalog anchor that produced the text."
+  - id: coordinator_guidance
+    comment: "tags a structured guidance retry. HostSignalID carries the registered guidance Code."
+  - id: host_nudge
+    comment: "tags host-authored steering without a catalog anchor."
+  - id: host_loop_wake
+    comment: "tags the exact host loop re-entry row."
+  - id: host_secret_redaction_notice
+    comment: "tags the transient model instruction projected from durable host-secret-redaction provenance."
+  - id: user_continuation
+    comment: "keeps mid-turn direction in the visible turn."

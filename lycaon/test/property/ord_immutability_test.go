@@ -49,8 +49,8 @@ func TestOrdCreatedAtImmutabilityAcrossPatches(t *testing.T) {
 			Role:              rapid.SampledFrom([]api.MessageRole{api.MessageRoleUser, api.MessageRoleAssistant, api.MessageRoleTool, api.MessageRoleSystem}).Draw(t, "role"),
 			Content:           rapid.StringMatching(`[a-z .,]{0,40}`).Draw(t, "content"),
 			Kind:              rapid.SampledFrom([]api.MessageKind{"", api.MessageKindDraft, api.MessageKindWorkflowBoundary, api.MessageKindProgressUpdate}).Draw(t, "kind"),
-			Visibility:        rapid.SampledFrom(api.AllMessageVisibilities()).Draw(t, "visibility"),
-			DraftStatus:       rapid.SampledFrom(append([]api.DraftStatus{""}, api.AllDraftStatuses()...)).Draw(t, "draft_status"),
+			Visibility:        rapid.SampledFrom(api.AllMessageVisibilityValues()).Draw(t, "visibility"),
+			DraftStatus:       rapid.SampledFrom(append([]api.DraftStatus{""}, api.AllDraftStatusValues()...)).Draw(t, "draft_status"),
 			DraftVersionCount: rapid.IntRange(0, 5).Draw(t, "draft_version_count"),
 			CreatedAt:         patchTS,
 		}

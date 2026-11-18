@@ -838,15 +838,7 @@ components:
         armed:
           type: boolean
     WorkflowRunStatus:
-      type: string
-      enum:
-      - running
-      - paused
-      - paused_on_child
-      - complete
-      - failed
-      - canceled
-      - interrupted
+      $ref: workflow-run-status.generated.yaml#/components/schemas/WorkflowRunStatus
     WorkflowScope:
       type: string
       enum:

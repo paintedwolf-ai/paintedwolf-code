@@ -1,0 +1,6 @@
+name: MessageLiveStatus
+description: Runtime-derived streaming affordance stamped at query/SSE time; not persisted
+go_const_prefix: MessageLiveStatus
+values:
+  - id: streaming
+  - id: complete

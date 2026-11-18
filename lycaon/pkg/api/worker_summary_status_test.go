@@ -22,7 +22,7 @@ func TestWorkerResultStatusReactable(t *testing.T) {
 	if api.WorkerResultStatusReactable("running") {
 		t.Fatal("queue running is not a terminal result")
 	}
-	for _, status := range api.AllWorkerSummaryStatuses() {
+	for _, status := range api.AllWorkerSummaryStatusValues() {
 		got := api.WorkerResultStatusReactable(string(status))
 		switch status {
 		case api.WorkerSummaryStatusCanceled, api.WorkerSummaryStatusHeld:
