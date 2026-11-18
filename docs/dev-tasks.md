@@ -87,7 +87,7 @@ directory owned by that run. Print a location from the repository root with
 `python3 scripts/artifact_paths.py artifacts|build|bin|locks`; the examples
 below use `BUILD_DIR="$(python3 scripts/artifact_paths.py build)"`.
 
-The repository ships no pre-commit hook. **Closeout:** a change pushed for a pull request closes out in CI; a change handed off without a push runs `./task check-fast`; `./task check` is full local verification on request. **CI** (`ci.yml`) runs the fast tier for a ready PR and the affected-scope integration gate for its merge group, both behind required `check`; enabling auto-merge on a ready PR adds it to the queue once its fast tier passes. Drafts do not verify. Broad changes run the full check profile in the queue. `qualification.yml` runs full check, platform, and E2E only on manual dispatch for an exact release commit. The daily nightly covers the complete main verification signal; dispatching it with `source-sha` runs the same stages on that exact commit. Manual CI dispatch runs full check and platform, or the fast tier with `profile: fast`, and reports the required `check` on the dispatched commit as a commit status, because a pull request's checks leave out dispatch runs. Nightly also covers race, fuzz, stress, WebKit, performance, and quarantine observation. See [hosted admission and qualification](test-strategy.md#hosted-admission-and-qualification) for scope, offline execution, recovery, and queue rollout.
+The repository ships no pre-commit hook. **Closeout:** a change pushed for a pull request closes out in CI; a change handed off without a push runs `./task check-fast`; `./task check` is full local verification on request. **CI** (`ci.yml`) runs the fast tier for a ready PR and the affected-scope integration gate for its merge group, both behind required `check`; enabling auto-merge on a ready PR adds it to the queue once its fast tier passes. Drafts do not verify. Broad changes run the full check profile in the queue. `qualification.yml` runs full check, platform, and E2E only on manual dispatch for an exact release commit. The daily nightly covers the complete main verification signal; dispatching it with `source-sha` runs the same stages on that exact commit. Dispatching it with `suite: release` runs only the release rehearsal and the published installed upgrade. Manual CI dispatch runs full check and platform, or the fast tier with `profile: fast`, and reports the required `check` on the dispatched commit as a commit status, because a pull request's checks leave out dispatch runs. Nightly also covers race, fuzz, stress, WebKit, and performance. See [hosted admission and qualification](test-strategy.md#hosted-admission-and-qualification) for scope, offline execution, recovery, and queue rollout.
 
 For an isolated hosted diagnostic, select an existing catalog lane, for example
 `gh workflow run ci.yml --ref <branch> -f profile=check -f lane=runner`.
@@ -1423,7 +1423,7 @@ The Rust shell owns discovery, preferences, downloads, staging, and activation. 
 
 Native device files live under `updates/`: versioned preferences (`preferences.json`), the newest accepted pointer timestamp per feed (`feed-state.json`), and, per installed application path under `installations/<path-sha256>/`, the verified staging directory, `ready.json`, `rejected.json`, the activation journal `transaction.json` with its `receipts/`, and the private `records.lock` and `preparation.lock` files. `install-source.json` beside them is the Homebrew receipt. Unknown preference and journal formats are refused unchanged; an unreadable preference file disables automatic updating for that run and reports why. Unreadable ephemeral records (`ready.json`, `rejected.json`, `feed-state.json`) are moved aside as `*-quarantined-<uuid>.json` and rebuilt. Records written by other releases follow [Compatibility § Device configuration](compatibility.md#device-configuration).
 
-The public macOS adapter prepares a complete app beside the installation and uses an atomic directory exchange. Its helper is a private copy of the signed application executable invoked in native-only `--apply-update` mode; no WebView or engine is created in that mode. A committed journal and exclusive installation lease are required. Preparation records the executable hash and a complete file, symlink, and permission digest from the authenticated archive. Startup restores that small receipt without re-reading the archive before opening a window. Production code-signature checks require the same Developer ID team as the running signed executable. The helper reuses that exact bundle only after validating its complete digest and signed resource seal; missing or changed preparation is rebuilt from the verified archive. Executable hashes reconcile an exchange interrupted before the final journal write. The canonical parent directory inode is the admission gate, and the installed bundle directory inode carries the lifetime lease across accounts. The gate protects lease acquisition, exchange, and downgrade; it is released while waiting for other processes. Activation locks both bundle inodes during exchange and retains the new installed inode afterward. A coordination failure refuses launch. Concurrent ordinary launches share the lifetime lease without waiting for the first process to quit. A verified external reinstall retires the superseded transaction receipt. Recovery never deletes the old bundle before publishing the new one, never treats unexpected process death as a new installation request, and never automatically launches an old binary against a newly upgraded database. The Linux adapter is check-only. `src-tauri/src/linux_install.rs` captures package ownership of the running executable through the native package database (`dpkg-query`, `rpm`, or `pacman`). That process identity stays distinct from the fresh database version observed during an update check. A general package-owner workflow is not an offer for the version in the upstream feed. The feed check runs on the shared schedule and channel preference and reads the manifest version without a Linux artifact entry; the resulting candidate carries no artifact URL or signature, so download, restart, and automatic installation are never offered, and explicit requests return the structured `package_managed` refusal. Nothing under the install root is ever written by the app. Windows has no automatic activation adapter.
+The public macOS adapter prepares a complete app beside the installation and uses an atomic directory exchange. Its helper is the signed application executable inside the installed bundle, invoked in native-only `--apply-update` mode; no WebView or engine is created in that mode. Releases through 1.0.2 ran a copy of that executable outside the bundle, which macOS kills; those installations activate a committed update on their next launch. A committed journal and exclusive installation lease are required. Preparation records the executable hash and a complete file, symlink, and permission digest from the authenticated archive. Startup restores that small receipt without re-reading the archive before opening a window. Production code-signature checks require the same Developer ID team as the running signed executable. The helper reuses that exact bundle only after validating its complete digest and signed resource seal; missing or changed preparation is rebuilt from the verified archive. Executable hashes reconcile an exchange interrupted before the final journal write. The canonical parent directory inode is the admission gate, and the installed bundle directory inode carries the lifetime lease across accounts. The gate protects lease acquisition, exchange, and downgrade; it is released while waiting for other processes. Activation locks both bundle inodes during exchange and retains the new installed inode afterward. A coordination failure refuses launch. Concurrent ordinary launches share the lifetime lease without waiting for the first process to quit. A verified external reinstall retires the superseded transaction receipt. Recovery never deletes the old bundle before publishing the new one, never treats unexpected process death as a new installation request, and never automatically launches an old binary against a newly upgraded database. The Linux adapter is check-only. `src-tauri/src/linux_install.rs` captures package ownership of the running executable through the native package database (`dpkg-query`, `rpm`, or `pacman`). That process identity stays distinct from the fresh database version observed during an update check. A general package-owner workflow is not an offer for the version in the upstream feed. The feed check runs on the shared schedule and channel preference and reads the manifest version without a Linux artifact entry; the resulting candidate carries no artifact URL or signature, so download, restart, and automatic installation are never offered, and explicit requests return the structured `package_managed` refusal. Nothing under the install root is ever written by the app. Windows has no automatic activation adapter.
 
 Linux source checks first re-read the native package database owner of the process-captured original executable path. A changed or ambiguous owner stops candidate claims; it never rewrites the captured running identity. They then use bounded, read-only cache interfaces under `linux_install/source`: python-apt selects the configured APT policy candidate, hold and trusted origin/suite; DNF5 uses cache-only JSON check-upgrade (DNF4 has a fixed query-format fallback); pacman uses a print-only full-system upgrade without refreshing its databases. The query has one eight-second deadline, a 64 KiB output cap per command and cancellation that terminates only its own child process group. A failed fresh query replaces earlier source facts. Raw package versions, configured source identifiers and suites are retained; an upstream stable/preview preference changes no repository configuration. DNF transaction/versionlock policy and unobserved pacman group holds remain explicitly unknown. Cached candidates establish neither remote freshness nor successful installation. Missing adapters, missing packages, holds, untrusted origins, ambiguous results and wrong architectures have structured outcomes; they never turn into an upgrade command. Nix source ownership remains unknown without a selected owner contract.
 
@@ -1903,6 +1903,22 @@ production control file, conffiles and maintainer scripts around the same payloa
 lints it with lintian, and requires an unmarked `/etc` file to fail. A ready pull
 request runs both when it changes `packaging/`, `scripts/linux_release/` or the
 package assembler.
+`./task release:live-test -- --assembly --receipt PATH` checks that no workflow sets
+an environment name the runner overwrites, holds a tiny updater archive to the
+client's download and expansion limits, and runs the release's aggregate script on
+one tiny signed result per public platform: manifest assembly and validation, the
+public artifact set and both casks, with every updater signature verified against
+a disposable key. Each check also requires its seeded fault to be refused: a
+`RUNNER_NAME` step variable, an archive over the download limit, and a signature
+bound to another version.
+`./task release:live-test -- --macos --app PATH --dmg PATH --public-key KEY --receipt PATH`
+takes an unsigned `den:bundle` build whose updater archive was signed with a
+disposable key, checks the archive's limits and signature, then renders the preview
+cask for its disk image, installs it from a local tap and origin, and uninstalls it.
+It runs only on a disposable hosted runner.
+Nightly runs both, the two metadata rehearsals, `linux-signing`,
+`native-repositories` and `pacman-repositories` through the reusable
+`release-rehearsal.yml`; no job in it holds a credential.
 `./task release:rehearse:pacman-construction -- --receipt PATH` builds and admits a
 sealed tiny fixture with native makepkg in the pinned substrate.
 `./task release:rehearse:package-probe -- --tree DIR` runs the extracted-package
@@ -1975,12 +1991,29 @@ an unmodified prior app in writable scratch space, materializes its exact corpus
 and enables automatic updates with rollout bucket zero. After automatic staging,
 it terminates the staged source process and stops its captured engine, then
 launches that installation again to exercise startup activation. The installed
-bundle must remain unchanged until that launch.
+bundle must remain unchanged until that launch. A source through 1.0.2 commits the
+update and exits on that launch, because its helper runs outside the signed bundle;
+the case waits for the committed journal and the app's exit and launches once more,
+which is how those installations activate. A launch first forgets a daemon record
+whose process has exited, so observation never reports an engine the case stopped.
 The shipped helper performs activation and relaunch. Assertions require the
 prepared bundle's inode at the installation path, matching executable and release
 identities, healthy engine/schema, startup confirmation, old-bundle removal,
-retained corpus semantics, and another healthy restart. Preview promotion keeps
+retained corpus semantics, and another healthy restart. Finally the candidate's
+executable runs `--apply-update` with an unknown transaction inside the installed
+bundle and must refuse it with status 1: helper mode executes there, where a
+killed out-of-bundle copy would end by signal. Preview promotion keeps
 the preview preference; retained generations advance through their bridge feeds.
+
+Nightly runs the same cases from `--prepare-bundle --published --source DIR
+--output DIR`. The newest channel pointer is the candidate, and the newest older
+corpus with a retained release manifest is the source. Every pointer is the one
+the channel already serves, so preparation signs nothing and refuses feed
+credentials. Both apps trust only their compiled-in keys, so the run shows that
+the harness and the published releases work and nothing about the current source;
+its job summary says so. The current source's updater is covered by the
+updater's negative-path tests, and the shipped release accepting a candidate only
+by this release gate.
 
 Upgrade fixtures and desktop evidence are retained for 14 days with attempt-specific
 artifact names. A retried desktop job consumes the successful preparation job's

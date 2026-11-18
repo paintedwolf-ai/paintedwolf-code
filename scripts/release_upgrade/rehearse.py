@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path, PurePosixPath
 import shutil
 import signal
 import tempfile
 
-from release_upgrade.case import run_case, probe_committed_recovery
+from release_upgrade.case import run_case
 from release_upgrade.host import local_origin, require_disposable_host
 from release_upgrade.prepare import file_digest
 
@@ -51,13 +52,14 @@ def verify_requests(path: Path, case: dict, start: int):
             raise ValueError("upgrade did not fetch every authenticated fixture route")
 
 
-def rehearse(root: Path, evidence: Path, case_id: str, recovery_probe=False):
+def rehearse(root: Path, evidence: Path, case_id: str):
     evidence.mkdir(parents=True, exist_ok=False)
     receipt = {"format_version": 1, "result": "failed", "case_id": case_id, "cases": []}
     config = None
     try:
         plan = verify_inventory(root)
         receipt.update({"source_sha": plan["source_sha"], "candidate_version": plan["candidate"]["version"],
+                        "candidate_source": plan["candidate_source"],
                         "excluded_sources": plan["excluded_sources"], "plan_case_count": len(plan["cases"]), "inventory_sha256": file_digest(root / "inventory.json")})
         shutil.copyfile(root / "plan.json", evidence / "plan.json")
         if not plan["cases"]:
@@ -87,11 +89,6 @@ def rehearse(root: Path, evidence: Path, case_id: str, recovery_probe=False):
                     verify_requests(request_log, case, start)
                 except (Exception, KeyboardInterrupt) as error:
                     receipt["cases"][-1]["error"] = str(error)
-                    if recovery_probe and not isinstance(error, KeyboardInterrupt):
-                        try:
-                            receipt["recovery_probe"] = probe_committed_recovery(case, plan, root, case_work, config, evidence / "next-launch-recovery")
-                        except Exception as diagnostic_error:
-                            receipt["recovery_probe"] = {"result": "failed", "error": str(diagnostic_error)}
                     raise
                 receipt["cases"][-1] = result
                 shutil.rmtree(config)
@@ -106,6 +103,18 @@ def rehearse(root: Path, evidence: Path, case_id: str, recovery_probe=False):
         raise
     finally:
         (evidence / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
+        summarize(receipt)
+
+
+def summarize(receipt: dict):
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path or receipt.get("candidate_source") != "published":
+        return
+    case = receipt["case_id"]
+    with open(path, "a") as summary:
+        summary.write(f"### Installed upgrade {case} to published {receipt['candidate_version']}: {receipt['result']}\n\n"
+                      "Both releases are published builds signed with production keys. This run shows that the "
+                      "upgrade harness and those releases work; it shows nothing about the current source.\n")
 
 
 def main():
@@ -113,13 +122,12 @@ def main():
     parser.add_argument("--fixtures", type=Path, required=True)
     parser.add_argument("--case", dest="case_id", required=True)
     parser.add_argument("--evidence", type=Path, required=True)
-    parser.add_argument("--recovery-probe", action="store_true", help="diagnose an explicit next launch while retaining upgrade failure")
     args = parser.parse_args()
     def interrupted(number, _frame):
         raise KeyboardInterrupt(f"Desktop rehearsal interrupted by signal {number}")
     previous = {number: signal.signal(number, interrupted) for number in (signal.SIGINT, signal.SIGTERM)}
     try:
-        rehearse(args.fixtures.resolve(), args.evidence.resolve(), args.case_id, args.recovery_probe)
+        rehearse(args.fixtures.resolve(), args.evidence.resolve(), args.case_id)
     finally:
         for number, handler in previous.items():
             signal.signal(number, handler)

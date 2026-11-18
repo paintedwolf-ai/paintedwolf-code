@@ -10,6 +10,15 @@ def client_protocol(version: str) -> str:
     return "tauri-plugin-v1" if compare(parse(version), parse("1.0.1")) <= 0 else "native-v2"
 
 
+def activation(version: str) -> str:
+    """How an installed native-v2 client activates a staged update.
+
+    Through 1.0.2 the handoff runs a helper copied out of the signed bundle, which macOS
+    kills, so the committed update activates on the next launch instead.
+    """
+    return "next_launch" if compare(parse(version), parse("1.0.2")) <= 0 else "startup"
+
+
 def route(source: dict, candidate: dict, registry: dict, feeds: dict, channel: str) -> list[dict]:
     current = source
     steps = []

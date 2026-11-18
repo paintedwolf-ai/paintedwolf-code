@@ -92,6 +92,8 @@ macho_files() {
 }
 
 if [[ "${HOST_KIND}" == "darwin" ]]; then
+  # Without a Developer ID the same bundle is signed ad hoc.
+  SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:--}"
   GITENGINE_ROOT="${ENGINE_ROOT}/gitengine"
   # The staged credential helper already carries its signature and profile.
   if [[ -d "${GITENGINE_ROOT}" ]]; then
@@ -99,7 +101,7 @@ if [[ "${HOST_KIND}" == "darwin" ]]; then
     GITENGINE_SIGNED=0
     while IFS= read -r f; do
       codesign --force --timestamp --options runtime \
-        -s "${APPLE_SIGNING_IDENTITY}" "${f}"
+        -s "${SIGNING_IDENTITY}" "${f}"
       GITENGINE_SIGNED=$(( GITENGINE_SIGNED + 1 ))
     done < <(macho_files "${GITENGINE_ROOT}")
     if (( GITENGINE_SIGNED == 0 )); then
@@ -125,18 +127,18 @@ if [[ "${HOST_KIND}" == "darwin" ]]; then
     fi
     find "${ENGINE_ROOT}/browser" -type f -name '*.dylib' -print0 \
       | while IFS= read -r -d '' f; do
-          codesign --force --timestamp --options runtime -s "${APPLE_SIGNING_IDENTITY}" "${f}"
+          codesign --force --timestamp --options runtime -s "${SIGNING_IDENTITY}" "${f}"
         done
     codesign --force --timestamp --options runtime \
       --entitlements "${BROWSER_ENTITLEMENTS}" \
-      -s "${APPLE_SIGNING_IDENTITY}" "${BROWSER_BIN}"
+      -s "${SIGNING_IDENTITY}" "${BROWSER_BIN}"
   fi
 fi
 
 chmod +x "${SIDECAR_BIN}"
 
 export CI=false
-if [[ "${HOST_KIND}" == "darwin" ]]; then
+if [[ "${HOST_KIND}" == "darwin" && -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
   if [[ -n "${APPLE_API_ISSUER:-}" && -n "${APPLE_API_KEY:-}" && -n "${APPLE_API_KEY_PATH:-}" ]]; then
     echo "den:bundle — notarizing via App Store Connect API key" >&2
   elif [[ -n "${APPLE_ID:-}" && -n "${APPLE_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
@@ -278,7 +280,9 @@ if [[ "${HOST_KIND}" == "darwin" ]]; then
   APP_PATH="$(find "${BUNDLE_DIR}/macos" -maxdepth 1 -name '*.app' -print -quit 2>/dev/null || true)"
 fi
 if [[ -n "${APP_PATH}" ]]; then
-  VERIFY_ARGS=(--app "${APP_PATH}" --require-signed)
+  VERIFY_ARGS=(--app "${APP_PATH}")
+  # Only a Developer ID build can satisfy the signing audit; an unsigned build still gets the rest.
+  [[ -z "${APPLE_SIGNING_IDENTITY:-}" ]] || VERIFY_ARGS+=(--require-signed)
   echo "den:bundle — verifying bundle integrity" >&2
   bash "${ROOT}/scripts/verify-bundle.sh" "${VERIFY_ARGS[@]}"
 fi

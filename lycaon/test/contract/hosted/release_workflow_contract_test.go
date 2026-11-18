@@ -83,7 +83,7 @@ func TestReleaseWorkflowValidatesTagAgainstVERSION(t *testing.T) {
 		"./task upgrade:rehearse",
 		"aggregate-release:",
 		"packaging/release-platforms.json",
-		"release-assemble-updater-manifest.py",
+		"scripts/release-aggregate.sh",
 		"publish-immutable:",
 		"activate-updater:",
 		"publish-github-release:",
@@ -91,7 +91,6 @@ func TestReleaseWorkflowValidatesTagAgainstVERSION(t *testing.T) {
 		"--channel \"${CHANNEL}\"",
 		"--prerelease",
 		"--latest=false",
-		"scripts/release-validate-updater-manifest.sh",
 		"environment: release-publication",
 	} {
 		if !strings.Contains(body, needle) {

@@ -37,6 +37,13 @@ class UpgradePlanTests(unittest.TestCase):
         self.assertEqual(client_protocol("1.0.1"), "tauri-plugin-v1")
         self.assertEqual(client_protocol("1.0.2-rc1"), "native-v2")
 
+    def test_released_handoff_boundary_decides_next_launch_activation(self):
+        from release_upgrade.plan import activation
+        for version in ("1.0.2-rc1", "1.0.2-rc8", "1.0.2"):
+            self.assertEqual(activation(version), "next_launch")
+        for version in ("1.0.3-rc1", "1.0.3", "1.1.0"):
+            self.assertEqual(activation(version), "startup")
+
     def test_stable_promotes_preview_without_changing_the_preference(self):
         result = plan(manifest("1.2.0"), self.registry,
                       [snapshot("stable", manifest("1.0.2")), snapshot("preview", manifest("1.2.0-rc.1"))])
