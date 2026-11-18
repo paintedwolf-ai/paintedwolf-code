@@ -7,12 +7,13 @@ import (
 )
 
 func TestWatcherLifetimeKeepsStreamsUntilFinalLease(t *testing.T) {
+	var lifetime streamLifetimes
 	root := t.TempDir()
-	old, current := AcquireWatcherLifetime(), AcquireWatcherLifetime()
+	old, current := lifetime.acquire(), lifetime.acquire()
 	t.Cleanup(func() { _ = old(context.Background()) })
 	t.Cleanup(func() { _ = current(context.Background()) })
-	EnsureRoot(t.Context(), root)
-	if !Coverage(root).Watching {
+	lifetime.registry().Ensure(t.Context(), root)
+	if !lifetime.registry().Coverage(root).Watching {
 		t.Fatal("fixture did not start physical stream")
 	}
 	if err := old(t.Context()); err != nil {
@@ -21,7 +22,7 @@ func TestWatcherLifetimeKeepsStreamsUntilFinalLease(t *testing.T) {
 	if err := old(t.Context()); err != nil {
 		t.Fatalf("release old watcher lease: %v", err)
 	}
-	if !Coverage(root).Watching {
+	if !lifetime.registry().Coverage(root).Watching {
 		t.Fatal("old engine stopped current engine stream")
 	}
 	if err := current(t.Context()); err != nil {
@@ -30,15 +31,26 @@ func TestWatcherLifetimeKeepsStreamsUntilFinalLease(t *testing.T) {
 	if err := current(t.Context()); err != nil {
 		t.Fatalf("release current watcher lease: %v", err)
 	}
-	if Coverage(root).Watching {
+	if lifetime.registry().Coverage(root).Watching {
 		t.Fatal("final engine left physical stream alive")
+	}
+	lifetime.registry().Ensure(t.Context(), root)
+	if lifetime.registry().Coverage(root).Watching {
+		t.Fatal("retired engine admitted a new physical stream")
+	}
+	renewed := lifetime.acquire()
+	t.Cleanup(func() { _ = renewed(context.Background()) })
+	lifetime.registry().Ensure(t.Context(), root)
+	if !lifetime.registry().Coverage(root).Watching {
+		t.Fatal("new engine did not reopen stream admission")
 	}
 }
 
 func TestFinalWatcherLeaseSettlesAcceptedChangesAcrossRestart(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
+		var lifetime streamLifetimes
 		root := t.TempDir()
-		releaseOld := AcquireWatcherLifetime()
+		releaseOld := lifetime.acquire()
 		entered, finish := make(chan struct{}), make(chan struct{})
 		t.Cleanup(RegisterObserver(func(_ context.Context, event Event) {
 			if event.ProjectDir == root {
@@ -46,12 +58,12 @@ func TestFinalWatcherLeaseSettlesAcceptedChangesAcrossRestart(t *testing.T) {
 				<-finish
 			}
 		}))
-		NotifyWorktreeDebounced(t.Context(), root, []string{"accepted"}, SourceMutation)
+		lifetime.registry().debounce.NotifyWorktree(t.Context(), root, []string{"accepted"}, SourceMutation)
 		epoch := CurrentEpoch(root)
 		settled := make(chan error, 1)
 		go func() { settled <- releaseOld(t.Context()) }()
 		<-entered
-		releaseNew := AcquireWatcherLifetime()
+		releaseNew := lifetime.acquire()
 		if CurrentEpoch(root) != epoch {
 			t.Fatal("restarting streams reset the process epoch")
 		}

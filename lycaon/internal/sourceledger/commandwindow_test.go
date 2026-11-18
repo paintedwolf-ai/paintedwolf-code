@@ -175,6 +175,7 @@ func TestWindowIsSettledFollowsSettlement(t *testing.T) {
 
 	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
+	loseInventoryCoverage(store, root)
 	window := openTestWindow(t, store, ctx, root, "make")
 	if window.IsSettled() {
 		t.Fatal("open window reported settled")

@@ -138,6 +138,7 @@ func TestReanchorDoesNotReuseASlowPassOverTheGap(t *testing.T) {
 
 	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
+	loseInventoryCoverage(store, root)
 	clock := manualLedgerClock(store)
 	writeRootFile(t, root, "seed.txt", "seed\n")
 	window, first := programWindow(t, store, ctx, root)

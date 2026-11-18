@@ -347,6 +347,7 @@ func TestFailedSettlementReportsUnsettledAndListsAsIncomplete(t *testing.T) {
 
 	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
+	loseInventoryCoverage(store, root)
 	writeRootFile(t, root, "seed.txt", "seed\n")
 	window := openTestWindow(t, store, ctx, root, "make")
 	writeRootFile(t, root, "gen.txt", "generated\n")
@@ -390,6 +391,7 @@ func (failingLocks) lockObservations(context.Context, string, []RootSpec) (func(
 func TestFailedLockLeavesTheRowUntilTheNextBoot(t *testing.T) {
 	ledger := openDiskLedger(t)
 	store, ctx, root := ledger.store, context.Background(), ledger.root
+	loseInventoryCoverage(store, root)
 
 	repochangetest.Acquire(t)
 	window := openTestWindow(t, store, ctx, root, "make")
@@ -421,6 +423,7 @@ func TestFailedGracePassListsAsIncompleteAndClearsOnTheNextPass(t *testing.T) {
 
 	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
+	loseInventoryCoverage(store, root)
 	writeRootFile(t, root, "seed.txt", "seed\n")
 	window, release := programWindow(t, store, ctx, root)
 	writeRootFile(t, root, "gen.txt", "generated\n")
@@ -504,6 +507,7 @@ func TestUntrustedCoverageConvergesOnAPassLongerThanTheBudget(t *testing.T) {
 
 	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
+	loseInventoryCoverage(store, root)
 	clock := manualLedgerClock(store)
 	gate := &gatedInventory{commandsInventoryPort: store.Commands.inventory, release: make(chan struct{}), entered: make(chan struct{}, 8)}
 	store.Commands.inventory = gate
@@ -559,6 +563,7 @@ func TestFinalPassLongerThanTheBudgetServesTheNextOpen(t *testing.T) {
 
 	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
+	loseInventoryCoverage(store, root)
 	clock := manualLedgerClock(store)
 	first := openTestWindow(t, store, ctx, root, "make")
 	released := make(chan struct{})
@@ -579,6 +584,7 @@ func TestSlowPassIsReusedForItsOwnLength(t *testing.T) {
 
 	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
+	loseInventoryCoverage(store, root)
 	clock := manualLedgerClock(store)
 	first := openTestWindow(t, store, ctx, root, "make")
 	released := make(chan struct{})

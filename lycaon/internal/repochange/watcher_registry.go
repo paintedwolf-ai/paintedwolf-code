@@ -28,8 +28,8 @@ type watcherRegistry struct {
 	debounce *debouncer
 }
 
-// newwatcherRegistry returns an empty registry.
-func newwatcherRegistry() *watcherRegistry {
+// newWatcherRegistry returns an empty registry.
+func newWatcherRegistry() *watcherRegistry {
 	return &watcherRegistry{
 		byDir:    map[string]*worktreeWatcher{},
 		maxDirs:  watchfd.MaxDirs,

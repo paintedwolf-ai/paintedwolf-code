@@ -435,7 +435,7 @@ func TestCoverageShortfallDoesNotPublishMutation(t *testing.T) {
 
 func TestWatchCoverageSeparatesLazyPolicyFromTruncation(t *testing.T) {
 	root := t.TempDir()
-	reg := newwatcherRegistry()
+	reg := newWatcherRegistry()
 	t.Cleanup(reg.CloseAll)
 	if err := os.MkdirAll(filepath.Join(root, "node_modules", "library"), 0700); err != nil {
 		t.Fatalf("create lazy library: %v", err)
