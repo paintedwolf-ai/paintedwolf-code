@@ -53,17 +53,22 @@ func newTestServer(t *testing.T, opts ...testDeps) *Server {
 }
 
 func newTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...testDeps) *Server {
-	sessionFixture := storetest.New(t)
-
 	t.Helper()
-	store := sessionFixture
-	mock := llm.NewMockProvider(testMockConfig(t))
-	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
-	mgr.SetDataDir(t.TempDir())
-	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
-	// Stub bindings do not expose coordinator tools.
+	store := storetest.New(t)
+	deps := Dependencies{Core: CoreDependencies{Store: store, Projects: project.NewSQLRegistry(store.DB())}}
+	for _, opt := range opts {
+		opt(&deps)
+	}
+	if deps.Core.Sessions == nil {
+		mock := llm.NewMockProvider(testMockConfig(t))
+		mgr := session.NewHost(deps.Core.Store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
+		mgr.SetDataDir(t.TempDir())
+		mgr.SetProjectRegistry(deps.Core.Projects)
+		mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
+		deps.Core.Sessions = mgr
+	}
 	wireTestBindingRegistry(t)
-	return newServerForTest(t, Dependencies{Core: CoreDependencies{Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: mgr}}, opts...)
+	return newServerForTest(t, deps)
 }
 
 // newServerForTest builds a server with the bundled user notices after opts
