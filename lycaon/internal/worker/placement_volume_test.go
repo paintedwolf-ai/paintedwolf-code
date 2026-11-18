@@ -86,7 +86,8 @@ func TestPlacedWorkerSurvivesEjectAndRelocatesThroughBackup(t *testing.T) {
 		t.Fatalf("edit after remount = %q", body)
 	}
 
-	relocated, _ := relocateWorkerInstallation(t, database, id)
+	relocatedServices, _ := relocateWorkerInstallation(t, database, id)
+	relocated := relocatedServices.Queue
 	moved, ok := relocated.Get(id)
 	if !ok || strings.HasPrefix(moved.WorkspaceRoot, volume.Root) {
 		t.Fatalf("restored root = %+v", moved)
