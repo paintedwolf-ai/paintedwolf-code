@@ -39,7 +39,7 @@ func TestLoadWorkflowManifestHonoursDisable(t *testing.T) {
 	content, err := extpacks.DiscoverStockContent()
 	testutil.FailErr(t, "DiscoverStockContent", err)
 	desired := extpacks.EmptyDesired()
-	desired.Disabled = []string{extpacks.WorkflowUnitID("bugbash")}
+	desired.Disabled = []string{"workflows/bugbash"}
 	reduced := extpacks.Resolve(t.Context(), extpacks.ResolveInput{Packs: content, Desired: desired})
 	if _, err := LoadWorkflowManifest(reduced, "bugbash", "1.1.0"); err == nil {
 		t.Fatal("disabled workflow unit must not resolve")

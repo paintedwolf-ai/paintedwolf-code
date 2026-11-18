@@ -45,7 +45,7 @@ func TestOutboundPolicyMatrix(t *testing.T) {
 			"retrieval new clean":              api.GateFirstHost,
 		},
 	}
-	for _, posture := range Postures() {
+	for _, posture := range testPostures() {
 		for _, d := range dests {
 			f := baseFacts(StagePreDial)
 			f.UntrustedIngested = d.ingested

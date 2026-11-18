@@ -11,13 +11,25 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// Every declared preset has a boundary implementation.
+// Every shipped action uses a registered boundary.
 func TestEveryPresetHasABoundary(t *testing.T) {
 	t.Parallel()
 
-	for _, preset := range contribution.PresetIDs() {
-		if _, ok := editorturn.PresetBoundaryFor(preset); !ok {
-			t.Errorf("preset %s has no host boundary implementation", preset)
+	used := map[contribution.PresetID]bool{}
+	for _, action := range stockContributionSet(t).EditorActions() {
+		preset := action.Execution.Preset
+		boundary, ok := editorturn.PresetBoundaryFor(preset)
+		if !ok || boundary.ToolProfile == "" {
+			t.Errorf("action %s has no usable boundary for preset %s", action.ID, preset)
+		}
+		used[preset] = true
+	}
+	for _, preset := range []contribution.PresetID{
+		contribution.PresetInspectFile, contribution.PresetEditFile,
+		contribution.PresetEditSibling, contribution.PresetFixFinding,
+	} {
+		if !used[preset] {
+			t.Errorf("preset %s has no shipped action", preset)
 		}
 	}
 }

@@ -9,8 +9,12 @@ import (
 )
 
 func TestFontCatalogComplete(t *testing.T) {
-	for _, f := range Fonts() {
-		data, err := readEmbedded("fonts/" + f.File)
+	for _, family := range GetCatalog().Fonts {
+		f, ok := LookupFont(family)
+		if !ok {
+			t.Fatalf("catalog font %q cannot be resolved", family)
+		}
+		data, err := FontFile(f.File)
 		if err != nil {
 			t.Fatalf("font %s: %v", f.Family, err)
 		}
@@ -45,8 +49,8 @@ func TestDocumentHTMLIncludesKit(t *testing.T) {
 }
 
 func TestIconCatalogExpanded(t *testing.T) {
-	if len(Icons()) < 400 {
-		t.Fatalf("expected expanded icon catalog, got %d", len(Icons()))
+	if count := len(GetCatalog().Icons); count < 400 {
+		t.Fatalf("expected expanded icon catalog, got %d", count)
 	}
 	for _, name := range []string{"house", "triangle-alert", "search", "settings", "x", "trash-2", "mail"} {
 		if _, ok := LookupIcon(name); !ok {
@@ -84,11 +88,13 @@ func TestIconGroupsNonEmpty(t *testing.T) {
 
 func TestGetCatalogListsAssets(t *testing.T) {
 	c := GetCatalog()
-	if len(c.Fonts) != len(Fonts()) {
-		t.Fatalf("fonts: %d", len(c.Fonts))
+	if len(c.Fonts) != len(fonts) || len(c.Icons) != len(icons) {
+		t.Fatalf("catalog assets: %d fonts, %d icons", len(c.Fonts), len(c.Icons))
 	}
-	if len(c.Icons) < len(Icons()) {
-		t.Fatalf("icons: %d", len(c.Icons))
+	for _, name := range c.Icons {
+		if _, ok := LookupIcon(name); !ok {
+			t.Fatalf("catalog icon %q cannot be resolved", name)
+		}
 	}
 	if len(c.IconGroups) == 0 || c.IconNaming == "" || len(c.Icons) == 0 {
 		t.Fatalf("catalog incomplete: groups=%d naming=%t icons=%d", len(c.IconGroups), c.IconNaming != "", len(c.Icons))

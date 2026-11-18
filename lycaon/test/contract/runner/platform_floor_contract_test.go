@@ -3,7 +3,6 @@ package contract
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"testing"
 
@@ -112,30 +111,15 @@ func releaseMatrixArches(t *testing.T) []string {
 	var got []string
 	for _, platform := range catalog.Platforms {
 		if platform.GOOS == "darwin" {
-			got = append(got, platform.ArtifactArch)
+			got = append(got, platform.GOARCH)
 		}
 	}
-	sort.Strings(got)
 	return got
 }
 
 func TestReleaseMatrixMatchesDarwinArches(t *testing.T) {
 	t.Parallel()
-	want := make([]string, 0, len(platformfloor.DarwinArches()))
-	for _, goArch := range platformfloor.DarwinArches() {
-		machO, ok := platformfloor.MachOArchForGoArch(goArch)
-		if !ok {
-			t.Fatalf("DarwinArches entry %q has no MachOArchForGoArch mapping", goArch)
-		}
-		want = append(want, machO)
-	}
-	sort.Strings(want)
-
-	got := releaseMatrixArches(t)
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("release.yml matrix arches = %v, want %v (derived from platformfloor.DarwinArches).\n"+
-			"The arch set is one SSOT: adding or dropping a slice is one edit in platformfloor, and this test names every consumer that must follow.", got, want)
-	}
+	contractcheck.FailSetEqual(t, "Darwin release architectures", releaseMatrixArches(t), platformfloor.DarwinArches())
 }
 
 // The Linux floor is one SSOT: the package dependency catalog renders from it,
@@ -143,14 +127,15 @@ func TestReleaseMatrixMatchesDarwinArches(t *testing.T) {
 func TestLinuxFloorFeedsPackagingAndCatalog(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	for name, value := range map[string]string{
-		"kernel":    platformfloor.LinuxKernelMin(),
-		"glibc":     platformfloor.LinuxGlibcMin(),
-		"webkitgtk": platformfloor.LinuxWebKitGTKMin(),
-		"gtk3":      platformfloor.LinuxGTK3Min(),
-	} {
-		if value == "" {
-			t.Fatalf("Linux %s floor is empty: lycaon/internal/platformfloor/linux_floor.txt must declare it", name)
+	floor := map[string]string{}
+	for _, line := range strings.Split(contractcheck.ReadRepoFile(t, root, "lycaon/internal/platformfloor/linux_floor.txt"), "\n") {
+		if row := strings.Fields(line); len(row) == 2 {
+			floor[row[0]] = row[1]
+		}
+	}
+	for _, name := range []string{"kernel", "glibc", "webkitgtk", "gtk3"} {
+		if floor[name] == "" {
+			t.Fatalf("Linux floor is missing %s", name)
 		}
 	}
 	dependencies := contractcheck.ReadRepoFile(t, root, "packaging/linux/dependencies.json")
@@ -194,19 +179,10 @@ func TestLinuxFloorFeedsPackagingAndCatalog(t *testing.T) {
 		if platform.GOOS != "linux" {
 			continue
 		}
-		elf, ok := platformfloor.ELFArchForGoArch(platform.GOARCH)
-		if !ok || elf != platform.ArtifactArch {
-			t.Fatalf("Linux row %s/%s is not a shipped architecture (%v, %q)", platform.GOOS, platform.GOARCH, ok, elf)
-		}
 		if strings.Join(platform.PackageExts, ",") != "deb,rpm,pkg.tar.zst" {
 			t.Fatalf("Linux row %s ships %v, want the deb, rpm, and pacman package families", platform.ArtifactArch, platform.PackageExts)
 		}
 		got = append(got, platform.ArtifactArch)
 	}
-	sort.Strings(got)
-	want := platformfloor.LinuxELFArches()
-	sort.Strings(want)
-	if fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Fatalf("release catalog Linux arches = %v, want %v (derived from platformfloor.LinuxArches)", got, want)
-	}
+	contractcheck.FailSetEqual(t, "Linux release package architectures", got, platformfloor.LinuxELFArches())
 }

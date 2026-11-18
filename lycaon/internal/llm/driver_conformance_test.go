@@ -80,7 +80,7 @@ func driverConformanceCoverage() map[string]string {
 
 func TestDriverFactoriesConformanceCoverage(t *testing.T) {
 	covered := driverConformanceCoverage()
-	for _, kind := range driverFactories.Kinds() {
+	for kind := range driverConstructors {
 		if _, ok := covered[kind]; !ok {
 			t.Errorf("driverFactories[%q] has no conformance entry — add httptest matrix or explicit skip reason", kind)
 		}
@@ -283,7 +283,7 @@ func TestHTTPDriversInterruptedAndEmptyConformance(t *testing.T) {
 		Model:    "m",
 		Messages: []api.Message{{Role: api.MessageRoleUser, Content: "ping"}},
 	}
-	for _, kind := range driverFactories.Kinds() {
+	for kind := range driverConstructors {
 		if providerKindSpecs[kind].Protocol == ProtocolNativeGeneration {
 			continue
 		}

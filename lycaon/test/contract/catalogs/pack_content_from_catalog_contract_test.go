@@ -120,7 +120,7 @@ func TestWorkflowManifestsAndTemplatesLoadFromCatalogUnits(t *testing.T) {
 		t.Fatal("no workflow template provide units in the stock catalog")
 	}
 	desired := extpacks.EmptyDesired()
-	desired.Disabled = []string{extpacks.WorkflowUnitID("plan"), templateUnitID}
+	desired.Disabled = []string{"workflows/plan", templateUnitID}
 	reduced := extpacks.Resolve(t.Context(), extpacks.ResolveInput{Packs: stock, Desired: desired})
 
 	afterManifests, _, err := workflowdef.LoadManifestsFromCatalog(reduced)
