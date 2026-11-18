@@ -14,30 +14,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/httpclient"
 	"github.com/lycaon/lycaon/internal/modelfeed"
+	"github.com/lycaon/lycaon/internal/modelfeed/modelfeedtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-type failingRefreshModelFeed struct {
-	doc *modelfeed.Document
-	err error
-}
-
-func (f *failingRefreshModelFeed) Document(context.Context) (*modelfeed.Document, error) {
-	return f.doc, nil
-}
-
-func (f *failingRefreshModelFeed) Refresh(context.Context) (*modelfeed.Document, error) {
-	return nil, f.err
-}
-
-func (f *failingRefreshModelFeed) Snapshot() (*modelfeed.Document, string, bool) {
-	return f.doc, string(StatusOK), f.doc != nil
-}
-
 func TestRateTableFromModelFeedFixture(t *testing.T) {
 	body := readFixture(t, "models-dev", "api.json")
-	table, err := parseModelFeedFixture(body)
-	testutil.FailErr(t, "parseModelFeedFixture", err)
+	table, err := fixtureRateTable(t, body)
+	testutil.FailErr(t, "project fixture rate table", err)
 	rate, ok := table.Rates[RateKey{Kind: "openai", ModelID: "gpt-4.1"}]
 	if !ok {
 		t.Fatal("expected openai/gpt-4.1 rate")
@@ -46,12 +30,24 @@ func TestRateTableFromModelFeedFixture(t *testing.T) {
 }
 
 func TestModelsDevForceRefreshReportsFailureInsteadOfStaleSuccess(t *testing.T) {
-	doc, err := modelfeed.ParseDocument(readFixture(t, "models-dev", "api.json"))
-	testutil.FailErr(t, "ParseDocument", err)
+	body := readFixture(t, "models-dev", "api.json")
 	feedErr := errors.New("feed unavailable")
+	feed, err := modelfeed.New(modelfeed.Options{
+		CacheDir: t.TempDir(),
+		GetBytes: func(context.Context, string) ([]byte, error) {
+			if body == nil {
+				return nil, feedErr
+			}
+			return body, nil
+		},
+	})
+	testutil.FailErr(t, "open model feed", err)
+	_, err = feed.Refresh(t.Context())
+	testutil.FailErr(t, "publish initial feed", err)
+	body = nil
 	source := newModelsDevSource(SourceConfig{
 		ID: "models-dev", Kind: kindModelsDev, Label: "Models.dev",
-	}, &failingRefreshModelFeed{doc: doc, err: feedErr}, time.Now)
+	}, feed, time.Now)
 
 	if _, err := source.Fetch(t.Context()); err != nil {
 		testutil.FailErr(t, "ordinary cached fetch", err)
@@ -292,8 +288,7 @@ func TestOversizedPayloadRejected(t *testing.T) {
 
 func TestModelsDevProjectsFromModelFeed(t *testing.T) {
 	body := readFixture(t, "models-dev", "api.json")
-	feed, err := newStubModelFeed(body)
-	testutil.FailErr(t, "stub feed", err)
+	feed := modelfeedtest.Publish(t, body)
 	cfg := SourcesConfig{Sources: []SourceConfig{{
 		ID: "models-dev", Kind: kindModelsDev, Label: "Models.dev",
 	}}}
@@ -322,8 +317,8 @@ func TestFireworksKindIdentity(t *testing.T) {
     }
   }
 }`)
-	table, err := parseModelFeedFixture(body)
-	testutil.FailErr(t, "parseModelFeedFixture", err)
+	table, err := fixtureRateTable(t, body)
+	testutil.FailErr(t, "project fixture rate table", err)
 	rate, ok := table.Rates[RateKey{Kind: "fireworks", ModelID: "accounts/fireworks/models/kimi-k2p7-code"}]
 	if !ok {
 		t.Fatalf("want fireworks kind key, rates=%+v", table.Rates)
@@ -388,8 +383,7 @@ func TestLoadBundledPricingSources(t *testing.T) {
 	if len(cfg.Sources) != 3 {
 		t.Fatalf("want 3 sources, got %d", len(cfg.Sources))
 	}
-	feed, err := newStubModelFeed(readFixture(t, "models-dev", "api.json"))
-	testutil.FailErr(t, "stub feed", err)
+	feed := modelfeedtest.Publish(t, readFixture(t, "models-dev", "api.json"))
 	reg, err := NewRegistryFromConfig(t.Context(), cfg, RegistryOptions{
 		CacheDir:  t.TempDir(),
 		GetBytes:  (&seqFetcher{}).Get, // no network for HTTP feeds
@@ -449,31 +443,6 @@ func (s *seqFetcher) Get(_ context.Context, rawURL string) ([]byte, error) {
 	return body, err
 }
 
-type stubModelFeed struct {
-	doc *modelfeed.Document
-}
-
-func newStubModelFeed(body []byte) (*stubModelFeed, error) {
-	doc, err := modelfeed.ParseDocument(body)
-	if err != nil {
-		return nil, err
-	}
-	doc.FetchedAt = time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC)
-	return &stubModelFeed{doc: doc}, nil
-}
-
-func (s *stubModelFeed) Document(context.Context) (*modelfeed.Document, error) {
-	return s.doc, nil
-}
-
-func (s *stubModelFeed) Refresh(context.Context) (*modelfeed.Document, error) {
-	return s.doc, nil
-}
-
-func (s *stubModelFeed) Snapshot() (*modelfeed.Document, string, bool) {
-	return s.doc, string(StatusOK), s.doc != nil
-}
-
 func rateValue(v *float64) float64 {
 	if v == nil {
 		return 0
@@ -481,11 +450,8 @@ func rateValue(v *float64) float64 {
 	return *v
 }
 
-func parseModelFeedFixture(body []byte) (RateTable, error) {
-	doc, err := modelfeed.ParseDocument(body)
-	if err != nil {
-		return RateTable{}, err
-	}
-	table := RateTableFromDocument(doc)
+func fixtureRateTable(t *testing.T, body []byte) (RateTable, error) {
+	t.Helper()
+	table := RateTableFromDocument(modelfeedtest.Document(t, body))
 	return table, validateRateTable(table)
 }

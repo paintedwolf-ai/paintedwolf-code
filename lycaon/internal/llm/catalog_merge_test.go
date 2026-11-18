@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/modelfeed"
+	"github.com/lycaon/lycaon/internal/modelfeed/modelfeedtest"
 )
 
 func fixtureDoc(t *testing.T) *modelfeed.Document {
@@ -20,11 +21,7 @@ func fixtureDoc(t *testing.T) *modelfeed.Document {
 	if err != nil {
 		t.Fatalf("fixture: %v", err)
 	}
-	doc, err := modelfeed.ParseDocument(raw)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	return doc
+	return modelfeedtest.Document(t, raw)
 }
 
 func TestMergeCatalogAuthoritativeEmptyDiscoveryKeepsEligible(t *testing.T) {

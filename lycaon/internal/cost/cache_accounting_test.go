@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/modelfeed"
+	"github.com/lycaon/lycaon/internal/modelfeed/modelfeedtest"
 	"github.com/lycaon/lycaon/internal/pricing"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -49,8 +49,7 @@ func TestCacheCountsMustBeDisjointSubsets(t *testing.T) {
 }
 
 func TestPromptTierUsesInclusiveInputForWholeCall(t *testing.T) {
-	doc, err := modelfeed.ParseDocument([]byte(`{"openai":{"models":{"m":{"cost":{"input":1,"output":2,"cache_read":0.1,"context_over_200k":{"input":2,"output":4,"cache_read":0.2}}}}}}`))
-	testutil.FailErr(t, "parse tiered prices", err)
+	doc := modelfeedtest.Document(t, []byte(`{"openai":{"models":{"m":{"cost":{"input":1,"output":2,"cache_read":0.1,"context_over_200k":{"input":2,"output":4,"cache_read":0.2}}}}}}`))
 	table := pricing.RateTableFromDocument(doc)
 	rate := table.Rates[pricing.RateKey{Kind: "openai", ModelID: "m"}]
 	u := TokenUsage{PromptTokens: 200000, CacheReadInputTokens: 190000, CompletionTokens: 1000}
