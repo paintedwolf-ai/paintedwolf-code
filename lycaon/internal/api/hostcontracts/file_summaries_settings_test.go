@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
+	hostapi "github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -17,10 +18,13 @@ import (
 )
 
 func TestFileSummariesSettingsDisablePurgesAndRejectsBriefings(t *testing.T) {
-	briefings := filebriefing.NewMemory()
+	var briefings *filebriefing.SQL
 	cfg, err := filebriefing.LoadConfig()
 	testutil.FailErr(t, "load File summaries config", err)
-	srv, _, projects := contractfixture.NewSettingsTestServer(t, contractfixture.WithTestFileBriefings(t, briefings, cfg))
+	srv, _, projects := contractfixture.NewSettingsTestServer(t, func(d *hostapi.Dependencies) {
+		briefings = filebriefing.NewSQL(d.Core.Database)
+		contractfixture.WithTestFileBriefings(t, briefings, cfg)(d)
+	})
 
 	root := t.TempDir()
 	p, err := project.CreateWithRoot(t.Context(), projects, root)
@@ -70,7 +74,10 @@ func TestFileSummariesSettingsDisablePurgesAndRejectsBriefings(t *testing.T) {
 func TestFileSummariesSettingsDisableKeepsSettingOnWhenPurgeFails(t *testing.T) {
 	cfg, err := filebriefing.LoadConfig()
 	testutil.FailErr(t, "load briefing config", err)
-	srv, _, _ := contractfixture.NewSettingsTestServer(t, contractfixture.WithTestFileBriefings(t, contractfixture.FailingClearFileBriefingStore{Store: filebriefing.NewMemory()}, cfg))
+	srv, _, _ := contractfixture.NewSettingsTestServer(t, func(d *hostapi.Dependencies) {
+		failed := contractfixture.FailingClearFileBriefingStore{Store: filebriefing.NewSQL(d.Core.Database)}
+		contractfixture.WithTestFileBriefings(t, failed, cfg)(d)
+	})
 
 	Put := httptest.NewRecorder()
 	req := contractfixture.NewAuthedRequest(http.MethodPatch, "/v1/settings/file-summaries", strings.NewReader(`{"enabled":false}`))
