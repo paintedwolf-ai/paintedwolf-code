@@ -108,7 +108,7 @@ func (f agentFixture) observeLaunchDraft(t *testing.T, id, path string) launchOb
 }
 
 func unsavedByPath(unsaved []UnsavedDocument) map[string]UnsavedCause {
-	out := make(map[string]UnsavedCause, len(save.Unsaved))
+	out := make(map[string]UnsavedCause, len(unsaved))
 	for _, document := range unsaved {
 		out[document.Path] = document.Cause
 	}
