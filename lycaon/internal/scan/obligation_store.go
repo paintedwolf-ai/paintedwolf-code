@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -28,22 +28,22 @@ type LandedChange struct {
 }
 
 // WarmingObligationIDs returns durable scans still waiting for snapshot publication.
-func (s *sqlRunStore) WarmingObligationIDs(ctx context.Context, limit int) ([]string, error) {
-	if s == nil || s.db == nil {
+func (s *RunStore) WarmingObligationIDs(ctx context.Context, limit int) ([]string, error) {
+	if s == nil || s.tx.db == nil {
 		return nil, nil
 	}
 	if limit <= 0 {
 		limit = 16
 	}
-	return s.queries.WarmingObligationIDs(ctx, int64(limit))
+	return s.tx.queries.WarmingObligationIDs(ctx, int64(limit))
 }
 
 // LandedChangeForScan returns exact attribution metadata for ingestion.
-func (s *sqlRunStore) LandedChangeForScan(ctx context.Context, scanID string) (*LandedChange, error) {
-	if s == nil || s.db == nil || strings.TrimSpace(scanID) == "" {
+func (s *RunStore) LandedChangeForScan(ctx context.Context, scanID string) (*LandedChange, error) {
+	if s == nil || s.tx.db == nil || strings.TrimSpace(scanID) == "" {
 		return nil, nil
 	}
-	row, err := s.queries.GetLandedChangeForScan(ctx, db.NullString(scanID))
+	row, err := s.tx.queries.GetLandedChangeForScan(ctx, db.NullString(scanID))
 	if db.IsNoRows(err) {
 		return nil, nil
 	}
@@ -54,11 +54,11 @@ func (s *sqlRunStore) LandedChangeForScan(ctx context.Context, scanID string) (*
 }
 
 // LatestRequiredLandedChangeForSession returns the newest required generation landed by sessionID's workers.
-func (s *sqlRunStore) LatestRequiredLandedChangeForSession(ctx context.Context, sessionID string) (*LandedChange, error) {
-	if s == nil || s.db == nil || strings.TrimSpace(sessionID) == "" {
+func (s *RunStore) LatestRequiredLandedChangeForSession(ctx context.Context, sessionID string) (*LandedChange, error) {
+	if s == nil || s.tx.db == nil || strings.TrimSpace(sessionID) == "" {
 		return nil, nil
 	}
-	row, err := s.queries.LatestRequiredLandedChangeForSession(ctx, db.NullString(sessionID))
+	row, err := s.tx.queries.LatestRequiredLandedChangeForSession(ctx, db.NullString(sessionID))
 	if db.IsNoRows(err) {
 		return nil, nil
 	}
@@ -69,7 +69,7 @@ func (s *sqlRunStore) LatestRequiredLandedChangeForSession(ctx context.Context, 
 }
 
 // LatestRequiredScanForSession returns the cumulative landing scan for sessionID.
-func (s *sqlRunStore) LatestRequiredScanForSession(ctx context.Context, sessionID string) (*api.CodeScan, error) {
+func (s *RunStore) LatestRequiredScanForSession(ctx context.Context, sessionID string) (*api.CodeScan, error) {
 	landed, err := s.LatestRequiredLandedChangeForSession(ctx, sessionID)
 	if err != nil || landed == nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (s *sqlRunStore) LatestRequiredScanForSession(ctx context.Context, sessionI
 	if strings.TrimSpace(landed.ScanID) == "" {
 		return nil, fmt.Errorf("landed change %s is missing its scan obligation", landed.ID)
 	}
-	rec, err := s.Get(ctx, landed.ScanID)
+	rec, err := s.reads.Get(ctx, landed.ScanID)
 	if err != nil {
 		return nil, err
 	}
@@ -104,12 +104,12 @@ func landedChangeFromRow(row db.LandedChanges) (*LandedChange, error) {
 }
 
 // CancelPendingScans makes the product main authoritative for queued work.
-func (s *sqlRunStore) CancelPendingScans(ctx context.Context, reason string) ([]api.CodeScan, error) {
-	if s == nil || s.db == nil {
+func (s *RunStore) CancelPendingScans(ctx context.Context, reason string) ([]api.CodeScan, error) {
+	if s == nil || s.tx.db == nil {
 		return nil, nil
 	}
 	var canceled []api.CodeScan
-	err := db.InTx(ctx, s.db, s.queries, s.notify, func(qtx *db.Queries, tx *sql.Tx) error {
+	err := db.InTx(ctx, s.tx.db, s.tx.queries, s.tx.notify, func(qtx *db.Queries, tx *sql.Tx) error {
 		ids, err := qtx.CancelPendingScans(ctx, db.CancelPendingScansParams{
 			Error: db.NullString(reason), CompletedAt: db.NullString(timelayout.Format(time.Now().UTC())),
 		})
@@ -129,23 +129,23 @@ func (s *sqlRunStore) CancelPendingScans(ctx context.Context, reason string) ([]
 				return getErr
 			}
 			canceled = append(canceled, *codeScanFromRow(row))
-			if err := s.emitScanTx(ctx, tx, id); err != nil {
+			if err := s.tx.emitScanTx(ctx, tx, id); err != nil {
 				return err
 			}
 		}
 		return nil
 	})
 	if err == nil && len(canceled) > 0 {
-		s.QueueChanged.Notify()
-		s.SeriesChanged.Notify()
+		s.tx.queueChanged.Notify()
+		s.tx.seriesChanged.Notify()
 	}
 	return canceled, err
 }
 
 // bindHeadSHA updates provenance after the filesystem commit and snapshot publication.
-func (s *sqlRunStore) bindHeadSHA(ctx context.Context, scanID, headSHA string) error {
-	if s == nil || s.db == nil || strings.TrimSpace(headSHA) == "" {
+func (s *RunStore) bindHeadSHA(ctx context.Context, scanID, headSHA string) error {
+	if s == nil || s.tx.db == nil || strings.TrimSpace(headSHA) == "" {
 		return nil
 	}
-	return s.queries.BindScanHeadSHA(ctx, db.BindScanHeadSHAParams{HeadSha: headSHA, ID: scanID})
+	return s.tx.queries.BindScanHeadSHA(ctx, db.BindScanHeadSHAParams{HeadSha: headSHA, ID: scanID})
 }

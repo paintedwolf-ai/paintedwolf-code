@@ -10,8 +10,8 @@ import (
 )
 
 // Get returns a scan by id, or (nil, nil) when no row exists.
-func (s *sqlCore) Get(ctx context.Context, id string) (*api.CodeScan, error) {
-	row, err := s.queries.GetCodeScan(ctx, id)
+func (s *ReadStore) Get(ctx context.Context, id string) (*api.CodeScan, error) {
+	row, err := s.tx.queries.GetCodeScan(ctx, id)
 	if db.IsNoRows(err) {
 		return nil, nil
 	}
@@ -22,14 +22,14 @@ func (s *sqlCore) Get(ctx context.Context, id string) (*api.CodeScan, error) {
 }
 
 // FindReusableByPathScanner returns matching active or complete evidence.
-func (s *sqlCore) FindReusableByPathScanner(ctx context.Context, canonicalPath, snapshotID, scannerID, reuseKey string) (*api.CodeScan, error) {
+func (s *ReadStore) FindReusableByPathScanner(ctx context.Context, canonicalPath, snapshotID, scannerID, reuseKey string) (*api.CodeScan, error) {
 	canonicalPath = strings.TrimSpace(canonicalPath)
 	scannerID = strings.TrimSpace(scannerID)
 	snapshotID = strings.TrimSpace(snapshotID)
 	if canonicalPath == "" || scannerID == "" {
 		return nil, nil
 	}
-	row, err := s.queries.FindReusableScanByPathScanner(ctx, db.FindReusableScanByPathScannerParams{
+	row, err := s.tx.queries.FindReusableScanByPathScanner(ctx, db.FindReusableScanByPathScannerParams{
 		CanonicalPath:    canonicalPath,
 		ScannerID:        db.NullString(scannerID),
 		SourceSnapshotID: snapshotID,
@@ -45,8 +45,8 @@ func (s *sqlCore) FindReusableByPathScanner(ctx context.Context, canonicalPath, 
 }
 
 // OpenScansForPath returns pending or running scans for a path across all triggers.
-func (s *sqlCore) OpenScansForPath(ctx context.Context, canonicalPath string) ([]api.CodeScan, error) {
-	rows, err := s.queries.OpenScansForPath(ctx, canonicalPath)
+func (s *ReadStore) OpenScansForPath(ctx context.Context, canonicalPath string) ([]api.CodeScan, error) {
+	rows, err := s.tx.queries.OpenScansForPath(ctx, canonicalPath)
 	if err != nil {
 		return nil, err
 	}
@@ -54,8 +54,8 @@ func (s *sqlCore) OpenScansForPath(ctx context.Context, canonicalPath string) ([
 }
 
 // ListOpen returns every pending or running scan.
-func (s *sqlCore) ListOpen(ctx context.Context) ([]api.CodeScan, error) {
-	rows, err := s.queries.ListOpenScans(ctx)
+func (s *ReadStore) ListOpen(ctx context.Context) ([]api.CodeScan, error) {
+	rows, err := s.tx.queries.ListOpenScans(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -63,8 +63,8 @@ func (s *sqlCore) ListOpen(ctx context.Context) ([]api.CodeScan, error) {
 }
 
 // ListByCanonicalPath returns scans for one canonical path.
-func (s *sqlCore) ListByCanonicalPath(ctx context.Context, canonicalPath string) ([]api.CodeScan, error) {
-	rows, err := s.queries.ListScansByCanonicalPath(ctx, canonicalPath)
+func (s *ReadStore) ListByCanonicalPath(ctx context.Context, canonicalPath string) ([]api.CodeScan, error) {
+	rows, err := s.tx.queries.ListScansByCanonicalPath(ctx, canonicalPath)
 	if err != nil {
 		return nil, err
 	}
@@ -72,12 +72,12 @@ func (s *sqlCore) ListByCanonicalPath(ctx context.Context, canonicalPath string)
 }
 
 // ListByWorkflowRunID returns scans bound to a workflow run, newest first.
-func (s *sqlCore) ListByWorkflowRunID(ctx context.Context, workflowRunID string) ([]api.CodeScan, error) {
+func (s *ReadStore) ListByWorkflowRunID(ctx context.Context, workflowRunID string) ([]api.CodeScan, error) {
 	workflowRunID = strings.TrimSpace(workflowRunID)
 	if workflowRunID == "" {
 		return nil, nil
 	}
-	rows, err := s.queries.ListScansByWorkflowRunID(ctx, workflowRunID)
+	rows, err := s.tx.queries.ListScansByWorkflowRunID(ctx, workflowRunID)
 	if err != nil {
 		return nil, err
 	}
@@ -89,12 +89,12 @@ func (s *sqlCore) ListByWorkflowRunID(ctx context.Context, workflowRunID string)
 }
 
 // ListBySessionID returns scans the session asked for, newest first.
-func (s *sqlCore) ListBySessionID(ctx context.Context, sessionID string) ([]api.CodeScan, error) {
+func (s *ReadStore) ListBySessionID(ctx context.Context, sessionID string) ([]api.CodeScan, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil, nil
 	}
-	rows, err := s.queries.ListScansBySessionID(ctx, sessionID)
+	rows, err := s.tx.queries.ListScansBySessionID(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (s *sqlCore) ListBySessionID(ctx context.Context, sessionID string) ([]api.
 }
 
 // LatestCompleteForSessionSnapshot returns the newest complete scan bound to sessionID for a snapshot.
-func (s *sqlCore) LatestCompleteForSessionSnapshot(ctx context.Context, sessionID, snapshotID string, categories []api.ScanCategory) (*api.CodeScan, error) {
+func (s *ReadStore) LatestCompleteForSessionSnapshot(ctx context.Context, sessionID, snapshotID string, categories []api.ScanCategory) (*api.CodeScan, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil, fmt.Errorf("session_id required")
@@ -115,7 +115,7 @@ func (s *sqlCore) LatestCompleteForSessionSnapshot(ctx context.Context, sessionI
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.queries.LatestCompleteScanForSessionSnapshot(ctx, db.LatestCompleteScanForSessionSnapshotParams{
+	row, err := s.tx.queries.LatestCompleteScanForSessionSnapshot(ctx, db.LatestCompleteScanForSessionSnapshotParams{
 		SessionID:        sessionID,
 		CategoriesJson:   categoriesJSON,
 		SourceSnapshotID: strings.TrimSpace(snapshotID),
@@ -134,7 +134,7 @@ func (s *sqlCore) LatestCompleteForSessionSnapshot(ctx context.Context, sessionI
 }
 
 // FindInFlightForSessionSnapshot returns a matching pending or running scan bound to sessionID.
-func (s *sqlCore) FindInFlightForSessionSnapshot(ctx context.Context, sessionID, snapshotID string, categories []api.ScanCategory, paths []string) (*api.CodeScan, error) {
+func (s *ReadStore) FindInFlightForSessionSnapshot(ctx context.Context, sessionID, snapshotID string, categories []api.ScanCategory, paths []string) (*api.CodeScan, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil, nil
@@ -147,7 +147,7 @@ func (s *sqlCore) FindInFlightForSessionSnapshot(ctx context.Context, sessionID,
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.queries.FindInFlightScanForSessionSnapshot(ctx, db.FindInFlightScanForSessionSnapshotParams{
+	row, err := s.tx.queries.FindInFlightScanForSessionSnapshot(ctx, db.FindInFlightScanForSessionSnapshotParams{
 		SessionID:        sessionID,
 		CategoriesJson:   categoriesJSON,
 		SourceSnapshotID: strings.TrimSpace(snapshotID),
@@ -167,7 +167,7 @@ func (s *sqlCore) FindInFlightForSessionSnapshot(ctx context.Context, sessionID,
 }
 
 // LatestCompleteForDelegationSnapshot returns the newest complete scan for a delegation snapshot.
-func (s *sqlCore) LatestCompleteForDelegationSnapshot(ctx context.Context, delegationID, snapshotID string, categories []api.ScanCategory) (*api.CodeScan, error) {
+func (s *ReadStore) LatestCompleteForDelegationSnapshot(ctx context.Context, delegationID, snapshotID string, categories []api.ScanCategory) (*api.CodeScan, error) {
 	if delegationID == "" {
 		return nil, fmt.Errorf("delegation_id required")
 	}
@@ -175,7 +175,7 @@ func (s *sqlCore) LatestCompleteForDelegationSnapshot(ctx context.Context, deleg
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.queries.LatestCompleteScanForDelegationSnapshot(ctx, db.LatestCompleteScanForDelegationSnapshotParams{
+	row, err := s.tx.queries.LatestCompleteScanForDelegationSnapshot(ctx, db.LatestCompleteScanForDelegationSnapshotParams{
 		DelegationID:     delegationID,
 		CategoriesJson:   categoriesJSON,
 		SourceSnapshotID: strings.TrimSpace(snapshotID),
@@ -190,7 +190,7 @@ func (s *sqlCore) LatestCompleteForDelegationSnapshot(ctx context.Context, deleg
 }
 
 // FindInFlightForDelegationSnapshot returns a matching pending or running scan.
-func (s *sqlCore) FindInFlightForDelegationSnapshot(ctx context.Context, delegationID, snapshotID string, categories []api.ScanCategory, paths []string) (*api.CodeScan, error) {
+func (s *ReadStore) FindInFlightForDelegationSnapshot(ctx context.Context, delegationID, snapshotID string, categories []api.ScanCategory, paths []string) (*api.CodeScan, error) {
 	if delegationID == "" {
 		return nil, nil
 	}
@@ -203,7 +203,7 @@ func (s *sqlCore) FindInFlightForDelegationSnapshot(ctx context.Context, delegat
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.queries.FindInFlightScanForDelegationSnapshot(ctx, db.FindInFlightScanForDelegationSnapshotParams{
+	row, err := s.tx.queries.FindInFlightScanForDelegationSnapshot(ctx, db.FindInFlightScanForDelegationSnapshotParams{
 		DelegationID:     delegationID,
 		CategoriesJson:   categoriesJSON,
 		SourceSnapshotID: strings.TrimSpace(snapshotID),

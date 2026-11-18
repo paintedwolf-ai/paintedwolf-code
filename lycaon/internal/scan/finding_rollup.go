@@ -150,12 +150,12 @@ func mergeFindingRollups(parts []findingRollup) findingRollup {
 	return out
 }
 
-func (s *sqlFindingStore) assessmentSummary(ctx context.Context, id string, scans []api.CodeScan) (*api.BoardScanSummary, error) {
+func (s *FindingStore) assessmentSummary(ctx context.Context, id string, scans []api.CodeScan) (*api.BoardScanSummary, error) {
 	summary := BuildAssessmentSummary(id, scans)
 	if summary == nil {
 		return nil, nil
 	}
-	row, err := s.queries.GetAssessmentRollup(ctx, id)
+	row, err := s.tx.queries.GetAssessmentRollup(ctx, id)
 	if err != nil {
 		return nil, err
 	}

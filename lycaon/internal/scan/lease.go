@@ -3,18 +3,18 @@ package scan
 import (
 	"context"
 	"database/sql"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const ScanClaimLease = 45 * time.Second
 
-func (s *sqlRunStore) RenewClaim(ctx context.Context, scanID, claimToken string) (bool, error) {
+func (s *RunStore) RenewClaim(ctx context.Context, scanID, claimToken string) (bool, error) {
 	now := time.Now().UTC()
-	rows, err := s.queries.RenewScanClaim(ctx, db.RenewScanClaimParams{
+	rows, err := s.tx.queries.RenewScanClaim(ctx, db.RenewScanClaimParams{
 		HeartbeatAt: db.NullString(timelayout.Format(now)), LeaseExpiresAt: db.NullString(timelayout.Format(now.Add(ScanClaimLease))),
 		ID: scanID, ClaimToken: db.NullString(claimToken),
 	})
@@ -25,16 +25,16 @@ func (s *sqlRunStore) RenewClaim(ctx context.Context, scanID, claimToken string)
 }
 
 // RecoverExpiredClaims fails scans whose leases expired.
-func (s *sqlRunStore) RecoverExpiredClaims(ctx context.Context) ([]api.CodeScan, error) {
+func (s *RunStore) RecoverExpiredClaims(ctx context.Context) ([]api.CodeScan, error) {
 	now := timelayout.Format(time.Now().UTC())
-	ids, err := s.queries.ListExpiredScanIDs(ctx, db.NullString(now))
+	ids, err := s.tx.queries.ListExpiredScanIDs(ctx, db.NullString(now))
 	if err != nil {
 		return nil, err
 	}
 	var recovered []api.CodeScan
 	for _, id := range ids {
 		won := false
-		err := s.inTx(ctx, func(q *db.Queries, tx *sql.Tx) error {
+		err := s.tx.inTx(ctx, func(q *db.Queries, tx *sql.Tx) error {
 			changed, err := q.FailExpiredScanClaim(ctx, db.FailExpiredScanClaimParams{
 				Error: db.NullString("scan interrupted after its host lease expired"), CompletedAt: db.NullString(now),
 				ID: id, ExpiredBefore: db.NullString(now),
@@ -49,13 +49,13 @@ func (s *sqlRunStore) RecoverExpiredClaims(ctx context.Context) ([]api.CodeScan,
 				return err
 			}
 			won = true
-			return s.emitScanTx(ctx, tx, id)
+			return s.tx.emitScanTx(ctx, tx, id)
 		})
 		if err != nil {
 			return nil, err
 		}
 		if won {
-			if scan, err := s.Get(ctx, id); err != nil {
+			if scan, err := s.reads.Get(ctx, id); err != nil {
 				return nil, err
 			} else if scan != nil {
 				recovered = append(recovered, *scan)
@@ -65,7 +65,7 @@ func (s *sqlRunStore) RecoverExpiredClaims(ctx context.Context) ([]api.CodeScan,
 	return recovered, nil
 }
 
-func (s *sqlRunStore) NextLeaseExpiry(ctx context.Context) (time.Time, error) {
-	raw, err := s.queries.NextScanLeaseExpiry(ctx)
+func (s *RunStore) NextLeaseExpiry(ctx context.Context) (time.Time, error) {
+	raw, err := s.tx.queries.NextScanLeaseExpiry(ctx)
 	return parseCadenceTime(raw), err
 }

@@ -42,7 +42,7 @@ type scanPageRow struct {
 }
 
 // ListPageByCanonicalPaths reads at most one page per root, without finding bodies.
-func (s *sqlFindingStore) ListPageByCanonicalPaths(ctx context.Context, paths []string, query PageQuery) (api.CodeScanPage, error) {
+func (s *FindingStore) ListPageByCanonicalPaths(ctx context.Context, paths []string, query PageQuery) (api.CodeScanPage, error) {
 	paths = uniqueNonEmpty(paths)
 	sort.Strings(paths)
 	if query.Sort == "" {
@@ -68,7 +68,7 @@ func (s *sqlFindingStore) ListPageByCanonicalPaths(ctx context.Context, paths []
 		return api.CodeScanPage{Scans: []api.CodeScan{}}, nil
 	}
 	if cursor.WatermarkOrdinal == 0 {
-		cursor.WatermarkOrdinal, err = s.queries.CodeScanPageWatermark(ctx)
+		cursor.WatermarkOrdinal, err = s.tx.queries.CodeScanPageWatermark(ctx)
 		if err != nil {
 			return api.CodeScanPage{}, err
 		}
@@ -115,7 +115,7 @@ func (s *sqlFindingStore) ListPageByCanonicalPaths(ctx context.Context, paths []
 	return page, err
 }
 
-func (s *sqlFindingStore) scanRootPage(ctx context.Context, path, expression, order string, cursor scanPageCursor, limit int) ([]scanPageRow, error) {
+func (s *FindingStore) scanRootPage(ctx context.Context, path, expression, order string, cursor scanPageCursor, limit int) ([]scanPageRow, error) {
 	direction, comparison := "DESC", "<"
 	if order == "asc" {
 		direction, comparison = "ASC", ">"
@@ -143,7 +143,7 @@ func (s *sqlFindingStore) scanRootPage(ctx context.Context, path, expression, or
   ORDER BY ` + orderFields + ` LIMIT ?
  ) SELECT selected.id, selected.sort_value, selected.created_at, list_json
  FROM selected CROSS JOIN scan_summaries ON scan_summaries.scan_id = selected.id`
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := s.tx.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

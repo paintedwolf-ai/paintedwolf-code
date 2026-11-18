@@ -31,14 +31,14 @@ type assessmentRow struct {
 }
 
 // AssessmentView returns assessment aggregates newest first across paths.
-func (s *sqlFindingStore) AssessmentView(ctx context.Context, canonicalPaths []string) (AssessmentView, error) {
+func (s *FindingStore) AssessmentView(ctx context.Context, canonicalPaths []string) (AssessmentView, error) {
 	paths := uniqueNonEmpty(canonicalPaths)
 	if len(paths) == 0 {
 		return AssessmentView{}, nil
 	}
 	var rows []db.BoardAssessmentCandidatesRow
 	for _, path := range paths {
-		part, err := s.queries.BoardAssessmentCandidates(ctx, path)
+		part, err := s.tx.queries.BoardAssessmentCandidates(ctx, path)
 		if err != nil {
 			return AssessmentView{}, err
 		}
@@ -63,7 +63,7 @@ func (s *sqlFindingStore) AssessmentView(ctx context.Context, canonicalPaths []s
 	if len(assessmentIDs) == 0 {
 		return AssessmentView{}, nil
 	}
-	bindings, err := s.queries.ListAssessmentScanBindings(ctx, assessmentIDs)
+	bindings, err := s.tx.queries.ListAssessmentScanBindings(ctx, assessmentIDs)
 	if err != nil {
 		return AssessmentView{}, err
 	}

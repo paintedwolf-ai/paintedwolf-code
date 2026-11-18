@@ -4,69 +4,95 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // ErrNoPendingScans is returned when ClaimNext finds no queued work.
 var ErrNoPendingScans = errors.New("no pending code scans")
 
-// SQLStore persists code scan records.
+// SQLStore assembles scan persistence operations over one database.
 type SQLStore struct {
-	sqlCore
-	sqlFindingStore
-	sqlRunStore
-	sqlIgnoreStore
-	sqlLedgerStore
+	Reads      *ReadStore
+	Runs       *RunStore
+	Findings   *FindingStore
+	Ignores    *IgnoreStore
+	FullPasses *FullPassStore
+	Series     *SeriesStore
+	db         db.Handle
+	tx         *transactions
 }
 
-type sqlCore struct {
-	seriesRuntimeStates sync.Map
-	SecretIgnores       SecretIgnoreSource
-	db                  db.Handle
-	queries             *db.Queries
-	outbox              scanEventOutbox
-	// QueueChanged wakes the execution runner when queued scans change.
-	QueueChanged WorkSignal
-	// SeriesChanged wakes the cadence loop when a scan series changes.
-	SeriesChanged WorkSignal
+type transactions struct {
+	db            db.Handle
+	queries       *db.Queries
+	outbox        scanEventOutbox
+	queueChanged  *WorkSignal
+	seriesChanged *WorkSignal
 }
 
-type sqlFindingStore struct {
-	*sqlCore
+type ReadStore struct {
+	tx       *transactions
+	findings *FindingStore
 }
 
-type sqlRunStore struct {
-	*sqlCore
+type RunStore struct {
+	tx      *transactions
+	reads   *ReadStore
+	Changed *WorkSignal
 }
 
-type sqlIgnoreStore struct {
-	*sqlCore
+type FindingStore struct {
+	tx *transactions
 }
 
-type sqlLedgerStore struct {
-	*sqlCore
+type IgnoreStore struct {
+	tx            *transactions
+	SecretIgnores SecretIgnoreSource
 }
 
-// NewSQLStore creates a code scan store.
+type FullPassStore struct {
+	tx     *transactions
+	series *SeriesStore
+}
+
+type SeriesStore struct {
+	tx            *transactions
+	Changed       *WorkSignal
+	runtimeStates sync.Map
+}
+
+// NewSQLStore creates the scan persistence components.
 func NewSQLStore(database db.Handle) *SQLStore {
-	s := &SQLStore{
-		sqlCore: sqlCore{db: database, queries: db.New(database)},
+	tx := &transactions{
+		db:            database,
+		queries:       db.New(database),
+		queueChanged:  &WorkSignal{},
+		seriesChanged: &WorkSignal{},
 	}
-	s.sqlFindingStore.sqlCore = &s.sqlCore
-	s.sqlRunStore.sqlCore = &s.sqlCore
-	s.sqlIgnoreStore.sqlCore = &s.sqlCore
-	s.sqlLedgerStore.sqlCore = &s.sqlCore
-	return s
+	reads := &ReadStore{tx: tx}
+	findings := &FindingStore{tx: tx}
+	reads.findings = findings
+	series := &SeriesStore{tx: tx, Changed: tx.seriesChanged}
+	return &SQLStore{
+		Reads:      reads,
+		Runs:       &RunStore{tx: tx, reads: reads, Changed: tx.queueChanged},
+		Findings:   findings,
+		Ignores:    &IgnoreStore{tx: tx},
+		FullPasses: &FullPassStore{tx: tx, series: series},
+		Series:     series,
+		db:         database,
+		tx:         tx,
+	}
 }
 
 // DB returns the underlying database handle.
-func (s *sqlCore) DB() db.Handle {
+func (s *SQLStore) DB() db.Handle {
 	if s == nil {
 		return nil
 	}
@@ -74,7 +100,7 @@ func (s *sqlCore) DB() db.Handle {
 }
 
 // Insert stores a code scan row.
-func (s *sqlCore) Insert(ctx context.Context, scan api.CodeScan, paths []string, baseSnapshotID string) error {
+func (s *RunStore) Insert(ctx context.Context, scan api.CodeScan, paths []string, baseSnapshotID string) error {
 	if scan.ID == "" {
 		scan.ID = uuid.NewString()
 	}
@@ -106,7 +132,7 @@ func (s *sqlCore) Insert(ctx context.Context, scan api.CodeScan, paths []string,
 	if err != nil {
 		return err
 	}
-	return s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
+	return s.tx.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		if err := qtx.InsertCodeScan(ctx, db.InsertCodeScanRowParams{
 			ID:                scan.ID,
 			CanonicalPath:     scan.CanonicalPath,
@@ -138,7 +164,7 @@ func (s *sqlCore) Insert(ctx context.Context, scan api.CodeScan, paths []string,
 		if _, err := bindScanContextsTx(ctx, qtx, scan.ID, scan.AssessmentID, scan.WorkflowRunID, scan.SessionID, scan.CreatedAt); err != nil {
 			return err
 		}
-		return s.emitScanTx(ctx, tx, scan.ID)
+		return s.tx.emitScanTx(ctx, tx, scan.ID)
 	})
 }
 
