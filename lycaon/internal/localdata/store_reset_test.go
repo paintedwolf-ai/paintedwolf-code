@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/localdatatest"
 )
 
 func TestResetStoreCoupledPreservesAppPreferencesDeviceConfigurationAndDebugCaptures(t *testing.T) {
@@ -17,9 +18,9 @@ func TestResetStoreCoupledPreservesAppPreferencesDeviceConfigurationAndDebugCapt
 	}
 	removed = append(removed, storeCoupledRelPaths...)
 	preserved := []string{FirstRunOnboardingRelPath(), "debug/sessions/keep.json"}
-	for _, rel := range durableRelPaths {
-		if !isStoreFile(rel) {
-			preserved = append(preserved, rel)
+	for _, entry := range localdatatest.Entries() {
+		if entry.Preserve && !entry.IsDir && !isStoreFile(entry.Name) {
+			preserved = append(preserved, entry.Name)
 		}
 	}
 	for _, rel := range append(append([]string(nil), removed...), preserved...) {
