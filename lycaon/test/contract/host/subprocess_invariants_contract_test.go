@@ -22,6 +22,7 @@ var approvedHostLaunches = map[string]string{
 	"ssh_agent_socket_lookup":          "retrieves SSH_AUTH_SOCK from launchd environment on headless macOS launches",
 	"test volume":                      "attaches disk images for placement tests on macOS; test support, never in the product",
 	"test volume namespace":            "re-runs a placement test in a private mount namespace on Linux; test support, never in the product",
+	"source outage volume":             "mounts and detaches the loopback NFS volume of source-outage tests on macOS; test support, never in the product",
 	"git":                              "executes Git CLI for worktree isolation, staging, signing, and repository management",
 	"git_config_query":                 "reads global and system git configuration cascade",
 	"git_identity_query":               "queries author identity configured in host git",
