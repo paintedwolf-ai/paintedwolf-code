@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
@@ -15,7 +14,6 @@ import (
 // confined launch: local reads, a commit, and a push to and fetch from a local
 // remote all complete, and the remote receives exactly what was pushed.
 func TestCommandProgramGitRunsUnderTheAgentLaunch(t *testing.T) {
-	gitengine.TestingEnableBundledBinary()
 	s := newCommandProgramSession(t, strings.Join([]string{
 		"git status --short",
 		"git add notes.txt",
