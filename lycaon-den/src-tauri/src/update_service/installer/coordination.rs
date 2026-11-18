@@ -121,6 +121,11 @@ mod tests {
     fn seed_installation(path: &Path) {
         fs::create_dir(path).unwrap();
     }
+    // A process another test thread forks holds a duplicate of every lease
+    // descriptor until it execs, so a released lease is awaited, not polled once.
+    fn await_release(path: &Path, exclusive: bool) -> InstallationLease {
+        acquire_lease(path, exclusive, false).unwrap()
+    }
     #[test]
     fn process_contender() {
         let Some(path) = std::env::var_os("PW_TEST_INSTALLATION") else {
@@ -150,7 +155,7 @@ mod tests {
             .unwrap();
         assert!(status.success());
         drop(lease);
-        assert!(try_activation(&app).unwrap().is_some());
+        await_release(&app, true);
     }
     #[test]
     fn symlinked_bundle_is_not_a_coordination_root() {
@@ -170,7 +175,7 @@ mod tests {
         drop(first);
         assert!(try_activation(&app).unwrap().is_none());
         drop(second);
-        let exclusive = try_activation(&app).unwrap().unwrap();
+        let exclusive = await_release(&app, true);
         assert!(acquire_lease(&app, false, true).is_err());
         let gate = acquire_gate(&app).unwrap();
         downgrade(&exclusive).unwrap();
@@ -187,8 +192,8 @@ mod tests {
         let mut lease = try_activation(&app).unwrap().unwrap();
         exchange_coordinated(&mut lease, &app, &next).unwrap();
         assert!(acquire_lease(&app, false, true).is_err());
-        assert!(acquire_lease(&next, false, true).is_ok());
+        await_release(&next, false);
         drop(lease);
-        assert!(acquire_lease(&app, false, true).is_ok());
+        await_release(&app, false);
     }
 }
