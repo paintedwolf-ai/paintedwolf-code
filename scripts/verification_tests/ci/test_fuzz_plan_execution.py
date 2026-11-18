@@ -53,19 +53,21 @@ class FuzzPlanTests(unittest.TestCase):
         (directory / f"{name}_test.go").write_text(build + TARGET.format(name=name, title=title, crash=crash))
 
     def run_main(self, *argv):
+        """Exit code and stderr; go test's own output is kept out of this runner's
+        stdout and attached to the returned text so a failure shows its cause."""
         stderr = io.StringIO()
-        # go test writes to the inherited descriptors; keep its deliberate
-        # failure lines out of this runner's own output.
         saved = os.dup(1)
         self.addCleanup(os.close, saved)
-        with open(os.devnull, "w") as devnull:
-            os.dup2(devnull.fileno(), 1)
+        with tempfile.TemporaryFile() as child:
+            os.dup2(child.fileno(), 1)
             try:
                 with contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(io.StringIO()):
                     code = fuzz_plan.main(list(argv))
             finally:
                 os.dup2(saved, 1)
-        return code, stderr.getvalue()
+            child.seek(0)
+            output = child.read().decode(errors="replace")
+        return code, stderr.getvalue() + (f"\n--- go test output ---\n{output}" if code else "")
 
     def test_listing_reads_tagged_files_the_plan_declares(self):
         self.assertEqual(fuzz_plan.listed(["integration"], ["./..."]),
