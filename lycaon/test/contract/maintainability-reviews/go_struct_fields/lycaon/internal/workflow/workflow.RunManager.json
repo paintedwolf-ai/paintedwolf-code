@@ -1,0 +1,16 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/workflow/workflow.RunManager",
+  "kind": "construction",
+  "workstream": "shim-workflow-boundaries",
+  "disposition": "retain",
+  "reason": "RunManager assembles named workflow components with a shared run repository and variable lock. Review repair commits through the journal before publication, and inventory accounting reads the bound scan revision directly.",
+  "reviewed_commit": "700aac9e7f2462655107692955ad09cca78f0866",
+  "ceiling": 31,
+  "boundaries": {
+    "lycaon/internal/workflow/review_commit_test.go": "563ef4664509b77237a930fc2d75a472869bed0bc6f139923b31b47a5c624a4d",
+    "lycaon/internal/workflow/inventory_accounting_test.go": "98252870f28e94314805d171dc9b4e1570866c884a00418be41e45fc5bbfec24",
+    "lycaon/internal/workflow/review_repair_test.go": "ce6758863398b8f782a782227d04c801f51639ca61a6cf38b4434d0dc74f1456"
+  },
+  "reviewed_shape": "946871ce41f41cf7fb6cafa8812b4fe1fec418bf8d062cd0e72019447619598b"
+}
