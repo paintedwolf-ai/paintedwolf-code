@@ -2,7 +2,6 @@ package contract
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
@@ -12,29 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-func checkSkillReach(t *testing.T, catalog *toolvocab.Catalog, sk skills.Skill, reader string, corpus string, held map[string]bool) {
-	t.Helper()
-	if names := toolvocab.UnreachableNames(catalog, corpus, held); len(names) > 0 {
-		t.Errorf("skill %q as read by %s names %s, which that reader cannot reach:\n%s",
-			sk.Name, reader, strings.Join(names, ", "), linesNaming(corpus, names))
-	}
-}
-
-// Every stock skill names only tools and command programs its reader can reach
-// (INV-SK-01): coordinator surfaces across root counts, and every worker
-// profile across branch and git states. Retired names count: a skill must not
-// teach what no longer exists.
-func TestStockSkillsNameOnlyReachableToolsAndPrograms(t *testing.T) {
-	catalog, _ := promptNameCatalog(t)
-	forEachStockSkillRender(t, func(t *testing.T, sk skills.Skill, readerLabel string, reader prompts.Reader, _ map[string]any, parts []promptrender.Text) {
-		corpus := make([]string, len(parts))
-		for i, part := range parts {
-			corpus[i] = part.Text
-		}
-		checkSkillReach(t, catalog, sk, readerLabel, strings.Join(corpus, "\n"), reader.Held())
-	})
-}
 
 // TestSurveyRepoAliasAdmittedAtRenderLevel pins the PC09 alias end to end
 // through the render-level reach gate: rendered copy may spell the repo-map

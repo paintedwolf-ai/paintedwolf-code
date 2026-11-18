@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 )
 
@@ -26,7 +27,16 @@ import (
 type Stock struct {
 	Catalog  *extpacks.EffectiveCatalog
 	Profiles []sandbox.ToolProfile
+	Schemas  *toolschema.Config
 	Names    *toolvocab.Catalog
+	// Site is the checkout's distribution prompt overlay, which a render
+	// reads before the bundled templates.
+	Site string
+}
+
+// Engine renders the stock templates under the checkout's site overlay.
+func (s *Stock) Engine() *prompts.FileTemplateEngine {
+	return prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot(), Site: s.Site})
 }
 
 // LoadStock resolves the stock catalog with no device choices.
@@ -48,7 +58,7 @@ func LoadStock(ctx context.Context) (*Stock, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Stock{Catalog: eff, Profiles: profiles, Names: names}, nil
+	return &Stock{Catalog: eff, Profiles: profiles, Schemas: schemas, Names: names}, nil
 }
 
 // PersonaEngine renders personas and agent templates from the module.

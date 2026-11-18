@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -17,7 +18,7 @@ import (
 )
 
 // Family is the prompt-render rule table.
-var Family = invariants.Family{Name: "prompt-render", Invariants: []invariants.Invariant{
+var Family = invariants.Family{Name: "prompt-render", Invariants: append([]invariants.Invariant{
 	{Name: "agent-personas-render", Anchors: []invariants.Anchor{personaRenderer}, Check: agentPersonasRender},
 	{Name: "agent-templates-render", Anchors: []invariants.Anchor{personaRenderer}, Check: agentTemplatesRender},
 	{Name: "coordinator-kicks-render-non-empty", Anchors: []invariants.Anchor{kickRenderer}, Check: coordinatorKicksRenderNonEmpty},
@@ -27,7 +28,7 @@ var Family = invariants.Family{Name: "prompt-render", Invariants: []invariants.I
 	{Name: "templates-render-no-host-paths", Anchors: []invariants.Anchor{invariants.Dir("lycaon/config/packs/painted-wolf/platform/guidance")}, Exempt: []invariants.Exemption{
 		{Key: "config/packs/painted-wolf/platform/guidance/curator/user.md: c.path", Reason: "the curator's evidence path is a display path, not a host root"},
 	}, Check: templatesRenderNoHostPaths},
-}}
+}, reachInvariants...)}
 
 var (
 	personaRenderer = invariants.Func("internal/prompts", "RenderPersona")
@@ -36,7 +37,13 @@ var (
 
 // stock is the stock catalog, read once per corpus.
 func stock(r *invariants.Run) *Stock {
-	return invariants.Part(r.Corpus, "stock prompt catalog", func() (*Stock, error) { return LoadStock(context.Background()) })
+	return invariants.Part(r.Corpus, "stock prompt catalog", func() (*Stock, error) {
+		s, err := LoadStock(context.Background())
+		if err == nil {
+			s.Site = r.Corpus.Path("lycaon/" + protectedpath.PromptFilesDirName)
+		}
+		return s, err
+	})
 }
 
 // skillRenders is every stock skill rendered for every reader, once per
