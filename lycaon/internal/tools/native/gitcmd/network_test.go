@@ -23,7 +23,6 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
-	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -277,13 +276,6 @@ func TestNetworkCommandsAdmitEveryResolvedRemoteBeforeContact(t *testing.T) {
 	h.exec("git", "fetch", "--", "-c").refused(t, "option-shaped remote", "COMMAND_OPERAND_INVALID")
 }
 
-type sshTestHostConfig struct {
-	sshCmd string
-}
-
-func (c sshTestHostConfig) HelperFor(context.Context, string) string { return "" }
-func (c sshTestHostConfig) SSHCommand(context.Context) string        { return c.sshCmd }
-
 func (h *harness) execWithEnv(env []string, words ...string) run {
 	h.t.Helper()
 	inv := toolcontract.OperationInvocation{
@@ -350,8 +342,9 @@ esac
 	// Confinement supplies an agent launch's SSH transport; an ssh shim first
 	// on the launch's PATH stands in for it, and the host's own SSH command
 	// must not apply.
-	gitexec.SetHostConfig(sshTestHostConfig{sshCmd: "/bin/false"})
-	t.Cleanup(func() { gitexec.SetHostConfig(nil) })
+	config := filepath.Join(t.TempDir(), "gitconfig")
+	testutil.FailErr(t, "write user SSH config", os.WriteFile(config, []byte("[core]\n\tsshCommand = /bin/false\n"), 0o600))
+	t.Setenv("GIT_CONFIG_GLOBAL", config)
 	h.owners.Launch = func(ctx context.Context, tc tools.ToolContext, subject, line string, services []confine.HostService) (lycexec.LaunchPlan, func(context.Context, tools.AgentLaunchOutcome), error) {
 		plan, release, err := UnconfinedLaunch(ctx, tc, subject, line, services)
 		return plan.WithReducedEnvironment().WithExtraEnv("PATH=" + bareParent + string(os.PathListSeparator) + os.Getenv("PATH")), release, err

@@ -36,6 +36,7 @@ func assertNoSentinel(t *testing.T, path, what string) {
 }
 
 func TestRepoLocalDiffExternalNeverRuns(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
@@ -55,14 +56,14 @@ func TestRepoLocalDiffExternalNeverRuns(t *testing.T) {
 		{"log", "-p", "-1"},
 		{"show", "HEAD"},
 	} {
-		out, code, err := Run(t.Context(), dir, args, Opts{})
+		out, code, err := e.run(t.Context(), dir, args, Opts{}, nil)
 		if err != nil || code > 1 {
 			t.Fatalf("git %v: err=%v code=%d out=%s", args, err, code, out)
 		}
 		assertNoSentinel(t, sentinel, "git "+strings.Join(args, " ")+" diff.external")
 	}
 
-	out, _, err := Run(t.Context(), dir, []string{"diff"}, Opts{})
+	out, _, err := e.run(t.Context(), dir, []string{"diff"}, Opts{}, nil)
 	testutil.FailErr(t, "diff", err)
 	if !strings.Contains(string(out), "+two") {
 		t.Fatalf("diff lost its content: %s", out)
@@ -70,6 +71,7 @@ func TestRepoLocalDiffExternalNeverRuns(t *testing.T) {
 }
 
 func TestRepoLocalDiffTextconvNeverRuns(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
@@ -91,14 +93,14 @@ func TestRepoLocalDiffTextconvNeverRuns(t *testing.T) {
 		{"show", "HEAD"},
 		{"blame", "tracked.txt"},
 	} {
-		out, code, err := Run(t.Context(), dir, args, Opts{})
+		out, code, err := e.run(t.Context(), dir, args, Opts{}, nil)
 		if err != nil || code > 1 {
 			t.Fatalf("git %v: err=%v code=%d out=%s", args, err, code, out)
 		}
 		assertNoSentinel(t, sentinel, "git "+strings.Join(args, " ")+" diff.<name>.textconv")
 	}
 
-	out, _, err := Run(t.Context(), dir, []string{"diff"}, Opts{})
+	out, _, err := e.run(t.Context(), dir, []string{"diff"}, Opts{}, nil)
 	testutil.FailErr(t, "diff", err)
 	if !strings.Contains(string(out), "+two") {
 		t.Fatalf("diff lost its content: %s", out)
@@ -134,15 +136,15 @@ func TestDiffDriverFlagPlacement(t *testing.T) {
 }
 
 func TestRepoLocalCredentialHelperReset(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
-	SetHostConfig(stubHostConfig{helper: "osxkeychain"})
-	executablePath = func() (string, error) { return "/Applications/Painted Wolf Code.app/Contents/MacOS/pw", nil }
-	t.Cleanup(func() { executablePath = os.Executable })
+	e.hostConfig = stubHostConfig{helper: "osxkeychain"}
+	e.executablePath = func() (string, error) { return "/Applications/Painted Wolf Code.app/Contents/MacOS/pw", nil }
 	dir := t.TempDir()
 	initRepo(t, dir)
 	appendRepoConfig(t, dir, "\n[credential]\n\thelper = \"!repo-local-payload\"\n")
 
-	argv, _, err := buildArgv(t.Context(), dir, Opts{
+	argv, _, err := e.buildArgv(t.Context(), dir, Opts{
 		Profile:   ProfileNetwork,
 		RemoteURL: "https://example.com/r.git",
 	}, []string{"fetch"})
@@ -159,7 +161,7 @@ func TestRepoLocalCredentialHelperReset(t *testing.T) {
 		t.Fatalf("credential.helper values = %q, want reset then resolved helper", helpers)
 	}
 
-	out, code, err := Run(t.Context(), dir, []string{"config", "--get-all", "credential.helper"}, Opts{})
+	out, code, err := e.run(t.Context(), dir, []string{"config", "--get-all", "credential.helper"}, Opts{}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("config --get-all: err=%v code=%d out=%s", err, code, out)
 	}
@@ -170,13 +172,14 @@ func TestRepoLocalCredentialHelperReset(t *testing.T) {
 }
 
 func TestRepoLocalSSHCommandOverridden(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
-	SetHostConfig(nil)
+	e.hostConfig = nil
 	dir := t.TempDir()
 	initRepo(t, dir)
 	appendRepoConfig(t, dir, "\n[core]\n\tsshCommand = /payload/ssh\n")
 
-	out, code, err := Run(t.Context(), dir, []string{"config", "--get", "core.sshCommand"}, Opts{})
+	out, code, err := e.run(t.Context(), dir, []string{"config", "--get", "core.sshCommand"}, Opts{}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("config --get: err=%v code=%d out=%s", err, code, out)
 	}
@@ -186,11 +189,11 @@ func TestRepoLocalSSHCommandOverridden(t *testing.T) {
 }
 
 func TestUserSSHCommandRestored(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
-	SetHostConfig(stubHostConfig{ssh: "ssh -i /home/user/.ssh/id_work"})
-	t.Cleanup(func() { SetHostConfig(nil) })
+	e.hostConfig = stubHostConfig{ssh: "ssh -i /home/user/.ssh/id_work"}
 
-	prefix, err := neutralizeArgs(resolveSSHCommand(t.Context()))
+	prefix, err := e.neutralizeArgs(e.resolveSSHCommand(t.Context()))
 	testutil.FailErr(t, "neutralizeArgs", err)
 	found := false
 	for i := 0; i+1 < len(prefix); i++ {
@@ -204,6 +207,7 @@ func TestUserSSHCommandRestored(t *testing.T) {
 }
 
 func TestUnsafeRepoConfigRefused(t *testing.T) {
+	e := productionExecution()
 	cases := []struct {
 		name   string
 		stanza string
@@ -225,7 +229,7 @@ func TestUnsafeRepoConfigRefused(t *testing.T) {
 			initRepo(t, dir)
 			appendRepoConfig(t, dir, tc.stanza)
 
-			_, _, err := Run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{})
+			_, _, err := e.run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{}, nil)
 			var unsafeCfg *UnsafeRepoConfigError
 			if !errors.As(err, &unsafeCfg) {
 				t.Fatalf("err = %v (%T), want *UnsafeRepoConfigError", err, err)
@@ -241,28 +245,30 @@ func TestUnsafeRepoConfigRefused(t *testing.T) {
 }
 
 func TestLFSFilterConfigAllowed(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
 	appendRepoConfig(t, dir, "\n[filter \"lfs\"]\n\tclean = git-lfs clean -- %f\n\tsmudge = git-lfs smudge -- %f\n\tprocess = git-lfs filter-process\n\trequired = true\n")
 
-	out, code, err := Run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{})
+	out, code, err := e.run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("status on an LFS repo: err=%v code=%d out=%s", err, code, out)
 	}
 }
 
 func TestRepoConfigAuditSeesLaterEdits(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
 
-	if _, _, err := Run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{}); err != nil {
+	if _, _, err := e.run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{}, nil); err != nil {
 		t.Fatalf("clean repo must run: %v", err)
 	}
 	appendRepoConfig(t, dir, "\n[filter \"planted\"]\n\tclean = /payload/clean\n")
 
-	_, _, err := Run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{})
+	_, _, err := e.run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{}, nil)
 	var unsafeCfg *UnsafeRepoConfigError
 	if !errors.As(err, &unsafeCfg) {
 		t.Fatalf("err = %v, want the audit to notice the planted driver", err)
@@ -270,6 +276,7 @@ func TestRepoConfigAuditSeesLaterEdits(t *testing.T) {
 }
 
 func TestUnsafeRepoConfigRefusedFromSubdirectory(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
@@ -283,7 +290,7 @@ func TestUnsafeRepoConfigRefusedFromSubdirectory(t *testing.T) {
 		{"diff"},
 		{"checkout", "--", "."},
 	} {
-		_, _, err := Run(t.Context(), nested, args, Opts{})
+		_, _, err := e.run(t.Context(), nested, args, Opts{}, nil)
 		var unsafeCfg *UnsafeRepoConfigError
 		if !errors.As(err, &unsafeCfg) {
 			t.Fatalf("git %v from a subdirectory = %v (%T), want *UnsafeRepoConfigError", args, err, err)
@@ -295,22 +302,24 @@ func TestUnsafeRepoConfigRefusedFromSubdirectory(t *testing.T) {
 }
 
 func TestCleanRepoRunsFromSubdirectory(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
 	nested := filepath.Join(dir, "packages", "web")
 	testutil.FailErr(t, "mkdir nested", os.MkdirAll(nested, 0o755))
 
-	if _, _, err := Run(t.Context(), nested, []string{"status", "--porcelain"}, Opts{}); err != nil {
+	if _, _, err := e.run(t.Context(), nested, []string{"status", "--porcelain"}, Opts{}, nil); err != nil {
 		t.Fatalf("clean repo must run from a subdirectory: %v", err)
 	}
 }
 
 func TestNonRepositoryDirectoryIsNotAudited(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 
-	_, _, err := Run(t.Context(), dir, []string{"rev-parse", "--show-toplevel"}, Opts{})
+	_, _, err := e.run(t.Context(), dir, []string{"rev-parse", "--show-toplevel"}, Opts{}, nil)
 	var unsafeCfg *UnsafeRepoConfigError
 	if errors.As(err, &unsafeCfg) {
 		t.Fatalf("a plain directory was refused as an unsafe repository: %v", err)
@@ -318,18 +327,19 @@ func TestNonRepositoryDirectoryIsNotAudited(t *testing.T) {
 }
 
 func TestRepoConfigAuditSeesLaterEditsFromSubdirectory(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
 	nested := filepath.Join(dir, "packages", "web")
 	testutil.FailErr(t, "mkdir nested", os.MkdirAll(nested, 0o755))
 
-	if _, _, err := Run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{}); err != nil {
+	if _, _, err := e.run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{}, nil); err != nil {
 		t.Fatalf("clean repo must run: %v", err)
 	}
 	appendRepoConfig(t, dir, "\n[filter \"planted\"]\n\tclean = /payload/clean\n")
 
-	_, _, err := Run(t.Context(), nested, []string{"status", "--porcelain"}, Opts{})
+	_, _, err := e.run(t.Context(), nested, []string{"status", "--porcelain"}, Opts{}, nil)
 	var unsafeCfg *UnsafeRepoConfigError
 	if !errors.As(err, &unsafeCfg) {
 		t.Fatalf("err = %v, want the cached pass to have been invalidated by the edit", err)
@@ -445,28 +455,28 @@ func TestLooksLikeURL(t *testing.T) {
 }
 
 func TestRemoteURLResolvedForPushPull(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	seen := &recordingHostConfig{}
-	SetHostConfig(seen)
-	t.Cleanup(func() { SetHostConfig(nil) })
+	e.hostConfig = seen
 
 	dir := t.TempDir()
 	initRepo(t, dir)
-	out, code, err := Run(t.Context(), dir, []string{"remote", "add", "origin", "https://example.com/owner/repo.git"}, Opts{})
+	out, code, err := e.run(t.Context(), dir, []string{"remote", "add", "origin", "https://example.com/owner/repo.git"}, Opts{}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("remote add: err=%v code=%d out=%s", err, code, out)
 	}
 
-	_, err = buildArgvForTest(t, dir, Opts{Profile: ProfileNetwork}, []string{"pull", "--ff-only"})
+	_, err = e.buildArgvForTest(t, dir, Opts{Profile: ProfileNetwork}, []string{"pull", "--ff-only"})
 	testutil.FailErr(t, "buildArgv", err)
 	if seen.lastURL != "https://example.com/owner/repo.git" {
 		t.Fatalf("helper resolved for %q, want the repository's origin URL", seen.lastURL)
 	}
 }
 
-func buildArgvForTest(t *testing.T, dir string, opts Opts, args []string) ([]string, error) {
+func (e execution) buildArgvForTest(t *testing.T, dir string, opts Opts, args []string) ([]string, error) {
 	t.Helper()
-	argv, _, err := buildArgv(t.Context(), dir, opts, args)
+	argv, _, err := e.buildArgv(t.Context(), dir, opts, args)
 	return argv, err
 }
 
@@ -499,16 +509,17 @@ func TestHostConfigReadsOnlyTheUsersGlobalFile(t *testing.T) {
 	appendRepoConfig(t, repo, "\n[credential \"https://example.com\"]\n\thelper = \"!repo-local-payload\"\n")
 	t.Chdir(repo)
 
-	got := HostConfigResolver().HelperFor(t.Context(), "https://example.com/owner/repo.git")
+	got := hostConfigResolver{}.HelperFor(t.Context(), "https://example.com/owner/repo.git")
 	if got != "users-own-helper" {
 		t.Fatalf("HelperFor = %q, want the user's own global helper", got)
 	}
 }
 
 func TestInitUsesEmptyTemplateDir(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
-	out, code, err := Run(t.Context(), dir, []string{"init"}, Opts{})
+	out, code, err := e.run(t.Context(), dir, []string{"init"}, Opts{}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("init: err=%v code=%d out=%s", err, code, out)
 	}
@@ -540,6 +551,7 @@ func TestShellQuote(t *testing.T) {
 
 // The audit follows include directives, as every Git invocation does.
 func TestUnsafeRepoConfigRefusedThroughAnInclude(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
@@ -547,7 +559,7 @@ func TestUnsafeRepoConfigRefusedThroughAnInclude(t *testing.T) {
 	testutil.FailErr(t, "write include", os.WriteFile(included, []byte("[filter \"crypt\"]\n\tsmudge = /payload/smudge\n"), 0o600))
 	appendRepoConfig(t, dir, "\n[include]\n\tpath = "+included+"\n")
 
-	_, _, err := Run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{})
+	_, _, err := e.run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{}, nil)
 	var unsafeCfg *UnsafeRepoConfigError
 	if !errors.As(err, &unsafeCfg) || !strings.Contains(unsafeCfg.KeyList(), "filter.crypt") {
 		t.Fatalf("err = %v, want the included filter refused", err)
@@ -557,11 +569,12 @@ func TestUnsafeRepoConfigRefusedThroughAnInclude(t *testing.T) {
 // An agent's Git reaches only Git's own transports, and host bookkeeping in
 // an agent's call only the local one; a person's Git keeps every transport.
 func TestTransportsFollowTheLaunchAuthority(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
 	refused := func(ctx context.Context, url string) bool {
-		out, code, err := Run(ctx, dir, []string{"ls-remote", url}, Opts{})
+		out, code, err := e.run(ctx, dir, []string{"ls-remote", url}, Opts{}, nil)
 		return err == nil && code != 0 && strings.Contains(string(out), "not allowed")
 	}
 	agent := WithAgentLaunch(AgentEntry(t.Context()), AgentLaunch{Plan: execpkg.HostLaunch("git")})

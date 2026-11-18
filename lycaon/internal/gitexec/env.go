@@ -13,11 +13,9 @@ import (
 	"github.com/lycaon/lycaon/internal/exec"
 )
 
-var agentSocketResolver = defaultAgentSocket
-
 // buildEnv returns final environment overrides.
-func buildEnv(ctx context.Context, bin string, opts Opts) ([]string, error) {
-	hooksDir, err := emptyHooksDirFn()
+func (e execution) buildEnv(ctx context.Context, bin string, opts Opts) ([]string, error) {
+	hooksDir, err := e.emptyHooksDir()
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +50,7 @@ func buildEnv(ctx context.Context, bin string, opts Opts) ([]string, error) {
 		extras = append(extras, "GIT_LFS_SKIP_SMUDGE=1")
 	}
 	if opts.Profile == ProfileNetwork && !agentLaunched(ctx) {
-		if socket := agentSocketResolver(ctx); socket != "" {
+		if socket := e.agentSocket(ctx); socket != "" {
 			extras = append(extras, "SSH_AUTH_SOCK="+socket)
 		}
 	}

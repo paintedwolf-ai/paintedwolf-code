@@ -3,14 +3,11 @@ package gitexec
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/gitcredential"
 )
-
-var executablePath = os.Executable
 
 // hostHelper names the host's own credential-helper verb.
 type hostHelper string
@@ -24,11 +21,11 @@ const (
 // resolveCredentialHelper translates the user's configured helper into the
 // command Git runs. The host serves its own helpers; any other value stays the
 // user's command.
-func resolveCredentialHelper(helper string) (string, hostHelper, error) {
-	return resolveCredentialHelperFor(helper, runtime.GOOS)
+func (e execution) resolveCredentialHelper(helper string) (string, hostHelper, error) {
+	return e.resolveCredentialHelperFor(helper, runtime.GOOS)
 }
 
-func resolveCredentialHelperFor(helper, goos string) (string, hostHelper, error) {
+func (e execution) resolveCredentialHelperFor(helper, goos string) (string, hostHelper, error) {
 	helper = strings.TrimSpace(helper)
 	selected := hostHelperNone
 	switch {
@@ -42,16 +39,13 @@ func resolveCredentialHelperFor(helper, goos string) (string, hostHelper, error)
 	if selected == hostHelperNone {
 		return helper, selected, nil
 	}
-	executable, err := executablePath()
+	executable, err := e.executablePath()
 	if err != nil {
 		return "", selected, fmt.Errorf("resolve built-in credential helper: %w", err)
 	}
 	// Shell snippets require the executable path as one quoted token.
 	return "!" + shellQuote(executable) + " " + string(selected), selected, nil
 }
-
-// credentialServiceFn starts the per-invocation vault service; tests replace it.
-var credentialServiceFn = startCredentialService
 
 // credentialService is the per-invocation vault service as gitexec uses it:
 // its socket, binding to the started invocation, and release.

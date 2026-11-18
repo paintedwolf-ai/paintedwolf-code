@@ -58,7 +58,7 @@ func ResolveRemoteURLs(ctx context.Context, repoDir string, intent RemoteIntent)
 		if intent.Push {
 			args = append(args, "--push")
 		}
-		out, ok := runRemoteQuery(ctx, repoDir, append(args, target))
+		out, ok := productionExecution().runRemoteQuery(ctx, repoDir, append(args, target))
 		if !ok {
 			return nil, fmt.Errorf("%w: %q", ErrRemoteUnresolved, target)
 		}
@@ -73,7 +73,7 @@ func ResolveRemoteURLs(ctx context.Context, repoDir string, intent RemoteIntent)
 }
 
 func remoteNames(ctx context.Context, repoDir string) ([]string, error) {
-	out, ok := runRemoteQuery(ctx, repoDir, []string{"remote"})
+	out, ok := productionExecution().runRemoteQuery(ctx, repoDir, []string{"remote"})
 	if !ok {
 		return nil, errors.New("gitexec: list remotes")
 	}
@@ -85,7 +85,7 @@ func remoteNames(ctx context.Context, repoDir string) ([]string, error) {
 // and then origin.
 func defaultRemote(ctx context.Context, repoDir string, push bool) string {
 	branch := ""
-	if out, ok := runRemoteQuery(ctx, repoDir, []string{"symbolic-ref", "--short", "-q", "HEAD"}); ok {
+	if out, ok := productionExecution().runRemoteQuery(ctx, repoDir, []string{"symbolic-ref", "--short", "-q", "HEAD"}); ok {
 		branch = firstNonEmptyLine(out)
 	}
 	var keys []string
@@ -99,7 +99,7 @@ func defaultRemote(ctx context.Context, repoDir string, push bool) string {
 		keys = append(keys, "branch."+branch+".remote")
 	}
 	for _, key := range keys {
-		if out, ok := runRemoteQuery(ctx, repoDir, []string{"config", "--get", key}); ok {
+		if out, ok := productionExecution().runRemoteQuery(ctx, repoDir, []string{"config", "--get", key}); ok {
 			if name := firstNonEmptyLine(out); name != "" {
 				return name
 			}
@@ -114,7 +114,7 @@ func defaultRemote(ctx context.Context, repoDir string, push bool) string {
 // so a URL operand cannot be resolved by asking it.
 func rewriteURL(ctx context.Context, repoDir, raw string, push bool) string {
 	// -z keeps a base or prefix containing spaces or newlines intact.
-	out, ok := runRemoteQuery(ctx, repoDir, []string{"config", "-z", "--get-regexp", `^url\..*\.(insteadof|pushinsteadof)$`})
+	out, ok := productionExecution().runRemoteQuery(ctx, repoDir, []string{"config", "-z", "--get-regexp", `^url\..*\.(insteadof|pushinsteadof)$`})
 	if !ok {
 		// No rule is configured; Git exits non-zero for an empty match.
 		return raw
