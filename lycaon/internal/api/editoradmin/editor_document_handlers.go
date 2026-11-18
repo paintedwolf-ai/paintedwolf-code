@@ -31,7 +31,7 @@ func (s *Handler) editorProject(w http.ResponseWriter, r *http.Request) (*projec
 		}
 		return scoped, true
 	}
-	return requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
+	return requestscope.ProjectForRequest(s.SessionStore, s.responses, w, r, p)
 }
 
 func (s *Handler) HandleOpenEditorDocument(w http.ResponseWriter, r *http.Request) {

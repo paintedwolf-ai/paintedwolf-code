@@ -105,7 +105,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 	s.Admin.Extensions = extensionadmin.New(&s.responses, &s.background, extensionadmin.Deps{
 		Owner: &extensionstate.Owner{Views: deps.Extensions.ExtensionViews, Scanners: deps.Extensions.ExtensionScanners,
 			Journal: deps.Extensions.ExtensionJournal}, Runtime: deps.Extensions.Contributions, Events: deps.Host.Events, MCPRegistry: deps.External.MCP,
-		ModuleRoot: deps.Storage.ModuleRoot, Projects: deps.Core.Projects, Store: deps.Core.Store, Sessions: deps.Core.Sessions,
+		ModuleRoot: deps.Storage.ModuleRoot, Projects: deps.Core.Projects, Store: deps.Core.Store.Sessions, Sessions: deps.Core.Sessions,
 		Settings: deps.Core.Settings, Workflow: &s.Admin.Workflow, Prompt: &s.Admin.Prompt, Scan: &s.Admin.Scan,
 	})
 	s.Admin.Project = projectadmin.New(&s.responses, &s.background, projectadmin.Deps{

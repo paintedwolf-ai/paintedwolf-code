@@ -5,7 +5,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session/promptstate"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
@@ -23,7 +22,7 @@ type Fanout struct {
 	Vars             *runstate.Variables
 	Resolver         *catalog.Resolver
 	Journal          *runstate.Journal
-	Sessions         *sessionstore.Repositories
+	TranscriptStore  TranscriptReader
 	Phases           *workflowphases.Service
 	Questions        *workflowreview.Questions
 	Assignments      *workflowreview.Assignments

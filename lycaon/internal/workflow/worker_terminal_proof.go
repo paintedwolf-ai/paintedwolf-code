@@ -97,7 +97,7 @@ func (m *Fanout) recordWorkerTerminalProof(ctx context.Context, active *api.Work
 				return nil, false, err
 			}
 			vars = SetWorkerCycleEvalVars(vars, completingJobID, status)
-			vars = workflowreview.StampFanoutExecuteOutput(ctx, m.Sessions.Transcript, sessionID, vars)
+			vars = workflowreview.StampFanoutExecuteOutput(ctx, m.TranscriptStore, sessionID, vars)
 			mutated = true
 			clearWorkerCycle = true
 		}

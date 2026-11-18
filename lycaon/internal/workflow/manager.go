@@ -24,36 +24,36 @@ import (
 
 // RunManager composes workflow services against the persistence domains.
 type RunManager struct {
-	Policy       *workflowruntime.SessionPolicy
-	Snapshots    *workflowruntime.Snapshots
-	Presentation *workflowpresentation.Runs
-	Fanout       *Fanout
-	Ambient      *Ambient
-	Coverage     *workflowreview.Coverage
-	Assignments  *workflowreview.Assignments
-	Verdicts     *workflowreview.Verdicts
-	Repairs      *ReviewRepairs
-	Children     *Children
-	Reports      *Reports
-	Blueprints   *workflowblueprints.Service
-	Approvals    *Approvals
-	Requests     *workflowinputs.Requests
-	Feedback     *workflowinputs.Feedback
-	Asks         *workflowinputs.Asks
-	Slash        *workflowinputs.SlashCommands
-	Phases       *workflowphases.Service
-	Publication  *workflowpublication.Runs
-	Transcript   *workflowpublication.Messages
-	Batch        *runstate.Batches
-	Starts       *workflowlifecycle.Admission
-	Controls     *workflowlifecycle.Commands
-	Recovery     *workflowlifecycle.Recovery
-	Store        *runstate.Repository
-	Vars         *runstate.Variables
-	Journal      *runstate.Journal
-	Sessions     *sessionstore.Repositories
-	Resolver     workflowcatalog.Resolver
-	Obligations  *Obligations
+	Policy          *workflowruntime.SessionPolicy
+	Snapshots       *workflowruntime.Snapshots
+	Presentation    *workflowpresentation.Runs
+	Fanout          *Fanout
+	Ambient         *Ambient
+	Coverage        *workflowreview.Coverage
+	Assignments     *workflowreview.Assignments
+	Verdicts        *workflowreview.Verdicts
+	Repairs         *ReviewRepairs
+	Children        *Children
+	Reports         *Reports
+	Blueprints      *workflowblueprints.Service
+	Approvals       *Approvals
+	Requests        *workflowinputs.Requests
+	Feedback        *workflowinputs.Feedback
+	Asks            *workflowinputs.Asks
+	Slash           *workflowinputs.SlashCommands
+	Phases          *workflowphases.Service
+	Publication     *workflowpublication.Runs
+	Transcript      *workflowpublication.Messages
+	Batch           *runstate.Batches
+	Starts          *workflowlifecycle.Admission
+	Controls        *workflowlifecycle.Commands
+	Recovery        *workflowlifecycle.Recovery
+	Store           *runstate.Repository
+	Vars            *runstate.Variables
+	Journal         *runstate.Journal
+	TranscriptStore TranscriptReader
+	Resolver        workflowcatalog.Resolver
+	Obligations     *Obligations
 }
 
 // NewManager creates a workflow run manager.
@@ -64,10 +64,10 @@ func NewManager(store *runstate.Repository, sessions *sessionstore.Repositories,
 	vars := runstate.NewVariables(store.Runs, store.State, sessions.Sessions)
 	gates := workflowgates.FailClosedGateEvaluator{}
 	manager := &RunManager{
-		Store:    store,
-		Vars:     vars,
-		Sessions: sessions,
-		Resolver: workflowcatalog.Resolver{Overlay: manifests, Sessions: sessions.Sessions, Runs: store.Runs},
+		Store:           store,
+		Vars:            vars,
+		TranscriptStore: sessions.Transcript,
+		Resolver:        workflowcatalog.Resolver{Overlay: manifests, Sessions: sessions.Sessions, Runs: store.Runs},
 	}
 	manager.Publication = &workflowpublication.Runs{Events: pub, Sessions: sessions.Sessions, Transactions: store.Transactions}
 	manager.Transcript = &workflowpublication.Messages{SessionStore: sessions.Sessions, TranscriptStore: sessions.Transcript, Events: pub, Runs: store.Runs}
@@ -93,8 +93,8 @@ func NewManager(store *runstate.Repository, sessions *sessionstore.Repositories,
 	manager.Controls.Phases = manager.Phases
 
 	scaffold := &workflowinputs.Scaffold{}
-	manager.Blueprints = &workflowblueprints.Service{Runs: store.Runs, Bindings: store.Blueprints, Vars: vars, Sessions: sessions, Scaffold: scaffold, Starts: manager.Starts, Controls: manager.Controls, Phases: manager.Phases, Publication: manager.Publication, Transcript: manager.Transcript}
-	manager.Approvals = &Approvals{Runs: store.Runs, State: store.State, Records: store.Blueprints, Vars: vars, Resolver: &manager.Resolver, Sessions: sessions, Phases: manager.Phases}
+	manager.Blueprints = &workflowblueprints.Service{Runs: store.Runs, Bindings: store.Blueprints, Vars: vars, TranscriptStore: sessions.Transcript, Scaffold: scaffold, Starts: manager.Starts, Controls: manager.Controls, Phases: manager.Phases, Publication: manager.Publication, Transcript: manager.Transcript}
+	manager.Approvals = &Approvals{Runs: store.Runs, State: store.State, Records: store.Blueprints, Vars: vars, Resolver: &manager.Resolver, Sessions: sessions.Sessions, Phases: manager.Phases}
 	cards := &workflowinputs.Cards{SessionStore: sessions.Sessions, TranscriptStore: sessions.Transcript, Transcript: manager.Transcript}
 	manager.Requests = &workflowinputs.Requests{Runs: store.Runs, SessionStore: sessions.Sessions, TranscriptStore: sessions.Transcript, Resolver: &manager.Resolver, Vars: vars, Phases: manager.Phases, Publication: manager.Publication, Cards: cards, Approvals: manager.Approvals}
 	manager.Feedback = &workflowinputs.Feedback{Runs: store.Runs, Resolver: &manager.Resolver, Vars: vars, Phases: manager.Phases, Cards: cards, Requests: manager.Requests, Controls: manager.Controls, Publication: manager.Publication}
@@ -110,17 +110,17 @@ func NewManager(store *runstate.Repository, sessions *sessionstore.Repositories,
 	manager.Controls.Asks = manager.Asks
 	manager.Recovery.Requests = manager.Requests
 	manager.Recovery.Approvals = manager.Approvals
-	manager.Children = &Children{Runs: store.Runs, Starts: store.Starts, Sessions: sessions, Resolver: &manager.Resolver, Vars: vars, Journal: journal, Blueprints: manager.Blueprints, Approvals: manager.Approvals, Phases: manager.Phases, Entries: entries, Publication: manager.Publication}
-	manager.Reports = &Reports{Runs: store.Runs, Sessions: sessions, Resolver: &manager.Resolver, Vars: vars, Controls: manager.Controls, Phases: manager.Phases}
-	manager.Ambient = &Ambient{Runs: store.Runs, Sessions: sessions, Resolver: &manager.Resolver, Starts: manager.Starts}
-	explanations := &Explanations{Sessions: sessions, Transcript: manager.Transcript, Obligations: manager.Obligations}
-	reviewEvidence := &workflowreview.ReviewEvidence{Vars: vars, Sessions: sessions}
+	manager.Children = &Children{Runs: store.Runs, Starts: store.Starts, Sessions: sessions.Sessions, Resolver: &manager.Resolver, Vars: vars, Journal: journal, Blueprints: manager.Blueprints, Approvals: manager.Approvals, Phases: manager.Phases, Entries: entries, Publication: manager.Publication}
+	manager.Reports = &Reports{Runs: store.Runs, TranscriptStore: sessions.Transcript, Resolver: &manager.Resolver, Vars: vars, Controls: manager.Controls, Phases: manager.Phases}
+	manager.Ambient = &Ambient{Runs: store.Runs, Sessions: sessions.Sessions, Resolver: &manager.Resolver, Starts: manager.Starts}
+	explanations := &Explanations{Sessions: sessions.Sessions, Transcript: manager.Transcript, Obligations: manager.Obligations}
+	reviewEvidence := &workflowreview.ReviewEvidence{Vars: vars, TranscriptStore: sessions.Transcript}
 	entries.Explanations = explanations
 	entries.Reviews = reviewEvidence
 	manager.Verdicts.Evidence = reviewEvidence
 	manager.Requests.Ambient = manager.Ambient
 	manager.Controls.Ambient = manager.Ambient
-	manager.Fanout = &Fanout{Runs: store.Runs, Vars: vars, Resolver: &manager.Resolver, Journal: journal, Sessions: sessions, Phases: manager.Phases, Questions: questions, Assignments: manager.Assignments}
+	manager.Fanout = &Fanout{Runs: store.Runs, Vars: vars, Resolver: &manager.Resolver, Journal: journal, TranscriptStore: sessions.Transcript, Phases: manager.Phases, Questions: questions, Assignments: manager.Assignments}
 	manager.Phases.Settlement = manager.Children
 	manager.Controls.Settlement = manager.Children
 	manager.Recovery.Settlement = manager.Children

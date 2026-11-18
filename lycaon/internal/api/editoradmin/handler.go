@@ -2,6 +2,7 @@ package editoradmin
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
@@ -10,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/viewstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -24,7 +24,7 @@ type Dependencies struct {
 	MutationGate    *project.MutationGate
 	ProjectRegistry project.Registry
 	SecretSpans     *secretspan.Screener
-	SessionStore    *sessionstore.Repositories
+	SessionStore    requestscope.Sessions
 	TryRunPromotion func(context.Context, string)
 }
 type Handler struct {
@@ -36,7 +36,7 @@ type Handler struct {
 	MutationGate    *project.MutationGate
 	ProjectRegistry project.Registry
 	SecretSpans     *secretspan.Screener
-	SessionStore    *sessionstore.Repositories
+	SessionStore    requestscope.Sessions
 	TryRunPromotion func(context.Context, string)
 	editorScreens   editorScreenMemo
 	background      *taskgroup.Group

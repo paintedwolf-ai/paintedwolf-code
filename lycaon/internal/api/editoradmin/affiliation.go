@@ -13,7 +13,7 @@ func (s *Handler) editorAffiliation(w http.ResponseWriter, r *http.Request, proj
 	if sessionID != nil {
 		requested = *sessionID
 	}
-	session, turn, err := requestscope.ChatAffiliation(r.Context(), s.SessionStore.Sessions, projectID, requested)
+	session, turn, err := requestscope.ChatAffiliation(r.Context(), s.SessionStore, projectID, requested)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return "", 0, false

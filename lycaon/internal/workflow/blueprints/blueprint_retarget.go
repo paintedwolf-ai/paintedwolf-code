@@ -76,10 +76,10 @@ func (m *Service) RebindBlueprintPath(ctx context.Context, projectID, from, to s
 }
 
 func (m *Service) retargetBlueprintTranscriptPath(ctx context.Context, sessionID, from, to string) error {
-	if m == nil || m.Sessions == nil {
+	if m == nil || m.TranscriptStore == nil {
 		return nil
 	}
-	msgs, err := m.Sessions.Transcript.GetMessages(ctx, sessionID)
+	msgs, err := m.TranscriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func (m *Service) retargetBlueprintTranscriptPath(ctx context.Context, sessionID
 	meta := *existing.Blueprint
 	meta.BlueprintPath = to
 	patch.Blueprint = &meta
-	if _, err := m.Sessions.Transcript.UpdateMessage(ctx, sessionID, existing.ID, patch); err != nil {
+	if _, err := m.TranscriptStore.UpdateMessage(ctx, sessionID, existing.ID, patch); err != nil {
 		return err
 	}
 	m.Transcript.PublishPatch(ctx, sessionID, patch)

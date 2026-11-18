@@ -8,14 +8,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+type SessionReader interface {
+	Get(context.Context, string) (*api.Session, error)
+}
+
 type Explanations struct {
-	Sessions    *sessionstore.Repositories
+	Sessions    SessionReader
 	Transcript  *publication.Messages
 	Obligations *Obligations
 }
@@ -105,7 +108,7 @@ func (m *Explanations) obligationFullPass(ctx context.Context, run *api.Workflow
 }
 
 func (m *Explanations) sessionWorkspaceRootID(ctx context.Context, sessionID string) string {
-	sess, err := m.Sessions.Sessions.Get(ctx, sessionID)
+	sess, err := m.Sessions.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return ""
 	}

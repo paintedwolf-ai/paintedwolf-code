@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hostctx"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/lifecycle"
@@ -17,7 +16,7 @@ import (
 
 type Ambient struct {
 	Runs     runstate.RunsRepository
-	Sessions *sessionstore.Repositories
+	Sessions SessionReader
 	Resolver *catalog.Resolver
 	Starts   *lifecycle.Admission
 }
@@ -37,7 +36,7 @@ func (m *Ambient) EnsureSessionWorkflow(ctx context.Context, sessionID string) (
 	if err != nil || run != nil {
 		return run, err
 	}
-	sess, err := m.Sessions.Sessions.Get(ctx, sessionID)
+	sess, err := m.Sessions.Get(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}

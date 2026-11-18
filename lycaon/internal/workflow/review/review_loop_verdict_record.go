@@ -295,10 +295,10 @@ func (m *Verdicts) missingReviewAgents(ctx context.Context, run *api.WorkflowRun
 	var since time.Time
 	ambient := runstate.IsAmbientRun(run)
 	if ambient {
-		if m.Sessions == nil {
+		if m.TranscriptStore == nil {
 			return append([]string(nil), required...)
 		}
-		history, err := m.Sessions.Transcript.GetMessages(ctx, run.SessionID)
+		history, err := m.TranscriptStore.GetMessages(ctx, run.SessionID)
 		if err != nil {
 			return append([]string(nil), required...)
 		}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -13,9 +12,13 @@ import (
 
 const fanoutExecuteOutputStage = "fan_out"
 
+type TranscriptReader interface {
+	GetMessages(context.Context, string) ([]api.Message, error)
+}
+
 type ReviewEvidence struct {
 	Vars            *runstate.Variables
-	Sessions        *sessionstore.Repositories
+	TranscriptStore TranscriptReader
 	EvidenceDigests []EvidenceDigestSource
 }
 type fanoutMessageReader interface {
@@ -39,11 +42,11 @@ func StampFanoutExecuteOutput(ctx context.Context, store fanoutMessageReader, se
 }
 
 func (m *ReviewEvidence) StampEvidence(ctx context.Context, run *api.WorkflowRun) error {
-	if m == nil || run == nil || m.Sessions == nil {
+	if m == nil || run == nil || m.TranscriptStore == nil {
 		return nil
 	}
 	_, err := m.Vars.Stamp(ctx, run.ID, func(ctx context.Context, run *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
-		vars = StampFanoutExecuteOutput(ctx, m.Sessions.Transcript, run.SessionID, vars)
+		vars = StampFanoutExecuteOutput(ctx, m.TranscriptStore, run.SessionID, vars)
 		if digest := compileReviewLoopDigest(ctx, m, run); digest != "" {
 			vars = runstate.SetHostVar(vars, "evidence_digest", digest)
 		}

@@ -15,7 +15,7 @@ import (
 func TestReviewerScopePreservesExplicitRunsAndIsolatesAmbientIntents(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "reviewer-scope.db")
 	testdbseed.InsertSessionWithRoot(t, sqlDB, "sess-1", testdbseed.DefaultProjectID, t.TempDir())
-	verdicts := &Verdicts{Sessions: store.NewSQL(sqlDB)}
+	verdicts := &Verdicts{TranscriptStore: store.NewSQL(sqlDB).Transcript}
 	now := time.Now().UTC()
 	testutil.FailErr(t, "append current request", verdicts.Sessions.Transcript.AppendMessages(t.Context(), "sess-1", api.Message{ID: "request", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "New implementation", CreatedAt: now}))
 	reviewer := api.WorkerTask{ID: "review", WorkflowRunID: "run", WorkflowPhase: "judge", AgentType: "skeptic", Status: api.WorkerStatusComplete, CreatedAt: now.Add(-time.Second), Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}

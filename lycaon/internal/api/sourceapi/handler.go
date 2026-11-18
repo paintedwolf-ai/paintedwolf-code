@@ -243,7 +243,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	// Editor publications share source path reservations.
 	deps.EditorDocuments.SetSourcePaths(deps.SourceMutations.Paths)
 
-	editor := editoradmin.New(responses, background, editoradmin.Dependencies{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, ProjectViews: deps.ProjectViews, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, TryRunPromotion: deps.TryRunPromotion})
+	editor := editoradmin.New(responses, background, editoradmin.Dependencies{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, ProjectViews: deps.ProjectViews, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore.Sessions, TryRunPromotion: deps.TryRunPromotion})
 	sourceViews := &sourceViewService{}
 	sourceReaders := &sourcecomparison.Cache{}
 	warmupPolls := newWarmupClock()
@@ -283,7 +283,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	h.Views.Trees = h.Trees
 	h.Views.Workspace = h.Workspace
 	h.Workspace.Watch = h.Watch
-	h.Briefings = briefingadmin.New(responses, briefingadmin.Dependencies{EditorDocuments: deps.EditorDocuments, Briefings: deps.Briefings, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, WorkerBranchRoot: h.Workspace.WorkerBranchRoot})
+	h.Briefings = briefingadmin.New(responses, briefingadmin.Dependencies{EditorDocuments: deps.EditorDocuments, Briefings: deps.Briefings, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore.Sessions, SourceLedger: deps.SourceLedger, WorkerBranchRoot: h.Workspace.WorkerBranchRoot})
 	return h
 }
 

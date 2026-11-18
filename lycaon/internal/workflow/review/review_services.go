@@ -6,7 +6,6 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/inspector"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
@@ -39,7 +38,7 @@ type Verdicts struct {
 	Records                 runstate.VerdictsRepository
 	Vars                    *runstate.Variables
 	Resolver                *catalog.Resolver
-	Sessions                *sessionstore.Repositories
+	TranscriptStore         TranscriptReader
 	Phases                  *workflowphases.Service
 	Coverage                *Coverage
 	Questions               *Questions

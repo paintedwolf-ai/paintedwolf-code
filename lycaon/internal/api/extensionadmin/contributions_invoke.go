@@ -55,7 +55,7 @@ func (s *Execution) HandleInvokeProjectCommand(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Execution) HandleInvokeSessionCommand(w http.ResponseWriter, r *http.Request) {
-	sess, ok := requestscope.Session(s.Store.Sessions, s.responses, w, r, chi.URLParam(r, "id"))
+	sess, ok := requestscope.Session(s.Store, s.responses, w, r, chi.URLParam(r, "id"))
 	if !ok {
 		return
 	}
