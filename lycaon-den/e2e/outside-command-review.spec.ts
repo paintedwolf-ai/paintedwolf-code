@@ -1,8 +1,8 @@
-import { chmodSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
-import type { CheckpointListResponse, SourceWalkResponse, ToolResult } from "../src/api/types.ts";
+import type { CheckpointListResponse, SourceWalkResponse, SourceWorkspace, ToolResult } from "../src/api/types.ts";
 import {
   apiConfig, apiPostPrompt, bootstrapActiveProject, e2eTempDir, e2eUniqueLabel,
   liveChatStage, settledChatSessionId, waitForChatComposerReady, webE2e,
@@ -75,6 +75,11 @@ webE2e("outside command changes reach chat Files and Review with explicit covera
     const project = await bootstrapActiveProject(page, request, root, e2eUniqueLabel("Outside command review"));
     await waitForChatComposerReady(page);
     const sessionId = await settledChatSessionId(page);
+    await expect.poll(async () => {
+      const response = await request.get(`${apiUrl}/v1/projects/${project.id}/source/workspace`, { headers });
+      expect(response.ok(), await response.text()).toBeTruthy();
+      return (await response.json() as SourceWorkspace).inventory.complete;
+    }, { timeout: 30_000 }).toBe(true);
     const manual = await request.post(`${apiUrl}/harness/llm/auto`, { headers, data: { enabled: false } });
     expect(manual.ok(), await manual.text()).toBeTruthy();
     const prompt = await apiPostPrompt(request, sessionId, { text: "Copy the project note to the outside fixture, then test observation of a second folder." });
@@ -89,12 +94,14 @@ webE2e("outside command changes reach chat Files and Review with explicit covera
       capability_request: { write_root: observed },
     });
     await allowOutsideCommand(request, sessionId, copy);
+    expect(readFileSync(changedPath, "utf8")).toBe(newContents);
 
     const chmod = await driver.invoke("command", {
       command: `external -- chmod 000 ${quotePath(unreadable)}`,
       capability_request: { write_root: unreadable },
     });
     const gap = await allowOutsideCommand(request, sessionId, chmod);
+    expect(statSync(unreadable).mode & 0o777).toBe(0);
     const resume = await request.post(`${apiUrl}/harness/llm/auto`, { headers, data: { enabled: true } });
     expect(resume.ok(), await resume.text()).toBeTruthy();
     expect(gap.card_facts).toContainEqual(expect.objectContaining({
