@@ -206,8 +206,8 @@ type reachScenario struct {
 }
 
 const (
-	loadResponse = 6
-	useResponse  = 7
+	loadResponse = 7
+	useResponse  = 8
 )
 
 func reachResponses() []llm.MockResponseEntry {
@@ -226,6 +226,7 @@ func reachResponses() []llm.MockResponseEntry {
 		{Pattern: "write it directly", ToolCalls: []llm.MockToolCall{{ID: "unoffered", Name: "write", Args: map[string]any{"path": "notes.md", "content": "x"}}}, FollowUpText: "Tried."},
 		{Pattern: "run nothing", ToolCalls: []llm.MockToolCall{{ID: "noargs", Name: "command", Args: map[string]any{}}}, FollowUpText: "Tried."},
 		{Pattern: "count with a cap", ToolCalls: []llm.MockToolCall{{ID: "badarg", Name: "update_progress", Args: map[string]any{"max_results": 3}}}, FollowUpText: "Tried."},
+		{Pattern: "write a note", ToolCalls: []llm.MockToolCall{{ID: "mutate", Name: "command", Args: map[string]any{"command": "printf 'x\\n' > note.txt"}}}, FollowUpText: "Wrote it."},
 		loadResponse: {Pattern: "load what is missing", FollowUpText: "Loaded."},
 		useResponse:  {Pattern: "use what was loaded", FollowUpText: "Used it."},
 	}
@@ -251,7 +252,7 @@ func TestEveryRequestNamesOnlyWhatItOffers(t *testing.T) {
 			cells:   []string{"implement_investigate", surface.SurfaceImplementPark},
 		},
 		{
-			loading: "requested this turn, then loaded earlier", posture: api.SessionPostureBuild, decider: decide.Absent{},
+			loading: "deferred, requested, then loaded earlier", posture: api.SessionPostureBuild, decider: &decidetest.Fake{},
 			prompts: []string{"what is here", "@request", "use what was loaded"},
 			cells:   []string{"implement_investigate"},
 		},
@@ -260,9 +261,10 @@ func TestEveryRequestNamesOnlyWhatItOffers(t *testing.T) {
 			prompts: []string{"write it directly", "run nothing", "count with a cap"},
 			cells:   []string{"implement_investigate"},
 		},
-		{loading: "nothing loaded", posture: api.SessionPostureSpec, decider: decide.Absent{}, prompts: []string{"what is here"}, cells: []string{"implement_investigate"}},
+		{loading: "nothing loaded", posture: api.SessionPostureSpec, decider: decide.Absent{}, prompts: []string{"what is here", "write a note"}, cells: []string{"implement_investigate"}},
 		{loading: "nothing loaded", posture: api.SessionPostureBuild, workflow: "recon-pack", decider: decide.Absent{}, prompts: []string{"what is here"}},
-		{loading: "nothing loaded", posture: api.SessionPostureBuild, workflow: "plan", decider: decide.Absent{}, prompts: []string{"what is here"}},
+		{loading: "nothing loaded", posture: api.SessionPostureBuild, workflow: "options", decider: decide.Absent{}, prompts: []string{"what is here"}},
+		{loading: "nothing loaded", posture: api.SessionPostureBuild, workflow: "security-survey", decider: decide.Absent{}, prompts: []string{"what is here"}},
 	}
 	counts := map[reachCell]int{}
 	var codes []string
@@ -283,6 +285,7 @@ func TestEveryRequestNamesOnlyWhatItOffers(t *testing.T) {
 				t.Error("the scenario recorded no request")
 			}
 			codes = append(codes, got.codes...)
+			t.Logf("refusals: %v", got.codes)
 			if len(got.violations) > 0 {
 				t.Errorf("%d names the request does not offer:\n%s", len(got.violations), strings.Join(got.violations, "\n"))
 			}
