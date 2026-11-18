@@ -10,6 +10,7 @@ changes or when CI tooling changes.
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 
 from ci_policy.native_impact import dependencies as native_dependencies
@@ -210,7 +211,11 @@ def changed_packages(scope):
     # A deleted package has nothing left to run.
     packages = {"./" + directory.relative_to("lycaon").as_posix() for directory in directories
                 if any((ROOT / directory).glob("*.go"))}
-    return sorted(packages - RACE_EXCLUDED)
+    # The race recipe never runs its excluded packages, so they cannot select the lane either.
+    from verification_plan import catalog
+    exclude = catalog()["go"]["test:race"].get("exclude")
+    return sorted(package for package in packages - RACE_EXCLUDED
+                  if not exclude or not re.search(exclude, package))
 
 
 def confinement_source(path):

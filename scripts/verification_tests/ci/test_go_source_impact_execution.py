@@ -177,6 +177,14 @@ class QueueScopeTests(unittest.TestCase):
         self.assertIn(lane, self.queue(["lycaon/internal/tools/native/jq/eval.go"]))
         self.assertNotIn(lane, self.queue(["lycaon/internal/tools/native/search/grep.go"]))
 
+    def test_a_change_only_in_race_excluded_packages_selects_no_race_lane(self):
+        for path in ("lycaon/internal/launchguard/guard.go", "lycaon/test/wiring/conformance/harness_test.go"):
+            with self.subTest(path=path):
+                scope = {"full": False, "paths": [path]}
+                self.assertEqual(impact.changed_packages(scope), [])
+                self.assertNotIn("go-code", impact.change_areas(scope))
+                self.assertNotIn(live(phase="changed-packages"), self.queue([path]))
+
     def test_changed_packages_are_the_edited_go_source_without_the_database_or_deleted_packages(self):
         scope = {"paths": ["lycaon/internal/confine/seatbelt_darwin.go", "lycaon/internal/confine/testdata/x.json",
                            "lycaon/internal/db/store.go", "lycaon/internal/removed/gone.go", "lycaon-den/src/a.ts",

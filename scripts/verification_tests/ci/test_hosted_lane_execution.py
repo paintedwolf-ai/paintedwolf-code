@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import verification_plan
 from ci_policy import hosted_execution as ci
 from ci_policy import hosted_plan
 from verification_execute import shard_packages
@@ -111,6 +112,21 @@ class HostedExecutionTests(unittest.TestCase):
             self.assertEqual(run.call_args.args[0], ["./task", "test:confine:linux", "--", "nix"])
             ci.run_lane(NIX)
             self.assertEqual(run.call_args.args[0], ["./task", "nix:check"])
+
+    def test_a_lane_with_arguments_runs_each_target_as_its_own_valid_selection(self):
+        lane = next(name for name, spec in hosted_plan.lanes().items()
+                    if "arguments" in spec and len(hosted_plan.invocation(spec["targets"])) > 1)
+        spec = hosted_plan.lanes()[lane]
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.subprocess, "call", return_value=0) as run:
+            self.assertEqual(ci.run_lane(lane), 0)
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertEqual(commands, [["./task", target, "--", *spec["arguments"]]
+                                    for target in hosted_plan.invocation(spec["targets"])])
+        for command in commands:
+            split = command.index("--")
+            verification_plan.validate_selection(command[1:split], command[split + 1:])
 
     def test_the_changed_package_lane_runs_only_the_edited_packages(self):
         lane = live(phase="changed-packages")

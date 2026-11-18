@@ -138,6 +138,9 @@ def run_lane(name, shard="", clock=time.monotonic):
         # Every phase runs, so one run reports every failure and repairs need not rediscover them one at a time.
         environment["PW_TEST_KEEP_GOING"] = "1"
         commands = [command]
+        # A selection reaches one target at a time, so a lane's arguments run as one phase per target.
+        if "arguments" in lane and len(hosted_plan.invocation(targets)) > 1:
+            commands = [["./task", target, "--", *lane["arguments"]] for target in hosted_plan.invocation(targets)]
         if phases == "admission":
             commands = ready_scope.check_phases(hosted_plan.invocation(targets), scope)
         elif phases == "admission-tests":
