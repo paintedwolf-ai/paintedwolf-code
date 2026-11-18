@@ -2,12 +2,17 @@ package webresearch
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestRuntimeProviderCachesStayLocal(t *testing.T) {
@@ -221,4 +226,65 @@ func TestCrawlerQueuedRequestHonorsNewCooldown(t *testing.T) {
 			t.Fatal("cooldown rejection retained host capacity")
 		}
 	})
+}
+
+func TestConcurrentRegistrySearchesKeepTheirTransportAndCache(t *testing.T) {
+	type fixture struct {
+		registry *Registry
+		calls    atomic.Int32
+		url      string
+	}
+	fixtures := []*fixture{{url: "https://example.com/left"}, {url: "https://example.com/right"}}
+	for _, item := range fixtures {
+		item.registry = NewRegistry(testCatalog(t), func(_ context.Context, _ outboundhttp.Request) (outboundhttp.Response, error) {
+			item.calls.Add(1)
+			body, err := json.Marshal(map[string]any{"web": map[string]any{"results": []map[string]string{{"url": item.url, "title": "Widget guide", "description": "Widget guide"}}}})
+			return outboundhttp.Response{Status: http.StatusOK, Body: body}, err
+		})
+		item.registry.registerREST(braveRESTSpec(), KindKeyed)
+	}
+	done := make(chan error, len(fixtures))
+	for _, item := range fixtures {
+		go func() {
+			opts := SearchOptions{Registry: item.registry, Query: "widget guide", Settings: Settings{Keys: map[string]string{"brave": "key"}, EnabledProviders: []string{"brave"}}}
+			for i := 0; i < 2; i++ {
+				result := Search(t.Context(), opts)
+				if !result.OK || len(result.Results) != 1 || result.Results[0].URL != item.url || result.RepeatSearch != (i == 1) {
+					done <- fmt.Errorf("runtime %s search %d: %+v", item.url, i, result)
+					return
+				}
+			}
+			if item.calls.Load() != 1 {
+				done <- fmt.Errorf("runtime %s made %d exchanges", item.url, item.calls.Load())
+				return
+			}
+			done <- nil
+		}()
+	}
+	for range fixtures {
+		testutil.FailErr(t, "independent registry search", <-done)
+	}
+}
+
+func TestToolRegistrationRequiresRuntimeResources(t *testing.T) {
+	crawler := NewCrawler(nil)
+	cases := []struct {
+		name string
+		deps ToolDeps
+	}{
+		{name: "crawler", deps: ToolDeps{}},
+		{name: "discovery", deps: ToolDeps{Crawler: crawler}},
+		{name: "budget", deps: ToolDeps{Crawler: crawler, Discovery: NewDiscovery(crawler)}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := RegisterToolsWithFactory(tools.NewDefaultRegistry(), tc.deps, nil); err == nil {
+				t.Fatal("incomplete runtime registered tools")
+			}
+		})
+	}
+	result := Search(t.Context(), SearchOptions{Query: "query", Index: testIndex(t)})
+	if result.OK || result.Error == "" {
+		t.Fatal("index search accepted missing discovery")
+	}
 }
