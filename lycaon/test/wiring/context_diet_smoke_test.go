@@ -2,12 +2,12 @@ package wiring
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 

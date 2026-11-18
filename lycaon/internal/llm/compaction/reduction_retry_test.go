@@ -2,11 +2,11 @@ package compaction
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 )
 
 type recoveringReductionSummarizer struct{ calls int }

@@ -2,11 +2,11 @@ package compaction
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 )
 
 func TestBoundedReductionMakesCumulativeProgress(t *testing.T) {

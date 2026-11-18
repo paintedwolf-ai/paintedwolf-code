@@ -3,7 +3,6 @@ package contractfixture
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 

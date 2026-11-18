@@ -3,8 +3,9 @@ package llmtest
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"sync"
+
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
 )
 
 // RecordingClient wraps an LLMClient and captures completion requests for tests.

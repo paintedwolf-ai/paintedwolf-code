@@ -3,6 +3,9 @@ package llm
 import (
 	"context"
 	"errors"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -12,8 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/llmtest"
-	"strings"
-	"testing"
 )
 
 func testCompactionConfig() compaction.CompactionConfig {

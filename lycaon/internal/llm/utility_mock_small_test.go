@@ -3,15 +3,16 @@ package llm
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/testutil/llmtest"
-	"io"
-	"net/http"
-	"strings"
-	"testing"
 )
 
 func TestMockEnabled(t *testing.T) {

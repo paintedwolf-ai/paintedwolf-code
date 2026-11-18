@@ -2,9 +2,10 @@ package llmtest
 
 import (
 	"context"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // KickDrivenMock selects responses from the latest host kick.
