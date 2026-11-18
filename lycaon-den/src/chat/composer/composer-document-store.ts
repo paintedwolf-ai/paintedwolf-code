@@ -165,6 +165,7 @@ export async function stageComposerMutation(
   const previousDraft = composerDraftForSession(sessionId);
   const result = addPendingAttachments(sessionId, attachments);
   if (!result.ok) return result;
+  if (result.additions.length === 0 && !draftPrefill) return { ok: true };
   if (!previousDraft.trim() && draftPrefill) {
     setComposerDraft(sessionId, draftPrefill);
   }
@@ -176,7 +177,7 @@ export async function stageComposerMutation(
         draft: previousDraft,
         attachments: previousAttachments,
       },
-      attachments,
+      result.additions,
       draftPrefill,
     );
     // Preserve local text until its debounced publish.

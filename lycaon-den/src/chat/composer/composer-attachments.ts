@@ -241,6 +241,11 @@ export function isPayloadAttachment(
   return isPayloadKind(att.kind);
 }
 
+export function sameComposerAttachment(a: ComposerPendingAttachment, b: ComposerPendingAttachment): boolean {
+  return a.id === b.id ||
+    (isPayloadAttachment(a) && isPayloadAttachment(b) && Boolean(a.blobId) && a.blobId === b.blobId);
+}
+
 /** True when the chip carries payload bytes, or was refused as a payload. */
 export function isByteAttachmentKind(kind: ComposerPendingKind): boolean {
   return isPayloadKind(kind) || kind === "reject";

@@ -1,7 +1,7 @@
 /** Bounded metadata for staged attachments; bodies stay in host storage. */
 import { COMPOSER_DRAFTS_SESSION_CAP } from "../../../shared/app-state-types.ts";
 import type { AttachmentVideoFacts } from "../../api/types.ts";
-import type { ComposerPendingAttachment } from "./composer-attachments.ts";
+import { sameComposerAttachment, type ComposerPendingAttachment } from "./composer-attachments.ts";
 import { isRecord } from "../../utils/type-guards.ts";
 
 export type ComposerAttachmentDraft = {
@@ -74,10 +74,13 @@ export function parseComposerAttachmentDrafts(raw: unknown): ComposerAttachmentD
   const out: ComposerAttachmentDrafts = {};
   for (const [sessionId, value] of Object.entries(raw).slice(-COMPOSER_DRAFTS_SESSION_CAP)) {
     if (!text(sessionId) || !isRecord(value) || !text(value.projectId) || !Array.isArray(value.attachments)) continue;
-    const attachments = value.attachments.slice(0, 128).flatMap((item) => {
-      const attachment = retainedComposerAttachment(item, value.projectId as string);
-      return attachment ? [attachment] : [];
-    });
+    const attachments: ComposerPendingAttachment[] = [];
+    for (const item of value.attachments.slice(0, 128)) {
+      const attachment = retainedComposerAttachment(item, value.projectId);
+      if (attachment && !attachments.some((existing) => sameComposerAttachment(existing, attachment))) {
+        attachments.push(attachment);
+      }
+    }
     if (attachments.length > 0) Object.defineProperty(out, sessionId, {
       value: { projectId: value.projectId, attachments }, enumerable: true, configurable: true, writable: true,
     });
