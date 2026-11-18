@@ -2,7 +2,7 @@ package execution
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
+	scanfixtures "github.com/lycaon/lycaon/internal/scan/scantest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -25,7 +25,7 @@ func TestRunnerRecoversLeaseAtItsDeadline(t *testing.T) {
 		Status: api.CodeScanStatusRunning, Categories: []api.ScanCategory{api.ScanCategorySecurity},
 		SourceSnapshotID: "snapshot", ClaimToken: "lost-host", LeaseExpiresAt: &expiry,
 	}, nil, ""))
-	runner := NewRunner(scanbase.NewSQLStore(store.DB()), &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(scanbase.NewSQLStore(store.DB()), &scanfixtures.MockRegistry{Scanner: &scanfixtures.MockScanner{}}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	terminal := make(chan api.CodeScan, 1)
 	runner.OnTerminal = func(_ context.Context, scan api.CodeScan) { terminal <- scan }
 	scantest.RunService(t, runner.Run)
@@ -44,7 +44,7 @@ func TestSettingsDisableCancelsClaimBeforeEngineAdmission(t *testing.T) {
 	configuration, err := settings.NewSecurityScannersStoreAt(filepath.Join(t.TempDir(), "security.yaml"))
 	testutil.FailErr(t, "create settings", err)
 	probe := &cancellationProbeScanner{started: make(chan struct{}), stopped: make(chan struct{})}
-	runner := NewRunner(store, &scantest.MockRegistry{Scanner: probe}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(store, &scanfixtures.MockRegistry{Scanner: probe}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.Settings = configuration
 	runner.Snapshots = testSnapshots(t, store)
 	runner.Broker = backgroundwork.New(map[backgroundwork.Resource]backgroundwork.Limits{

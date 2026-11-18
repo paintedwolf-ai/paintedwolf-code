@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"testing"
 

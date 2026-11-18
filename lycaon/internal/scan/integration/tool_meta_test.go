@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"testing"
 

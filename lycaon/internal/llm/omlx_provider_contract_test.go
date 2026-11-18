@@ -40,6 +40,7 @@ func TestBundledProvidersIncludeOMLX(t *testing.T) {
 	catalog, err := llm.NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
 	testutil.FailErr(t, "create provider catalog", err)
 	testutil.FailErr(t, "add omlx provider", catalog.Put(*omlx))
+	testutil.FailErr(t, "reload provider catalog", catalog.Reload())
 	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
