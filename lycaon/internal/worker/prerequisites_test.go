@@ -116,7 +116,7 @@ func TestConsumerCapturesPrimaryAfterProducerPromotion(t *testing.T) {
 	p, err := projects.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: canonical, Label: "app"}}})
 	testutil.FailErr(t, "create project", err)
 	testdbseed.InsertSession(t, database, "parent", p.ID)
-	q := NewSQLQueue(database, 2)
+	q := newTestQueueOnDatabase(database, 2)
 	q.SetProjectStore(projects)
 	q.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(db.DataDir(q.db), "worker-branches"), platform.NewSelector(platform.Config{})))
 	producer := api.WorkerTask{ProjectID: p.ID, WorkspaceRootID: p.Roots[0].ID, WorkspacePath: canonical, ParentSessionID: "parent", AgentType: "implementer", Prompt: "produce", Brief: "produce", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}

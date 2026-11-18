@@ -24,7 +24,7 @@ func TestDecisionBranchStaysAttachedButCannotBePromoted(t *testing.T) {
 	p, err := projects.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: canonical, Label: "app"}}})
 	testutil.FailErr(t, "create project", err)
 	testdbseed.InsertSession(t, database, "parent", p.ID)
-	queue := NewSQLQueue(database, 1)
+	queue := newTestQueueOnDatabase(database, 1)
 	queue.SetProjectStore(projects)
 	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(db.DataDir(queue.db), "worker-branches"), platform.NewSelector(platform.Config{})))
 	id, err := queue.Enqueue(t.Context(), api.WorkerTask{
