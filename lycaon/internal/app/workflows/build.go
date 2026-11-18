@@ -180,6 +180,6 @@ func Build(ctx context.Context, deps Dependencies, registerRecovery func(bootrec
 		Manager:    workflowMgr,
 		Blueprints: blueprintMgr,
 	}
-	runtime.bindEvidence(deps)
+	runtime.bindEvidence(deps.Sessions.Sessions, deps.Database, deps.DataDir)
 	return runtime, nil
 }

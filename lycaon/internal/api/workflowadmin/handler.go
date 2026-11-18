@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/sessionadmin"
 	"github.com/lycaon/lycaon/internal/api/sessionview"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
@@ -72,7 +73,7 @@ type Composition struct {
 	Persister      *workflowcomposition.Persister
 	SessionView    *sessionview.Projector
 	Sessions       *session.Host
-	SessionStore   sessionstore.SessionRepository
+	SessionStore   requestscope.Sessions
 	responses      *httpio.Responder
 }
 
@@ -81,7 +82,7 @@ type Reports struct {
 	Projects        project.Registry
 	Runs            *runstate.Repository
 	Scans           scan.ScanCoordinator
-	SessionStore    sessionstore.SessionRepository
+	SessionStore    requestscope.Sessions
 	TranscriptStore sessionstore.TranscriptRepository
 	VisualStore     visual.Store
 	Workers         worker.WorkerQueue
@@ -96,7 +97,7 @@ type RunControl struct {
 	Runs           *runstate.Repository
 	SessionView    *sessionview.Projector
 	Sessions       *session.Host
-	SessionStore   sessionstore.SessionRepository
+	SessionStore   requestscope.Sessions
 	Topology       *Topology
 	Workflows      *workflow.RunManager
 	responses      *httpio.Responder
@@ -106,7 +107,7 @@ type Topology struct {
 	Requests           *workflowinputs.Requests
 	Orchestrator       orchestration.Orchestrator
 	Runs               *runstate.Repository
-	SessionStore       sessionstore.SessionRepository
+	SessionStore       requestscope.Sessions
 	activeTopologyRuns sync.Map // workflow run id → struct{} while topology settlement is executing
 	background         *taskgroup.Group
 }

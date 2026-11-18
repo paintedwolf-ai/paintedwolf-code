@@ -47,7 +47,11 @@ type Runtime struct {
 }
 
 func New(ctx context.Context, database *db.Store, sessions *store.Repositories, projects *project.SQLRegistry, trust *settings.TrustSurfacesStore) *Runtime {
-	return &Runtime{ctx: ctx, database: database, sessions: sessions.Sessions, projects: projects, trust: trust, Detections: &Detections{}}
+	var queries store.SessionRepository
+	if sessions != nil {
+		queries = sessions.Sessions
+	}
+	return &Runtime{ctx: ctx, database: database, sessions: queries, projects: projects, trust: trust, Detections: &Detections{}}
 }
 func (b *Runtime) BindRemember(set func(secretmatch.RememberFunc)) {
 	b.remember = set

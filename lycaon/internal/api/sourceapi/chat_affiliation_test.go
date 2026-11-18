@@ -52,7 +52,7 @@ func TestUserSourceChatAffiliationNamesTheChatAndOnlyAnActiveTurn(t *testing.T) 
 	if gotSession, gotTurn := server.Workspace.UserSourceChatAffiliation(gone); gotSession != "" || gotTurn != 0 {
 		t.Fatalf("unknown chat affiliation = (%q, %d), want none", gotSession, gotTurn)
 	}
-	if session, turn, err := requestscope.ChatAffiliation(ctx, server.Workspace.SessionStore.Sessions, "another-project", sess.ID); err != nil || session != "" || turn != 0 {
+	if session, turn, err := requestscope.ChatAffiliation(ctx, server.Workspace.SessionQueries, "another-project", sess.ID); err != nil || session != "" || turn != 0 {
 		t.Fatalf("another project's chat affiliation = (%q, %d, %v), want none", session, turn, err)
 	}
 }

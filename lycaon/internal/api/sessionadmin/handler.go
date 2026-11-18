@@ -4,6 +4,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/promptadmin"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/sessionview"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
@@ -60,7 +61,7 @@ type Bootstrap struct {
 	ProgressStore  progress.Store
 	SessionView    *sessionview.Projector
 	Sessions       *session.Host
-	SessionStore   sessionstore.SessionRepository
+	SessionStore   requestscope.Sessions
 	Workers        worker.WorkerQueue
 	responses      *httpio.Responder
 }
@@ -85,7 +86,7 @@ type Lifecycle struct {
 
 type Navigation struct {
 	Sessions        *session.Host
-	SessionStore    sessionstore.SessionRepository
+	SessionStore    requestscope.Sessions
 	Workers         worker.WorkerQueue
 	responses       *httpio.Responder
 	sourceWorkspace *sourceapi.Workspace

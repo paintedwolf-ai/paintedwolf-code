@@ -129,12 +129,12 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 	)
 	caps := promptattach.Active()
 	h := Handler{}
-	h.Attachments = &Attachments{Caps: caps, DataDir: deps.DataDir, Projects: deps.Projects, Sessions: deps.Sessions, SessionQueries: deps.SessionQueries, AttachmentBlobs: deps.AttachmentBlobs, Video: deps.Video, responses: responses}
-	h.Content = &Content{HintConfig: deps.HintConfig, Sessions: deps.Sessions, SessionQueries: deps.SessionQueries, TranscriptQueries: deps.TranscriptQueries, responses: responses}
-	h.Execution = &Execution{EventPublisher: deps.EventPublisher, Sessions: deps.Sessions, SessionQueries: deps.SessionQueries, TranscriptQueries: deps.TranscriptQueries, background: background, responses: responses}
-	h.Queue = &Queue{Sessions: deps.Sessions, SessionQueries: deps.SessionQueries, background: background, responses: responses}
-	h.References = &References{Caps: caps, Projects: deps.Projects, SessionQueries: deps.SessionQueries, Database: deps.Store.DB(), VisualStore: deps.VisualStore, sourceEditor: deps.Sources.Editor}
-	h.Submission = &Submission{Caps: caps, EventPublisher: deps.EventPublisher, ManagedSecrets: deps.ManagedSecrets, Sessions: deps.Sessions, SessionQueries: deps.SessionQueries, GrantedPaths: deps.GrantedPaths, Video: deps.Video, VisualStore: deps.VisualStore, responses: responses}
+	h.Attachments = &Attachments{Caps: caps, DataDir: deps.DataDir, Projects: deps.Projects, Sessions: deps.Sessions, SessionQueries: deps.Store.Sessions, AttachmentBlobs: deps.Store.Attachments, Video: deps.Video, responses: responses}
+	h.Content = &Content{HintConfig: deps.HintConfig, Sessions: deps.Sessions, SessionQueries: deps.Store.Sessions, TranscriptQueries: deps.Store.Transcript, responses: responses}
+	h.Execution = &Execution{EventPublisher: deps.EventPublisher, Sessions: deps.Sessions, SessionQueries: deps.Store.Sessions, TranscriptQueries: deps.Store.Transcript, background: background, responses: responses}
+	h.Queue = &Queue{Sessions: deps.Sessions, SessionQueries: deps.Store.Sessions, background: background, responses: responses}
+	h.References = &References{Caps: caps, Projects: deps.Projects, SessionQueries: deps.Store.Sessions, Database: deps.Store.DB(), VisualStore: deps.VisualStore, sourceEditor: deps.Sources.Editor}
+	h.Submission = &Submission{Caps: caps, EventPublisher: deps.EventPublisher, ManagedSecrets: deps.ManagedSecrets, Sessions: deps.Sessions, SessionQueries: deps.Store.Sessions, GrantedPaths: deps.GrantedPaths, Video: deps.Video, VisualStore: deps.VisualStore, responses: responses}
 	h.Attachments.Submission = h.Submission
 	h.Execution.Attachments = h.Attachments
 	h.Submission.Attachments = h.Attachments

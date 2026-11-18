@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/extensionadmin"
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/board"
@@ -71,7 +72,7 @@ type Projects struct {
 	Roots           *Roots
 	Sessions        *session.Host
 	Settings        *settings.Service
-	SessionStore    sessionstore.SessionRepository
+	SessionStore    requestscope.Sessions
 	Verification    *Verification
 	responses       *httpio.Responder
 	sourceWorkspace *sourceapi.Workspace

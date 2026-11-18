@@ -4,13 +4,15 @@ import (
 	"context"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/search"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 )
 
-func (r *Runtime) bindEvidence(deps Dependencies) {
+func (r *Runtime) bindEvidence(sessions sessiontree.Reader, database db.Handle, dataDir string) {
 	evidenceStore := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 	simpleInspector := inspector.NewSimpleInspector(evidenceStore)
 	simpleInspector.ProjectDir = func(c context.Context, runID string) (string, error) {
@@ -19,44 +21,44 @@ func (r *Runtime) bindEvidence(deps Dependencies) {
 			return "", nil
 		}
 		if r.Store != nil && r.Store.Runs != nil {
-			if wfRun, err := r.Store.Runs.Get(c, runID); err == nil && wfRun != nil && deps.Sessions != nil {
-				if sess, sErr := deps.Sessions.Sessions.Get(c, wfRun.SessionID); sErr == nil && sess != nil && strings.TrimSpace(sess.ProjectID) != "" {
-					return project.EnsureHostDataDir(deps.DataDir, sess.ProjectID)
+			if wfRun, err := r.Store.Runs.Get(c, runID); err == nil && wfRun != nil && sessions != nil {
+				if sess, sErr := sessions.Get(c, wfRun.SessionID); sErr == nil && sess != nil && strings.TrimSpace(sess.ProjectID) != "" {
+					return project.EnsureHostDataDir(dataDir, sess.ProjectID)
 				}
 			}
 		}
-		if deps.Sessions == nil {
+		if sessions == nil {
 			return "", nil
 		}
-		sess, err := deps.Sessions.Sessions.Get(c, runID)
+		sess, err := sessions.Get(c, runID)
 		if err != nil || sess == nil {
 			return "", err
 		}
 		if strings.TrimSpace(sess.ProjectID) == "" {
 			return "", nil
 		}
-		return project.EnsureHostDataDir(deps.DataDir, sess.ProjectID)
+		return project.EnsureHostDataDir(dataDir, sess.ProjectID)
 	}
 	r.Manager.Verdicts.EvidenceStore = evidenceStore
 	r.Manager.SetEvidenceProjectDir(func(c context.Context, sessionID string) (string, error) {
-		if deps.Sessions == nil {
+		if sessions == nil {
 			return "", nil
 		}
-		sess, err := deps.Sessions.Sessions.Get(c, sessionID)
+		sess, err := sessions.Get(c, sessionID)
 		if err != nil || sess == nil {
 			return "", err
 		}
 		if strings.TrimSpace(sess.ProjectID) == "" {
 			return "", nil
 		}
-		return project.EnsureHostDataDir(deps.DataDir, sess.ProjectID)
+		return project.EnsureHostDataDir(dataDir, sess.ProjectID)
 	})
 	r.Manager.Verdicts.OnGateEvidencePersisted = func(c context.Context, sessionID, workflowRunID string, rec evidence.Record) {
-		projectID, err := search.ResolveProjectIDForSession(c, deps.Database, sessionID)
+		projectID, err := search.ResolveProjectIDForSession(c, database, sessionID)
 		if err != nil || projectID == "" {
 			return
 		}
-		_ = search.ProjectGateEvidenceComplete(c, deps.Database, search.ProjectGateEvidenceInput{
+		_ = search.ProjectGateEvidenceComplete(c, database, search.ProjectGateEvidenceInput{
 			ProjectID:     projectID,
 			SessionID:     sessionID,
 			WorkflowRunID: workflowRunID,

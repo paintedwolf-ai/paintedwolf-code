@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/grantedpath"
@@ -71,7 +72,7 @@ type Access struct {
 	Inventory    *Inventory
 	Projects     project.Registry
 	Settings     *settings.Service
-	SessionStore sessionstore.SessionRepository
+	SessionStore requestscope.Sessions
 	responses    *httpio.Responder
 }
 
@@ -80,7 +81,7 @@ type CheckpointActions struct {
 	Events         events.ReplayHub
 	ManagedSecrets *secretcap.Service
 	Projects       project.Registry
-	SessionStore   sessionstore.SessionRepository
+	SessionStore   requestscope.Sessions
 	options        hitl.ApprovalOptionResolver
 	presence       *hitl.VaultPresence
 	responses      *httpio.Responder
@@ -126,7 +127,7 @@ type Inventory struct {
 	Listen            *approvalstate.SandboxPortGrantRuntime
 	Loopback          *approvalstate.SandboxPortGrantRuntime
 	Sockets           *approvalstate.SocketCapabilityRuntime
-	SessionStore      sessionstore.SessionRepository
+	SessionStore      requestscope.Sessions
 	WriteRoots        *approvalstate.SandboxPathGrantRuntime
 	responses         *httpio.Responder
 }
