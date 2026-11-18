@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -23,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type nativeProgressFixture struct{ store *progress.MemoryStore }
@@ -93,6 +95,9 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath, modelTool string) {
 		prepared = true
 		return PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, actual tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			invoked = true
+			if _, ok := people.Caller(ctx); ok {
+				t.Fatal("native owner saw the request caller")
+			}
 			file, err := nativePath.Open()
 			if err != nil {
 				return toolcontract.ProducerResult{}, err
@@ -125,7 +130,9 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath, modelTool string) {
 		return nil
 	})
 	admission := stageMemory(t, 64<<20)
-	result, err := executor.InvokeNative(t.Context(), frame, surface, admission, nativeProgressFixture{owner}, observer, effect, tc)
+	// The request that started the turn had a caller; the agent's effect does not.
+	callerCtx := people.WithCaller(t.Context(), people.Person{ID: "person-1", Role: api.PersonRoleOwner})
+	result, err := executor.InvokeNative(callerCtx, frame, surface, admission, nativeProgressFixture{owner}, observer, effect, tc)
 	testutil.FailErr(t, "invoke actual native read binding", err)
 	if !result.OwnerInvoked || !result.OutputPublishable || result.Producer.EffectCertainty != toolcontract.NoEffect || starts != 1 || admission.InUse().State != 0 || stdout.String() != "original bytes" {
 		t.Fatalf("lost invoked/read distinction or reservation: %+v held%d", result, admission.InUse().State)

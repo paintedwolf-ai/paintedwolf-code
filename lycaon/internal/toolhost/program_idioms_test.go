@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
 
@@ -161,4 +162,37 @@ func TestComposedProgramProcessSubstitutionWithExternalAndEarlyExit(t *testing.T
 			t.Fatalf("python3 >(...) outcome: %+v", outcome)
 		}
 	}
+}
+
+// Reads, depth-bounded discovery and Git inspection give exact output through
+// the composed owners.
+func TestComposedProgramReadsDiscoveryAndGitInspection(t *testing.T) {
+	t.Run("read with line total", func(t *testing.T) {
+		f := newComposedProgramFixture(t)
+		testutil.FailErr(t, "write sample", os.WriteFile(filepath.Join(f.Dir, "sample.txt"), []byte("alpha\nbeta\ngamma\n"), 0o644))
+		outcome := callComposedProgram(t, f, "cat -- sample.txt; wc -l < sample.txt")
+		if outcome.Stdout != "alpha\nbeta\ngamma\n3\n" || outcome.Status != 0 || outcome.Refusal != nil {
+			t.Fatalf("read outcome: %+v", outcome)
+		}
+	})
+	t.Run("find honors maxdepth", func(t *testing.T) {
+		f := newComposedProgramFixture(t)
+		deep := filepath.Join(f.Dir, "a", "b", "c", "d")
+		testutil.FailErr(t, "mkdir deep", os.MkdirAll(deep, 0o755))
+		testutil.FailErr(t, "write shallow", os.WriteFile(filepath.Join(f.Dir, "a", "shallow.go"), []byte("x"), 0o644))
+		testutil.FailErr(t, "write deep", os.WriteFile(filepath.Join(deep, "deep.go"), []byte("x"), 0o644))
+		outcome := callComposedProgram(t, f, "find . -maxdepth 3 -type f -name '*.go'")
+		if outcome.Stdout != "./a/shallow.go\n" || outcome.Status != 0 || outcome.Refusal != nil {
+			t.Fatalf("find outcome: %+v", outcome)
+		}
+	})
+	t.Run("git status and recent commit", func(t *testing.T) {
+		f := newComposedProgramFixture(t)
+		testutil.FailErr(t, "write tracked", os.WriteFile(filepath.Join(f.Dir, "tracked.txt"), []byte("x"), 0o644))
+		gittest.InitCommit(t, f.Dir, "Initial commit")
+		outcome := callComposedProgram(t, f, "git status --porcelain; git log -1 --format=%s")
+		if outcome.Stdout != "Initial commit\n" || outcome.Status != 0 || outcome.Refusal != nil {
+			t.Fatalf("git outcome: %+v", outcome)
+		}
+	})
 }

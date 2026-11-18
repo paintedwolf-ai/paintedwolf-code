@@ -32,6 +32,27 @@ type bundledCompactionLimitsYAML struct {
 	MaxWaitVisibilityRepairs    int `yaml:"max_wait_visibility_repairs"`
 }
 
+// parseCompactionLimits decodes the shared limits from compaction YAML and
+// refuses a document missing any required limit.
+func parseCompactionLimits(data []byte) (bundledCompactionLimitsYAML, error) {
+	var doc bundledCompactionLimitsYAML
+	// The llm package validates the complete compaction schema.
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return doc, fmt.Errorf("parse bundled compaction limits: %w", err)
+	}
+	if doc.MaxCitationGroundingRetries <= 0 ||
+		doc.MaxGroundingRejectsPerTurn <= 0 ||
+		doc.MaxGroundingRejectsPerCycle <= 0 ||
+		doc.MaxReportDocumentRetries <= 0 ||
+		doc.MaxWaitVisibilityRepairs <= 0 {
+		return doc, fmt.Errorf("bundled compaction.yaml missing required limit fields")
+	}
+	if doc.MaxWorkerSummaryChars <= 0 {
+		doc.MaxWorkerSummaryChars = baseWorkerSummaryMaxChars
+	}
+	return doc, nil
+}
+
 func ensureBundledCompactionLimits() {
 	bundledCompactionLimitsOnce.Do(func() {
 		data, err := config.Read(config.Compaction)
@@ -39,25 +60,12 @@ func ensureBundledCompactionLimits() {
 			bundledCompactionLimitsErr = fmt.Errorf("read bundled compaction limits: %w", err)
 			return
 		}
-		var doc bundledCompactionLimitsYAML
-		// The llm package validates the complete compaction schema.
-		if err := yaml.Unmarshal(data, &doc); err != nil {
-			bundledCompactionLimitsErr = fmt.Errorf("parse bundled compaction limits: %w", err)
+		doc, err := parseCompactionLimits(data)
+		if err != nil {
+			bundledCompactionLimitsErr = err
 			return
 		}
-		if doc.MaxCitationGroundingRetries <= 0 ||
-			doc.MaxGroundingRejectsPerTurn <= 0 ||
-			doc.MaxGroundingRejectsPerCycle <= 0 ||
-			doc.MaxReportDocumentRetries <= 0 ||
-			doc.MaxWaitVisibilityRepairs <= 0 {
-			bundledCompactionLimitsErr = fmt.Errorf("bundled compaction.yaml missing required limit fields")
-			return
-		}
-		if doc.MaxWorkerSummaryChars > 0 {
-			DefaultWorkerSummaryMaxChars = doc.MaxWorkerSummaryChars
-		} else {
-			DefaultWorkerSummaryMaxChars = baseWorkerSummaryMaxChars
-		}
+		DefaultWorkerSummaryMaxChars = doc.MaxWorkerSummaryChars
 		DefaultCitationGroundingRetries = doc.MaxCitationGroundingRetries
 		DefaultGroundingRejectsPerTurn = doc.MaxGroundingRejectsPerTurn
 		DefaultGroundingRejectsPerCycle = doc.MaxGroundingRejectsPerCycle

@@ -9,13 +9,14 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/nativemanifest"
-
+	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
@@ -219,11 +220,21 @@ func TestMultiRootExplicitAddressRejectsTraversal(t *testing.T) {
 	}
 }
 
+// A bare relative path names a file in the active root only: the secondary
+// root's file is not found from the primary, and is found once the secondary
+// root is active.
 func TestMultiRootBareRelativeUsesActiveRootOnly(t *testing.T) {
 	fix := newMultiRootFixture(t)
+	if out := assertRootProgramSuccess(t, rootProgram(t, "cat -- primary-sentinel.txt", fix.tctx("s1"))); out != "primary" {
+		t.Fatalf("active-root read = %q", out)
+	}
 	out := rootProgram(t, "cat -- secondary-sentinel.txt", fix.tctx("s1"))
-	if out.Status == 0 || out.Stdout != "" {
-		t.Fatalf("relative read escaped active root: %+v", out)
+	if out.Refusal != nil || out.Status != 1 || out.Stdout != "" {
+		t.Fatalf("relative read outside the active root = %+v, want cat's not-found status", out)
+	}
+	fix.activeID = "d"
+	if out := assertRootProgramSuccess(t, rootProgram(t, "cat -- secondary-sentinel.txt", fix.tctx("s1"))); out != "secondary" {
+		t.Fatalf("relative read in the secondary active root = %q", out)
 	}
 }
 
@@ -344,40 +355,70 @@ func TestMultiRootActiveFolderDisplayContract(t *testing.T) {
 
 }
 
+// One stat call takes operands in different roots and reports each at its
+// root-resolved path.
 func TestMultiRootPathsArrayToolStat(t *testing.T) {
 	fix := newMultiRootFixture(t)
-	out := assertRootProgramSuccess(t, rootProgram(t, "stat -- @lycaon-den/secondary-sentinel.txt", fix.tctx("s1")))
-	if !strings.Contains(out, "secondary-sentinel.txt") {
-		t.Fatalf("labeled stat=%q", out)
+	out := assertRootProgramSuccess(t, rootProgram(t, `stat -c '%n %s' -- @lycaon-den/secondary-sentinel.txt @lycaon/primary-sentinel.txt`, fix.tctx("s1")))
+	want := filepath.Join(fix.secondaryDir, "secondary-sentinel.txt") + " 9\n" + filepath.Join(fix.primaryDir, "primary-sentinel.txt") + " 7\n"
+	if out != want {
+		t.Fatalf("labeled stat = %q, want %q", out, want)
 	}
 }
 
+// The composed brief splits its budget by the primary share: a root whose
+// orientation fits its share keeps it whole, and one that exceeds its share is
+// trimmed to fit.
 func TestMultiRootAnalyzeRootsBudget(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-	base := t.TempDir()
-	primary := filepath.Join(base, "a")
-	secondary := filepath.Join(base, "b")
-	for _, dir := range []string{primary, secondary} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			contractcheck.FailErr(t, "mkdir", err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "file.go"), []byte("package x\n"), 0o644); err != nil {
-			contractcheck.FailErr(t, "write", err)
-		}
+	brief := &repoinfo.Brief{
+		Languages: []string{"Go", "TypeScript"}, FileCount: packboard.TinyMaxFiles + 1, Materialized: true,
+		Layout: api.RepoLayout{TopLevel: []string{"commands-and-entry-points/", "internal-service-packages/", "frontend-workspace/", "documentation/"}},
 	}
-	budget := repoinfo.BriefBudget{TotalBytes: 2048, PrimaryShare: 0.6}
-	provider := repotest.NewProvider(t)
-	defer func() { _ = provider.Close() }()
-	mrb, err := repoinfo.AnalyzeRoots(ctx, []projectroot.RootRef{
-		{Path: primary, IsPrimary: true, Label: "a"},
-		{Path: secondary, Label: "b"},
+	lines := packboard.RepoOrientationLines(repoinfo.WireBrief(brief))
+	if len(lines) != 2 {
+		t.Fatalf("fixture brief renders %d orientation lines, want repo and layout", len(lines))
+	}
+	full := len(strings.Join(lines, "\n"))
+	budget := repoinfo.BriefBudget{TotalBytes: full*5/3 + 2, PrimaryShare: 0.6}
+	primaryCap := int(float64(budget.TotalBytes) * budget.PrimaryShare)
+	secondaryCap := budget.TotalBytes - primaryCap
+	if primaryCap < full || secondaryCap >= full || secondaryCap < len(lines[0]) {
+		t.Fatalf("budget %d does not separate the shares for a %d byte brief", budget.TotalBytes, full)
+	}
+	provider := fixedBriefProvider{"/roots/a": brief, "/roots/b": brief}
+	mrb, err := repoinfo.AnalyzeRoots(context.Background(), []projectroot.RootRef{
+		{Path: "/roots/a", IsPrimary: true, Label: "a"},
+		{Path: "/roots/b", Label: "b"},
 	}, budget, provider)
 	contractcheck.FailErr(t, "AnalyzeRoots", err)
-	if mrb.RenderedBytes() > budget.TotalBytes+256 {
-		t.Fatalf("rendered %d exceeds budget %d", mrb.RenderedBytes(), budget.TotalBytes)
+	if len(mrb.Roots) != 2 {
+		t.Fatalf("composed %d roots, want 2", len(mrb.Roots))
+	}
+	size := func(r repoinfo.RootBrief) int {
+		return len(strings.Join(packboard.RepoOrientationLines(repoinfo.WireBrief(r.Brief)), "\n"))
+	}
+	if primary := mrb.Roots[0]; primary.Truncated || size(primary) != full {
+		t.Fatalf("primary = %d bytes truncated=%v, want its whole %d byte brief", size(primary), primary.Truncated, full)
+	}
+	if secondary := mrb.Roots[1]; !secondary.Truncated || size(secondary) > secondaryCap {
+		t.Fatalf("secondary = %d bytes truncated=%v, want trimmed to at most %d", size(secondary), secondary.Truncated, secondaryCap)
 	}
 }
+
+// fixedBriefProvider answers each root with a fixed brief.
+type fixedBriefProvider map[string]*repoinfo.Brief
+
+func (p fixedBriefProvider) Brief(_ context.Context, dir string) (*repoinfo.Brief, error) {
+	return p[dir], nil
+}
+func (fixedBriefProvider) KnownEmpty(context.Context, string) (bool, error) { return false, nil }
+func (fixedBriefProvider) Warm(string)                                      {}
+func (fixedBriefProvider) Changed(context.Context, string)                  {}
+func (fixedBriefProvider) SetOnSettled(func(string))                        {}
+func (fixedBriefProvider) Wait(context.Context) error                       { return nil }
+func (fixedBriefProvider) Stop()                                            {}
+func (fixedBriefProvider) Close() error                                     { return nil }
 
 func TestMultiRootUnattachedAtWordRemainsLiteral(t *testing.T) {
 	fix := newMultiRootFixture(t)

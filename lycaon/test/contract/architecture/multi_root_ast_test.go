@@ -2,25 +2,13 @@ package contract
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/tools"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
-
-func TestMultiRootASTAddressingCopySingleSource(t *testing.T) {
-	t.Parallel()
-	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon")
-	scan, err := scanMultiRootAST(root)
-	contractcheck.FailErr(t, "scanMultiRootAST", err)
-	if len(scan.DuplicateAddressing) > 0 {
-		t.Fatalf("multi-root addressing copy outside SSOT partials:\n%s", strings.Join(scan.DuplicateAddressing, "\n"))
-	}
-}
 
 // The cwd argument selects an attached root.
 func TestMultiRootDisclosureCommandCwdIsTheOnlyRootSelector(t *testing.T) {

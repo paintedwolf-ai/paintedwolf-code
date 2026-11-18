@@ -10,25 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestExplainActionCommandDestructive(t *testing.T) {
-	reg, err := approvals.LoadRegistryStock()
-	if err != nil {
-		t.Fatalf("LoadRegistryStock: %v", err)
-	}
-	got := reg.ExplainAction(hitl.ProposedAction{
-		Invocation: hitl.ActionInvocation{
-			Tool: "command",
-			Args: map[string]any{"command": "git push origin main"},
-		},
-	}, settings.TierIrreversible)
-	if got.Key != approvals.KeyCommandDestructive {
-		t.Fatalf("key: got %q want %q", got.Key, approvals.KeyCommandDestructive)
-	}
-	if got.Copy.What == "" || got.Copy.IfWrong == "" {
-		t.Fatalf("expected rendered copy: %+v", got.Copy)
-	}
-}
-
 func TestExplainActionUnknownUsesFallback(t *testing.T) {
 	reg, err := approvals.LoadRegistryStock()
 	if err != nil {

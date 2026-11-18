@@ -1,32 +1,49 @@
 package contract
 
 import (
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/debugpaths"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// Debug capture layout — config root, debug/sessions/latest tree, capture
-// filenames, LYCAON_*_FILE redirects — is defined by internal/debugpaths.
-// Guards below keep writers, the log viewer, clear registry, and shell scripts
-// from spelling those paths a second time.
-
-// The session tree the scripts create is the tree the viewer reads.
+// The session tree the capture script creates is the tree the viewer reads:
+// the script runs against a scratch configuration root, and the session
+// directory and latest link it leaves are where debugpaths looks.
 func TestDebugCaptureScriptTreeMatchesLayout(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	body := contractcheck.ReadRepoFile(t, root, filepath.Join("scripts", "debug-session.sh"))
+	configDir := t.TempDir()
+	t.Setenv(configdir.EnvConfigDir, configDir)
+	t.Setenv(debugpaths.SessionDirEnv, "")
+	script := filepath.Join(contractcheck.RepoRoot(t), "scripts", "debug-session.sh")
+	cmd := exec.CommandContext(t.Context(), "bash", script)
+	cmd.Env = append(os.Environ(), "HOME="+t.TempDir())
+	out, err := cmd.CombinedOutput()
+	contractcheck.FailErr(t, "run debug-session.sh: "+string(out), err)
 
-	for _, want := range []string{
-		`DEBUG_ROOT="${CONFIG_DIR}/` + filepath.Base(debugpaths.DebugRoot()) + `"`,
-		`SESSIONS_DIR="${DEBUG_ROOT}/` + filepath.Base(debugpaths.SessionsRoot()) + `"`,
-		`"${DEBUG_ROOT}/` + filepath.Base(debugpaths.LatestLink()) + `"`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("scripts/debug-session.sh missing %s", want)
-		}
+	if !strings.HasPrefix(debugpaths.DebugRoot(), configDir) {
+		t.Fatalf("debug root %q is not under the configured root %q", debugpaths.DebugRoot(), configDir)
+	}
+	target, err := os.Readlink(debugpaths.LatestLink())
+	contractcheck.FailErr(t, "read latest link", err)
+	if filepath.Dir(target) != debugpaths.SessionsRoot() {
+		t.Fatalf("latest link points at %q, want a directory in %q", target, debugpaths.SessionsRoot())
+	}
+	if _, err := debugpaths.ParseSessionStamp(filepath.Base(target)); err != nil {
+		t.Fatalf("session directory %q is not a session stamp: %v", filepath.Base(target), err)
+	}
+	info, err := os.Stat(target)
+	contractcheck.FailErr(t, "stat session directory", err)
+	if !info.IsDir() {
+		t.Fatalf("session path %q is not a directory", target)
+	}
+	entries, err := os.ReadDir(debugpaths.SessionsRoot())
+	contractcheck.FailErr(t, "list sessions", err)
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(target) {
+		t.Fatalf("sessions root holds %v, want only %s", entries, filepath.Base(target))
 	}
 }

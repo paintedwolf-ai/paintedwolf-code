@@ -9,6 +9,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// A bare relative path resolves in the session's active root; @label/ selects
+// any attached root, whichever root is active.
 func TestResolveAbsTwoRoots(t *testing.T) {
 	dir := t.TempDir()
 	primary := filepath.Join(dir, "lycaon")
@@ -22,18 +24,24 @@ func TestResolveAbsTwoRoots(t *testing.T) {
 		{ID: "p", Label: "lycaon", Path: primary, IsPrimary: true},
 		{ID: "d", Label: "lycaon-den", Path: secondary, IsPrimary: false},
 	}
-	abs, root, err := ResolveAbs(roots, "p", "@lycaon-den/src")
-	testutil.FailErr(t, "ResolveAbs failed", err)
-	want := filepath.Join(secondary, "src")
-	if abs != want {
-		t.Fatalf("abs = %q want %q", abs, want)
-	}
-	if root.Label != "lycaon-den" {
-		t.Fatalf("root label = %q", root.Label)
-	}
-	display := Qualify(roots, "p", root, abs)
-	if display != "@lycaon-den/src" {
-		t.Fatalf("Qualify = %q", display)
+	for _, tc := range []struct {
+		active, input, wantRoot, wantAbs, wantDisplay string
+	}{
+		{"p", "@lycaon-den/src", "d", filepath.Join(secondary, "src"), "@lycaon-den/src"},
+		{"p", "@lycaon/src", "p", filepath.Join(primary, "src"), "src"},
+		{"p", "src", "p", filepath.Join(primary, "src"), "src"},
+		{"d", "@lycaon-den/src", "d", filepath.Join(secondary, "src"), "src"},
+		{"d", "@lycaon/src", "p", filepath.Join(primary, "src"), "@lycaon/src"},
+		{"d", "src", "d", filepath.Join(secondary, "src"), "src"},
+	} {
+		abs, root, err := ResolveAbs(roots, tc.active, tc.input)
+		testutil.FailErr(t, "ResolveAbs "+tc.input, err)
+		if abs != tc.wantAbs || root.ID != tc.wantRoot {
+			t.Fatalf("active %s: ResolveAbs(%q) = %q in %q, want %q in %q", tc.active, tc.input, abs, root.ID, tc.wantAbs, tc.wantRoot)
+		}
+		if display := Qualify(roots, tc.active, root, abs); display != tc.wantDisplay {
+			t.Fatalf("active %s: Qualify(%q) = %q, want %q", tc.active, tc.input, display, tc.wantDisplay)
+		}
 	}
 }
 

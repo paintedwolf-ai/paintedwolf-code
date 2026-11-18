@@ -1,6 +1,7 @@
 package guidance_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -202,6 +203,45 @@ func TestBindObservedSampleDoesNotInventUnobservedPaths(t *testing.T) {
 	}
 	if len(report.CitedEvidence) != 1 || report.CitedEvidence[0].Path != "src/observed.go" {
 		t.Fatalf("expected only observed path, got %+v", report.CitedEvidence)
+	}
+}
+
+// The host-assembled grounding reads the report's typed citations and the
+// ledger, never its prose: a path or URL named only in the synthesis binds
+// nothing, and a cited path the ledger never observed is dropped.
+func TestBuildObservedAutobindGroundingDoesNotInventFromProse(t *testing.T) {
+	msgs := []api.Message{
+		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{Name: "read", Args: map[string]any{"path": "src/observed.go"}}}},
+		{Role: api.MessageRoleTool, Content: `{"path":"src/observed.go","content":"1|ok","offset":1,"end_line":1,"limit":1}`},
+	}
+	ev := ledgertest.BuildFromMessages("", msgs)
+	const unobservedPath, unobservedURL = "lycaon/never/observed.go", "https://never.example/observed"
+	report := guidance.CoordinatorCompletionReport{
+		Synthesis: "See `" + unobservedPath + ":9` and " + unobservedURL + ".",
+		CitedEvidence: []guidance.CoordinatorCitedEvidence{
+			{Path: "src/observed.go"},
+			{Path: unobservedPath, Line: 9},
+		},
+	}
+
+	g := guidance.BuildObservedAutobindGrounding(evidence.CitationRoots{}, ev, report)
+	if g == nil || !g.HostAssembled || g.Traced {
+		t.Fatalf("grounding = %+v, want host-assembled and untraced", g)
+	}
+	if len(g.CitedEvidence) != 1 || g.CitedEvidence[0].Path != "src/observed.go" || g.CitedEvidence[0].Handle == "" {
+		t.Fatalf("cited evidence = %+v, want only the observed path with its handle", g.CitedEvidence)
+	}
+	if len(g.CitedURLs) != 0 {
+		t.Fatalf("cited URLs = %v, want none", g.CitedURLs)
+	}
+	raw, err := json.Marshal(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, invented := range []string{unobservedPath, unobservedURL} {
+		if strings.Contains(string(raw), invented) {
+			t.Fatalf("grounding carries %q from prose: %s", invented, raw)
+		}
 	}
 }
 

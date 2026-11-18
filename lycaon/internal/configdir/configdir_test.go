@@ -94,6 +94,8 @@ func TestRootDoesNotCreateOrRestrictStorage(t *testing.T) {
 	}
 }
 
+// Host storage resolves under ~/.config/<channel> on every channel: never a
+// dotted directory in home, and never XDG_CONFIG_HOME.
 func TestRootTracksSelectedChannelAndHome(t *testing.T) {
 	t.Setenv(configdir.EnvConfigDir, "")
 	for _, dev := range []string{"", "1"} {
@@ -101,14 +103,25 @@ func TestRootTracksSelectedChannelAndHome(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)
 		t.Setenv("USERPROFILE", home)
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		want := filepath.Join(home, ".config", configdir.ChannelDirName())
 		root, err := configdir.Root()
 		testutil.FailErr(t, "Root", err)
-		want := filepath.Join(home, ".config", configdir.ChannelDirName())
 		if root != want {
 			t.Fatalf("Root() = %q, want %q", root, want)
 		}
 		if _, err := os.Stat(root); !os.IsNotExist(err) {
 			t.Fatalf("lookup changed home-derived storage: %v", err)
+		}
+		created, err := configdir.UserConfigDir()
+		testutil.FailErr(t, "UserConfigDir", err)
+		if created != want {
+			t.Fatalf("UserConfigDir() = %q, want %q", created, want)
+		}
+		entries, err := os.ReadDir(home)
+		testutil.FailErr(t, "list home", err)
+		if len(entries) != 1 || entries[0].Name() != ".config" {
+			t.Fatalf("home holds %v, want only .config", entries)
 		}
 	}
 }
