@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -45,7 +44,7 @@ func (r *secretSinkRun) suppliedReference(t *testing.T, sess *wire.Session) stri
 	body, err := json.Marshal(wire.CreateManagedSecretRequest{OperationID: uuid.NewString(), Name: "sink token", Purpose: "file sink test", SecretValue: sinkSentinel})
 	testutil.FailErr(t, "encode secret", err)
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects/"+sess.ProjectID+"/secrets", bytes.NewReader(body))
-	request.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	request.Header.Set("Authorization", "Bearer "+r.h.APIToken)
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	r.h.Server.ServeHTTP(response, request)

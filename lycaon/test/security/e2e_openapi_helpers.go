@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -53,7 +52,7 @@ func validatedRequest(t *testing.T, base, method, pathTemplate string, pathParam
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("Authorization", api.TestAuthHeader())
+	req.Header.Set("Authorization", fixtureAuthorization())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, pathTemplate, err)

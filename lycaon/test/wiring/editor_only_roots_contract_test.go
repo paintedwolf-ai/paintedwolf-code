@@ -10,7 +10,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/project"
@@ -103,7 +102,7 @@ func attachRootOverHTTP(t *testing.T, h *Harness, projectID, path string) wire.P
 	body, err := json.Marshal(wire.AttachProjectRootRequest{Path: path})
 	testutil.FailErr(t, "encode attach", err)
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects/"+projectID+"/roots", bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	req.Header.Set("Authorization", "Bearer "+h.APIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)

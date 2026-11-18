@@ -30,8 +30,7 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 		},
 	}}))
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 	mgr := h.Sessions.Manager
 	ctx := context.Background()
 	projectDir := t.TempDir()

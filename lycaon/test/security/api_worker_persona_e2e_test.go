@@ -19,8 +19,7 @@ func TestDelegateImplementerPromptContainsPersona(t *testing.T) {
 		Text:    "implementation complete",
 	}}}))
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 	ctx := context.Background()
 	dir := t.TempDir()
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, dir)
@@ -68,8 +67,7 @@ func TestDelegatePlanReviewerDistinctFromImplementer(t *testing.T) {
 		Text:    "implementation complete",
 	}}}))
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 	ctx := context.Background()
 	dir := t.TempDir()
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, dir)

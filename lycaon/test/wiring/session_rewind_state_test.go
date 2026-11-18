@@ -26,8 +26,7 @@ func TestRewindResetsCoordinatorBatchAtTheNewBoundary(t *testing.T) {
 		{Pattern: "second ask", FollowUpText: MockCoordinatorCloseoutMarkdown("Did the second ask.", "")},
 	}})
 	h := BuildForTest(t, WithLLMClient(mock))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	ctx := h.OwnerCtx(t, context.Background())
 	projectDir := t.TempDir()
@@ -77,8 +76,7 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 		{Pattern: "second ask", FollowUpText: MockCoordinatorCloseoutMarkdown("Did the second ask.", "")},
 	}})
 	h := BuildForTest(t, WithLLMClient(mock))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	ctx := h.OwnerCtx(t, context.Background())
 	projectDir := t.TempDir()
