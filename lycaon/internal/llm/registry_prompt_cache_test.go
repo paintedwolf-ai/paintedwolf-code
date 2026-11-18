@@ -2,10 +2,10 @@ package llm
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/catalogruntime"
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/catalogruntime"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"

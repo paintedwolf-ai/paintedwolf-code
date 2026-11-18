@@ -297,10 +297,14 @@ func TestRegistryListNeverIncludesSecrets(t *testing.T) {
 		testutil.FailErr(t, "registry.Reload failed", err)
 	}
 
-	for _, meta := range registry.List(t.Context()) {
-		if meta.ID == "test-provider" && meta.BaseURL == "" {
-			t.Fatalf("meta missing base_url: %+v", meta)
-		}
+	providers := registry.List(t.Context())
+	if meta := providerMetaByID(t, providers, "test-provider"); meta.BaseURL == "" {
+		t.Fatalf("meta missing base_url: %+v", meta)
+	}
+	encoded, err := json.Marshal(providers)
+	testutil.FailErr(t, "encode provider metadata", err)
+	if strings.Contains(string(encoded), "super-secret-key") {
+		t.Fatal("provider metadata exposed the stored credential")
 	}
 }
 
