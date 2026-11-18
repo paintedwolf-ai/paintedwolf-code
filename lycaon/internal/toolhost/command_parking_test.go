@@ -32,8 +32,32 @@ func TestCommandServicesComposeProgramParkingAndReceipts(t *testing.T) {
 
 	fixture := programtest.New(t, programtest.Options{})
 	original := fixture.Runtime
+	for _, services := range []ProgramServices{
+		{Recorder: fixture.Recorder, Provenance: original.Provenance},
+		{Recorder: fixture.Recorder, SourceObserver: original.SourceObserver},
+	} {
+		if err := runtime.Commands.SetProgramServices(services); err == nil {
+			t.Fatal("incomplete evidence bindings were accepted")
+		}
+		if runtime.Commands.programs().Recorder != nil {
+			t.Fatal("rejected construction changed runtime bindings")
+		}
+	}
+	provenance, observer := original.Provenance, original.SourceObserver
+	for _, missing := range []string{"provenance", "source observer"} {
+		original.Provenance, original.SourceObserver = provenance, observer
+		if missing == "provenance" {
+			original.Provenance = nil
+		} else {
+			original.SourceObserver = nil
+		}
+		if _, err := original.Run(t.Context(), "command", map[string]any{"command": "true"}, tools.ToolContext{}); err == nil {
+			t.Fatalf("program ran without %s", missing)
+		}
+	}
+	original.Provenance, original.SourceObserver = provenance, observer
 	testutil.FailErr(t, "compose program services", runtime.Commands.SetProgramServices(ProgramServices{
-		Recorder: fixture.Recorder, Blobs: original.Blobs, Projector: original.Projector, Progress: original.Progress, Sessions: original.Sessions,
+		Recorder: fixture.Recorder, Blobs: original.Blobs, Projector: original.Projector, Progress: original.Progress, Sessions: original.Sessions, Provenance: original.Provenance, SourceObserver: original.SourceObserver,
 	}))
 	content, err := fixture.Call(t, t.Context(), "true")
 	testutil.FailErr(t, "run program", err)

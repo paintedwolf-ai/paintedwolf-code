@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -220,11 +221,12 @@ func newProgramFixture(t *testing.T) *programFixture {
 	testutil.FailErr(t, "set actual progress", owner.Set(session, "- [ ] Run the fixture program"))
 	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	t.Cleanup(func() { _ = background.Lifecycle.Close(context.Background()) })
+	evidenceStore := store.NewSQL(database).Evidence
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
-		Sessions: fixtureSessions{},
+		Sessions: fixtureSessions{}, Provenance: evidenceStore, SourceObserver: evidenceStore,
 		// The foreground budget never expires, so a program runs to its end inline however slow the host.
 		Clock: programtest.NewManualClock(),
 	}

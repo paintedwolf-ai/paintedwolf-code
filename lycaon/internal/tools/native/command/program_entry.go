@@ -49,7 +49,8 @@ type ProgramRuntime struct {
 	Evaluate func(context.Context, commandsurface.ProgramSnapshot, commandprogram.EvaluationPorts) (commandprogram.ProgramOutcome, error)
 	Boundary *sandbox.Boundary
 	// Sessions names the person who started the session; the program acts for them.
-	Sessions SessionOwners
+	Sessions   SessionOwners
+	Provenance ProgramProvenance
 	// SourceObserver confirms delivered source windows into the evidence ledger.
 	SourceObserver invocation.ProgramSourceObserver
 	// Builtins supplies host utilities for one invocation; nested runs their command operands.
@@ -136,7 +137,7 @@ type programRun struct {
 	// envelope carries the call's launch capability requests to each launch.
 	envelope   map[string]any
 	window     *programWindow
-	sessions   SessionOwners
+	custody    ProgramProvenance
 	provenance programProvenanceState
 }
 
@@ -152,7 +153,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	if r != nil && r.disabled.Load() {
 		return "", toolrejection.RejectInvalidArguments("COMMAND_PROGRAMS_DISABLED", map[string]any{"tool": tool})
 	}
-	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Sessions == nil || r.Projector == nil {
+	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Sessions == nil || r.Projector == nil || r.Provenance == nil || r.SourceObserver == nil {
 		return "", fmt.Errorf("command program runtime is not configured")
 	}
 	catalog, err := toolcontract.ReadOnlyLanguageV1()
@@ -227,7 +228,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 		}
 	}
 	run.executor, run.registry, run.recorder, run.supervisor, run.progress = r.Executor, r.Registry, r.Recorder, r.Supervisor, r.Progress
-	run.sessions = r.Sessions
+	run.custody = r.Provenance
 	run.externalHidden = r.ExternalHidden
 	run.publishDocument = owners.PublishDocument
 	if err := r.bindProgramCapture(ctx, run); err != nil {
