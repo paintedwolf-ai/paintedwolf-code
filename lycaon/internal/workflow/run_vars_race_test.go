@@ -14,11 +14,11 @@ import (
 // An ask injected while turn-boundary batch events write the same scaffold blob
 // keeps its pending entry, so the later resolve does not fail feedback_not_pending.
 func TestAskInjectSurvivesConcurrentBatchWrites(t *testing.T) {
-	mgr, _, _, _ := testManagerWithRegistry(t)
+	mgr, repositories, _, _ := testManagerWithRegistry(t)
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{
 		"ask-user-host@1.0.0": askUserTestManifest(),
 	})
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, repositories)
 	run, err := startRun(ctx, mgr, "sess-1", "ask-user-host", "1.0.0")
 	testutil.FailErr(t, "startRun", err)
 

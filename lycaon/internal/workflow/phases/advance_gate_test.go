@@ -88,9 +88,9 @@ func TestAdvanceAfterPlanStub(t *testing.T) {
 }
 
 func TestAdvanceImplementPhaseCompletesRun(t *testing.T) {
-	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
+	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, repositories)
 
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)

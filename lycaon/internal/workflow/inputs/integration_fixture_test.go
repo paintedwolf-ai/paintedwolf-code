@@ -89,14 +89,14 @@ func testManagerWithRegistry(t *testing.T) (*workflow.RunManager, *store.Reposit
 	return mgr, store, blueprintMgr, projectDir
 }
 
-func workflowCaller(t testing.TB, mgr *workflow.RunManager) context.Context {
+func workflowCaller(t testing.TB, repositories *store.Repositories) context.Context {
 	t.Helper()
-	owner, err := mgr.Policy.Sessions.(*store.Repositories).People.HostOwner(context.Background())
+	owner, err := repositories.People.HostOwner(context.Background())
 	testutil.FailErr(t, "host owner", err)
 	return people.WithCaller(context.Background(), owner)
 }
 
-func testWorkflowManager(t *testing.T) (*workflow.RunManager, string, string) {
+func testWorkflowManager(t *testing.T) (*workflow.RunManager, string, string, *store.Repositories) {
 	t.Helper()
 	projectDir := t.TempDir()
 	sqlDB := testdbfixture.Open(t, "wf.db")
@@ -123,5 +123,5 @@ func testWorkflowManager(t *testing.T) (*workflow.RunManager, string, string) {
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "conditions.NewDefaultRegistry", err)
 	mgr.SetConditionRegistry(reg)
-	return mgr, sess.ID, projectDir
+	return mgr, sess.ID, projectDir, sessStore
 }

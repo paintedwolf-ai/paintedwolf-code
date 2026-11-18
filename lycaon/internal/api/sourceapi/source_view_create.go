@@ -53,7 +53,7 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 		return true
 	}
 	operationID, clientID, sessionID := sourceViewCreateIdentity(request)
-	scoped, err := requestscope.ResolveSessionProject(s.SessionStore.Sessions, r.Context(), p, sessionID)
+	scoped, err := requestscope.ResolveSessionProject(s.SessionQueries, r.Context(), p, sessionID)
 	if err != nil {
 		s.writeSourceViewError(w, r, err)
 		return true

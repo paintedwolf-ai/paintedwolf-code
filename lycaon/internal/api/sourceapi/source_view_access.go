@@ -81,7 +81,7 @@ func (s *Views) requestedSourceView(w http.ResponseWriter, r *http.Request) (*so
 
 // Every retained read rechecks the current project and session relationship.
 func (s *Views) sourceViewProject(ctx context.Context, p *project.Project, view *sourceView) (*project.Project, error) {
-	scope, err := requestscope.ResolveSessionProject(s.SessionStore.Sessions, ctx, p, view.sessionID)
+	scope, err := requestscope.ResolveSessionProject(s.SessionQueries, ctx, p, view.sessionID)
 	if err != nil {
 		return nil, err
 	}

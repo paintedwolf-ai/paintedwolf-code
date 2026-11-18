@@ -56,8 +56,8 @@ func TestSyncHumanApprovalRejectsWhenNotReady(t *testing.T) {
 }
 
 func TestPlanApprovalPreflightThenSyncAdvancesWhenReady(t *testing.T) {
-	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	ctx := workflowCaller(t, mgr)
+	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
+	ctx := workflowCaller(t, repositories)
 	run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request",
 	})
@@ -160,7 +160,7 @@ func TestTrySatisfyHumanApprovalFromChatBailsWhenNotReady(t *testing.T) {
 
 func TestOptionsTerminalApprovalDoesNotWakeAmbientImplementation(t *testing.T) {
 	mgr, sessStore, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, sessStore)
 	run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
 		WorkflowID: "options", WorkflowVersion: "1.0.0",
 	})

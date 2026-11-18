@@ -17,7 +17,7 @@ import (
 )
 
 func TestPlanStartMintsConventionPath(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.1",
@@ -36,7 +36,7 @@ func TestPlanStartMintsConventionPath(t *testing.T) {
 }
 
 func TestOptionsStartUsesFixedBlueprintPath(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID: "options", WorkflowVersion: "1.0.0",
@@ -78,7 +78,7 @@ func TestNotifyBlueprintPathWrittenAdvancesExpand(t *testing.T) {
 func TestNotifyRetargetsProvisionalPathOnce(t *testing.T) {
 	mgr, sessStore, blueprintMgr, _ := testManager(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.RegistryDeps{})
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, sessStore)
 	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
@@ -115,7 +115,7 @@ func TestNotifyRetargetsProvisionalPathOnce(t *testing.T) {
 }
 
 func TestNotifyBlueprintPathWrittenNonBoundNoop(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	run, err := startPlanRun(ctx, mgr, sessionID)
 	testutil.FailErr(t, "start plan", err)

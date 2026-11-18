@@ -28,7 +28,7 @@ func TestResumeReconcilesTopologyCompletedWhilePaused(t *testing.T) {
 				name = tc.workflow + "/new_manager"
 			}
 			t.Run(name, func(t *testing.T) {
-				mgr, _, _, _ := testManagerWithRegistry(t)
+				mgr, repositories, _, _ := testManagerWithRegistry(t)
 				ctx := t.Context()
 				run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
 					WorkflowID: tc.workflow, WorkflowVersion: tc.version, Request: "Inspect the fixture.",
@@ -46,7 +46,7 @@ func TestResumeReconcilesTopologyCompletedWhilePaused(t *testing.T) {
 					t.Fatalf("paused run moved: %+v", paused)
 				}
 				if restart {
-					fresh := workflow.NewManager(mgr.Store, mgr.Verdicts.Sessions, mgr.Resolver.Overlay, nil)
+					fresh := workflow.NewManager(mgr.Store, repositories, mgr.Resolver.Overlay, nil)
 					fresh.SetConditionRegistry(mgr.Policy.Registry)
 					fresh.Blueprints.Getter = mgr.Blueprints.Getter
 					fresh.Presentation.BlueprintGetter = mgr.Blueprints.Getter
@@ -78,7 +78,7 @@ func TestResumeReconcilesTopologyCompletedWhilePaused(t *testing.T) {
 }
 
 func TestResumeRetainsUnfinishedPhaseWithoutReenteringIt(t *testing.T) {
-	mgr, _, _, _ := testManagerWithRegistry(t)
+	mgr, repositories, _, _ := testManagerWithRegistry(t)
 	ctx := t.Context()
 	run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
 		WorkflowID: "options", WorkflowVersion: "1.0.0", Request: "Inspect the fixture.",

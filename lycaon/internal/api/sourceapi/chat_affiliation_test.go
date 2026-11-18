@@ -22,7 +22,7 @@ func TestUserSourceChatAffiliationNamesTheChatAndOnlyAnActiveTurn(t *testing.T) 
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
-	server := &Handler{Workspace: &Workspace{SessionStore: sessions}}
+	server := &Handler{Workspace: &Workspace{SessionQueries: sessions.Sessions}}
 	request := httptest.NewRequest("POST", "/source/rename?session_id="+sess.ID, nil)
 
 	assertAffiliation := func(step, wantSession string, wantTurn int) {

@@ -82,9 +82,9 @@ func TestWorkflowRequestsCurateRootChatAfterAdmission(t *testing.T) {
 				}
 				run, err := mgr.Store.Runs.ActiveBySession(t.Context(), "sess-1")
 				testutil.FailErr(t, "get pending run", err)
-				_, err = mgr.Feedback.ResolveUserFeedback(workflowCaller(t, mgr), "sess-1", run.ID, runstate.WorkflowRequestFeedbackID, text)
+				_, err = mgr.Feedback.ResolveUserFeedback(workflowCaller(t, sessions), "sess-1", run.ID, runstate.WorkflowRequestFeedbackID, text)
 				testutil.FailErr(t, "answer workflow request", err)
-				_, err = mgr.Feedback.ResolveUserFeedback(workflowCaller(t, mgr), "sess-1", run.ID, runstate.WorkflowRequestFeedbackID, text)
+				_, err = mgr.Feedback.ResolveUserFeedback(workflowCaller(t, sessions), "sess-1", run.ID, runstate.WorkflowRequestFeedbackID, text)
 				if err == nil {
 					t.Fatal("duplicate answer accepted")
 				}

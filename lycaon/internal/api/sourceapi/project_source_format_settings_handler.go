@@ -17,7 +17,7 @@ func (s *Workspace) HandleGetProjectSourceFormatSettings(w http.ResponseWriter, 
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		return
 	}

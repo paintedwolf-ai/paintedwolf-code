@@ -21,7 +21,7 @@ func (s *Review) HandleResolveProjectSourceRevisions(w http.ResponseWriter, r *h
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		return
 	}
@@ -83,7 +83,7 @@ func (s *Review) HandleGetProjectSourceRevisionReview(w http.ResponseWriter, r *
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		return
 	}

@@ -70,7 +70,7 @@ func TestHumanApprovalChatPhraseDoesNotAdvanceAtApprovePhase(t *testing.T) {
 }
 
 func TestSyncHumanApprovalAutoAdvancesPlanRun(t *testing.T) {
-	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
+	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
 	ctx := context.Background()
 
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
@@ -83,7 +83,7 @@ func TestSyncHumanApprovalAutoAdvancesPlanRun(t *testing.T) {
 		t.Fatalf("phase = %q want approve", run.CurrentPhase)
 	}
 
-	synced, err := mgr.Approvals.SyncHumanApproval(workflowCaller(t, mgr), run.ID, projectDir)
+	synced, err := mgr.Approvals.SyncHumanApproval(workflowCaller(t, repositories), run.ID, projectDir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	if synced == nil || synced.CurrentPhase != "execute" {
 		t.Fatalf("phase = %q want execute after API approval", synced.CurrentPhase)

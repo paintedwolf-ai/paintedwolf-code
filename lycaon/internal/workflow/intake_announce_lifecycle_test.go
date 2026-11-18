@@ -29,7 +29,7 @@ func TestDeclaredIntakeStartAnnouncesChoiceCard(t *testing.T) {
 		},
 	})
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"intake-announce@1.0.0": manifest})
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, store)
 	run, err := startRun(ctx, mgr, "sess-1", "intake-announce", "1.0.0")
 	testutil.FailErr(t, "startRun", err)
 
@@ -88,7 +88,7 @@ func TestDeclaredMultiKeyIntakeSequentialCards(t *testing.T) {
 		},
 	})
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"intake-multi@1.0.0": manifest})
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, store)
 	run, err := startRun(ctx, mgr, "sess-1", "intake-multi", "1.0.0")
 	testutil.FailErr(t, "startRun", err)
 

@@ -17,7 +17,7 @@ func TestSecretResolutionRetainsOnlyReferenceAndRollsBackFailedCapture(t *testin
 		t.Run(mode, func(t *testing.T) {
 			mgr, store, _, _ := testManagerWithRegistry(t)
 			mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"ask-user-host@1.0.0": askUserTestManifest()})
-			ctx := workflowCaller(t, mgr)
+			ctx := workflowCaller(t, store)
 			run, err := startRun(ctx, mgr, "sess-1", "ask-user-host", "1.0.0")
 			if err != nil {
 				t.Fatalf("operation failed: %v", err)

@@ -298,7 +298,8 @@ func TestPolicySourceUsesOneActiveRevision(t *testing.T) {
 
 func TestPolicySourceDistinguishesAbsentRunAndReadFailure(t *testing.T) {
 	store := &policyReadStore{}
-	runs := workflow.NewManager(&runstate.Repository{Runs: store}, nil, nil, nil)
+	_, _, runs, _ := setupCoordinatorTurnFrameLoader(t)
+	runs.Policy.Runs = store
 	state, err := runs.Policy.PolicySnapshot(t.Context(), "session")
 	testutil.FailErr(t, "capture absent workflow", err)
 	if state.RunID != "" || len(state.AllowedAgents) == 0 || store.reads != 1 || store.splitReads != 0 {

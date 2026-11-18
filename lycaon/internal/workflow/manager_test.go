@@ -105,9 +105,9 @@ func testManagerWithRegistry(t *testing.T) (*RunManager, *store.Repositories, *b
 	return mgr, store, blueprintMgr, projectDir
 }
 
-func workflowCaller(t testing.TB, mgr *RunManager) context.Context {
+func workflowCaller(t testing.TB, repositories *store.Repositories) context.Context {
 	t.Helper()
-	owner, err := mgr.Policy.Sessions.(*store.Repositories).People.HostOwner(context.Background())
+	owner, err := repositories.People.HostOwner(context.Background())
 	testutil.FailErr(t, "host owner", err)
 	return people.WithCaller(context.Background(), owner)
 }
@@ -229,9 +229,9 @@ func TestAdvanceWhilePaused(t *testing.T) {
 }
 
 func TestCompleteOnFinalAdvance(t *testing.T) {
-	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
+	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, repositories)
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)

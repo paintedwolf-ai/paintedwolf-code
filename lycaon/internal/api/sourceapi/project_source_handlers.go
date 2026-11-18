@@ -36,7 +36,7 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		return
 	}
@@ -146,7 +146,7 @@ func (s *Workspace) HandleGetSourceWorkspace(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	scoped, ok := requestscope.SessionProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
+	scoped, ok := requestscope.SessionProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		return
 	}
@@ -232,7 +232,7 @@ func (s *Workspace) currentSourceWorkspaceID(
 	if !ok {
 		return "", false
 	}
-	current, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, current)
+	current, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, current)
 	if !ok {
 		return "", false
 	}
@@ -263,7 +263,7 @@ func (s *Workspace) HandleGetProjectSourceRaw(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		return
 	}
@@ -321,7 +321,7 @@ func (s *Workspace) HandleBrowseProjectSource(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		return
 	}

@@ -31,7 +31,7 @@ func (s *Mutations) beginProjectSourceMutation(
 		release()
 		return nil, nil, false
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		release()
 		return nil, nil, false

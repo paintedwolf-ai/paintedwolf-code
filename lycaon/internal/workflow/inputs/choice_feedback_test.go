@@ -38,7 +38,7 @@ func TestResolveMultiChoiceAdvancesAndStampsAnswer(t *testing.T) {
 		},
 	})
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"choice-flow@1.0.0": manifest})
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, store)
 	run, err := startRun(ctx, mgr, "sess-1", "choice-flow", "1.0.0")
 	testutil.FailErr(t, "startRun", err)
 

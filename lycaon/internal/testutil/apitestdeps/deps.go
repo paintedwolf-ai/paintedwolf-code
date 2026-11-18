@@ -130,8 +130,8 @@ type Deps struct {
 // kept; the ones it builds share one disposable database.
 func Fill(t *testing.T, d *Deps) {
 	t.Helper()
-	if d.Database == nil {
-		d.Database = storeDatabase(d.Store)
+	if d.Database == nil && d.Store != nil {
+		d.Database = d.Store.DB()
 	}
 	if d.Database == nil {
 		d.Database = testdbfixture.Open(t, "api-deps.db")
@@ -328,13 +328,6 @@ func (refusingExecutor) Execute(context.Context, wire.WorkerTask, worker.WorkerR
 }
 
 func (refusingExecutor) AbortWorkerRuntime(context.Context, wire.WorkerTask) error { return nil }
-
-func storeDatabase(store *sessionstore.Repositories) db.Handle {
-	if database, ok := store.(interface{ DB() db.Handle }); ok {
-		return database.DB()
-	}
-	return nil
-}
 
 func fillSessions(t *testing.T, d *Deps) {
 	t.Helper()

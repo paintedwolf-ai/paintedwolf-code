@@ -71,7 +71,7 @@ func seedTopologyCompletion(t *testing.T, mgr *RunManager, run *api.WorkflowRun,
 	if edit != nil {
 		edit(&msg)
 	}
-	testutil.FailErr(t, "persist phase completion", mgr.Verdicts.Sessions.Transcript.AppendMessages(t.Context(), run.SessionID, msg))
+	testutil.FailErr(t, "persist phase completion", mgr.Transcript.TranscriptStore.AppendMessages(t.Context(), run.SessionID, msg))
 	return msg.ID
 }
 

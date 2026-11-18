@@ -26,7 +26,7 @@ func (s *History) HandleListProjectSourceVersions(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		return
 	}

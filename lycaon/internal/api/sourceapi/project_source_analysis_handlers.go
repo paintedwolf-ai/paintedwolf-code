@@ -18,7 +18,7 @@ func (s *Analysis) sourceIndexSnapshot(w http.ResponseWriter, r *http.Request) (
 	if !ok {
 		return projectsource.SourceIndexSnapshot{}, "", false
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		return projectsource.SourceIndexSnapshot{}, "", false
 	}
@@ -171,7 +171,7 @@ func (s *Analysis) HandleListProjectSourceSymbols(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		return
 	}
@@ -208,7 +208,7 @@ func (s *Analysis) HandleResolveProjectSourceDefinition(w http.ResponseWriter, r
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		return
 	}

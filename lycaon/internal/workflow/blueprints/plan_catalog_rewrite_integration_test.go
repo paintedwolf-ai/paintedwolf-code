@@ -20,7 +20,7 @@ import (
 )
 
 func TestPlanCatalogHappyPathReachesExecutionSubroutine(t *testing.T) {
-	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
+	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
 	ctx := context.Background()
 
@@ -34,7 +34,7 @@ func TestPlanCatalogHappyPathReachesExecutionSubroutine(t *testing.T) {
 	testutil.FailErr(t, "advance expand", err)
 	run, err = completePlanReviewAtDepthNone(ctx, mgr, run)
 	testutil.FailErr(t, "skip review", err)
-	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, mgr), run.ID, projectDir)
+	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, repositories), run.ID, projectDir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	if run.CurrentPhase != "execute" {
 		t.Fatalf("phase = %q want execute after approval", run.CurrentPhase)
@@ -81,7 +81,7 @@ func TestPlanResearchDepthNoneReachesExecutionSubroutine(t *testing.T) {
 	if parent.CurrentPhase != "approve" {
 		t.Fatalf("phase = %q want approve before human approval", parent.CurrentPhase)
 	}
-	parent, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, mgr), parent.ID, dir)
+	parent, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, sessStore), parent.ID, dir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	if parent.CurrentPhase != "execute" {
 		t.Fatalf("phase = %q want execute", parent.CurrentPhase)

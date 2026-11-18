@@ -34,7 +34,7 @@ func TestWorkflowModeIntegrationImplementOnEnter(t *testing.T) {
 
 	run, err = advancePlanToApprovePhase(ctx, mgr, run)
 	testutil.FailErr(t, "advancePlanToApprovePhase", err)
-	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, mgr), run.ID, projectDir)
+	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, sessStore), run.ID, projectDir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	if run.CurrentPhase != "execute" {
 		t.Fatalf("phase = %q want execute", run.CurrentPhase)

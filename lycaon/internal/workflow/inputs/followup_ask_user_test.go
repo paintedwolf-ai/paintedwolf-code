@@ -14,7 +14,7 @@ import (
 
 func TestFollowUpQuestionSurvivesWorkflowManagerRestart(t *testing.T) {
 	mgr, sessions, _, _ := testManagerWithRegistry(t)
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, sessions)
 	original, err := mgr.Ambient.StartAmbient(ctx, "sess-1", "implement", "1.0.0")
 	testutil.FailErr(t, "start original workflow", err)
 	original.Status = api.WorkflowRunStatusComplete

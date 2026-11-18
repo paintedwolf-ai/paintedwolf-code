@@ -81,7 +81,7 @@ func TestTriggerPhaseEnterSyncsBlueprintApprovalTranscriptForAnyPhaseName(t *tes
 	testutil.FailErr(t, "Store.UpdateVars approval ready", mgr.Store.State.UpdateVars(ctx, run, projectDir, vars))
 
 	mgr.Phases.Entries.Trigger(ctx, run, projectDir, approvalPhase)
-	msgs, err := mgr.Verdicts.Sessions.Transcript.GetMessages(ctx, run.SessionID)
+	msgs, err := mgr.TranscriptStore.GetMessages(ctx, run.SessionID)
 	testutil.FailErr(t, "GetMessages", err)
 	blueprintRow, found := findBlueprintTranscriptMessage(msgs, run.BlueprintPath)
 	if !found || blueprintRow.Blueprint == nil {

@@ -24,7 +24,7 @@ func TestLaunchSourceCompatible(t *testing.T) {
 }
 
 func TestLaunchFromBlueprintCopiesFile(t *testing.T) {
-	mgr, sessionID, projectDir := testWorkflowManager(t)
+	mgr, sessionID, projectDir, repositories := testWorkflowManager(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.1",
@@ -43,7 +43,7 @@ func TestLaunchFromBlueprintCopiesFile(t *testing.T) {
 	target, err := workflowblueprints.ResolveLaunchTarget(source.Path, "plan", mgr.Resolver.Overlay.List())
 	testutil.FailErr(t, "workflowblueprints.ResolveLaunchTarget", err)
 
-	sess2, err := mgr.Verdicts.Sessions.Sessions.Create(ctx, api.CreateSessionRequest{
+	sess2, err := repositories.Sessions.Create(ctx, api.CreateSessionRequest{
 		ProjectID: run.ProjectID,
 		Posture:   api.SessionPostureSpec,
 	}, run.ProjectID)
@@ -64,7 +64,7 @@ func TestLaunchFromBlueprintCopiesFile(t *testing.T) {
 }
 
 func TestLaunchFromBlueprintDeferStartArmsPendingPath(t *testing.T) {
-	mgr, sessionID, projectDir := testWorkflowManager(t)
+	mgr, sessionID, projectDir, repositories := testWorkflowManager(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.1",
@@ -83,7 +83,7 @@ func TestLaunchFromBlueprintDeferStartArmsPendingPath(t *testing.T) {
 	target, err := workflowblueprints.ResolveLaunchTarget(source.Path, "plan", mgr.Resolver.Overlay.List())
 	testutil.FailErr(t, "workflowblueprints.ResolveLaunchTarget", err)
 
-	sess2, err := mgr.Verdicts.Sessions.Sessions.Create(ctx, api.CreateSessionRequest{
+	sess2, err := repositories.Sessions.Create(ctx, api.CreateSessionRequest{
 		ProjectID: run.ProjectID,
 		Posture:   api.SessionPostureSpec,
 	}, run.ProjectID)

@@ -22,7 +22,7 @@ func TestReadChatFileEditResolvesEachListFromZero(t *testing.T) {
 			OverlayPromotion: &wire.OverlayPromotion{Files: []wire.FileEditSnapshot{{Path: "p.go", After: "p"}, {Path: "q.go", After: "q"}}},
 		},
 	}, wire.Message{ID: "m2", Role: wire.MessageRoleTool, ToolResult: &wire.ToolResult{ToolCallID: "c2", FileEdits: []wire.FileEditSnapshot{{Path: "only.go", After: "x"}}}}))
-	comparisons := &Comparisons{SessionStore: sessionStore}
+	comparisons := &Comparisons{SessionQueries: sessionStore.Sessions, TranscriptQueries: sessionStore.Transcript}
 	ref := func(message, call string, source wire.FileEditSource, index int) wire.FileEditReference {
 		return wire.FileEditReference{MessageID: message, ToolCallID: call, Source: source, Index: index}
 	}

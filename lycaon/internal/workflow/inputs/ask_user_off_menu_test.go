@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/orchestration"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -17,7 +16,7 @@ import (
 // answeredAskBody returns the resolved tool row.
 func answeredAskBody(t *testing.T, fx *askUserFixture, ctx context.Context, toolCallID string) map[string]any {
 	t.Helper()
-	msgs, err := fx.wfMgr.Policy.Sessions.(*sessionstore.Repositories).Transcript.GetMessages(ctx, fx.sess.ID)
+	msgs, err := fx.repositories.Transcript.GetMessages(ctx, fx.sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	for _, m := range msgs {
 		if m.Role != wire.MessageRoleTool || m.ToolResult == nil {
@@ -47,7 +46,7 @@ func openChoiceAsk(t *testing.T, fx *askUserFixture, ctx context.Context, toolCa
 	testutil.FailErr(t, "ask_user", err)
 	var body map[string]any
 	testutil.FailErr(t, "unmarshal", json.Unmarshal([]byte(out), &body))
-	testutil.FailErr(t, "AppendMessages", fx.wfMgr.Policy.Sessions.(*sessionstore.Repositories).Transcript.AppendMessages(ctx, fx.sess.ID, wire.Message{
+	testutil.FailErr(t, "AppendMessages", fx.repositories.Transcript.AppendMessages(ctx, fx.sess.ID, wire.Message{
 		ID:      "msg-" + toolCallID,
 		Role:    wire.MessageRoleTool,
 		Content: out,

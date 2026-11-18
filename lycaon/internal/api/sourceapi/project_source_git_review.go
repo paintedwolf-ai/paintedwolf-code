@@ -40,7 +40,7 @@ func (s *Review) sourceGitReviewRequest(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return empty, false
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore.Sessions, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		return empty, false
 	}

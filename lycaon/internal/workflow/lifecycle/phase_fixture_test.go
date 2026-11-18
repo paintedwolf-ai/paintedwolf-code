@@ -56,7 +56,7 @@ func completePlanDepthPhaseAtNone(ctx context.Context, mgr *workflow.RunManager,
 	vars = runstate.StampDepthParamSkips(vars, manifest)
 	projectDir := ""
 	if mgr.Policy.Sessions != nil {
-		if sess, getErr := mgr.Policy.SessionStore.Get(ctx, run.SessionID); getErr == nil && sess != nil {
+		if sess, getErr := mgr.Policy.Sessions.Get(ctx, run.SessionID); getErr == nil && sess != nil {
 			projectDir = sess.WorkspacePath
 		}
 	}
