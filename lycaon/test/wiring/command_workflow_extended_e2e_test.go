@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -111,7 +110,6 @@ func TestWorkflowMoveAcrossAttachedRoots(t *testing.T) {
 }
 
 func TestWorkflowGitFreshRepositoryIgnoresUnrelatedNestedRepository(t *testing.T) {
-	gitengine.TestingEnableBundledBinary()
 	f := newCommandWorkflowFixture(t, []workflowTurn{
 		{callID: "git-init", command: `git init; git status --short`},
 		{callID: "git-commit", command: `git add README.txt; git commit -m 'Initial files'; git status --short`},

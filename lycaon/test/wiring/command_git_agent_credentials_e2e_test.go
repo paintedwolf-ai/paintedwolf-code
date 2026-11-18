@@ -84,7 +84,6 @@ func authenticatedUploadPack(t *testing.T, repo string) (*httptest.Server, func(
 // remembered for the chat covers the next command without a card or a
 // capability request.
 func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
-	gitengine.TestingEnableBundledBinary()
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_SANDBOX", "on")
 	t.Cleanup(gitexec.TestingUseAgentCredentialStore(fixedCredentialStore{username: "alice", password: "remote-secret"}))
@@ -184,7 +183,6 @@ func fakeSSHAgent(t *testing.T) (string, func() int) {
 // when the call requests the session's socket capability for it, and not
 // otherwise.
 func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T) {
-	gitengine.TestingEnableBundledBinary()
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_SANDBOX", "on")
 	agent, requests := fakeSSHAgent(t)
