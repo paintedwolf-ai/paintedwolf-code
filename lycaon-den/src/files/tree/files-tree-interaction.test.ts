@@ -5,11 +5,13 @@ import { filesControllerFixture } from "../../test/files-controller-fixture.ts";
 import { createFilesTreeInteraction } from "./files-tree-interaction.ts";
 import { applyFilesBufferDraft } from "../documents/project-files-buffer-io.ts";
 import { resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
+import { recordChatLocations, resetChatLocationsForTests } from "../source/chat-locations.ts";
+import { recordOutsideRoot, resetOutsideRootsForTests } from "../source/outside-namespace.ts";
 import type { FilesTreeHandle } from "./files-tree-context.ts";
 const history = vi.hoisted(() => ({ noteLifecycleChange: vi.fn(), refreshSourceHistory: vi.fn().mockResolvedValue(undefined), runSourceHistory: vi.fn(), reportHistoryFailure: vi.fn() }));
 vi.mock("../history/project-files-history.ts", () => ({ createSourceHistoryCommands: () => history }));
 const disposers: Array<() => void> = [];
-afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); resetProjectFilesForTests(); vi.clearAllMocks(); });
+afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); resetProjectFilesForTests(); resetChatLocationsForTests(); resetOutsideRootsForTests(); vi.clearAllMocks(); });
 
 function fixture() {
   const f = filesControllerFixture("tree-interaction");
@@ -82,4 +84,26 @@ it("opens selected files and builds tab menus from current buffer identities", (
   const key = f.state().activeKey!; expect(f.interaction.selectedEntry()).toEqual({ rootId: "root", path: "src/file.ts", kind: "file" });
   f.interaction.openTabContextMenu(key, { x: 12, y: 20 }); expect(f.interaction.ctxMenu()?.items.length).toBeGreaterThan(0);
   f.interaction.setCtxMenu(null); f.interaction.openTabContextMenu("missing", { x: 12, y: 20 }); expect(f.interaction.ctxMenu()).toBeNull();
+});
+
+it("opens live rows through their location and retained deletions by their history address", async () => {
+  const f = fixture();
+  const rootId = "outside";
+  const locationId = "location";
+  const path = "home/me/notes/today.txt";
+  recordOutsideRoot(f.projectId, rootId);
+  recordChatLocations(f.projectId, [{
+    id: locationId, root_id: rootId, session_id: "chat", kind: "folder",
+    anchor: "home/me/notes", path: "/home/me/notes", label: "notes", hidden: false, available: true,
+  }]);
+  const openChatLocationFile = vi.fn().mockResolvedValue({ root_id: rootId, path, file_id: "outside-file" });
+  Object.assign(f.client, { openChatLocationFile });
+  f.interaction.openFile({ rootId, locationId, path, rootLabel: "Outside project" }, "permanent");
+  await vi.waitFor(() => expect(f.state().byKey[f.state().activeKey!]?.fileId).toBe("outside-file"));
+  expect(openChatLocationFile).toHaveBeenCalledExactlyOnceWith(f.projectId, locationId, { path: "today.txt" });
+
+  const deleted = "home/me/notes/old.txt";
+  f.interaction.openFile({ rootId, locationId, path: deleted, rootLabel: "Outside project", deleted: true }, "permanent");
+  expect(f.state().byKey[f.state().activeKey!]?.path).toBe(deleted);
+  expect(openChatLocationFile).toHaveBeenCalledTimes(1);
 });

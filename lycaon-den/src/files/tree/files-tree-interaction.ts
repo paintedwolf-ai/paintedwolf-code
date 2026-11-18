@@ -250,7 +250,7 @@ export function createFilesTreeInteraction(options: TreeInteraction) {
     const location = chatLocation(projectId, selection.locationId ?? address?.rootId ?? "");
     const row = location && locationRowPath(location, selection.path);
     const c = client();
-    if (!c || !location || !row || selection.fileId) {
+    if (!c || !location || !row || selection.fileId || selection.deleted) {
       publishOpenedFile(selection, intent);
       return;
     }

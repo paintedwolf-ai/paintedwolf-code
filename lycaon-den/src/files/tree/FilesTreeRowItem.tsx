@@ -249,7 +249,7 @@ export function FileEntryRow(props: {
           onClick={(event) => {
             // Ignore the second click of a double-click gesture.
             if (event.detail > 1) return;
-            ctx.openFile({ rootId: row().rootId, rootLabel: row().rootLabel, path: row().path }, "permanent");
+            ctx.openFile({ rootId: row().rootId, rootLabel: row().rootLabel, path: row().path, deleted: row().deleted }, "permanent");
           }}
         >
           <FileIcon />
