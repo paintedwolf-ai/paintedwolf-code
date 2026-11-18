@@ -3,12 +3,10 @@ package tooloutput
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
@@ -174,82 +172,6 @@ func sanitizeSpillName(raw string) string {
 	raw = strings.ReplaceAll(raw, "\\", "_")
 	raw = strings.ReplaceAll(raw, "/", "_")
 	return raw
-}
-
-// WireSpillOverlayPromote writes the full screened body when it exceeds maxBytes
-// and keeps a compacted screened inline preview.
-func WireSpillOverlayPromote(hostDataDir, relPath string, full, inline ScreenedOutput, maxBytes, maxSpillBytes int) WireSpillOutcome {
-	fullBody := full.String()
-	out := WireSpillOutcome{Preview: fullBody, OriginalBytes: len(fullBody)}
-	if maxBytes <= 0 || len(fullBody) <= maxBytes {
-		return out
-	}
-	out.Truncated = true
-	out.Preview = inlinePreview(inline.String(), maxBytes)
-
-	relPath = filepath.ToSlash(strings.TrimSpace(relPath))
-	hostDataDir = strings.TrimSpace(hostDataDir)
-	if hostDataDir == "" || !IsAgentWireSpillRel(relPath) {
-		return out
-	}
-	abs := filepath.Join(hostDataDir, filepath.FromSlash(relPath))
-	if promoteSpillHasConflictBodies(abs) {
-		out.SpillPath = relPath
-		out.SpillBytes = len(fullBody)
-		return out
-	}
-	if SpillFileTooLarge(len(fullBody), maxSpillBytes) {
-		out.RejectCode = ToolOutputSpillCapExceededCode
-		out.RejectData = map[string]any{
-			"bytes": len(fullBody),
-			"cap":   EffectiveMaxSpillFileBytes(maxSpillBytes),
-		}
-		return out
-	}
-	if err := os.MkdirAll(filepath.Dir(abs), 0o750); err != nil {
-		return out
-	}
-	if _, err := fseffect.Replace(fseffect.ReplaceRequest{
-		Location: fseffect.PathLocation(abs),
-		Source:   strings.NewReader(fullBody),
-		Mode:     0o600,
-		DirMode:  0o750,
-	}); err != nil {
-		return out
-	}
-	out.SpillPath = relPath
-	out.SpillBytes = len(fullBody)
-	return out
-}
-
-func inlinePreview(inlineContent string, maxBytes int) string {
-	if len(inlineContent) <= maxBytes {
-		return inlineContent
-	}
-	return truncateInline(inlineContent, maxBytes)
-}
-
-func promoteSpillHasConflictBodies(abs string) bool {
-	data, err := os.ReadFile(abs)
-	if err != nil || len(data) == 0 {
-		return false
-	}
-	var spill struct {
-		Conflicts []struct {
-			Primary string `json:"primary"`
-			Branch  string `json:"branch"`
-			Base    string `json:"base"`
-		} `json:"conflicts"`
-	}
-	if err := json.Unmarshal(data, &spill); err != nil {
-		return false
-	}
-	for _, c := range spill.Conflicts {
-		if strings.TrimSpace(c.Primary) != "" || strings.TrimSpace(c.Branch) != "" || strings.TrimSpace(c.Base) != "" {
-			return true
-		}
-	}
-	return false
 }
 
 // IsOverlayPromoteTool reports coordinator overlay assess/promote tools.

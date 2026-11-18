@@ -14,8 +14,8 @@ func TestSpillOverlayPromoteProjectUsesInlineDigest(t *testing.T) {
 	dir := t.TempDir()
 	full := strings.Repeat("x", 8192) + `{"job_id":"job-1","conflicts":[{"path":"a.go"}]}`
 	inline := `{"job_id":"job-1","conflict_digest":[{"path":"a.go","summary":["L1: primary: p"]}]}`
-	rel := tooloutput.PromoteSpillRelPath("job-1")
-	out := tooloutput.WireSpillOverlayPromote(dir, rel, tooloutput.Screened(full), tooloutput.Screened(inline), 4096, 0)
+	rel := tooloutput.ToolOutputSpillRelPath(full)
+	out := tooloutput.WireSpillOverlayPromote(t.Context(), dir, tooloutput.Screened(full), tooloutput.Screened(inline), 4096, 0)
 	if !out.Truncated || out.SpillPath == "" {
 		t.Fatalf("expected spill truncated=%v rel=%q", out.Truncated, out.SpillPath)
 	}
@@ -40,9 +40,10 @@ func TestSpillOverlayPromoteProjectPreservesWorkerSpill(t *testing.T) {
 	}
 	full := strings.Repeat("x", 8192) + `{"job_id":"job-1","conflicts":[{"path":"a.go"}]}`
 	inline := `{"job_id":"job-1","conflict_digest":[{"path":"a.go","summary":["L1: primary: p"]}]}`
-	out := tooloutput.WireSpillOverlayPromote(dir, rel, tooloutput.Screened(full), tooloutput.Screened(inline), 4096, 0)
-	if !out.Truncated || out.SpillPath != rel {
-		t.Fatalf("truncated=%v relOut=%q want %q", out.Truncated, out.SpillPath, rel)
+	out := tooloutput.WireSpillOverlayPromote(t.Context(), dir, tooloutput.Screened(full), tooloutput.Screened(inline), 4096, 0)
+	transcriptRel := tooloutput.ToolOutputSpillRelPath(full)
+	if !out.Truncated || out.SpillPath != transcriptRel {
+		t.Fatalf("truncated=%v relOut=%q want %q", out.Truncated, out.SpillPath, transcriptRel)
 	}
 	if out.Preview != inline {
 		t.Fatalf("preview should use inline digest, got %q", out.Preview)

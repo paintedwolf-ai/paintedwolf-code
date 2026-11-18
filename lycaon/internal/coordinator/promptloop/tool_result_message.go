@@ -71,7 +71,6 @@ var spillWireLog = observability.LazyComponent("tool_spill")
 func (l *toolInvocations) truncateToolResultForSession(
 	ctx context.Context,
 	tool string,
-	ownerRef string,
 	projection toolResultStorageProjection,
 	rawContent string,
 	maxBytes, maxSpillBytes int,
@@ -119,8 +118,7 @@ func (l *toolInvocations) truncateToolResultForSession(
 
 	var out tooloutput.WireSpillOutcome
 	if overlayPromote && hostDataDir != "" {
-		rel := tooloutput.PromoteSpillRelPath(ownerRef)
-		out = tooloutput.WireSpillOverlayPromote(hostDataDir, rel, screened, inline, maxBytes, maxSpillBytes)
+		out = tooloutput.WireSpillOverlayPromote(ctx, hostDataDir, screened, inline, maxBytes, maxSpillBytes)
 	} else {
 		out = tooloutput.WireSpillToolOutput(ctx, hostDataDir, screened, maxBytes, maxSpillBytes)
 	}
