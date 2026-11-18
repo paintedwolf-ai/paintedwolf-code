@@ -19,9 +19,8 @@ func TestBlueprintRebindPublishesOnePatchForCommittedRow(t *testing.T) {
 	database := testdbfixture.Open(t, "blueprint.db")
 	const sessionID, projectID = "chat", testdbseed.DefaultProjectID
 	const from, to = ".paintedwolf/blueprints/draft.md", ".paintedwolf/blueprints/design.md"
-	testdbseed.InsertSession(t, database, sessionID, projectID)
-	testdbseed.InsertSessionWorkflowRun(t, database, "run", sessionID, "complete")
-	_, err := database.ExecContext(ctx, "UPDATE workflow_runs SET blueprint_path = ? WHERE id = 'run'", from)
+	testdbseed.InsertWorkflowRun(t, database, "run", sessionID, projectID)
+	_, err := database.ExecContext(ctx, "UPDATE workflow_runs SET status = 'complete', completed_at = updated_at, blueprint_path = ? WHERE id = 'run'", from)
 	testutil.FailErr(t, "bind source blueprint", err)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
