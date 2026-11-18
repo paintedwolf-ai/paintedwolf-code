@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"sync"
 	"testing"
 	"time"
@@ -17,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -102,7 +102,7 @@ func (q *queueRoundWorkerQueue) Get(jobID string) (*api.WorkerTask, bool) {
 func TestRunPromptSubmissionEnqueuesWhileBusy(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -143,7 +143,7 @@ func TestRunPromptSubmissionEnqueuesWhileBusy(t *testing.T) {
 func TestRunPromptSubmissionRoutesConcurrentReceiptsInAdmissionOrder(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -182,7 +182,7 @@ func TestRunPromptSubmissionRoutesConcurrentReceiptsInAdmissionOrder(t *testing.
 func TestNextReceiptClaimsOnlyAfterPriorReceiptIsTerminal(t *testing.T) {
 	ctx := context.Background()
 	st := &receiptTransitionStore{Memory: store.NewMemory()}
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
@@ -218,7 +218,7 @@ func TestNextReceiptClaimsOnlyAfterPriorReceiptIsTerminal(t *testing.T) {
 func TestMalformedReceiptFailsThenDispatcherRunsNextReceipt(t *testing.T) {
 	ctx := context.Background()
 	st := &receiptTransitionStore{Memory: store.NewMemory()}
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
@@ -289,7 +289,7 @@ func TestQueueDrainRunsSubmissionReceiptLifecycle(t *testing.T) {
 func TestTakeQueuedSendPersistsContinuationWithoutOpeningNewTurn(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append opening user turn", st.AppendMessages(ctx, sess.ID, api.Message{
@@ -392,7 +392,7 @@ func TestQueueSendWithoutActivePromptLoopStartsContinuationCycle(t *testing.T) {
 func TestQueueRemoveCancelsSubmissionReceipt(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -420,7 +420,7 @@ func TestQueueRemoveCancelsSubmissionReceipt(t *testing.T) {
 func TestMixedContentReceiptWaitsForPriorWorkerCycle(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	dir := t.TempDir()
@@ -449,7 +449,7 @@ func TestMixedContentReceiptWaitsForPriorWorkerCycle(t *testing.T) {
 func TestQueueableReceiptJoinsDraftWhilePriorWorkerCycleRuns(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	dir := t.TempDir()
@@ -475,7 +475,7 @@ func TestQueueableReceiptJoinsDraftWhilePriorWorkerCycleRuns(t *testing.T) {
 func TestQueueRoundCompleteRequiresIdleWorkerCycle(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
@@ -504,7 +504,7 @@ func TestQueueRoundCompleteRequiresIdleWorkerCycle(t *testing.T) {
 }
 
 func TestDrainQueuedNextTurnRespectsHold(t *testing.T) {
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	const id = "sess-hold"
 
@@ -576,7 +576,7 @@ func TestDrainQueueRetainsDraftWhenReceiptClaimFails(t *testing.T) {
 	ctx := context.Background()
 	wantErr := errors.New("receipt store unavailable")
 	st := &batchClaimFailStore{Memory: store.NewMemory(), err: wantErr}
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "queued work", promptinput.Input{Text: "queued work"})
@@ -599,7 +599,7 @@ func TestDrainQueueRetainsDraftWhenReceiptClaimFails(t *testing.T) {
 func TestQueueHeadWaitsForEarlierMixedContentReceipt(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	base := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)

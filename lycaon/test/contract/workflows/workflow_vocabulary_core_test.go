@@ -3,12 +3,12 @@ package contract
 import (
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/vocabulary"
+	"github.com/lycaon/lycaon/internal/vocabulary/vocabularytest"
 )
 
 func TestWorkflowVocabularyCoreLayer(t *testing.T) {
 	t.Parallel()
-	for _, row := range vocabulary.ExportCatalog() {
+	for _, row := range vocabularytest.ExportCatalog() {
 		if row.Status != "shipped" {
 			continue
 		}

@@ -1,6 +1,7 @@
 package cadence
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -38,7 +39,7 @@ func TestCadenceConfigFaultMarksSeriesUnavailableWithoutRequeueingAndClearsOnEng
 	ctx := t.Context()
 	clock := newTestClock()
 	cadence, store := newTestCadence(t, clock)
-	registry := cadence.Registry.(*scanbase.MockRegistry)
+	registry := cadence.Registry.(*scantest.MockRegistry)
 	registry.Contracts = map[string]scancatalog.ScannerContract{
 		"lycaon-sast": brokenBundledContract("lycaon-sast"),
 	}
@@ -116,7 +117,7 @@ func TestCadenceIncrementalConfigFaultPreservesPendingPathsUntilEngineRecovers(t
 	ctx := t.Context()
 	clock := newTestClock()
 	cadence, store := newTestCadence(t, clock)
-	registry := cadence.Registry.(*scanbase.MockRegistry)
+	registry := cadence.Registry.(*scantest.MockRegistry)
 	registry.Contracts = map[string]scancatalog.ScannerContract{
 		"lycaon-sast": healthyBundledContract("lycaon-sast"),
 	}

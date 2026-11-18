@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -83,7 +84,7 @@ func TestRenderedOwnerFailureKeepsOwnershipClassification(t *testing.T) {
 		Code: "HTTP_TRANSPORT_ENDED", FailureClass: api.FailureClassOwnerError, Retryable: true,
 		Data: map[string]any{"reason": "remote ended the response"},
 	})
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	testutil.FailErr(t, "register read", registry.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "", rendered
 	}))
@@ -201,7 +202,7 @@ func TestBatchProgressConsumesInvocationFactsBeforeTranscriptProjection(t *testi
 		{"parallel advancing", []string{"read", "read"}, true, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			registry := tools.NewStubRegistry()
+			registry := toolstest.NewRegistry()
 			for _, name := range []string{"update_progress", "read", "edit"} {
 				testutil.FailErr(t, "register typed result producer", registry.Register(name, func(_ context.Context, _ map[string]any, call tools.ToolContext) (string, error) {
 					advanced := tc.advanced

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/version"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -341,7 +341,7 @@ func TestCreateSessionByProjectID(t *testing.T) {
 	store := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{
 		Store: store, Projects: reg,
-		Sessions: session.NewHost(store, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())}}), nil, TestAPIToken)
+		Sessions: session.NewHost(store, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())}}), nil, TestAPIToken)
 	stopBackgroundOnCleanup(t, srv)
 	body := `{"project_id":"` + opened.ID + `","posture":"spec"}`
 	req := newAuthedRequest(http.MethodPost, "/v1/sessions", strings.NewReader(body))

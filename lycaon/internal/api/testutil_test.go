@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"io"
 	"net"
 	"net/http"
@@ -48,7 +49,7 @@ type testDeps func(*Dependencies)
 
 func newTestServer(t *testing.T, opts ...testDeps) *Server {
 	t.Helper()
-	return newTestServerWithRegistry(t, tools.NewStubRegistry(), opts...)
+	return newTestServerWithRegistry(t, toolstest.NewRegistry(), opts...)
 }
 
 func newTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...testDeps) *Server {

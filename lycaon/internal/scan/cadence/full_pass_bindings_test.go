@@ -5,6 +5,7 @@ package cadence
 import (
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"strings"
 	"testing"
 
@@ -67,7 +68,7 @@ func TestFullPassScansTakeTheBindingsOfEveryRequester(t *testing.T) {
 
 func TestFullPassRequestNeedsARunnableScanner(t *testing.T) {
 	cadence, _, dir, _ := attachedCadence(t)
-	cadence.Registry.(*scanbase.MockRegistry).Scanners = nil
+	cadence.Registry.(*scantest.MockRegistry).Scanners = nil
 	if _, err := cadence.RequestFull(t.Context(), dir, nil, api.ScanTriggerManual, scanbase.FullScanContext{}); !errors.Is(err, scanbase.ErrNoScannerAvailable) {
 		t.Fatalf("request with no scanner = %v, want ErrNoScannerAvailable", err)
 	}

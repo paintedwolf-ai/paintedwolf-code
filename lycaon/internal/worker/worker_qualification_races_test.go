@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -17,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
-	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -201,7 +201,7 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 	cancel := &CancelService{Queue: queue, Reject: rejectFmt, Names: records}
 
 	reg := tools.NewDefaultRegistry()
-	agents := orchestration.NewMemoryAgentRegistryForTest()
+	agents := orchestrationtest.Registry(t)
 	plan := plantest.New(t, plantest.Deps(records))
 	testutil.FailErr(t, "register task", RegisterTaskTool(reg, TaskToolDeps{
 		Queue: queue, Agents: agents, Workers: DefaultWorkersConfig(), WorkerRecords: records, Reviews: ops, Plan: plan,

@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/db"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/oar"
@@ -19,7 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -53,7 +53,7 @@ func newExecutionStack(t *testing.T) (*session.Host, *SQLQueue, *LocalWorkerExec
 	queue := newTestQueue(t, DefaultWorkersConfig().Poller.MaxConcurrency, testdbseed.DefaultProjectID)
 	testdbseed.InsertProjectRoot(t, queue.db, testdbseed.DefaultProjectID, t.TempDir())
 	store := store.NewSQL(queue.db.(db.ReadHandle))
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	wireExecutionCloseoutPolicy(t, mgr)
 	cfg := DefaultWorkersConfig()
 	queue.SetWorkersConfig(cfg)

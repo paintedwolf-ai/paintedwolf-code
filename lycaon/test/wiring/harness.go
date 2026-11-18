@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/progress"
+	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io/fs"
 	"os"
@@ -24,7 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/scan"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -115,7 +116,7 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 	if o.useBundledScanners {
 		cfg.TestAdvisoryDatabase = scantest.OSVExport(t)
 	} else {
-		cfg.TestScanRegistry = &scan.MockRegistry{Scanner: &scan.MockScanner{
+		cfg.TestScanRegistry = &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{
 			// Match the bundled secret scanner categories.
 			CategoryList: []wire.ScanCategory{wire.ScanCategorySecret, wire.ScanCategorySecurity, wire.ScanCategorySCA},
 			Result:       &scanoutput.Result{FindingsCount: 0},

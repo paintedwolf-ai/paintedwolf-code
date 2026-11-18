@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -13,7 +14,7 @@ import (
 func TestBundledProvidersIncludeOMLX(t *testing.T) {
 
 	cfg, err := llm.LoadProviderConfig()
-	contractcheck.FailErr(t, "llm.LoadProviderConfig failed", err)
+	testutil.FailErr(t, "llm.LoadProviderConfig failed", err)
 	var omlx *llm.ProviderEntry
 	for i := range cfg.Providers {
 		if cfg.Providers[i].ID == "omlx" {
@@ -37,12 +38,15 @@ func TestBundledProvidersIncludeOMLX(t *testing.T) {
 	t.Setenv("LYCAON_TEST", "1")
 	t.Cleanup(llm.SetHostProductPlatformForTest(llm.PlatformmacOS))
 
-	catalog := liveCatalogForShipIDs(t, "omlx")
+	catalog, err := llm.NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
+	testutil.FailErr(t, "create provider catalog", err)
+	testutil.FailErr(t, "add omlx provider", catalog.Put(*omlx))
+	testutil.FailErr(t, "reload provider catalog", catalog.Reload())
 	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}
-	contractcheck.FailErr(t, "llm.NewRegistry failed", err)
+	testutil.FailErr(t, "llm.NewRegistry failed", err)
 
 	if !registry.IsConfigured("omlx") {
 		t.Fatal("expected keyless omlx to be configured without a key")

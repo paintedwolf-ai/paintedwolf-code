@@ -3,6 +3,7 @@ package browser
 import (
 	"bytes"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelinearchive/timelinearchivetest"
 	"image/png"
 	"testing"
 
@@ -54,7 +55,7 @@ func TestRecordingShowsALateLayoutShiftASettledCaptureWouldMiss(t *testing.T) {
 	if len(rec.Actions) != 1 || !rec.Actions[0].OK || rec.Actions[0].StartMS > jump.AtMS {
 		t.Fatalf("actions = %+v", rec.Actions)
 	}
-	m, entries, err := timelinearchive.Unpack(rec.Archive)
+	m, entries, err := timelinearchivetest.Unpack(rec.Archive)
 	testutil.FailErr(t, "unpack timeline", err)
 	if len(m.Frames) != s.FrameCount || len(m.Frames) < 3 || m.Frames[0].AtMS > 100 {
 		t.Fatalf("frames = %d (summary %d), first at %v", len(m.Frames), s.FrameCount, m.Frames[0].AtMS)

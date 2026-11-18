@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"reflect"
 	"strings"
 	"testing"
@@ -65,7 +66,7 @@ func TestLoopRepairsMixedResponseFailuresWithoutExecutingRejectedCalls(t *testin
 		{"structured", []error{malformed}, false, false, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			executed := 0
 			testutil.FailErr(t, "register", reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				executed++

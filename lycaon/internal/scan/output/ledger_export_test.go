@@ -2,18 +2,18 @@ package output
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"strings"
 	"testing"
 	"time"
 
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	scanfixture "github.com/lycaon/lycaon/internal/scan/testfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func exportEntry(state api.FindingLedgerState, rule string, ignore *api.FindingIgnore, advisories ...string) api.FindingLedgerEntry {
-	finding := scanfindings.FixtureFinding(rule, api.FindingLevelHigh, rule+" message", "internal/api/a.go", 7)
+	finding := findingstest.Finding(rule, api.FindingLevelHigh, rule+" message", "internal/api/a.go", 7)
 	finding.Tool.DriverID = "opengrep-sast"
 	if len(advisories) > 0 {
 		finding = scanfixture.WithAdvisory(finding, advisories...)

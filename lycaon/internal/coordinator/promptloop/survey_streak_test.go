@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -9,9 +10,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func surveyRegistry(t *testing.T) *tools.StubRegistry {
+func surveyRegistry(t *testing.T) *toolstest.Registry {
 	t.Helper()
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	handler := func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		t.Fatal("survey classification invoked a tool")
 		return "", nil

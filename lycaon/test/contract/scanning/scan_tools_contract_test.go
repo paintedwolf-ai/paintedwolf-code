@@ -1,10 +1,11 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/scan"
+	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/scan"
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scantoolapi "github.com/lycaon/lycaon/internal/scan/toolapi"
@@ -35,7 +36,7 @@ func TestScanToolsContractAllowlistAndRegistration(t *testing.T) {
 	reg, err := tools.NewCatalogRegistry(schemas)
 	contractcheck.FailErr(t, "new catalog registry", err)
 	coord := scantest.Coordinator(t, scan.NewSQLStore(sqlDB), nil)
-	if err := scantoolapi.RegisterScanTools(reg, coord, &scan.MockRegistry{Scanner: &scan.MockScanner{}}, scancadence.New(scan.StoreFromCoordinator(coord), coord, &scan.MockRegistry{Scanner: &scan.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
+	if err := scantoolapi.RegisterScanTools(reg, coord, &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{}}, scancadence.New(scan.StoreFromCoordinator(coord), coord, &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
 		contractcheck.FailErr(t, "scan.RegisterScanTools failed", err)
 	}
 	meta, ok := reg.Meta("scan_pack")

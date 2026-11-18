@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"slices"
 	"strings"
@@ -65,7 +66,7 @@ func setupAskUserIntegration(t *testing.T) *askUserFixture {
 	sqlDB := testdbfixture.Open(t, "ask-user-int.db")
 
 	store := store.NewSQL(sqlDB)
-	sessMgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	sessMgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	testutil.FailErr(t, "install anchor registry", sessMgr.Coordinator.Guidance.InstallAnchorRegistry())
 
 	manifest := askUserHostManifest()

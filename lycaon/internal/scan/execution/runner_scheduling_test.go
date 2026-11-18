@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	scanfixtures "github.com/lycaon/lycaon/internal/scan/scantest"
 	"testing"
 
 	scanbase "github.com/lycaon/lycaon/internal/scan"
@@ -16,8 +17,8 @@ import (
 func TestRunnerSleepsIdleAndWakesForCommittedScan(t *testing.T) {
 	database := &scantest.CountedDB{Handle: testdbfixture.Open(t, "scan.db")}
 	store := scanbase.NewSQLStore(database)
-	scanner := &scanbase.MockScanner{}
-	runner := NewRunner(store, &scanbase.MockRegistry{Scanner: scanner}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	scanner := &scanfixtures.MockScanner{}
+	runner := NewRunner(store, &scanfixtures.MockRegistry{Scanner: scanner}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.Snapshots = testSnapshots(t, store)
 	root := t.TempDir()
 	snapshot := publishTestSnapshot(t, runner.Snapshots, root)
@@ -45,7 +46,7 @@ func TestRunnerSleepsIdleAndWakesForCommittedScan(t *testing.T) {
 func TestDisabledRunnerSleepsAndSettingsWakeIt(t *testing.T) {
 	database := &scantest.CountedDB{Handle: testdbfixture.Open(t, "scan.db")}
 	store := scanbase.NewSQLStore(database)
-	runner := NewRunner(store, &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(store, &scanfixtures.MockRegistry{Scanner: &scanfixtures.MockScanner{}}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.Settings = disabledScannerSettings(t)
 	scantest.RunService(t, runner.Run)
 	testutil.WaitFor(t, "the runner writes the scan", func() bool { return database.Writes.Load() > 0 })
