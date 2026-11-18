@@ -4,6 +4,7 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 
@@ -44,7 +45,7 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 		FollowUpText: "done",
 	}}}))
 	store := store.NewMemory()
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	if err := reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "[]", nil
 	}); err != nil {
@@ -96,7 +97,7 @@ func TestSecondPromptStillGetsRunContextAfterAdvance(t *testing.T) {
 		{Pattern: ".", Text: "ok"},
 	}}))
 	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
@@ -139,7 +140,7 @@ func TestWorkerLegInjectsEveryIteration(t *testing.T) {
 		FollowUpText: "done",
 	}}}))
 	store := store.NewMemory()
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register worker command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "module fixture", nil
 	}))
@@ -188,7 +189,7 @@ func TestGateBlockedSingleImperativeChannel(t *testing.T) {
 	ctx := context.Background()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	hintCfg, err := guidance.LoadHintConfigStock()

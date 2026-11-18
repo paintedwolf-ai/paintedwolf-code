@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"slices"
 	"strings"
 	"sync"
@@ -59,7 +60,7 @@ func (r *refusingRecorder) InterruptRunning(context.Context) (int64, error) { re
 // the call's result is durable and bound to its host-fault receipt, and the
 // batch's remaining calls settle as not run.
 func TestRefusedSettlementEndsTurnAsHostFault(t *testing.T) {
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	var ran []string
 	testutil.FailErr(t, "register write", reg.Register("write", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 		path, _ := args["path"].(string)

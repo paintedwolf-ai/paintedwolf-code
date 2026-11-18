@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"go/parser"
 	"go/token"
 	"os"
@@ -65,7 +66,7 @@ func newReachFixture(t *testing.T, rootPath string) *reachFixture {
 	t.Helper()
 	mem := store.NewMemory()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, rootPath)
 	testutil.FailErr(t, "CreateWithRoot", err)
@@ -283,7 +284,7 @@ func TestWorktreeReach_rootBelowToplevel(t *testing.T) {
 
 	mem := store.NewMemory()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, web)
 	testutil.FailErr(t, "CreateWithRoot", err)
@@ -379,7 +380,7 @@ func TestWorktreeReach_getFailureRefuses(t *testing.T) {
 	mem := store.NewMemory()
 	failing := &getFailStore{Store: mem, failGet: true}
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	mgr := NewHost(failing, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(failing, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, repoDir)
 	testutil.FailErr(t, "CreateWithRoot", err)

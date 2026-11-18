@@ -2,6 +2,7 @@ package promptloop_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 
@@ -75,7 +76,7 @@ func TestStreamProgressBuffersAllToolCalls(t *testing.T) {
 		{ID: "tc-sum", Name: "summarize", Args: map[string]any{"path": "pkg"}},
 		{ID: "tc-read", Name: "read", Args: map[string]any{"path": "a.go"}},
 	}}
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("summarize", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return "ok", nil
 	})
@@ -178,7 +179,7 @@ func TestLoopPublishesAnEdgePerSettledToolCall(t *testing.T) {
 	var published []publishedProgress
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
-	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Tools = toolstest.NewRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Nudges.PublishWorkerProgress = func(_ context.Context, _ string, snap workerprogress.Snapshot, checkpoint bool) {
 		published = append(published, publishedProgress{snap: snap, checkpoint: checkpoint})

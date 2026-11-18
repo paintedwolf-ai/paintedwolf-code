@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -352,7 +352,7 @@ func TestBuildImplementSessionStateLedgerOverridesStaleEnvelope(t *testing.T) {
 		testutil.FailErr(t, "AppendMessages", err)
 	}
 
-	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetWorkerQueue(q)
 	state := mgr.Workers.State.ForSession(ctx, parent)
 	if len(state.PendingOverlayIDs) != 0 {

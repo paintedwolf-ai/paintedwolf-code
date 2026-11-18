@@ -2,6 +2,7 @@ package orchestration_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"slices"
 	"sync"
 	"testing"
@@ -15,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -41,7 +41,7 @@ var _ orchestration.Orchestrator = (*orchestration.OrchestratorImpl)(nil)
 func TestPipelineTopologyLegAgentTypes(t *testing.T) {
 	ctx := context.Background()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 
 	reg := orchestration.NewMemoryAgentRegistryForTest()
 	rec := &recordingWorkers{TopologyWorkers: orchestration.NewMemoryTopologyWorkers()}
@@ -95,7 +95,7 @@ func TestPipelineTopologyLegAgentTypes(t *testing.T) {
 func TestPipelineUnknownProfileFailsRun(t *testing.T) {
 	ctx := context.Background()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 
 	reg := orchestration.NewMemoryAgentRegistryForTest()
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
@@ -133,7 +133,7 @@ func newPipelineIntegrationOrchestrator(t *testing.T) (*orchestration.Orchestrat
 	testutil.FailErr(t, "llm.LoadMockConfig failed", err)
 
 	sessStore := store.NewMemory()
-	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	rec := &recordingWorkers{
 		TopologyWorkers: orchestration.NewMemoryTopologyWorkers(),
 		order:           make([]string, 0, 8),

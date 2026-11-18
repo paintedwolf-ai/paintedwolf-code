@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -118,7 +119,7 @@ func listCoordinatorToolsForPosture(t *testing.T, row postureToolExpectation) []
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: contractcheck.StockCatalog(t)})
 	contractcheck.FailErr(t, "toolhost.NewRuntime failed", err)
-	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.Coordinator.Guards.SetToolMetadata(rt.Executor.Metadata)
 	workflowMgr := wireToolpolicyMatrixContract(t, configRoot, mgr, store, rt.Registry, sqlDB)
 

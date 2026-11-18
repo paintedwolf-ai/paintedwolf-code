@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/events"
@@ -15,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -31,7 +31,7 @@ func TestAutoTitleSessionIdempotentOnReplay(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".*", Text: "ok"},
 	}})
-	mgr := NewHost(store, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, Lookup: project.ScopeLookup{Registry: reg}})
@@ -88,7 +88,7 @@ func TestPublishSessionTitleUsesStoreStatus(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 
 	store := store.NewMemory()
-	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, Lookup: project.ScopeLookup{Registry: reg}})
@@ -148,7 +148,7 @@ func TestAutoNameProjectSkipsNonDraft(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".*", Text: "ignored"},
 	}})
-	mgr := NewHost(store, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 
 	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
@@ -218,7 +218,7 @@ func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
 		}),
 		Utility: llm.NewUtilityPlane(),
 	}
-	mgr := NewHost(mem, Models{Client: blocker, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(mem, Models{Client: blocker, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 	t.Cleanup(func() {
 		select {
@@ -284,7 +284,7 @@ func TestCurationSharesLocalCoordinator(t *testing.T) {
 		Coordinator: llm.ModelRef{ProviderID: "ollama-1", Model: "gemma4:e2b"},
 		Lite:        llm.ModelRef{ProviderID: "ollama-1", Model: "gemma4:e2b"},
 	})
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.Runner.Curation.SetModelSources(policy, registry)
 
 	if !mgr.Runner.Curation.SharesCoordinatorCapacity(ctx, &api.Session{ProviderID: "ollama-1"}) {
@@ -302,7 +302,7 @@ func TestCurationSharesLocalCoordinator(t *testing.T) {
 func TestWorkflowRequestCurationPreservesManualTitlesAndExcludesWorkers(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	parent, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
 	testutil.FailErr(t, "create root chat", err)
 	_, err = mgr.Chats.Naming.SetTitle(t.Context(), parent.ID, "Manual orchard title")
@@ -330,7 +330,7 @@ func TestWorkflowRequestCurationPreservesManualTitlesAndExcludesWorkers(t *testi
 func TestAcceptedWorkflowRequestCurationSurvivesInitiatingTurnCancellation(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
 	testutil.FailErr(t, "create chat", err)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -357,7 +357,7 @@ func TestEngineShutdownCancelsAndDrainsDetachedNaming(t *testing.T) {
 	providers.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	testutil.FailErr(t, "register naming provider", providers.Register(blocker))
 	svc := &llm.Service{Registry: providers, Policy: llm.NewInMemoryPolicyStore(llm.ModelPolicy{Lite: llm.ModelRef{ProviderID: blocker.ID(), Model: "naming-model"}}), Utility: llm.NewUtilityPlane()}
-	mgr := NewHost(mem, Models{Client: blocker, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(mem, Models{Client: blocker, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)

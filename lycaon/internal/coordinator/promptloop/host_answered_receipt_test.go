@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"sync"
 	"testing"
 
@@ -95,7 +96,7 @@ func (r *recordingRecorder) only(t *testing.T) (invocation.Start, invocation.Set
 // readCallDeps wires one `read` call the mock model makes, against a ledger.
 func readCallDeps(t *testing.T, rec *recordingRecorder) (promptloop.PromptLoopDeps, *store.Memory) {
 	t.Helper()
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		t.Fatal("subsystem owner ran: the pre-invoke hook was supposed to answer this call")
 		return "", nil
@@ -173,7 +174,7 @@ func TestPreInvokeRefusalSettlesOnTheLedger(t *testing.T) {
 // Refusal before definition selection opens no receipt.
 func TestOffSurfaceToolOpensNoReceipt(t *testing.T) {
 	rec := newRecordingRecorder()
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	mem := store.NewMemory()
 	deps := promptloop.StoreDeps(mem)
 	deps.Context.Limits = loopTestLimits(2)
@@ -194,7 +195,7 @@ func TestOffSurfaceToolOpensNoReceipt(t *testing.T) {
 // The ledger settles the subsystem owner's source verdict.
 func TestStatedSourceVerdictReachesTheLedger(t *testing.T) {
 	rec := newRecordingRecorder()
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("command", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 		if tctx.Effects.Out != nil {
 			tctx.Effects.Out.SourceRun = &tools.SourceRunCapture{
@@ -225,7 +226,7 @@ func TestStatedSourceVerdictReachesTheLedger(t *testing.T) {
 // A subsystem owner that ran no source states no verdict.
 func TestOwnerWithoutSourceRunSettlesNoVerdict(t *testing.T) {
 	rec := newRecordingRecorder()
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "file contents", nil
 	})

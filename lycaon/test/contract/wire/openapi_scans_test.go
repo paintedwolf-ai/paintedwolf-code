@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,7 +26,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -87,7 +87,7 @@ func TestOpenAPIScansRealServer(t *testing.T) {
 
 	sessStore := store.NewMemory()
 	mockLLM := llm.NewMockProvider(nil)
-	mgr := session.NewHost(sessStore, session.Models{Client: mockLLM, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(sessStore, session.Models{Client: mockLLM, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{
 		Core:  api.CoreDependencies{Store: sessStore, Projects: projReg, Sessions: mgr},
 		Scans: api.ScansDependencies{ScanCoordinator: coord, ScannerRegistry: reg},

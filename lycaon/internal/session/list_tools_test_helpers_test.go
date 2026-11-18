@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerplan/plantest"
 	"github.com/lycaon/lycaon/internal/workerrecords"
@@ -73,7 +74,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 
 	store := store.NewSQL(sqlDB)
 	rt := newContextualToolsRuntime(t, configRoot)
-	mgr := session.NewHost(store, session.Models{Client: client, Provider: nil, Limits: cfg, Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: client, Provider: nil, Limits: cfg, Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
 	mgr.Coordinator.Guards.SetToolMetadata(rt.Executor.Metadata)

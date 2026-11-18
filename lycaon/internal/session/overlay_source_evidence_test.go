@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,7 +87,7 @@ func currentVerifyPassedMessage(root string) api.Message {
 func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	t.Cleanup(mgr.BeginEngineShutdown)
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
@@ -130,7 +131,7 @@ func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	t.Cleanup(mgr.BeginEngineShutdown)
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
@@ -218,7 +219,7 @@ func TestReadSensitivePathSetsSecretExposure(t *testing.T) {
 func TestSecretExposureInheritAndMerge(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	testutil.FailErr(t, "seed parent", mem.SeedSecretExposure(ctx, parent.ID))
@@ -256,7 +257,7 @@ func TestSpawnChildRollsBackWhenSecurityInheritanceFails(t *testing.T) {
 	testutil.FailErr(t, "create parent", err)
 	testutil.FailErr(t, "seed parent", mem.SeedSecretExposure(ctx, parent.ID))
 	failing := &failingSecretInheritanceStore{Memory: mem}
-	mgr := session.NewHost(failing, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(failing, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 
 	if _, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "implementer"}); err == nil {
 		t.Fatal("SpawnChild succeeded without inheriting secret exposure")
@@ -288,7 +289,7 @@ func TestSessionSecretExposureSQLRebuild(t *testing.T) {
 func TestAppendWorkerSummaryCarriesStructuredDecisionRequest(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
@@ -583,10 +584,10 @@ type unrelatedWorker struct {
 	primary string
 }
 
-func newObservationHost(t *testing.T) (*store.Memory, *tools.StubRegistry, *session.Host, *worker.InMemoryQueue) {
+func newObservationHost(t *testing.T) (*store.Memory, *toolstest.Registry, *session.Host, *worker.InMemoryQueue) {
 	t.Helper()
 	mem := store.NewMemory()
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 
 	mgr := session.NewHost(
 		mem,
@@ -615,7 +616,7 @@ func provisionUnrelatedWorker(
 	mem *store.Memory,
 	mgr *session.Host,
 	q *worker.InMemoryQueue,
-	reg *tools.StubRegistry,
+	reg *toolstest.Registry,
 	parent *api.Session,
 	rev, rootDigest string,
 ) unrelatedWorker {

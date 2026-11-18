@@ -5,6 +5,7 @@ package orchestration_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"sync"
 	"testing"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -36,7 +36,7 @@ func newFanOutTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestrat
 	t.Helper()
 	mem := orchestration.NewMemoryTopologyWorkers()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	if rec == nil {
 		rec = &recordingWorkers{}
 	}
