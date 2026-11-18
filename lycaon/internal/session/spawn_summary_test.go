@@ -190,14 +190,14 @@ func TestAppendWorkerSummaryUnmetEvidenceKeepsDeliveredWork(t *testing.T) {
 	ctx := context.Background()
 	database := testdbfixture.Open(t, "session-workers.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
-	mem := store.NewSQL(database)
-	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessionStore := store.NewSQL(database)
+	mgr := session.NewHost(sessionStore, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	q := workertest.OnDatabase(t, database, 4)
 	mgr.SetWorkerQueue(q)
-	primary, overlay, scope := overlaySourceFixture(t, mem.DB())
-	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	primary, overlay, scope := overlaySourceFixture(t, sessionStore.DB())
+	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := sessionStore.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 	jobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
@@ -213,7 +213,7 @@ func TestAppendWorkerSummaryUnmetEvidenceKeepsDeliveredWork(t *testing.T) {
 		Scope:           &scope,
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
-	bindWorkerFixture(t, mem.DB(), jobID, overlay, primary, api.WorkerMergeStatusPending)
+	bindWorkerFixture(t, sessionStore.DB(), jobID, overlay, primary, api.WorkerMergeStatusPending)
 	status, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		JobID:          jobID,
 		ChildSessionID: child.ID,
@@ -226,7 +226,7 @@ func TestAppendWorkerSummaryUnmetEvidenceKeepsDeliveredWork(t *testing.T) {
 	if status != "open" {
 		t.Fatalf("status = %q want open", status)
 	}
-	msgs, err := mem.GetMessages(ctx, parent.ID)
+	msgs, err := sessionStore.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	var summary *api.WorkerSummaryMeta
 	for _, msg := range msgs {
@@ -247,17 +247,17 @@ func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 	ctx := context.Background()
 	database := testdbfixture.Open(t, "session-workers.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
-	mem := store.NewSQL(database)
-	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessionStore := store.NewSQL(database)
+	mgr := session.NewHost(sessionStore, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	ledger := sourceledger.New(testdbfixture.Open(t, "source.db"), t.TempDir())
 	t.Cleanup(func() { testutil.FailErr(t, "close source snapshot store", ledger.Snapshots.Close()) })
 	mgr.SetSourceLedger(ledger, tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
 	q := workertest.OnDatabase(t, database, 4)
 	mgr.SetWorkerQueue(q)
-	primary, overlay, scope := overlaySourceFixture(t, mem.DB())
-	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	primary, overlay, scope := overlaySourceFixture(t, sessionStore.DB())
+	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := sessionStore.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild", err)
 	jobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
@@ -273,9 +273,9 @@ func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 		Scope:           &scope,
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
-	bindWorkerFixture(t, mem.DB(), jobID, overlay, primary, api.WorkerMergeStatusPending)
+	bindWorkerFixture(t, sessionStore.DB(), jobID, overlay, primary, api.WorkerMergeStatusPending)
 	revision, digest := sourceledger.VerificationState(ctx, ledger.Inventory, overlay)
-	testutil.FailErr(t, "AppendMessages", mem.AppendMessages(ctx, child.ID, api.Message{
+	testutil.FailErr(t, "AppendMessages", sessionStore.AppendMessages(ctx, child.ID, api.Message{
 		Role: api.MessageRoleTool, WorkerID: jobID,
 		ToolResult: &api.ToolResult{
 			Content: `{"outcome":"passed"}`,
@@ -303,9 +303,9 @@ func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 
 func TestAppendWorkerSummaryRejectsInvalidState(t *testing.T) {
 	ctx := context.Background()
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(sessionStore, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 
 	_, err = mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
@@ -318,13 +318,13 @@ func TestAppendWorkerSummaryRejectsInvalidState(t *testing.T) {
 
 func TestAppendWorkerSummaryParentEnvelopeOmitsHostLedger(t *testing.T) {
 	ctx := context.Background()
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(sessionStore, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "security-reviewer"})
+	child, err := sessionStore.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "security-reviewer"})
 	testutil.FailErr(t, "create child", err)
-	testutil.FailErr(t, "seed child receipt", mem.AppendMessages(ctx, child.ID, api.Message{
+	testutil.FailErr(t, "seed child receipt", sessionStore.AppendMessages(ctx, child.ID, api.Message{
 		Role: api.MessageRoleTool,
 		ToolResult: &api.ToolResult{
 			Outcome: api.ToolResultOutcomeCompleted,
@@ -352,7 +352,7 @@ func TestAppendWorkerSummaryParentEnvelopeOmitsHostLedger(t *testing.T) {
 		Status: "complete",
 	})
 	testutil.FailErr(t, "AppendWorkerSummary", err)
-	msgs, err := mem.GetMessages(ctx, parent.ID)
+	msgs, err := sessionStore.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	var envelope string
 	for _, m := range msgs {

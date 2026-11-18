@@ -195,14 +195,14 @@ func TestSmallObservationSurvivesModelFormattingOverhead(t *testing.T) {
 
 func TestFitRequestRetainsActiveTurnToolExchangesAcrossPriorTurns(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "small"}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "small"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	priorUser := strings.Repeat("Prior turn context. ", 250)
 	priorTool := strings.Repeat("Prior turn observation. ", 400)
 	activeRead := strings.Repeat("Active observation row. ", 90)
 	reasoning := &api.ModelReasoning{ProviderID: "fixture", Model: "small", Text: "Checking prior and current observations"}
-	testutil.FailErr(t, "append multi-turn history", mem.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append multi-turn history", sessionStore.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: priorUser},
 		api.Message{ID: "a1", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "c1", Name: "read"}}},
 		api.Message{ID: "t1", Role: api.MessageRoleTool, Content: priorTool, ToolResult: &api.ToolResult{Tool: "read", ToolCallID: "c1", AssistantMessageID: "a1", Content: priorTool}},
@@ -214,11 +214,11 @@ func TestFitRequestRetainsActiveTurnToolExchangesAcrossPriorTurns(t *testing.T) 
 		api.Message{ID: "result-1", Role: api.MessageRoleTool, Content: activeRead, ToolResult: &api.ToolResult{Tool: "recall", ToolCallID: "rc-1", AssistantMessageID: "call-1", Content: activeRead}},
 		api.Message{ID: "call-2", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "rd-2", Name: "read"}}},
 		api.Message{ID: "result-2", Role: api.MessageRoleTool, Content: activeRead, ToolResult: &api.ToolResult{Tool: "read", ToolCallID: "rd-2", AssistantMessageID: "call-2", Content: activeRead}}))
-	rows, err := mem.GetMessages(t.Context(), sess.ID)
+	rows, err := sessionStore.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "load session rows", err)
 	cfg := compaction.DefaultCompactionConfig()
 	cfg.KeepRecentMessages = 16
-	service := &Service{store: mem, Compactor: compaction.NewSimpleCompactor(cfg, nil), recallAvailable: func(context.Context, *api.Session) bool { return true }}
+	service := &Service{store: sessionStore, Compactor: compaction.NewSimpleCompactor(cfg, nil), recallAvailable: func(context.Context, *api.Session) bool { return true }}
 	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: strings.Repeat("Standing instructions. ", 700)}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 8192}})}
 	fitted, err := service.FitRequest(t.Context(), sess, rows, modelcall.CompletionRequest{Model: "small", Messages: append([]api.Message{standing}, rows...)}, budgets, nil)

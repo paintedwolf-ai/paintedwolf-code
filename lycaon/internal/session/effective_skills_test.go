@@ -210,8 +210,8 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 	root := t.TempDir()
 	writeSkill(t, root, ".agents/skills", "release-check", "Release checklist.")
 
-	mem := sessionFixture
-	m := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessionStore := sessionFixture
+	m := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "cs.yaml"))
 	testutil.FailErr(t, "surfaces", err)
 	reg := project.NewSQLRegistry(sessionFixture.DB())
@@ -225,7 +225,7 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 		Projects: reg,
 	})
 
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)
 
 	loaded, _ := m.Profiles.EffectiveSkills(ctx, p.ID, []string{root})
@@ -238,7 +238,7 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 	if !found {
 		t.Fatal("expected project skill")
 	}
-	if mem.SessionUntrustedContent(sess.ID) {
+	if sessionStore.SessionUntrustedContent(sess.ID) {
 		t.Fatal("loading a project skill must not taint the session")
 	}
 }

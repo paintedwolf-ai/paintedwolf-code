@@ -115,7 +115,7 @@ func newReproducedSourceFixture(t *testing.T, completions []*modelcall.Completio
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 
 	rootDir := t.TempDir()
-	mem := sessionFixture
+	sessionStore := sessionFixture
 	client := &scriptedTurnClient{completions: completions}
 
 	registry := tools.NewStubRegistry()
@@ -130,7 +130,7 @@ func newReproducedSourceFixture(t *testing.T, completions []*modelcall.Completio
 		return string(payload), err
 	}))
 
-	mgr := session.NewHost(mem, session.Models{Client: client, Limits: settings.DefaultSessionLimits()}, registry)
+	mgr := session.NewHost(sessionStore, session.Models{Client: client, Limits: settings.DefaultSessionLimits()}, registry)
 	mgr.SetDataDir(t.TempDir())
 
 	projects := project.NewSQLRegistry(sessionFixture.DB())
@@ -155,7 +155,7 @@ func newReproducedSourceFixture(t *testing.T, completions []*modelcall.Completio
 	mgr.SetRejectFormatter(rejectFmt)
 	mgr.SetOARPipeline(loadStockGuardPipeline(t), oar.NewRenderer(rejectFmt, nil))
 
-	return &reproducedSourceFixture{mgr: mgr, store: mem, client: client, rootDir: rootDir, projID: proj.ID}
+	return &reproducedSourceFixture{mgr: mgr, store: sessionStore, client: client, rootDir: rootDir, projID: proj.ID}
 }
 
 func buildSourceFileLines(prefix string, n int) string {

@@ -22,12 +22,12 @@ import (
 // User input interrupts a parked command; the user's turn opens with the
 // program's interrupted result, ahead of the user's message.
 func TestUserTurnOpensWithTheInterruptedParkedProgram(t *testing.T) {
-	memory := storetest.New(t, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	registry := tools.NewStubRegistry()
-	mgr := NewHost(memory, Models{Client: llm.NewMockProvider(testMockConfig(t)), Limits: settings.DefaultSessionLimits()}, registry)
+	mgr := NewHost(sessionStore, Models{Client: llm.NewMockProvider(testMockConfig(t)), Limits: settings.DefaultSessionLimits()}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
-	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	database := testdbfixture.Open(t, "waits.db")
 	testdbseed.InsertSession(t, database, sess.ID, testdbseed.DefaultProjectID)

@@ -64,19 +64,19 @@ func (f *outputTruncatedFixtureLLM) Stream(ctx context.Context, req modelcall.Co
 
 func newOutputTruncatedTestHost(t *testing.T, client modelcall.LLMClient) (*Host, *store.SQL) {
 	t.Helper()
-	memory := storetest.New(t, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	registry := tools.NewStubRegistry()
 	_ = registry.Register("write", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return "written", nil
 	})
-	mgr := NewHost(memory, Models{
+	mgr := NewHost(sessionStore, Models{
 		Client: client,
 		Limits: settings.DefaultSessionLimits(),
 	}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 	mgr.SetDataDir(t.TempDir())
-	return mgr, memory
+	return mgr, sessionStore
 }
 
 func TestCoordinatorTurnRecoversOnceFromLengthTruncatedToolCall(t *testing.T) {
@@ -110,9 +110,9 @@ func TestCoordinatorTurnRecoversOnceFromLengthTruncatedToolCall(t *testing.T) {
 		},
 	}
 
-	mgr, memory := newOutputTruncatedTestHost(t, client)
+	mgr, sessionStore := newOutputTruncatedTestHost(t, client)
 	ctx := context.Background()
-	sess, err := memory.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	resp, err := mgr.Submissions.Prompt(ctx, sess.ID, "write the large file")
@@ -124,7 +124,7 @@ func TestCoordinatorTurnRecoversOnceFromLengthTruncatedToolCall(t *testing.T) {
 		t.Fatalf("requests = %d, want 2", len(client.requests))
 	}
 
-	status, err := memory.LatestTurnStatus(ctx, sess.ID)
+	status, err := sessionStore.LatestTurnStatus(ctx, sess.ID)
 	testutil.FailErr(t, "LatestTurnStatus", err)
 	if status != store.TurnStatusComplete {
 		t.Fatalf("turn status = %q, want %q", status, store.TurnStatusComplete)
@@ -162,9 +162,9 @@ func TestCoordinatorTurnSecondLengthTruncationRecordsTypedOutcomeWithoutFailedTu
 		},
 	}
 
-	mgr, memory := newOutputTruncatedTestHost(t, client)
+	mgr, sessionStore := newOutputTruncatedTestHost(t, client)
 	ctx := context.Background()
-	sess, err := memory.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	resp, err := mgr.Submissions.Prompt(ctx, sess.ID, "write the huge file")
@@ -188,7 +188,7 @@ func TestCoordinatorTurnSecondLengthTruncationRecordsTypedOutcomeWithoutFailedTu
 		t.Fatalf("expected low output ceiling guidance in notice, got %q", resp.OutputTruncated.Notice)
 	}
 
-	status, err := memory.LatestTurnStatus(ctx, sess.ID)
+	status, err := sessionStore.LatestTurnStatus(ctx, sess.ID)
 	testutil.FailErr(t, "LatestTurnStatus", err)
 	if status != store.TurnStatusComplete {
 		t.Fatalf("turn status = %q, want %q", status, store.TurnStatusComplete)

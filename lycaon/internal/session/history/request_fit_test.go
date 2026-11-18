@@ -45,8 +45,8 @@ func TestCompleteRequestFitsColdOllamaWindowWithoutChangingFrame(t *testing.T) {
 	}))
 	defer server.Close()
 	provider := ollama.New("local", server.URL+"/v1", "", []modelinfo.Entry{{ID: "gemma4:e4b", ContextLength: 16384}})
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "local", Model: "gemma4:e4b"}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{ProviderID: "local", Model: "gemma4:e4b"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	var rows []api.Message
 	for i := 0; i < 8; i++ {
@@ -56,8 +56,8 @@ func TestCompleteRequestFitsColdOllamaWindowWithoutChangingFrame(t *testing.T) {
 	rows = append(rows, api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser,
 		Authority: api.ContentAuthorityUser, Content: "Recover the original observation",
 		ContentParts: []api.MessageContentPart{{Content: "Recover the original observation", Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser}}})
-	testutil.FailErr(t, "append canonical history", mem.AppendMessages(t.Context(), sess.ID, rows...))
-	rows, err = mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "append canonical history", sessionStore.AppendMessages(t.Context(), sess.ID, rows...))
+	rows, err = sessionStore.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read canonical history", err)
 	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, Content: strings.Repeat("Standing instructions. ", 850),
 		ContextPinned: true, PromptCacheBreakpoint: api.PromptCacheTierStanding}
@@ -78,7 +78,7 @@ func TestCompleteRequestFitsColdOllamaWindowWithoutChangingFrame(t *testing.T) {
 	}
 	cfg := compaction.DefaultCompactionConfig()
 	cfg.ModelContextWindow = 12288
-	history := &Service{store: mem, Compactor: compaction.NewSimpleCompactor(cfg, nil), recallAvailable: func(context.Context, *api.Session) bool { return true }}
+	history := &Service{store: sessionStore, Compactor: compaction.NewSimpleCompactor(cfg, nil), recallAvailable: func(context.Context, *api.Session) bool { return true }}
 	fitted, err := history.FitRequest(t.Context(), sess, rows, req, nativeRequestBudgets{provider}, nil)
 	testutil.FailErr(t, "fit complete request", err)
 	payload, _, err := provider.Prepare(t.Context(), fitted, true)
@@ -102,7 +102,7 @@ func TestCompleteRequestFitsColdOllamaWindowWithoutChangingFrame(t *testing.T) {
 	if current != 1 || !recovery {
 		t.Fatal("fitted request lost the active instruction or canonical recovery")
 	}
-	canonical, err := mem.GetMessages(t.Context(), sess.ID)
+	canonical, err := sessionStore.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read preserved canonical history", err)
 	if !reflect.DeepEqual(canonical, rows) {
 		t.Fatal("request fitting changed canonical records")
@@ -173,20 +173,20 @@ func TestRequestFittingUsesRemainingOutputAfterHistoryIsMinimal(t *testing.T) {
 }
 
 func TestEveryRequestAdoptsPublishedHistoryProjection(t *testing.T) {
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append original history", mem.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append original history", sessionStore.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "old", Role: api.MessageRoleAssistant, Content: "Original detail"},
 		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Continue"}))
-	canonical, err := mem.GetMessages(t.Context(), sess.ID)
+	canonical, err := sessionStore.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read original history", err)
 	summary := api.Message{ID: "summary", Role: api.MessageRoleAssistant, Content: "Recorded continuation",
 		ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: "Recorded continuation"}}}
-	testutil.FailErr(t, "publish projection", mem.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
+	testutil.FailErr(t, "publish projection", sessionStore.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
 		Generation: 1, CoveredThroughOrd: canonical[0].Ord, CoveredThroughID: canonical[0].ID, SourceSeq: canonical[1].Seq,
 		Messages: []api.Message{summary}}))
-	history := &Service{store: mem}
+	history := &Service{store: sessionStore}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "large", ContextLength: 1_000_000}})}
 	for range 2 {
 		req := modelcall.CompletionRequest{Model: "large", Messages: canonical}
@@ -205,13 +205,13 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 	}))
 	defer server.Close()
 	provider := ollama.New("local", server.URL+"/v1", "", []modelinfo.Entry{{ID: "gemma4:e4b", ContextLength: 16384}})
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "local", Model: "gemma4:e4b"}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{ProviderID: "local", Model: "gemma4:e4b"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create active session", err)
 	args := map[string]any{"path": "observations.txt", "offset": float64(650), "limit": float64(151)}
 	body := strings.Repeat("Recorded observation. ", 6000)
 	recallBody := strings.Repeat("Recovered page. ", 200)
-	testutil.FailErr(t, "append active exchange", mem.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append active exchange", sessionStore.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "earlier", Role: api.MessageRoleAssistant, Content: strings.Repeat("Earlier work. ", 120)},
 		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Read the observations"},
 		api.Message{ID: "call", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "read-call", Name: "read", Args: args}}},
@@ -221,11 +221,11 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 		api.Message{ID: "recall-call", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "rc-1", Name: "recall"}}},
 		api.Message{ID: "recall-result", Role: api.MessageRoleTool, Content: recallBody, TrustTier: api.ContentTrustTierUntrusted,
 			ToolResult: &api.ToolResult{Tool: "recall", ToolCallID: "rc-1", AssistantMessageID: "recall-call", Content: recallBody, Outcome: api.ToolResultOutcomeCompleted}}))
-	rows, err := mem.GetMessages(t.Context(), sess.ID)
+	rows, err := sessionStore.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "load active exchange", err)
 	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: strings.Repeat("Standing instructions. ", 1400)}
 	req := modelcall.CompletionRequest{Model: sess.Model, Messages: append([]api.Message{standing}, rows...)}
-	history := &Service{store: mem, recallAvailable: func(context.Context, *api.Session) bool { return true }}
+	history := &Service{store: sessionStore, recallAvailable: func(context.Context, *api.Session) bool { return true }}
 	fitted, err := history.FitRequest(t.Context(), sess, rows, req, nativeRequestBudgets{provider}, nil)
 	testutil.FailErr(t, "fit active observation", err)
 	_, _, err = provider.Prepare(t.Context(), fitted, true)
@@ -248,7 +248,7 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 	if !call || !result || !recallKept {
 		t.Fatal("active projection changed call pairing, arguments, outcome, or bounded recall result")
 	}
-	canonical, err := mem.GetMessages(t.Context(), sess.ID)
+	canonical, err := sessionStore.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "reload original observation", err)
 	if !reflect.DeepEqual(rows, canonical) {
 		t.Fatal("active projection changed canonical tool records")

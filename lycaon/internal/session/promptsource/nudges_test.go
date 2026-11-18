@@ -43,12 +43,12 @@ func (*nudgeSpendCosts) ClaimSpendWarning(context.Context, string, float64) (boo
 func (*nudgeSpendCosts) ClearSpendWarning(context.Context, string) error { return nil }
 
 func TestNudgesClassifiesActualSpendCeilingAndRetainsRunway(t *testing.T) {
-	memory := storetest.New(t, "project-spend")
-	session, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "project-spend")
+	sessionStore := storetest.New(t, "project-spend")
+	session, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, "project-spend")
 	testutil.FailErr(t, "create spend session", err)
 	costs := &nudgeSpendCosts{t: t, session: session.ID, nanoUSD: 900_000_000}
 	deps := (&Nudges{
-		Spend:  spendguard.New(memory, nudgeSpendLimits{}, costs),
+		Spend:  spendguard.New(sessionStore, nudgeSpendLimits{}, costs),
 		Nudges: &turnnudges.Service{},
 	}).Build()
 	check, err := deps.CheckSpendCeiling(t.Context(), session.ID, session)

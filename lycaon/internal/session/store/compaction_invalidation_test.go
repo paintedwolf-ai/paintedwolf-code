@@ -64,16 +64,16 @@ func TestCompactionRevisionLagRebuildsWithoutChangingHistory(t *testing.T) {
 }
 
 func TestContinuationCopiesSlices(t *testing.T) {
-	mem := newSQLTestStore(t)
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sessionStore := newSQLTestStore(t)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	record := &messageview.Continuation{Summary: messageview.ContinuationSummary{Facts: []string{"accepted"}}, Sources: []messageview.ContinuationSource{{Handles: []string{"read#1"}}}}
-	testutil.FailErr(t, "publish continuation", mem.PutCompactionView(t.Context(), sess.ID, CompactionView{Generation: 1, Continuation: record}))
+	testutil.FailErr(t, "publish continuation", sessionStore.PutCompactionView(t.Context(), sess.ID, CompactionView{Generation: 1, Continuation: record}))
 	record.Summary.Facts[0] = "changed"
-	view, _, err := mem.GetCompactionView(t.Context(), sess.ID)
+	view, _, err := sessionStore.GetCompactionView(t.Context(), sess.ID)
 	testutil.FailErr(t, "read continuation", err)
 	view.Continuation.Sources[0].Handles[0] = "changed"
-	view, _, err = mem.GetCompactionView(t.Context(), sess.ID)
+	view, _, err = sessionStore.GetCompactionView(t.Context(), sess.ID)
 	testutil.FailErr(t, "reread continuation", err)
 	if view.Continuation.Summary.Facts[0] != "accepted" || view.Continuation.Sources[0].Handles[0] != "read#1" {
 		t.Fatal("consumer mutated the stored continuation")

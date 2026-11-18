@@ -47,8 +47,8 @@ func newStubCommandRegistry(t *testing.T) *tools.StubRegistry {
 
 func newTestManager(t *testing.T) (*Host, *store.SQL) {
 	t.Helper()
-	memory := storetest.New(t, testdbseed.DefaultProjectID)
-	return newTestManagerWithStore(t, memory), memory
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	return newTestManagerWithStore(t, sessionStore), sessionStore
 }
 
 func newTestManagerWithStore(t *testing.T, persistence Store) *Host {

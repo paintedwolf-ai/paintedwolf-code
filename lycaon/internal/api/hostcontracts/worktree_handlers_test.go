@@ -200,8 +200,8 @@ func TestGitWorktreeBindRollsBack(t *testing.T) {
 	sessionFixture := storetest.New(t)
 
 	dir := contractfixture.InitCommittedRepoDir(t)
-	mem := sessionFixture
-	failing := &contractfixture.PutFailStore{Store: mem, FailPut: true}
+	sessionStore := sessionFixture
+	failing := &contractfixture.PutFailStore{Store: sessionStore, FailPut: true}
 	mock := llm.NewMockProvider(contractfixture.TestMockConfig(t))
 	mgr := session.NewHost(failing, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	contractfixture.WireTestBindingRegistry(t)

@@ -26,20 +26,20 @@ import (
 
 func TestRecoverOrphanedTurnsClearsStuckBusy(t *testing.T) {
 	ctx := context.Background()
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	hub := events.NewMemoryHub()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub})
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
-	testutil.FailErr(t, "busy", mem.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "busy", sessionStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	ch, unsub, err := hub.Subscribe(ctx, events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "Subscribe", err)
 	t.Cleanup(unsub)
 
 	testutil.FailErr(t, "RecoverOrphanedTurns", mgr.Stops.Recovery.RecoverOrphanedTurns(ctx))
-	got, err := mem.Get(ctx, sess.ID)
+	got, err := sessionStore.Get(ctx, sess.ID)
 	testutil.FailErr(t, "Get", err)
 	if got.Status != api.SessionStatusIdle {
 		t.Fatalf("status = %s want idle", got.Status)

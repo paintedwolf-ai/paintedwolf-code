@@ -289,10 +289,10 @@ const messageStorageSecret = "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
 
 func TestUpdateMessageReappliesStorageRedaction(t *testing.T) {
 	ctx := context.Background()
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.Runner.Transcript.SetRedactor(redactMessageStorageFixture)
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	placeholder := api.Message{ID: "assistant-1", Role: api.MessageRoleAssistant}
@@ -304,7 +304,7 @@ func TestUpdateMessageReappliesStorageRedaction(t *testing.T) {
 	}}
 	testutil.FailErr(t, "update assistant tool call", mgr.Runner.Transcript.Update(ctx, sess.ID, raw.ID, raw))
 
-	messages, err := mem.GetMessages(ctx, sess.ID)
+	messages, err := sessionStore.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read messages", err)
 	if len(messages) != 1 || len(messages[0].ToolCalls) != 1 {
 		t.Fatalf("stored messages = %+v", messages)

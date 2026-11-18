@@ -303,10 +303,10 @@ func (unavailableWorkerEvidence) ReadAll(context.Context, string, string, string
 }
 
 func TestWorkerValidationEvidenceUnavailablePreservesDelivery(t *testing.T) {
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Verification.SetEvidenceStore(unavailableWorkerEvidence{})
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	task := &api.WorkerTask{ChildSessionID: sess.ID}
 	proof, _ := mgr.Workers.Summaries.Proof(t.Context(), task, nil, "")

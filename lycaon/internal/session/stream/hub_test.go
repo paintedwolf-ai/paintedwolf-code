@@ -15,15 +15,15 @@ import (
 // Deferred projection persists after the turn is canceled.
 func TestScheduleLiveProjectionSurvivesCallerContextCancellation(t *testing.T) {
 	mgr := New(nil)
-	mem := storetest.New(t, "proj-1")
+	sessionStore := storetest.New(t, "proj-1")
 	ctx := context.Background()
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, "proj-1")
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
-	testutil.FailErr(t, "AppendMessages", mem.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "AppendMessages", sessionStore.AppendMessages(ctx, sess.ID, api.Message{
 		ID:   "msg-live",
 		Role: api.MessageRoleAssistant,
 	}))
-	mgr.store = mem
+	mgr.store = sessionStore
 
 	turnCtx, cancel := context.WithCancel(ctx)
 	mgr.Schedule(turnCtx, sess.ID, api.Message{ID: "msg-live", Content: "partial before stop"})
@@ -31,7 +31,7 @@ func TestScheduleLiveProjectionSurvivesCallerContextCancellation(t *testing.T) {
 	cancel()
 
 	testutil.WaitFor(t, "the live projection is stored", func() bool {
-		msg, err := mem.GetMessage(context.Background(), sess.ID, "msg-live")
+		msg, err := sessionStore.GetMessage(context.Background(), sess.ID, "msg-live")
 		return err == nil && msg.Content == "partial before stop"
 	})
 }

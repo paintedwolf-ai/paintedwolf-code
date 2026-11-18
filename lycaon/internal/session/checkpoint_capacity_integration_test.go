@@ -123,10 +123,10 @@ func (s *feedbackReadFailureStore) GetMessage(ctx context.Context, sessionID, me
 }
 
 func TestPolicyFeedbackRetriesRenderingAndPersistenceWithoutLoss(t *testing.T) {
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
-	storage := &feedbackReadFailureStore{Store: mem}
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	storage := &feedbackReadFailureStore{Store: sessionStore}
 	mgr := NewHost(storage, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	decision := &oar.Decision{Effect: oar.EffectNudge, Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "frozen observation"}}
 	testutil.FailErr(t, "queue before renderer", mgr.Coordinator.Guidance.DeliverAdvisories(t.Context(), sess.ID, oar.AnchorCoordinatorPostTurn, decision))
@@ -145,7 +145,7 @@ func TestPolicyFeedbackRetriesRenderingAndPersistenceWithoutLoss(t *testing.T) {
 	}
 	messages, err := mgr.Coordinator.Guidance.TakePolicy(t.Context(), sess.ID)
 	testutil.FailErr(t, "retry persisted feedback", err)
-	stored, err := mem.GetMessages(t.Context(), sess.ID)
+	stored, err := sessionStore.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read transcript", err)
 	if len(messages) != 1 || len(stored) != 1 || messages[0].ID != lease.ID {
 		t.Fatalf("retry duplicated feedback: returned=%d stored=%d", len(messages), len(stored))
@@ -187,8 +187,8 @@ func TestPolicyAdvisoryRoutingAtEveryHostBoundary(t *testing.T) {
 }
 
 func TestPolicyAdvisoryPersistenceUsesScreenedBytesAndAcknowledgesOnce(t *testing.T) {
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	renderer := advisoryTestManager(t).Coordinator.Feedback.Renderer()
 	mgr.SetOARPipeline(nil, renderer)
 	mgr.Runner.Transcript.SetRedactor(func(_ context.Context, msg api.Message) (api.Message, bool) {
@@ -198,7 +198,7 @@ func TestPolicyAdvisoryPersistenceUsesScreenedBytesAndAcknowledgesOnce(t *testin
 		}
 		return msg, true
 	})
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for _, id := range []string{"first", "second"} {
 		decision := &oar.Decision{Effect: oar.EffectNudge, Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "private-fixture"}, Data: map[string]any{"subject": map[string]any{"kind": "task", "id": id}, "observation": "private-fixture"}}
@@ -209,7 +209,7 @@ func TestPolicyAdvisoryPersistenceUsesScreenedBytesAndAcknowledgesOnce(t *testin
 	if len(messages) != 1 || strings.Contains(messages[0].Content, "private-fixture") || !strings.Contains(messages[0].Content, "second") {
 		t.Fatalf("delivery lost screening or subjects: %#v", messages)
 	}
-	stored, err := mem.GetMessage(t.Context(), sess.ID, messages[0].ID)
+	stored, err := sessionStore.GetMessage(t.Context(), sess.ID, messages[0].ID)
 	testutil.FailErr(t, "read stored feedback", err)
 	if stored.Content != messages[0].Content {
 		t.Fatal("model received different bytes from history")

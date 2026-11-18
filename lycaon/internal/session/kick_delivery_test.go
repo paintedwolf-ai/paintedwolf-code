@@ -97,12 +97,12 @@ func TestTurnDeliversEveryQueuedKickAndDropsNoticesForFinishedRounds(t *testing.
 func TestWorkerParentDeliveryPreservesFrozenDecision(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	database := testdbfixture.Open(t, "worker-feedback.db")
-	mem := store.NewSQL(database)
-	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessionStore := store.NewSQL(database)
+	mgr := session.NewHost(sessionStore, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
-	parent, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	parent, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	child, err := mem.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := sessionStore.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 	rule := &oar.Rule{SpecVersion: "1.0", ID: "CHANGED_POLICY", Kind: oar.KindPolicy, Anchor: oar.AnchorWorkerReportCheck, Effect: oar.EffectBlock, Enforcement: "enforce", OnError: "fail_closed", OnFire: []oar.OnFireAction{oar.OnFireIncrementCounter}, Copy: oar.Copy{What: "Changed after queue commit"}}
 	pipeline := oar.NewGuardPipeline(oar.NewRuleSet([]*oar.Rule{rule}), nil, oar.NewCounterStore())
@@ -121,7 +121,7 @@ func TestWorkerParentDeliveryPreservesFrozenDecision(t *testing.T) {
 	if n := pipeline.Counters().Get(child.ID, rule.Qualified(), oar.CounterFire); n != 0 {
 		t.Fatalf("parent generated %d new policy occurrences", n)
 	}
-	messages, err := mem.GetMessages(t.Context(), parent.ID)
+	messages, err := sessionStore.GetMessages(t.Context(), parent.ID)
 	testutil.FailErr(t, "read parent projection", err)
 	found := false
 	for _, message := range messages {

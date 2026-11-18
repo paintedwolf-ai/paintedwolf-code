@@ -231,10 +231,10 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 	registry := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := registry.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: t.TempDir()}}})
 	testutil.FailErr(t, "create project", err)
-	mem := sessionFixture
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
+	sessionStore := sessionFixture
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create session", err)
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetProjectRegistry(registry)
 	ref := api.NavigationReference{ID: "ref-0", Syntax: "code", Mention: "same.go", ProjectID: p.ID, Path: "same.go", Status: api.NavigationAmbiguous, Line: 12, EndLine: 20,
 		Candidates: []api.NavigationTarget{
@@ -244,11 +244,11 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 		},
 	}
 	const content = "See `same.go`."
-	if err := mem.AppendMessages(t.Context(), sess.ID, api.Message{ID: "invalid", Role: api.MessageRoleAssistant, Content: content, NavigationRefs: []api.NavigationReference{ref}}); err == nil {
+	if err := sessionStore.AppendMessages(t.Context(), sess.ID, api.Message{ID: "invalid", Role: api.MessageRoleAssistant, Content: content, NavigationRefs: []api.NavigationReference{ref}}); err == nil {
 		t.Fatal("cross-project candidate was persisted")
 	}
 	ref.Candidates = ref.Candidates[:2]
-	testutil.FailErr(t, "append ambiguous message", mem.AppendMessages(t.Context(), sess.ID, api.Message{ID: "m", Role: api.MessageRoleAssistant, Content: content, NavigationRefs: []api.NavigationReference{ref}}))
+	testutil.FailErr(t, "append ambiguous message", sessionStore.AppendMessages(t.Context(), sess.ID, api.Message{ID: "m", Role: api.MessageRoleAssistant, Content: content, NavigationRefs: []api.NavigationReference{ref}}))
 	index := 1
 	req := api.ResolveMessageNavigationRequest{MessageID: "m", ContentSHA256: sessionstore.NavigationContentHash(content), ReferenceID: ref.ID, CandidateIndex: &index}
 	calls := 0
@@ -265,7 +265,7 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 	if !out.References[0].Deleted || calls != 1 {
 		t.Fatalf("resolution = %+v, calls = %d", out, calls)
 	}
-	stored, err := mem.GetMessage(t.Context(), sess.ID, "m")
+	stored, err := sessionStore.GetMessage(t.Context(), sess.ID, "m")
 	testutil.FailErr(t, "read original reference", err)
 	if stored.NavigationRefs[0].Status != api.NavigationAmbiguous || len(stored.NavigationRefs[0].Candidates) != 2 {
 		t.Fatal("candidate selection rewrote durable binding")
@@ -291,10 +291,10 @@ func TestAssistantCommitAndNotePersistNavigationReferences(t *testing.T) {
 	registry := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := registry.Create(ctx, project.CreateParams{Roots: []project.AttachRootParams{{Path: root}}})
 	testutil.FailErr(t, "create project", err)
-	mem := sessionFixture
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, p.ID)
+	sessionStore := sessionFixture
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create session", err)
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetProjectRegistry(registry)
 
 	testutil.FailErr(t, "append agent note", mgr.Runner.Transcript.Append(ctx, sess.ID, api.Message{
@@ -310,7 +310,7 @@ func TestAssistantCommitAndNotePersistNavigationReferences(t *testing.T) {
 		ID: "answer-1", Role: api.MessageRoleAssistant, Content: "See FINDINGS.md.",
 		Visibility: api.MessageVisibilityTranscript,
 	}))
-	msgs, err := mem.GetMessages(ctx, sess.ID)
+	msgs, err := sessionStore.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read messages", err)
 	if len(msgs) != 2 || len(msgs[0].NavigationRefs) != 1 || len(msgs[1].NavigationRefs) != 1 {
 		t.Fatalf("messages = %+v", msgs)
@@ -326,12 +326,12 @@ func TestNavigationParsesWorktreeAbsolutePathsWithoutFilesystemValidation(t *tes
 	registry := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := registry.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: t.TempDir()}}})
 	testutil.FailErr(t, "project", err)
-	mem := sessionFixture
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
+	sessionStore := sessionFixture
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "session", err)
 	branch := filepath.Join(t.TempDir(), "not-materialized")
-	testutil.FailErr(t, "worktree binding", mem.PutWorktreeBinding(t.Context(), sessionstore.WorktreeBinding{SessionID: sess.ID, ProjectID: p.ID, Toplevel: p.Roots[0].Path, WorktreePath: branch, Branch: "work", BaseBranch: "main"}))
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	testutil.FailErr(t, "worktree binding", sessionStore.PutWorktreeBinding(t.Context(), sessionstore.WorktreeBinding{SessionID: sess.ID, ProjectID: p.ID, Toplevel: p.Roots[0].Path, WorktreePath: branch, Branch: "work", BaseBranch: "main"}))
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetProjectRegistry(registry)
 	rows := []api.Message{{Role: api.MessageRoleAssistant, Content: "[file](" + filepath.ToSlash(filepath.Join(branch, "src/a.go")) + ")", Visibility: api.MessageVisibilityTranscript}}
 	mgr.Runner.Transcript.NavigationRefs(t.Context(), sess.ID, rows)

@@ -241,9 +241,9 @@ func TestLoopRejectsUnofferedToolCalls(t *testing.T) {
 			if !withRead {
 				client.completions[0].ToolCalls = client.completions[0].ToolCalls[1:]
 			}
-			mem := storetest.New(t, testdbseed.DefaultProjectID)
+			sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 			ctx := context.Background()
-			sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			sess.ParentSessionID = "parent-1"
 			sess.AgentType = orchestration.ProfileImplementer
@@ -256,7 +256,7 @@ func TestLoopRejectsUnofferedToolCalls(t *testing.T) {
 				progressCalls++
 				return `{"status":"updated"}`, nil
 			})
-			deps := promptloop.StoreDeps(mem)
+			deps := promptloop.StoreDeps(sessionStore)
 			deps.Model.LLM = client
 			deps.Context.Policy = &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "read"}}}
 			deps.Context.Tools = reg

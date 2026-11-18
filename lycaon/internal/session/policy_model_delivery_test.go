@@ -38,7 +38,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			sessionFixture := storetest.New(t)
 
 			t.Setenv("LYCAON_LLM_MOCK", "1")
-			mem := sessionFixture
+			sessionStore := sessionFixture
 			root := t.TempDir()
 			response := llm.MockResponseEntry{Pattern: ".", Text: "ok"}
 			if anchor == oar.AnchorCoordinatorPreInvoke {
@@ -50,7 +50,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			testutil.FailErr(t, "register command tool", registry.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				return "", nil
 			}))
-			mgr := session.NewHost(mem, session.Models{Client: recorder, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
+			mgr := session.NewHost(sessionStore, session.Models{Client: recorder, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 			projects := project.NewSQLRegistry(sessionFixture.DB())
 			proj, err := project.CreateWithRoot(t.Context(), projects, root)
 			testutil.FailErr(t, "create rooted project", err)
@@ -65,7 +65,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			pipeline.EnableAnchor(anchor)
 			pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
 			mgr.SetOARPipeline(pipeline, oar.NewRenderer(nil, nil))
-			sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, proj.ID)
+			sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, proj.ID)
 			testutil.FailErr(t, "create session", err)
 			_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "continue")
 			testutil.FailErr(t, "run prompt", err)
@@ -81,7 +81,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			if !found {
 				t.Fatalf("%s advisory absent from actual model request", anchor)
 			}
-			messages, err := mem.GetMessages(t.Context(), sess.ID)
+			messages, err := sessionStore.GetMessages(t.Context(), sess.ID)
 			testutil.FailErr(t, "read transcript", err)
 			found = false
 			for _, message := range messages {

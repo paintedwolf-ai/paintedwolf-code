@@ -71,13 +71,13 @@ func spendRunwayHost(t *testing.T, tracker cost.CostTracker, ceilingUSD float64,
 	lim := settings.DefaultSessionLimits()
 	lim.SpendCeilingEnabled = enabled
 	lim.SessionSpendCeilingUSD = ceilingUSD
-	mem := storetest.New(t, testdbseed.DefaultProjectID, "project")
-	mgr := NewHost(mem, Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID, "project")
+	mgr := NewHost(sessionStore, Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfigStock", err)
 	mgr.SetWorkflowHints(hints, nil)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	return mgr, mem
+	return mgr, sessionStore
 }
 
 func recordSessionSpend(t *testing.T, tracker cost.CostTracker, sessionID string, usd float64) {

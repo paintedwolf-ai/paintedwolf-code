@@ -13,16 +13,16 @@ import (
 
 func TestRecoverOrphanedTurnsDrainsMultiplePages(t *testing.T) {
 	ctx := context.Background()
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
-	recovery := NewRecovery(mem, transcript.New(mem, nil), NewStatus(mem), nil)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	recovery := NewRecovery(sessionStore, transcript.New(sessionStore, nil), NewStatus(sessionStore), nil)
 	for i := 0; i < sessionRecoveryPageSize+7; i++ {
-		sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		testutil.FailErr(t, "Create", err)
-		testutil.FailErr(t, "set busy", mem.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+		testutil.FailErr(t, "set busy", sessionStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 	}
 
 	testutil.FailErr(t, "RecoverOrphanedTurns", recovery.RecoverOrphanedTurns(ctx))
-	remaining, err := mem.ListBusySessionIDs(ctx, 1)
+	remaining, err := sessionStore.ListBusySessionIDs(ctx, 1)
 	testutil.FailErr(t, "ListBusySessionIDs", err)
 	if len(remaining) != 0 {
 		t.Fatalf("busy sessions remain after paged recovery: %v", remaining)

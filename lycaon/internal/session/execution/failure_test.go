@@ -68,11 +68,11 @@ func TestTurnFailureReportingPreservesUnreportedCauses(t *testing.T) {
 }
 
 func TestStatusPublishIdleWithMessageOverride(t *testing.T) {
-	mem := storetest.New(t, "proj-1")
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
+	sessionStore := storetest.New(t, "proj-1")
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "create session", err)
 	hub := events.NewMemoryHub()
-	status := NewStatus(mem)
+	status := NewStatus(sessionStore)
 	status.SetPublisher(&events.Publisher{Hub: hub})
 	status.PublishIdle(t.Context(), sess.ID, api.SessionIdleDispositionCompleted)
 	status.PublishIdleWithMessage(t.Context(), sess.ID, api.SessionIdleDispositionCompleted, "Workflow phase plan is waiting on open gate(s): test (WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT).")

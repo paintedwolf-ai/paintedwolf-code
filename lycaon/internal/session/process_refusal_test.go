@@ -63,10 +63,10 @@ func TestHandleCommandRefusalWakesWithDigest(t *testing.T) {
 }
 
 func testHandleCommandRefusalWakesWithDigest(t *testing.T, offered []string) {
-	memory := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Processes.ToolPolicy = newPostToolGuidanceManager(t).ToolPolicy
-	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create waiting session", err)
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	reports := make(chan anchor.Envelope, 1)
@@ -202,11 +202,11 @@ func TestMixedPathRecoveryKeepsTerminalPathsOutsideRequestedGrants(t *testing.T)
 }
 
 func TestCommandCompletionWakesWorkerProcessWait(t *testing.T) {
-	memory := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create waiting worker session", err)
-	testutil.FailErr(t, "mark worker session", memory.UpdateSession(t.Context(), sess.ID, func(s *api.Session) {
+	testutil.FailErr(t, "mark worker session", sessionStore.UpdateSession(t.Context(), sess.ID, func(s *api.Session) {
 		s.ParentSessionID = "parent"
 	}))
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()

@@ -113,23 +113,23 @@ func TestHandleCostSummaryProjectBreakdown(t *testing.T) {
 func TestHandleProjectCostReportIncludesSessionBreakdownAndArchivedChats(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "cost-report.db")
 	tracker := &contractfixture.ProjectReportCountingTracker{CostTracker: cost.NewSQLTracker(sqlDB, nil)}
-	memStore := store.NewSQL(sqlDB)
-	mgr := session.NewHost(memStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
+	sessionStore := store.NewSQL(sqlDB)
+	mgr := session.NewHost(sessionStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
 	reg := project.NewSQLRegistry(sqlDB)
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: memStore, Projects: reg, Sessions: mgr}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionStore, Projects: reg, Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
 	dir := t.TempDir()
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "create project", err)
-	first, err := memStore.Create(t.Context(), wire.CreateSessionRequest{
+	first, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{
 		Posture: wire.SessionPostureBuild, ProjectID: p.ID,
 	}, "")
 	testutil.FailErr(t, "create first session", err)
-	child, err := memStore.CreateChild(t.Context(), first, wire.SpawnChildRequest{
+	child, err := sessionStore.CreateChild(t.Context(), first, wire.SpawnChildRequest{
 		AgentType: "implementer", Prompt: "work",
 	})
 	testutil.FailErr(t, "create worker child", err)
-	second, err := memStore.Create(t.Context(), wire.CreateSessionRequest{
+	second, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{
 		Posture: wire.SessionPostureVet, ProjectID: p.ID,
 	}, "")
 	testutil.FailErr(t, "create second session", err)

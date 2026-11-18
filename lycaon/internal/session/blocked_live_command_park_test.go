@@ -256,11 +256,11 @@ func TestFailedSynthesisKeepsPublishedRecoveryAndCanonicalHistory(t *testing.T) 
 	cfg.ChunkTokenThreshold = 1_000_000
 	cfg.KeepRecentMessages = 2
 
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
-	mgr := NewHost(mem, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, failedCompactionSummarizer{}))
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	block := strings.Repeat("retained fact ", 120)
@@ -272,18 +272,18 @@ func TestFailedSynthesisKeepsPublishedRecoveryAndCanonicalHistory(t *testing.T) 
 		}
 		seed = append(seed, api.Message{ID: fmt.Sprintf("seed-%d", i), Role: role, Content: block})
 	}
-	testutil.FailErr(t, "append canonical history", mem.AppendMessages(t.Context(), sess.ID, seed...))
+	testutil.FailErr(t, "append canonical history", sessionStore.AppendMessages(t.Context(), sess.ID, seed...))
 	mgr.Runner.History.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, 1000, 1000)
 
 	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "first attempt")
 	testutil.FailErr(t, "first prompt", err)
 	mgr.Runner.History.Wait()
-	got, err := mem.Get(t.Context(), sess.ID)
+	got, err := sessionStore.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get session after failure", err)
 	if got.CompactionGeneration == 0 {
 		t.Fatalf("failed synthesis lost its independent baseline: generation %d", got.CompactionGeneration)
 	}
-	if _, ok, viewErr := mem.GetCompactionView(t.Context(), sess.ID); viewErr != nil || !ok {
+	if _, ok, viewErr := sessionStore.GetCompactionView(t.Context(), sess.ID); viewErr != nil || !ok {
 		t.Fatalf("failed synthesis did not retain a view: ok=%v err=%v", ok, viewErr)
 	}
 
@@ -292,12 +292,12 @@ func TestFailedSynthesisKeepsPublishedRecoveryAndCanonicalHistory(t *testing.T) 
 	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "retry")
 	testutil.FailErr(t, "retry prompt", err)
 	mgr.Runner.History.Wait()
-	got, err = mem.Get(t.Context(), sess.ID)
+	got, err = sessionStore.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get session after retry", err)
 	if got.CompactionGeneration == 0 {
 		t.Fatal("successful retry did not persist a compaction view")
 	}
-	if _, ok, viewErr := mem.GetCompactionView(t.Context(), sess.ID); viewErr != nil || !ok {
+	if _, ok, viewErr := sessionStore.GetCompactionView(t.Context(), sess.ID); viewErr != nil || !ok {
 		t.Fatalf("successful retry view: ok=%v err=%v", ok, viewErr)
 	}
 }
