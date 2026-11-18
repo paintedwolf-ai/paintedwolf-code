@@ -46,7 +46,7 @@ type RuleMetadata struct {
 	Notes      string `yaml:"notes,omitempty"`
 }
 
-// LoadRuleFile reads and parses a lycaon rule YAML file.
+// LoadRuleFile reads a scanner rule YAML file.
 func LoadRuleFile(path string) (*RuleFile, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -84,7 +84,7 @@ func validateRule(r Rule) error {
 	return nil
 }
 
-// ValidateRuleFile validates all rules in a lycaon gate rule file.
+// ValidateRuleFile checks structural rule contracts.
 func ValidateRuleFile(path string) error {
 	rf, err := LoadRuleFile(path)
 	if err != nil {

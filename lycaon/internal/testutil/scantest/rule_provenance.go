@@ -46,7 +46,7 @@ type LycaonProvenanceBlock struct {
 	Files      []ProvenanceFileEntry `yaml:"files"`
 }
 
-// LycaonProvenanceOriginBundledInRepo marks first-party gap-fill rules shipped in-repo (CC-BY-4.0).
+// LycaonProvenanceOriginBundledInRepo identifies bundled first-party rules.
 const LycaonProvenanceOriginBundledInRepo = "bundled-in-repo"
 
 // LoadRulesProvenance returns the bundled provenance ledger for the shipped rules.
