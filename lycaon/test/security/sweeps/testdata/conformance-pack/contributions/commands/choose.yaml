@@ -16,5 +16,7 @@ interaction:
         requirement: conformance/sweep:tracker
         tool: list_items
 action:
-  kind: composer_prefill
-  text: Conformance choice
+  kind: mcp_tool
+  requirement: conformance/sweep:tracker
+  tool: get_item
+result: output
