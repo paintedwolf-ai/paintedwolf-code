@@ -1,6 +1,6 @@
 import { expect, type Locator } from "@playwright/test";
 import {
-  apiSeedSessionTranscript, bootstrapChatSession, liveChatStage,
+  activateProject, apiSeedSessionTranscript, bootstrapChatSession, expectShellReady, liveChatStage, openSessionRow,
   modelIndependentWebE2e as test, settledChatSessionId, transcriptMessages,
 } from "../helpers.ts";
 
@@ -14,7 +14,7 @@ async function bounds(element: Locator) {
 for (const scale of [1, 53 / 17]) {
   test(`visible transcript edges at text scale ${scale}`, async ({ page, request }, info) => {
     await page.setViewportSize({ width: 1600, height: 1200 });
-    await bootstrapChatSession(page, request);
+    const project = await bootstrapChatSession(page, request);
     const session = await settledChatSessionId(page);
     const opening = crypto.randomUUID();
     const call = crypto.randomUUID();
@@ -48,6 +48,9 @@ for (const scale of [1, 53 / 17]) {
       await route.fulfill({ response, json: data });
     });
     await page.reload();
+    await expectShellReady(page);
+    await activateProject(page, project.id);
+    await openSessionRow(page, session);
     const stage = liveChatStage(page);
     const review = stage.getByTestId("turn-walk-card");
     await expect(review).toBeVisible();

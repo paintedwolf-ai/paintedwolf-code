@@ -65,31 +65,31 @@ export function TurnWalkCard(props: Props) {
     <Show when={summary()?.steps ? summary() : null}>
       {(value) => (
         <div class="den-seam den-seam--in-row" data-seam={props.seam}>
-        <aside class="den-transcript-card den-turn-walk" data-testid="turn-walk-card">
-          <div class="den-turn-walk__copy">
-            <strong>Changes in this turn</strong>
-            <span>
-              {value().steps} {value().steps === 1 ? "step" : "steps"}
-              <Show when={value().items > 0}>
-                {" "}across {value().items} {value().items === 1 ? "item" : "items"}
+          <aside class="den-transcript-card den-turn-walk" data-testid="turn-walk-card">
+            <div class="den-turn-walk__copy">
+              <strong>Changes in this turn</strong>
+              <span>
+                {value().steps} {value().steps === 1 ? "step" : "steps"}
+                <Show when={value().items > 0}>
+                  {" "}across {value().items} {value().items === 1 ? "item" : "items"}
+                </Show>
+              </span>
+            </div>
+            <div class="den-turn-walk__actions">
+              <Show when={value().items > 0 && value().turn > 0}>
+                <button type="button" class="den-turn-walk__action den-turn-walk__action--quiet"
+                  data-testid="turn-diffs-action" onClick={openDiffs}>
+                  <ThemeIcon slot="diff" size={15} />
+                  All diffs
+                </button>
               </Show>
-            </span>
-          </div>
-          <div class="den-turn-walk__actions">
-            <Show when={value().items > 0 && value().turn > 0}>
-              <button type="button" class="den-turn-walk__action den-turn-walk__action--quiet"
-                data-testid="turn-diffs-action" onClick={openDiffs}>
-                <ThemeIcon slot="diff" size={15} />
-                All diffs
+              <button type="button" class="den-turn-walk__action"
+                data-testid="turn-walk-action" onPointerEnter={prepare} onFocus={prepare} onClick={startWalk}>
+                <ThemeIcon slot="walk" size={15} />
+                Walk from here
               </button>
-            </Show>
-            <button type="button" class="den-turn-walk__action"
-              data-testid="turn-walk-action" onPointerEnter={prepare} onFocus={prepare} onClick={startWalk}>
-              <ThemeIcon slot="walk" size={15} />
-              Walk from here
-            </button>
-          </div>
-        </aside>
+            </div>
+          </aside>
         </div>
       )}
     </Show>
