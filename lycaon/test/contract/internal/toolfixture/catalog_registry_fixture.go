@@ -308,10 +308,3 @@ func wireContractProgramServices(t *testing.T, rt *toolhost.Runtime, sqlDB db.Ha
 		contractcheck.FailErr(t, "rt.Commands.SetProgramServices failed", err)
 	}
 }
-
-func BootRegisteredToolSet(t *testing.T, reg *tools.DefaultRegistry) map[string]bool {
-	t.Helper()
-	registered, err := tools.BootRegisteredToolSet(reg)
-	contractcheck.FailErr(t, "tools.BootRegisteredToolSet failed", err)
-	return registered
-}

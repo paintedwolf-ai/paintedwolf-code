@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/tools"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,7 @@ func TestNativeToolsBeforeMultiRootSandbox(t *testing.T) {
 	lycaonRoot := filepath.Join(root, "lycaon")
 	// Multi-root sandbox depends on native path tools — boot registry must expose them.
 	reg := toolfixture.ContractServeBootRegistry(t)
-	registered := toolfixture.BootRegisteredToolSet(t, reg)
+	registered := tools.RegisteredToolSet(reg)
 	for _, tool := range []string{"command", "code_rewrite", "summarize", "survey_repo"} {
 		if !registered[tool] {
 			t.Fatalf("native tool %q must be registered before multi-root sandbox", tool)

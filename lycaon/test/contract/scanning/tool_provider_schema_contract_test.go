@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"testing"
 
@@ -16,7 +17,7 @@ import (
 // TestServeBootRegistryToolsHaveProviderArgsSchema checks every provider projection.
 func TestServeBootRegistryToolsHaveProviderArgsSchema(t *testing.T) {
 	reg := toolfixture.ContractServeBootRegistry(t)
-	if err := tools.ValidateRegistryProviderArgsSchemas(reg); err != nil {
+	if err := toolstest.ValidateRegistryProviderArgsSchemas(reg); err != nil {
 		contractcheck.FailErr(t, "validate boot registry provider args schemas", err)
 	}
 }
@@ -26,7 +27,7 @@ func TestServeBootToolMetadataMatchesCatalog(t *testing.T) {
 	cfg, _, err := extpacks.LoadEffectiveToolSchemas(contractcheck.StockCatalog(t))
 	contractcheck.FailErr(t, "LoadEffectiveToolSchemas", err)
 	reg := toolfixture.ContractServeBootRegistry(t)
-	if err := tools.ValidateCatalogSchemaParity(reg, cfg); err != nil {
+	if err := toolstest.ValidateCatalogSchemaParity(reg, cfg); err != nil {
 		contractcheck.FailErr(t, "validate catalog metadata", err)
 	}
 }
@@ -44,7 +45,7 @@ func TestCoordinatorTrimmedToolsKeepProviderArgsSchema(t *testing.T) {
 	}
 	full := tools.ToolMeta{Name: "read", Description: meta.Description, ArgsSchema: meta.ArgsSchema}
 	trimmed := tools.ProjectProviderToolMeta(full)
-	if err := tools.ValidateProviderArgsSchema(trimmed); err != nil {
+	if err := toolstest.ValidateProviderArgsSchema(trimmed); err != nil {
 		contractcheck.FailErr(t, "validate trimmed coordinator read schema", err)
 	}
 }
@@ -62,7 +63,7 @@ func TestCoordinatorTrimmedCatalogRootsAreProviderSafe(t *testing.T) {
 		if !ok {
 			t.Fatalf("ToolMeta(%q) missing after LoadSchemaDir", name)
 		}
-		for _, key := range tools.FunctionParametersRootForbiddenKeys() {
+		for _, key := range []string{"oneOf", "anyOf", "allOf", "enum", "const", "not"} {
 			if _, has := yamlMeta.ArgsSchema[key]; has {
 				catalogRoots[name] = append(catalogRoots[name], key)
 			}
@@ -72,7 +73,7 @@ func TestCoordinatorTrimmedCatalogRootsAreProviderSafe(t *testing.T) {
 			Description: yamlMeta.Description,
 			ArgsSchema:  yamlMeta.ArgsSchema,
 		})
-		if err := tools.ValidateProviderArgsSchema(trimmed); err != nil {
+		if err := toolstest.ValidateProviderArgsSchema(trimmed); err != nil {
 			contractcheck.FailErr(t, "validate trimmed "+name, err)
 		}
 		if err := tools.ValidateFunctionParametersRoot(trimmed.ArgsSchema); err != nil {

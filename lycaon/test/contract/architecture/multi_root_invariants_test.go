@@ -22,7 +22,7 @@ import (
 
 func TestMultiRootEveryBootToolClassified(t *testing.T) {
 	reg := toolfixture.ContractServeBootRegistry(t)
-	registered := toolfixture.BootRegisteredToolSet(t, reg)
+	registered := tools.RegisteredToolSet(reg)
 	for name := range registered {
 		if !multiRootClassified(name) {
 			t.Errorf("boot tool %q is not classified — add it to multi_root in native-tools.yaml", name)
@@ -32,7 +32,7 @@ func TestMultiRootEveryBootToolClassified(t *testing.T) {
 
 func TestMultiRootExemptionHygiene(t *testing.T) {
 	reg := toolfixture.ContractServeBootRegistry(t)
-	registered := toolfixture.BootRegisteredToolSet(t, reg)
+	registered := tools.RegisteredToolSet(reg)
 	for _, name := range multiRootProbeExemptNames() {
 		reason, _ := multiRootProbeExemption(name)
 		if strings.TrimSpace(reason) == "" {
@@ -50,7 +50,7 @@ func TestMultiRootExemptionHygiene(t *testing.T) {
 
 func TestMultiRootCapabilityDeclaredNamesAreBootTools(t *testing.T) {
 	reg := toolfixture.ContractServeBootRegistry(t)
-	registered := toolfixture.BootRegisteredToolSet(t, reg)
+	registered := tools.RegisteredToolSet(reg)
 	schemas := contractToolSchemas(t)
 	manifest, err := nativemanifest.Load()
 	contractcheck.FailErr(t, "load native manifest", err)
@@ -74,7 +74,7 @@ func TestMultiRootPathDiscoveryToolsRejectUnknownLabel(t *testing.T) {
 	fix := newMultiRootFixture(t)
 	ctx := context.Background()
 	probe := "@missing/secondary-sentinel.txt"
-	registered := toolfixture.BootRegisteredToolSet(t, reg)
+	registered := tools.RegisteredToolSet(reg)
 	program := toolfixture.NewProgramFixture(t)
 	for _, name := range multiRootProbeNames(t, registered) {
 		cap := multiRootCapabilityOf(name)
@@ -137,7 +137,7 @@ func TestMultiRootZeroRootsStructuredReject(t *testing.T) {
 		Identity: tools.InvocationIdentity{Agent: "implement",
 			SessionID: "s1"},
 	}
-	registered := toolfixture.BootRegisteredToolSet(t, reg)
+	registered := tools.RegisteredToolSet(reg)
 	program := toolfixture.NewProgramFixture(t)
 	for _, name := range multiRootProbeNames(t, registered) {
 		cap := multiRootCapabilityOf(name)
