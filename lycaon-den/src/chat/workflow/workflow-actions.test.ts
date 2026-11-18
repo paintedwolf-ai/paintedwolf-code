@@ -268,6 +268,54 @@ describe("exitActiveWorkflow on a stale view", () => {
     expect(exitWorkflowRun).toHaveBeenCalledTimes(1);
   });
 
+  it("exits the host's catalog run when a typed /exit named a stale run", async () => {
+    const ambient: WorkflowRun = { ...terminalRun, id: "run-ambient", workflow_id: "build", status: "canceled" };
+    const child: WorkflowRun = { ...planRun, id: "run-child", workflow_id: "research", parent_run_id: "run-plan", revision: 1 };
+    const plan = { ...planRun, revision: 7, parent_run_id: "run-host-ambient" };
+    const hostAmbient: WorkflowRun = { ...terminalRun, id: "run-host-ambient", status: "paused_on_child" };
+    const exited = { ...plan, status: "canceled" as const };
+    const exitWorkflowRun = vi.fn()
+      .mockRejectedValueOnce(new LycaonApiError("ended", 409, "workflow_run_not_active"))
+      .mockResolvedValueOnce(exited);
+    const runs = new Map([[plan.id, plan], [hostAmbient.id, hostAmbient]]);
+    const client = stubClient({
+      exitWorkflowRun,
+      getActiveWorkflowRun: vi.fn().mockResolvedValue(child),
+      getWorkflowRun: vi.fn((id: string) => Promise.resolve(runs.get(id))),
+      listSessionWorkflowRuns: vi.fn().mockResolvedValue({ runs: [] }),
+      listWorkflows: vi.fn().mockResolvedValue([]),
+      listBlueprints: vi.fn().mockResolvedValue([]),
+    });
+    const store = createAppStore();
+    store.actions.setCurrentSession({ id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    store.actions.setWorkflowState("s1", store.state.sessionViewEpoch, {
+      activeWorkflowRun: ambient, workflowRuns: [ambient], workflowCatalog: [], blueprints: [],
+    });
+
+    await expect(exitActiveWorkflow(store, client, "s1", "/project", [])).resolves.toEqual(exited);
+    expect(exitWorkflowRun.mock.calls.map(([id, body]) => [id, body.expected_revision])).toEqual([["run-ambient", 1], ["run-plan", 7]]);
+  });
+
+  it("leaves a typed /exit settled when the host has only the ambient run", async () => {
+    const ambient: WorkflowRun = { ...terminalRun, id: "run-ambient", status: "canceled" };
+    const exitWorkflowRun = vi.fn().mockRejectedValue(new LycaonApiError("ended", 409, "workflow_run_not_active"));
+    const client = stubClient({
+      exitWorkflowRun,
+      getActiveWorkflowRun: vi.fn().mockResolvedValue({ ...terminalRun, id: "run-new-ambient", status: "running" }),
+      listSessionWorkflowRuns: vi.fn().mockResolvedValue({ runs: [] }),
+      listWorkflows: vi.fn().mockResolvedValue([]),
+      listBlueprints: vi.fn().mockResolvedValue([]),
+    });
+    const store = createAppStore();
+    store.actions.setCurrentSession({ id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    store.actions.setWorkflowState("s1", store.state.sessionViewEpoch, {
+      activeWorkflowRun: ambient, workflowRuns: [ambient], workflowCatalog: [], blueprints: [],
+    });
+
+    await expect(exitActiveWorkflow(store, client, "s1", "/project", [])).resolves.toBeNull();
+    expect(exitWorkflowRun).toHaveBeenCalledTimes(1);
+  });
+
   it("reports any other refusal", async () => {
     const refusal = new LycaonApiError("denied", 403, "forbidden");
     const client = exitClient(vi.fn().mockRejectedValue(refusal), planRun);

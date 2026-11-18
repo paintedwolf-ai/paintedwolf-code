@@ -11,7 +11,7 @@ import { isApiErrorCode } from "../../api/http.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { projectIdForPath } from "../../store/app-state.ts";
 import type { Project } from "../../api/types.ts";
-import { catalogWorkflowRun } from "../../workflow/workflow-run-stack.ts";
+import { catalogWorkflowRun, isAmbientRootRun } from "../../workflow/workflow-run-stack.ts";
 
 /** Refusals that mean the run moved under the caller's view of it. */
 const WORKFLOW_CHANGED_CODES = [
@@ -220,10 +220,21 @@ export async function exitActiveWorkflow(
     return await exit(active);
   } catch (err) {
     if (!isApiErrorCode(err, EXIT_STALE_CODES)) throw err;
-    // The run advanced or ended after the view was read; the exit still names this run.
-    const current = await client.getWorkflowRun(active.id);
-    return EXITABLE_STATUSES.has(current.status) ? exit(current) : current;
+    // The view was stale: a named run is reread; a typed /exit means the host's current catalog run.
+    const current = target ? await client.getWorkflowRun(target.id) : await hostCatalogRun(client, sessionId);
+    return current && EXITABLE_STATUSES.has(current.status) ? exit(current) : current ?? null;
   }
+}
+
+async function hostCatalogRun(client: LycaonClient, sessionId: string): Promise<WorkflowRun | null> {
+  let run = await client.getActiveWorkflowRun(sessionId);
+  if (!run || isAmbientRootRun(run)) return null;
+  while (run.parent_run_id) {
+    const parent = await client.getWorkflowRun(run.parent_run_id);
+    if (isAmbientRootRun(parent)) break;
+    run = parent;
+  }
+  return run;
 }
 
 export async function pauseActiveWorkflow(
