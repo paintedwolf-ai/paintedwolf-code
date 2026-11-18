@@ -10,11 +10,11 @@ function matchesAny(file, globs) {
   return globs.some((glob) => path.posix.matchesGlob(file, glob));
 }
 
-/** An invariant governs production files under `files`; `tests: true` extends it to test files. */
-export function governs(invariant, file) {
-  if (!matchesAny(file, invariant.files)) return false;
-  if (invariant.ignores && matchesAny(file, invariant.ignores)) return false;
-  return invariant.tests === true || !TEST_FILE.test(file);
+/** A contract governs production files under `files`; `tests: true` extends it to test files. */
+export function governs(contract, file) {
+  if (!matchesAny(file, contract.files)) return false;
+  if (contract.ignores && matchesAny(file, contract.ignores)) return false;
+  return contract.tests === true || !TEST_FILE.test(file);
 }
 
 /** The module a specifier names: a package name, or a path relative to the lint root. */
@@ -49,37 +49,37 @@ function takenNames(node) {
 export default {
   meta: {
     type: "problem",
-    docs: { description: "Source invariants scoped to the files they govern." },
+    docs: { description: "Den source contracts scoped to the files they govern." },
     schema: [{ type: "array", items: { type: "object" } }],
-    messages: { invariant: "{{message}} [{{name}}]" },
+    messages: { contract: "{{message}} [{{name}}]" },
   },
   create(context) {
     const file = posix(path.relative(context.cwd, context.filename));
-    const invariants = context.options[0].filter((invariant) => governs(invariant, file));
+    const contracts = context.options[0].filter((contract) => governs(contract, file));
     const listeners = new Map();
     const listen = (selector, handler) => {
       const handlers = listeners.get(selector) ?? [];
       handlers.push(handler);
       listeners.set(selector, handlers);
     };
-    const report = (invariant, node) =>
-      context.report({ node, messageId: "invariant", data: { message: invariant.message, name: invariant.name } });
+    const report = (contract, node) =>
+      context.report({ node, messageId: "contract", data: { message: contract.message, name: contract.name } });
 
-    for (const invariant of invariants) {
-      for (const selector of invariant.syntax ?? []) listen(selector, (node) => report(invariant, node));
+    for (const contract of contracts) {
+      for (const selector of contract.syntax ?? []) listen(selector, (node) => report(contract, node));
     }
 
-    const importInvariants = invariants.filter((invariant) => invariant.imports);
-    if (importInvariants.length > 0) {
+    const importContracts = contracts.filter((contract) => contract.imports);
+    if (importContracts.length > 0) {
       const check = (node) => {
         if (node.source?.type !== "Literal" || typeof node.source.value !== "string") return;
         const module = importedModule(node.source.value, file);
         const names = takenNames(node);
-        for (const invariant of importInvariants) {
-          for (const ban of invariant.imports) {
+        for (const contract of importContracts) {
+          for (const ban of contract.imports) {
             if (!bansModule(ban, module)) continue;
             if (ban.names && names && !names.some((name) => ban.names.includes(name))) continue;
-            report(invariant, node);
+            report(contract, node);
             break;
           }
         }

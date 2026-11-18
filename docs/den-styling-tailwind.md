@@ -174,7 +174,7 @@ Shared interactive chrome uses Solid primitives rather than one-off CSS button b
 - `DenNumberInput` is the only component that renders `type="number"`; `DenInput` does not accept that type. It preserves numeric validation and arrow-key semantics while painting the steppers. Search decorations, autofill paint, and textarea resize affordances are normalized globally. File inputs remain hidden behind an explicit app control.
 - A content-rich picker may define its popup layout, but must provide the same dismissal, focus return, arrow, Home/End, and activation behavior as the shared primitives.
 
-The lint invariants in `lycaon-den/eslint/invariants/native-chrome.js` prevent native select DOM and unowned checkbox, radio, number, or visible file controls from appearing.
+The source contracts in `lycaon-den/eslint/source-contracts/native-chrome.js` prevent native select DOM and unowned checkbox, radio, number, or visible file controls from appearing.
 
 ### OS light / dark
 
@@ -211,7 +211,7 @@ Proof: `styling/resize-invalidation-invariants.test.ts` (registration, reader pl
 
 ## Invariants
 
-**`src/styling/styling-invariants.test.ts` is the list.** Its `it(…)` titles are the roster, about fifty of them across `Tailwind adoption invariants`, `utility-first adoption ratchets`, and the helper suite, plus the sibling suites named through this page (`resize-invalidation-invariants`, `focus-motion-a11y`) and the lint invariants in `lycaon-den/eslint/invariants/`. Read that file for the complete set; this page explains why the rules exist.
+**`src/styling/styling-invariants.test.ts` is the list.** Its `it(…)` titles are the roster, about fifty of them across `Tailwind adoption invariants`, `utility-first adoption ratchets`, and the helper suite, plus the sibling suites named through this page (`resize-invalidation-invariants`, `focus-motion-a11y`) and the source contracts in `lycaon-den/eslint/source-contracts/`. Read that file for the complete set; this page explains why the rules exist.
 
 | Category | What it protects | Examples |
 |----------|------------------|----------|

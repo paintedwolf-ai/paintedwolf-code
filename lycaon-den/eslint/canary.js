@@ -1,9 +1,9 @@
-// Proves the lint invariants can fail: every invariant and local rule is run through the
+// Proves the source contracts can fail: every contract and local rule is run through the
 // shipped config on source seeded with its violation.
 import { globSync } from "node:fs";
 import path from "node:path";
 import { ESLint } from "eslint";
-import invariants from "./invariants/index.js";
+import contracts from "./source-contracts/index.js";
 import { cases as computationCases } from "./rules/no-computation-in-jsx-callback.js";
 import { cases as statusCases } from "./rules/no-http-error-status-branching.js";
 import { cases as draftCases } from "./rules/no-keyed-settings-draft.js";
@@ -13,23 +13,23 @@ import { cases as leakCases } from "./rules/no-show-accessor-prop-leak.js";
 const denRoot = path.resolve(import.meta.dirname, "..");
 const failures = [];
 
-// An invariant that governs nothing, or exempts nothing, has outlived its subject.
+// A contract that governs nothing, or exempts nothing, has outlived its subject.
 const names = new Set();
-for (const invariant of invariants) {
-  if (names.has(invariant.name)) failures.push(`${invariant.name}: declared twice`);
-  names.add(invariant.name);
-  for (const glob of [...invariant.files, ...(invariant.ignores ?? [])]) {
-    if (globSync(glob, { cwd: denRoot }).length === 0) failures.push(`${invariant.name}: ${glob} matches no file`);
+for (const contract of contracts) {
+  if (names.has(contract.name)) failures.push(`${contract.name}: declared twice`);
+  names.add(contract.name);
+  for (const glob of [...contract.files, ...(contract.ignores ?? [])]) {
+    if (globSync(glob, { cwd: denRoot }).length === 0) failures.push(`${contract.name}: ${glob} matches no file`);
   }
 }
 
 const cases = [
-  ...invariants.map((invariant) => ({
-    label: invariant.name,
-    rule: "den/invariants",
-    file: invariant.seed.file ?? invariant.files[0],
-    code: invariant.seed.code,
-    marker: `[${invariant.name}]`,
+  ...contracts.map((contract) => ({
+    label: contract.name,
+    rule: "den/source-contracts",
+    file: contract.seed.file ?? contract.files[0],
+    code: contract.seed.code,
+    marker: `[${contract.name}]`,
     some: true,
   })),
   ...[
