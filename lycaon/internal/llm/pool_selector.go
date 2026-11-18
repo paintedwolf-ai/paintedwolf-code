@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
-	"fmt"
 	"math/big"
 	"sync"
 )
@@ -55,36 +54,6 @@ func (s *PoolSelector) SelectOne(ctx context.Context) (*ModelSelection, error) {
 	}
 }
 
-// SelectGroup picks n models maximizing diversity for group dispatch.
-func (s *PoolSelector) SelectGroup(ctx context.Context, n int) ([]ModelSelection, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if n <= 0 {
-		return nil, fmt.Errorf("select group: n must be positive")
-	}
-	s.mu.Lock()
-	pool := append([]ModelRef(nil), s.policy.AgentPool.Models...)
-	coord := s.policy.Coordinator
-	s.mu.Unlock()
-
-	if len(pool) == 0 {
-		out := make([]ModelSelection, n)
-		sel := selectionFromRef(coord, ModelRoleCoordinator, false)
-		for i := range out {
-			out[i] = *sel
-		}
-		return out, nil
-	}
-
-	picked := diversePick(pool, n)
-	out := make([]ModelSelection, len(picked))
-	for i, ref := range picked {
-		out[i] = *selectionFromRef(ref, ModelRolePool, false)
-	}
-	return out, nil
-}
-
 func selectionFromRef(ref ModelRef, role ModelRole, fallback bool) *ModelSelection {
 	return &ModelSelection{
 		ProviderID: ref.ProviderID,
@@ -92,58 +61,6 @@ func selectionFromRef(ref ModelRef, role ModelRole, fallback bool) *ModelSelecti
 		Role:       role,
 		Fallback:   fallback,
 	}
-}
-
-func poolKey(ref ModelRef) string {
-	return ref.ProviderID + "\x00" + ref.Model
-}
-
-func providerKey(ref ModelRef) string {
-	return ref.ProviderID
-}
-
-// diversePick greedily maximizes distinct provider_id then model pairs.
-func diversePick(pool []ModelRef, n int) []ModelRef {
-	if n <= 0 || len(pool) == 0 {
-		return nil
-	}
-	remaining := append([]ModelRef(nil), pool...)
-	var out []ModelRef
-	usedProviders := make(map[string]struct{})
-	usedKeys := make(map[string]struct{})
-
-	for len(out) < n && len(remaining) > 0 {
-		bestIdx := -1
-		bestScore := -1
-		for i, ref := range remaining {
-			score := 0
-			pk := providerKey(ref)
-			k := poolKey(ref)
-			if _, ok := usedProviders[pk]; !ok {
-				score += 2
-			}
-			if _, ok := usedKeys[k]; !ok {
-				score += 1
-			}
-			if score > bestScore {
-				bestScore = score
-				bestIdx = i
-			}
-		}
-		if bestIdx < 0 {
-			break
-		}
-		ref := remaining[bestIdx]
-		out = append(out, ref)
-		usedProviders[providerKey(ref)] = struct{}{}
-		usedKeys[poolKey(ref)] = struct{}{}
-		remaining = append(remaining[:bestIdx], remaining[bestIdx+1:]...)
-	}
-
-	for len(out) < n {
-		out = append(out, out[len(out)%len(pool)])
-	}
-	return out
 }
 
 func randInt(max int) (int, error) {

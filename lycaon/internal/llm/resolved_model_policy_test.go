@@ -25,13 +25,6 @@ func TestRuntimePolicyDefaultsReachWorkersWithoutPersistence(t *testing.T) {
 			if selected.ProviderID != want.ProviderID || selected.Model != want.Model {
 				t.Fatalf("worker = %+v, want %+v", selected, want)
 			}
-			group, err := view.SelectGroup(t.Context(), 3)
-			testutil.FailErr(t, "select worker group", err)
-			for _, member := range group {
-				if member.ProviderID != want.ProviderID || member.Model != want.Model {
-					t.Fatalf("group member = %+v, want %+v", member, want)
-				}
-			}
 			child, err := view.ResolveSession(t.Context(), &api.Session{ParentSessionID: "parent"})
 			testutil.FailErr(t, "resolve worker session", err)
 			if child.ProviderID != want.ProviderID || child.Model != want.Model {

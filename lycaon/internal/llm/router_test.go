@@ -107,17 +107,3 @@ func TestSelectUsesPool(t *testing.T) {
 		t.Fatalf("role = %q want pool", sel.Role)
 	}
 }
-
-func TestSelectGroupReturnsPoolModels(t *testing.T) {
-	r := testRouter(t)
-	group, err := r.SelectGroup(context.Background(), 2)
-	testutil.FailErr(t, "r.SelectGroup failed", err)
-	if len(group) != 2 {
-		t.Fatalf("len = %d", len(group))
-	}
-	for i, sel := range group {
-		if sel.Role != ModelRolePool {
-			t.Fatalf("group[%d] role = %q want pool", i, sel.Role)
-		}
-	}
-}

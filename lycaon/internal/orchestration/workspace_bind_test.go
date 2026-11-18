@@ -47,7 +47,7 @@ func (s *failingUpdateWorkers) UpdateUnit(context.Context, string, orchestration
 func TestBindLegWorkspacesSharedSkips(t *testing.T) {
 	workers := orchestration.NewMemoryTopologyWorkers()
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{Workers: workers})
-	bindings, err := orch.BindUnitWorkspacesIfIsolatedForTest(context.Background(), orchestration.TopologySpec{WorkspaceMode: orchestration.WorkspaceShared}, "/tmp", "batch", []string{"unit-1"})
+	bindings, err := orch.BindUnitWorkspacesIfIsolatedForTest(context.Background(), orchestration.TopologySpec{Pattern: orchestration.TopologyPack, WorkspaceMode: orchestration.WorkspaceShared}, "/tmp", "batch", []string{"unit-1"})
 	if err != nil || len(bindings) != 0 {
 		t.Fatalf("bindings = %v err=%v", bindings, err)
 	}
@@ -90,10 +90,10 @@ func TestBindLegWorkspacesPreservesRecoveryBindings(t *testing.T) {
 	created, _, err := workers.CreateBatch(ctx, orchestration.TopologyBatch{SessionID: "session", ProjectID: "project", WorkspacePath: dir, Task: "task"}, units)
 	testutil.FailErr(t, "create batch", err)
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{Workers: workers, Workspaces: binder})
-	bindings, err := orch.BindUnitWorkspacesIfIsolatedForTest(ctx, orchestration.TopologySpec{WorkspaceMode: orchestration.WorkspaceIsolated}, dir, created.ID, []string{"running", "complete", "bound"})
+	bindings, err := orch.BindUnitWorkspacesIfIsolatedForTest(ctx, orchestration.TopologySpec{Pattern: orchestration.TopologyPack, WorkspaceMode: orchestration.WorkspaceIsolated}, dir, created.ID, []string{"running", "complete", "bound"})
 	testutil.FailErr(t, "restore workspace bindings", err)
 	if len(bindings) != 0 || len(binder.created) != 0 {
-		t.Fatal("recovery recreated or took ownership of existing workspaces")
+		t.Fatal("recovery registered existing workspaces for replacement or cleanup")
 	}
 	got, err := workers.GetUnit(ctx, created.ID, "running")
 	testutil.FailErr(t, "read running unit", err)
@@ -110,7 +110,7 @@ func TestBindLegWorkspacesDestroysBindingsWhenLegLookupFails(t *testing.T) {
 	created, _, err := workers.CreateBatch(ctx, orchestration.TopologyBatch{SessionID: "sess", ProjectID: "proj-1", WorkspacePath: dir, Task: "t"}, []orchestration.TopologyUnit{{ID: "unit-1", WorkID: "probe-0", Status: api.LegStatusPending}})
 	testutil.FailErr(t, "create batch", err)
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{Workers: workers, Workspaces: binder})
-	if _, err := orch.BindUnitWorkspacesIfIsolatedForTest(ctx, orchestration.TopologySpec{WorkspaceMode: orchestration.WorkspaceIsolated}, dir, created.ID, []string{"unit-1", "unit-ghost"}); err == nil {
+	if _, err := orch.BindUnitWorkspacesIfIsolatedForTest(ctx, orchestration.TopologySpec{Pattern: orchestration.TopologyPack, WorkspaceMode: orchestration.WorkspaceIsolated}, dir, created.ID, []string{"unit-1", "unit-ghost"}); err == nil {
 		t.Fatal("expected the unknown unit to fail the bind")
 	}
 	if len(binder.destroyed) != 1 || binder.destroyed[0].ID != "unit-1" {
@@ -130,7 +130,7 @@ func TestBindLegWorkspacesDestroysBindingsWhenCreateFails(t *testing.T) {
 	created, _, err := workers.CreateBatch(ctx, orchestration.TopologyBatch{SessionID: "sess", ProjectID: "proj-1", WorkspacePath: dir, Task: "t"}, units)
 	testutil.FailErr(t, "create batch", err)
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{Workers: workers, Workspaces: binder})
-	if _, err := orch.BindUnitWorkspacesIfIsolatedForTest(ctx, orchestration.TopologySpec{WorkspaceMode: orchestration.WorkspaceIsolated}, dir, created.ID, []string{"unit-1", "unit-2"}); err == nil {
+	if _, err := orch.BindUnitWorkspacesIfIsolatedForTest(ctx, orchestration.TopologySpec{Pattern: orchestration.TopologyPack, WorkspaceMode: orchestration.WorkspaceIsolated}, dir, created.ID, []string{"unit-1", "unit-2"}); err == nil {
 		t.Fatal("expected the forced create failure to fail the bind")
 	}
 	if len(binder.destroyed) != 1 || binder.destroyed[0].ID != "unit-1" {
@@ -146,7 +146,7 @@ func TestBindLegWorkspacesDestroysBindingsWhenLegUpdateFails(t *testing.T) {
 	created, _, err := workers.CreateBatch(ctx, orchestration.TopologyBatch{SessionID: "sess", ProjectID: "proj-1", WorkspacePath: dir, Task: "t"}, []orchestration.TopologyUnit{{ID: "unit-1", WorkID: "probe-0", Status: api.LegStatusPending}})
 	testutil.FailErr(t, "create batch", err)
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{Workers: workers, Workspaces: binder})
-	if _, err := orch.BindUnitWorkspacesIfIsolatedForTest(ctx, orchestration.TopologySpec{WorkspaceMode: orchestration.WorkspaceIsolated}, dir, created.ID, []string{"unit-1"}); err == nil {
+	if _, err := orch.BindUnitWorkspacesIfIsolatedForTest(ctx, orchestration.TopologySpec{Pattern: orchestration.TopologyPack, WorkspaceMode: orchestration.WorkspaceIsolated}, dir, created.ID, []string{"unit-1"}); err == nil {
 		t.Fatal("expected the forced update failure to fail the bind")
 	}
 	if len(binder.destroyed) != 1 || binder.destroyed[0].ID != "unit-1" {

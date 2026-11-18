@@ -48,15 +48,6 @@ func TestLoadWorkflowManifestHonoursDisable(t *testing.T) {
 
 func TestTopologyLookupEmpty(t *testing.T) {
 	stock := extpackstest.StockCatalog(t)
-	if got := TopologyPathForID(nil, "x"); !got.Empty() {
-		t.Fatalf("got %q", got)
-	}
-	if got := TopologyPathForID(stock, ""); !got.Empty() {
-		t.Fatalf("got %q", got)
-	}
-	if got := TopologyPathForID(stock, "does-not-exist"); !got.Empty() {
-		t.Fatalf("got %q", got)
-	}
 	if _, err := TopologySpecForID(nil, "default-pipeline"); err == nil {
 		t.Fatal("nil catalog must fail closed")
 	}

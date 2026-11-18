@@ -14,27 +14,17 @@ type WorkspaceBinder interface {
 	DestroyWorkerWorkspace(ctx context.Context, binding *workspace.Binding) error
 }
 
-func (o *OrchestratorImpl) ensureWorkspaceManager(mode WorkspaceMode) error {
-	if effectiveWorkspaceMode(mode) != WorkspaceIsolated {
-		return nil
-	}
-	if o == nil || o.workspaces == nil {
-		return fmt.Errorf("workspace_mode isolated requires WorkspaceManager")
-	}
-	return nil
-}
-
 func (o *OrchestratorImpl) bindUnitWorkspacesIfIsolated(
 	ctx context.Context,
 	spec TopologySpec,
 	projectDir, batchID string,
 	unitIDs []string,
 ) ([]*workspace.Binding, error) {
-	if effectiveWorkspaceMode(spec.WorkspaceMode) != WorkspaceIsolated {
+	if !TopologyRequiresIsolation(spec) {
 		return nil, nil
 	}
-	if err := o.ensureWorkspaceManager(spec.WorkspaceMode); err != nil {
-		return nil, err
+	if o == nil || o.workspaces == nil {
+		return nil, fmt.Errorf("workspace_mode isolated requires WorkspaceManager")
 	}
 	bindings := make([]*workspace.Binding, 0, len(unitIDs))
 	for _, unitID := range unitIDs {
