@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -132,27 +133,30 @@ func (s *Store) ChatLocations(ctx context.Context, sessionID string) ([]ChatLoca
 		return nil, err
 	}
 	all := make([]ChatLocation, 0, len(rows))
+	folders := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
-		all = append(all, chatLocationFromRow(row))
+		location := chatLocationFromRow(row)
+		all = append(all, location)
+		if !location.Hidden && location.Kind != ChatLocationFile && location.Available() {
+			folders[location.Anchor] = struct{}{}
+		}
 	}
 	locations := make([]ChatLocation, 0, len(all))
 	for _, location := range all {
-		if location.Kind == ChatLocationFile {
-			locations = append(locations, location)
-			continue
-		}
-		covered := false
-		for _, outer := range all {
-			if outer.ID != location.ID && !outer.Hidden && outer.Kind != ChatLocationFile && outer.Covers(location.Anchor) && outer.Available() {
-				covered = true
-				break
-			}
-		}
-		if !covered {
+		if location.Kind == ChatLocationFile || !hasAncestorLocation(location.Anchor, folders) {
 			locations = append(locations, location)
 		}
 	}
 	return locations, nil
+}
+
+func hasAncestorLocation(anchor string, folders map[string]struct{}) bool {
+	for parent := path.Dir(anchor); parent != "."; parent = path.Dir(parent) {
+		if _, ok := folders[parent]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // ChatLocationCovering answers the chat's visible location covering rel.
