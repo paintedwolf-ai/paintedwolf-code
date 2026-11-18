@@ -97,7 +97,7 @@ func TestFetchURLToolCachesAndPages(t *testing.T) {
 	body := b.String()
 	srv := testHTTPServer(t, "text/plain", body)
 
-	out, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{URL: srv})
+	out, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{Budget: NewFetchBudget(DefaultFetchURLLimits()), URL: srv})
 	if err != nil {
 		t.Fatalf("fetchURLTool: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestFetchURLToolCachesAndPages(t *testing.T) {
 	}
 
 	// Second orientation call is served from cache.
-	out2, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{URL: srv})
+	out2, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{Budget: NewFetchBudget(DefaultFetchURLLimits()), URL: srv})
 	if err != nil {
 		t.Fatalf("re-fetch: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestFetchURLToolCachesAndPages(t *testing.T) {
 	}
 
 	// Ranges page the cached body verbatim.
-	out3, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{URL: srv, Offset: 1, Limit: 1})
+	out3, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{Budget: NewFetchBudget(DefaultFetchURLLimits()), URL: srv, Offset: 1, Limit: 1})
 	if err != nil {
 		t.Fatalf("ranged fetch: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestFetchURLToolCachesAndPages(t *testing.T) {
 	}
 
 	// `limit` alone means the same range from the top.
-	out4, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{URL: srv, Limit: 1})
+	out4, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{Budget: NewFetchBudget(DefaultFetchURLLimits()), URL: srv, Limit: 1})
 	if err != nil {
 		t.Fatalf("limit without offset: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestFetchURLToolCachesAndPages(t *testing.T) {
 	}
 
 	// An open-ended range is what omitting both already asks for.
-	if _, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{URL: srv, Offset: 2}); err == nil {
+	if _, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{Budget: NewFetchBudget(DefaultFetchURLLimits()), URL: srv, Offset: 2}); err == nil {
 		t.Fatal("offset without limit must still reject")
 	}
 }
@@ -157,7 +157,7 @@ func TestFetchURLToolCacheHitPreservesResponseMetadata(t *testing.T) {
 	testutil.FailErr(t, "write fetch cache", tooloutput.WriteFetchCache(requestedURL, entry))
 
 	invocation := &tools.ToolInvocationOut{}
-	out, fetched, err := fetchURLTool(context.Background(), fetchURLToolArgs{
+	out, fetched, err := fetchURLTool(context.Background(), fetchURLToolArgs{Budget: NewFetchBudget(DefaultFetchURLLimits()),
 		URL: requestedURL,
 		Tctx: tools.ToolContext{
 			Effects: tools.InvocationEffects{Out: invocation},
@@ -185,7 +185,7 @@ func TestFetchURLToolCacheHitPreservesResponseMetadata(t *testing.T) {
 }
 
 func TestFetchURLToolRejectsIncompleteRange(t *testing.T) {
-	_, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{
+	_, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{Budget: NewFetchBudget(DefaultFetchURLLimits()),
 		URL: "https://example.com/docs", Offset: 2,
 	})
 	var reject *toolrejection.ToolReject
@@ -211,7 +211,7 @@ func TestFetchURLToolMapsHTMLDocHeadings(t *testing.T) {
 	b.WriteString(`<footer>© 2026 Sign in Navigation</footer></body></html>`)
 	srv := testHTTPServer(t, "text/html", b.String())
 
-	out, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{URL: srv})
+	out, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{Budget: NewFetchBudget(DefaultFetchURLLimits()), URL: srv})
 	if err != nil {
 		t.Fatalf("fetchURLTool: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestFetchURLToolMapsHTMLDocHeadings(t *testing.T) {
 	if !ok || cached.Ext != "md" {
 		t.Fatalf("HTML doc should cache as markdown: cache=%#v ok=%v", cached, ok)
 	}
-	out2, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{URL: srv})
+	out2, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{Budget: NewFetchBudget(DefaultFetchURLLimits()), URL: srv})
 	if err != nil {
 		t.Fatalf("cache-hit fetch: %v", err)
 	}

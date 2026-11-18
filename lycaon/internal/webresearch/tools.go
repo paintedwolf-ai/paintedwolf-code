@@ -47,7 +47,7 @@ type ToolDeps struct {
 	SearchWarmHook SearchWarmHook
 	// FetchWarmHook runs after fetch_url fetches a fresh page; nil disables post-fetch warming.
 	FetchWarmHook FetchWarmHook
-	// FetchBudget soft-caps outbound fetch_url network fetches; nil → GlobalFetchBudget().
+	// FetchBudget caps outbound fetch_url network fetches.
 	FetchBudget *FetchBudget
 	// SecretMatcher screens outbound content; nil or Inert() ⇒ no ask.
 	SecretMatcher *secretmatch.Matcher
@@ -74,6 +74,9 @@ const (
 func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFactory FactoryGetter) error {
 	if reg == nil {
 		return fmt.Errorf("registry required")
+	}
+	if deps.FetchBudget == nil {
+		return fmt.Errorf("fetch budget required")
 	}
 	settingsFn := func() Settings {
 		return DefaultSettings(deps.Creds, deps.Config, deps.Catalog)
@@ -280,8 +283,7 @@ func WireRuntime(ctx context.Context, exchange Exchange) (Runtime, error) {
 	if err != nil {
 		return Runtime{}, fmt.Errorf("fetch_url limits: %w", err)
 	}
-	SetGlobalFetchBudget(NewFetchBudget(limits))
-	return Runtime{Creds: creds, Config: cfg, Catalog: cat, Registry: reg}, nil
+	return Runtime{Creds: creds, Config: cfg, Catalog: cat, Registry: reg, FetchBudget: NewFetchBudget(limits)}, nil
 }
 
 func projectDirFrom(tctx tools.ToolContext) string {

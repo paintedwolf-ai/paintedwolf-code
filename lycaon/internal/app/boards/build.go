@@ -160,12 +160,13 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	}
 
 	deps := webresearch.ToolDeps{
-		Creds:    r.WebCreds,
-		Config:   webCfg,
-		Catalog:  webCat,
-		Registry: webReg,
-		Index:    r.deps.Storage.WebIndex,
-		Rerank:   r.deps.Decisions.Rerank,
+		FetchBudget: r.WebRuntime.FetchBudget,
+		Creds:       r.WebCreds,
+		Config:      webCfg,
+		Catalog:     webCat,
+		Registry:    webReg,
+		Index:       r.deps.Storage.WebIndex,
+		Rerank:      r.deps.Decisions.Rerank,
 		SearchWarmHook: func(ctx context.Context, sessionID, toolCallID, query, projectDir string, hitURLs, residualURLs []string, strongHits, maxResults int, directParticipated bool) {
 			r.deps.Sessions.Manager.Chats.Research.Search(ctx, sessionID, toolCallID, query, projectDir, hitURLs, residualURLs, strongHits, maxResults, directParticipated)
 		},

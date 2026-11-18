@@ -10,10 +10,11 @@ import (
 )
 
 type Runtime struct {
-	Creds    *CredentialStore
-	Config   *ConfigStore
-	Catalog  *Catalog
-	Registry *Registry
+	FetchBudget *FetchBudget
+	Creds       *CredentialStore
+	Config      *ConfigStore
+	Catalog     *Catalog
+	Registry    *Registry
 }
 
 // InvalidateProvider clears transient state for a repaired provider.

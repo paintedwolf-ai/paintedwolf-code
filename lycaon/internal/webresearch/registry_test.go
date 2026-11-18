@@ -27,17 +27,13 @@ func TestRegistryBraveSearch(t *testing.T) {
 	})
 	t.Cleanup(srv.Close)
 
-	orig := braveSearchURL
 	override := srv.URL
-	// braveRESTSpec uses const URL — test via custom spec pointed at srv
 	spec := braveRESTSpec()
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return override + "?q=" + query, nil
 	}
 	reg := NewRegistry(testCatalog(t), srv.exchange)
 	reg.Register(NewRESTSearchProvider(spec, KindKeyed, srv.exchange))
-
-	_ = orig
 
 	out := reg.Get("brave").Search(context.Background(), Settings{
 		Keys:                  map[string]string{"brave": "secret"},

@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/lycaon/lycaon/pkg/api"
 	"net/url"
 	"path"
@@ -234,7 +235,7 @@ func mapFetchToolErr(err error) error {
 func acquireFetchBudget(ctx context.Context, a fetchURLToolArgs, rawURL string) (func(), error) {
 	b := a.Budget
 	if b == nil {
-		b = GlobalFetchBudget()
+		return nil, fmt.Errorf("fetch budget required")
 	}
 	return b.Acquire(ctx, a.Tctx.Identity.SessionID, rawURL)
 }

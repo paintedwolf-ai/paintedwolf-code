@@ -16,7 +16,7 @@ func periodToolRegistry(t *testing.T, fake *FakeDirectDiscoverer) *tools.Default
 	t.Helper()
 	reg := tools.NewDefaultRegistry()
 	factory := func(_ context.Context, _ tools.ToolContext) DirectDiscoverer { return fake }
-	err := RegisterToolsWithFactory(reg, ToolDeps{}, func() DirectDiscovererFactory { return factory })
+	err := RegisterToolsWithFactory(reg, ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits())}, func() DirectDiscovererFactory { return factory })
 	testutil.FailErr(t, "RegisterToolsWithFactory", err)
 	return reg
 }

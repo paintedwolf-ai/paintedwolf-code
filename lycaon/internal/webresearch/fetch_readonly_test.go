@@ -48,7 +48,7 @@ func TestMapFetchToolErrOversizeIsStructured(t *testing.T) {
 
 func TestFetchURLBlocksLoopbackMapsToRejectViaTool(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterToolsWithFactory(reg, ToolDeps{}, nil); err != nil {
+	if err := RegisterToolsWithFactory(reg, ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits())}, nil); err != nil {
 		testutil.FailErr(t, "RegisterToolsWithFactory failed", err)
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -72,7 +72,7 @@ func TestFetchURLRejectsNonResearchBodies(t *testing.T) {
 	for _, contentType := range []string{"font/woff2", "application/zip", "video/mp4", "application/octet-stream"} {
 		t.Run(contentType, func(t *testing.T) {
 			url := testHTTPServer(t, contentType, "binary\x00body")
-			_, _, err := fetchURLTool(t.Context(), fetchURLToolArgs{URL: url})
+			_, _, err := fetchURLTool(t.Context(), fetchURLToolArgs{Budget: NewFetchBudget(DefaultFetchURLLimits()), URL: url})
 			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != "FETCH_URL_TYPE_UNSUPPORTED" {
 				t.Fatalf("reject = %v", err)
@@ -85,7 +85,7 @@ func TestFetchURLRejectsOversizeBeforePublishing(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	allowLoopbackFetch(t)
 	url := testHTTPServer(t, "text/plain", strings.Repeat("x", fetchBodyByteLimit+1))
-	out, fetched, err := fetchURLTool(t.Context(), fetchURLToolArgs{URL: url})
+	out, fetched, err := fetchURLTool(t.Context(), fetchURLToolArgs{Budget: NewFetchBudget(DefaultFetchURLLimits()), URL: url})
 	var tooLarge FetchBodyTooLargeError
 	if !errors.As(err, &tooLarge) || out != "" || fetched != nil {
 		t.Fatalf("out=%q fetched=%v err=%v", out, fetched, err)
@@ -96,7 +96,7 @@ func TestFetchURLRejectsCachedNonDocument(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	url := "https://example.org/asset"
 	testutil.FailErr(t, "cache asset", tooloutput.WriteFetchCache(url, tooloutput.FetchCacheEntry{URL: url, ContentType: "font/woff2", Body: "cached font", Ext: "woff2"}))
-	out, fetched, err := fetchURLTool(t.Context(), fetchURLToolArgs{URL: url})
+	out, fetched, err := fetchURLTool(t.Context(), fetchURLToolArgs{Budget: NewFetchBudget(DefaultFetchURLLimits()), URL: url})
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "FETCH_URL_TYPE_UNSUPPORTED" || out != "" || fetched != nil {
 		t.Fatalf("out=%q fetched=%v err=%v", out, fetched, err)

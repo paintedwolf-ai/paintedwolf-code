@@ -92,10 +92,9 @@ func TestCustomModeMemoryCarriesResultWhenProviderFails(t *testing.T) {
 	index.QueuePage(t.Context(), webindex.Page{URL: page.URL + "/", Title: "Widget frobnicator review", Verified: true})
 	index.Flush()
 
-	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	provider := withProviderHTTP(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
-	t.Cleanup(provider.Close)
 	opts := customBraveOptions(t, provider, index)
 	opts.Query = "widget frobnicator review"
 
