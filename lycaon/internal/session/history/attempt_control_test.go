@@ -143,8 +143,14 @@ func TestRelevantChangeResumesSuppressedWorkAC_COMP_02(t *testing.T) {
 			_, err := f.svc.ForceCompact(t.Context(), f.sess.ID)
 			testutil.FailErr(t, "force compact", err)
 		}
-		<-f.provider.entered
-		close(f.provider.release)
+		drained := make(chan error, 1)
+		go func() { drained <- f.svc.Runner.Synthesis.WaitContext(t.Context()) }()
+		select {
+		case <-f.provider.entered:
+			close(f.provider.release)
+		case err := <-drained:
+			t.Fatalf("explicit request ended without invoking synthesis: %v", err)
+		}
 		f.settle(t)
 		if f.provider.count() != 2 {
 			t.Fatalf("explicit requests made %d further calls, want one in flight", f.provider.count()-1)
