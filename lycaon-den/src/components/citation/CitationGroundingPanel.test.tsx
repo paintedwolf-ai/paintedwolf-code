@@ -174,10 +174,12 @@ describe("CitationGroundingPanel render-by-shape", () => {
         },
       ],
     };
-    render(() => <CitationGroundingPanel view={view} />);
+    render(() => <CitationGroundingPanel view={view} projectId="proj-shape" />);
     const record = screen.getByTestId("citation-grounding-record");
     expect(record.getAttribute("data-shape")).toBe("file_region");
-    expect(screen.getByText("pkg/handler.go:7")).toBeTruthy();
+    const link = record.querySelector('[data-testid="source-path-link"]');
+    expect(link?.getAttribute("data-den-source-path")).toBe("pkg/handler.go");
+    expect(link?.getAttribute("data-den-source-line")).toBe("7");
     expect(record.textContent).not.toContain("unregistered_tool");
   });
 
