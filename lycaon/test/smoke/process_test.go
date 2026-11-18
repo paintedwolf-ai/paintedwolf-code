@@ -48,7 +48,7 @@ func startSmokeProcess(t *testing.T, proc *exec.Cmd) *smokeProcess {
 func (p *smokeProcess) waitForHealth(t *testing.T, baseURL string) {
 	t.Helper()
 	client := &http.Client{Timeout: 2 * time.Second}
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the sidecar reports healthy", func() bool {
 		select {
 		case <-p.done:
 			t.Fatalf("sidecar exited before health: %v", p.err)

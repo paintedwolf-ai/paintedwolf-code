@@ -42,11 +42,15 @@ func newPublishFixture(t *testing.T, history int) *publishFixture {
 	_, err := NewStore(f.storeDir)
 	testutil.FailErr(t, "NewStore", err)
 	runGitTestCmd(t, f.dest, "init", "-q", "-b", "main")
+	// One fast-import stream writes the whole history; each commit rewrites history.txt.
+	var stream strings.Builder
 	for i := range history {
-		testutil.FailErr(t, "write history", os.WriteFile(filepath.Join(f.dest, "history.txt"), []byte(strconv.Itoa(i)), 0o644))
-		runGitTestCmd(t, f.dest, "add", "history.txt")
-		runGitTestCmd(t, f.dest, "commit", "-q", "-m", "history "+strconv.Itoa(i))
+		content, message := strconv.Itoa(i), "history "+strconv.Itoa(i)
+		fmt.Fprintf(&stream, "commit refs/heads/main\ncommitter Fixture <fixture@example.invalid> %d +0000\ndata %d\n%s\n", 1700000000+i, len(message), message)
+		fmt.Fprintf(&stream, "M 100644 inline history.txt\ndata %d\n%s\n\n", len(content), content)
 	}
+	runGitTestCmdInput(t, f.dest, stream.String(), "fast-import", "--quiet")
+	runGitTestCmd(t, f.dest, "reset", "-q", "--hard")
 	// The worker starts as a copy of the destination, with the destination's main as its base.
 	testutil.FailErr(t, "copy destination", os.CopyFS(f.worker, os.DirFS(f.dest)))
 	runGitTestCmd(t, f.worker, "update-ref", "refs/remotes/origin/main", "HEAD")
@@ -156,7 +160,7 @@ func TestPublicationFailsTypedWhenTheBoundaryIsDamaged(t *testing.T) {
 	testutil.FailErr(t, "remove boundary commit", os.Remove(filepath.Join(f.dest, ".git", "objects", base[:2], base[2:])))
 
 	_, err := ImportAndValidateCheckpointGitRefs(t.Context(), GitObjectSources{StoreDir: f.storeDir}, "chk", "w",
-		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/main": tip}}, map[string]string{"primary": f.dest})
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/main": tip}}, map[string]string{"primary": f.dest}, "primary")
 	if !errors.Is(err, ErrCheckpointGitBoundary) {
 		t.Fatalf("damaged boundary: %v", err)
 	}
@@ -190,7 +194,7 @@ func TestPublicationIntoAnEmptyDestinationIsComplete(t *testing.T) {
 	runGitTestCmd(t, dest, "init", "-q")
 
 	imported, err := ImportAndValidateCheckpointGitRefs(t.Context(), GitObjectSources{StoreDir: storeDir}, "chk", "w",
-		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/main": tip}}, map[string]string{"primary": dest})
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/main": tip}}, map[string]string{"primary": dest}, "primary")
 	testutil.FailErr(t, "publish into empty destination", err)
 	if imported["refs/lycaon/workers/w/heads/main"] != tip {
 		t.Fatalf("imported = %v", imported)

@@ -30,6 +30,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitengine"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -224,6 +225,8 @@ func newProgramFixture(t *testing.T) *programFixture {
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
 		Sessions: fixtureSessions{},
+		// The foreground budget never expires, so a program runs to its end inline however slow the host.
+		Clock: programtest.NewManualClock(),
 	}
 	return &programFixture{runtime: runtime, recorder: recorder, database: database, session: session, dir: dir}
 }

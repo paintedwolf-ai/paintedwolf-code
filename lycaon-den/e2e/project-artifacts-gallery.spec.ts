@@ -143,6 +143,28 @@ webE2e(
     await expect(olderEnlarge).toBeEnabled({ timeout: 60_000 });
     await expect(page.getByTestId("project-artifact-load-error")).toHaveCount(0);
 
+    // Tiles share a row, and each preview is letterboxed inside its thumbnail frame.
+    const [newest, older] = [await tiles.nth(0).boundingBox(), await tiles.nth(1).boundingBox()];
+    expect(Math.abs(newest!.y - older!.y)).toBeLessThanOrEqual(1);
+    expect(older!.x).toBeGreaterThan(newest!.x);
+    const frame = await tiles.nth(0).locator(".den-transcript-visual__frame").boundingBox();
+    expect(frame!.width / frame!.height).toBeCloseTo(1.6, 1);
+    const preview = tiles.nth(0).locator("img.den-transcript-visual__img");
+    await expect(preview).toHaveCSS("object-fit", "contain");
+    const previewBox = await preview.boundingBox();
+    expect(previewBox!.height).toBeLessThanOrEqual(frame!.height + 1);
+    expect(previewBox!.width).toBeLessThanOrEqual(frame!.width + 1);
+
+    // A short window scrolls the gallery inside the stage, not the page.
+    const viewport = page.viewportSize()!;
+    await page.setViewportSize({ width: 900, height: 360 });
+    expect(await page.evaluate(() => document.scrollingElement!.scrollHeight <= window.innerHeight + 1)).toBe(true);
+    const grid = await page.locator(".den-artifacts-grid").boundingBox();
+    expect(grid!.y + grid!.height).toBeLessThanOrEqual(360 + 1);
+    await tiles.nth(1).scrollIntoViewIfNeeded();
+    await expect(tiles.nth(1)).toBeInViewport();
+    await page.setViewportSize(viewport);
+
     await page.screenshot({
       path:
         process.env.LYCAON_REVIEW_SCREENSHOT ??

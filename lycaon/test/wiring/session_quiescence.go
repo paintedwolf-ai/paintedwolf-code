@@ -16,7 +16,7 @@ import (
 func WaitForSessionIdleGate(t *testing.T, h *Harness, ctx context.Context, sessionID string) {
 	t.Helper()
 	loop := h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the session is quiescent", func() bool {
 		if loop.Admission.PromptExecutionActive(sessionID) || loop.Nudges.HasPendingLoopWakes(sessionID) || loop.Turns.Active(sessionID) {
 			return false
 		}

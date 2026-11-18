@@ -67,9 +67,16 @@ fn start_bus(service: Service) -> (BusProcess, String) {
     let services = config_dir.join("services");
     std::fs::create_dir_all(&services).unwrap();
     if service == Service::Activatable {
+        // The launched process announces itself and stays until the fixture owns the name.
+        let launched = config_dir.join("launched");
+        let owned = config_dir.join("owned");
         std::fs::write(
             services.join(format!("{SERVICE}.service")),
-            format!("[D-BUS Service]\nName={SERVICE}\nExec=/bin/sleep 3\n"),
+            format!(
+                "[D-BUS Service]\nName={SERVICE}\nExec=/bin/sh -c \"touch {}; until [ -e {} ]; do sleep 0.1; done\"\n",
+                launched.display(),
+                owned.display(),
+            ),
         )
         .unwrap();
     }
@@ -271,13 +278,18 @@ impl Fixture {
         self.server.flush_sync(gio::Cancellable::NONE).unwrap();
     }
 
-    /// Takes the well-known name after `delay`, as a service does once the bus
-    /// has launched it.
-    fn own_name_after(&self, delay: Duration) -> thread::JoinHandle<()> {
+    /// Takes the well-known name once the bus has launched the service, as the
+    /// launched service itself would.
+    fn own_name_when_launched(&self) -> thread::JoinHandle<()> {
         let server = self.server.clone();
+        let launched = self._daemon.config_dir.join("launched");
+        let owned = self._daemon.config_dir.join("owned");
         thread::spawn(move || {
-            thread::sleep(delay);
+            while !launched.exists() {
+                thread::sleep(Duration::from_millis(10));
+            }
             request_name(&server);
+            std::fs::write(owned, b"").unwrap();
         })
     }
 }
@@ -311,12 +323,27 @@ fn pump(context: &glib::MainContext, predicate: impl Fn() -> bool) {
     }
 }
 
-fn settle(context: &glib::MainContext) {
-    for _ in 0..100 {
-        while context.pending() {
-            context.iteration(false);
-        }
-        thread::sleep(Duration::from_millis(2));
+/// Returns once every signal already sent to `receiver` by the fixture service
+/// or by `senders` has been dispatched. The bus keeps each sender's messages in
+/// order, so a reply that follows them can only arrive after they have.
+fn settle(context: &glib::MainContext, receiver: &gio::DBusConnection, senders: &[&gio::DBusConnection]) {
+    for connection in senders.iter().copied().chain([receiver]) {
+        connection
+            .call_sync(
+                Some(SERVICE),
+                PATH,
+                SERVICE,
+                "GetCapabilities",
+                None,
+                None,
+                gio::DBusCallFlags::NONE,
+                120_000,
+                gio::Cancellable::NONE,
+            )
+            .unwrap();
+    }
+    while context.pending() {
+        context.iteration(false);
     }
 }
 
@@ -341,7 +368,7 @@ fn native_service_replaces_cancels_and_routes_only_owned_notifications() {
             let activations = Rc::new(RefCell::new(Vec::new()));
             let routed = activations.clone();
             let delivery = Delivery::new(
-                connection,
+                connection.clone(),
                 desktop_entry(),
                 move |session, token| routed.borrow_mut().push((session, token)),
                 deadline(),
@@ -417,7 +444,7 @@ fn native_service_replaces_cancels_and_routes_only_owned_notifications() {
                     Some(&(4u32, "default").to_variant()),
                 )
                 .unwrap();
-            settle(&context);
+            settle(&context, &connection, &[&foreign]);
             assert_eq!(activations.borrow().len(), 1);
             assert!(delivery
                 .send(
@@ -489,8 +516,9 @@ fn native_service_without_actions_preserves_delivery_and_clearing() {
         .with_thread_default(|| {
             let activations = Rc::new(RefCell::new(0));
             let routed = activations.clone();
+            let connection = connect(&context, &fixture.address);
             let delivery = Delivery::new(
-                connect(&context, &fixture.address),
+                connection.clone(),
                 desktop_entry(),
                 move |_, _| *routed.borrow_mut() += 1,
                 deadline(),
@@ -506,7 +534,7 @@ fn native_service_without_actions_preserves_delivery_and_clearing() {
                 .unwrap();
             assert_eq!(*fixture.requests.lock().unwrap(), vec![(0, "Body".into())]);
             fixture.signal("ActionInvoked", (1u32, "default").to_variant());
-            settle(&context);
+            settle(&context, &connection, &[]);
             assert_eq!(*activations.borrow(), 0);
             delivery.cancel(&["chat-a".into()], deadline()).unwrap();
             assert_eq!(*fixture.closed.lock().unwrap(), vec![1]);
@@ -534,7 +562,7 @@ fn native_service_starts_from_its_service_file_or_reports_absence() {
     drop(absent);
 
     let fixture = Fixture::start(vec!["body".into()], Service::Activatable);
-    let owned = fixture.own_name_after(Duration::from_millis(300));
+    let owned = fixture.own_name_when_launched();
     let context = glib::MainContext::new();
     context
         .with_thread_default(|| {

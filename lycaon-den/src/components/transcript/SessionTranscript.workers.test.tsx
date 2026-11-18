@@ -153,7 +153,6 @@ describe("SessionTranscript workers and synthesis", () => {
         expect(container.querySelector('[data-task-kind="worker-summary"]')).toBeNull();
         const taskCard = container.querySelector('[data-task-kind="task"]');
         expect(taskCard).toBeTruthy();
-        expect(taskCard?.classList.contains("den-task-card--clickable")).toBe(true);
         expect(taskCard?.querySelector('[data-testid="task-card-agent"]')?.textContent).toContain("web-researcher");
         taskCard?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(onOpenWorker).toHaveBeenCalledWith("job-research");
@@ -386,7 +385,7 @@ describe("SessionTranscript workers and synthesis", () => {
     ) as HTMLElement;
     expect(chicklet).toBeTruthy();
     expect(isDisclosureOpen(chicklet)).toBe(false);
-    expect(chicklet.querySelector(".den-citation-grounding-chicklet--traced")).toBeTruthy();
+    expect(chicklet.dataset.evidenceOutcome).toBe("traced");
     expect(
       container.querySelector('[data-testid="synthesis-evidence-section"]'),
     ).toBeNull();

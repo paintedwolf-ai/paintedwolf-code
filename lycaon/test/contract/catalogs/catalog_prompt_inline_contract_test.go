@@ -7,11 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/datamark"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
@@ -28,8 +31,6 @@ var catalogCopyDuplicationAllowed = map[string]string{
 		"framed body as well as the prompt partial, so it has to exist at the injection point; " +
 		"TestUntrustedTeachingMatchesPartial pins the two equal",
 }
-
-const untrustedOutputPartial = "lycaon/config/packs/painted-wolf/web-research/shared/partials/untrusted-output.md"
 
 func TestProductionGoHoldsNoCatalogPromptCopy(t *testing.T) {
 	t.Parallel()
@@ -113,20 +114,20 @@ func TestCatalogCopyAllowancesAreLive(t *testing.T) {
 	contractcheck.FailViolations(t, "stale catalog-copy allowances", stale)
 }
 
-// Retrieval bodies and prompts carry the same trust notice.
+// Retrieval bodies and prompts carry the same trust notice: the rendered
+// untrusted-output partial is one line of every framed retrieval body.
 func TestUntrustedTeachingMatchesPartial(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	partial := strings.TrimSpace(contractcheck.ReadRepoFile(t, root, untrustedOutputPartial))
+	engine := contractcheck.BundledPromptEngineForRoot(t)
+	rendered, err := engine.Render(t.Context(), "partials/untrusted-output.md", map[string]any{})
+	contractcheck.FailErr(t, "render untrusted-output partial", err)
+	partial := strings.TrimSpace(rendered)
 	if partial == "" {
-		t.Fatalf("%s is empty", untrustedOutputPartial)
+		t.Fatal("untrusted-output partial renders empty")
 	}
-	source := contractcheck.ReadRepoFile(t, root, "lycaon/internal/datamark/datamark.go")
-	if !strings.Contains(source, strconv.Quote(partial)) {
-		t.Fatalf("datamark.go no longer carries the untrusted-output partial verbatim.\n"+
-			"The constant is rendered into every framed retrieval body while the partial is rendered "+
-			"into the prompt, so an agent that reads one and not the other gets different teaching.\n"+
-			"partial: %s\nExpected a Go literal equal to: %q", untrustedOutputPartial, partial)
+	framed := datamark.Frame("contract", "retrieved body", time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
+	if !slices.Contains(strings.Split(framed, "\n"), partial) {
+		t.Fatalf("framed retrieval body does not carry the rendered partial as a line:\npartial: %q\nframed: %q", partial, framed)
 	}
 }
 

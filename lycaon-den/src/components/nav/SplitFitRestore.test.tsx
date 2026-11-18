@@ -3,6 +3,9 @@ import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import type { AttentionRow } from "../../api/types.ts";
 import { SplitFitRestoreButton } from "./SplitFitRestore.tsx";
+import { useElapsableClock } from "../../test/elapse.ts";
+
+const elapse = useElapsableClock();
 
 function attention(cls: AttentionRow["class"], reason: AttentionRow["reason"]) {
   return { session_id: "s1", project_id: "p1", class: cls, reason } as AttentionRow;
@@ -83,7 +86,7 @@ describe("split fit restore", () => {
     );
     expect(widen.getAttribute("data-tip")).toBe(widen.getAttribute("aria-label"));
 
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await elapse(200);
     expect(widen.hasAttribute("data-refused")).toBe(false);
     // The refusal stands until the claim re-arms; only the motion was brief.
     expect(widen.getAttribute("aria-label")).toContain("No room to widen");

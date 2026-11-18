@@ -44,12 +44,12 @@ func TestDesignateCover_latestWins(t *testing.T) {
 	if err := DesignateCover(context.Background(), store, binding, lookup, DesignateRequest{
 		ProjectID: "proj-1", RootSessionID: "root-a", ArtifactID: first.ID,
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "DesignateCover failed", err)
 	}
 	if err := DesignateCover(context.Background(), store, binding, lookup, DesignateRequest{
 		ProjectID: "proj-1", RootSessionID: "root-a", ArtifactID: second.ID,
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "DesignateCover failed", err)
 	}
 	got, ok, err := binding.GetCover(context.Background(), "proj-1")
 	if err != nil || !ok {

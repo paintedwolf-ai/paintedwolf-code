@@ -355,11 +355,13 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 			w.mu.Unlock()
 			slog.WarnContext(ctx, "worktree watcher coverage interrupted", "root", w.root, "error", err)
 			NotifyWorktreeChangesDebounced(ctx, w.root, []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, SourceWatcher)
+			w.refs.reconcile(ctx, w.addMeasuredDir)
 		case _, ok := <-w.watcher.ResyncChannel():
 			if !ok {
 				return
 			}
 			NotifyWorktreeChangesDebounced(ctx, w.root, []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, SourceWatcher)
+			w.refs.reconcile(ctx, w.addMeasuredDir)
 		}
 	}
 }
@@ -376,6 +378,7 @@ func (w *worktreeWatcher) recoverOverflow(ctx context.Context) {
 	w.mu.Unlock()
 	slog.WarnContext(ctx, "worktree watcher event queue overflowed; rescanning the root", "root", w.root, "overflows", count)
 	Notify(ctx, Event{ProjectDir: w.root, Kind: WorktreeChanged, Changes: []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, Source: SourceWatcher})
+	w.refs.reconcile(ctx, w.addMeasuredDir)
 	w.mu.Lock()
 	w.overflowed = false
 	w.mu.Unlock()

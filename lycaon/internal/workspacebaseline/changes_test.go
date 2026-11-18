@@ -286,30 +286,30 @@ func BenchmarkChangeSet(b *testing.B) {
 			for i := range size {
 				abs := filepath.Join(branch, fmt.Sprintf("d%02d", i%50), fmt.Sprintf("s%02d", i%37), fmt.Sprintf("f%05d.go", i))
 				if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-					b.Fatal(err)
+					testutil.FailErr(b, "create directory", err)
 				}
 				if err := os.WriteFile(abs, fmt.Appendf(nil, "package p // %d\n", i), 0o644); err != nil {
-					b.Fatal(err)
+					testutil.FailErr(b, "write file", err)
 				}
 			}
 			store := workspacebaseline.New(nil, blobs, filepath.Join(root, "manifests"))
 			manifest, err := store.Capture(b.Context(), "job", workspacebaseline.Branch(nil, branch))
 			if err != nil {
-				b.Fatal(err)
+				testutil.FailErr(b, "store.Capture failed", err)
 			}
 			if err := os.WriteFile(filepath.Join(branch, "made.txt"), []byte("made\n"), 0o644); err != nil {
-				b.Fatal(err)
+				testutil.FailErr(b, "write file", err)
 			}
 			b.ReportAllocs()
 			b.ResetTimer()
 			for range b.N {
 				reader, err := workspacebaseline.Open(b.Context(), manifest, blobs)
 				if err != nil {
-					b.Fatal(err)
+					testutil.FailErr(b, "workspacebaseline.Open failed", err)
 				}
 				changes, err := reader.ChangeSet(b.Context(), nil, branch)
 				if err != nil {
-					b.Fatal(err)
+					testutil.FailErr(b, "reader.ChangeSet failed", err)
 				}
 				if len(changes) != 1 {
 					b.Fatalf("changes = %d", len(changes))

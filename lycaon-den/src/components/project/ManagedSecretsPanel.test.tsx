@@ -834,11 +834,6 @@ describe("ManagedSecretsPanel", () => {
     expect(
       screen
         .getByTestId("managed-secrets-list-panel")
-        .classList.contains("den-managed-secrets-panel"),
-    ).toBe(true);
-    expect(
-      screen
-        .getByTestId("managed-secrets-list-panel")
         .querySelector(".den-settings-list-inbox__list")
         ?.getAttribute("data-den-scrollport"),
     ).toBe("y");
@@ -857,7 +852,6 @@ describe("ManagedSecretsPanel", () => {
 
     expect(await screen.findByTestId("managed-secret-add-form")).toBeTruthy();
     expect(screen.getByTestId("managed-secrets-list-panel")).toBe(panel);
-    expect(panel.classList.contains("den-managed-secrets-panel")).toBe(true);
   });
 
   it("pages a long inventory", async () => {

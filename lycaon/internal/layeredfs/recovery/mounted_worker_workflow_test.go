@@ -21,8 +21,10 @@ import (
 
 // TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion runs on the host's real mounted
 // adapter. Its views live under the test temp directory, so a killed run leaves them where the test
-// runner reclaims them.
+// runner reclaims them. It runs in full mode: in short mode the mount-free recovery tests and the
+// adapters' own real-mount workflow tests cover its parts.
 func TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *testing.T) {
+	testutil.SkipIfShort(t, "three real mounts; mount-free recovery and the adapters' mounted workflows cover it")
 	baseDir := t.TempDir()
 	host := newMountedWorkflowHost()
 	adp := host.adapter
@@ -236,6 +238,7 @@ func verifyRecoveredMountAndStackedChild(
 	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{
 		Store:       cpStore,
 		TargetRoots: map[string]string{"primary": trunkDir},
+		PrimaryRoot: "primary",
 	})
 	testutil.FailErr(t, "checkpoint.NewPromoter failed", err)
 	if err := promoteStackedAndCommit(t, coord, recovery.StackedPromotionRequest{
@@ -274,7 +277,7 @@ func verifyRecoveredMountAndStackedChild(
 		t.Fatalf("expected 0 active views after CancelAndRelease")
 	}
 	if _, err := os.Stat(filepath.Join(trunkDir, ".git")); err != nil && !errors.Is(err, os.ErrNotExist) {
-		t.Fatal(err)
+		testutil.FailErr(t, "stat path", err)
 	}
 	return childConnections
 }

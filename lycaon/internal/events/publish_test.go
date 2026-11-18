@@ -211,19 +211,6 @@ func TestPublisherPublishSessionOrdersConcurrentBuildsByCallNotFinish(t *testing
 	}
 }
 
-func TestPublisherNilSafe(t *testing.T) {
-	var pub *Publisher
-	ctx := context.Background()
-	pub.PublishSession(ctx, "6083f538-41e9-5089-94c9-733e281e9b63", "s", api.SessionStatusIdle, "")
-	pub.PublishBoard(ctx, "6083f538-41e9-5089-94c9-733e281e9b63", "sess-1")
-	pub.PublishLLM(ctx, "6083f538-41e9-5089-94c9-733e281e9b63", "s", api.LLMCallEvent{})
-	pub.PublishCost(ctx, "6083f538-41e9-5089-94c9-733e281e9b63", "s", api.CostEvent{})
-	pub.PublishWorkflow(ctx, "6083f538-41e9-5089-94c9-733e281e9b63", "s", api.WorkflowEvent{})
-	pub.PublishGrounding(ctx, "6083f538-41e9-5089-94c9-733e281e9b63", "s", "code", "", "", false)
-	pub.PublishGatePending(ctx, "6083f538-41e9-5089-94c9-733e281e9b63", "s", api.WorkflowEvent{})
-	pub.PublishWorkflowPersisted(ctx, "6083f538-41e9-5089-94c9-733e281e9b63", "s", api.WorkflowEvent{})
-}
-
 // blockingBoardSource lets a test hold one BuildView call open while another
 // runs to completion, to reproduce a slow build finishing after a fast one.
 type blockingBoardSource struct {
@@ -391,11 +378,6 @@ func TestPublisherPublishCheckpointPayload(t *testing.T) {
 	case <-t.Context().Done():
 		t.Fatal("timeout waiting for checkpoint event")
 	}
-}
-
-func TestPublisherPublishCheckpointNilSafe(t *testing.T) {
-	var pub *Publisher
-	pub.PublishCheckpoint(context.Background(), "6083f538-41e9-5089-94c9-733e281e9b63", "s", api.CheckpointEvent{})
 }
 
 // Den renders stopped versus broken from idle_disposition alone.

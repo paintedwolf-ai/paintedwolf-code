@@ -88,4 +88,39 @@ describe("paint interest live streams", () => {
     expect(requestSignals[0]?.aborted).toBe(true);
     dispose();
   });
+  it("follows a shown worker without a parent session and stops when it is no longer shown", async () => {
+    const requests: { sessionId: string; signal?: AbortSignal }[] = [];
+    const client = stubClient({
+      streamSession: async (sessionId: string, opts?: { signal?: AbortSignal }) => {
+        requests.push({ sessionId, signal: opts?.signal });
+        return new Response(new ReadableStream<Uint8Array>());
+      },
+    });
+    const state = {
+      currentSession: { id: "session-1", status: "busy" },
+      sessionActivity: {},
+      messages: [{ id: "message-1", role: "assistant", status: "streaming", content: "" }],
+      workerTranscripts: {
+        "worker-1": { rows: [{ id: "row-1", role: "assistant", status: "streaming", content: "" }] },
+      },
+    };
+    const [shown, setShown] = createSignal(true);
+    const dispose = createRoot((rootDispose) => {
+      bindPaintInterestLiveStreams({
+        appStore: { state } as unknown as AppStore,
+        client: () => client,
+        paintedWorker: () =>
+          shown() ? { workerId: "worker-1", childSessionId: "child-1" } : null,
+      });
+      return rootDispose;
+    });
+    await settleEffects();
+    expect(requests.map((request) => request.sessionId)).toEqual(["child-1"]);
+
+    setShown(false);
+    await settleEffects();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.signal?.aborted).toBe(true);
+    dispose();
+  });
 });
