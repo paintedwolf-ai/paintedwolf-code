@@ -41,9 +41,10 @@ var programProbes = []programProbe{
 	{program: "cat", source: "cat notes.txt", effect: stdoutIs(probeNotes)},
 	{program: "grep", source: "grep note notes.txt", effect: stdoutIs(probeNotes)},
 	{program: "stat", source: "stat notes.txt", effect: stdoutHas("notes.txt")},
-	{program: "code-rewrite", source: "code-rewrite --path notes.txt --pattern '$A' --rewrite rewritten --dry-run",
+	{program: "code-rewrite", source: "code-rewrite --path rewrite-probe.go --pattern 'package $A' --rewrite 'package rewritten' --dry-run",
+		seed: map[string]string{"rewrite-probe.go": "package probe\n"},
 		effect: func(dir string, out command.ProgramOutcome) bool {
-			return strings.Contains(out.Stdout, "rewritten") && fileIs(dir, "notes.txt", probeNotes)
+			return strings.Contains(out.Stdout, "package rewritten") && fileIs(dir, "rewrite-probe.go", "package probe\n")
 		}},
 	{program: "repo-map", source: "repo-map", effect: stdoutHas("notes.txt")},
 	{program: "summarize", source: "summarize --path notes.txt", effect: func(_ string, out command.ProgramOutcome) bool {
