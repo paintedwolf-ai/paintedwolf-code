@@ -1504,19 +1504,14 @@ workflows share one group across workflows and stagger their schedules. Issue
 intake, an issue's lifecycle nudge, and verification recovery handle one event
 per run instead: each run is a single job bounded to fifteen minutes.
 
-Linux package construction is a reusable workflow. Release calls consume the
-release class's existing two-runner footprint without entering maintenance.
-Weekly, manual, and ready packaging pull requests into `main` share the
-maintenance class's single runner through `linux-candidate-requests.yml`. Its
-path filter includes packaging, native setup, release builders, and toolchain
-inputs. Queue entry compares these inputs between the retained candidate source
-and the current merge source; changed or uncertain inputs build again. The
-read-only selection job and native builds run in turn. Pull requests into
-another branch build only by explicit dispatch. Queue batching serializes
-independently so maintenance cannot replace its pending reconciliation. Pending
-standalone
-requests can be replaced by later maintenance requests; an explicit dispatch
-restores a needed candidate without affecting a selected release.
+Unsigned release artifacts are prepared once per source by a reusable
+workflow whose package, closure and macOS jobs start together; a retained
+receipt for the same commit and tree is reused instead
+([release preparation](dev-tasks.md#release-preparation)). Weekly, manual, and
+ready packaging pull requests into `main` call it through
+`linux-candidates.yml`, in a concurrency group per pull request. Queue batching
+serializes independently so maintenance cannot replace its pending
+reconciliation.
 
 These caps are maxima, not reservations. Hosted runners start waiting jobs in
 the order they were queued, and nothing reorders or preempts runs, so when every
