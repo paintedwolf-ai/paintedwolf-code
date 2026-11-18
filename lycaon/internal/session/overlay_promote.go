@@ -17,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 // CheckpointStoreDirForTask names the recovery store holding the checkpoint a task's branch published.
@@ -71,7 +70,7 @@ func roundCheckpoint(jobID string) (string, bool) {
 }
 
 // OpenTaskCheckpointStore loads the reviewed checkpoint, or latest when no preview is bound.
-func OpenTaskCheckpointStore(task *api.WorkerTask) (*checkpoint.*sessionstore.Repositories, checkpoint.Manifest, bool, error) {
+func OpenTaskCheckpointStore(task *api.WorkerTask) (*checkpoint.Store, checkpoint.Manifest, bool, error) {
 	dir := CheckpointStoreDirForTask(task)
 	if dir == "" {
 		return nil, checkpoint.Manifest{}, false, nil

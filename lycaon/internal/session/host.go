@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/queue"
 	"github.com/lycaon/lycaon/internal/session/authorization"
 	"github.com/lycaon/lycaon/internal/session/batchcontrol"
+	sessioncatalog "github.com/lycaon/lycaon/internal/session/catalog"
 	"github.com/lycaon/lycaon/internal/session/chats"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	"github.com/lycaon/lycaon/internal/session/closeoutassembly"
@@ -27,8 +28,10 @@ import (
 	"github.com/lycaon/lycaon/internal/session/history"
 	"github.com/lycaon/lycaon/internal/session/instructions"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
+	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
 	"github.com/lycaon/lycaon/internal/session/loading"
 	"github.com/lycaon/lycaon/internal/session/naming"
+	sessionobservation "github.com/lycaon/lycaon/internal/session/observation"
 	"github.com/lycaon/lycaon/internal/session/policyfacts"
 	"github.com/lycaon/lycaon/internal/session/policyfeedback"
 	"github.com/lycaon/lycaon/internal/session/policyindex"
@@ -44,9 +47,11 @@ import (
 	"github.com/lycaon/lycaon/internal/session/researchwarm"
 	"github.com/lycaon/lycaon/internal/session/resources"
 	"github.com/lycaon/lycaon/internal/session/rewindruntime"
+	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/sourcebrief"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/stopping"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/submissions"
 	"github.com/lycaon/lycaon/internal/session/submissionstate"
 	"github.com/lycaon/lycaon/internal/session/toolcontext"
@@ -57,6 +62,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/turnguards"
 	"github.com/lycaon/lycaon/internal/session/turnnudges"
 	"github.com/lycaon/lycaon/internal/session/turnsettlement"
+	sessionverification "github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/session/viewcontext"
 	"github.com/lycaon/lycaon/internal/session/workerexecution"
 	"github.com/lycaon/lycaon/internal/session/workerharness"
@@ -66,12 +72,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	sessioncatalog "github.com/lycaon/lycaon/internal/session/catalog"
-	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
-	sessionobservation "github.com/lycaon/lycaon/internal/session/observation"
-	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
-	sessionverification "github.com/lycaon/lycaon/internal/session/verification"
 )
 
 type Host struct {
@@ -98,7 +98,7 @@ type Host struct {
 	Catalog            sessioncatalog.Service
 	Observations       *sessionobservation.Service
 	Submissions        *submissions.Service
-	Decisions          decisions.*sessionstore.Repositories
+	Decisions          decisions.Store
 	loopbackProv       LoopbackProvenanceResolver
 }
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -17,8 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
-	awaitstore "github.com/lycaon/lycaon/internal/await"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 // User input interrupts a parked command; the user's turn opens with the
@@ -34,7 +33,7 @@ func TestUserTurnOpensWithTheInterruptedParkedProgram(t *testing.T) {
 	database := testdbfixture.Open(t, "waits.db")
 	testdbseed.InsertSession(t, database, sess.ID, testdbseed.DefaultProjectID)
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
-	loop.Subscriptions.SetWaitStore(&awaitstore.*sessionstore.Repositories{DB: database})
+	loop.Subscriptions.SetWaitStore(&awaitstore.Store{DB: database})
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), sess.ID) })
 
 	const partial = `{"program_id":"program-1","state":"interrupted","status":130,"stdout":"start\n"}`

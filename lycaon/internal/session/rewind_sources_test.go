@@ -16,14 +16,14 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 func appendRewindAsk(t *testing.T, mgr *Host, sessionID string) string {
@@ -49,7 +49,7 @@ func TestSourceRewindRestoresEntireSuffixAndRecordsUserVersions(t *testing.T) {
 	}
 	p, err := rewindFixtureProject(t, mgr, ctx, id)
 	testutil.FailErr(t, "project", err)
-	ledger := mgr.ToolContext.SourceLedger.(*sourceledger.*sessionstore.Repositories)
+	ledger := mgr.ToolContext.SourceLedger.(*sourceledger.Store)
 	fileIDs := map[string]string{}
 	for _, name := range []string{"first.txt", "second.txt"} {
 		head, err := ledger.History.ResolveHead(ctx, p.ID, p.BranchForRoot(p.Roots[0].ID), p.Roots[0].ID, name)
@@ -181,7 +181,7 @@ func TestSourceRewindResolvesEachRootAndRenamedFile(t *testing.T) {
 	testutil.FailErr(t, "write primary file", os.WriteFile(filepath.Join(root, "same.txt"), []byte("primary"), 0o644))
 	recordRewindTestEffect(t, mgr, id, "same.txt", nil, []byte("primary"), api.SourceChangeOpCreate)
 	testutil.FailErr(t, "write secondary file", os.WriteFile(filepath.Join(secondary, "renamed.txt"), []byte("secondary"), 0o644))
-	ledger := mgr.ToolContext.SourceLedger.(*sourceledger.*sessionstore.Repositories)
+	ledger := mgr.ToolContext.SourceLedger.(*sourceledger.Store)
 	err = ledger.Record(ctx, sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: change.Added.ID, FromRootID: change.Added.ID, FromPath: "same.txt", Path: "renamed.txt"}, ProjectID: p.ID, SessionID: id, Turn: 1, Origin: api.SourceChangeOriginAgent, Op: api.SourceChangeOpRename, Before: []byte("secondary"), After: []byte("secondary")})
 	testutil.FailErr(t, "record secondary rename", err)

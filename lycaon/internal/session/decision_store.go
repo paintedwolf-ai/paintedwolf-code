@@ -2,11 +2,10 @@ package session
 
 import (
 	"github.com/lycaon/lycaon/internal/session/decisions"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 // SetDecisionStore wires pending worker decisions.
-func (m *Host) SetDecisionStore(store decisions.*sessionstore.Repositories) {
+func (m *Host) SetDecisionStore(store decisions.Store) {
 	if m != nil {
 		m.Decisions = store
 		m.Workers.SetDecisions(store)

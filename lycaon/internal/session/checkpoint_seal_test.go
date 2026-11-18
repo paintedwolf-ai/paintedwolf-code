@@ -19,8 +19,10 @@ import (
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
+	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -35,13 +37,11 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	"gopkg.in/yaml.v3"
-	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 // checkpointPreImages is the engine's shared source content store, where a
 // checkpoint seals each path's pre-turn bytes.
-func checkpointPreImages(mgr *Host) *sourceblob.*sessionstore.Repositories {
+func checkpointPreImages(mgr *Host) *sourceblob.Store {
 	return sourceblob.New(filepath.Join(mgr.Workspace.DataDir, enginepaths.SourceContentDirName))
 }
 

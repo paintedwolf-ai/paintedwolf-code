@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 var (
@@ -91,7 +90,7 @@ func RevalidateTaskCheckpointPreview(ctx context.Context, task *api.WorkerTask, 
 	return promoter.RevalidatePreviewTargets(bound)
 }
 
-func taskLatestCheckpointID(task *api.WorkerTask, store *checkpoint.*sessionstore.Repositories) (string, error) {
+func taskLatestCheckpointID(task *api.WorkerTask, store *checkpoint.Store) (string, error) {
 	if _, published, ok := taskBranchCheckpoint(task); ok {
 		return published, nil
 	}
@@ -142,7 +141,7 @@ func TargetRootsForTaskCheckpoint(task *api.WorkerTask, roots []projectroot.Root
 }
 
 // NewTaskCheckpointPromoter creates a checkpoint.Promoter bound to task's published checkpoint store and target roots.
-func NewTaskCheckpointPromoter(task *api.WorkerTask, roots []projectroot.RootRef) (*checkpoint.*sessionstore.Repositories, checkpoint.Manifest, *checkpoint.Promoter, bool, error) {
+func NewTaskCheckpointPromoter(task *api.WorkerTask, roots []projectroot.RootRef) (*checkpoint.Store, checkpoint.Manifest, *checkpoint.Promoter, bool, error) {
 	store, manifest, ok, err := OpenTaskCheckpointStore(task)
 	if err != nil || !ok {
 		return nil, checkpoint.Manifest{}, nil, ok, err
@@ -233,7 +232,7 @@ func beneathCheckpointNonDirectory(path layeredfs.QualifiedPath, replaced map[la
 	return false
 }
 
-func applyManifestEntryToRoot(store *checkpoint.*sessionstore.Repositories, rootDir string, entry checkpoint.ManifestEntry) error {
+func applyManifestEntryToRoot(store *checkpoint.Store, rootDir string, entry checkpoint.ManifestEntry) error {
 	if !filepath.IsLocal(entry.Path.Rel) || entry.Path.Rel == "." {
 		return fmt.Errorf("%w: invalid entry path %q", checkpoint.ErrInvalidManifest, entry.Path.Rel)
 	}
