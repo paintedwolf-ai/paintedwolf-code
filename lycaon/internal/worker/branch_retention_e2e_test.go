@@ -57,7 +57,7 @@ func testCompletedOverlaySurvivesTreeEviction(t *testing.T, relocate bool) {
 	branches := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches")
 	mgr := workspace.NewManager(branches, platform.NewSelector(platform.Config{}))
 	q := NewSQLQueue(sqlDB, 4)
-	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
+	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content"), sourceledger.Timing{}).Baselines)
 	q.SetWorkerWorkspaceManager(earlierFormatBranches{mgr})
 
 	id, err := q.Enqueue(ctx, api.WorkerTask{
@@ -187,7 +187,7 @@ func relocateWorkerInstallation(t *testing.T, original db.Handle, jobID string) 
 		t.Fatal("worker persisted installation paths")
 	}
 	queue := NewSQLQueue(restored, 4)
-	queue.SetBaselineStore(sourceledger.New(restored, filepath.Join(newRoot, "source-content")).Baselines)
+	queue.SetBaselineStore(sourceledger.New(restored, filepath.Join(newRoot, "source-content"), sourceledger.Timing{}).Baselines)
 	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"), platform.NewSelector(platform.Config{}))
 	queue.SetWorkerWorkspaceManager(earlierFormatBranches{manager})
 	return queue, manager
@@ -201,7 +201,7 @@ func TestUnsealedWorkerEditsSurviveRelocatedArchive(t *testing.T) {
 	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", project)
 	dataDir := testbaseline.DataDir(t, database)
 	queue := NewSQLQueue(database, 1)
-	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
+	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content"), sourceledger.Timing{}).Baselines)
 	queue.SetWorkerWorkspaceManager(earlierFormatBranches{workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}))})
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
 	testutil.FailErr(t, "enqueue unsealed worker", err)
@@ -307,7 +307,7 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 	initialManager := workspace.NewManager(initialBranches, platform.NewSelector(platform.Config{})).WithPrivateGit(initialGit).
 		WithRecovery(openEngineRecovery(t, dataDir, initialGit))
 	queue := NewSQLQueue(database, 1)
-	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
+	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content"), sourceledger.Timing{}).Baselines)
 	queue.SetWorkerWorkspaceManager(initialManager)
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
 	testutil.FailErr(t, "enqueue", err)
@@ -388,7 +388,7 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 
 	restoredDB := testdbfixture.OpenPath(t, filepath.Join(newRoot, "store.db"))
 	restored := NewSQLQueue(restoredDB, 4)
-	restored.SetBaselineStore(sourceledger.New(restoredDB, filepath.Join(newRoot, "source-content")).Baselines)
+	restored.SetBaselineStore(sourceledger.New(restoredDB, filepath.Join(newRoot, "source-content"), sourceledger.Timing{}).Baselines)
 	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"), platform.NewSelector(platform.Config{}))
 	restoredGit, err := workspace.OpenPrivateGit(manager.BranchBase())
 	testutil.FailErr(t, "open restored private Git", err)
@@ -482,7 +482,7 @@ func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunk
 	initialGit, err := workspace.OpenPrivateGit(initialBranches)
 	testutil.FailErr(t, "open initial private Git", err)
 	queue := NewSQLQueue(database, 1)
-	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
+	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content"), sourceledger.Timing{}).Baselines)
 	queue.SetWorkerWorkspaceManager(workspace.NewManager(initialBranches, platform.NewSelector(platform.Config{})).WithPrivateGit(initialGit))
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
 	testutil.FailErr(t, "enqueue", err)
@@ -515,7 +515,7 @@ func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunk
 
 	restoredDB := testdbfixture.OpenPath(t, filepath.Join(newRoot, "store.db"))
 	restored := NewSQLQueue(restoredDB, 4)
-	restored.SetBaselineStore(sourceledger.New(restoredDB, filepath.Join(newRoot, "source-content")).Baselines)
+	restored.SetBaselineStore(sourceledger.New(restoredDB, filepath.Join(newRoot, "source-content"), sourceledger.Timing{}).Baselines)
 	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"), platform.NewSelector(platform.Config{}))
 	restoredGit, err := workspace.OpenPrivateGit(manager.BranchBase())
 	testutil.FailErr(t, "open restored private Git", err)

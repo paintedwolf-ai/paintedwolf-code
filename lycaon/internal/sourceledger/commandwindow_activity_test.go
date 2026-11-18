@@ -413,7 +413,7 @@ func TestFailedLockLeavesTheRowUntilTheNextBoot(t *testing.T) {
 	if listed := store.Commands.OpenSessionWindows("p1", "s1"); len(listed) != 0 {
 		t.Fatalf("a completed pass left it listed: %+v", listed)
 	}
-	testutil.FailErr(t, "boot recovery", New(ledger.sqlDB, ledger.contentDir).Commands.RecoverInterruptedWindows(ctx))
+	testutil.FailErr(t, "boot recovery", New(ledger.sqlDB, ledger.contentDir, Timing{}).Commands.RecoverInterruptedWindows(ctx))
 	if _, err := store.queries.GetSourceCommandWindow(ctx, window.ID); err == nil {
 		t.Fatal("quiet window's row survived the next boot's recovery")
 	}
@@ -711,7 +711,7 @@ func TestFailedWindowRecoveryReportsAndRetriesBeforeAnyWindowOpens(t *testing.T)
 	deliverWrites(ctx, root, "public/bundle.js")
 	forceTestPass(t, store, ctx, root)
 
-	fresh := New(ledger.sqlDB, ledger.contentDir)
+	fresh := New(ledger.sqlDB, ledger.contentDir, Timing{})
 	setWindowTimer(fresh.Commands, func() <-chan time.Time { return time.After(0) })
 	fresh.Commands.startQuietGrace, fresh.Commands.startQuietWait = 0, 0
 	_, err := ledger.sqlDB.ExecContext(ctx, `CREATE TRIGGER refuse_recovery BEFORE UPDATE ON source_command_windows BEGIN SELECT RAISE(ABORT, 'recovery refused'); END`)

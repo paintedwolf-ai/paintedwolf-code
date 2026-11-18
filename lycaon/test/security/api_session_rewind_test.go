@@ -149,7 +149,7 @@ func TestRewindRestoresFilesAndTruncatesTranscript(t *testing.T) {
 	var dbPath, rootID string
 	testutil.FailErr(t, "resolve source storage", f.h.DB.QueryRowContext(ctx, `SELECT file FROM pragma_database_list WHERE name='main'`).Scan(&dbPath))
 	testutil.FailErr(t, "resolve project root", f.h.DB.QueryRowContext(ctx, `SELECT id FROM project_roots WHERE project_id=? AND is_primary=1`, f.projectID).Scan(&rootID))
-	ledger := sourceledger.New(f.h.DB, filepath.Join(filepath.Dir(dbPath), enginepaths.SourceContentDirName))
+	ledger := sourceledger.New(f.h.DB, filepath.Join(filepath.Dir(dbPath), enginepaths.SourceContentDirName), sourceledger.Timing{})
 	turnSource, err := f.h.Store.ReadSourceTurn(ctx, f.sessionID, 0)
 	turn := turnSource.Number
 	testutil.FailErr(t, "resolve source turn", err)

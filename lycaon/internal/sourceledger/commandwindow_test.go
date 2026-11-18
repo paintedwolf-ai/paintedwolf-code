@@ -44,7 +44,7 @@ func openDiskLedger(t *testing.T) diskLedger {
 	`, root, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert root", err)
 	contentDir := t.TempDir()
-	store := New(sqlDB, contentDir)
+	store := New(sqlDB, contentDir, Timing{})
 	// These tests deliver the command's writes themselves, so a window neither
 	// waits at its start for events on their way nor, closed and still owing a
 	// pass, waits out the settle period.
@@ -406,7 +406,7 @@ func TestInterruptedWindowsSettleWhenAFreshProcessOpensOne(t *testing.T) {
 	quiet := openTestWindow(t, store, ctx, root, "true")
 
 	// A new process holds no memory of either window.
-	fresh := New(ledger.sqlDB, ledger.contentDir)
+	fresh := New(ledger.sqlDB, ledger.contentDir, Timing{})
 	setWindowTimer(fresh.Commands, func() <-chan time.Time { return time.After(0) })
 	fresh.Commands.startQuietGrace, fresh.Commands.startQuietWait = 0, 0
 	next, err := fresh.Commands.OpenCommandWindow(ctx, CommandWindowInput{

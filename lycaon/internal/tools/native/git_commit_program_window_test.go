@@ -31,7 +31,7 @@ func TestGitCommitStagesWhatTheSessionsProgramGeneratedACCW10(t *testing.T) {
 
 	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
-	ledger := f.AttachLedger(t)
+	ledger := f.AttachLedger(t, sourceledger.Timing{})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	gittest.Init(t, f.Dir)
@@ -87,7 +87,7 @@ func TestBulkCommitLeavesAnOutsideEditMadeBetweenProcessesOfAProgram(t *testing.
 	f := programtest.New(t, programtest.Options{})
 	f.Runtime.ParkThreshold = time.Hour
 	gate := make(chan time.Time)
-	ledger := f.AttachLedger(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time { return gate }))
+	ledger := f.AttachLedger(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time { return gate }})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
@@ -123,7 +123,7 @@ func TestBulkCommitLeavesDriftObservedWhileTwoSessionsWereActive(t *testing.T) {
 
 	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
-	ledger := f.AttachLedger(t)
+	ledger := f.AttachLedger(t, sourceledger.Timing{})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
@@ -166,7 +166,7 @@ func TestBulkCommitLeavesAPersonsEditToAFileAWindowClaimed(t *testing.T) {
 
 	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
-	ledger := f.AttachLedger(t)
+	ledger := f.AttachLedger(t, sourceledger.Timing{})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
@@ -217,7 +217,7 @@ func runTrustedGenerator(t *testing.T, f *programtest.Fixture, name string) {
 func TestBulkCommitWaitsForItsSessionsClosingWindow(t *testing.T) {
 	f := programtest.New(t, programtest.Options{})
 	gate := make(chan time.Time)
-	ledger := f.AttachLedger(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time { return gate }))
+	ledger := f.AttachLedger(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time { return gate }})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
@@ -242,9 +242,9 @@ func TestBulkCommitReportsWhatAWindowStillSettlingLeftOut(t *testing.T) {
 	t.Cleanup(func() { close(held) })
 	var activeGate atomic.Pointer[chan time.Time]
 	activeGate.Store(&first)
-	ledger := f.AttachLedger(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time {
+	ledger := f.AttachLedger(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time {
 		return *activeGate.Load()
-	}))
+	}})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)

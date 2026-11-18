@@ -128,7 +128,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	testutil.FailErr(t, "open recovery coordinator", err)
 	manager := workspace.NewManager(branches, selector).WithPrivateGit(gitManager).WithRecovery(coordinator)
 	queue := NewSQLQueue(database, 4)
-	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(root, "source-content")).Baselines)
+	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(root, "source-content"), sourceledger.Timing{}).Baselines)
 	queue.SetWorkerWorkspaceManager(manager)
 	fixture := &layeredWorkerFixture{db: database, queue: queue, manager: manager, source: source, branches: branches}
 	if phase == "prepare" {

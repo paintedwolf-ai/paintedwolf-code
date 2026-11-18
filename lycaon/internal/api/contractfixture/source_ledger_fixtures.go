@@ -77,7 +77,7 @@ func PrepareLedgerInventory(t *testing.T, srv *hostapi.Server, ledger *sourceled
 func TestSourceLedger(t *testing.T) (*sourceledger.Store, *db.Store, TestDeps) {
 	t.Helper()
 	sqlDB := testdbfixture.Open(t, "store.db")
-	st := sourceledger.New(sqlDB, t.TempDir())
+	st := sourceledger.New(sqlDB, t.TempDir(), sourceledger.Timing{})
 	return st, sqlDB, func(d *hostapi.Dependencies) {
 		d.Source.SourceLedger, d.Source.SourceInventory = st, st.Inventory
 		d.Source.SourceMutations = projectsource.NewSourceMutationService(sqlDB, st)

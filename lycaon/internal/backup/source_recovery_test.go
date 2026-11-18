@@ -21,7 +21,7 @@ func TestBackupRequiresTrashRecoveryObjects(t *testing.T) {
 	database := testdbfixture.OpenPath(t, dbPath)
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	objectRoot := filepath.Join(config, "source-content")
-	ledger := sourceledger.New(database, objectRoot)
+	ledger := sourceledger.New(database, objectRoot, sourceledger.Timing{})
 	source := filepath.Join(t.TempDir(), "binary")
 	testutil.FailErr(t, "seed", os.WriteFile(source, []byte{0, 255, 1}, 0o600))
 	scope, err := os.OpenRoot(filepath.Dir(source))

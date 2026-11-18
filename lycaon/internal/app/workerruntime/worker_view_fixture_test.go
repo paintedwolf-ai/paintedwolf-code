@@ -120,7 +120,7 @@ func (f *engineFixture) boot() *Runtime {
 	engine.Recovery = coordinator
 	f.engine = engine
 	f.bindWorkspace(f.selector)
-	engine.Queue.SetBaselineStore(sourceledger.New(f.database, filepath.Join(f.dataRoot, "source-content")).Baselines)
+	engine.Queue.SetBaselineStore(sourceledger.New(f.database, filepath.Join(f.dataRoot, "source-content"), sourceledger.Timing{}).Baselines)
 	return engine
 }
 

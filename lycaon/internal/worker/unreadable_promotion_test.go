@@ -44,7 +44,7 @@ func TestEntryLeftOutOfTheBranchIsNotAWorkerDeletion(t *testing.T) {
 	dataDir := testbaseline.DataDir(t, sqlDB)
 	mgr := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}))
 	q := NewSQLQueue(sqlDB, 4)
-	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(dataDir, "source-content")).Baselines)
+	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(dataDir, "source-content"), sourceledger.Timing{}).Baselines)
 	q.SetWorkerWorkspaceManager(mgr)
 	id, err := q.Enqueue(ctx, api.WorkerTask{
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id",

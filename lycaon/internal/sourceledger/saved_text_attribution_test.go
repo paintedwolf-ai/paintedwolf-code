@@ -20,7 +20,7 @@ func TestSavedTextAttributionNamesThePublishingEffect(t *testing.T) {
 	_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
 		VALUES ('r1', 'p1', '/tmp/source-ledger-test', 'source-ledger-test', 1, ?, 'attached')`, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert root", err)
-	store, ctx := New(sqlDB, t.TempDir()), t.Context()
+	store, ctx := New(sqlDB, t.TempDir(), Timing{}), t.Context()
 	location := RecordLocation{RootID: "r1", Path: "a.txt"}
 	base := &TextState{DocumentID: "doc", Epoch: 1, Revision: 1, Spans: []TextSpan{{Index: 0, Length: 6, Client: 1}}}
 	mustRecord(t, store, ctx, RecordInput{RecordLocation: location, ProjectID: "p1", Op: api.SourceChangeOpCreate,

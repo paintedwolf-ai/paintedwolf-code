@@ -117,7 +117,7 @@ func TestVerifyRefusedProgramIsUnverifiable(t *testing.T) {
 
 func TestVerifyBindsEvidenceToSourceBeforeExecution(t *testing.T) {
 	f := programtest.New(t, programtest.Options{Tools: []string{"verify"}})
-	ledger := sourceledger.New(f.Database, t.TempDir())
+	ledger := sourceledger.New(f.Database, t.TempDir(), sourceledger.Timing{})
 	out := &tools.ToolInvocationOut{}
 	f.Configure = func(tc *tools.ToolContext) {
 		tc.Source.Observations = ledger.Inventory

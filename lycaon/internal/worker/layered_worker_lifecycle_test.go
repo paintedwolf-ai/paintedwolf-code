@@ -89,7 +89,7 @@ func newLayeredWorkerFixture(t *testing.T, selector *adapter.Selector) *layeredW
 	}
 	manager := workspace.NewManager(branches, selector).WithPrivateGit(privateGit)
 	queue := NewSQLQueue(sqlDB, 4)
-	queue.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
+	queue.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content"), sourceledger.Timing{}).Baselines)
 	queue.SetWorkerWorkspaceManager(manager)
 	return &layeredWorkerFixture{db: sqlDB, queue: queue, manager: manager, source: source, branches: branches}
 }

@@ -37,7 +37,7 @@ func windowProgramRepo(t *testing.T) (*toolfixture.ProgramFixture, *countingWind
 
 	repochangetest.Acquire(t)
 	f := toolfixture.NewProgramFixture(t)
-	ledger := f.Seed.AttachLedger(t)
+	ledger := f.Seed.AttachLedger(t, sourceledger.Timing{})
 	dir := f.Seed.Dir
 	gittest.Init(t, dir)
 	for _, content := range []string{"one\n", "two\n", "three\n"} {
@@ -98,7 +98,7 @@ func TestSourceHistoryOverviewACCW02ProgramEffectsListSettled(t *testing.T) {
 
 	repochangetest.Acquire(t)
 	f := toolfixture.NewProgramFixture(t)
-	ledger := f.Seed.AttachLedger(t)
+	ledger := f.Seed.AttachLedger(t, sourceledger.Timing{})
 	dir := f.Seed.Dir
 	gittest.Init(t, dir)
 	contractcheck.FailErr(t, "write tracked file", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644))
@@ -155,7 +155,7 @@ func TestGitBisectRunHoldsTheWindowWhileItsCheckRuns(t *testing.T) {
 
 	repochangetest.Acquire(t)
 	f := toolfixture.NewProgramFixture(t)
-	ledger := f.Seed.AttachLedger(t)
+	ledger := f.Seed.AttachLedger(t, sourceledger.Timing{})
 	dir := f.Seed.Dir
 	gittest.Init(t, dir)
 	for _, content := range []string{"one\n", "two\n", "three\n"} {

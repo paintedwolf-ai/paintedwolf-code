@@ -110,7 +110,7 @@ func TestProgramFailureLoopChangedApproachStartsFreshStreak(t *testing.T) {
 func TestProgramFailureLoopAdmitsObservedWorkspaceSourceChange(t *testing.T) {
 	f := newProgramFixture(t)
 	f.Runtime.FailureTracker = command.NewCommandFailureTracker()
-	ledger := sourceledger.New(testdbfixture.Open(t, "source.db"), filepath.Join(t.TempDir(), "content"))
+	ledger := sourceledger.New(testdbfixture.Open(t, "source.db"), filepath.Join(t.TempDir(), "content"), sourceledger.Timing{})
 	t.Cleanup(func() { testutil.FailErr(t, "close snapshots", ledger.Snapshots.Close()) })
 	f.Configure = func(tc *tools.ToolContext) {
 		tc.Source.Observations = ledger.Inventory

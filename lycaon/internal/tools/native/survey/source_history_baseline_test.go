@@ -22,7 +22,7 @@ import (
 func TestSourceHistoryDiffACDF12RecreatedPathKeepsItsBaseline(t *testing.T) {
 	seeded := func(t *testing.T) (*historyHarness, string) {
 		t.Helper()
-		h := newHistoryHarness(t)
+		h := newHistoryHarness(t, sourceledger.Timing{})
 		h.record(effectSeed{path: "a.go", content: "baseline\n", session: "s0", op: api.SourceChangeOpCreate})
 		baseline := h.head("a.go").VersionID
 		h.beginSession(historySession)
@@ -106,7 +106,7 @@ func TestSourceHistoryDiffACDF12RecreatedPathKeepsItsBaseline(t *testing.T) {
 }
 
 func TestSourceHistoryDiffACDF13DeletedBeforeTheSessionSaysSo(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "gone.go", content: "old\n", session: "s0", op: api.SourceChangeOpCreate})
 	h.remove("gone.go", sourcebranch.Trunk)
 	h.record(effectSeed{path: "kept.go", content: "kept\n", session: "s0", op: api.SourceChangeOpCreate})
@@ -132,7 +132,7 @@ func TestSourceHistoryDiffACDF08RealComparisonClassifiesEachSide(t *testing.T) {
 		}
 	}
 	t.Run("unresolved", func(t *testing.T) {
-		h := newHistoryHarness(t)
+		h := newHistoryHarness(t, sourceledger.Timing{})
 		h.beginSession(historySession)
 		h.record(effectSeed{path: "a.bin"})
 		h.writeFile("a.bin", "x")
@@ -145,7 +145,7 @@ func TestSourceHistoryDiffACDF08RealComparisonClassifiesEachSide(t *testing.T) {
 		}
 	})
 	t.Run("not captured", func(t *testing.T) {
-		h := newHistoryHarness(t)
+		h := newHistoryHarness(t, sourceledger.Timing{})
 		h.beginSession(historySession)
 		h.nextOp++
 		testutil.FailErr(t, "record metadata only", h.store.Record(t.Context(), sourceledger.RecordInput{
@@ -164,7 +164,7 @@ func TestSourceHistoryDiffACDF08RealComparisonClassifiesEachSide(t *testing.T) {
 		}
 	})
 	t.Run("retained bytes lost", func(t *testing.T) {
-		h := newHistoryHarness(t)
+		h := newHistoryHarness(t, sourceledger.Timing{})
 		h.record(effectSeed{path: "a.go", content: "before\n", session: "s0", op: api.SourceChangeOpCreate})
 		baseline := h.head("a.go").VersionID
 		h.beginSession(historySession)
@@ -188,7 +188,7 @@ func TestSourceHistoryDiffACDF08RealComparisonClassifiesEachSide(t *testing.T) {
 		}
 	})
 	t.Run("a directory diffs empty", func(t *testing.T) {
-		h := newHistoryHarness(t)
+		h := newHistoryHarness(t, sourceledger.Timing{})
 		h.beginSession(historySession)
 		h.record(effectSeed{path: "pkg", kind: sourceledger.EntryKindDirectory, op: api.SourceChangeOpCreate})
 		testutil.FailErr(t, "create directory", os.Mkdir(filepath.Join(h.dir, "pkg"), 0o755))
@@ -216,7 +216,7 @@ func (l listingSignal) OpenSessionWindows(projectID, sessionID string) []sourcel
 func TestSourceHistoryOverviewACCW02WaitsForTheAsynchronousSettle(t *testing.T) {
 	repochangetest.Acquire(t)
 	endSettle := make(chan time.Time)
-	h := newHistoryHarness(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time { return endSettle }))
+	h := newHistoryHarness(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time { return endSettle }})
 	roots := make([]sourceledger.RootSpec, 0, len(h.tctx.Source.Roots))
 	for _, root := range h.tctx.Source.Roots {
 		roots = append(roots, sourceledger.RootSpec{ID: root.ID, Path: root.Path})

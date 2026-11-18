@@ -29,7 +29,7 @@ func newAdapterFixture(t *testing.T) (editorDocumentsAdapter, *editordoc.Service
 	testdbseed.InsertProjectRootWithID(t, sqlDB, projectID, rootID, root)
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(root, "a.txt"), []byte("base\n"), 0o644))
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	sourceHistory12 := sourceledger.New(sqlDB, "")
+	sourceHistory12 := sourceledger.New(sqlDB, "", sourceledger.Timing{})
 	service := editordoc.New(editordoc.NewStore(sqlDB), sourceHistory12, sourceHistory12.History, adapterRoots{p: p})
 	return editorDocumentsAdapter{service: service}, service, p, rootID
 }

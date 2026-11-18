@@ -40,7 +40,7 @@ func newDraftFixture(t *testing.T, primary, branch map[string][]byte) draftFixtu
 	sqlDB := testdbfixture.Open(t, "presence-drafts.db")
 	f := draftFixture{projectID: testdbseed.DefaultProjectID, rootID: uuid.NewString(), primary: t.TempDir(), branch: t.TempDir()}
 	testdbseed.InsertProjectRootWithID(t, sqlDB, f.projectID, f.rootID, f.primary)
-	ledger := sourceledger.New(sqlDB, t.TempDir())
+	ledger := sourceledger.New(sqlDB, t.TempDir(), sourceledger.Timing{})
 	f.projects = project.NewSQLRegistry(sqlDB)
 	f.documents = editordoc.New(editordoc.NewStore(sqlDB), ledger, ledger.History, f.projects)
 	for path, content := range primary {

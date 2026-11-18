@@ -78,7 +78,7 @@ func expectSingleChange(t *testing.T, diff, removed, added string) {
 }
 
 func TestSourceHistoryDiffACDF01ComparesHeadWithTheSessionBaseline(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "a.go", content: "before\n", session: "s0", op: api.SourceChangeOpCreate})
 	baseline := h.head("a.go").VersionID
 	h.beginSession(historySession)
@@ -94,7 +94,7 @@ func TestSourceHistoryDiffACDF01ComparesHeadWithTheSessionBaseline(t *testing.T)
 }
 
 func TestSourceHistoryDiffACDF02CreatedThisSessionDiffsFromAbsence(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.beginSession(historySession)
 	h.record(effectSeed{path: "new.go", content: "fresh\n", op: api.SourceChangeOpCreate})
 
@@ -109,7 +109,7 @@ func TestSourceHistoryDiffACDF02CreatedThisSessionDiffsFromAbsence(t *testing.T)
 }
 
 func TestSourceHistoryDiffACDF03UntouchedThisSessionIsAnEmptyDiff(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "a.go", content: "user change\n", origin: api.SourceChangeOriginUser, op: api.SourceChangeOpCreate})
 	h.beginSession(historySession)
 
@@ -121,7 +121,7 @@ func TestSourceHistoryDiffACDF03UntouchedThisSessionIsAnEmptyDiff(t *testing.T) 
 }
 
 func TestSourceHistoryDiffACDF04WorkerEditsStayOutOfTheTrunkDiff(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "a.go", content: "before\n", session: "s0", op: api.SourceChangeOpCreate})
 	baseline := h.head("a.go").VersionID
 	h.beginSession(historySession)
@@ -141,7 +141,7 @@ func TestSourceHistoryDiffACDF04WorkerEditsStayOutOfTheTrunkDiff(t *testing.T) {
 }
 
 func TestSourceHistoryDiffACDF05ExplicitVersionIsUnchanged(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "a.go", content: "one\n", session: "s0", op: api.SourceChangeOpCreate})
 	first := h.head("a.go").VersionID
 	h.beginSession(historySession)
@@ -182,7 +182,7 @@ func expectNotFoundFromHistory(t *testing.T, err error) {
 }
 
 func TestSourceHistoryDiffACDF06BaseAloneNeedsAVersion(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.beginSession(historySession)
 	h.writeFile("a.go", "x\n")
 	for _, base := range []string{"v1", "head"} {
@@ -194,7 +194,7 @@ func TestSourceHistoryDiffACDF06BaseAloneNeedsAVersion(t *testing.T) {
 }
 
 func TestSourceHistoryDiffACDF07VersionModeStillNeedsAVersion(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.writeFile("a.go", "x\n")
 	_, err := h.tool.Run(t.Context(), map[string]any{"path": "a.go", "mode": "version"}, h.tctx)
 	if reject := expectReject(t, err, "SOURCE_VERSION_REQUIRED"); reject.Data["mode"] != "version" {
@@ -229,7 +229,7 @@ func TestSourceHistoryDiffACDF08RejectsSidesWithNoText(t *testing.T) {
 		for _, state := range states {
 			for side, id := range map[string]string{"base": "v-base", "version": "v-head"} {
 				t.Run(fmt.Sprintf("%s %s %s", callName, state, side), func(t *testing.T) {
-					h := newHistoryHarness(t)
+					h := newHistoryHarness(t, sourceledger.Timing{})
 					h.beginSession(historySession)
 					h.record(effectSeed{path: "a.go", content: "text\n", op: api.SourceChangeOpCreate})
 					h.writeFile("a.go", "text\n")
@@ -256,7 +256,7 @@ func TestSourceHistoryDiffACDF08RejectsSidesWithNoText(t *testing.T) {
 
 // The recorded bytes reach the rejection through the real comparison path.
 func TestSourceHistoryDiffACDF08RecordedBinaryRejectsOnBothPaths(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "a.bin", content: "\x00\xff binary", session: "s0", op: api.SourceChangeOpCreate})
 	binary := h.head("a.bin").VersionID
 	h.beginSession(historySession)
@@ -277,7 +277,7 @@ func TestSourceHistoryDiffACDF08RecordedBinaryRejectsOnBothPaths(t *testing.T) {
 }
 
 func TestSourceHistoryDiffACDF09UnknownWindowIsStated(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "a.go", content: "x\n", session: "s0", op: api.SourceChangeOpCreate})
 	result := h.sessionDiff("a.go")
 	if result.Recorded || result.Note == "" || result.Diff != "" || result.Since != nil {
@@ -286,7 +286,7 @@ func TestSourceHistoryDiffACDF09UnknownWindowIsStated(t *testing.T) {
 }
 
 func TestSourceHistoryDiffACDF10BaselineIsNotLimitedToOnePage(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "a.go", content: "before\n", session: "s0", op: api.SourceChangeOpCreate})
 	baseline := h.head("a.go").VersionID
 	h.beginSession(historySession)
@@ -303,7 +303,7 @@ func TestSourceHistoryDiffACDF10BaselineIsNotLimitedToOnePage(t *testing.T) {
 // Both versions come from the file's own record, so a move in the window is not
 // a mismatch between the path and its baseline.
 func TestSourceHistoryDiffFollowsAMoveInTheWindow(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "old.go", content: "body\n", session: "s0", op: api.SourceChangeOpCreate})
 	baseline := h.head("old.go").VersionID
 	h.beginSession(historySession)
@@ -325,7 +325,7 @@ func TestSourceHistoryDiffACDF11DeletedThisSessionDiffsToAbsence(t *testing.T) {
 		return result
 	}
 	t.Run("baseline to absence", func(t *testing.T) {
-		h := newHistoryHarness(t)
+		h := newHistoryHarness(t, sourceledger.Timing{})
 		h.record(effectSeed{path: "a.go", content: "before\n", session: "s0", op: api.SourceChangeOpCreate})
 		baseline := h.head("a.go").VersionID
 		h.beginSession(historySession)
@@ -342,7 +342,7 @@ func TestSourceHistoryDiffACDF11DeletedThisSessionDiffsToAbsence(t *testing.T) {
 		}
 	})
 	t.Run("created and deleted this session is empty", func(t *testing.T) {
-		h := newHistoryHarness(t)
+		h := newHistoryHarness(t, sourceledger.Timing{})
 		h.beginSession(historySession)
 		h.record(effectSeed{path: "a.go", content: "brief\n", op: api.SourceChangeOpCreate})
 		h.remove("a.go", sourcebranch.Trunk)
@@ -352,7 +352,7 @@ func TestSourceHistoryDiffACDF11DeletedThisSessionDiffsToAbsence(t *testing.T) {
 		}
 	})
 	t.Run("deleted before the session has no effect in the window", func(t *testing.T) {
-		h := newHistoryHarness(t)
+		h := newHistoryHarness(t, sourceledger.Timing{})
 		h.record(effectSeed{path: "a.go", content: "old\n", session: "s0", op: api.SourceChangeOpCreate})
 		h.remove("a.go", sourcebranch.Trunk)
 		h.beginSession(historySession)
@@ -362,7 +362,7 @@ func TestSourceHistoryDiffACDF11DeletedThisSessionDiffsToAbsence(t *testing.T) {
 		}
 	})
 	t.Run("the caller's branch decides", func(t *testing.T) {
-		h := newHistoryHarness(t)
+		h := newHistoryHarness(t, sourceledger.Timing{})
 		h.record(effectSeed{path: "a.go", content: "before\n", session: "s0", op: api.SourceChangeOpCreate})
 		h.beginSession(historySession)
 		h.record(effectSeed{path: "a.go", content: "worker\n", before: "before\n", branch: "job-1", session: "child", job: "job-1"})
@@ -384,7 +384,7 @@ func TestSourceHistoryDiffACDF11DeletedThisSessionDiffsToAbsence(t *testing.T) {
 		}
 	})
 	t.Run("never tracked keeps the no-record note", func(t *testing.T) {
-		h := newHistoryHarness(t)
+		h := newHistoryHarness(t, sourceledger.Timing{})
 		h.beginSession(historySession)
 		result := deletedDiff(t, h, "never.go")
 		if result.Recorded || result.Note == "" || result.State != "" {
@@ -394,7 +394,7 @@ func TestSourceHistoryDiffACDF11DeletedThisSessionDiffsToAbsence(t *testing.T) {
 }
 
 func TestSourceHistoryDiffUntrackedPathStatesNoRecord(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.beginSession(historySession)
 	result := h.sessionDiff("never.go")
 	if result.Recorded || result.Note == "" {
@@ -403,7 +403,7 @@ func TestSourceHistoryDiffUntrackedPathStatesNoRecord(t *testing.T) {
 }
 
 func TestSourceHistoryDiffExplicitPathRejections(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "a.go", content: "a\n", op: api.SourceChangeOpCreate})
 	version := h.head("a.go").VersionID
 	h.record(effectSeed{path: "other.go", content: "b\n", op: api.SourceChangeOpCreate})
@@ -421,7 +421,7 @@ func TestSourceHistoryDiffExplicitPathRejections(t *testing.T) {
 
 func TestSourceHistoryDiffReportsLedgerFailures(t *testing.T) {
 	failure := errors.New("ledger down")
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "a.go", content: "a\n", op: api.SourceChangeOpCreate})
 	h.writeFile("a.go", "a\n")
 	real := h.store.History

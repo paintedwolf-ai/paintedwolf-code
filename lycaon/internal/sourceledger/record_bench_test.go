@@ -37,7 +37,7 @@ func BenchmarkRecordBatchPromoteScale(b *testing.B) {
 			`, now); err != nil {
 				b.Fatalf("insert root: %v", err)
 			}
-			store := New(sqlDB, b.TempDir())
+			store := New(sqlDB, b.TempDir(), Timing{})
 			ctx := context.Background()
 
 			b.ResetTimer()
@@ -104,7 +104,7 @@ func benchmarkOpenCommandWindow(b *testing.B, files int, committed, watched bool
 		VALUES ('r1', 'p1', ?, 'root', 1, ?, 'attached')`, root, timelayout.Format(time.Now().UTC())); err != nil {
 		b.Fatalf("insert root: %v", err)
 	}
-	store := New(sqlDB, b.TempDir())
+	store := New(sqlDB, b.TempDir(), Timing{})
 	setWindowTimer(store.Commands, func() <-chan time.Time { return time.After(0) })
 	store.Commands.startQuietGrace, store.Commands.startQuietWait = 0, 0
 	store.Commands.observationBudget = time.Minute
