@@ -1130,27 +1130,30 @@ back from the signed file.
 | **HTTP API** | `/v1/` | Breaking wire only → `/v2/` (rare) |
 | **Workflow catalog** | `plan@1.0.0` | Manifest YAML; independent of host patch |
 
-**Primary distribution:** [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the platforms marked `publication: public` in [`packaging/release-platforms.json`](../packaging/release-platforms.json). The public set is the Apple Silicon macOS DMG and updater archive, plus Linux amd64 and arm64 DEB, RPM and pacman packages. They publish at `downloads.paintedwolf.dev`, Homebrew receives the matching cask, and the GitHub Release is a trailing mirror. Windows x86_64 remains a `candidate` outside the release matrix. Each catalog row lists its `package_extensions` (one build emits every family: `["deb", "rpm", "pkg.tar.zst"]` on Linux) and its `updater_extension`, which is `null` where the package manager owns updates. A public Linux platform uses the same lane and admission as macOS: `classify` requires the exact-source Qualification record, which carries the source verification, upgrade corpus and prior-release upgrade rehearsal, `build-release` signs its packages with the Linux package key, `aggregate-release` collects them, and publication follows `ship-gates`, `publish-artifacts` and the completed `publish-immutable` metadata gate; see [Linux in the next regular release](#linux-in-the-next-regular-release). The independent nonpublishing `linux-candidates` workflow retains development packages without release authority; regular releases use the public matrix once. The minimum supported macOS version is 14.0 (Sonoma), which clears the UI's WebKit requirement; the floor lives in [`lycaon/internal/platformfloor/macos_floor.txt`](../lycaon/internal/platformfloor/macos_floor.txt), and contract tests keep the catalog, Tauri, Homebrew, and compiled binary aligned.
+**Primary distribution:** [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the platforms marked `publication: public` in [`packaging/release-platforms.json`](../packaging/release-platforms.json). The public set is the Apple Silicon macOS DMG and updater archive, plus Linux amd64 and arm64 DEB, RPM and pacman packages. They publish at `downloads.paintedwolf.dev`, Homebrew receives the matching cask, and the GitHub Release is a trailing mirror. Windows x86_64 remains a `candidate` outside the release matrix. Each catalog row lists its `package_extensions` (one build emits every family: `["deb", "rpm", "pkg.tar.zst"]` on Linux) and its `updater_extension`, which is `null` where the package manager owns updates. A public Linux platform uses the same lane and admission as macOS: `classify` requires the exact-source Qualification record, which carries the source verification, upgrade corpus and prior-release upgrade rehearsal, `prepare` reuses the unsigned packages, Nix closures and compiled macOS app that Qualification prepared for the same commit and tree (or builds them without secrets), `build-release` refuses any artifact prepared from another source and signs it, `aggregate-release` collects them, and publication follows `ship-gates`, `publish-artifacts` and the completed `publish-immutable` metadata gate; see [Linux in the next regular release](#linux-in-the-next-regular-release). The independent nonpublishing `linux-candidates` workflow retains development packages without release authority; regular releases use the public matrix once. The minimum supported macOS version is 14.0 (Sonoma), which clears the UI's WebKit requirement; the floor lives in [`lycaon/internal/platformfloor/macos_floor.txt`](../lycaon/internal/platformfloor/macos_floor.txt), and contract tests keep the catalog, Tauri, Homebrew, and compiled binary aligned.
 
 ```mermaid
 flowchart TD
     tag["Push tag v*<br/>(must equal v + VERSION)"] --> classify["Classify qualified source<br/>and check static release metadata"]
     classify --> probe["Prove every credential and both protected environments"]
     probe --> compat["Published stable compatibility"]
+    probe --> prepare["prepare: reuse the source's unsigned artifacts<br/>or build them without secrets"]
     compat --> gates["ship-gates: require every result"]
-    compat --> build["build-release public matrix<br/>Apple Silicon macOS and both Linux architectures"]
-    build --> verify["Native structure and signature checks<br/>macOS notarization"]
-    verify --> aggregate["aggregate-release<br/>Collect every public platform build"]
+    prepare --> sign["build-release, in parallel<br/>macOS: sign, notarize, staple, dmg, verify<br/>Linux x86_64 and aarch64: verify source, sign"]
+    compat --> sign
+    prepare --> nix["import-nix-closures<br/>Verify source and import both closures"]
+    sign --> aggregate["aggregate-release<br/>Collect every public platform build"]
     aggregate --> plan["Select one retained monotonic channel plan"]
     gates --> plan
-    plan --> setup["Build signed native generations<br/>and repository setup packages"]
-    setup --> deposit["publish-artifacts<br/>Deposit and verify immutable package bytes"]
-    gates --> deposit
+    plan --> repos["Signed apt, dnf and pacman generations<br/>and repository setup packages"]
+    plan --> cases["Prepare signed installed upgrade cases"]
+    cases --> upgrade["bundle-upgrade<br/>Cases two at a time"]
+    repos --> deposit["publish-artifacts<br/>Deposit and verify immutable package bytes"]
+    upgrade --> deposit
+    nix --> deposit
     deposit --> native["Activate apt, dnf and pacman repositories"]
-    classify --> prepare["Prepare unsigned artifacts of the source<br/>or reuse its receipt"]
-    prepare --> nix
-    native --> nix["Publish and observe both Nix cache closures"]
-    nix --> document["publish-immutable<br/>Sign and verify completed distribution document"]
+    native --> cache["Publish and observe both Nix cache closures"]
+    cache --> document["publish-immutable<br/>Sign and verify completed distribution document"]
     document --> cask["update-cask<br/>Homebrew tap"]
     document --> website["notify-website<br/>Exact selected channel plan and digest"]
     cask --> updater["activate-updater<br/>Publish selected signed feed pointers"]
@@ -1761,7 +1764,10 @@ schedule, push or dispatch run of this repository whose workflow commit is on
 `main` counts; pull request runs and branch dispatches never vouch for
 artifacts. A failed lookup builds.
 
-The release calls it for its source and imports the Nix closures from it. The
+The release calls it for its source after the credential probe. It signs the
+macOS archive and the Linux packages and imports the Nix closures from it, so a
+release compiles nothing when Qualification prepared the same source, and a
+signing rerun repeats only the signing job. The
 [Linux candidates workflow](../.github/workflows/linux-candidates.yml) calls it
 for packaging pull requests into `main` when they open ready or become ready,
 weekly for `main`, and by dispatch for any commit

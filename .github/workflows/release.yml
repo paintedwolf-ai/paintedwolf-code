@@ -257,6 +257,50 @@ jobs:
           name: release-compatibility-${{ github.run_attempt }}
           status: ${{ job.status }}
 
+  # Reuses the unsigned artifacts prepared for this exact source, or builds them without secrets.
+  prepare:
+    needs: [classify, credentials]
+    uses: ./.github/workflows/release-prepare.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      source_sha: ${{ needs.classify.outputs.source_sha }}
+
+  # A closure that fails identity or import stops the release before anything is public.
+  import-nix-closures:
+    needs: [classify, prepare]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.classify.outputs.source_sha }}
+          persist-credentials: false
+      - name: Install the pinned Nix
+        run: python3 -c 'from scripts.linux_release.nix_runner import install; print(install())' >> "${GITHUB_PATH}"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: prepared-nix-*
+          path: ${{ runner.temp }}/prepared
+          run-id: ${{ needs.prepare.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify both closures against the source and import them
+        env:
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          for system in x86_64-linux aarch64-linux; do
+            closure="${RUNNER_TEMP}/prepared/prepared-nix-${system}"
+            python3 -m scripts.release_preparation verify --artifact "${closure}" --name "prepared-nix-${system}" \
+              --source-commit "${SOURCE_SHA}"
+            xargs nix copy --extra-experimental-features nix-command --no-check-sigs \
+              --from "file://${closure}/cache" < "${closure}/outputs.txt"
+          done
+
   ship-gates:
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
     if: ${{ !cancelled() && inputs.rehearsal_run_id == '' }}
@@ -272,17 +316,18 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: python3 scripts/ci_verification.py gate
 
-  # Packaging follows static compatibility; publication requires ship-gates.
+  # Signs what preparation compiled; a signing rerun repeats only this job.
   build-release:
-    needs: [classify, compatibility]
+    needs: [classify, compatibility, prepare]
     strategy:
       fail-fast: false
-      # One signed build at a time keeps packaging within the release runner budget.
-      max-parallel: 1
       matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.goos == 'darwin' && matrix.runner || 'ubuntu-latest' }}
     environment: release-signing
-    timeout-minutes: 360
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
     defaults:
       run:
         shell: bash
@@ -291,6 +336,23 @@ jobs:
         with:
           ref: ${{ needs.classify.outputs.source_sha }}
           fetch-depth: 0
+
+      - name: Download the prepared artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: prepared-${{ matrix.updater_key }}
+          path: ${{ runner.temp }}/prepared
+          run-id: ${{ needs.prepare.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Refuse an artifact prepared from another source
+        env:
+          NAME: prepared-${{ matrix.updater_key }}
+          SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+        run: |
+          python3 -m scripts.release_preparation verify --artifact "${RUNNER_TEMP}/prepared" --name "${NAME}" \
+            --source-commit "${SOURCE_SHA}"
+          rm "${RUNNER_TEMP}/prepared/preparation.json"
 
       - name: Check out the trusted packaging controller
         if: ${{ matrix.goos == 'darwin' }}
@@ -301,39 +363,26 @@ jobs:
           persist-credentials: false
 
       - uses: actions/setup-go@b2a9ab24f04885adb52faf6bdccb0bb7dfb3c187 # v7.0.0
+        if: ${{ matrix.goos == 'darwin' }}
         with:
           go-version-file: lycaon/go.mod
           cache: false
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        if: ${{ matrix.goos == 'darwin' }}
         with:
           bun-version-file: .bun-version
           no-cache: true
 
       - name: Install the pinned Rust toolchain
+        if: ${{ matrix.goos == 'darwin' }}
         run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
 
-      - name: Verify native release runner
-        env:
-          EXPECTED_GOOS: ${{ matrix.goos }}
-          EXPECTED_GOARCH: ${{ matrix.goarch }}
-        run: |
-          set -euo pipefail
-          [[ "$(go env GOOS)" == "${EXPECTED_GOOS}" ]]
-          [[ "$(go env GOARCH)" == "${EXPECTED_GOARCH}" ]]
-          case "${EXPECTED_GOOS}/${EXPECTED_GOARCH}" in
-            darwin/arm64) [[ "$(rustc --print host-tuple)" == aarch64-apple-darwin ]] ;;
-            linux/amd64) [[ "$(rustc --print host-tuple)" == x86_64-unknown-linux-gnu ]] ;;
-            linux/arm64) [[ "$(rustc --print host-tuple)" == aarch64-unknown-linux-gnu ]] ;;
-            windows/amd64) [[ "$(rustc --print host-tuple)" == x86_64-pc-windows-msvc ]] ;;
-            *) echo "error: unsupported release runner ${EXPECTED_GOOS}/${EXPECTED_GOARCH}" >&2; exit 1 ;;
-          esac
-
-      - name: Install Linux bundle dependencies
+      - name: Install Linux signing tools
         if: ${{ matrix.goos == 'linux' }}
         uses: ./.github/actions/setup-apt
         with:
-          packages: libwebkit2gtk-4.1-dev librsvg2-dev xdg-utils rpm rpmlint lintian cpio libarchive-tools gnupg
+          packages: rpm gnupg libarchive-tools
 
       - name: Import signing certificate and notary key
         if: ${{ matrix.goos == 'darwin' }}
@@ -345,82 +394,28 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: bash scripts/macos-notary-tools/signing.sh import
 
-      - name: Restore the decision engine build
-        if: ${{ matrix.goos == 'darwin' }}
-        uses: ./.github/actions/cache-decide
-
-      - uses: ./.github/actions/cache-go
-        if: ${{ matrix.goos == 'darwin' }}
-      - uses: ./.github/actions/cache-notices-tools
-        if: ${{ matrix.goos == 'darwin' }}
-      - uses: ./.github/actions/cache-document-core
-        if: ${{ matrix.goos == 'darwin' }}
-
-      - name: Restore the release build warmed on main
-        if: ${{ matrix.goos == 'darwin' }}
-        uses: ./.github/actions/cache-release-build
-
-      - name: Download or restore qualified maintained engine
-        uses: ./.github/actions/setup-opengrep
-
-      - name: Download pinned Bialy heads
-        uses: ./.github/actions/setup-bialy
-
       - name: Install frontend dependencies
+        if: ${{ matrix.goos == 'darwin' }}
         working-directory: lycaon-den
         run: bun install --frozen-lockfile
 
-      - name: Install Windows Artifact Signing client
-        if: ${{ matrix.goos == 'windows' }}
-        run: cargo install artifact-signing-cli --locked --version 0.11.0
-
-      - name: Build, sign, and notarize
+      - name: Sign, notarize, staple and package the compiled application
+        if: ${{ matrix.goos == 'darwin' }}
         env:
-          GOOS: ${{ matrix.goos }}
-          PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}
-          APPLE_SIGNING_IDENTITY: ${{ matrix.goos == 'darwin' && secrets.APPLE_SIGNING_IDENTITY || '' }}
-          APPLE_API_ISSUER: ${{ matrix.goos == 'darwin' && secrets.APPLE_API_ISSUER || '' }}
-          APPLE_API_KEY: ${{ matrix.goos == 'darwin' && secrets.APPLE_API_KEY_ID || '' }}
-          AZURE_CLIENT_ID: ${{ matrix.goos == 'windows' && secrets.AZURE_CLIENT_ID || '' }}
-          AZURE_CLIENT_SECRET: ${{ matrix.goos == 'windows' && secrets.AZURE_CLIENT_SECRET || '' }}
-          AZURE_TENANT_ID: ${{ matrix.goos == 'windows' && secrets.AZURE_TENANT_ID || '' }}
-          AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ matrix.goos == 'windows' && vars.AZURE_ARTIFACT_SIGNING_ENDPOINT || '' }}
-          AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ matrix.goos == 'windows' && vars.AZURE_ARTIFACT_SIGNING_ACCOUNT || '' }}
-          AZURE_ARTIFACT_SIGNING_PROFILE: ${{ matrix.goos == 'windows' && vars.AZURE_ARTIFACT_SIGNING_PROFILE || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           : "${TAURI_SIGNING_PRIVATE_KEY:?missing TAURI_SIGNING_PRIVATE_KEY}"
-          if [[ "${GOOS}" == darwin ]]; then
-            : "${APPLE_SIGNING_IDENTITY:?missing APPLE_SIGNING_IDENTITY}"
-            : "${APPLE_API_ISSUER:?missing APPLE_API_ISSUER}"
-            : "${APPLE_API_KEY:?missing APPLE_API_KEY_ID}"
-          fi
-          if [[ "${GOOS}" == windows ]]; then
-            : "${AZURE_CLIENT_ID:?missing AZURE_CLIENT_ID}"
-            : "${AZURE_CLIENT_SECRET:?missing AZURE_CLIENT_SECRET}"
-            : "${AZURE_TENANT_ID:?missing AZURE_TENANT_ID}"
-            : "${AZURE_ARTIFACT_SIGNING_ENDPOINT:?missing AZURE_ARTIFACT_SIGNING_ENDPOINT}"
-            : "${AZURE_ARTIFACT_SIGNING_ACCOUNT:?missing AZURE_ARTIFACT_SIGNING_ACCOUNT}"
-            : "${AZURE_ARTIFACT_SIGNING_PROFILE:?missing AZURE_ARTIFACT_SIGNING_PROFILE}"
-          fi
-          if [[ "${GOOS}" == darwin ]]; then
-            export PW_STAPLE_LOG_DIR="${RUNNER_TEMP}/staple-evidence"
-            export PATH="${GITHUB_WORKSPACE}/.release-controller/scripts/macos-notary-tools:${PATH}"
-          fi
-          if [[ "${GOOS}" == linux ]]; then
-            case "${PACKAGE_EXTENSIONS}" in
-              deb,rpm) ./task den:bundle ;;
-              deb,rpm,pkg.tar.zst) ./task den:bundle -- --pacman-container ;;
-              *) echo "Unsupported release package-family contract" >&2; exit 1 ;;
-            esac
-          else
-            ./task den:bundle
-          fi
-          if [[ "${GOOS}" == darwin ]]; then
-            python3 .release-controller/scripts/macos-notary-tools/notary.py --check "${PW_STAPLE_LOG_DIR}"
-          fi
+          : "${APPLE_API_ISSUER:?missing APPLE_API_ISSUER}"
+          : "${APPLE_API_KEY:?missing APPLE_API_KEY_ID}"
+          export PW_STAPLE_LOG_DIR="${RUNNER_TEMP}/staple-evidence"
+          export PATH="${GITHUB_WORKSPACE}/.release-controller/scripts/macos-notary-tools:${PATH}"
+          ./task den:bundle -- --phase package --archive "${RUNNER_TEMP}/prepared/compiled.tar"
+          python3 .release-controller/scripts/macos-notary-tools/notary.py --check "${PW_STAPLE_LOG_DIR}"
 
       - name: Retain notarization and stapling evidence
         if: ${{ always() && matrix.goos == 'darwin' }}
@@ -443,6 +438,7 @@ jobs:
           retention-days: 14
 
       - name: Verify and stage platform artifacts
+        if: ${{ matrix.goos == 'darwin' }}
         env:
           VERSION: ${{ needs.classify.outputs.version }}
           PLATFORM: ${{ matrix.updater_key }}
@@ -459,6 +455,7 @@ jobs:
             --version "${VERSION}" --package-extensions "${PACKAGE_EXTENSIONS}" \
             --updater-extension "${UPDATER_EXTENSION}" --output "${RUNNER_TEMP}/release"
 
+      # Preparation staged and audited these packages; signing adds signatures and rebinds digests.
       - name: Sign Linux packages and rebind their final digests
         if: ${{ matrix.goos == 'linux' }}
         env:
@@ -468,6 +465,7 @@ jobs:
           SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
           LINUX_PACKAGE_SIGNING_KEY: ${{ secrets.LINUX_PACKAGE_SIGNING_KEY }}
         run: |
+          mv "${RUNNER_TEMP}/prepared" "${RUNNER_TEMP}/release"
           PYTHONPATH=scripts python3 -m scripts.linux_release.release_signing --directory "${RUNNER_TEMP}/release" \
             --platform "${PLATFORM}" --architecture "${ARCH}" --version "${VERSION}" --source-commit "${SOURCE_SHA}"
 
@@ -612,10 +610,8 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # Follows the apt and dnf assembly: both read the same collected artifacts, and the
-  # serial order keeps a release run within its declared two runners.
   linux-pacman-repositories:
-    needs: [classify, aggregate-release, linux-repositories]
+    needs: [classify, aggregate-release, select-release-channels]
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel@sha256:061679925e5d5028f2df9395d441ce6c4b9accf0157ff3486c06b6962e014ef1
@@ -657,7 +653,7 @@ jobs:
     outputs:
       fixture_name: bundle-upgrade-fixtures-${{ github.run_attempt }}
       matrix: ${{ steps.prepare.outputs.matrix }}
-    needs: [classify, ship-gates, aggregate-release, linux-pacman-repositories]
+    needs: [classify, ship-gates, aggregate-release, select-release-channels]
     runs-on: ubuntu-latest
     environment: release-publication
     timeout-minutes: 45
@@ -729,7 +725,8 @@ jobs:
     needs: [classify, prepare-bundle-upgrade]
     strategy:
       fail-fast: false
-      max-parallel: 1
+      # One macOS runner signs while the other runs a case; after signing both run cases.
+      max-parallel: 2
       matrix: ${{ fromJSON(needs.prepare-bundle-upgrade.outputs.matrix) }}
     runs-on: macos-15
     timeout-minutes: 150
@@ -775,7 +772,7 @@ jobs:
           status: ${{ job.status }}
 
   publish-artifacts:
-    needs: [classify, ship-gates, build-release, aggregate-release, linux-pacman-repositories, bundle-upgrade]
+    needs: [classify, ship-gates, build-release, import-nix-closures, aggregate-release, linux-repositories, linux-pacman-repositories, bundle-upgrade]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     environment: release-publication
@@ -935,17 +932,6 @@ jobs:
           path: ${{ runner.temp }}/linux-publication.json
           if-no-files-found: error
           retention-days: 90
-
-  # Reuses the unsigned artifacts prepared for this exact source, or builds them without secrets.
-  prepare:
-    needs: [classify, credentials]
-    if: ${{ needs.classify.outputs.publish == 'true' }}
-    uses: ./.github/workflows/release-prepare.yml
-    permissions:
-      contents: read
-      actions: read
-    with:
-      source_sha: ${{ needs.classify.outputs.source_sha }}
 
   # Observe cache publication before immutable discovery metadata is signed.
   linux-delivery:
