@@ -10451,7 +10451,8 @@ export interface components {
             phase_host_held?: boolean;
         };
         ActiveWorkflowRunResponse: {
-            run: components["schemas"]["WorkflowRun"];
+            /** @description The chat's active run; null when it has none. */
+            run: components["schemas"]["WorkflowRun"] | null;
         };
         AdvanceWorkflowRunRequest: {
             /** Format: int64 */

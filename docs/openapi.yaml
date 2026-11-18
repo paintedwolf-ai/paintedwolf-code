@@ -26791,9 +26791,11 @@ components:
       additionalProperties: false
       properties:
         run:
-          x-go-pointer: true
-          nullable: true
-          $ref: '#/components/schemas/WorkflowRun'
+          description: The chat's active run; null when it has none.
+          x-go-type: '*WorkflowRun'
+          anyOf:
+            - $ref: '#/components/schemas/WorkflowRun'
+            - type: 'null'
     AdvanceWorkflowRunRequest:
       x-go-generate: true
       type: object

@@ -167,6 +167,7 @@ type ActionReceiptScope struct {
 
 // ActiveWorkflowRunResponse
 type ActiveWorkflowRunResponse struct {
+	// The chat's active run; null when it has none.
 	Run *WorkflowRun `json:"run"`
 }
 
