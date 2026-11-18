@@ -65,22 +65,6 @@ func Open(dbPath string) (*Store, error) {
 // OpenWithOptions opens a store after recognized upgrades and verified installation recovery capture.
 // The caller holds the installation lease throughout recovery, upgrading, and serving.
 func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opts StoreOptions) (*Store, error) {
-	return openStore(ctx, dbPath, hooks, opts, false)
-}
-
-// OpenCopy copies a store and opens the copy. When the source is unchanged
-// since this process verified and cleanly closed it, the copy's identical
-// bytes are not inspected for upgrade again; any other source gets the full
-// open.
-func OpenCopy(ctx context.Context, srcPath, dstPath string, opts StoreOptions) (*Store, error) {
-	verified := closedStores.unchanged(srcPath)
-	if err := copyStoreFile(srcPath, dstPath); err != nil {
-		return nil, err
-	}
-	return openStore(ctx, dstPath, UpgradeHooks{}, opts, verified)
-}
-
-func openStore(ctx context.Context, dbPath string, hooks UpgradeHooks, opts StoreOptions, verifiedCopy bool) (*Store, error) {
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0o700); err != nil { // #nosec G703 -- local SQLite store dir
 		return nil, fmt.Errorf("create db directory: %w", err)
@@ -106,7 +90,7 @@ func openStore(ctx context.Context, dbPath string, hooks UpgradeHooks, opts Stor
 		created = true
 	}
 
-	if !created && !verifiedCopy {
+	if !created {
 		if err := upgradeExisting(ctx, dbPath, hooks, false); err != nil {
 			return nil, ClassifyStoreFailure(err)
 		}
@@ -165,7 +149,6 @@ func openStore(ctx context.Context, dbPath string, hooks UpgradeHooks, opts Stor
 		_ = writer.Close()
 		return nil, ClassifyStoreFailure(err)
 	}
-	store.path = dbPath
 	if filepath.IsAbs(dbPath) {
 		store.dataDir = filepath.Dir(dbPath)
 	}

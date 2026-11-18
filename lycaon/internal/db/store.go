@@ -36,7 +36,6 @@ type Store struct {
 	audit   auditControl
 	health  storeHealth
 	dataDir string
-	path    string
 	writer  *sql.DB
 	reader  *sql.DB
 
@@ -216,9 +215,6 @@ func (s *Store) Shutdown(parent context.Context) error {
 			}
 		}
 		s.closeErr = errors.Join(errs...)
-		if s.closeErr == nil && s.Failure() == nil {
-			closedStores.record(s.path)
-		}
 	})
 	return s.closeErr
 }
