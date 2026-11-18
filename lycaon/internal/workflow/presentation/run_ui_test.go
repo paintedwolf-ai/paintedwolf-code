@@ -2,6 +2,7 @@ package presentation_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"testing"
 
@@ -130,7 +131,7 @@ func TestComputeRunUIHumanApprovalAwaitingWithoutTasksMarker(t *testing.T) {
 	testutil.FailErr(t, "completePlanResearchAtDepthNone", err)
 	bp, err := blueprintMgr.Get(ctx, run.ProjectID, run.BlueprintPath)
 	testutil.FailErr(t, "Get stub-only blueprint", err)
-	if _, err := blueprintMgr.Store.UpdateContent(ctx, run.ProjectID, run.BlueprintPath, conditions.TestPlanContentStubOnly, blueprint.ContentDigest(bp.Content)); err != nil {
+	if _, err := blueprintMgr.Store.UpdateContent(ctx, run.ProjectID, run.BlueprintPath, conditionstest.PlanStub, blueprint.ContentDigest(bp.Content)); err != nil {
 		testutil.FailErr(t, "plan update stub-only", err)
 	}
 	run, err = advancePlanThroughExpand(ctx, mgr, run)

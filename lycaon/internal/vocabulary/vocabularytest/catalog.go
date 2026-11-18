@@ -1,9 +1,8 @@
 package vocabularytest
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"sort"
-
-	"github.com/lycaon/lycaon/internal/conditions"
 )
 
 // CatalogEntry is one row in schemas/workflow_vocabulary.json.
@@ -15,7 +14,7 @@ type CatalogEntry struct {
 	Parameterized bool   `json:"parameterized"`
 }
 
-// ExportCatalog returns the machine-readable vocabulary catalog from shipped registry tables.
+// ExportCatalog returns the machine-readable vocabulary catalog for comparison with the shipped vocabulary.
 func ExportCatalog() []CatalogEntry {
 	var out []CatalogEntry
 	out = append(out,
@@ -28,19 +27,19 @@ func ExportCatalog() []CatalogEntry {
 	for _, id := range shippedCoreParameterized {
 		out = append(out, entry(id, "core", "—", "shipped", true))
 	}
-	for _, id := range conditions.ShippedPlanDomainIDs() {
+	for _, id := range conditionstest.PlanIDs {
 		out = append(out, entry(id, "domain", "plan", "shipped", false))
 	}
-	for _, id := range conditions.ShippedBlueprintDomainIDs() {
+	for _, id := range conditionstest.BlueprintIDs {
 		out = append(out, entry(id, "domain", "blueprint", "shipped", false))
 	}
-	for _, id := range conditions.ShippedScanDomainIDs() {
+	for _, id := range conditionstest.ScanIDs {
 		out = append(out, entry(id, "domain", "scan", "shipped", false))
 	}
-	for _, id := range conditions.ShippedHumanApprovalDomainIDs() {
+	for _, id := range conditionstest.HumanApprovalIDs {
 		out = append(out, entry(id, "core", "—", "shipped", false))
 	}
-	for _, id := range conditions.ScanCatalogStubIDs() {
+	for _, id := range conditionstest.DeferredScanIDs {
 		out = append(out, entry(id, "domain", "scan", "catalog", false))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })

@@ -1,7 +1,6 @@
 package definition
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/boolexpr"
@@ -164,34 +163,4 @@ func CollectManifestVocabulary(m Manifest) (completeWhen []string, gateLeaves []
 		}
 	}
 	return completeWhen, gateLeaves
-}
-
-// RegisteredGateLeafIDs returns sorted gate leaf ids allowed in phases[].gates (static registry).
-func RegisteredGateLeafIDs() []string {
-	out := make([]string, 0, len(registeredGateLeafIDs))
-	for id := range registeredGateLeafIDs {
-		out = append(out, id)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// RegisteredCompleteWhenPredicates returns the sorted complete_when predicate ids
-// validated at manifest load time. The static table here is checked against the
-// runtime condition registry by contract test so it cannot drift from real evaluators.
-func RegisteredCompleteWhenPredicates() []string {
-	out := make([]string, 0, len(registeredCompleteWhenPredicates))
-	for id := range registeredCompleteWhenPredicates {
-		out = append(out, id)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// DelegateSubroutineGateLeafIDs returns delegate + subroutine leaves for gate registry scans.
-func DelegateSubroutineGateLeafIDs() []string {
-	out := conditions.ShippedDelegateLeafIDs()
-	out = append(out, conditions.ShippedSubroutineLeafIDs()...)
-	sort.Strings(out)
-	return out
 }

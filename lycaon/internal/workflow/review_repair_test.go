@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -39,7 +39,7 @@ func persistReviewResponse(t *testing.T, mgr *RunManager, session string, msg ap
 
 func TestReviewRepairBlocksOnceAndResumeRetainsWork(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	for i := 0; i < 3; i++ {
 		msg := api.Message{ID: fmt.Sprintf("result-%d", i), WorkflowRunID: run.ID, ToolResult: &api.ToolResult{Tool: "submit_verdict", Outcome: api.ToolResultOutcomeRejected, AssistantMessageID: fmt.Sprintf("response-%d", i), ToolCallID: fmt.Sprintf("call-%d", i), Codes: []string{"TOOL_ARGS_INVALID"}, Feedback: []api.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"field": "verdict.coverage"}}}}}
@@ -74,7 +74,7 @@ func TestReviewRepairBlocksOnceAndResumeRetainsWork(t *testing.T) {
 
 func TestReviewContractBlocksWithoutModelAttempts(t *testing.T) {
 	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	testutil.FailErr(t, "block impossible contract", ReviewRepairs{mgr}.BlockContract(t.Context(), run.ID, fmt.Errorf("host id rejected by schema")))
 	got, err := mgr.Store.Runs.Get(t.Context(), run.ID)
@@ -93,7 +93,7 @@ func TestReviewContractBlocksWithoutModelAttempts(t *testing.T) {
 
 func TestReviewRepairRecoveryCountsResponsesOnce(t *testing.T) {
 	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	for i := 0; i < 3; i++ {
 		msg := api.Message{ID: fmt.Sprintf("durable-result-%d", i), Role: api.MessageRoleTool, WorkflowRunID: run.ID, CreatedAt: time.Now().UTC(), ToolResult: &api.ToolResult{Tool: "submit_verdict", ToolCallID: fmt.Sprintf("call-%d", i), AssistantMessageID: fmt.Sprintf("response-%d", i), Outcome: api.ToolResultOutcomeRejected, Codes: []string{"TOOL_ARGS_INVALID"}, Feedback: []api.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"workflow_phase": run.CurrentPhase, "field": "verdict.coverage"}}}}}
@@ -112,7 +112,7 @@ func TestReviewRepairRecoveryCountsResponsesOnce(t *testing.T) {
 
 func TestReviewRepairIgnoresResultsFromPriorPhase(t *testing.T) {
 	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	msg := api.Message{ID: "old-result", WorkflowRunID: run.ID, ToolResult: &api.ToolResult{Tool: "submit_verdict", ToolCallID: "old-call", Outcome: api.ToolResultOutcomeRejected, Codes: []string{"TOOL_ARGS_INVALID"}, Feedback: []api.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"workflow_phase": "previous_phase"}}}}}
 	testutil.FailErr(t, "ignore old result", mgr.RecordReviewToolResult(t.Context(), run.SessionID, msg))
@@ -155,7 +155,7 @@ func TestReviewRepairCountsOneResponseAndRetainsLatestCandidate(t *testing.T) {
 
 func TestReviewRepairTotalBudgetBoundsChangingDefects(t *testing.T) {
 	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	for i := 0; i < 8; i++ {
 		msg := api.Message{ID: fmt.Sprintf("result-%d", i), WorkflowRunID: run.ID, ToolResult: &api.ToolResult{Tool: "submit_verdict", ToolCallID: fmt.Sprintf("call-%d", i), AssistantMessageID: fmt.Sprintf("response-%d", i), Outcome: api.ToolResultOutcomeRejected, Codes: []string{"TOOL_ARGS_INVALID"}, Feedback: []api.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"field": fmt.Sprintf("verdict.claims[%d]", i)}}}}}

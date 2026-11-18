@@ -1,6 +1,7 @@
 package phases_test
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 
 	"context"
@@ -56,7 +57,7 @@ func obligationTestManifest() workflowdef.Manifest {
 func wireTestObligation(t *testing.T, mgr *workflow.RunManager, obligation *stubWorkflowObligation) {
 	t.Helper()
 	mgr.Obligations.Register(obligation)
-	deps := conditions.TestRegistryDeps()
+	deps := conditionstest.Dependencies()
 	deps.ObligationResolvers = map[string]conditions.ObligationStatusReader{"scan": obligation}
 	reg, err := conditions.NewDefaultRegistry(deps)
 	testutil.FailErr(t, "conditions registry", err)

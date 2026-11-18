@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -53,7 +53,7 @@ func TestInventoryPreviewChecksEveryLocation(t *testing.T) {
 
 func TestInventoryAccountingRequiresBoundScansAndPreservesRevision(t *testing.T) {
 	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	scans := []api.CodeScan{{ID: "scan", ScannerID: "sast", Status: api.CodeScanStatusComplete, Findings: []api.SecurityFinding{scanfindings.BuildSecurityFinding(scanfindings.FindingBuildOpts{DriverID: "sast", RuleID: "rule", Level: api.FindingLevelHigh})}}}
 	mgr.Coverage.Inventory = workflowFakeInventory{run: scans}
@@ -84,7 +84,7 @@ func TestInventoryAccountingRequiresBoundScansAndPreservesRevision(t *testing.T)
 func startInventoryReview(t *testing.T) (*RunManager, *api.WorkflowRun, string) {
 	t.Helper()
 	mgr, _, blueprints, dir := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	manifest := reviewLoopTestManifest()
 	manifest.PhaseDefs[0].ActivityLabel = "Reviewing inventory"
 	manifest.PhaseDefs[1].ActivityLabel = "Done"

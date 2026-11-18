@@ -2,6 +2,7 @@ package inputs_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -25,7 +26,7 @@ func slashAskFeedbackManifest(trigger string) workflowdef.Manifest {
 
 func TestSlashAttachedRequestDoesNotOpenWorkflowQuestion(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry", err)
 	mgr.SetConditionRegistry(reg)
 	manifest := slashAskFeedbackManifest("/decide")
@@ -52,7 +53,7 @@ func TestSlashAttachedRequestDoesNotOpenWorkflowQuestion(t *testing.T) {
 
 func TestBareSlashOpensWorkflowQuestion(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry", err)
 	mgr.SetConditionRegistry(reg)
 	manifest := slashAskFeedbackManifest("/decide")
@@ -75,7 +76,7 @@ func TestBareSlashOpensWorkflowQuestion(t *testing.T) {
 
 func TestSlashAskDoesNotResolveChoiceFeedback(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry", err)
 	mgr.SetConditionRegistry(reg)
 	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{

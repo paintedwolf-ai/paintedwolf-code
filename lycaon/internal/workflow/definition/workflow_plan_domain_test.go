@@ -1,6 +1,7 @@
 package definition_test
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -63,7 +64,7 @@ func TestPlanDomainDoesNotDuplicateCore(t *testing.T) {
 	if err := conditions.RegisterCoreConditions(coreReg, conditions.CoreDeps{}); err != nil {
 		testutil.FailErr(t, "conditions.RegisterCoreConditions failed", err)
 	}
-	for _, id := range conditions.ShippedPlanDomainIDs() {
+	for _, id := range conditionstest.PlanIDs {
 		if coreReg.Has(id) {
 			t.Fatalf("plan domain id %q is also registered in core", id)
 		}

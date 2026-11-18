@@ -2,6 +2,7 @@ package inputs_test
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -13,7 +14,7 @@ import (
 
 func TestResolveUserFeedbackValidatesPending(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	mgr.SetConditionRegistry(reg)
 	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
@@ -41,7 +42,7 @@ func TestResolveUserFeedbackValidatesPending(t *testing.T) {
 
 func TestResolveUserFeedbackTriggersAutoAdvance(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	mgr.SetConditionRegistry(reg)
 	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
@@ -73,7 +74,7 @@ func TestResolveUserFeedbackTriggersAutoAdvance(t *testing.T) {
 
 func TestResolveUserFeedbackRejectsStaleReviewedRevision(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry", err)
 	mgr.SetConditionRegistry(reg)
 	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{

@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"github.com/lycaon/lycaon/internal/vocabulary/vocabularytest"
 	"testing"
 
@@ -15,7 +16,7 @@ func TestPlanDomainIDsRegisteredOnBoot(t *testing.T) {
 	t.Parallel()
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	contractcheck.FailErr(t, "build conditions registry", err)
-	for _, id := range conditions.ShippedPlanDomainIDs() {
+	for _, id := range conditionstest.PlanIDs {
 		if !reg.Has(id) {
 			t.Fatalf("shipped plan domain id %q not registered", id)
 		}
@@ -30,7 +31,7 @@ func TestVocabularyExportPlanCatalogStatus(t *testing.T) {
 			seen[row.ID] = row
 		}
 	}
-	for _, id := range conditions.ShippedPlanDomainIDs() {
+	for _, id := range conditionstest.PlanIDs {
 		row, ok := seen[id]
 		if !ok {
 			t.Fatalf("missing plan domain catalog row for %q", id)
