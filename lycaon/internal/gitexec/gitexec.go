@@ -50,8 +50,8 @@ type Opts struct {
 	Input []byte
 }
 
-// HostConfig reads user-owned transport configuration.
-type HostConfig interface {
+// hostConfigReader reads user transport configuration.
+type hostConfigReader interface {
 	// HelperFor returns the configured credential helper.
 	HelperFor(ctx context.Context, remoteURL string) string
 	// SSHCommand returns the configured SSH command.

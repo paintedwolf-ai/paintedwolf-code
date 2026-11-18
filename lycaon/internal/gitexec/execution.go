@@ -15,7 +15,7 @@ type execution struct {
 	emptyHooksDir      func() (string, error)
 	lfsPath            func() (string, error)
 	executablePath     func() (string, error)
-	hostConfig         HostConfig
+	hostConfig         hostConfigReader
 	proxyConfiguration func() hostproxy.Configuration
 	agentSocket        func(context.Context) string
 	credentialService  func(context.Context, string) (credentialService, error)
