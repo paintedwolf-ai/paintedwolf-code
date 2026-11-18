@@ -768,6 +768,9 @@ func TestRefusedPathsStayInsideTheRoots(t *testing.T) {
 					if len(changed) > 0 {
 						t.Errorf("%s through %s changed %v: %s", tpl.covers, name, changed, describePath(t, s, tpl))
 					}
+					if result, ok := findWitnessResult(t, s); ok && strings.Contains(result.Content, s.dir) {
+						t.Errorf("%s through %s exposed the absolute project root: %.300q", tpl.covers, name, result.Content)
+					}
 				})
 			}
 		})
