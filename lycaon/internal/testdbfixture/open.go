@@ -3,7 +3,6 @@ package testdbfixture
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -42,30 +41,6 @@ func ensureTemplate() (string, error) {
 	return templateFile, templateErr
 }
 
-func cloneTemplate(src, dst string) (err error) {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = in.Close() }()
-
-	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
-		return err
-	}
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if closeErr := out.Close(); err == nil {
-			err = closeErr
-		}
-	}()
-
-	_, err = io.Copy(out, in)
-	return err
-}
-
 // Open creates a database below t.TempDir and registers its close operation.
 func Open(t testing.TB, name string) *db.Store {
 	t.Helper()
@@ -75,12 +50,16 @@ func Open(t testing.TB, name string) *db.Store {
 // OpenPath opens a disposable database at path and registers cleanup.
 func OpenPath(t testing.TB, path string) *db.Store {
 	t.Helper()
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if tmpl, tmplErr := ensureTemplate(); tmplErr == nil {
-			_ = cloneTemplate(tmpl, path)
-		}
+	opts := db.StoreOptions{FastTestSync: true}
+	var store *db.Store
+	var err error
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		tmpl, tmplErr := ensureTemplate()
+		testutil.FailErr(t, "prepare test database template", tmplErr)
+		store, err = db.OpenCopy(context.Background(), tmpl, path, opts)
+	} else {
+		store, err = db.OpenWithOptions(context.Background(), path, db.UpgradeHooks{}, opts)
 	}
-	store, err := db.OpenWithOptions(context.Background(), path, db.UpgradeHooks{}, db.StoreOptions{FastTestSync: true})
 	testutil.FailErr(t, "open test database", err)
 	t.Cleanup(func() {
 		testutil.FailErr(t, "close test database", store.Close())
