@@ -3,7 +3,7 @@ import { installConnectionFixtureCleanup, createFixtureApp, createLycaonClient, 
 import { describe, expect, it, vi } from "vitest";
 
 import type { EventSubscriptionOptions } from "../../api/events.ts";
-import { readHostCorpus } from "../../api/testdata/host-corpus.ts";
+import { readHostCorpus } from "../../test/host-corpus.ts";
 
 installConnectionFixtureCleanup();
 

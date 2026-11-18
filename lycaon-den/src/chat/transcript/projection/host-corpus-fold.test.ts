@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { readHostCorpus } from "../../../api/testdata/host-corpus.ts";
+import { readHostCorpus } from "../../../test/host-corpus.ts";
 import type { EventEnvelope, MessageEvent, SessionBootstrap } from "../../../api/types.ts";
 import { createAppStore } from "../../../store/app-state.ts";
 import { applyMessageEvent } from "./message-events.ts";
