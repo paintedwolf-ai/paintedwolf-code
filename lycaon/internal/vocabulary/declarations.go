@@ -40,7 +40,7 @@ var declarations = map[string]declaration{
 	"approval_denied":               {"—", predicate},
 	"closeout_gates_passed":         {"—", predicate},
 	"critic_task":                   {"—", predicate},
-	"delegation_closeout_complete":  {"—", predicate},
+	"delegation_closeout_complete":  {"—", overlayPredicate},
 	"delivery_gates_passed":         {"—", predicate},
 	"disallowed_agent":              {"—", predicate},
 	"doom_loop_exceeded":            {"—", predicate},

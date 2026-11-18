@@ -25,13 +25,9 @@ Explicit invocation text wins. With no text, the host uses `default` when presen
 
 ## Generic gate kit (project overlays)
 
-Static leaves: `gates_satisfied`, `orchestration_complete`, `child_run_complete`, `child_run_failed`, `choice_transition_required`, `human_approval`.
-
-Parameterized prefixes (non-empty suffix required): `var_equals:`, `var_truthy:`, `user_decision_received:`, `user_feedback_received:`, `user_decision:`, `hitl_consulted:`, `evidence_passed:`, `phase_is:`, `phase_skipped:`, `gate_passed:`, `obligation_settled:`.
-
 Use the `overlay` field in `schemas/workflow_vocabulary.json` to find supported project gates. Each leaf inside an expression or named gate wrapper must be available on that surface.
 
-`complete_when` accepts `gates_satisfied` (which requires a non-empty `gates: […]` — the one form the validator refuses when the list is empty), `gate_satisfied:<leaf>`, a bare leaf from the kit above, or a boolean expression over those identifiers. A terminal phase must use `complete_when: orchestration_complete`. Terminal entry is an atomic host completion sink: do not bind coordinator work, feedback, obligations, or invocation to it.
+`complete_when` accepts `gates_satisfied` (which requires a non-empty `gates: […]` — the one form the validator refuses when the list is empty), `gate_satisfied:<leaf>`, a bare leaf from the kit, or a boolean expression over those identifiers. A terminal phase must use `complete_when: orchestration_complete`. Terminal entry is an atomic host completion sink: do not bind coordinator work, feedback, obligations, or invocation to it.
 
 ## Approval and child workflows
 
@@ -43,13 +39,11 @@ Every `invoke_workflow:` block must declare `blueprint: inherit | own | none`. `
 
 An approval that enters an invocation phase wakes the current active leaf after the child start commits. Do not add a second parent wake or model-authored handoff; terminal root approval emits no coordinator wake.
 
-Topology workers run under the session worker lifecycle and produce findings and evidence. The coordinator writes protected workflow-control artifacts such as Blueprints; pipeline stages do not promote worker overlays into those paths. The `delegation_closeout_complete` leaf keeps its identifier and evaluates planned worker settlement and typed criteria.
+Topology workers run under the session worker lifecycle and produce findings and evidence. The coordinator writes protected workflow-control artifacts such as Blueprints; pipeline stages do not promote worker overlays into those paths. Use `delegation_closeout_complete` to require planned workers to settle and meet their typed criteria.
 
 ## Forbidden on project overlays
 
-Bundled domain leaves — `plan_stub_valid`, `research_satisfied`, `topology_stage_complete`, `delegation_closeout_complete`, `closeout_gates_passed`, `delivery_gates_passed`, `recon_or_board_ready`, `worker_cycle_ready`, `topology_report_delivered`, `fanout_planned`, `parallel_stages_complete`, `implement_workflow_ready`, `options_selection_valid` — diagnostic `domain_leaf_on_overlay`. Anything outside the kit above is refused, so treat the kit as the allowance rather than this list as the denial.
-
-A domain leaf is refused wherever it appears — in `gates:`, after `gate_satisfied:`, or as a bare `complete_when:`. Also forbidden: `agents[]` entries without `tools: all | profile`. Unknown manifest fields fail load.
+An explicitly authored bundled-only predicate such as `plan_stub_valid` produces `domain_leaf_on_overlay`. The same check covers child phases, named gate wrappers, transitions and approval readiness. Each `agents[]` entry declares `tools: all | profile`. Unknown manifest fields fail load.
 
 ## Leaveability (host facts)
 

@@ -107,7 +107,7 @@
       "status": "shipped",
       "parameterized": false,
       "kind": "predicate",
-      "overlay": false
+      "overlay": true
     },
     {
       "id": "delivery_gates_passed",
