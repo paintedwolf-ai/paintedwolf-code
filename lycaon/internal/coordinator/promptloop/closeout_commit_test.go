@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -136,6 +137,7 @@ func TestCloseoutCitationsRequiredHostAssemblesImmediately(t *testing.T) {
 // A retry that rewrites the retained answer is refused on the citation budget, and
 // what stays retained is the first answer.
 func TestCloseoutCitationRetryKeepsPinnedSynthesis(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	const pinned = "Honest report: tea install failed."
 	retained := activeRetained(pinned, 1, false, guidance.InvestHandleNotObservedCode)
 	var noted guidance.CloseoutDraft

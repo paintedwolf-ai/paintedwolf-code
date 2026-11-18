@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/policyfeedback"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -19,7 +20,7 @@ func TestObserveProgressMissingBeforeDispatch_blocksTaskWithoutPlan(t *testing.T
 	sess := &api.Session{ID: "root-1"}
 	gc := oar.NewGuardContext()
 	ObserveProgressMissingBeforeDispatch(sess, "", "task", false, gc)
-	if !hasRejectCode(gc, ProgressMissingCode) {
+	if !hasRejectCode(t, gc, ProgressMissingCode) {
 		t.Fatalf("want %s in %v", ProgressMissingCode, gc.Invocation.ArgValidationErrors)
 	}
 }
@@ -29,7 +30,7 @@ func TestObserveProgressMissingBeforeDispatch_blocksWriteWithoutChecklist(t *tes
 	for _, tool := range []string{"write", "edit", "replace_lines"} {
 		gc := oar.NewGuardContext()
 		ObserveProgressMissingBeforeDispatch(sess, "", tool, false, gc)
-		if !hasRejectCode(gc, ProgressMissingCode) {
+		if !hasRejectCode(t, gc, ProgressMissingCode) {
 			t.Fatalf("%s: want %s in %v", tool, ProgressMissingCode, gc.Invocation.ArgValidationErrors)
 		}
 	}
@@ -39,7 +40,7 @@ func TestObserveProgressMissingBeforeDispatch_allowsWithPlan(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
 	gc := oar.NewGuardContext()
 	ObserveProgressMissingBeforeDispatch(sess, "- [ ] Research libraries", "task", false, gc)
-	if hasRejectCode(gc, ProgressMissingCode) {
+	if hasRejectCode(t, gc, ProgressMissingCode) {
 		t.Fatal("checklist present must not observe reject")
 	}
 }
@@ -48,7 +49,7 @@ func TestObserveProgressMissingBeforeDispatch_allowsWriteWithChecklist(t *testin
 	sess := &api.Session{ID: "root-1"}
 	gc := oar.NewGuardContext()
 	ObserveProgressMissingBeforeDispatch(sess, "- [ ] Ship feature", "write", false, gc)
-	if hasRejectCode(gc, ProgressMissingCode) {
+	if hasRejectCode(t, gc, ProgressMissingCode) {
 		t.Fatal("checklist present must not observe reject")
 	}
 }
@@ -57,7 +58,7 @@ func TestObserveProgressMissingBeforeDispatch_allowsWebSearchWithoutPlan(t *test
 	sess := &api.Session{ID: "root-1"}
 	gc := oar.NewGuardContext()
 	ObserveProgressMissingBeforeDispatch(sess, "", "web_search", false, gc)
-	if hasRejectCode(gc, ProgressMissingCode) {
+	if hasRejectCode(t, gc, ProgressMissingCode) {
 		t.Fatal("web_search must not observe reject")
 	}
 }
@@ -66,7 +67,7 @@ func TestObserveProgressMissingBeforeDispatch_skipsWorkerChild(t *testing.T) {
 	sess := &api.Session{ID: "child-1", ParentSessionID: "root-1"}
 	gc := oar.NewGuardContext()
 	ObserveProgressMissingBeforeDispatch(sess, "", "task", false, gc)
-	if hasRejectCode(gc, ProgressMissingCode) {
+	if hasRejectCode(t, gc, ProgressMissingCode) {
 		t.Fatal("worker child must not observe reject")
 	}
 }
@@ -75,7 +76,7 @@ func TestObserveProgressMissingBeforeDispatch_allowsOnReviewLoop(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
 	gc := oar.NewGuardContext()
 	ObserveProgressMissingBeforeDispatch(sess, "", "task", true, gc)
-	if hasRejectCode(gc, ProgressMissingCode) {
+	if hasRejectCode(t, gc, ProgressMissingCode) {
 		t.Fatal("review loop must not observe reject")
 	}
 }
@@ -111,7 +112,7 @@ func TestProgressMissingRetainsBoundedRejectedCallOnProjection(t *testing.T) {
 			gc.Session.Role = "coordinator"
 			gc.ObserveToolCall(tc.tool, args)
 			ObserveProgressMissingBeforeDispatch(&api.Session{ID: t.Name()}, "", tc.tool, false, gc)
-			res, err := hostFinishOARPipeline().EvaluateBlock(t.Context(), oar.AnchorCoordinatorPreInvoke, gc)
+			res, err := oartest.NewCoordinatorGuardPipeline(t).EvaluateBlock(t.Context(), oar.AnchorCoordinatorPreInvoke, gc)
 			testutil.FailErr(t, "evaluate progress prerequisite", err)
 			service := policyfeedback.New()
 			service.SetRenderer(oar.NewRenderer(nil, nil))

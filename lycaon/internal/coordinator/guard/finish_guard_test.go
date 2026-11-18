@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/testutil/guardtest"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -25,7 +26,7 @@ func coordinatorRejectFmt(t *testing.T) *guidance.StaticRejectFormatter {
 func TestObserveHostFinishEchoesTaskEnvelope(t *testing.T) {
 	fmt := coordinatorRejectFmt(t)
 	sess := &api.Session{Posture: api.SessionPostureBuild}
-	reject, block := guard.FormatHostNoToolTurnReject(
+	reject, block := guardtest.FormatHostNoToolTurnReject(t,
 		sess, hostLoopHistory(
 
 			nil),
@@ -62,7 +63,7 @@ func TestTaskEnvelopeEchoFollowsTheParse(t *testing.T) {
 		{"no job id", "<task state=\"complete\"></task> is the shape.", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			reject, _ := guard.FormatHostNoToolTurnReject(sess, hostLoopHistory(nil), tc.content, nil,
+			reject, _ := guardtest.FormatHostNoToolTurnReject(t, sess, hostLoopHistory(nil), tc.content, nil,
 				spawn.SurfaceImplementSynthesis, true, surface.ImplementSessionState{}, rejectFmt, guard.BatchTurnGuard{})
 			if got := strings.Contains(reject, guard.CoordinatorTaskEnvelopeEchoCode); got != tc.echoes {
 				t.Fatalf("echo = %v want %v, reject = %q", got, tc.echoes, reject)
@@ -74,7 +75,7 @@ func TestTaskEnvelopeEchoFollowsTheParse(t *testing.T) {
 func TestObserveHostTurnRequiresWaitBlocksProseOnly(t *testing.T) {
 	fmt := coordinatorRejectFmt(t)
 	sess := &api.Session{Posture: api.SessionPostureBuild}
-	reject, block := guard.FormatHostNoToolTurnReject(
+	reject, block := guardtest.FormatHostNoToolTurnReject(t,
 		sess, hostLoopHistory(
 
 			nil),

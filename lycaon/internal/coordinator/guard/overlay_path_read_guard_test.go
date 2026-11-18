@@ -19,7 +19,7 @@ func TestObserveCoordinatorWorkerBranchPathBlocksSandboxPath(t *testing.T) {
 		map[string]any{"path": testSandboxReadPath},
 		gc)
 
-	if !observeHasCode(gc, guard.CoordinatorOverlayPathReadForbiddenCode) {
+	if !observeHasCode(t, gc, guard.CoordinatorOverlayPathReadForbiddenCode) {
 		t.Fatalf("want %s in %v", guard.CoordinatorOverlayPathReadForbiddenCode, gc.Invocation.ArgValidationErrors)
 	}
 	if gc.RejectData[guard.CoordinatorOverlayPathReadForbiddenCode]["path"] != "shellsim/builtins.py" {
@@ -35,7 +35,7 @@ func TestObserveCoordinatorWorkerBranchPathBlocksCommandCwd(t *testing.T) {
 		"command",
 		map[string]any{"cwd": "/Users/me/.config/paintedwolf/worker-branches/deadbeef/job-a"},
 		gc)
-	if !observeHasCode(gc, guard.CoordinatorOverlayPathReadForbiddenCode) {
+	if !observeHasCode(t, gc, guard.CoordinatorOverlayPathReadForbiddenCode) {
 		t.Fatalf("want %s for command cwd", guard.CoordinatorOverlayPathReadForbiddenCode)
 	}
 	if gc.RejectData[guard.CoordinatorOverlayPathReadForbiddenCode]["path"] != "." {
@@ -51,7 +51,7 @@ func TestObserveCoordinatorWorkerBranchPathBlocksReplaceLines(t *testing.T) {
 		"replace_lines",
 		map[string]any{"path": testSandboxReadPath},
 		gc)
-	if !observeHasCode(gc, guard.CoordinatorOverlayPathReadForbiddenCode) {
+	if !observeHasCode(t, gc, guard.CoordinatorOverlayPathReadForbiddenCode) {
 		t.Fatalf("want %s for replace_lines", guard.CoordinatorOverlayPathReadForbiddenCode)
 	}
 }
@@ -65,7 +65,7 @@ func TestObserveCoordinatorWorkerBranchPathAllowsPrimaryPath(t *testing.T) {
 		map[string]any{"path": "shellsim/builtins.py"},
 		gc)
 
-	if observeHasCode(gc, guard.CoordinatorOverlayPathReadForbiddenCode) {
+	if observeHasCode(t, gc, guard.CoordinatorOverlayPathReadForbiddenCode) {
 		t.Fatal("primary read should pass")
 	}
 }
@@ -79,7 +79,7 @@ func TestObserveCoordinatorWorkerBranchPathSkipsWorkerChild(t *testing.T) {
 		map[string]any{"path": testSandboxReadPath},
 		gc)
 
-	if observeHasCode(gc, guard.CoordinatorOverlayPathReadForbiddenCode) {
+	if observeHasCode(t, gc, guard.CoordinatorOverlayPathReadForbiddenCode) {
 		t.Fatal("worker child should pass")
 	}
 }

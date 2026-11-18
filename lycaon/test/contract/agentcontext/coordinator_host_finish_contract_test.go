@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/testutil/surfacetest"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/guidancescan"
@@ -73,7 +74,7 @@ func TestCoordinatorHostFinish_readScoutFanoutCanReportToUser(t *testing.T) {
 		api.CoordinatorRunContext{},
 		&api.Session{Posture: api.SessionPostureBuild},
 		coordinatorTurnHistory(history, surface.HostLoopWakeSentinel),
-		surface.WithWrapupGates(surface.ImplementSessionState{}, true, false),
+		surfacetest.WithWrapupGates(surface.ImplementSessionState{}, true, false),
 	)
 	if profile.SurfaceID != "implement_synthesis" {
 		t.Fatalf("path-explorer loop wake resolved to surface %q, want implement_synthesis", profile.SurfaceID)
@@ -92,7 +93,7 @@ func TestCoordinatorHostFinish_readScoutSynthesisCanReportToUser(t *testing.T) {
 	sess := &api.Session{Posture: api.SessionPostureBuild}
 	profile := surface.ResolveTurnProfile(
 		api.CoordinatorRunContext{}, sess, coordinatorTurnHistory(history, surface.HostLoopWakeSentinel),
-		surface.WithWrapupGates(surface.ImplementSessionState{}, true, false),
+		surfacetest.WithWrapupGates(surface.ImplementSessionState{}, true, false),
 	)
 	if profile.SurfaceID != "implement_synthesis" {
 		t.Fatalf("repo-researcher loop wake resolved to surface %q, want implement_synthesis", profile.SurfaceID)
