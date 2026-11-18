@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -88,16 +89,24 @@ func chatLocationFromRow(row db.SourceChatLocations) ChatLocation {
 
 func placeChatLocation(ctx context.Context, q *db.Queries, chat, rel string, relation ChatFileRelation, ts time.Time) error {
 	anchor, kind := locationAnchor(rel)
-	rows, err := q.ListSourceChatLocations(ctx, chat)
-	if err != nil {
-		return err
+	// Each candidate is an indexed lookup in the chat.
+	candidates := []string{rel}
+	if kind != ChatLocationFile {
+		for parent := path.Dir(rel); parent != "." && parent != "/"; parent = path.Dir(parent) {
+			candidates = append(candidates, parent)
+		}
+		slices.Reverse(candidates)
 	}
-	for _, row := range rows {
-		location := chatLocationFromRow(row)
-		if !location.Covers(rel) || kind == ChatLocationFile && location.Kind != ChatLocationFile {
+	for _, candidate := range candidates {
+		row, err := q.GetSourceChatLocationByAnchor(ctx, db.GetSourceChatLocationByAnchorParams{SessionID: chat, Anchor: candidate})
+		if errors.Is(err, sql.ErrNoRows) {
 			continue
 		}
-		if !location.Available() {
+		if err != nil {
+			return err
+		}
+		location := chatLocationFromRow(row)
+		if !location.Covers(rel) || kind == ChatLocationFile && location.Kind != ChatLocationFile || !location.Available() {
 			continue
 		}
 		if location.Hidden && relation&(ChatFileChanged|ChatFileOpened) != 0 {
