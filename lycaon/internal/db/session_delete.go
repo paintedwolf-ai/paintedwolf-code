@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -163,56 +162,3 @@ func stringArgs(ss []string) []any {
 	}
 	return out
 }
-
-// AdoptOutsideTree moves the outside files under rel into a newly attached
-// root, keeping their file identities, history and editor documents. Recorded
-// versions keep the address they were recorded at.
-func AdoptOutsideTree(ctx context.Context, q *Queries, projectID, rootID, rel string) error {
-	outside, err := q.GetProjectOutsideRootID(ctx, projectID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	dir, err := q.GetSourceDirectoryRoot(ctx, GetSourceDirectoryRootParams{ProjectID: projectID, BranchID: "", RootID: outside})
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	for _, name := range strings.Split(rel, "/") {
-		dir, err = q.GetSourceDirectoryChild(ctx, GetSourceDirectoryChildParams{ParentID: NullString(dir.ID), Name: name})
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-	}
-	subtree, err := queryStringColumn(ctx, q.db, sourceSubtreeQuery, dir.ID)
-	if err != nil {
-		return err
-	}
-	for _, id := range subtree {
-		if err := q.MoveSourceDirectoryHeadsRoot(ctx, MoveSourceDirectoryHeadsRootParams{RootID: rootID, DirectoryID: id}); err != nil {
-			return err
-		}
-		if err := q.MoveSourceDirectoryRoot(ctx, MoveSourceDirectoryRootParams{RootID: rootID, DirectoryID: id}); err != nil {
-			return err
-		}
-	}
-	if err := q.AdoptSourceDirectoryAsRoot(ctx, AdoptSourceDirectoryAsRootParams{DirectoryID: dir.ID, RootID: rootID}); err != nil {
-		return err
-	}
-	return q.MoveOutsideEditorDocuments(ctx, MoveOutsideEditorDocumentsParams{RootID: rootID, Prefix: rel, ProjectID: projectID, OutsideRootID: outside})
-}
-
-const sourceSubtreeQuery = `
-		WITH RECURSIVE subtree(id) AS (
-		    SELECT source_directories.id FROM source_directories WHERE source_directories.id = ?
-		    UNION ALL
-		    SELECT d.id FROM source_directories d JOIN subtree parent ON d.parent_id = parent.id
-		)
-		SELECT subtree.id FROM subtree`

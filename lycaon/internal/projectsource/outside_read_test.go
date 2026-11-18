@@ -51,4 +51,9 @@ func TestOutsideReadRequiresTheRecordedAddress(t *testing.T) {
 	if _, err := ReadProjectSource(p, req); !errors.Is(err, ErrSourcePathDenied) {
 		t.Fatalf("redirected outside source = %v", err)
 	}
+	testutil.FailErr(t, "remove redirect target", os.Remove(filepath.Join(replacement, "note.txt")))
+	if _, err := ReadProjectSource(p, req); !errors.Is(err, ErrSourcePathDenied) {
+		t.Fatalf("dangling redirected outside source = %v", err)
+	}
+
 }

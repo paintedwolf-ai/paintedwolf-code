@@ -41,7 +41,7 @@ The host shares immutable comparison plans within the authenticated project, pre
 
 ## Stage identity
 
-A full-stage Context surface: `Nav` value `files`, a context-zone entry, and a Crossbar go-to target. It reuses the same `/source` jail as every other source read; the stage adds no new path authority.
+A full-stage Context surface: `Nav` value `files`, a context-zone entry, and a Crossbar go-to target. Its source requests use the project workspace and the selected chat's outside locations ([Outside the project](#outside-the-project)).
 
 The Files view composes workspace resolution (`source/files-workspace.ts`), host document synchronization (`editor/files-editor-synchronization.ts`), and version history (`history/files-version-history.ts`). Document transport consumes the narrow `EditorDraftSource` port; only the synchronization composition imports both transport and the concrete buffer store. Attribution uses the editor's project, root, and session; findings refresh with the host's scan identity and status. Neither is cached by content hash, because identical bytes can have different provenance and findings.
 
@@ -83,6 +83,12 @@ Every folder row carries **new-file** and **new-folder** affordances, mounted on
 - A name containing slashes creates the missing folders on the way.
 - Escape cancels; blur abandons only an empty row.
 - A refused name (leaves the folder, names the wrong kind, already taken) reports under the row **without discarding what was typed**.
+
+### Outside the project
+
+The selected chat's locations follow the project folders under **Outside project**. The tree updates its chat selection without replacing the project view. A location lists only the directories the person expands, using the same paged tree. Protected files appear individually. Locations carry the identity of their observed folder and show **Unavailable** if the folder is missing or has been replaced.
+
+**Open file outside the project…** uses the native picker and adds the file to the selected chat. Opening a tree row addresses it by its location ID and relative path. The host verifies the folder identity on a held descriptor and returns the file's project identity. Outside documents use the normal editor and remain open across chat switches. Location details show the host path and the saved approval that applies to it. **Manage agent access** opens Saved approvals, and **Hide from chat** removes the location from this view.
 
 ### File lifecycle
 

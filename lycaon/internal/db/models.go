@@ -1667,6 +1667,16 @@ type SourceChatFiles struct {
 	LastTs    string `json:"last_ts"`
 }
 
+type SourceChatLocations struct {
+	ID             string `json:"id"`
+	SessionID      string `json:"session_id"`
+	Anchor         string `json:"anchor"`
+	AnchorIdentity string `json:"anchor_identity"`
+	Kind           string `json:"kind"`
+	Hidden         int64  `json:"hidden"`
+	CreatedTs      string `json:"created_ts"`
+}
+
 type SourceCheckpointGitStates struct {
 	CheckpointID string `json:"checkpoint_id"`
 	RootID       string `json:"root_id"`

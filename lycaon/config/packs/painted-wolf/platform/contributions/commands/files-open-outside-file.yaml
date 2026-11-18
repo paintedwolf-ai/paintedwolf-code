@@ -1,0 +1,13 @@
+id: painted-wolf/platform:files-open-outside-file
+title: "Open file outside the project…"
+scope: "files"
+keywords:
+  - "open file"
+  - "outside project"
+  - "other folder"
+category: "navigation"
+when:
+  fact: "files_stage_active"
+action:
+  kind: native_ui
+  handler: "files.openOutsideFile"

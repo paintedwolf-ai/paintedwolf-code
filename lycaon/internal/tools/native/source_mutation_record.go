@@ -189,10 +189,13 @@ func agentCommitInputsWithWorkspace(tctx tools.ToolContext, m agentMutation, wor
 	if tctx.Identity.ProjectID == "" || !located {
 		return sourceledger.RecordInput{}, sourcefeed.Change{}, false
 	}
-	fromPath := ""
+	var fromRootID, fromPath string
 	if m.FromAbsPath != "" {
-		if fromRoot, from, ok := tctx.RecordedLocation(m.FromAbsPath); ok && fromRoot.ID == root.ID {
+		if fromRoot, from, ok := tctx.RecordedLocation(m.FromAbsPath); ok {
 			fromPath = from
+			if fromRoot.ID != root.ID {
+				fromRootID = fromRoot.ID
+			}
 		}
 	}
 	// Branchless worker calls produce no durable mutation.
@@ -201,7 +204,7 @@ func agentCommitInputsWithWorkspace(tctx tools.ToolContext, m agentMutation, wor
 		return sourceledger.RecordInput{}, sourcefeed.Change{}, false
 	}
 	in := sourceledger.RecordInput{
-		RecordLocation: sourceledger.RecordLocation{RootID: root.ID, Path: path, FromPath: fromPath, EntryKind: sourceledger.EntryKindFile},
+		RecordLocation: sourceledger.RecordLocation{RootID: root.ID, Path: path, FromPath: fromPath, FromRootID: fromRootID, EntryKind: sourceledger.EntryKindFile},
 		ProjectID:      tctx.Identity.ProjectID,
 		BranchID:       branch,
 		Op:             m.Op, Origin: api.SourceChangeOriginAgent,
@@ -210,6 +213,10 @@ func agentCommitInputsWithWorkspace(tctx tools.ToolContext, m agentMutation, wor
 		Turn:         tctx.Identity.UserTurn,
 		BeforeSHA256: m.BeforeSHA256, AfterSHA256: m.AfterSHA256, Before: m.Before, After: m.After,
 		BeforeSize: max(m.BeforeSize, int64(len(m.Before))), AfterSize: max(m.AfterSize, int64(len(m.After)))}
+	if m.Op == api.SourceChangeOpRename {
+		// The approval previews the overwritten target; history follows the moved entry.
+		in.Before, in.BeforeSHA256, in.BeforeSize = in.After, in.AfterSHA256, in.AfterSize
+	}
 	isDir := m.IsDir
 	if m.IsDir {
 		in.EntryKind = sourceledger.EntryKindDirectory
@@ -226,6 +233,7 @@ func agentCommitInputsWithWorkspace(tctx tools.ToolContext, m agentMutation, wor
 		RootID:        root.ID,
 		Path:          path,
 		FromPath:      fromPath,
+		FromRootID:    fromRootID,
 		Op:            m.Op,
 		Origin:        api.SourceChangeOriginAgent,
 		SessionID:     tctx.Identity.SessionID,

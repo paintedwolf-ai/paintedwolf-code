@@ -13,15 +13,15 @@ import (
 // OpenDocument returns the accepted shared document for a project-tree path.
 // A failed lookup is an error, never a silent fall back to disk.
 func OpenDocument(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (tools.EditorDocumentText, bool, error) {
-	documents, ok := DocumentsFor(tctx, resolved)
+	documents, address, ok := DocumentsFor(tctx, resolved)
 	if !ok {
 		return tools.EditorDocumentText{}, false, nil
 	}
-	branch, err := tctx.SourceBranch(resolved.Root.ID)
+	branch, err := tctx.SourceBranch(address.RootID)
 	if err != nil {
 		return tools.EditorDocumentText{}, false, err
 	}
-	doc, open, err := documents.OpenDocument(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, resolved.ScopeRel)
+	doc, open, err := documents.OpenDocument(ctx, tctx.Identity.ProjectID, branch, address.RootID, address.Path)
 	if errors.Is(err, projectsource.ErrSourceIsDirectory) {
 		return tools.EditorDocumentText{}, false, DirectoryReject(resolved.DisplayPath)
 	}

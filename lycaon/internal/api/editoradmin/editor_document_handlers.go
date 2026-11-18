@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/outsideaccess"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/editordoc"
@@ -60,9 +61,9 @@ func (s *Handler) HandleOpenEditorDocument(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	// Outside files are read through the source reader.
-	if req.RootID == p.Outside.ID {
-		s.writeEditorDocumentError(w, r, editordoc.ErrReadOnly)
+	p, err := outsideaccess.Admit(r.Context(), s.SourceLedger, p, req.RootID, req.Path)
+	if err != nil {
+		s.writeEditorDocumentError(w, r, err)
 		return
 	}
 	d, err := s.EditorDocuments.Open(r.Context(), p, req.Path, req.RootID, req.DecodeAs, req.ClientID, retainedReplica(req.Replica))

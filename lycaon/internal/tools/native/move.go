@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -112,7 +113,7 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 				continue
 			}
 		}
-		if crossRoot {
+		if crossRoot && !canRenameOutsideFile(tctx, srcResolved.Abs, dstResolved.Abs) {
 			// The copy operation stages and reviews the destination before publication.
 			// Remove the source only after that publication succeeds.
 			copyOperation, err := (&CopyTool{Boundary: t.Boundary}).Begin(CopyInput{
@@ -196,4 +197,28 @@ func (t *MoveTool) moveSource(ctx context.Context, tctx tools.ToolContext, from 
 		return entry, nil
 	}
 	return resolved, nil
+}
+
+// Only a rename on one physical history branch can keep the original file ID.
+func canRenameOutsideFile(tc tools.ToolContext, from, to string) bool {
+	srcRoot, _, srcOK := tc.RecordedLocation(from)
+	dstRoot, _, dstOK := tc.RecordedLocation(to)
+	if !srcOK || !dstOK || (!srcRoot.Outside && !dstRoot.Outside) {
+		return false
+	}
+	srcBranch, srcErr := tc.SourceBranch(srcRoot.ID)
+	dstBranch, dstErr := tc.SourceBranch(dstRoot.ID)
+	if srcErr != nil || dstErr != nil || srcBranch != dstBranch {
+		return false
+	}
+	info, err := os.Lstat(from)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	for dir := filepath.Dir(to); ; dir = filepath.Dir(dir) {
+		same, err := fspath.SameFilesystem(from, dir)
+		if !os.IsNotExist(err) || dir == filepath.Dir(dir) {
+			return same
+		}
+	}
 }

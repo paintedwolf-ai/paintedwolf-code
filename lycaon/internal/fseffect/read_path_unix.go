@@ -61,12 +61,10 @@ func (r *ReadRoot) OpenCanonicalFile(rel string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	address := filepath.Join(r.Path(), relative)
-	return walkReadContained(r.root, relative, true, func(dir *os.File, name string, expected *unix.Stat_t) (*os.File, error) {
-		actual := filepath.Join(dir.Name(), name)
-		if actual != address {
-			return nil, ErrSymlink
-		}
+	if !filepath.IsLocal(relative) || filepath.Clean(relative) != relative {
+		return nil, ErrInvalidPath
+	}
+	return walkReadContained(r.root, relative, refuseReadLinks, func(dir *os.File, name string, expected *unix.Stat_t) (*os.File, error) {
 		if expected.Mode&unix.S_IFMT != unix.S_IFREG {
 			return nil, os.ErrNotExist
 		}
@@ -83,7 +81,7 @@ func (r *ReadRoot) OpenCanonicalFile(rel string) (*os.File, error) {
 			return nil, ErrPredicateChanged
 		}
 		r.root.readOpens.Add(1)
-		return os.NewFile(uintptr(fd), actual), nil
+		return os.NewFile(uintptr(fd), filepath.Join(dir.Name(), name)), nil
 	})
 }
 
@@ -108,7 +106,7 @@ func (r *MetadataRoot) OpenExact(rel string, directory bool) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return walkReadContained(r.root, relative, true, func(dir *os.File, name string, expected *unix.Stat_t) (*os.File, error) {
+	return walkReadContained(r.root, relative, followReadLinks, func(dir *os.File, name string, expected *unix.Stat_t) (*os.File, error) {
 		fd, err := unix.Openat(int(dir.Fd()), name, metadataOpenFlags(directory)|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 		if err != nil {
 			return nil, err

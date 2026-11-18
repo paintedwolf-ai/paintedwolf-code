@@ -10,8 +10,6 @@ func outsideRoot(projectID, id string, addedAt time.Time) Root {
 	return Root{ID: id, ProjectID: projectID, Path: projectroot.OutsidePath, Label: projectroot.OutsideLabel, AddedAt: addedAt, Kind: RootKindOutside}
 }
 
-// OutsideRef is the project's outside namespace, absent for a project read
-// without it.
 func (p *Project) OutsideRef() (projectroot.RootRef, bool) {
 	if p == nil || p.Outside.ID == "" {
 		return projectroot.RootRef{}, false
@@ -19,8 +17,7 @@ func (p *Project) OutsideRef() (projectroot.RootRef, bool) {
 	return projectroot.OutsideRef(p.Outside.ID), true
 }
 
-// HistoryRoots are the namespaces source history addresses: every root, then
-// the outside namespace.
+// HistoryRoots includes the outside namespace so retained addresses resolve.
 func (p *Project) HistoryRoots() []Root {
 	if p == nil {
 		return nil
@@ -32,11 +29,15 @@ func (p *Project) HistoryRoots() []Root {
 	return roots
 }
 
-// WithOutside is a view of p in which the outside namespace is one of its
-// roots. Callers build it only for a path already admitted for the request.
+// WithOutside exposes the outside namespace after request-specific admission.
 func WithOutside(p *Project) *Project {
 	if p == nil || p.Outside.ID == "" {
 		return p
+	}
+	for _, root := range p.Roots {
+		if root.ID == p.Outside.ID {
+			return p
+		}
 	}
 	out := *p
 	out.Roots = append(append([]Root(nil), p.Roots...), p.Outside)

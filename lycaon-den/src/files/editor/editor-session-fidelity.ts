@@ -155,8 +155,9 @@ export function rekeySessionFidelityUnderPath(
   rootId: string,
   fromPath: string,
   toPath: string,
+  toRootId = rootId,
 ): void {
-  viewStates.rekeyUnderPath(rootId, fromPath, toPath);
+  viewStates.rekeyUnderPath(rootId, fromPath, toPath, toRootId);
   scheduleSessionFidelityPersist();
 }
 

@@ -9,6 +9,8 @@ import type { ActiveFile, FilesTreeProps } from "../tree/files-tree-context.ts";
 import { isAddedInScope, isInScope, resolvedScope, scopeBaseline } from "../tree/scope-resolution.ts";
 import { leaveWalk } from "../walk/walk-store.ts";
 import { FilesTreePane } from "./FilesTreePane.tsx";
+import { chatLocation, ledgerAddress, treeAddress } from "../source/chat-locations.ts";
+import { OUTSIDE_ROOT_LABEL, outsideRootId } from "../source/outside-namespace.ts";
 
 type Props = Omit<ComponentProps<typeof FilesTreePane>, "tree" | "review"> &
   Pick<FilesTreeProps,
@@ -25,9 +27,18 @@ type Props = Omit<ComponentProps<typeof FilesTreePane>, "tree" | "review"> &
       explicitTreeReveal: ActiveFile;
       scopeMarksVersion: number;
       onOpenReviewFile: ComponentProps<typeof ReviewLens>["onOpenFile"];
+      /** The selected chat, whose locations outside the project the tree lists. */
+      chatId?: string;
     };
 
 export function FilesNavigationPane(props: Props) {
+  const toLedger = (rootId: string, path: string) => ledgerAddress(props.projectId, outsideRootId(props.projectId), rootId, path);
+  const toTree = <T extends { rootId: string; path: string }>(value: T | null | undefined): T | null => {
+    if (!value) return null;
+    const address = treeAddress(props.projectId, outsideRootId(props.projectId), value.rootId, value.path);
+    if (!address) return null;
+    return address.rootId === value.rootId && address.path === value.path ? value : { ...value, ...address };
+  };
   const selectedTreeEntry = () => {
     const selected = props.selectedEntry;
     if (!editorRevealInTreePref() || selected?.kind !== "file") return selected;
@@ -80,7 +91,7 @@ export function FilesNavigationPane(props: Props) {
         />
       }
       tree={
-        <Show when={props.roots.length > 0} fallback={
+        <Show when={props.roots.length > 0 || props.chatId} fallback={
           <p class="den-files-empty" data-testid="files-tree-no-roots">Attach a folder to browse its files.</p>
         }>
           <FilesTree
@@ -92,20 +103,39 @@ export function FilesNavigationPane(props: Props) {
             onInitialLoadSettled={props.onInitialLoadSettled}
             client={props.client}
             sessionId={props.sessionId}
+            chatId={props.chatId}
+            approvalsRevision={props.appStore.state.approvalsRevision}
             reviewScope={reviewScope()}
             retainPresentation={props.retainPresentation}
             autoReveal={editorRevealInTreePref()}
             navigationRevision={props.navigationRevision}
             navigationOrigin={props.navigationOrigin}
-            activeFile={editorRevealInTreePref() ? props.publishedTreeFile : null}
+            activeFile={editorRevealInTreePref() ? toTree(props.publishedTreeFile) : null}
             onRevealMotionStart={props.onRevealMotionStart}
-            selectedEntry={selectedTreeEntry()}
-            onSelectEntry={props.onSelectEntry}
-            agentPresenceForPath={props.agentPresenceForPath}
-            inScope={(rootId, path) => { void props.scopeMarksVersion; return isInScope(props.projectId, rootId, path); }}
-            addedInScope={(rootId, path) => { void props.scopeMarksVersion; return isAddedInScope(props.projectId, rootId, path); }}
-            onOpenFile={props.onOpenFile}
-            onRevertFile={props.onRevertFile}
+            selectedEntry={toTree(selectedTreeEntry())}
+            onSelectEntry={(entry) => props.onSelectEntry({ ...entry, ...toLedger(entry.rootId, entry.path) })}
+            agentPresenceForPath={(rootId, path) => {
+              const address = toLedger(rootId, path);
+              return props.agentPresenceForPath?.(address.rootId, address.path) ?? null;
+            }}
+            inScope={(rootId, path) => {
+              void props.scopeMarksVersion;
+              const address = toLedger(rootId, path);
+              return isInScope(props.projectId, address.rootId, address.path);
+            }}
+            addedInScope={(rootId, path) => {
+              void props.scopeMarksVersion;
+              const address = toLedger(rootId, path);
+              return isAddedInScope(props.projectId, address.rootId, address.path);
+            }}
+            onOpenFile={(selection, intent) => {
+              const outside = chatLocation(props.projectId, selection.rootId);
+              props.onOpenFile({ ...selection, ...toLedger(selection.rootId, selection.path), ...(outside ? { rootLabel: OUTSIDE_ROOT_LABEL, locationId: outside.id } : {}) }, intent);
+            }}
+            onRevertFile={props.onRevertFile ? (rootId, path) => {
+              const address = toLedger(rootId, path);
+              props.onRevertFile?.(address.rootId, address.path);
+            } : undefined}
             createEntry={props.createEntry}
             filterQuery={props.filterQuery}
             onFilterQueryChange={props.onFilterQueryChange}
@@ -116,7 +146,12 @@ export function FilesNavigationPane(props: Props) {
             onCancelRename={props.onCancelRename}
             onMovePath={props.onMovePath}
             onReady={props.onReady}
-            onRowMenu={props.onRowMenu}
+            onRowMenu={props.onRowMenu ? (anchor, target) => {
+              if (target.surface !== "tree-row") return props.onRowMenu?.(anchor, target);
+              const location = chatLocation(props.projectId, target.rootId);
+              if (!location) return props.onRowMenu?.(anchor, target);
+              props.onRowMenu?.(anchor, { ...target, ...toLedger(target.rootId, target.path), outsideLocation: location.id });
+            } : undefined}
           />
         </Show>
       }

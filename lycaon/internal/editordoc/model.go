@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -140,6 +141,9 @@ func saveInputDigest(documentID, projectID string, actor saveActor, expected int
 }
 
 func rootPath(p *project.Project, rootID string) string {
+	if rootID != "" && rootID == p.Outside.ID {
+		return projectroot.OutsidePath
+	}
 	for _, root := range p.Roots {
 		if root.ID == rootID {
 			return fspath.CanonicalPath(root.Path)
@@ -165,4 +169,13 @@ func serializeEOL(content, eol string) string {
 		return strings.ReplaceAll(content, "\n", "\r\n")
 	}
 	return content
+}
+
+// documentProject is p with its outside namespace as a root when rootID
+// names it, so source reads and writes resolve an outside document.
+func documentProject(p *project.Project, rootID string) *project.Project {
+	if p != nil && rootID != "" && rootID == p.Outside.ID {
+		return project.WithOutside(p)
+	}
+	return p
 }

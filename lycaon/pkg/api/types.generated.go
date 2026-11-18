@@ -4835,6 +4835,12 @@ type ObserveEditorDocumentRequest struct {
 	ClientID string `json:"client_id"`
 }
 
+// OpenChatLocationFileRequest
+type OpenChatLocationFileRequest struct {
+	// File row path under the location root.
+	Path string `json:"path"`
+}
+
 // OpenEditorDocumentRequest
 type OpenEditorDocumentRequest struct {
 	// Root-relative, slash-separated file path.
@@ -4846,6 +4852,24 @@ type OpenEditorDocumentRequest struct {
 	// Explicit decoding for BOM-less UTF-16 text.
 	DecodeAs string           `json:"decode_as,omitempty"`
 	Replica  *RetainedReplica `json:"replica,omitempty"`
+}
+
+// OpenOutsideFileRequest
+type OpenOutsideFileRequest struct {
+	// The chat whose Files section receives the file.
+	SessionID string `json:"session_id"`
+	// Absolute host path the person chose in the native file picker.
+	Path string `json:"path"`
+}
+
+// OpenedOutsideFile
+type OpenedOutsideFile struct {
+	// The project's outside namespace.
+	RootID string `json:"root_id"`
+	// The file's outside-namespace path.
+	Path     string             `json:"path"`
+	FileID   string             `json:"file_id"`
+	Location SourceChatLocation `json:"location"`
 }
 
 // OverlayMergePlan
@@ -7106,7 +7130,9 @@ type SourceChange struct {
 	RootID string `json:"root_id"`
 	// Root-relative path after the change (destination for rename).
 	Path string `json:"path"`
-	// Root-relative path before a rename; omit for other ops.
+	// Source root for a rename across roots.
+	FromRootID string `json:"from_root_id,omitempty"`
+	// Path before a rename, relative to from_root_id when present and root_id otherwise.
 	FromPath string             `json:"from_path,omitempty"`
 	Op       SourceChangeOp     `json:"op"`
 	Origin   SourceChangeOrigin `json:"origin"`
@@ -7131,6 +7157,28 @@ type SourceChangesEvent struct {
 	Resync        bool                `json:"resync"`
 	// A git ref surface moved in this window — possibly with no file changes at all (a commit). Consumers refresh git-derived comparisons even when changes is empty.
 	GitChanged bool `json:"git_changed,omitempty"`
+}
+
+// SourceChatLocation A place outside the project where a root chat has worked. A Files tree view for the chat lists each visible location as a root whose id is the location id; its rows address files by the location and their path under the anchor.
+type SourceChatLocation struct {
+	ID string `json:"id"`
+	// The root chat the location belongs to.
+	SessionID string `json:"session_id"`
+	// The project's outside namespace, which addresses the location's files in source history.
+	RootID string `json:"root_id"`
+	// The anchor's outside-namespace path, its host path without the leading slash.
+	Anchor string `json:"anchor"`
+	// The anchor's host path.
+	Path string `json:"path"`
+	// What the location is anchored at: a repository work tree, a folder, or one protected file listed alone.
+	Kind string `json:"kind"`
+	// The anchor's name for display.
+	Label string `json:"label"`
+	// Hidden from the chat's Files section. Hiding revokes and deletes nothing.
+	Hidden bool `json:"hidden"`
+	// Whether the host can still address the observed location.
+	Available bool                  `json:"available"`
+	Access    *SourceLocationAccess `json:"access,omitempty"`
 }
 
 // SourceCommandWindow One host-run command's observation window: the span of a command or
@@ -7761,6 +7809,15 @@ type SourceInventoryState struct {
 	CompletedAt   *time.Time `json:"completed_at,omitempty"`
 }
 
+// SourceLocationAccess The strongest active saved approval covering this location or a path within it.
+type SourceLocationAccess struct {
+	Path      string     `json:"path"`
+	Mode      string     `json:"mode"`
+	Tree      bool       `json:"tree"`
+	Scope     string     `json:"scope"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
 // SourceOperationEvent A file operation's status after a persisted transition or progress save; the same shape the operation list returns.
 type SourceOperationEvent struct {
 	ProjectID string                `json:"project_id"`
@@ -8146,6 +8203,8 @@ type SourceTreeIntent struct {
 	Disclosures []SourceTreeDisclosure `json:"disclosures,omitempty"`
 	Filter      string                 `json:"filter,omitempty"`
 	Review      *SourceTreeReviewScope `json:"review,omitempty"`
+	// Chat whose outside locations are shown. Omit for project folders only.
+	ChatID string `json:"chat_id,omitempty"`
 }
 
 // SourceTreeLocation
@@ -8209,6 +8268,13 @@ type SourceTreeSearchPage struct {
 	Matches            []SourceTreeSearchMatch `json:"matches"`
 }
 
+// SourceTreeSelectChat
+type SourceTreeSelectChat struct {
+	Kind string `json:"kind"`
+	// Chat whose outside locations are shown. Omit for project folders only.
+	ChatID string `json:"chat_id,omitempty"`
+}
+
 // SourceTreeToggle
 type SourceTreeToggle struct {
 	Kind    string            `json:"kind"`
@@ -8230,6 +8296,8 @@ type SourceTreeView struct {
 	WorkspaceID        string             `json:"workspace_id"`
 	Intent             SourceTreeIntent   `json:"intent"`
 	Roots              []ProjectRoot      `json:"roots"`
+	// The view's chat's visible locations outside the project, in tree order after the roots. Each is also a tree root whose id is the location id.
+	OutsideLocations []SourceChatLocation `json:"outside_locations"`
 	// Directory reads still pending for this view.
 	LoadingDirectories int `json:"loading_directories"`
 }
@@ -9130,6 +9198,12 @@ type UpdateSessionRequest struct {
 	Pinned *bool `json:"pinned,omitempty"`
 	// Moves a pinned session to this 1-based position in its project's pinned order; a position past the end moves it last. The project's pinned chats are renumbered 1…n.
 	PinPosition *int `json:"pin_position,omitempty"`
+}
+
+// UpdateSourceChatLocationRequest
+type UpdateSourceChatLocationRequest struct {
+	// Whether the chat's Files section hides the location; omitted keeps it.
+	Hidden *bool `json:"hidden,omitempty"`
 }
 
 // UpdateTrustSettingsRequest

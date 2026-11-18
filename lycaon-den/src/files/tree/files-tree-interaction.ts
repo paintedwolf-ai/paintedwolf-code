@@ -1,4 +1,7 @@
+import { reportSurfaceFailure } from "../../notices/surface-failure.ts";
 import type { ProjectFilesViewProps } from "../components/project-files-view-props.ts";
+import { chatLocation, locationRowPath, treeAddress } from "../source/chat-locations.ts";
+import { OUTSIDE_ROOT_LABEL, outsideRootId } from "../source/outside-namespace.ts";
 import { createFileContextActions, createFilePathIntents } from "../commands/file-context-actions.ts";
 import { createFilesSelection } from "../tree/files-selection.ts";
 import { createFilesTabCommands } from "../tabs/files-tab-commands.ts";
@@ -104,6 +107,13 @@ export function createFilesTreeInteraction(options: TreeInteraction) {
       void scopeMarksVersion();
       return deletedPathsInScope(props.projectId, rootId);
     },
+    outsideAddress: (rootId, path) => {
+      const outside = outsideRootId(props.projectId);
+      if (!outside || rootId !== outside) return undefined;
+      const address = treeAddress(props.projectId, outside, rootId, path);
+      const location = address && chatLocation(props.projectId, address.rootId);
+      return { available: location?.available ?? false };
+    },
     browse,
   });
 
@@ -172,7 +182,10 @@ export function createFilesTreeInteraction(options: TreeInteraction) {
     if (!request || !workspaceSettled() || mountedTreeWorkspace() !== filesWorkspaceId()) return;
     untrack(() => {
       setRequestedTreeReveal(null);
-      if (request.current()) tree?.revealPath(request.rootId, request.path, request.isDir);
+      if (!request.current()) return;
+      // An outside file reveals in the chat location holding it, when one does.
+      const address = treeAddress(props.projectId, outsideRootId(props.projectId), request.rootId, request.path);
+      if (address) tree?.revealPath(address.rootId, address.path, request.isDir);
     });
   });
 
@@ -227,10 +240,30 @@ export function createFilesTreeInteraction(options: TreeInteraction) {
     return res.path;
   };
 
-  const openFile = (
-    selection: FilesTreeSelection,
-    intent: BufferOpenIntent,
-  ) => {
+  let openRevision = 0;
+  const openFile = (selection: FilesTreeSelection, intent: BufferOpenIntent) => {
+    const projectId = props.projectId;
+    const current = ++openRevision;
+    const address = selection.rootId === outsideRootId(projectId)
+      ? treeAddress(projectId, selection.rootId, selection.rootId, selection.path)
+      : undefined;
+    const location = chatLocation(projectId, selection.locationId ?? address?.rootId ?? "");
+    const row = location && locationRowPath(location, selection.path);
+    const c = client();
+    if (!c || !location || !row || selection.fileId) {
+      publishOpenedFile(selection, intent);
+      return;
+    }
+    void c.openChatLocationFile(projectId, location.id, { path: row }).then(opened => {
+      if (current !== openRevision || props.projectId !== projectId) return;
+      publishOpenedFile({ rootId: opened.root_id, rootLabel: OUTSIDE_ROOT_LABEL, path: opened.path, fileId: opened.file_id }, intent);
+    }).catch(error => {
+      if (current !== openRevision || props.projectId !== projectId) return;
+      reportSurfaceFailure({ code: "files_open_outside_failed", title: "Couldn’t open file", suggestedAction: "Try opening the location again." }, error, projectId);
+    });
+  };
+
+  function publishOpenedFile(selection: FilesTreeSelection, intent: BufferOpenIntent) {
     setSelectedEntry({
       rootId: selection.rootId,
       path: selection.path,
@@ -244,7 +277,7 @@ export function createFilesTreeInteraction(options: TreeInteraction) {
       path: selection.path,
       line: 1,
     });
-  };
+  }
 
   const openFilesMenu = (anchor: ContextMenuAnchor, target: FilesContextTarget) => {
     const items = filesContextMenuItems(target, ctxActions());

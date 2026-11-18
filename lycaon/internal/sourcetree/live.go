@@ -18,6 +18,9 @@ type liveView struct {
 func (v *View) startLive() {
 	v.live = liveView{wake: make(chan struct{}, 1), directories: make(map[Address]time.Time), dirty: make(map[Address]struct{})}
 	for _, root := range v.rootOrder {
+		if root.OnDemand {
+			continue
+		}
 		v.live.directories[Address{Root: root.ID, Path: "."}] = time.Now()
 		v.live.unsubscribe = append(v.live.unsubscribe, v.catalog.Directories.SubscribeNavigation(root.Root, v.wakeLive))
 	}

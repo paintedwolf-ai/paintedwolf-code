@@ -63,7 +63,7 @@ export class FilesTreeSession extends SourceViewSession<"tree"> {
     let attempted = false;
     return this.mutate(state => {
       // A basis applies once, inside the view that presented it.
-      const basis = !attempted && command.kind !== "filter" && command.kind !== "review" && this.presentationOf(base, state.id) ? base : undefined;
+      const basis = !attempted && command.kind !== "filter" && command.kind !== "review" && command.kind !== "select_chat" && this.presentationOf(base, state.id) ? base : undefined;
       attempted = true;
       return this.client.applySourceViewIntent(this.projectId, state.id,
         { kind: "tree", operation_id, expected_intent_revision: state.intent_revision, command, base_presentation_id: basis ?? undefined });

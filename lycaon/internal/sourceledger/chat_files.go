@@ -18,8 +18,7 @@ const (
 	ChatFileOpened
 )
 
-// outsideRootID names the project's outside namespace, which never changes
-// once the project exists.
+// The outside root is stable for the project's lifetime.
 func (s *Store) outsideRootID(ctx context.Context, q *db.Queries, projectID string) (string, error) {
 	if id, ok := s.outsideRoots.Load(projectID); ok {
 		return id.(string), nil
@@ -35,9 +34,18 @@ func (s *Store) outsideRootID(ctx context.Context, q *db.Queries, projectID stri
 	return id, nil
 }
 
-// referenceChatFile records that the root chat of sessionID holds an outside
-// file. Files under attached roots need no reference.
-func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID, rootID, sessionID, fileID string, relation ChatFileRelation, ts time.Time) error {
+func (s *Store) referenceMutationChatFile(ctx context.Context, q *db.Queries, in RecordInput, fileID string) error {
+	if err := s.referenceChatFile(ctx, q, in.ProjectID, in.RootID, in.Path, in.SessionID, fileID, ChatFileChanged, in.TS); err != nil {
+		return err
+	}
+	if in.FromRootID != "" && in.FromRootID != in.RootID {
+		return s.referenceChatFile(ctx, q, in.ProjectID, in.FromRootID, in.FromPath, in.SessionID, fileID, ChatFileChanged, in.TS)
+	}
+	return nil
+}
+
+// referenceChatFile links a root chat to an outside file and its location.
+func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID, rootID, rel, sessionID, fileID string, relation ChatFileRelation, ts time.Time) error {
 	if sessionID == "" || fileID == "" {
 		return nil
 	}
@@ -58,15 +66,20 @@ func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID,
 		}
 		return 0
 	}
-	return q.RecordSourceChatFile(ctx, db.RecordSourceChatFileParams{
+	if err := q.RecordSourceChatFile(ctx, db.RecordSourceChatFileParams{
 		SessionID: chat, FileID: fileID,
 		Changed: flag(ChatFileChanged), Read: flag(ChatFileRead), Opened: flag(ChatFileOpened),
 		Ts: ts.UTC().Format(time.RFC3339Nano),
-	})
+	}); err != nil {
+		return err
+	}
+	if rel == "" {
+		return nil
+	}
+	return placeChatLocation(ctx, q, chat, rel, ts)
 }
 
-// OutsideFileHeld reports whether a chat of the project holds the outside
-// file currently at rel.
+// OutsideFileHeld checks chat references to the current file at rel.
 func (s *Store) OutsideFileHeld(ctx context.Context, projectID, rel string) (bool, error) {
 	outside, err := s.outsideRootID(ctx, s.queries, projectID)
 	if err != nil || outside == "" {

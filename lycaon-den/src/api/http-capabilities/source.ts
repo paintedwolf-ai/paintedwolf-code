@@ -25,6 +25,11 @@ import type {
   SourceDefinitionRequest,
   SourceDefinitionResponse,
   SourceDirListing,
+  OpenOutsideFileRequest,
+  OpenChatLocationFileRequest,
+  OpenedOutsideFile,
+  SourceChatLocation,
+  UpdateSourceChatLocationRequest,
 } from "../types.ts";
 
 /** Defaults to the primary root's top folder. */
@@ -72,6 +77,11 @@ export interface SourceClient {
     sessionId?: string,
   ): Promise<MakeProjectSourceEditableResponse>;
   getSourceWorkspace(projectId: string, sessionId?: string): Promise<SourceWorkspace>;
+  /** Adds a file the person picked outside the project to a chat's Files section. */
+  openChatLocationFile(projectId: string, locationId: string, req: OpenChatLocationFileRequest): Promise<OpenedOutsideFile>;
+  openOutsideFile(projectId: string, req: OpenOutsideFileRequest): Promise<OpenedOutsideFile>;
+  /** Hides or shows a chat location; it revokes and deletes nothing. */
+  updateSourceChatLocation(projectId: string, locationId: string, req: UpdateSourceChatLocationRequest): Promise<SourceChatLocation>;
   createProjectSourceEntry(
     projectId: string,
     req: CreateProjectSourceEntryRequest,
@@ -180,6 +190,12 @@ export function createSourceClient(j: JsonRequester, connection: BackendConnecti
       j(`/v1/projects/${projectId}/source/editable${formatQuery({ session_id: sessionId })}`, jsonRequest("POST", req)),
     getSourceWorkspace: (projectId, sessionId) =>
       j(`/v1/projects/${projectId}/source/workspace${formatQuery({ session_id: sessionId })}`),
+    openChatLocationFile: (projectId, locationId, req) =>
+      j(`/v1/projects/${projectId}/source/outside-locations/${encodeURIComponent(locationId)}/files`, jsonRequest("POST", req)),
+    openOutsideFile: (projectId, req) =>
+      j(`/v1/projects/${projectId}/source/outside-files`, { method: "POST", body: JSON.stringify(req) }),
+    updateSourceChatLocation: (projectId, locationId, req) =>
+      j(`/v1/projects/${projectId}/source/outside-locations/${locationId}`, { method: "PATCH", body: JSON.stringify(req) }),
     createProjectSourceEntry: (projectId, req, sessionId) =>
       sourceOperation(connection, projectId, req.operation_id,`/v1/projects/${projectId}/source${formatQuery({ session_id: sessionId })}`, {
         method: "POST",

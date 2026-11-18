@@ -19,6 +19,9 @@ SELECT EXISTS (
     SELECT 1 FROM source_chat_files c
     JOIN sessions s ON s.id = c.session_id
     WHERE c.file_id = sqlc.arg(file_id) AND s.project_id = sqlc.arg(project_id)
+) OR EXISTS (
+    SELECT 1 FROM editor_documents d
+    WHERE d.file_id = sqlc.arg(file_id) AND d.project_id = sqlc.arg(project_id)
 ) AS referenced;
 
 -- ListReleasedOutsideFiles names the outside files of a project that nothing

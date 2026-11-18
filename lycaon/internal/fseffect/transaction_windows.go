@@ -522,6 +522,14 @@ func RelocateGuarded(from, to Location, expected string) error {
 	return relocateEntry(from, to, false, expected)
 }
 
+// ReplaceByRelocateGuarded moves an identified entry over a destination.
+func ReplaceByRelocateGuarded(from, to Location, expected string) error {
+	if expected == "" {
+		return ErrPostcondition
+	}
+	return relocateEntry(from, to, true, expected)
+}
+
 func renameEntry(root, fromRel, toRel string, replace bool, expected string) error {
 	return relocateEntry(Location{Root: root, Rel: fromRel}, Location{Root: root, Rel: toRel}, replace, expected)
 }

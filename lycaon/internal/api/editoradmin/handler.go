@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/viewstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -25,6 +26,7 @@ type Dependencies struct {
 	ProjectRegistry project.Registry
 	SecretSpans     *secretspan.Screener
 	SessionStore    session.Store
+	SourceLedger    *sourceledger.Store
 	TryRunPromotion func(context.Context, string)
 }
 type Handler struct {
@@ -37,6 +39,7 @@ type Handler struct {
 	ProjectRegistry project.Registry
 	SecretSpans     *secretspan.Screener
 	SessionStore    session.Store
+	SourceLedger    *sourceledger.Store
 	TryRunPromotion func(context.Context, string)
 	editorScreens   editorScreenMemo
 	background      *taskgroup.Group
@@ -44,7 +47,7 @@ type Handler struct {
 }
 
 func New(responses *httpio.Responder, background *taskgroup.Group, deps Dependencies) *Handler {
-	return &Handler{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, ProjectViews: deps.ProjectViews, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, TryRunPromotion: deps.TryRunPromotion, responses: responses, background: background}
+	return &Handler{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, ProjectViews: deps.ProjectViews, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, TryRunPromotion: deps.TryRunPromotion, responses: responses, background: background}
 }
 func (s *Handler) EditorScreen(documentID, digest string) (*wire.SecretScreen, bool) {
 	return s.editorScreens.get(documentID, digest)

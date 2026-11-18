@@ -2,9 +2,11 @@ package sourcecatalog
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/repochange"
 )
 
@@ -21,6 +23,9 @@ func collectDirectoryObservation(ctx context.Context, store *indexStore, dir str
 	}
 	defer directory.close()
 	observation.Stamp = directory.stamp
+	if store.root.Only != "" {
+		return observeExactEntry(ctx, store, root, dir, directory, observation, consume)
+	}
 	// Unwatched membership is reusable only after its directory has been re-statted.
 	if cached.Complete && cached.Failure == "" && cached.Stamp.known() && cached.Stamp == observation.Stamp && cached.Invalidation == observation.Invalidation && cached.Epoch == observation.Epoch {
 		return cached, true, nil
@@ -66,6 +71,25 @@ func collectDirectoryObservation(ctx context.Context, store *indexStore, dir str
 	return observation, false, nil
 }
 
+func observeExactEntry(ctx context.Context, store *indexStore, root *os.Root, dir string, directory *observationDirectory, observation DirectoryObservation, consume func(directoryDiscovery) error) (DirectoryObservation, bool, error) {
+	finish, err := store.stores.broker.Acquire(ctx, store.observationRequest(dir))
+	if err != nil {
+		return observation, false, err
+	}
+	defer finish()
+	name := store.root.Only
+	info, err := root.Lstat(filepath.FromSlash(name))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return observation, false, err
+	}
+	var nodes []indexNode
+	if err == nil && info.Mode().IsRegular() {
+		nodes = readObservationNodes(root, directory, dir, []directoryEntry{directoryKind{name: name, kind: info.Mode().Type()}})
+	}
+	observation.Entries, observation.Complete = len(nodes), true
+	return observation, false, consume(directoryDiscovery{nodes: nodes, observation: observation})
+}
+
 func openObservationDirectory(ctx context.Context, store *indexStore, root *os.Root, dir string, held DirectoryReadAdmission) (*observationDirectory, error) {
 	release, err := store.stores.broker.Acquire(ctx, store.observationRequest(dir))
 	if err != nil {
@@ -106,9 +130,28 @@ func acquireObservationRoot(ctx context.Context, store *indexStore) (*os.Root, f
 			err = errObservationChanged
 		}
 	}
+	if err == nil && store.root.DirectoryIdentity != "" {
+		err = checkAnchoredDirectory(store.root, root)
+	}
 	if err != nil {
 		release()
 		return nil, nil, err
 	}
 	return root, release, nil
+}
+
+func checkAnchoredDirectory(expected Root, root *os.Root) error {
+	if fspath.CanonicalPath(expected.Path) != expected.Path {
+		return os.ErrNotExist
+	}
+	file, err := root.Open(".")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = file.Close() }()
+	identity, err := fspath.FileIdentity(file)
+	if err == nil && identity != expected.DirectoryIdentity {
+		return os.ErrNotExist
+	}
+	return err
 }

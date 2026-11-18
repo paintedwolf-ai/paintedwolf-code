@@ -1,4 +1,5 @@
 import { ThemeIcon } from "../../components/primitives/ThemeIcon.tsx";
+import { chatLocation } from "../source/chat-locations.ts";
 import { ShowLatest } from "../../components/primitives/ShowLatest.tsx";
 import { ContextMenu } from "../../components/ContextMenu.tsx";
 import { Match, Show, Switch, createMemo, createSignal, type JSX } from "solid-js";
@@ -233,7 +234,7 @@ export function FileEntryRow(props: {
         onMouseOut={disengage}
         onFocusIn={engage}
         onFocusOut={disengage}
-        onPointerDown={(e) => ctx.onRowPointerDown(row().rootId, row().path, row().name, false, e)}
+        onPointerDown={(e) => { if (!chatLocation(ctx.props.projectId, row().rootId)) ctx.onRowPointerDown(row().rootId, row().path, row().name, false, e); }}
       >
         <button
           type="button"
