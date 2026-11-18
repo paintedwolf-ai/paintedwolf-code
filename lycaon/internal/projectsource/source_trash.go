@@ -40,17 +40,36 @@ func (s *SourceEffects) SetSameFilesystem(same func(string, string) (bool, error
 	}
 }
 
+// canMoveAside reports whether absPath can be renamed into the recovery area.
+// It changes nothing: a probe runs before the person decides.
 func (s *SourceEffects) canMoveAside(rootPath, absPath string) (bool, error) {
-	dir := settingsoverlay.RecoveryDir(rootPath)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return false, err
-	}
-	_ = gitrepo.EnsureRecoveryExcluded(rootPath)
 	same := s.sameFilesystem
 	if same == nil {
 		same = fspath.SameFilesystem
 	}
-	return same(absPath, dir)
+	return same(absPath, nearestExisting(settingsoverlay.RecoveryDir(rootPath)))
+}
+
+func nearestExisting(path string) string {
+	for {
+		if _, err := os.Lstat(path); err == nil {
+			return path
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			return path
+		}
+		path = parent
+	}
+}
+
+// prepareRecoveryArea creates the recovery area once a move aside is approved.
+func prepareRecoveryArea(rootPath string) error {
+	if err := os.MkdirAll(settingsoverlay.RecoveryDir(rootPath), 0o700); err != nil {
+		return err
+	}
+	_ = gitrepo.EnsureRecoveryExcluded(rootPath)
+	return nil
 }
 
 func recoverySlotName(id string) string {
@@ -260,6 +279,9 @@ func (s *SourceEffects) applyNativeTrash(ctx context.Context, row *sourceMutatio
 			return ErrSourceMutationDiverged
 		}
 		same, sameErr := s.canMoveAside(plan.RootPath, plan.AbsPath)
+		if sameErr == nil && same {
+			sameErr = prepareRecoveryArea(plan.RootPath)
+		}
 		if sameErr != nil || !same {
 			plan.NativeTrash, plan.EntryRecoveryKey, plan.RecoveryID = nil, "", ""
 			if sameErr == nil {

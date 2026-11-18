@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceworkspace"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -584,6 +585,11 @@ func chownAgentPath(ctx context.Context, tctx tools.ToolContext, target mutation
 }
 
 func applyAgentMetadataChange(ctx context.Context, tctx tools.ToolContext, target mutationTarget, metadataChange string, apply func() error) error {
+	// Metadata belongs to the inode, which a hard link shares with names the
+	// host cannot see or review.
+	if info, err := os.Lstat(target.Abs); err == nil && info.Mode().IsRegular() && fspath.ObserveFile(info).Links > 1 {
+		return &toolrejection.ToolReject{Code: "METADATA_TARGET_HARD_LINKED", Data: map[string]any{"path": filepath.ToSlash(target.Location.Rel)}}
+	}
 	evidence, err := captureAgentFileAt(target.Location, ctx, nil, true)
 	if err != nil {
 		return err
