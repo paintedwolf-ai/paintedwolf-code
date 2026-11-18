@@ -37,7 +37,7 @@ func (r *cookieReceipt) facts() map[string]any {
 		return nil
 	}
 	out := map[string]any{
-		"jar": r.Jar, "sent": r.Sent, "stored": r.Stored, "persisted": r.Persisted,
+		"jar": r.Jar, "cookie_jar_name": r.Jar, "sent": r.Sent, "stored": r.Stored, "persisted": r.Persisted,
 	}
 	if r.Reference != "" {
 		out["reference"] = r.Reference

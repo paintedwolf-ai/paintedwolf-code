@@ -1194,6 +1194,18 @@
       "emit": "guard:host_resource_policy",
       "summary": "{% if paintedwolf.action_host_resource_denials %}Effective policy denies these requested host resources: {{ paintedwolf.action_host_resource_denials }}.{% else %}A requested host resource was denied by effective policy.{% endif %}"
     },
+    "HTTP_REQUEST_COOKIE_JAR_FAILED": {
+      "branch_instruction": "Inspect the named cookie jar in the capability inventory.",
+      "category": "recoverable",
+      "emit": "guard:http_request",
+      "summary": "The host could not open or update the named cookie jar."
+    },
+    "HTTP_REQUEST_COOKIE_NOT_HELD": {
+      "branch_instruction": "Use a cookie that applies to the selected destination.",
+      "category": "recoverable",
+      "emit": "guard:http_request",
+      "summary": "The selected jar cannot supply a referenced cookie at this destination."
+    },
     "HTTP_REQUEST_FAILED": {
       "branch_instruction": "{{ paintedwolf.next_steps }}",
       "category": "recoverable",
@@ -1211,6 +1223,24 @@
       "category": "advisory",
       "emit": "guard:http_request",
       "summary": "The request connected to {{ paintedwolf.destination }} on port {{ paintedwolf.port }}, where another listener is active."
+    },
+    "HTTP_REQUEST_TOKEN_CAPTURE_FAILED": {
+      "branch_instruction": "Use the receipt to identify which capture names were missing.",
+      "category": "recoverable",
+      "emit": "guard:http_request",
+      "summary": "The exchange completed but a requested response field was missing or unusable."
+    },
+    "HTTP_REQUEST_TOKEN_JAR_FAILED": {
+      "branch_instruction": "Inspect the named token jar in the capability inventory.",
+      "category": "recoverable",
+      "emit": "guard:http_request",
+      "summary": "The host could not open or update the named token jar."
+    },
+    "HTTP_REQUEST_TOKEN_NOT_HELD": {
+      "branch_instruction": "Use a token name listed in the jar receipt.",
+      "category": "recoverable",
+      "emit": "guard:http_request",
+      "summary": "The request references a token the jar does not hold."
     },
     "HTTP_REQUEST_WEB_PAGE": {
       "branch_instruction": "Keep native curl when you need the exact markup, headers, or status of this endpoint",

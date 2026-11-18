@@ -1,0 +1,22 @@
+spec_version: "1.0"
+id: HTTP_REQUEST_TOKEN_CAPTURE_FAILED
+kind: schema
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.operation, paintedwolf.rejection_code]
+when: (paintedwolf.operation == "http_request" || paintedwolf.operation == "command") && paintedwolf.rejection_code == "HTTP_REQUEST_TOKEN_CAPTURE_FAILED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:http_request
+message: The response did not supply the requested token
+what: The exchange completed but a requested response field was missing or unusable.
+cause: Each capture names a response header or JSON field.
+fix: Check the response status and --capture-token source before repeating an operation that may have changed the service.
+instead: Use the receipt to identify which capture names were missing.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      jar: auth_api
+      missing: [access_token]
+      profile: implement
+      tool: command

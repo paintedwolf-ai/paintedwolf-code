@@ -1,0 +1,18 @@
+spec_version: "1.0"
+id: HTTP_REQUEST_TOKEN_NOT_HELD
+kind: schema
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.operation, paintedwolf.rejection_code]
+when: (paintedwolf.operation == "http_request" || paintedwolf.operation == "command") && paintedwolf.rejection_code == "HTTP_REQUEST_TOKEN_NOT_HELD"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:http_request
+message: The token is missing from the selected jar
+what: The request references a token the jar does not hold.
+cause: A captured token is bound to its name and issuer.
+fix: Select the jar that holds the token or capture it from the issuing service with --capture-token.
+instead: Use a token name listed in the jar receipt.
+x-paintedwolf-scenarios:
+  - id: default
+    vars: {jar: api, missing: auth, held: [session], profile: implement, tool: command}

@@ -1,0 +1,23 @@
+spec_version: "1.0"
+id: HTTP_REQUEST_COOKIE_JAR_FAILED
+kind: schema
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.cookie_jar_name, paintedwolf.operation, paintedwolf.rejection_code]
+when: (paintedwolf.operation == "http_request" || paintedwolf.operation == "command") && paintedwolf.rejection_code == "HTTP_REQUEST_COOKIE_JAR_FAILED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:http_request
+message: The cookie jar is unavailable
+what: The host could not open or update the named cookie jar.
+cause: The jar may have expired, been revoked or become unavailable in the vault.
+fix: Check the jar state and command receipt before retrying. Use --managed-cookie-jar with the intended session name.
+instead: Inspect the named cookie jar in the capability inventory.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      jar: registry
+      reason: secret reference is revoked
+      profile: implement
+      tool: command
+      cookie_jar_name: registry

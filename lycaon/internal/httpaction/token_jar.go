@@ -1,6 +1,7 @@
 package httpaction
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -63,7 +65,7 @@ func (r *tokenReceipt) facts() map[string]any {
 		return nil
 	}
 	out := map[string]any{
-		"jar": r.Jar, "held": r.Held, "captured": r.Captured, "persisted": r.Persisted,
+		"jar": r.Jar, "token_jar_name": r.Jar, "held": r.Held, "captured": r.Captured, "persisted": r.Persisted,
 	}
 	if r.Reference != "" {
 		out["reference"] = r.Reference
@@ -97,6 +99,7 @@ func parseCaptureTokens(raw any) ([]captureTokenRule, error) {
 		return nil, fmt.Errorf("capture_tokens accepts at most 16 rules")
 	}
 	out := make([]captureTokenRule, 0, len(items))
+	seen := make(map[string]bool, len(items))
 	for _, item := range items {
 		obj, ok := item.(map[string]any)
 		if !ok {
@@ -109,7 +112,12 @@ func parseCaptureTokens(raw any) ([]captureTokenRule, error) {
 		if name == "" || from == "" {
 			return nil, fmt.Errorf("each capture_tokens rule requires name and from")
 		}
-		if !strings.HasPrefix(from, "json:") && !strings.HasPrefix(from, "header:") {
+		if utf8.RuneCountInString(name) > 64 || utf8.RuneCountInString(from) > 128 || seen[name] {
+			return nil, fmt.Errorf("capture names must be unique and at most 64 characters, with sources at most 128 characters")
+		}
+		seen[name] = true
+		kind, path, ok := strings.Cut(from, ":")
+		if !ok || strings.TrimSpace(path) == "" || (kind != "json" && kind != "header") {
 			return nil, fmt.Errorf("capture_tokens from must begin with 'json:' or 'header:'")
 		}
 		out = append(out, captureTokenRule{Name: name, From: from})
@@ -206,7 +214,11 @@ func extractTokens(resp outboundhttp.Response, rules []captureTokenRule) (map[st
 			jsonPath := strings.TrimSpace(strings.TrimPrefix(rule.From, "json:"))
 			if !bodyParsed {
 				bodyParsed = true
-				_ = json.Unmarshal(resp.Body, &bodyJSON)
+				if json.Valid(resp.Body) {
+					decoder := json.NewDecoder(bytes.NewReader(resp.Body))
+					decoder.UseNumber()
+					_ = decoder.Decode(&bodyJSON)
+				}
 			}
 			if bodyJSON == nil {
 				missing = append(missing, rule.Name)
@@ -242,8 +254,8 @@ func lookupJSONPath(root any, p string) (string, bool) {
 	switch v := curr.(type) {
 	case string:
 		return v, true
-	case float64:
-		return fmt.Sprintf("%v", v), true
+	case json.Number:
+		return v.String(), true
 	case bool:
 		return fmt.Sprintf("%v", v), true
 	default:

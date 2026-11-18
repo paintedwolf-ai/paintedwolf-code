@@ -1,0 +1,18 @@
+spec_version: "1.0"
+id: HTTP_REQUEST_COOKIE_NOT_HELD
+kind: schema
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.operation, paintedwolf.rejection_code]
+when: (paintedwolf.operation == "http_request" || paintedwolf.operation == "command") && paintedwolf.rejection_code == "HTTP_REQUEST_COOKIE_NOT_HELD"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:http_request
+message: The cookie is unavailable for this request
+what: The selected jar cannot supply a referenced cookie at this destination.
+cause: Cookie selection depends on the host, path, expiry and reviewed service identity.
+fix: Check the cookie name and request URL. If the session expired, sign in to the intended service again.
+instead: Use a cookie that applies to the selected destination.
+x-paintedwolf-scenarios:
+  - id: default
+    vars: {jar: registry, missing: session, held: csrf, profile: implement, tool: command}

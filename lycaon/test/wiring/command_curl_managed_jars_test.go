@@ -17,16 +17,17 @@ import (
 func TestCommandCurlUsesManagedJarsAcrossSubmissions(t *testing.T) {
 	run, _ := newSecretSinkRun(t)
 	const cookie = "fixture-session-cookie-871"
-	seen := make(chan [2]string, 2)
+	const number = "9876543210123456789"
+	seen := make(chan [3]string, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/login" {
 			http.SetCookie(w, &http.Cookie{Name: "sid", Value: cookie, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
 			w.Header().Set("X-Session", sinkSentinel)
-			_, _ = io.WriteString(w, "login complete")
+			_, _ = io.WriteString(w, `{"result":{"id":`+number+`}}`)
 			return
 		}
-		seen <- [2]string{r.Header.Get("Cookie"), r.Header.Get("X-Session")}
-		_, _ = io.WriteString(w, "accepted "+cookie+" "+sinkSentinel)
+		seen <- [3]string{r.Header.Get("Cookie"), r.Header.Get("X-Session"), r.Header.Get("X-Number")}
+		_, _ = io.WriteString(w, "accepted "+cookie+" "+sinkSentinel+" "+number)
 	}))
 	defer server.Close()
 	u, err := url.Parse(server.URL)
@@ -38,8 +39,8 @@ func TestCommandCurlUsesManagedJarsAcrossSubmissions(t *testing.T) {
 	}
 	const jars = "curl -s --managed-cookie-jar browser --managed-token-jar api "
 	run.script.steps = []citableStep{
-		{command: jars + "--capture-token session=header:X-Session -D login.headers " + server.URL + "/login"},
-		{command: jars + "-H 'X-Session: {{token:session}}' -o response.txt " + server.URL + "/check"},
+		{command: jars + "--capture-token session=header:X-Session --capture-token number=json:result.id -D login.headers " + server.URL + "/login"},
+		{command: jars + "-H 'X-Session: {{token:session}}' -H 'X-Number: {{token:number}}' -o response.txt " + server.URL + "/check"},
 	}
 	_, err = run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "use the fixture service")
 	testutil.FailErr(t, "submit command sequence", err)
@@ -50,8 +51,8 @@ func TestCommandCurlUsesManagedJarsAcrossSubmissions(t *testing.T) {
 	}
 	select {
 	case got := <-seen:
-		if got != [2]string{"sid=" + cookie, sinkSentinel} {
-			t.Fatal("service did not receive both scoped values")
+		if got != [3]string{"sid=" + cookie, sinkSentinel, number} {
+			t.Fatal("service did not receive the scoped values")
 		}
 	default:
 		t.Fatal("service did not receive the second request")
@@ -59,7 +60,7 @@ func TestCommandCurlUsesManagedJarsAcrossSubmissions(t *testing.T) {
 	for _, file := range []string{"login.headers", "response.txt"} {
 		b, err := os.ReadFile(filepath.Join(run.dir, file))
 		testutil.FailErr(t, "read published output", err)
-		if len(b) == 0 || strings.Contains(string(b), cookie) || strings.Contains(string(b), sinkSentinel) {
+		if len(b) == 0 || strings.Contains(string(b), cookie) || strings.Contains(string(b), sinkSentinel) || strings.Contains(string(b), number) {
 			t.Fatalf("unsafe or missing bytes in %s", file)
 		}
 	}
