@@ -371,7 +371,7 @@ export function FileSummaryDrawer(props: Props) {
             ariaLabel="Resize file summary"
             ariaMin={() => MIN_HEIGHT}
             ariaMax={maximumHeight}
-            tip="Drag to resize the file summary — double-click to reset"
+            tip="Double-click to reset height"
             testId="file-summary-resize"
           />
         </Show>

@@ -100,5 +100,6 @@ export function redactionMarkTitle(span: RedactedSpan): string {
   if (span.kind === "managed_reference") {
     return "Protected secret shown as its reference — the source still holds the value";
   }
-  return [span.rule_title?.trim(), "removed by this host"].filter(Boolean).join(" — ");
+  const rule = span.rule_title?.trim();
+  return rule ? `${rule} — removed by this host` : "Removed by this host";
 }

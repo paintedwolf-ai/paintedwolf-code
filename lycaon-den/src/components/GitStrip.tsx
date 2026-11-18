@@ -567,7 +567,7 @@ export function GitStrip(props: Props) {
                 <Show when={ahead() > 0 || behind() > 0}>
                   <span
                     class="git-strip__track"
-                    data-tip="Ahead / behind upstream"
+                    data-tip={`${ahead()} ahead · ${behind()} behind upstream`}
                   >
                     <Show when={ahead() > 0}>
                       <span data-testid="git-ahead">↑{ahead()}</span>
@@ -592,7 +592,6 @@ export function GitStrip(props: Props) {
                   class="git-strip__sync-btn"
                   data-testid="git-push"
                   disabled={busy() || ahead() === 0}
-                  data-tip="Push to upstream"
                   onClick={() => props.onPush()}
                 >
                   Push
@@ -678,7 +677,7 @@ export function GitStrip(props: Props) {
                   class="git-strip__commit"
                   data-testid="git-commit"
                   disabled={!canCommit()}
-                  data-tip="Stage all changes and commit (⏎)"
+                  data-tip="Stage all changes and commit (Enter)"
                   onClick={() => void commit()}
                 >
                   Stage &amp; commit

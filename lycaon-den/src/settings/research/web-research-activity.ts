@@ -1,5 +1,6 @@
 import type { WebResearchWarmActivity } from "../../api/types.ts";
 import type { DenseReadOnlyListItem } from "../../components/settings/DenseReadOnlyList.tsx";
+import { viewerCalendarTimeFormat } from "../../time/calendar-time.ts";
 import { formatRelativeTime } from "../../time/time-copy.ts";
 
 /** Prefer a short page so Local index + activity usually fit one screen. */
@@ -23,7 +24,7 @@ export function webResearchActivityToDenseItems(
       primary,
       secondary: parts.length > 0 ? parts.join(" · ") : undefined,
       meta: hasTime ? formatRelativeTime(atMs, now) : undefined,
-      metaTitle: hasTime ? new Date(atMs).toLocaleString() : undefined,
+      metaTitle: hasTime ? viewerCalendarTimeFormat().fullDateTime(atMs) : undefined,
     };
   });
 }

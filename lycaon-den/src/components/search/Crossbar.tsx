@@ -42,6 +42,7 @@ import {
 import {
   ariaKeyShortcutsForHandler,
   bindingForHandler,
+  tipWithShortcut,
 } from "../../shortcuts/display-binding-for.ts";
 import { attachDispatcher, registerCommandHandler } from "../../shortcuts/dispatcher.ts";
 import { ChromeDragSurface } from "../shell/ChromeDragSurface.tsx";
@@ -513,7 +514,7 @@ export function Crossbar(props: CrossbarProps) {
     });
 
   const modeTooltip = (m: CrossbarMode): string => {
-    return `${CROSSBAR_MODE_LABEL[m]} (${bindingForHandler(SEARCH_MODE_COMMAND_BY_MODE[m])})`;
+    return tipWithShortcut(CROSSBAR_MODE_LABEL[m], SEARCH_MODE_COMMAND_BY_MODE[m]);
   };
 
   return (
@@ -578,7 +579,7 @@ export function Crossbar(props: CrossbarProps) {
                 <button
                   type="button"
                   class="den-search-query__toggle"
-                  data-tip={`Match case (${bindingForHandler("search.toggleMatchCase")})`}
+                  data-tip={tipWithShortcut("Match case", "search.toggleMatchCase")}
                   aria-label="Match case"
                   aria-keyshortcuts={ariaKeyShortcutsForHandler("search.toggleMatchCase")}
                   aria-pressed={matchPrefs().caseSensitive}
@@ -594,7 +595,7 @@ export function Crossbar(props: CrossbarProps) {
                 <button
                   type="button"
                   class="den-search-query__toggle"
-                  data-tip={`Whole word (${bindingForHandler("search.toggleWholeWord")})`}
+                  data-tip={tipWithShortcut("Whole word", "search.toggleWholeWord")}
                   aria-label="Whole word"
                   aria-keyshortcuts={ariaKeyShortcutsForHandler("search.toggleWholeWord")}
                   aria-pressed={matchPrefs().wholeWord}
@@ -606,7 +607,7 @@ export function Crossbar(props: CrossbarProps) {
                 <button
                   type="button"
                   class="den-search-query__toggle"
-                  data-tip={`Regular expression (${bindingForHandler("search.toggleRegex")})`}
+                  data-tip={tipWithShortcut("Regular expression", "search.toggleRegex")}
                   aria-label="Regular expression"
                   aria-keyshortcuts={ariaKeyShortcutsForHandler("search.toggleRegex")}
                   aria-pressed={matchPrefs().regex}

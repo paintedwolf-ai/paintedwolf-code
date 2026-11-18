@@ -278,7 +278,7 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
                 ariaLabel="Resize file tree"
                 ariaMax={treeLayout.maxSize}
                 ariaMin={treeLayout.minSize}
-                tip="Drag to resize or hide the file tree — double-click to reset"
+                tip="Double-click to reset width · drag past the edge to hide"
                 testId="files-tree-resize"
               />
               <FilesEditorWorkspace

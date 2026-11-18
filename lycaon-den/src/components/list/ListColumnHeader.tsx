@@ -115,7 +115,6 @@ export function ListColumnHeader<T>(props: ListColumnHeaderProps<T>) {
                 ariaLabel={`Resize ${col.label} column`}
                 ariaMin={() => col.width.min}
                 ariaMax={() => col.width.max}
-                tip={`Drag to resize ${col.label}`}
               />
             </Show>
           </div>

@@ -3,7 +3,7 @@ export const EXTERNAL_CONTENT_BADGE_LABEL = "External content";
 
 /** Hover copy — short; click opens session external-content search. */
 export const EXTERNAL_CONTENT_BADGE_TITLE =
-  "External content in this session — click to search";
+  "External content in this session — opens search";
 
 
 /**

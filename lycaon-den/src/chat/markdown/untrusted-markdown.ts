@@ -53,7 +53,7 @@ function remoteImagePlaceholder(
   button.className = "den-md-remote-img";
   button.setAttribute("data-den-img-src", src);
   if (alt) button.setAttribute("data-den-img-alt", alt);
-  button.dataset.tip = host ? `Open image from ${host}` : "Open remote image";
+  button.dataset.tip = src;
 
   const label = doc.createElement("span");
   label.className = "den-md-remote-img__label";
@@ -71,6 +71,7 @@ function surfaceLinkDestinations(fragment: DocumentFragment): void {
     const href = (a.getAttribute("href") ?? "").trim();
     if (!href) continue;
     a.setAttribute("data-tip", href);
+    if ((a.textContent ?? "").trim() === href) a.setAttribute("data-tip-when-clipped", "");
     const rel = (a.getAttribute("rel") ?? "").trim();
     if (!/\bnoopener\b/i.test(rel) || !/\bnoreferrer\b/i.test(rel)) {
       a.setAttribute("rel", "noopener noreferrer");

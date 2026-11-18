@@ -164,7 +164,7 @@ export function WorkspaceFoldersPanel(props: WorkspaceFoldersPanelProps) {
                         class="workspace-folders-panel__label"
                         data-testid={`project-root-rename-trigger-${root.id}`}
                         aria-label="Rename folder label"
-                        data-tip="Rename"
+                        data-tip="Rename label"
                         disabled={busy()}
                         onClick={() => setRenamingRootId(root.id)}
                       >

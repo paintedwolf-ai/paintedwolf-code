@@ -1,3 +1,4 @@
+import { viewerCalendarTimeFormat } from "../../time/calendar-time.ts";
 import { ShowLatest } from "../primitives/ShowLatest.tsx";
 import { createSurfaceQuery } from "../../ui/surface-query.ts";
 import { CacheSavingsNote } from "../../cost/CacheSavingsNote.tsx";
@@ -771,7 +772,7 @@ export function ProjectCostView(props: Props) {
                                       </td>
                                       <td>
                                         <strong>{formatRelativeTime(Date.parse(row.session.activity_at))}</strong>
-                                        <span data-tip={new Date(row.session.activity_at).toLocaleString()}>{new Date(row.session.activity_at).toLocaleDateString()}</span>
+                                        <span data-tip={viewerCalendarTimeFormat().fullDateTime(Date.parse(row.session.activity_at))}>{new Date(row.session.activity_at).toLocaleDateString()}</span>
                                       </td>
                                     </tr>
                                   )}

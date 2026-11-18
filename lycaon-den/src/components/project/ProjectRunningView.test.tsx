@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { viewerCalendarTimeFormat } from "../../time/calendar-time.ts";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_APP_STATE_V1 } from "../../../shared/app-state-types.ts";
@@ -145,7 +146,7 @@ describe("ProjectRunningView", () => {
       screen
         .getByTestId("project-running-started-bg_1")
         .getAttribute("data-tip"),
-    ).toBe("2026-04-20T12:00:00Z");
+    ).toBe(viewerCalendarTimeFormat().fullDateTime(Date.parse("2026-04-20T12:00:00Z")));
 
     // Archive the owning chat -> Archived indicator appears.
     patchProjectBackgroundSession("proj_1", "sess_1", {

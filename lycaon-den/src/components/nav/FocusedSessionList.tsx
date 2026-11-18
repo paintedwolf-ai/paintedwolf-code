@@ -388,7 +388,7 @@ export function FocusedSessionList(props: Props) {
               <span
                 class="focused-session-list__notices"
                 data-testid="session-notice-count"
-                data-tip={`${noticeCountFor(row())} unresolved in this chat`}
+                data-tip={`${noticeCountFor(row())} unresolved notice${noticeCountFor(row()) === 1 ? "" : "s"} in this chat`}
               >
                 {countLabel(noticeCountFor(row()))}
               </span>
@@ -422,7 +422,7 @@ export function FocusedSessionList(props: Props) {
               type="button"
               class="focused-session-list__window den-inset-icon-btn"
               aria-label={`${windowViewCount(row())} open window view${windowViewCount(row()) === 1 ? "" : "s"}`}
-              data-tip={`${windowViewCount(row())} open window view${windowViewCount(row()) === 1 ? "" : "s"}`}
+              data-tip={`Bring to front · ${windowViewCount(row())} open window view${windowViewCount(row()) === 1 ? "" : "s"}`}
               data-testid="session-window-glyph"
               onClick={() => raiseWindowView(row())}
             >
