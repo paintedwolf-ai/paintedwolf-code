@@ -10,8 +10,11 @@ const corpus = readHostCorpus();
 /** A chat's transcript the host answered before and after its message events. */
 function bootstrapPair(): [SessionBootstrap, SessionBootstrap] {
   const reads = corpus.exchanges.filter(ex => ex.operation === "getSessionBootstrap" && ex.status === 200);
-  expect(reads.length, "the corpus holds a chat's bootstrap before and after the sweep").toBe(2);
-  return [reads[0].body as SessionBootstrap, reads[1].body as SessionBootstrap];
+  const [first, last] = reads;
+  if (reads.length !== 2 || !first || !last) {
+    throw new Error(`the corpus holds ${reads.length} bootstraps; it needs a chat's before and after the sweep`);
+  }
+  return [first.body as SessionBootstrap, last.body as SessionBootstrap];
 }
 
 /** The chat's message events published between the two bootstraps. */

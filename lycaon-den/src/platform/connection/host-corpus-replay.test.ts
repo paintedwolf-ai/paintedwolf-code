@@ -2,6 +2,7 @@ import { installConnectionFixtureCleanup, createFixtureApp, createLycaonClient, 
 
 import { describe, expect, it, vi } from "vitest";
 
+import type { EventSubscriptionOptions } from "../../api/events.ts";
 import { readHostCorpus } from "../../api/testdata/host-corpus.ts";
 
 installConnectionFixtureCleanup();
@@ -36,8 +37,10 @@ describe("host corpus replay", () => {
       }
       await new Promise<void>(resolve => signal.addEventListener("abort", () => resolve(), { once: true }));
     }
+    // The fixture records the app's options with a narrower type than the real subscription takes.
+    const appOptions = options as EventSubscriptionOptions;
     const subscription = subscribeEvents({ baseUrl: "http://127.0.0.1:8787", apiToken: "tok" }, "", handlers as never, {
-      ...options,
+      ...appOptions,
       appStore,
       storeActions: appStore.actions,
       onReconcile: async () => {},
