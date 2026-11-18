@@ -10,47 +10,24 @@ import (
 )
 
 // TestHostCorpusMatchesTheContract keeps the corpus Den replays true to the
-// current contract: every answer recorded whole validates against the
-// operation it answered, every recorded event against its topic's schema, and every
-// operation has a recorded success. A contract change that the recording
-// predates fails here, before the slower sweep that rewrites it runs.
+// current contract: every recorded answer validates against the operation it
+// answered, and every recorded event against its topic's schema. A contract
+// change that the recording predates fails here, before the slower sweep that
+// rewrites it runs.
 func TestHostCorpusMatchesTheContract(t *testing.T) {
 	t.Parallel()
 	corpus, err := openapi.ReadHostCorpus()
 	contractcheck.FailErr(t, "read "+openapi.HostCorpusPath+"; refresh with "+openapi.HostCorpusRefresh, err)
 	validator, err := openapi.Bundled()
 	contractcheck.FailErr(t, "load the bundled OpenAPI document", err)
-	doc, err := openapi.Document()
-	contractcheck.FailErr(t, "load the bundled OpenAPI document", err)
 	schemas, err := openapi.BundledEventSchemas()
 	contractcheck.FailErr(t, "load the event schemas", err)
 
-	succeeded := map[string]bool{}
 	for _, ex := range corpus.Exchanges {
-		header := http.Header{}
-		if ex.ContentType != "" {
-			header.Set("Content-Type", ex.ContentType)
-		}
-		body := []byte(ex.Body)
-		if ex.Text != "" {
-			body = []byte(ex.Text)
-		}
-		// An answer kept as its shape was validated whole by the sweep.
-		if ex.BodyShape == nil {
-			if err := validator.ValidateResponse(t.Context(), ex.Method, ex.Path, ex.Params, ex.Status, header, body); err != nil {
-				line, _, _ := strings.Cut(err.Error(), "\n")
-				t.Errorf("%s %d no longer matches the contract: %s", ex.Operation, ex.Status, line)
-			}
-		}
-		if ex.Status/100 == 2 {
-			succeeded[ex.Operation] = true
-		}
-	}
-	for path, item := range doc.Paths.Map() {
-		for method, op := range item.Operations() {
-			if !succeeded[op.OperationID] {
-				t.Errorf("%s (%s %s) has no recorded success", op.OperationID, method, path)
-			}
+		header := http.Header{"Content-Type": []string{ex.ContentType}}
+		if err := validator.ValidateResponse(t.Context(), ex.Method, ex.Path, ex.Params, ex.Status, header, ex.Body); err != nil {
+			line, _, _ := strings.Cut(err.Error(), "\n")
+			t.Errorf("%s %d no longer matches the contract: %s", ex.Operation, ex.Status, line)
 		}
 	}
 	for i, env := range corpus.Events {

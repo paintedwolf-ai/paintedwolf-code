@@ -34,15 +34,13 @@ const (
 	// resumeAfter drops the stream and reconnects with ?after= the last
 	// cursor it delivered.
 	resumeAfter
-	// resumeExpired drops the stream until its cursor leaves the replay
-	// window; the 409 names the cursor of a fresh bootstrap to continue from.
-	resumeExpired
 )
 
 // TestBootstrapPlusEventsConverges: a chat bootstrapped at cursor k plus the
 // events after k equals a fresh bootstrap and the whole stored transcript,
-// for a subscriber that stays, one that resumes, and one whose cursor
-// expires; a subscriber that watched from the start agrees with both.
+// for a subscriber that stays and one that resumes; a subscriber that watched
+// from the start agrees with both. A cursor that left the replay window, and a
+// write whose event is the bootstrap's cursor, are fixed cases.
 func TestBootstrapPlusEventsConverges(t *testing.T) {
 	// Every generated case creates two chats; admission limits are their own contract.
 	t.Setenv("LYCAON_RATE_SESSIONS_PER_MIN", "100000000")
@@ -68,7 +66,7 @@ func TestBootstrapPlusEventsConverges(t *testing.T) {
 		run := &convergeRun{world: world, chats: chats}
 		steps := rapid.IntRange(1, 24).Draw(rt, "steps")
 		cut := rapid.IntRange(0, steps).Draw(rt, "cut")
-		mode := rapid.SampledFrom([]resumeMode{stayConnected, resumeAfter, resumeExpired}).Draw(rt, "mode")
+		mode := rapid.SampledFrom([]resumeMode{stayConnected, resumeAfter}).Draw(rt, "mode")
 		for range cut {
 			run.step(rt)
 		}
@@ -86,25 +84,10 @@ func TestBootstrapPlusEventsConverges(t *testing.T) {
 		stream := world.subscribe(cursor)
 		var delivered []wire.EventEnvelope
 		for i := cut; i < steps; i++ {
-			if i == (cut+steps)/2 && mode != stayConnected {
+			if i == (cut+steps)/2 && mode == resumeAfter {
 				delivered = append(delivered, world.sync(stream)...)
 				stream.close()
-				if mode == resumeExpired {
-					world.expireReplay(early)
-					world.resubscribeExpired(lastCursor(delivered, cursor))
-					cursor = ""
-					for _, chat := range chats {
-						boot := world.bootstrap(chat)
-						late[chat] = stateFromBootstrap(boot)
-						if cursor == "" {
-							cursor = boot.EventCursor
-						}
-					}
-					delivered = nil
-					stream = world.subscribe(cursor)
-				} else {
-					stream = world.subscribe(lastCursor(delivered, cursor))
-				}
+				stream = world.subscribe(lastCursor(delivered, cursor))
 			}
 			run.step(rt)
 		}
@@ -136,6 +119,82 @@ func TestBootstrapPlusEventsConverges(t *testing.T) {
 			rt.Fatalf("%d outbox rows are still undelivered after settling", pending)
 		}
 	})
+
+	t.Run("an expired cursor continues from a fresh bootstrap", func(t *testing.T) {
+		world := world.on(t)
+		world.settle()
+		watching := world.subscribe(world.currentCursor())
+		defer watching.close()
+		chat := CreateSessionForProjectHTTP(t, h.Server, project.ID, wire.SessionPostureBuild).ID
+		world.append(chat)
+		world.settle()
+		stream := world.subscribe(world.bootstrap(chat).EventCursor)
+		world.append(chat)
+		world.settle()
+		delivered := world.sync(stream)
+		stream.close()
+		world.expireReplay(watching)
+		world.resubscribeExpired(lastCursor(delivered, ""))
+		boot := world.bootstrap(chat)
+		stream = world.subscribe(boot.EventCursor)
+		defer stream.close()
+		world.append(chat)
+		world.settle()
+		world.requireConverged(chat, stateFromBootstrap(boot).apply(chat, world.sync(stream)))
+	})
+
+	t.Run("a write whose event is the bootstrap's cursor is not delivered again", func(t *testing.T) {
+		world := world.on(t)
+		chat := CreateSessionForProjectHTTP(t, h.Server, project.ID, wire.SessionPostureBuild).ID
+		atCut := world.append(chat)
+		world.settle()
+		boot := world.bootstrap(chat)
+		if _, ok := stateFromBootstrap(boot).messages[atCut]; !ok {
+			t.Fatalf("the bootstrap taken after message %s does not hold it", atCut)
+		}
+		stream := world.subscribe(boot.EventCursor)
+		defer stream.close()
+		after := world.append(chat)
+		world.settle()
+		delivered := world.sync(stream)
+		for _, env := range delivered {
+			var ev wire.MessageEvent
+			if env.Topic == wire.EventTopicMessage && json.Unmarshal(env.Data, &ev) == nil && ev.Message.ID == atCut {
+				t.Fatalf("message %s, inside the bootstrap, was delivered again after its cursor", atCut)
+			}
+		}
+		folded := stateFromBootstrap(boot).apply(chat, delivered)
+		if _, ok := folded.messages[after]; !ok {
+			t.Fatalf("message %s, written after the cursor, was not delivered", after)
+		}
+		world.requireConverged(chat, folded)
+	})
+}
+
+// on is the same world failing through t, for a subtest.
+func (w *convergeWorld) on(t *testing.T) *convergeWorld {
+	scoped := *w
+	scoped.t = t
+	return &scoped
+}
+
+// append adds an assistant message to chat through the store's outbox and
+// answers its id.
+func (w *convergeWorld) append(chat string) string {
+	msg := wire.Message{ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Origin: wire.MessageOriginModel, Content: "appended " + uuid.NewString()}
+	testutil.FailErr(w.t, "append message", w.h.Sessions.Store.AppendMessages(w.t.Context(), chat, msg))
+	return msg.ID
+}
+
+// requireConverged compares a folded state with a fresh bootstrap and the
+// whole stored transcript.
+func (w *convergeWorld) requireConverged(chat string, folded convergeState) {
+	w.t.Helper()
+	fresh := stateFromBootstrap(w.bootstrap(chat))
+	fresh.messages = messageRevisions(pageWholeTranscript(w.t, w.h.Server, chat))
+	if diff := fresh.diff(folded); diff != "" {
+		w.t.Fatalf("chat %s: %s", chat, diff)
+	}
 }
 
 // convergeWorld is one host, one project, and the HTTP client the subscribers use.
