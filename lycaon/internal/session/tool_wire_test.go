@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"strings"
 	"testing"
 
@@ -48,7 +49,7 @@ func TestPrepareToolWirePreservesBoundedRecallBody(t *testing.T) {
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled: true, ChunkTokenThreshold: 50, ChunkTargetTokens: 20,
-	}, compaction.MockSummarizer{Text: "summary"}))
+	}, llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "summary"}))
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	body := strings.Repeat("observed line\n", 30) + "historical value: 7119\n" + strings.Repeat("observed line\n", 30)
@@ -70,7 +71,7 @@ func TestPrepareToolWireContentCompactsBeforeStore(t *testing.T) {
 		Enabled:             true,
 		ChunkTokenThreshold: 50,
 		ChunkTargetTokens:   500,
-	}, compaction.MockSummarizer{Text: "summary"}))
+	}, llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "summary"}))
 
 	ctx := context.Background()
 

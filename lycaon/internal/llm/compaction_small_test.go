@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"strings"
 	"testing"
 )
@@ -48,7 +49,7 @@ func TestCompactionResultDoesNotDependOnAccounting(t *testing.T) {
 		{ID: "old", Role: "user", Content: strings.Repeat("old evidence ", 2000)},
 		{ID: "recent", Role: "assistant", Content: "Continue"}}
 	var wantSummary string
-	summary, err := (compaction.MockSummarizer{Text: "Continue the same task."}).Summarize(compaction.WithSummaryFormat(t.Context()), "", "", 0)
+	summary, err := (llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "Continue the same task."}).Summarize(compaction.WithSummaryFormat(t.Context()), "", "", 0)
 	testutil.FailErr(t, "encode continuation fixture", err)
 	for _, accounting := range []struct {
 		name    string

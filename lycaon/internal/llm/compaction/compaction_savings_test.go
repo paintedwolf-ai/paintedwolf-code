@@ -3,6 +3,7 @@ package compaction
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"strings"
 	"testing"
 
@@ -34,7 +35,7 @@ func savingsCompactor(t *testing.T, summary Summarizer) *SimpleCompactor {
 }
 
 func TestCompactionRejectsEnglishTokenGrowthDespiteCharacterSavings(t *testing.T) {
-	c := savingsCompactor(t, MockSummarizer{})
+	c := savingsCompactor(t, llmtest.Summarizer{Structured: SummaryFormatRequested})
 	before := []ContextMessage{{Role: "assistant", Content: strings.Repeat(" alphabet", 755)}}
 	after := []ContextMessage{{Role: "assistant", Content: strings.Repeat(" SQL, CSV, HTTP, JSON, YAML.", 180)}}
 	if EstimateMessagesTokens(after) >= EstimateMessagesTokens(before) {
@@ -58,7 +59,7 @@ func TestCompactionRejectsEnglishTokenGrowthDespiteCharacterSavings(t *testing.T
 }
 
 func TestCompactionKeepsCurrentRequestOnceWithOriginalAuthority(t *testing.T) {
-	c := savingsCompactor(t, MockSummarizer{Text: "Earlier observations retained."})
+	c := savingsCompactor(t, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "Earlier observations retained."})
 	request := strings.Repeat("Keep SQL and HTTP checks. ", 250)
 	messages := []ContextMessage{
 		{ID: "old", Role: "assistant", Content: strings.Repeat("Earlier work and measurements. ", 2000)},
@@ -101,7 +102,7 @@ func TestCompactionPreflightAvoidsPaidCallForProtectedHistory(t *testing.T) {
 }
 
 func TestCompactionMemoInvalidatesOnSourceModelAndPolicy(t *testing.T) {
-	raw, err := mockCompactionSummary(strings.Repeat("A long retained fact. ", 5))
+	raw, err := llmtest.SummaryJSON(strings.Repeat("A long retained fact. ", 5))
 	testutil.FailErr(t, "summary fixture", err)
 	summary := &chunkSummaryFixture{text: raw}
 	c := savingsCompactor(t, summary)

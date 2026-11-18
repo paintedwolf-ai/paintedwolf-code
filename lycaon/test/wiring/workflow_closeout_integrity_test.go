@@ -3,12 +3,12 @@ package wiring
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -24,7 +24,7 @@ func TestWorkflowCloseoutCannotPromiseUncommittedAdvancement(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			var calls atomic.Int32
-			mock := llm.NewKickDrivenMock(llm.KickDrivenConfig{Fallback: func(context.Context, llm.Snapshot) modelcall.Completion {
+			mock := llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{Fallback: func(context.Context, llmtest.Snapshot) modelcall.Completion {
 				calls.Add(1)
 				return modelcall.Completion{Content: "The gates passed. The host will advance the workflow."}
 			}})

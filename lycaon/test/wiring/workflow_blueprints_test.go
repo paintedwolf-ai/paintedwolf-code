@@ -3,6 +3,7 @@ package wiring
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/blueprint"
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
@@ -51,9 +51,9 @@ func (q *queuedWorkerScripts) push(agentType string, script ...api.ToolCall) {
 	q.queues[agentType] = append(q.queues[agentType], script)
 }
 
-func (q *queuedWorkerScripts) mock(h **Harness) *llm.KickDrivenMock {
-	return llm.NewKickDrivenMock(llm.KickDrivenConfig{
-		Fallback: func(ctx context.Context, _ llm.Snapshot) modelcall.Completion {
+func (q *queuedWorkerScripts) mock(h **Harness) *llmtest.KickDrivenMock {
+	return llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{
+		Fallback: func(ctx context.Context, _ llmtest.Snapshot) modelcall.Completion {
 			jobID := workercontext.Job(ctx)
 			if jobID == "" {
 				q.mu.Lock()

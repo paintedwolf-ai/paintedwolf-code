@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -288,7 +289,7 @@ func TestFailedSynthesisKeepsPublishedRecoveryAndCanonicalHistory(t *testing.T) 
 	}
 
 	// Prompt fitting does not lower the durable retry threshold.
-	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "validated continuation"}))
+	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "validated continuation"}))
 	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "retry")
 	testutil.FailErr(t, "retry prompt", err)
 	mgr.Runner.History.Wait()

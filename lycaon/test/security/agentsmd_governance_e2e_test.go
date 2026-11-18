@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -39,7 +40,7 @@ func runAgentsMDWriteApproval(t *testing.T, call llm.MockToolCall, kind wire.Che
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	var calls atomic.Int32
-	mock := llm.NewKickDrivenMock(llm.KickDrivenConfig{Fallback: func(context.Context, llm.Snapshot) modelcall.Completion {
+	mock := llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{Fallback: func(context.Context, llmtest.Snapshot) modelcall.Completion {
 		switch calls.Add(1) {
 		case 1:
 			return modelcall.Completion{ToolCalls: []wire.ToolCall{{ID: "offer-tool", Name: "request_tools", Args: map[string]any{"need": call.Name}}}}

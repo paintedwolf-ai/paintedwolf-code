@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,7 +35,7 @@ func TestFreeChatImplementerTask(t *testing.T) {
 			FollowUpText: "Added the TODO comment at the top of main.go.",
 		},
 	}})
-	rec := llm.NewRecordingClient(mock)
+	rec := llmtest.NewRecordingClient(mock)
 	h := BuildForTest(t, WithLLMClient(rec))
 	cancel := h.StartBackgroundWorkers(t, context.Background())
 	t.Cleanup(cancel)

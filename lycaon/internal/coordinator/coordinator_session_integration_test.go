@@ -4,6 +4,7 @@ package coordinator_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -69,7 +70,7 @@ func TestManagerPromptUsesCoordinatorAssembly(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	root := sessionIntegrationRoot(t)
 	ctx := context.Background()
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	store := store.NewMemory()
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wireManagerPromptPolicy(t, mgr, root)
@@ -95,7 +96,7 @@ func TestManagerKickNudgeViaRuntime(t *testing.T) {
 	root := sessionIntegrationRoot(t)
 	ctx := context.Background()
 	store := store.NewMemory()
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wireManagerPromptPolicy(t, mgr, root)
 	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())

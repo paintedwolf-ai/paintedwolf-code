@@ -2,6 +2,7 @@ package compaction
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"strings"
 	"testing"
 
@@ -68,7 +69,7 @@ func TestReductionMemoDependsOnSelectedSourcesNotUntouchedSuffix(t *testing.T) {
 }
 
 func TestBaselineRejectionDoesNotSuppressSynthesis(t *testing.T) {
-	c := savingsCompactor(t, MockSummarizer{Text: "A useful fact."})
+	c := savingsCompactor(t, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "A useful fact."})
 	info := SessionInfo{ID: "session", Attempts: &attemptFixture{}}
 	rows := []ContextMessage{{ID: "source", Role: "assistant", Content: strings.Repeat("source observation ", 80)}}
 	baseline, err := c.Baseline().sessionRevision(t.Context(), info, rows)

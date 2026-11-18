@@ -3,11 +3,11 @@ package wiring
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -17,8 +17,8 @@ import (
 
 func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 	var calls atomic.Int32
-	mock := llm.NewKickDrivenMock(llm.KickDrivenConfig{
-		Fallback: func(context.Context, llm.Snapshot) modelcall.Completion {
+	mock := llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{
+		Fallback: func(context.Context, llmtest.Snapshot) modelcall.Completion {
 			if calls.Add(1) > 1 {
 				return modelcall.Completion{Content: MockCoordinatorCloseoutMarkdown("Question was not parked.", "")}
 			}

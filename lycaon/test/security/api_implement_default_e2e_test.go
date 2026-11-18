@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -39,7 +40,7 @@ func TestImplementDefaultParitySmoke(t *testing.T) {
 		toolStep("", call("w1", "command", map[string]any{"command": "printf '// TODO: review here\\npackage main\\n\\nfunc main() {}\\n' > main.go"})),
 		textStep(wiring.MockWorkerCompletionJSON("complete", "Added the TODO comment at the top of main.go.", []string{"Added the TODO comment to main.go."})),
 	)
-	recording := llm.NewRecordingClient(mock)
+	recording := llmtest.NewRecordingClient(mock)
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(recording))
 
 	ctx := context.Background()

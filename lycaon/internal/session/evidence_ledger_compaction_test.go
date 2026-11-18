@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,7 +144,7 @@ func newSQLCompactionManager(t *testing.T, store Store, cfg compaction.Compactio
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "Continue from compacted context."}))
+	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "Continue from compacted context."}))
 	return mgr
 }
 

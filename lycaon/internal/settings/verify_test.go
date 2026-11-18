@@ -3,6 +3,7 @@ package settings
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,7 +58,7 @@ func TestDetectVerifyCommandLLM(t *testing.T) {
 	seedDoc(t, dir, "README.md", "## Testing\nRun `./task check` before committing.\n")
 
 	t.Run("proposes documented command", func(t *testing.T) {
-		sum := compaction.MockSummarizer{Text: `{"command":"./task check","source":"README.md"}`}
+		sum := llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: `{"command":"./task check","source":"README.md"}`}
 		cand, outcome := DetectVerifyCommandLLM(context.Background(), sum, []string{dir})
 		if outcome != VerifyDetectFound || cand.Command != "./task check" || cand.Source != "README.md" {
 			t.Fatalf("DetectVerifyCommandLLM = (%+v,%v) want ./task check from README.md", cand, outcome)
@@ -66,7 +67,7 @@ func TestDetectVerifyCommandLLM(t *testing.T) {
 
 	// A valid no-command answer is cacheable.
 	t.Run("model finds no command", func(t *testing.T) {
-		sum := compaction.MockSummarizer{Text: `{"command":""}`}
+		sum := llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: `{"command":""}`}
 		cand, outcome := DetectVerifyCommandLLM(context.Background(), sum, []string{dir})
 		if outcome != VerifyDetectNoCommand || cand.Command != "" {
 			t.Fatalf("empty command = (%+v,%v) want a cacheable no-command answer", cand, outcome)
@@ -81,7 +82,7 @@ func TestDetectVerifyCommandLLM(t *testing.T) {
 
 	// Summarizer failures stay uncached.
 	t.Run("summarizer error", func(t *testing.T) {
-		sum := compaction.MockSummarizer{Err: errors.New("no provider")}
+		sum := llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Err: errors.New("no provider")}
 		if _, outcome := DetectVerifyCommandLLM(context.Background(), sum, []string{dir}); outcome.Ran() {
 			t.Fatalf("errored summarizer must report unavailable, not an answer")
 		}
@@ -89,7 +90,7 @@ func TestDetectVerifyCommandLLM(t *testing.T) {
 
 	t.Run("no docs short-circuits", func(t *testing.T) {
 		// Empty documentation skips the summarizer.
-		sum := compaction.MockSummarizer{Text: `{"command":"./task check"}`}
+		sum := llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: `{"command":"./task check"}`}
 		cand, outcome := DetectVerifyCommandLLM(context.Background(), sum, []string{t.TempDir()})
 		// Empty documentation is a cacheable project result.
 		if outcome != VerifyDetectNoCommand || cand.Command != "" {
@@ -98,7 +99,7 @@ func TestDetectVerifyCommandLLM(t *testing.T) {
 	})
 
 	t.Run("parses reply wrapped in prose", func(t *testing.T) {
-		sum := compaction.MockSummarizer{Text: "Sure! Here you go:\n```json\n{\"command\":\"make test\",\"source\":\"AGENTS.md\"}\n```"}
+		sum := llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "Sure! Here you go:\n```json\n{\"command\":\"make test\",\"source\":\"AGENTS.md\"}\n```"}
 		cand, outcome := DetectVerifyCommandLLM(context.Background(), sum, []string{dir})
 		if outcome != VerifyDetectFound || cand.Command != "make test" {
 			t.Fatalf("wrapped reply = (%+v,%v) want make test", cand, outcome)

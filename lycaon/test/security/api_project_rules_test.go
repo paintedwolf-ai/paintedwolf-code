@@ -3,6 +3,7 @@ package security
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -26,7 +26,7 @@ func TestProjectRuleBlocksToolInProductionWiring(t *testing.T) {
 		toolStep("", call("write-denied", "edit", map[string]any{"path": "out.txt", "old_string": "before", "new_string": "x"})),
 		textStep("The project rule blocked the write."),
 	)
-	recording := llm.NewRecordingClient(mock)
+	recording := llmtest.NewRecordingClient(mock)
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(recording))
 	srv := h.Server
 	projectDir := t.TempDir()

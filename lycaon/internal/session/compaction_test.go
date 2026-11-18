@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"os"
 	"strings"
 	"testing"
@@ -31,7 +32,7 @@ func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Host,
 	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetDataDir(t.TempDir())
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "Continue from compacted context."}))
+	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "Continue from compacted context."}))
 	return mgr, store
 }
 

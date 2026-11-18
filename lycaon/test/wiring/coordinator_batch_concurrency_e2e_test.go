@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,7 +93,7 @@ func messageContains(msgs []api.Message, substr string) bool {
 }
 
 func TestCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
-	rec := llm.NewRecordingClient(batchThreeTaskMock())
+	rec := llmtest.NewRecordingClient(batchThreeTaskMock())
 	h := BuildForTest(t, WithLLMClient(rec))
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -136,7 +137,7 @@ func TestCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
 }
 
 func TestCoordinatorBatchTaskAndReadFollowUpE2E(t *testing.T) {
-	rec := llm.NewRecordingClient(batchTaskAndReadMock())
+	rec := llmtest.NewRecordingClient(batchTaskAndReadMock())
 	h := BuildForTest(t, WithLLMClient(rec))
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -215,7 +216,7 @@ func TestCoordinatorBatchOverCapRejectedInSameTurnE2E(t *testing.T) {
 // After a batched dispatch, the next request's worker roster names every
 // worker the batch started.
 func TestCoordinatorBatchWorkersOnNextRequestRosterE2E(t *testing.T) {
-	rec := llm.NewRecordingClient(batchThreeTaskMock())
+	rec := llmtest.NewRecordingClient(batchThreeTaskMock())
 	h := BuildForTest(t, WithLLMClient(rec))
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -292,7 +293,7 @@ func TestCoordinatorPackBoardShowsInFlightRosterE2E(t *testing.T) {
 
 func TestCoordinatorBatchEnqueuesBeforeTurnEndsNotSerialFirstOnlyE2E(t *testing.T) {
 	// One turn may enqueue several tasks.
-	rec := llm.NewRecordingClient(batchThreeTaskMock())
+	rec := llmtest.NewRecordingClient(batchThreeTaskMock())
 	h := BuildForTest(t, WithLLMClient(rec))
 	ctx := context.Background()
 	dir := t.TempDir()

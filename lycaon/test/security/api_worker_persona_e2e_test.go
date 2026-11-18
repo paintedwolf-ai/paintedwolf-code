@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"strings"
 	"testing"
 
@@ -14,7 +15,7 @@ import (
 )
 
 func TestDelegateImplementerPromptContainsPersona(t *testing.T) {
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: ".",
 		Text:    "implementation complete",
 	}}}))
@@ -63,7 +64,7 @@ func TestDelegateImplementerPromptContainsPersona(t *testing.T) {
 }
 
 func TestDelegatePlanReviewerDistinctFromImplementer(t *testing.T) {
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: ".",
 		Text:    "implementation complete",
 	}}}))

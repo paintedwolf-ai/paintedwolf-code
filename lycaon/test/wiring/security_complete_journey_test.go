@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/report"
@@ -34,7 +34,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	calls := map[string]int{}
 	reportBody := ""
 	parentID := ""
-	mock := llm.NewKickDrivenMock(llm.KickDrivenConfig{Fallback: func(ctx context.Context, _ llm.Snapshot) modelcall.Completion {
+	mock := llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{Fallback: func(ctx context.Context, _ llmtest.Snapshot) modelcall.Completion {
 		jobID := workercontext.Job(ctx)
 		mu.Lock()
 		calls[jobID]++

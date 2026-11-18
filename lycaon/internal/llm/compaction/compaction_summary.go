@@ -162,23 +162,6 @@ func renderContinuationRecord(ctx context.Context, summary compactionSummary, so
 	return out, nil
 }
 
-func mockCompactionSummary(text string) (string, error) {
-	if strings.TrimSpace(text) == "" {
-		text = "Continue coordinator work from compacted context."
-	}
-	raw, err := json.Marshal(compactionSummary{
-		Facts:       []string{text},
-		Completed:   []string{},
-		Pending:     []string{},
-		Reacquire:   []string{},
-		Constraints: []string{},
-	})
-	if err != nil {
-		return "", fmt.Errorf("marshal mock compaction summary: %w", err)
-	}
-	return string(raw), nil
-}
-
 var (
 	// Bounds keep small local models from writing paragraph-sized items that
 	// exhaust the context before the closing brace. Only facts has a floor.

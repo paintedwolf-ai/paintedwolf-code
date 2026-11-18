@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"strings"
 	"testing"
 
@@ -16,7 +17,7 @@ import (
 
 func TestWorkerSpawnUsesAgentSystemPrompt(t *testing.T) {
 	ctx := context.Background()
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: ".",
 		Text:    "done",
 	}}}))

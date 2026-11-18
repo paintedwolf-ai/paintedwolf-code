@@ -2,6 +2,7 @@ package compaction
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"strings"
 	"testing"
 
@@ -80,7 +81,7 @@ func TestSourceDataFailureRetainsAllReferences(t *testing.T) {
 	if err == nil || len(sources) != 2 {
 		t.Fatal("invalid arguments lost references or failed open")
 	}
-	_, sources, err = NewSimpleCompactor(testCompactionConfig(), MockSummarizer{Text: "unused"}).summarizePrefix(t.Context(), SessionInfo{}, rows)
+	_, sources, err = NewSimpleCompactor(testCompactionConfig(), llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "unused"}).summarizePrefix(t.Context(), SessionInfo{}, rows)
 	if err == nil || len(sources) != 2 {
 		t.Fatal("invalid source did not refuse synthesis")
 	}
@@ -105,7 +106,7 @@ func TestEmptyAssistantCallsReceiveSummaryDisposition(t *testing.T) {
 	cfg.SummaryMessageTokens = 32
 	cfg.SummaryInputTokens = 4096
 	cfg.ChunkMaxPerPass = 16
-	_, sources, err := NewSimpleCompactor(cfg, MockSummarizer{Text: "read application"}).summarizePrefix(t.Context(), SessionInfo{}, rows)
+	_, sources, err := NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "read application"}).summarizePrefix(t.Context(), SessionInfo{}, rows)
 	testutil.FailErr(t, "summarize tool evidence", err)
 	for _, source := range sources {
 		if source.Disposition != "summary_and_reference" {
@@ -124,7 +125,7 @@ func TestToolEvidencePageBudgetKeepsPartialDisposition(t *testing.T) {
 	cfg.SummaryMessageTokens = 32
 	cfg.SummaryInputTokens = 1024
 	cfg.ChunkMaxPerPass = 1
-	_, sources, err := NewSimpleCompactor(cfg, MockSummarizer{Text: "partial call evidence"}).summarizePrefix(t.Context(), SessionInfo{}, rows)
+	_, sources, err := NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "partial call evidence"}).summarizePrefix(t.Context(), SessionInfo{}, rows)
 	if err == nil || len(sources) != 2 {
 		t.Fatal("bounded work did not retain remaining source")
 	}

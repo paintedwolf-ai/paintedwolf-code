@@ -3,6 +3,7 @@ package compaction
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"strings"
 	"testing"
 
@@ -23,7 +24,7 @@ func (s *sourceCoverageSummarizer) Summarize(_ context.Context, _, input string,
 			s.seen[id] = true
 		}
 	}
-	return mockCompactionSummary("Accepted observations from the captured page.")
+	return llmtest.SummaryJSON("Accepted observations from the captured page.")
 }
 
 func TestSynthesisCoverageDoesNotDependOnTheRecoveryHintBudget(t *testing.T) {

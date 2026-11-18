@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"strings"
 	"testing"
 
@@ -55,7 +56,7 @@ func TestSummaryUsesInvocationPolicyWithoutChangingSharedBinding(t *testing.T) {
 
 func TestCompactionRoutingAndRevisionFollowProjectPolicy(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	body, err := (compaction.MockSummarizer{Text: "Continue the same work."}).Summarize(compaction.WithSummaryFormat(t.Context()), "", "", 0)
+	body, err := (llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "Continue the same work."}).Summarize(compaction.WithSummaryFormat(t.Context()), "", "", 0)
 	testutil.FailErr(t, "summary fixture", err)
 	provider := &captureProvider{id: "selected", response: body}
 	registry := newTestRegistry()

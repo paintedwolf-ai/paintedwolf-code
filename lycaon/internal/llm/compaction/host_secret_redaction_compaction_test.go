@@ -2,6 +2,7 @@ package compaction
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"strings"
 	"testing"
 
@@ -26,7 +27,7 @@ func TestSessionCompactionCarriesHostRedactionOntoCheckpoint(t *testing.T) {
 		},
 		{ID: "tail", Role: string(api.MessageRoleAssistant), Content: strings.Repeat("continue\n", 200)},
 	}
-	c := NewSimpleCompactor(cfg, MockSummarizer{Text: "credential remediation remains open"})
+	c := NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "credential remediation remains open"})
 	out, report, err := c.Compact(context.Background(), SessionInfo{ID: "s1"}, msgs, 20)
 	testutil.FailErr(t, "compact redacted history", err)
 	if !report.SessionCompacted || len(out) < 2 {
