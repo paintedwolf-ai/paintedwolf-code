@@ -38,7 +38,7 @@ type untrustedContentSeeder interface {
 }
 
 func (s *HarnessPreparation) requireHarnessServices() *harnessServices {
-	seeder := s.sessionStore.Evidence
+	seeder := s.evidenceStore
 	preparation, _ := s.llmSvc.Preparation.(*harnessfixture.PreludeController)
 	httpio.RequireDependencies("harness",
 		httpio.Required{Name: "HarnessWorkers", Present: s.harnessWorkers != nil},
@@ -58,7 +58,7 @@ func (s *HarnessPreparation) handleHarnessPreparation(w http.ResponseWriter, r *
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	if !requestscope.SessionExists(s.sessionStore.Sessions, s.responses, w, r, request.SessionID) {
+	if !requestscope.SessionExists(s.sessionStore, s.responses, w, r, request.SessionID) {
 		return
 	}
 	if err := s.harness.preparation.Install(r.Context(), request.SessionID, request.Prelude); err != nil {
@@ -111,7 +111,7 @@ func (s *HarnessPreparation) handleHarnessUpgradeHistory(w http.ResponseWriter, 
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	parent, ok := requestscope.Session(s.sessionStore.Sessions, s.responses, w, r, request.SessionID)
+	parent, ok := requestscope.Session(s.sessionStore, s.responses, w, r, request.SessionID)
 	if !ok {
 		return
 	}

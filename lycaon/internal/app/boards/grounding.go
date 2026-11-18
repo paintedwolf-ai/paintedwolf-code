@@ -23,7 +23,6 @@ import (
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/decisions"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/toolhost"
@@ -324,7 +323,7 @@ func (r *Runtime) wireApprovalRationaleAttacher() {
 		Cause:       briefingstore.NewCausal(r.deps.Storage.Database),
 		Workers:     r.deps.Workers.Queue,
 		Progress:    r.Progress,
-		Root:        sessionRootResolver{store: r.deps.Storage.Sessions},
+		Root:        sessionRootResolver{store: r.deps.Storage.Sessions.Sessions},
 		Engine:      briefings.Engine,
 		Router:      briefings.Router,
 		Pins:        briefings.Store,
@@ -335,11 +334,11 @@ func (r *Runtime) wireApprovalRationaleAttacher() {
 }
 
 type sessionRootResolver struct {
-	store *sessionstore.Repositories
+	store sessiontree.Reader
 }
 
 func (s sessionRootResolver) RootSessionID(ctx context.Context, sessionID string) string {
-	return sessiontree.RootID(ctx, s.store.Sessions, sessionID)
+	return sessiontree.RootID(ctx, s.store, sessionID)
 }
 
 // ReleaseAccounted lets the checklist latch release worker finishes whose

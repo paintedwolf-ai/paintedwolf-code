@@ -19,7 +19,7 @@ func (s *HarnessPreparation) handleHarnessOverlays(w http.ResponseWriter, r *htt
 		s.harnessRequestRejected(w, r, "the fixture setup is not valid", err)
 		return
 	}
-	parent, ok := requestscope.Session(s.sessionStore.Sessions, s.responses, w, r, request.SessionID)
+	parent, ok := requestscope.Session(s.sessionStore, s.responses, w, r, request.SessionID)
 	if !ok {
 		return
 	}
@@ -28,7 +28,7 @@ func (s *HarnessPreparation) handleHarnessOverlays(w http.ResponseWriter, r *htt
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "Fixture requires one attached project root")
 		return
 	}
-	evidence, err := harnessfixture.Prepare(r.Context(), s.workers, s.sessionStore, parent, project.Roots[0], request.Setup, s.sessions.Workers.Harness.Verify)
+	evidence, err := harnessfixture.Prepare(r.Context(), s.workers, s.sessionStore, parent, project.Roots[0], s.transcriptStore, request.Setup, s.sessions.Workers.Harness.Verify)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return

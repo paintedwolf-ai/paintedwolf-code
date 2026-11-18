@@ -14,7 +14,7 @@ import (
 
 func (s *Conversation) handleSessionProgress(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, err := s.sessionStore.Sessions.Get(r.Context(), id); err != nil {
+	if _, err := s.sessionStore.Get(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "session not found")
 			return
@@ -22,6 +22,6 @@ func (s *Conversation) handleSessionProgress(w http.ResponseWriter, r *http.Requ
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	root := sessiontree.RootID(r.Context(), s.sessionStore.Sessions, id)
+	root := sessiontree.RootID(r.Context(), s.sessionStore, id)
 	httpio.WriteJSON(w, http.StatusOK, progress.BuildDigest(s.progressStore.Get(r.Context(), root), root))
 }

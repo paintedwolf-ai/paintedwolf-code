@@ -158,7 +158,7 @@ func TestScriptedContinuationResumesTheSeededChildAndSurvivesRestart(t *testing.
 	h := newScriptedHarness(t, map[string]string{"app.py": "baseline"})
 	setup := Setup{Overlays: []Overlay{{Label: "Change", ResultStatus: "partial", Files: map[string]string{"app.py": "partial"},
 		Script: &WorkerScript{Stages: []WorkerStage{{Kind: StageComplete, Files: map[string]string{"app.py": "complete"}, Verify: "checks"}}}}}}
-	evidence, err := Prepare(t.Context(), h.queue, h.sessions, h.parent, h.attached.Roots[0], setup, nil)
+	evidence, err := Prepare(t.Context(), h.queue, h.sessions.Sessions, h.parent, h.attached.Roots[0], h.sessions.Transcript, setup, nil)
 	testutil.FailErr(t, "prepare partial return", err)
 	seed := evidence.Overlays[0]
 	testutil.FailErr(t, "install", h.workers().Install(h.parent.ID, setup, evidence))

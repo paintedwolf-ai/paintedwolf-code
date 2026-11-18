@@ -38,9 +38,9 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 	}
 	requireDependencies(deps)
 	s := &Server{
-		responses:      httpio.Responder{Logger: logger, Notices: deps.Core.UserNotices},
-		apiToken:       strings.TrimSpace(token),
-		sessionStore:   deps.Core.Store,
+		responses:    httpio.Responder{Logger: logger, Notices: deps.Core.UserNotices},
+		apiToken:     strings.TrimSpace(token),
+		sessionStore: deps.Core.Store.Sessions, peopleStore: deps.Core.Store.People,
 		personActions:  deps.Core.PersonActions,
 		sessions:       deps.Core.Sessions,
 		fileBriefings:  deps.Source.Briefings.Files,

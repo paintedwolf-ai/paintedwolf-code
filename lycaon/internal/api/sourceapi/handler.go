@@ -259,7 +259,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 
 	editor := editoradmin.New(responses, background, editoradmin.Dependencies{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, ProjectViews: deps.ProjectViews, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore.Sessions, TryRunPromotion: deps.TryRunPromotion})
 	sourceViews := &sourceViewService{}
-	sourceReaders := &sourcecomparison.Cache{}
+	sourceReaders := sourcecomparison.NewCache(nil)
 	warmupPolls := newWarmupClock()
 	h := Handler{Editor: editor}
 	h.Analysis = &Analysis{ProjectRegistry: deps.ProjectRegistry, SessionQueries: deps.SessionStore.Sessions, responses: responses, sourceIndexes: projectsource.NewSourceIndexCache(), warmupPolls: warmupPolls}

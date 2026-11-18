@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/lycaon/lycaon/internal/people/peoplestore"
 	"net/http"
 	"os"
 	"strings"
@@ -81,7 +82,8 @@ type Server struct {
 	recovery       *recoveryState
 	restorePending atomic.Bool
 	Search         searchadmin.Handler
-	sessionStore   *sessionstore.Repositories
+	sessionStore   sessionstore.SessionRepository
+	peopleStore    *peoplestore.Store
 	personActions  *personactions.Store
 	sessions       *session.Host
 	fileBriefings  *filebriefing.Service
@@ -171,7 +173,7 @@ func (s *Server) markRestorePending() {
 
 func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	sess, ok := requestscope.Session(s.sessionStore.Sessions, &s.responses, w, r, id)
+	sess, ok := requestscope.Session(s.sessionStore, &s.responses, w, r, id)
 	if !ok {
 		return
 	}

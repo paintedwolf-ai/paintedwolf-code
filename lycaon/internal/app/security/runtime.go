@@ -31,7 +31,7 @@ type Runtime struct {
 	publishVault           func(string, *presence.Unlocks)
 	ctx                    context.Context
 	database               *db.Store
-	sessions               *store.Repositories
+	sessions               store.SessionRepository
 	projects               *project.SQLRegistry
 	trust                  *settings.TrustSurfacesStore
 	remember               func(secretmatch.RememberFunc)
@@ -47,7 +47,7 @@ type Runtime struct {
 }
 
 func New(ctx context.Context, database *db.Store, sessions *store.Repositories, projects *project.SQLRegistry, trust *settings.TrustSurfacesStore) *Runtime {
-	return &Runtime{ctx: ctx, database: database, sessions: sessions, projects: projects, trust: trust, Detections: &Detections{}}
+	return &Runtime{ctx: ctx, database: database, sessions: sessions.Sessions, projects: projects, trust: trust, Detections: &Detections{}}
 }
 func (b *Runtime) BindRemember(set func(secretmatch.RememberFunc)) {
 	b.remember = set
@@ -64,7 +64,7 @@ func secretScreenProject(ctx context.Context) string {
 
 func (b *Runtime) BindTrust(trust *settings.TrustSurfacesStore) { b.trust = trust }
 
-// ReleaseRedactors detaches process screening callbacks owned by this runtime.
+// ReleaseRedactors detaches this runtime’s process screening callbacks.
 func (b *Runtime) ReleaseRedactors() {
 	if b.releaseCaptureRedactor != nil {
 		b.releaseCaptureRedactor()

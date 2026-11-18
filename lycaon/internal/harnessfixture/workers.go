@@ -77,14 +77,15 @@ type dispatchPlan struct {
 
 // Workers uses scripts for registered sessions and the live executor otherwise.
 type Workers struct {
-	root      string
-	sessions  *sessionstore.Repositories
-	queue     worker.WorkerQueue
-	verify    VerifyWorker
-	read      ReadWorker
-	decisions sessiondecisions.Store
-	fallback  worker.WorkerExecutor
-	locks     sync.Map
+	root       string
+	sessions   sessionstore.SessionRepository
+	transcript sessionstore.TranscriptRepository
+	queue      worker.WorkerQueue
+	verify     VerifyWorker
+	read       ReadWorker
+	decisions  sessiondecisions.Store
+	fallback   worker.WorkerExecutor
+	locks      sync.Map
 }
 
 func NewWorkers(root string, sessions *sessionstore.Repositories, queue worker.WorkerQueue, verify VerifyWorker, read ReadWorker, decisions sessiondecisions.Store, fallback worker.WorkerExecutor) (*Workers, error) {
@@ -95,7 +96,7 @@ func NewWorkers(root string, sessions *sessionstore.Repositories, queue worker.W
 	if err := os.MkdirAll(filepath.Join(root, "outcomes"), 0o700); err != nil {
 		return nil, err
 	}
-	return &Workers{root: root, sessions: sessions, queue: queue, verify: verify, read: read, decisions: decisions, fallback: fallback}, nil
+	return &Workers{root: root, sessions: sessions.Sessions, transcript: sessions.Transcript, queue: queue, verify: verify, read: read, decisions: decisions, fallback: fallback}, nil
 }
 
 // Install binds the fixture's scripts to the prepared children and the parent.
@@ -255,14 +256,14 @@ func (w *Workers) executionError(task api.WorkerTask, err error) error {
 }
 
 func (w *Workers) bindChild(ctx context.Context, task api.WorkerTask) (*api.Session, error) {
-	parent, err := w.sessions.Sessions.Get(ctx, task.ParentSessionID)
+	parent, err := w.sessions.Get(ctx, task.ParentSessionID)
 	if err != nil {
 		return nil, err
 	}
 	if parent == nil {
 		return nil, fmt.Errorf("scripted dispatch parent %s not found", task.ParentSessionID)
 	}
-	child, err := w.sessions.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: task.AgentType, Prompt: task.Prompt, Files: task.Files, WorkerJobID: task.ID})
+	child, err := w.sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: task.AgentType, Prompt: task.Prompt, Files: task.Files, WorkerJobID: task.ID})
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +274,7 @@ func (w *Workers) bindChild(ctx context.Context, task api.WorkerTask) (*api.Sess
 }
 
 func (w *Workers) runStage(ctx context.Context, task api.WorkerTask, run worker.WorkerRunContext, plan childPlan) (api.WorkerResult, error) {
-	child, err := w.sessions.Sessions.Get(ctx, task.ChildSessionID)
+	child, err := w.sessions.Get(ctx, task.ChildSessionID)
 	if err != nil {
 		return api.WorkerResult{}, err
 	}
@@ -370,7 +371,7 @@ func (w *Workers) executeStage(ctx context.Context, child *api.Session, task api
 }
 
 func (w *Workers) answeredOption(ctx context.Context, childID string) (string, bool, error) {
-	messages, err := w.sessions.Transcript.GetMessages(ctx, childID)
+	messages, err := w.transcript.GetMessages(ctx, childID)
 	if err != nil {
 		return "", false, err
 	}
