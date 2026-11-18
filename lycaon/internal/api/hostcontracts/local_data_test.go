@@ -14,9 +14,9 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/localdata"
-	"github.com/lycaon/lycaon/internal/localdata/localdatatest"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/localdatatest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 

@@ -14,7 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/testutil"
 
-	"github.com/lycaon/lycaon/internal/localdata/localdatatest"
+	"github.com/lycaon/lycaon/internal/testutil/localdatatest"
 )
 
 const (

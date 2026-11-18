@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/localdata/localdatatest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/localdatatest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	_ "modernc.org/sqlite"
 )

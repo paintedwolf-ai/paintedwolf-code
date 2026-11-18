@@ -3,7 +3,7 @@ package localdata
 import (
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/localdata/localdatatest"
+	"github.com/lycaon/lycaon/internal/testutil/localdatatest"
 )
 
 func TestConfigRootFixturesCoverClassification(t *testing.T) {

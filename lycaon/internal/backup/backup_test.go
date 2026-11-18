@@ -19,9 +19,9 @@ import (
 	"github.com/lycaon/lycaon/internal/backup"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/localdata"
-	"github.com/lycaon/lycaon/internal/localdata/localdatatest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/localdatatest"
 )
 
 func TestCreateArchiveIncludesVacuumedStoreAndManifest(t *testing.T) {

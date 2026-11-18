@@ -8,9 +8,9 @@ import (
 
 	"github.com/lycaon/lycaon/internal/debugpaths"
 	"github.com/lycaon/lycaon/internal/enginepaths"
-	"github.com/lycaon/lycaon/internal/localdata/localdatatest"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/localdatatest"
 )
 
 func TestKnownCatalog(t *testing.T) {

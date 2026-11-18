@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/localdata/localdatatest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/localdatatest"
 )
 
 func TestResetStoreCoupledPreservesAppPreferencesDeviceConfigurationAndDebugCaptures(t *testing.T) {
