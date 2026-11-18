@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -241,7 +242,9 @@ func TestWorkflowSourceVerifyPassedReadsCurrentSessionEvidence(t *testing.T) {
 	})
 	sess, err := memory.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
 	testutil.FailErr(t, "create verify session", err)
-	sess.WorkspacePath = t.TempDir()
+	testdbseed.BindSessionWorkspace(t, memory, sess.ID, t.TempDir())
+	sess, err = memory.Get(ctx, sess.ID)
+	testutil.FailErr(t, "read bound session", err)
 	testutil.FailErr(t, "append user boundary", memory.AppendMessages(ctx, sess.ID, api.Message{
 		ID: "user-1", Role: api.MessageRoleUser, Content: "fix it", CreatedAt: time.Now().Add(-time.Minute),
 	}))

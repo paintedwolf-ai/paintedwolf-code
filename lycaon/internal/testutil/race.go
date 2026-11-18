@@ -14,7 +14,6 @@ func SkipIfRace(t testing.TB, reason string) {
 	}
 }
 
-
 // SelectRaceTests sets the default race tests without overriding a targeted run.
 func SelectRaceTests(names ...string) {
 	if !RaceEnabled {
