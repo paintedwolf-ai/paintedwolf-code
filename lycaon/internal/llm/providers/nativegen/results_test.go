@@ -20,3 +20,10 @@ func TestResourceAdmissionRejectsInvalidPlansBeforeReservation(t *testing.T) {
 		}
 	}
 }
+
+func TestResourceAdmissionWithoutPerLayerEmbeddings(t *testing.T) {
+	plan := resourcePlan{ResidentWeightsBytes: 4, KVCapacityBytes: 2, WorkspaceBytes: 3, DeviceReservationBytes: 9, HostReservationBytes: 5}
+	if err := plan.validate(); err != nil {
+		t.Fatal(err)
+	}
+}
