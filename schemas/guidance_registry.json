@@ -474,7 +474,7 @@
     "COMMAND_LIMIT_EXCEEDED": {
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "{% if paintedwolf.deadline_expired %}The program reached its {{ paintedwolf.limit_id }} of {{ paintedwolf.maximum }} ms and was ended after {{ paintedwolf.observed }} ms{% if paintedwolf.waiting_statement %}, while waiting in `{{ paintedwolf.waiting_statement }}`{% endif %}.{% if paintedwolf.children_started_known %}{% if paintedwolf.children_started %} Commands started before the end: {{ paintedwolf.children_started }}.{% else %} No command had started.{% endif %}{% endif %}{% if paintedwolf.jobs_stopped %} Background jobs ended with it: {{ paintedwolf.jobs_stopped }}.{% endif %}{% else %}{% if paintedwolf.wait_refused %}`{{ paintedwolf.waiting_statement }}` would end {{ paintedwolf.observed }} ms after the program started, past its {{ paintedwolf.limit_id }} of {{ paintedwolf.maximum }} ms, so it was refused before waiting.{% else %}A command resource limit was reached{% if paintedwolf.limit_id %}: {{ paintedwolf.limit_id }}{% endif %}.{% if paintedwolf.limit_observation_known %} Observed {{ paintedwolf.observed }}{% if paintedwolf.resource_unit %} {{ paintedwolf.resource_unit }}{% endif %}; maximum {{ paintedwolf.maximum }}.{% endif %}{% endif %}{% endif %}"
+      "summary": "A command resource limit was reached{% if paintedwolf.limit_id %}: {{ paintedwolf.limit_id }}{% endif %}.{% if paintedwolf.limit_observation_known %} Observed {{ paintedwolf.observed }}{% if paintedwolf.resource_unit %} {{ paintedwolf.resource_unit }}{% endif %}; maximum {{ paintedwolf.maximum }}.{% endif %}"
     },
     "COMMAND_NATIVE_FORM_UNSUPPORTED": {
       "category": "recoverable",
@@ -3303,7 +3303,7 @@
     "TOOL_OWNER_INTERRUPTED": {
       "category": "recoverable",
       "emit": "guard:tool_owner",
-      "summary": "The operation was interrupted."
+      "summary": "The operation was interrupted.{% if paintedwolf.jobs_stopped %} Background jobs it started ended with it: {{ paintedwolf.jobs_stopped }}.{% endif %}"
     },
     "TOOL_PROFILE_DENIED": {
       "branch_instruction": "Preserve the profile boundary and report unavailable work",

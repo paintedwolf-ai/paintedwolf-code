@@ -3,13 +3,13 @@ id: TOOL_OWNER_INTERRUPTED
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason]
+requires_facts: [paintedwolf.jobs_stopped, paintedwolf.rejection_code, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "TOOL_OWNER_INTERRUPTED"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:tool_owner
 message: Subsystem owner interrupted the action before settlement
-what: The operation was interrupted.
+what: 'The operation was interrupted.{% if paintedwolf.jobs_stopped %} Background jobs it started ended with it: {{ paintedwolf.jobs_stopped }}.{% endif %}'
 cause: '{{ paintedwolf.rejection_reason }}'
 why: An interruption does not establish completion.
 fix: ''
@@ -20,3 +20,8 @@ x-paintedwolf-scenarios:
       profile: implement
       reason: program admission closed
       tool: command
+  - id: program_stopped_with_jobs
+    vars:
+      tool: command
+      reason: program stopped
+      jobs_stopped: 2

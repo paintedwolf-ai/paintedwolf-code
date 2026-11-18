@@ -115,7 +115,7 @@
     "statuses": "Last executed ordinary status; pipelines use rightmost nonzero after expected early closure. Grep/diff comparison 1 remains complete. Host terminal reasons latch and prevent later admission.",
     "publication": "When current authority permits, publish this session’s accepted agent-only drafts through separate admitted write operations before a reached owner opens its inputs. Read-only profiles read without publication. Every redirected producer must be typed eligible and complete; native grep/diff comparison 1 qualifies, unclassified external nonzero does not. Capture destinations after preparation, stage bytes, review, validate and publish per target. Never pre-truncate or replay a producer.",
     "evidence": "Execution pins differ from conversational delivery. Only delivered exact mapped cat/head/tail/nl ranges qualify an edit base; unseen output and arbitrary transforms do not.",
-    "jobs": "Session jobs have numeric references: real OS PIDs for external processes and session-unique numbers for native jobs. Capture cwd/environment, bound lifetime/output, allow cancellation only for this session; no interpreter checkpoints.",
+    "jobs": "Session jobs have numeric references: real OS PIDs for external processes and session-unique numbers for native jobs. Capture cwd/environment, end with their program's stop or session, bound output, allow cancellation only for this session; no interpreter checkpoints.",
     "secrets": "References remain opaque except declared authorized sinks; inserted bytes never become grammar.",
     "progress_update": "Optional existing update_progress payload; validate envelope/program before either effect; progress owner settles independently before gated effects. Zero-program-effect fresh resubmission references never imply zero progress effects.",
     "parameters": "Support $name/${name}, indexed arrays a=(...) / a+=(...) / a[i]=v / ${a[i]} / \"${a[@]}\" / \"${a[*]}\" / ${#a[@]} / ${#a[i]}, $0 program identity, $1..$9/${10} positional values, $# count, $? ordinary prior status, $! latest background process number (real OS PID for external jobs, session number for native jobs). Quoted \"$@\" preserves each positional operand and expands to zero arguments for zero parameters; \"$*\" joins with single spaces. ${#name} returns Unicode scalar length. ${name-word}, ${name:-word}, ${name+word}, ${name:+word}, ${name?word} and ${name:?word} select by set/non-empty state (the colon form treats empty as unset) and expand the word only when selected; ? refuses the containing command. ${name#pat}, ${name##pat}, ${name%pat} and ${name%%pat} remove the shortest/longest matching prefix/suffix; ${name/pat/word}, ${name//pat/word}, ${name/#pat/word} and ${name/%pat/word} replace the first/every/leading/trailing longest match; ${name:offset} and ${name:offset:len} slice Unicode scalars or array/positional elements; ${name^}, ${name^^}, ${name,} and ${name,,} convert case. Patterns are shell globs with quoted text literal. ${name=word} and ${name:=word} assign the expanded word in the current frame when the parameter is unset (or, with the colon, empty) and expand to the value; positional and special parameters reject assignment. $(( )) evaluates wrapping signed 64-bit integers with + - * / % ** << >> & | ^ ~ ! comparisons && || ?: and parentheses; operands are decimal, 0x hexadecimal or leading-zero octal literals or variables holding one (unset or empty is 0); division by zero, negative exponents and non-integer values refuse; assignment, ++ and -- reject inside $(( )) and are supported inside (( )) arithmetic commands. Single quotes preserve bytes. Double quotes escape only dollar/backtick/double-quote/backslash/LF; backslash-newline is removed. Windows native paths preserve backslashes when single quoted.",
@@ -414,20 +414,6 @@
       "boundary_model": "Isolated injected-counter at/over transition. A complete program also obeys every enclosing/remaining budget; raw maxima are not independently guaranteed launch or admission sizes."
     },
     {
-      "id": "job_lifetime_ms",
-      "maximum": 3600000,
-      "unit": "milliseconds",
-      "scope": "job",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "job_lifetime_ms-at",
-        "job_lifetime_ms-over"
-      ],
-      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
-      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects",
-      "boundary_model": "Isolated injected-counter at/over transition. A complete program also obeys every enclosing/remaining budget; raw maxima are not independently guaranteed launch or admission sizes."
-    },
-    {
       "id": "loop_iterations",
       "maximum": 16384,
       "unit": "iterations",
@@ -478,20 +464,6 @@
       "boundary_fixtures": [
         "program_bytes-at",
         "program_bytes-over"
-      ],
-      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
-      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects",
-      "boundary_model": "Isolated injected-counter at/over transition. A complete program also obeys every enclosing/remaining budget; raw maxima are not independently guaranteed launch or admission sizes."
-    },
-    {
-      "id": "program_lifetime_ms",
-      "maximum": 3600000,
-      "unit": "milliseconds",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "program_lifetime_ms-at",
-        "program_lifetime_ms-over"
       ],
       "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
       "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects",

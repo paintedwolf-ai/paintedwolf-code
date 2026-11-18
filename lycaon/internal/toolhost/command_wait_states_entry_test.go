@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
@@ -145,140 +146,6 @@ func receive[T any](t *testing.T, f *waitStateFixture, values <-chan T, what str
 		}
 	})
 	return value
-}
-
-func TestCommandEntryRealSleepParksAndResumesWithCompleteBytes(t *testing.T) {
-	f := newWaitStateFixture(t)
-	content := f.call(t, "echo start; sleep 120; echo done")
-	var parked command.ParkedProgramResult
-	testutil.FailErr(t, "decode parked call", json.Unmarshal([]byte(content), &parked))
-	if parked.State != "parked" || parked.Reason != "sleep 120" {
-		t.Fatalf("parked %s", content)
-	}
-	pending := receive(t, f, f.parked, "the program to park")
-	f.clock.Advance(119 * time.Second)
-	select {
-	case result := <-pending.settled:
-		t.Fatalf("sleep woke early: %s", result)
-	default:
-	}
-	f.clock.Advance(time.Second)
-	outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
-	if outcome.Status != 0 || outcome.Stdout != "start\ndone\n" || outcome.State != "completed" {
-		t.Fatalf("outcome %+v", outcome)
-	}
-}
-func TestCommandEntryRealShortSleepStaysInline(t *testing.T) {
-	f := newWaitStateFixture(t)
-	done := f.start(t, "sleep 0.2; echo done")
-	receive(t, f, f.states, "a wait state")
-	f.clock.Advance(200 * time.Millisecond)
-	outcome := decodeWaitOutcome(t, receive(t, f, done, "the call's result"))
-	if outcome.Status != 0 || outcome.Stdout != "done\n" {
-		t.Fatalf("outcome %+v", outcome)
-	}
-	select {
-	case parked := <-f.parked:
-		t.Fatalf("short sleep parked %+v", parked.request)
-	default:
-	}
-}
-func TestCommandEntryRealWaitUsesExactSupervisedJob(t *testing.T) {
-	for reference, status := range map[string]int{"$!": 7, "%1": 7, "": 0} {
-		t.Run(reference, func(t *testing.T) {
-			f := newWaitStateFixture(t)
-			f.call(t, "{ sleep 120; exit 7; } & wait "+reference)
-			pending := receive(t, f, f.parked, "the program to park")
-			var state commandprogram.WaitState
-			for len(state.Jobs) == 0 {
-				state = receive(t, f, f.states, "a wait state")
-			}
-			active := f.Background.ActiveJobs(f.Session)
-			if len(active) != 1 || len(state.Jobs) != 1 || state.Jobs[0] != active[0].Handle || !strings.HasPrefix(state.Statement, "wait") {
-				t.Fatalf("wait %+v jobs %+v", state, active)
-			}
-			f.clock.Advance(120 * time.Second)
-			outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
-			if outcome.Status != status || outcome.State != "completed" {
-				t.Fatalf("outcome %+v", outcome)
-			}
-		})
-	}
-}
-func TestCommandEntryRealTimeoutParksAndSettlesItsChild(t *testing.T) {
-	f := newWaitStateFixture(t)
-	content := f.call(t, "timeout 60 sleep 120")
-	pending := receive(t, f, f.parked, "the program to park")
-	if !strings.Contains(content, "timeout 60 sleep 120") {
-		t.Fatalf("reason %s", content)
-	}
-	f.clock.Advance(60 * time.Second)
-	outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
-	if outcome.Status != 124 || outcome.State != "completed" {
-		t.Fatalf("outcome %+v", outcome)
-	}
-	if active := f.Background.ActiveJobs(f.Session); len(active) != 0 {
-		t.Fatalf("timeout left jobs %+v", active)
-	}
-	if f.clock.Pending() != 0 {
-		t.Fatalf("timeout left %d timers", f.clock.Pending())
-	}
-}
-func TestCommandEntryTimedReadDoesNotWakeSleepEarly(t *testing.T) {
-	f := newWaitStateFixture(t)
-	done := f.start(t, "sleep 120 | read -t 5 value")
-	f.awaitTimers(t, 120*time.Second, 5*time.Second)
-	f.clock.Advance(5 * time.Second)
-	pending := receive(t, f, f.parked, "the program to park")
-	if result := receive(t, f, done, "the call's result"); !strings.Contains(result, "parked") {
-		t.Fatalf("remaining timer did not park %s", result)
-	}
-	f.clock.Advance(114 * time.Second)
-	select {
-	case result := <-pending.settled:
-		t.Fatalf("read timeout woke sleep early %s", result)
-	default:
-	}
-	f.clock.Advance(time.Second)
-	outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
-	if outcome.Status != 142 || outcome.State != "completed" {
-		t.Fatalf("outcome %+v", outcome)
-	}
-}
-func TestCommandEntryBackgroundOnlyReturnsAndItsTimerSurvives(t *testing.T) {
-	f := newWaitStateFixture(t)
-	outcome := decodeWaitOutcome(t, f.call(t, "{ sleep 120; echo done; } &"))
-	if outcome.State != "running" || outcome.Status != 0 {
-		t.Fatalf("background outcome %+v", outcome)
-	}
-	f.awaitTimers(t, 120*time.Second)
-	select {
-	case parked := <-f.parked:
-		t.Fatalf("background-only call parked %+v", parked.request)
-	default:
-	}
-	active := f.Background.ActiveJobs(f.Session)
-	if len(active) != 1 {
-		t.Fatalf("active jobs %+v", active)
-	}
-	f.clock.Advance(120 * time.Second)
-	_, stopped, err := f.Background.Lifecycle.Wait(t.Context(), f.Session, active[0].Handle)
-	testutil.FailErr(t, "wait background completion", err)
-	if stopped {
-		t.Fatal("returning from the foreground stopped its background job")
-	}
-}
-func TestCommandEntryRealSleepRefusesBeyondEnvelopeBeforeParking(t *testing.T) {
-	f := newWaitStateFixture(t)
-	outcome := decodeWaitOutcome(t, f.call(t, "sleep 7200"))
-	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_LIMIT_EXCEEDED" {
-		t.Fatalf("bound %+v", outcome)
-	}
-	select {
-	case parked := <-f.parked:
-		t.Fatalf("over-bound wait parked %+v", parked.request)
-	default:
-	}
 }
 
 func TestCommandEntryTimedReadPreservesPartialInputAndInheritedDescriptor(t *testing.T) {
@@ -554,104 +421,67 @@ func TestCommandEntryBareWaitIgnoresItsOwnContinuation(t *testing.T) {
 	}
 }
 
-func TestCommandEntryBoundRefusalKeepsDetachedJobsAlive(t *testing.T) {
+// Stopping a program's running handle ends the & jobs it started: an external
+// child started with & is gone, and the stop reports the jobs it ended.
+func TestCommandEntryStopEndsTheProgramsBackgroundJobs(t *testing.T) {
 	f := newWaitStateFixture(t)
-	outcome := decodeWaitOutcome(t, f.call(t, "sleep 7200 & wait $!"))
-	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_LIMIT_EXCEEDED" {
-		t.Fatalf("bound refusal %+v", outcome)
+	done := f.start(t, backgroundJobHelper(f)+" & "+f.externalHelper())
+	f.until(t, "the background child to start", func() bool {
+		_, err := os.Stat(filepath.Join(f.Dir, "job-running"))
+		return err == nil
+	})
+	f.awaitExternal(t)
+	if aliveLockFree(t, f.Dir) {
+		t.Fatal("the background child released its lock while running")
 	}
-	if !f.Background.HasRunning(f.Session) || !slices.Contains(f.clock.TimersDue(), 7200*time.Second) {
-		t.Fatalf("foreground refusal stopped detached work; timers due %v", f.clock.TimersDue())
+	jobs := f.Background.ActiveJobs(f.Session)
+	if len(jobs) != 1 {
+		t.Fatalf("background jobs %+v", jobs)
 	}
-	select {
-	case parked := <-f.parked:
-		t.Fatalf("over-bound wait parked %+v", parked.request)
-	default:
+	f.awaitTimers(t, toolcontract.ProgramInlineWait)
+	f.clock.Advance(toolcontract.ProgramInlineWait)
+	var running command.RunningProgramResult
+	testutil.FailErr(t, "decode running program", json.Unmarshal([]byte(receive(t, f, done, "the call's result")), &running))
+	if running.State != "running" || running.Handle == "" {
+		t.Fatalf("result %+v", running)
 	}
-}
-
-// A wait is measured against the program lifetime from the program's start,
-// so a sleep that fits from now but ends past the lifetime is refused before
-// it waits, and the refusal names the lifetime and the statement.
-func TestCommandEntryRefusesAWaitPastTheProgramLifetime(t *testing.T) {
-	f := newWaitStateFixture(t)
-	f.call(t, "echo start; sleep 2000; sleep 2000; echo done")
-	pending := receive(t, f, f.parked, "the program to park")
-	f.clock.Advance(2000 * time.Second)
-	outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the refused program's result"))
-	if outcome.Stdout != "start\n" || outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_LIMIT_EXCEEDED" {
-		t.Fatalf("refused program %+v", outcome)
+	defer func() { _ = os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600) }()
+	_, err := f.Background.Lifecycle.Stop(f.Session, running.Handle, bgprocess.TerminationStoppedByAgent)
+	testutil.FailErr(t, "stop the program", err)
+	var snapshot bgprocess.Snapshot
+	f.until(t, "the background child and its job to end with the program", func() bool {
+		var err error
+		snapshot, err = f.Background.Snapshot(t.Context(), f.Session, jobs[0].Handle, 0)
+		testutil.FailErr(t, "snapshot background job", err)
+		return snapshot.HasExit && aliveLockFree(t, f.Dir)
+	})
+	if snapshot.TerminationReason != bgprocess.TerminationStoppedByAgent {
+		t.Fatalf("background job ended as %q, not by the program's stop", snapshot.TerminationReason)
 	}
-	details := outcome.Refusal.Details
-	if details["limit_id"] != "program_lifetime_ms" || details["observed"] != float64(4000000) || details["wait_refused"] != true || details["waiting_statement"] != "sleep 2000" {
-		t.Fatalf("refusal details %v", details)
+	_, _, err = f.Background.Lifecycle.Wait(t.Context(), f.Session, running.Handle)
+	testutil.FailErr(t, "join the stopped program", err)
+	output, err := f.Background.Output.ReadCommandOutput(t.Context(), f.Session, running.Handle, 0)
+	testutil.FailErr(t, "read the stopped program's result", err)
+	var stderr strings.Builder
+	for _, chunk := range output.Output.Chunks {
+		if chunk.Stream == "stderr" {
+			stderr.WriteString(chunk.Text)
+		}
 	}
-}
-
-// The program lifetime ends the program's & jobs with it: an external child
-// started with & is gone once the lifetime expires, whether the program was
-// still waiting on it or had already finished its foreground.
-func TestCommandEntryProgramLifetimeEndsItsBackgroundJobs(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		source  string
-		waiting bool
-	}{
-		{name: "waiting on the job", source: " & wait", waiting: true},
-		{name: "foreground finished", source: " & echo started"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			f := newWaitStateFixture(t)
-			done := f.start(t, jobLifetimeHelper(f)+tc.source)
-			f.until(t, "the background child to start", func() bool {
-				_, err := os.Stat(filepath.Join(f.Dir, "running"))
-				return err == nil
-			})
-			if aliveLockFree(t, f.Dir) {
-				t.Fatal("the background child released its lock while running")
-			}
-			jobs := f.Background.ActiveJobs(f.Session)
-			if len(jobs) != 1 {
-				t.Fatalf("background jobs %+v", jobs)
-			}
-			var pending *waitStatePark
-			if tc.waiting {
-				f.awaitTimers(t, toolcontract.ProgramParkThreshold)
-				f.clock.Advance(toolcontract.ProgramParkThreshold)
-				pending = receive(t, f, f.parked, "the program to park")
-				f.clock.Advance(time.Hour - toolcontract.ProgramParkThreshold)
-			} else {
-				receive(t, f, done, "the call's result")
-				f.clock.Advance(time.Hour)
-			}
-			var snapshot bgprocess.Snapshot
-			f.until(t, "the background child and its job to end with the program", func() bool {
-				var err error
-				snapshot, err = f.Background.Snapshot(t.Context(), f.Session, jobs[0].Handle, 0)
-				testutil.FailErr(t, "snapshot background job", err)
-				return snapshot.HasExit && aliveLockFree(t, f.Dir)
-			})
-			if snapshot.TerminationReason != bgprocess.TerminationTimedOut {
-				t.Fatalf("background job ended as %q, not by the program lifetime", snapshot.TerminationReason)
-			}
-			if pending == nil {
-				return
-			}
-			outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the expired program's result"))
-			if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_LIMIT_EXCEEDED" || outcome.Refusal.Details["jobs_stopped"] != float64(1) {
-				t.Fatalf("expired program %+v", outcome)
-			}
-		})
+	lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
+	outcome := decodeWaitOutcome(t, lines[len(lines)-1])
+	if outcome.Refusal == nil || outcome.Refusal.Code != toolrejection.ToolOwnerInterruptedCode || outcome.Refusal.Details["jobs_stopped"] != float64(1) {
+		t.Fatalf("stopped program %+v", outcome)
 	}
 }
 
-func jobLifetimeHelper(f *waitStateFixture) string {
-	return "PW_COMMAND_JOB_HELPER=1 external -- " + strconv.Quote(f.helper) + " '-test.run=^TestCommandJobLifetimeHelper$'"
+func backgroundJobHelper(f *waitStateFixture) string {
+	return "PW_COMMAND_JOB_HELPER=1 external -- " + strconv.Quote(f.helper) + " '-test.run=^TestCommandBackgroundJobHelper$'"
 }
 
-// TestCommandJobLifetimeHelper holds a lock on "alive" for as long as its
+// TestCommandBackgroundJobHelper holds a lock on "alive" for as long as its
 // process lives, so the test sees the process end even across namespaces.
-func TestCommandJobLifetimeHelper(t *testing.T) {
+func TestCommandBackgroundJobHelper(t *testing.T) {
 	if os.Getenv("PW_COMMAND_JOB_HELPER") != "1" {
 		return
 	}
@@ -659,7 +489,7 @@ func TestCommandJobLifetimeHelper(t *testing.T) {
 	if err != nil || syscall.Flock(int(alive.Fd()), syscall.LOCK_EX) != nil {
 		os.Exit(2)
 	}
-	if err := os.WriteFile("running", nil, 0o600); err != nil {
+	if err := os.WriteFile("job-running", nil, 0o600); err != nil {
 		os.Exit(2)
 	}
 	for {

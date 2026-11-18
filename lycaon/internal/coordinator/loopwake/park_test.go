@@ -7,7 +7,6 @@ import (
 	"errors"
 	"sync"
 	"testing"
-	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -84,7 +83,7 @@ func (f *parkFixture) park(t *testing.T, programID, result string) *parkedCall {
 		Effects:  tools.InvocationEffects{Out: call.out},
 	}
 	parked, err := ProgramParking{Subscriptions: f.loop.Subscriptions}.ParkProgram(t.Context(), tctx, tools.ProgramPark{
-		ProgramID: programID, Reason: "sleep 600", Deadline: time.Now().Add(time.Hour), Claim: func() bool { return true },
+		ProgramID: programID, Reason: "sleep 600", Claim: func() bool { return true },
 		Interrupt: func(context.Context) string {
 			call.interrupted <- struct{}{}
 			return result
@@ -121,8 +120,8 @@ func TestProgramParkingArmsTheSessionLeaseAndEndsTheTurn(t *testing.T) {
 		len(lease.Conditions) != 1 || lease.Conditions[0].Kind != "program_done" || lease.Conditions[0].ProgramID != "program-1" {
 		t.Fatalf("armed lease %+v", lease)
 	}
-	if !lease.Deadline.After(time.Now().Add(time.Hour)) {
-		t.Fatalf("lease deadline %s does not outlive the program's bound", lease.Deadline)
+	if !lease.Deadline.IsZero() {
+		t.Fatalf("a parked program's lease has deadline %s; only the program's end settles it", lease.Deadline)
 	}
 	triggers := waitTriggerSet(f.loop.Waits.Triggers(parkSession))
 	if _, ok := triggers[WaitTriggerProgramDone]; !ok || !f.loop.Waits.IsSleeping(parkSession) {
