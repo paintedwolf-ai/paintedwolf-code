@@ -42,9 +42,10 @@ func acquireSlot(ctx context.Context, sem chan struct{}) (func(), error) {
 func (d *Discovery) acquire(ctx context.Context) (func(), error) { return acquireSlot(ctx, d.slots) }
 
 func (d *Discovery) tryAcquire() (func(), bool) {
+	sem := d.slots
 	select {
-	case d.slots <- struct{}{}:
-		return sync.OnceFunc(func() { <-d.slots }), true
+	case sem <- struct{}{}:
+		return sync.OnceFunc(func() { <-sem }), true
 	default:
 		return nil, false
 	}
