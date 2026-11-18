@@ -168,11 +168,19 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 }
 
 func TestExecutionObservationRejectsMissingSession(t *testing.T) {
-	st := store.NewMemory()
-	_, _, err := st.PutPromptSubmission(t.Context(), store.PromptSubmission{ID: "orphan", SessionID: "missing", Origin: store.PromptSubmissionOriginUser, SubmittedBy: testutil.HostOwner().ID})
-	testutil.FailErr(t, "retain orphan admission", err)
+	database := testdbfixture.Open(t, "execution.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	st := store.NewSQL(database)
+	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	_, _, err = st.PutPromptSubmission(t.Context(), store.PromptSubmission{ID: "admission", SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID, InputDigest: "task", InputJSON: "{}"})
+	testutil.FailErr(t, "admit task", err)
+	testutil.FailErr(t, "delete session", st.Delete(t.Context(), sess.ID))
 	manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
-	if _, err := manager.Observations.Observe(t.Context(), "missing", "orphan"); err == nil {
+	if _, err := manager.Observations.Observe(t.Context(), sess.ID, "admission"); err == nil {
+		t.Fatal("deleted session admission became a wait state")
+	}
+	if _, err := manager.Observations.Tree(t.Context(), sess.ID); err == nil {
 		t.Fatal("missing session became a wait state")
 	}
 }
