@@ -209,7 +209,6 @@ class ArchLintChangesTest(unittest.TestCase):
         with mock.patch.object(arch_lint_changes, "ROOT", self.repo), \
                 mock.patch.object(arch_lint_changes, "build", return_value=self.binary), \
                 mock.patch.object(arch_lint_changes, "golangci_lint", return_value=self.linter), \
-                mock.patch.object(arch_lint_changes, "artifact_root", return_value=self.tmp / "artifacts"), \
                 mock.patch.dict(os.environ, {"PW_CHANGE_BASE": self.base}), \
                 mock.patch("sys.stdout"):
             policy = self.tmp / "policy.json"
@@ -221,7 +220,6 @@ class ArchLintChangesTest(unittest.TestCase):
 
     def test_main_needs_a_base(self):
         with mock.patch.object(arch_lint_changes, "build", return_value=self.binary), \
-                mock.patch.object(arch_lint_changes, "artifact_root", return_value=self.tmp / "artifacts"), \
                 mock.patch.object(change_report, "resolve", return_value=None):
             with self.assertRaisesRegex(RuntimeError, "PW_CHANGE_BASE"):
                 arch_lint_changes.main([])
