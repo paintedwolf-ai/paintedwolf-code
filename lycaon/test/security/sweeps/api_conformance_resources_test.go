@@ -65,7 +65,10 @@ func (s *conformanceSweep) checkNotFound(ex conformanceExchange, target int) (no
 			break
 		}
 	}
-	if op.upsertTarget(target) && answering == target && ex.status/100 == 2 {
+	// An upsert creates its own target and a declared idempotent release
+	// already holds none; neither answers not-found for it.
+	if answering == target && ((op.upsertTarget(target) && ex.status != http.StatusNotFound) ||
+		(op.IdempotentRelease && ex.status == http.StatusNoContent)) {
 		return notFoundAnswer{}, false
 	}
 	code := ex.code()

@@ -36,6 +36,9 @@ type conformanceOp struct {
 	// Authenticated marks an operation whose effective security requires a
 	// credential.
 	Authenticated bool
+	// IdempotentRelease marks a release whose unknown handle is already
+	// released (x-idempotent-release).
+	IdempotentRelease bool
 }
 
 var templateParamRE = regexp.MustCompile(`\{([^}]+)\}`)
@@ -51,6 +54,7 @@ func conformanceOperations(doc *openapi3.T) []*conformanceOp {
 				security = *op.Security
 			}
 			out.Authenticated = len(security) > 0
+			out.IdempotentRelease = op.Extensions["x-idempotent-release"] == true
 			ops = append(ops, out)
 		}
 	}

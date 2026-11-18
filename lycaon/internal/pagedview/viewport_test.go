@@ -29,15 +29,17 @@ func TestViewportInterestSupersedesWorkAndRejectsReordering(t *testing.T) {
 	var interests ViewportInterests
 	defer interests.Close()
 	started, stopped := make(chan struct{}), make(chan struct{})
-	testutil.FailErr(t, "start old viewport", interests.Replace(t.Context(), "consumer", 1, func(ctx context.Context) { close(started); <-ctx.Done(); close(stopped) }, func() {}))
+	testutil.FailErr(t, "start old viewport", interests.Replace(t.Context(), "consumer", 1, func(ctx context.Context) { close(started); <-ctx.Done(); close(stopped) }, func() {}, goLaunch))
 	<-started
 	latest := make(chan struct{})
-	testutil.FailErr(t, "replace viewport", interests.Replace(t.Context(), "consumer", 3, func(context.Context) { close(latest) }, func() {}))
+	testutil.FailErr(t, "replace viewport", interests.Replace(t.Context(), "consumer", 3, func(context.Context) { close(latest) }, func() {}, goLaunch))
 	<-stopped
 	<-latest
 	called := false
-	testutil.FailErr(t, "ignore reordered viewport", interests.Replace(t.Context(), "consumer", 2, func(context.Context) { t.Error("obsolete demand ran") }, func() { called = true }))
+	testutil.FailErr(t, "ignore reordered viewport", interests.Replace(t.Context(), "consumer", 2, func(context.Context) { t.Error("obsolete demand ran") }, func() { called = true }, goLaunch))
 	if !called {
 		t.Fatal("obsolete demand retained its presentation")
 	}
 }
+
+func goLaunch(run func()) { go run() }

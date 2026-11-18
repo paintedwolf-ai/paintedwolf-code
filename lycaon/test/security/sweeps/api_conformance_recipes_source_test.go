@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/mcp"
 )
 
 // sourceClientID is the editor and view client every source recipe acts as.
@@ -1144,9 +1145,14 @@ func sourceRestoreCommitInputs(ctx context.Context, s *conformanceSweep, _ *conf
 		return successInputs{}, err
 	}
 	name := history.files[0]
-	read, err := sourceRead(ctx, s, name)
+	// The walk carries the ledger identity a disk write earns once observed.
+	file, err := sourceWalkFile(ctx, s, name)
 	if err != nil {
 		return successInputs{}, err
+	}
+	fileID := sourceString(file, "file_id")
+	if fileID == "" {
+		return successInputs{}, fmt.Errorf("the walk names no file_id for %s", name)
 	}
 	current, err := sourceDiskSHA(s, name)
 	if err != nil {
@@ -1155,7 +1161,7 @@ func sourceRestoreCommitInputs(ctx context.Context, s *conformanceSweep, _ *conf
 	return successInputs{
 		params: map[string]string{"commit_sha": history.parent},
 		fields: map[string]any{
-			"operation_id": uuid.NewString(), "file_id": sourceString(read, "file_id"), "root_id": root,
+			"operation_id": uuid.NewString(), "file_id": fileID, "root_id": root,
 			"path": name, "source_path": name, "blob_oid": history.blob,
 			"base": map[string]any{"state": "content", "sha256": current},
 		},
@@ -1343,10 +1349,34 @@ func sourceContributionSearchInputs(ctx context.Context, s *conformanceSweep, _ 
 		return successInputs{}, err
 	}
 	if projected.Revision != device {
-		return successInputs{}, fmt.Errorf("the project frame revision %s differs from the device frame revision %s", projected.Revision, device)
+		deviceFrame, err := s.host.Server.Admin.Extensions.Contributions.CaptureContributionFrame(ctx, "", "")
+		if err != nil {
+			return successInputs{}, err
+		}
+		return successInputs{}, fmt.Errorf("the project frame revision differs from the device frame revision: project MCP %s; device MCP %s",
+			sourceGeneration(projected.MCP), sourceGeneration(deviceFrame.MCP))
 	}
 	return successInputs{
 		params: map[string]string{"source_id": sourceString(sources[0], "id")},
 		fields: map[string]any{"frame_revision": device, "query": "conformance"},
 	}, nil
+}
+
+// sourceGeneration names an MCP generation's providers, tools and rejected rows.
+func sourceGeneration(gen *mcp.ResourceGeneration) string {
+	if gen == nil {
+		return "none"
+	}
+	var parts []string
+	for _, p := range gen.Providers {
+		tools := make([]string, 0, len(p.Tools))
+		for _, t := range p.Tools {
+			tools = append(tools, t.Name)
+		}
+		parts = append(parts, fmt.Sprintf("%s(enabled=%t status=%s tools=%v)", p.ID, p.Enabled, p.Status, tools))
+	}
+	for _, r := range gen.Rejected {
+		parts = append(parts, fmt.Sprintf("rejected(%s %s %s)", r.Layer, r.ID, r.Reason))
+	}
+	return strings.Join(parts, " ")
 }

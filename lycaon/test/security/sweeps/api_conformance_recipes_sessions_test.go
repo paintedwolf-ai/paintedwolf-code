@@ -75,7 +75,7 @@ var sessionRecipes = map[string]successRecipe{
 	"getCommandProgramReceipt":     {prepare: sessionPrepareProgramReceipt},
 	"getCommandReceiptDocument":    {prepare: sessionPrepareReceiptDocument},
 	"searchCommandReceiptDocument": {prepare: sessionPrepareReceiptSearch},
-	"listSessionInvocations":       {seed: sessionSeedInvocations},
+	"listSessionInvocations":       {prepare: sessionPrepareInvocations},
 
 	"getSessionBackgroundProcessOutput": {prepare: sessionPrepareProcessOutput},
 	"stopBackgroundProcess":             {prepare: sessionPrepareStopProcess},
@@ -829,23 +829,29 @@ func sessionPrepareReceiptSearch(ctx context.Context, s *conformanceSweep, _ *co
 	}}, nil
 }
 
-// sessionSeedInvocations answers two readme prompts, each a command
-// invocation in the fixture chat.
-func sessionSeedInvocations(ctx context.Context, s *conformanceSweep) error {
-	chat := s.fixture.session.ID
-	for range 2 {
-		if _, err := sessionPrompt(ctx, s, chat, "read the readme"); err != nil {
-			return err
+// sessionPrepareInvocations lists a chat of its own with two answered readme
+// prompts, each a command invocation.
+func sessionPrepareInvocations(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	chat, err := sessionOnce(s, "invocations-chat", func() (string, error) {
+		chat, err := sessionNewChat(ctx, s, s.fixture.project.ID, string(wire.SessionPostureBuild))
+		if err != nil {
+			return "", err
 		}
-	}
-	var receipts int
-	if err := s.host.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM invocation_receipts WHERE session_id = ?`, chat).Scan(&receipts); err != nil {
-		return err
-	}
-	if receipts < 2 {
-		return fmt.Errorf("two readme prompts left %d receipts; %s", receipts, sessionTurnState(ctx, s, chat))
-	}
-	return nil
+		for range 2 {
+			if _, err := sessionPrompt(ctx, s, chat, "read the readme"); err != nil {
+				return "", err
+			}
+		}
+		var receipts int
+		if err := s.host.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM invocation_receipts WHERE session_id = ?`, chat).Scan(&receipts); err != nil {
+			return "", err
+		}
+		if receipts < 2 {
+			return "", fmt.Errorf("two readme prompts left %d receipts; %s", receipts, sessionTurnState(ctx, s, chat))
+		}
+		return chat, nil
+	})
+	return successInputs{params: map[string]string{"id": chat}}, err
 }
 
 func sessionBackgroundChat(ctx context.Context, s *conformanceSweep) (string, error) {
