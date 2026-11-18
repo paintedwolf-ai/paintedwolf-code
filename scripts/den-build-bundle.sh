@@ -71,9 +71,18 @@ case "${TARGET}" in
   *-pc-windows-msvc) HOST_KIND="windows"; EXE_SUFFIX=".exe" ;;
   *) echo "error: unsupported desktop target ${TARGET}" >&2; exit 1 ;;
 esac
-# shellcheck source=toolchain/bundle-signing.sh
-source "${ROOT}/scripts/toolchain/bundle-signing.sh"
-bundle_signing "${HOST_KIND}" "${UNSIGNED}" "${PHASE}" || exit 2
+# A signed macOS bundle needs its Developer ID before anything builds; the compile
+# phase signs nothing and --unsigned (the release rehearsal) signs ad hoc.
+SIGNING_IDENTITY="-"
+HOST_SIGNING=()
+if [[ "${HOST_KIND}" == darwin && "${PHASE}" != compile && "${UNSIGNED}" == 0 ]]; then
+  [[ -n "${APPLE_SIGNING_IDENTITY:-}" && -n "${APPLE_ENGINE_PROVISIONING_PROFILE:-}" ]] || {
+    echo "error: a signed macOS bundle needs APPLE_SIGNING_IDENTITY and APPLE_ENGINE_PROVISIONING_PROFILE" >&2
+    exit 2
+  }
+  SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY}"
+  HOST_SIGNING=(--release)
+fi
 SIDECAR_BIN="${BINARIES_DIR}/${SIDECAR_NAME}-${TARGET}${EXE_SUFFIX}"
 LOG_VIEWER_BIN="${BINARIES_DIR}/pw-logs-${TARGET}${EXE_SUFFIX}"
 DECIDE_BIN="${BINARIES_DIR}/bialy-${TARGET}${EXE_SUFFIX}"
@@ -181,7 +190,7 @@ fi
 
 chmod +x "${SIDECAR_BIN}"
 
-if [[ "${SIGNING_MODE}" == developer-id ]]; then
+if [[ "${HOST_KIND}" == darwin && "${UNSIGNED}" == 0 ]]; then
   if [[ -n "${APPLE_API_ISSUER:-}" && -n "${APPLE_API_KEY:-}" && -n "${APPLE_API_KEY_PATH:-}" ]]; then
     echo "den:bundle — notarizing via App Store Connect API key" >&2
   elif [[ -n "${APPLE_ID:-}" && -n "${APPLE_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
@@ -318,7 +327,7 @@ if [[ "${HOST_KIND}" == "darwin" ]]; then
 fi
 if [[ -n "${APP_PATH}" ]]; then
   VERIFY_ARGS=(--app "${APP_PATH}")
-  [[ "${SIGNING_MODE}" == ad-hoc ]] || VERIFY_ARGS+=(--require-signed)
+  [[ "${UNSIGNED}" == 1 ]] || VERIFY_ARGS+=(--require-signed)
   echo "den:bundle — verifying bundle integrity" >&2
   bash "${ROOT}/scripts/verify-bundle.sh" "${VERIFY_ARGS[@]}"
 fi
