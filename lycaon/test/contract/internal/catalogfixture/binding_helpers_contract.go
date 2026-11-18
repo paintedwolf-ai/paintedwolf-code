@@ -1,6 +1,7 @@
 package catalogfixture
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,17 +55,25 @@ func StockGuidancePath(stem string) (extpacks.Source, error) {
 // FindStockPolicyFile returns policy/<CODE>.yaml across stock packs.
 func FindStockPolicyFile(t *testing.T, code string) extpacks.Source {
 	t.Helper()
+	path, err := StockPolicyFile(code)
+	testutil.FailErr(t, "find stock policy "+code, err)
+	return path
+}
+
+// StockPolicyFile returns <code>.yaml under any stock policy directory.
+func StockPolicyFile(code string) (extpacks.Source, error) {
 	code = strings.TrimSpace(code)
 	packs, err := extpacks.DiscoverStock()
-	testutil.FailErr(t, "DiscoverStock", err)
+	if err != nil {
+		return extpacks.Source{}, err
+	}
 	for _, dir := range extpacks.KindDirs(packs, "policy") {
 		path := dir.Join(code + ".yaml")
 		if _, err := path.Stat(); err == nil {
-			return path
+			return path, nil
 		}
 	}
-	t.Fatalf("missing stock policy %s.yaml", code)
-	return extpacks.Source{}
+	return extpacks.Source{}, fmt.Errorf("missing stock policy %s.yaml", code)
 }
 
 // FindStockAgentPrompt returns filename under any stock pack agents/prompts/.

@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/guidancescan"
 )
 
 // toolEnvelopeHintCodes are hint_code values carried inside successful tool JSON payloads.
@@ -54,37 +53,6 @@ func TestToolEnvelopeHintCodesRegisteredAsBanner(t *testing.T) {
 				t.Fatalf("hint %q missing %s", code, field.name)
 			}
 		}
-	}
-}
-
-func TestToolEnvelopeHintCodesHaveProductionEmission(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	cfg, err := guidance.LoadHintConfigStock()
-	contractcheck.FailErr(t, "load hint registry", err)
-	registered := make(map[string]bool, len(cfg.HintCodes))
-	for code := range cfg.HintCodes {
-		registered[code] = true
-	}
-	scanResult, err := guidancescan.ScanGuidanceEmission(lycaonRoot)
-	contractcheck.FailErr(t, "scan guidance emission", err)
-	for _, code := range toolEnvelopeHintCodes {
-		if !scanResult.HasEmissionSite(code) {
-			t.Fatalf("tool envelope hint %q has no production emission site", code)
-		}
-	}
-}
-
-func TestToolEnvelopePackagesNoInlineHintProseConsts(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	sites, err := guidancescan.ScanInlineEnvelopeHintConsts(lycaonRoot)
-	contractcheck.FailErr(t, "scan inline envelope hint consts", err)
-	if len(sites) > 0 {
-		t.Fatalf("tool envelope packages must not define inline Hint prose consts (use hint registry + BundledEnvelopeHint):\n%s",
-			strings.Join(sites, "\n"))
 	}
 }
 

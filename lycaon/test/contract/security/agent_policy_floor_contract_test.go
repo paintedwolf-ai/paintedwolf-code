@@ -3,15 +3,13 @@ package contract
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
@@ -158,63 +156,6 @@ func TestHardDenyWriteSpecsConsumedByBuildSeatbeltProfile(t *testing.T) {
 	}
 	if !foundPerm {
 		t.Fatalf("specs missing approvals.yaml: %+v", specs)
-	}
-}
-
-func TestSettingsOverlayBasenamesPathHelpersRegistered(t *testing.T) {
-	t.Parallel()
-	registered := map[string]bool{}
-	for _, b := range settingsoverlay.SettingsOverlayBasenames() {
-		registered[b] = true
-	}
-	root := contractcheck.RepoRoot(t)
-	pkgs := []string{
-		filepath.Join(root, "lycaon/internal/settings"),
-		filepath.Join(root, "lycaon/internal/mcp"),
-		filepath.Join(root, "lycaon/internal/llm"),
-		filepath.Join(root, "lycaon/internal/standingpatterns"),
-	}
-	fset := token.NewFileSet()
-	for _, dir := range pkgs {
-		entries, err := os.ReadDir(dir)
-		testutil.FailErr(t, "ReadDir "+dir, err)
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
-				continue
-			}
-			path := filepath.Join(dir, e.Name())
-			f, err := parser.ParseFile(fset, path, nil, 0)
-			testutil.FailErr(t, "Parse "+path, err)
-			ast.Inspect(f, func(n ast.Node) bool {
-				call, ok := n.(*ast.CallExpr)
-				if !ok {
-					return true
-				}
-				sel, ok := call.Fun.(*ast.SelectorExpr)
-				if !ok || sel.Sel.Name != "Join" {
-					return true
-				}
-				if len(call.Args) < 3 {
-					return true
-				}
-				mid, ok := call.Args[len(call.Args)-2].(*ast.BasicLit)
-				if !ok || mid.Kind != token.STRING || strings.Trim(mid.Value, `"`) != settingsoverlay.DirName() {
-					return true
-				}
-				last, ok := call.Args[len(call.Args)-1].(*ast.BasicLit)
-				if !ok || last.Kind != token.STRING {
-					return true
-				}
-				base := strings.Trim(last.Value, `"`)
-				if strings.Contains(base, "/") {
-					return true
-				}
-				if !registered[base] {
-					t.Errorf("%s: Join(.paintedwolf, %q) not in SettingsOverlayBasenames", path, base)
-				}
-				return true
-			})
-		}
 	}
 }
 

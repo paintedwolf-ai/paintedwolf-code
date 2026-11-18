@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -26,50 +25,6 @@ func declaredAPIErrorCodes() map[string]string {
 		out[string(code)] = "declared in docs/openapi/vocab/ApiErrorCode.yaml"
 	}
 	return out
-}
-
-// TestAPIErrorCodesClosure matches emitted API errors to the ledger.
-func TestAPIErrorCodesClosure(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	internalDir := filepath.Join(root, "lycaon", "internal")
-	apiDir := filepath.Join(internalDir, "api")
-
-	emitted := scanAPIErrorCodes(t, apiDir)
-	for code := range scanAPIHostErrorCodes(t, apiDir) {
-		emitted[code] = true
-	}
-	for code := range scanWorkerExecuteFailureCodes(t, filepath.Join(internalDir, "worker")) {
-		emitted[code] = true
-	}
-	for code := range scanTypedAPIErrorCodes(t, internalDir) {
-		emitted[code] = true
-	}
-	declared := declaredAPIErrorCodes()
-
-	var missing []string
-	for code := range emitted {
-		if _, ok := declared[code]; !ok {
-			missing = append(missing, code)
-		}
-	}
-	sort.Strings(missing)
-	var ghosts []string
-	for code := range declared {
-		if !emitted[code] {
-			ghosts = append(ghosts, code)
-		}
-	}
-	sort.Strings(ghosts)
-
-	var violations []string
-	for _, code := range missing {
-		violations = append(violations, "handler emits undeclared code "+code+" — add it to docs/openapi/vocab/ApiErrorCode.yaml")
-	}
-	for _, code := range ghosts {
-		violations = append(violations, "ledger lists ghost code "+code+" — remove entry or wire emission site")
-	}
-	contractcheck.FailViolations(t, "API error code ledger closure drift", violations)
 }
 
 // apiErrorCodeVocabValue is one ApiErrorCode vocabulary entry as authored.
@@ -206,38 +161,6 @@ func scanAPIErrorCodes(t *testing.T, apiDir string) map[string]bool {
 			return true
 		})
 		scanAPIReturnedErrorCodes(f, out, constants)
-	}
-	return out
-}
-
-// scanTypedAPIErrorCodes finds codes other host packages hand to the API:
-// generated constant references and constants declared as wire.ApiErrorCode.
-func scanTypedAPIErrorCodes(t *testing.T, internalDir string) map[string]bool {
-	t.Helper()
-	out := map[string]bool{}
-	constants := apiErrorCodeConstants(t, filepath.Join(internalDir, "..", "pkg", "api", "api_error_code_ids.generated.go"))
-	corpus, err := contractcheck.LoadGoASTCorpusMode(internalDir, parser.SkipObjectResolution)
-	contractcheck.FailErr(t, "load internal source corpus", err)
-	for _, source := range corpus.Production() {
-		ast.Inspect(source.AST, func(n ast.Node) bool {
-			switch node := n.(type) {
-			case *ast.SelectorExpr:
-				if code, ok := constants[node.Sel.Name]; ok {
-					out[code] = true
-				}
-			case *ast.ValueSpec:
-				typ, ok := node.Type.(*ast.SelectorExpr)
-				if !ok || typ.Sel.Name != "ApiErrorCode" {
-					return true
-				}
-				for _, value := range node.Values {
-					if code := contractcheck.AstStringLit(value); code != "" {
-						out[code] = true
-					}
-				}
-			}
-			return true
-		})
 	}
 	return out
 }

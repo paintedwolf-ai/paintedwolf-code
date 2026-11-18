@@ -33,9 +33,9 @@ The guard is structural, not a name list. `user_text_behavior_closure_ast.go` wa
 
 | Edge | Rule | Test |
 |------|------|------|
-| User-text parameter → behavior sink | A function taking `userPrompt` / `userMessage` / `message` / `text` must not reach `Emit` | `TestNoUserTextNLProbeToBehaviorSink` |
+| User-text parameter → behavior sink | A function taking `userPrompt` / `userMessage` / `message` / `text` must not reach `Emit` | `forbidden-calls/no-user-text-probe-to-behavior-sink` |
 | `maybeQueue*Kick` on the prompt path | Every hook is registered with a trigger class, and no trigger class is NL intent | `TestPromptPathKickHooksRegistered` · `TestKickContractTriggerClassesNotUserText` |
-| `strings.Contains(err.Error(), …)` | Typed errors and `errors.Is` instead of parsing error prose | `TestNoErrErrorStringParsingInCoordinatorPackages` |
+| `strings.Contains(err.Error(), …)` | Typed errors and `errors.Is` instead of parsing error prose | `forbidden-calls/no-error-text-parsing-in-coordinator-packages` |
 | Coordinator prompt gates | Pongo gate vars are registered or banned; no ad-hoc boolean derived from user text | `TestCoordinatorPromptBooleanGatesRegistered` |
 
 Because the scan matches the shape, a newly written classifier fails it under any name. A user message that discusses build policy (“we do not allow compatibility steps here”) must not queue a kick, set a prompt gate, or dispatch implementers; only an explicit coordinator tool call does that.
@@ -54,7 +54,7 @@ Tool-output compaction and routing branch on tool identity and chunk role, never
 | `compaction/chunk_compactor.go` `strategyFor` | `strings.Contains(content, hostmarker.CompactionBannerOpen)` | idempotency for already-compacted chunks, using the named constant the compactor wrote |
 | `compaction/overlay_promote_diet.go` | tool identity and overlay id | retains latest overlay assessments and board snapshots; source reads use shared budget fitting |
 
-Content-substring routers are forbidden outside these sites. Guards: `TestNoContentSubstringToolRouting` in [`test/contract/tools/tool_output_routing_test.go`](../lycaon/test/contract/tools/tool_output_routing_test.go) blocks new content-sniff routers, and `TestCompactChunkRoutesOverlayPromoteByToolIdentity` in [`internal/llm/compaction/chunk_route_test.go`](../lycaon/internal/llm/compaction/chunk_route_test.go) keeps summarize output away from the promote preserver.
+Content-substring routers are forbidden outside these sites. Guards: [`forbidden-calls/no-content-substring-tool-routing`](../lycaon/test/contract/laws/forbiddencalls/tool_output.go) blocks new content-sniff routers, and `TestCompactChunkRoutesOverlayPromoteByToolIdentity` in [`internal/llm/compaction/chunk_route_test.go`](../lycaon/internal/llm/compaction/chunk_route_test.go) keeps summarize output away from the promote preserver.
 
 ### Host markers
 

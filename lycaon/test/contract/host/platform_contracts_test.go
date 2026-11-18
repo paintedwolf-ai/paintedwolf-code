@@ -1,14 +1,14 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/nativemanifest"
+
 	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -27,15 +27,6 @@ func TestTopologyConfigLoads(t *testing.T) {
 		if spec.ID == "" || spec.Pattern == "" {
 			t.Fatalf("invalid spec from %s: %+v", name, spec)
 		}
-	}
-}
-
-func TestAgentConfigLoads(t *testing.T) {
-	t.Parallel()
-	profiles, err := agentdef.LoadEffective()
-	contractcheck.FailErr(t, "agentdef.LoadEffective failed", err)
-	if len(profiles) < 10 {
-		t.Fatalf("expected >=10 agent profiles, got %d", len(profiles))
 	}
 }
 

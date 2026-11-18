@@ -2,18 +2,7 @@ package contract
 
 import (
 	"go/ast"
-	"path/filepath"
-	"sort"
-	"strconv"
-	"strings"
-	"testing"
-
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-// agentReachablePackages run on an agent's behalf: native commands, their
-// HTTP owner, the program evaluator, tool execution and web research.
-var agentReachablePackages = append([]string{"internal/toolexecution/", "internal/webresearch/"}, agentAdapterPackages...)
 
 // agentForbiddenCalls bypass the launch and network doors: a host launch or
 // host Git purpose carries no agent confinement, os/exec starts a process
@@ -32,67 +21,6 @@ var agentForbiddenCalls = map[string]map[string]bool{
 var agentForbiddenTypes = map[string]map[string]bool{
 	"net/http": {"Client": true, "Transport": true},
 	"net":      {"Dialer": true},
-}
-
-// agentForbiddenImports hold credentials an agent may reach only through a
-// scoped service.
-var agentForbiddenImports = map[string]bool{
-	"github.com/lycaon/lycaon/internal/gitcredential":   true,
-	"github.com/lycaon/lycaon/internal/credentialstore": true,
-}
-
-// agentEffectExemptions name each remaining use by file and what it is.
-var agentEffectExemptions = map[string]string{
-	"internal/webresearch/credentials.go": "reads the user's configured search provider key for the provider request the host makes",
-}
-
-func TestAgentCodeReachesEffectsOnlyThroughTheirDoors(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	corp, err := contractcheck.LoadGoASTCorpus(filepath.Join(root, "lycaon"))
-	contractcheck.FailErr(t, "load AST corpus", err)
-
-	unused := map[string]bool{}
-	for rel := range agentEffectExemptions {
-		unused[rel] = true
-	}
-	var offences []string
-	for _, gf := range corp.Files() {
-		rel := filepath.ToSlash(gf.Rel)
-		if gf.IsTest || !hasAnyPrefix(rel, agentReachablePackages) {
-			continue
-		}
-		var found []string
-		for _, spec := range gf.AST.Imports {
-			if path, err := strconv.Unquote(spec.Path.Value); err == nil && agentForbiddenImports[path] {
-				found = append(found, "imports "+path)
-			}
-		}
-		found = append(found, agentEffectUses(gf.AST)...)
-		if len(found) == 0 {
-			continue
-		}
-		if _, exempt := agentEffectExemptions[rel]; exempt {
-			delete(unused, rel)
-			continue
-		}
-		for _, f := range found {
-			offences = append(offences, rel+" "+f)
-		}
-	}
-	sort.Strings(offences)
-	if len(offences) > 0 {
-		t.Errorf("agent code must launch through confined launch plans, reach the network through outboundhttp "+
-			"and use credentials only through scoped services:\n  %s", strings.Join(offences, "\n  "))
-	}
-	if len(unused) > 0 {
-		var stale []string
-		for rel := range unused {
-			stale = append(stale, rel)
-		}
-		sort.Strings(stale)
-		t.Errorf("these exemptions no longer match anything and should be deleted:\n  %s", strings.Join(stale, "\n  "))
-	}
 }
 
 // agentEffectUses finds every use of a forbidden call or type in file, as a
