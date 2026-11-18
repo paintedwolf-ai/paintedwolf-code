@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/version"
 )
@@ -50,9 +51,8 @@ func TestFreshRequestWipesOnlyDevelopmentStores(t *testing.T) {
 			t.Setenv("LYCAON_DEV", tc.dev)
 			ctx := t.Context()
 			dbPath := filepath.Join(t.TempDir(), "store.db")
-			seeded, err := db.Open(dbPath)
-			testutil.FailErr(t, "open seeded store", err)
-			_, err = seeded.ExecContext(ctx, `INSERT INTO command_invocations(operation_id,input_digest,response_json,created_at) VALUES ('seeded','digest','{}','2000-01-01T00:00:00Z')`)
+			seeded := testdbfixture.OpenPath(t, dbPath)
+			_, err := seeded.ExecContext(ctx, `INSERT INTO command_invocations(operation_id,input_digest,response_json,created_at) VALUES ('seeded','digest','{}','2000-01-01T00:00:00Z')`)
 			testutil.FailErr(t, "seed row", err)
 			testutil.FailErr(t, "stamp current application", db.New(seeded).UpsertStoreMeta(ctx, db.UpsertStoreMetaParams{Key: "app_version", Value: version.Version}))
 			testutil.FailErr(t, "close seeded store", seeded.Close())

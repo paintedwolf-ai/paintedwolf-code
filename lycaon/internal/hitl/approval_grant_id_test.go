@@ -29,7 +29,8 @@ func TestApprovalGrantIDSeparatesEveryAuthorityDimension(t *testing.T) {
 		witness:      hitl.ApprovalGrantWitness{FSJailed: true, Egress: hitl.ContainedEgressProxy, RootsDigest: "roots-a"},
 		exactActions: []string{"action-a"},
 	}
-	if base.id() != base.id() {
+	first, second := base.id(), base.id()
+	if first != second {
 		t.Fatal("grant id is not stable for one authority")
 	}
 	variants := map[string]func(*grantIDInputs){
@@ -43,7 +44,7 @@ func TestApprovalGrantIDSeparatesEveryAuthorityDimension(t *testing.T) {
 		"roots digest":  func(in *grantIDInputs) { in.witness.RootsDigest = "roots-b" },
 		"exact actions": func(in *grantIDInputs) { in.exactActions = []string{"action-a", "action-b"} },
 	}
-	seen := map[string]string{base.id(): "base"}
+	seen := map[string]string{first: "base"}
 	for name, change := range variants {
 		in := base
 		in.exactActions = append([]string(nil), base.exactActions...)
