@@ -1,9 +1,9 @@
 import { expect } from "@playwright/test";
-import type { CommandActivity, CommandProgramReceipt } from "../src/api/types.ts";
+import type { CommandActivity, CommandProgramReceipt } from "../../src/api/types.ts";
 import {
   apiSeedSessionTranscript, bootstrapChatSession, liveChatStage, modelIndependentWebE2e,
   settledChatSessionId, transcriptMessages,
-} from "./helpers.ts";
+} from "../helpers.ts";
 
 modelIndependentWebE2e("the first activity arrow preserves the collapsed card height", async ({ page, request }) => {
   await bootstrapChatSession(page, request);
