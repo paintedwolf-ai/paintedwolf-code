@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -258,8 +259,17 @@ func (s *Commands) settleOutside(ctx context.Context, w *openCommandWindow) {
 	for _, folder := range w.outside.pending() {
 		w.outside.settle(folder, s.compareOutside(ctx, w, folder))
 	}
-	if err := s.storeWindowCoverage(context.WithoutCancel(ctx), w.id, w.outside.decided()); err != nil {
+	coverage := w.outside.decided()
+	if len(coverage) == 0 {
+		return
+	}
+	publish := context.WithoutCancel(ctx)
+	if err := s.storeWindowCoverage(publish, w.id, coverage); err != nil {
 		slog.WarnContext(ctx, "command window outside coverage", "window_id", w.id, "err", err)
+		return
+	}
+	if err := sourcefeed.EmitProjectSignal(publish, w.projectID, rootRefsOf(w.roots)); err != nil {
+		slog.WarnContext(ctx, "command window outside publication", "window_id", w.id, "err", err)
 	}
 }
 
