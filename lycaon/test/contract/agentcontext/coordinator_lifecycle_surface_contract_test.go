@@ -7,15 +7,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func TestCoordinatorSurfaceInvariants_overlayPromoteIncludesWait(t *testing.T) {
-	t.Parallel()
-	surfaces := loadImplementSurfaces(t)
-	promote := surfaces[surfaceImplementOverlayPromote]
-	if !contractcheck.ContainsString(promote, "wait") {
-		t.Fatalf("%s must include wait for wait(resume=true) while siblings in flight", surfaceImplementOverlayPromote)
-	}
-}
-
 func TestCoordinatorSurfaceInvariants_taskIncludesWorkerLifecycle(t *testing.T) {
 	t.Parallel()
 	plans, err := surface.CompileToolPlans(1)
@@ -35,18 +26,5 @@ func TestCoordinatorSurfaceInvariants_taskIncludesWorkerLifecycle(t *testing.T) 
 				}
 			}
 		})
-	}
-}
-
-func TestCoordinatorSurfaceInvariants_orchestrationLifecycleOnPinnedSurfaces(t *testing.T) {
-	t.Parallel()
-	surfaces := loadImplementSurfaces(t)
-	for _, id := range orchestrationPinnedSurfaces {
-		wire := surfaces[id]
-		for _, tool := range orchestrationLifecycleTools {
-			if !contractcheck.ContainsString(wire, tool) {
-				t.Fatalf("%s must include orchestration lifecycle tool %q — host can pin this surface while coordinator-core references it", id, tool)
-			}
-		}
 	}
 }

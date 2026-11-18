@@ -38,6 +38,7 @@ var declaredReaderFactScalarNames = []string{
 	"profile_has_write_tools",
 	"profile_mutation_capable",
 	"progress_gated_tools",
+	"progress_ungated_lifecycle_tools",
 	"read_globs",
 	"recall_may_widen",
 	"reject_codes",
@@ -98,6 +99,7 @@ var declaredReaderFactScalars = map[string]ReaderFactScalarSpec{
 	"profile_has_write_tools":            {Name: "profile_has_write_tools", Type: "bool", States: "At least one workspace-mutating tool or mutating command is offered."},
 	"profile_mutation_capable":           {Name: "profile_mutation_capable", Type: "bool", States: "At least one workspace-mutating tool or mutating command is reachable."},
 	"progress_gated_tools":               {Name: "progress_gated_tools", Type: "[]string", States: "Offered tools gated on an active progress checklist item."},
+	"progress_ungated_lifecycle_tools":   {Name: "progress_ungated_lifecycle_tools", Type: "[]string", States: "Offered worker-lifecycle tools that run without an active progress checklist item."},
 	"read_globs":                         {Name: "read_globs", Type: "[]string", States: "Readable path globs for this coordinator surface."},
 	"recall_may_widen":                   {Name: "recall_may_widen", Type: "bool", States: "Recall supports widening beyond the current leg."},
 	"reject_codes":                       {Name: "reject_codes", Type: "[]map[string]any", States: "Recoverable rejection codes reachable by this reader's tools."},
@@ -178,6 +180,7 @@ type ReaderFacts struct {
 	ProfileHasWriteTools           bool
 	ProfileMutationCapable         bool
 	ProgressGatedTools             []string
+	ProgressUngatedLifecycleTools  []string
 	ReadGlobs                      []string
 	RecallMayWiden                 bool
 	RejectCodes                    []map[string]any
@@ -214,7 +217,7 @@ type ReaderFacts struct {
 
 // Map flattens the typed reader facts and family maps into a template variable map.
 func (f ReaderFacts) Map() map[string]any {
-	out := make(map[string]any, 62+len(f.ProfileHas)+len(f.AgentHasSkill))
+	out := make(map[string]any, 63+len(f.ProfileHas)+len(f.AgentHasSkill))
 	out["agent_tools"] = f.AgentTools
 	out["caps"] = map[string]any{"vision": f.CapsVision}
 	out["card_edit_deferred"] = f.CardEditDeferred
@@ -256,6 +259,11 @@ func (f ReaderFacts) Map() map[string]any {
 		out["progress_gated_tools"] = append([]string(nil), f.ProgressGatedTools...)
 	} else {
 		out["progress_gated_tools"] = []string(nil)
+	}
+	if f.ProgressUngatedLifecycleTools != nil {
+		out["progress_ungated_lifecycle_tools"] = append([]string(nil), f.ProgressUngatedLifecycleTools...)
+	} else {
+		out["progress_ungated_lifecycle_tools"] = []string(nil)
 	}
 	if f.ReadGlobs != nil {
 		out["read_globs"] = append([]string(nil), f.ReadGlobs...)

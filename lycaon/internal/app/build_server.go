@@ -483,6 +483,7 @@ func (b *serveBuilder) serveApp() *ServeApp {
 		decider:              b.decisions.Decider,
 		projects:             b.storage.Projects,
 		eventPub:             b.events.Publisher,
+		recovery:             b.startup.recovery,
 	}
 	registerBackgroundRunners(b, app)
 	return app

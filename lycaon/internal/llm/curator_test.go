@@ -143,8 +143,8 @@ func TestRegistrySummarizerCurate_snapshotIsolation(t *testing.T) {
 	cur := newTestRegistrySummarizer(t, provider)
 	got, err := cur.Curate(context.Background(), snapshot, CurationFocus{Target: "focus"}, 3)
 	testutil.FailErr(t, "Curate", err)
-	if len(got.Selections) != 0 {
-		t.Fatalf("prior-survey path must not resolve against snapshot: %#v", got.Selections)
+	if len(got.Selections) != 0 || got.Report.Dropped != 1 {
+		t.Fatalf("prior-survey path must be dropped, not resolved: selections=%#v dropped=%d", got.Selections, got.Report.Dropped)
 	}
 }
 

@@ -1,7 +1,5 @@
 package contract
 
-// AST scans enforce coordinator behavior channels.
-
 import (
 	"go/ast"
 	"io/fs"

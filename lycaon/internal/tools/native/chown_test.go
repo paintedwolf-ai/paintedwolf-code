@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -70,6 +71,11 @@ func TestChownToolRejectsForeignUID(t *testing.T) {
 	if !errors.As(err, &reject) || reject.Code != "CHOWN_TARGET_DENIED" {
 		t.Fatalf("err = %v want CHOWN_TARGET_DENIED", err)
 	}
+	info, err := os.Stat(filepath.Join(tmpDir, "a.txt"))
+	testutil.FailErr(t, "stat refused file", err)
+	if st, ok := info.Sys().(*syscall.Stat_t); !ok || int(st.Uid) != os.Getuid() {
+		t.Fatalf("refused chown changed the owner: %+v", info.Sys())
+	}
 }
 
 func TestChownToolRejectsRootWhenNotRoot(t *testing.T) {
@@ -121,6 +127,11 @@ func TestChownToolRejectsGitPath(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
 		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED", err)
+	}
+	data, err := os.ReadFile(filepath.Join(tmpDir, ".git", "config"))
+	testutil.FailErr(t, "read refused config", err)
+	if string(data) != "x" {
+		t.Fatalf("refused chown changed the config: %q", data)
 	}
 }
 

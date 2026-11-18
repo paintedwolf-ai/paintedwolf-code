@@ -109,19 +109,20 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 		RootCount: in.RootCount,
 		WebSearch: true,
 	})
-	vars := map[string]any{}
-	if err == nil {
-		vars = reader.Facts()
-	}
-	for k, v := range AgentPromptSurfaceTemplateVars(AgentPromptSurface{
+	// The snapshot holds the variables a render would receive; without a
+	// reader it records the surface variables alone.
+	vars := AgentPromptSurfaceTemplateVars(AgentPromptSurface{
 		SessionScratchDir:     strings.TrimSpace(in.SessionScratchDir),
 		Posture:               in.Posture,
 		CommandExternalHidden: in.CommandExternalHidden,
-	}) {
-		vars[k] = v
-	}
+	})
 	vars["platform_os"] = runtime.GOOS
 	vars["project_dir"] = strings.TrimSpace(in.ProjectDir)
+	if err == nil {
+		if merged, mergeErr := Vars(reader, vars); mergeErr == nil {
+			vars = merged
+		}
+	}
 
 	hasCommandOffered := slices.Contains(offered, "command")
 	hasCommandAny := hasCommandOffered || slices.Contains(deferred, "command")

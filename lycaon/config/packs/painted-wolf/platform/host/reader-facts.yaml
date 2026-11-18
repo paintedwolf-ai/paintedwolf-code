@@ -89,6 +89,9 @@ facts:
   - name: progress_gated_tools
     type: "[]string"
     states: Offered tools gated on an active progress checklist item.
+  - name: progress_ungated_lifecycle_tools
+    type: "[]string"
+    states: Offered worker-lifecycle tools that run without an active progress checklist item.
   - name: read_globs
     type: "[]string"
     states: Readable path globs for this coordinator surface.

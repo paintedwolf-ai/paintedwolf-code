@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolschema"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -31,28 +29,6 @@ func TestCoordinatorContextDietTurnProfileMatrix(t *testing.T) {
 				t.Fatalf("modeRefs = %v want %v", profile.ModeRefs, row.ModeRefs)
 			}
 		})
-	}
-}
-
-func TestProjectProviderToolMetaPreservesRequiredFields(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	contractcheck.FailErr(t, "LoadSchemaDir", err)
-	meta, ok := cfg.ToolMeta("read")
-	if !ok {
-		t.Fatal("missing read schema")
-	}
-	full := tools.ToolMeta{Name: "read", Description: meta.Description, ArgsSchema: meta.ArgsSchema}
-	trimmed := tools.ProjectProviderToolMeta(full)
-	if trimmed.ArgsSchema == nil {
-		t.Fatal("trimmed schema nil")
-	}
-	if trimmed.ArgsSchema["properties"] == nil {
-		t.Fatal("trimmed schema missing properties")
-	}
-	if len(trimmed.Description) == 0 {
-		t.Fatal("trimmed description empty")
 	}
 }
 

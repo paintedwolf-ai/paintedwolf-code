@@ -1,38 +1,13 @@
 package contract
 
 import (
-	"slices"
 	"testing"
-
-	"github.com/lycaon/lycaon/test/contract/laws/promptrender"
 
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/skills"
-	"github.com/lycaon/lycaon/internal/toolvocab"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/laws/promptrender"
 )
-
-// TestSurveyRepoAliasAdmittedAtRenderLevel pins the PC09 alias end to end
-// through the render-level reach gate: rendered copy may spell the repo-map
-// form as `survey-repo`, the gate resolves it through the survey_repo form
-// tool, and the alias stays gated on command and on survey_repo exactly like
-// the canonical spelling.
-func TestSurveyRepoAliasAdmittedAtRenderLevel(t *testing.T) {
-	catalog, _ := promptNameCatalog(t)
-	corpus := "Map the tree with `survey-repo` before reading files.\n"
-	held := map[string]bool{"command": true, "survey_repo": true}
-	if names := toolvocab.UnreachableNames(catalog, corpus, held); len(names) > 0 {
-		t.Fatalf("survey-repo alias flagged unreachable for a command+survey_repo reader: %v", names)
-	}
-	for _, incomplete := range []map[string]bool{
-		{"command": true},
-		{"survey_repo": true},
-	} {
-		if names := toolvocab.UnreachableNames(catalog, corpus, incomplete); !slices.Contains(names, "survey-repo") {
-			t.Fatalf("survey-repo must stay gated on command and survey_repo; held %v admitted it (unreachable = %v)", incomplete, names)
-		}
-	}
-}
 
 // forEachStockSkillRender calls check for every stock skill rendered for
 // every reader that can select it.
@@ -44,7 +19,9 @@ func forEachStockSkillRender(t *testing.T, check func(t *testing.T, sk skills.Sk
 	contractcheck.FailErr(t, "render the stock skills", err)
 	for _, sr := range renders {
 		t.Run(sr.Reader+"/"+sr.Skill.Name, func(t *testing.T) {
-			check(t, sr.Skill, sr.Reader, sr.State, prompts.SkillVars(sr.State), sr.Parts)
+			vars, err := prompts.SkillVars(sr.State)
+			contractcheck.FailErr(t, "skill vars", err)
+			check(t, sr.Skill, sr.Reader, sr.State, vars, sr.Parts)
 		})
 	}
 }

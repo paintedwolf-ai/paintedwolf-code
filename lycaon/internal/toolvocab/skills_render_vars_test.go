@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -15,7 +16,8 @@ func TestSkillRenderVarsSkipsInvalidToolNames(t *testing.T) {
 	if err != nil {
 		t.Fatalf("offeredReader: %v", err)
 	}
-	vars := prompts.SkillVars(reader)
+	vars, err := prompts.SkillVars(reader)
+	testutil.FailErr(t, "skill vars", err)
 	if _, ok := vars["profile_has_mcp_*"]; ok {
 		t.Fatalf("wildcard family leaked into template facts: %#v", vars)
 	}

@@ -100,7 +100,11 @@ func RenderStockSkills(stock *Stock) ([]SkillRender, error) {
 			if sk.Project || !toolvocab.SkillToolsOffered(sk, held) {
 				continue
 			}
-			parts, err := RenderSkill(sk, prompts.SkillVars(reader))
+			vars, err := prompts.SkillVars(reader)
+			if err != nil {
+				return err
+			}
+			parts, err := RenderSkill(sk, vars)
 			if err != nil {
 				return err
 			}

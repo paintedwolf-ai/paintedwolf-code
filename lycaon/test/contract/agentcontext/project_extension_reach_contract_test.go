@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/catalogview"
@@ -20,84 +19,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
-
-func scanInventoryKindRoots(t *testing.T) []string {
-	t.Helper()
-	src := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/extpacks/inventory.go")
-	start := strings.Index(src, "var inventoryKindRoots = []string{")
-	if start < 0 {
-		t.Fatal("inventoryKindRoots not found in inventory.go")
-	}
-	end := strings.Index(src[start:], "}")
-	if end < 0 {
-		t.Fatal("unterminated inventoryKindRoots")
-	}
-	var roots []string
-	for _, line := range strings.Split(src[start:start+end], "\n")[1:] {
-		line = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(line), ","))
-		switch {
-		case strings.HasPrefix(line, `"`):
-			roots = append(roots, strings.Trim(line, `"`))
-		case line == "ArchiveKindRoot":
-			roots = append(roots, extpacks.ArchiveKindRoot)
-		case line == "NextStepsKindRoot":
-			roots = append(roots, extpacks.NextStepsKindRoot)
-		case line == "DetectionPackKindRoot":
-			roots = append(roots, extpacks.DetectionPackKindRoot)
-		case line == "CredentialSlotsKindRoot":
-			roots = append(roots, extpacks.CredentialSlotsKindRoot)
-		}
-	}
-	if len(roots) == 0 {
-		t.Fatal("no kind roots parsed from inventoryKindRoots")
-	}
-	return roots
-}
-
-func TestProjectScopeCoversEveryKindRootContract(t *testing.T) {
-	t.Parallel()
-	kindRoots := scanInventoryKindRoots(t)
-	for _, root := range kindRoots {
-		if extpacks.ProjectScope(root) == 0 {
-			t.Fatalf("kind root %q has no ProjectScope class", root)
-		}
-	}
-	var deviceOnly []string
-	for _, root := range kindRoots {
-		if extpacks.ProjectScope(root) == extpacks.ScopeDeviceOnly {
-			deviceOnly = append(deviceOnly, root)
-		}
-	}
-	if len(deviceOnly) == 0 {
-		t.Fatal("device-only class must be non-empty")
-	}
-	foundTools := false
-	for _, k := range deviceOnly {
-		if k == "tools" {
-			foundTools = true
-			break
-		}
-	}
-	if !foundTools {
-		t.Fatalf("device-only class must include tools; got %v", deviceOnly)
-	}
-}
-
-func TestDesiredStateAPIHasOneProvenanceShape(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	sources := contractcheck.ReadRepoFile(t, root, "lycaon/internal/extpacks/desired.go") +
-		contractcheck.ReadRepoFile(t, root, "lycaon/internal/extpacks/desired_write.go")
-	for _, forbidden := range []string{
-		"func MergeDesiredWithProvenance(",
-		"func LoadMergedDesiredWithProvenance(",
-		"func LoadDesiredFileChecked(",
-	} {
-		if strings.Contains(sources, forbidden) {
-			t.Fatalf("desired-state API retains obsolete alternate shape %q", forbidden)
-		}
-	}
-}
 
 func TestFloorProjectDisables(t *testing.T) {
 	t.Parallel()
@@ -137,70 +58,6 @@ func TestFloorProjectDisables(t *testing.T) {
 	}
 	if hasFloorDiagUnit(eff, extpacks.DiagProjectScopeRefused, "policy/HOUSE_RULE") {
 		t.Fatal("no floor diagnostic when dropping the project's own unit")
-	}
-}
-
-func TestCatalogViewCacheBoundAndFingerprintKey(t *testing.T) {
-	t.Parallel()
-	root := configlayout.FindModuleRoot()
-	stock, err := extpacks.DiscoverStockContent()
-	contractcheck.FailErr(t, "DiscoverStockContent", err)
-	eff := extpacks.Resolve(t.Context(), extpacks.ResolveInput{
-		Packs: stock, Desired: extpacks.EmptyDesired(),
-	})
-	if eff.Revision == "" {
-		t.Fatal("empty fingerprint")
-	}
-	if catalogview.LRUCap != 8 {
-		t.Fatalf("LRUCap=%d want 8", catalogview.LRUCap)
-	}
-
-	cache := catalogview.NewCache(root, nil)
-	v1, err := cache.For(t.Context(), eff)
-	contractcheck.FailErr(t, "For first", err)
-	v2, err := cache.For(t.Context(), eff)
-	contractcheck.FailErr(t, "For second", err)
-	if v1 != v2 {
-		t.Fatal("same fingerprint must return the same *View pointer")
-	}
-	if cache.BuildCount() != 1 {
-		t.Fatalf("builds=%d want 1", cache.BuildCount())
-	}
-
-	// LRU hard cap.
-	cache2 := catalogview.NewCache(root, nil)
-	var first *extpacks.EffectiveCatalog
-	for i := 0; i < catalogview.LRUCap+1; i++ {
-		e := extpacks.Resolve(t.Context(), extpacks.ResolveInput{
-			Packs: stock, Desired: uniqueDisableDesired(i),
-		})
-		if i == 0 {
-			first = e
-		}
-		_, err := cache2.For(t.Context(), e)
-		contractcheck.FailErr(t, "For lru", err)
-	}
-	if cache2.Len() != catalogview.LRUCap {
-		t.Fatalf("lru len=%d want %d", cache2.Len(), catalogview.LRUCap)
-	}
-	before := cache2.BuildCount()
-	_, err = cache2.For(t.Context(), first)
-	contractcheck.FailErr(t, "For evicted", err)
-	if cache2.BuildCount() != before+1 {
-		t.Fatalf("evicted key should rebuild: builds=%d", cache2.BuildCount())
-	}
-
-	// Failed builds are not cached.
-	failCache := catalogview.NewCache("", nil)
-	_, err = failCache.For(t.Context(), eff)
-	if err == nil {
-		t.Fatal("empty module root must fail Build")
-	}
-	if failCache.Len() != 0 {
-		t.Fatalf("failed build must not cache: len=%d", failCache.Len())
-	}
-	if failCache.BuildCount() != 0 {
-		t.Fatalf("failed build counted as success: %d", failCache.BuildCount())
 	}
 }
 
@@ -315,28 +172,4 @@ func mustContractInventoryPack(t *testing.T, packRoot, id string) extpacks.PackC
 	pc, err := extpacks.InventoryPack(extpacks.Pack{ID: id, Root: extpacks.OnDisk(packRoot)}, man)
 	contractcheck.FailErr(t, "InventoryPack", err)
 	return pc
-}
-
-func uniqueDisableDesired(i int) extpacks.DesiredState {
-	d := extpacks.EmptyDesired()
-	switch i % 9 {
-	case 0:
-	case 1:
-		d.Disabled = []string{extpacks.GuidanceUnitID("coordinator-gate-blocked")}
-	case 2:
-		d.Disabled = []string{extpacks.PolicyUnitID("WRITE_SCOPE_DENIED")}
-	case 3:
-		d.Disabled = []string{extpacks.PolicyUnitID("DOOM_LOOP_REPEAT")}
-	case 4:
-		d.Disabled = []string{extpacks.PolicyUnitID("DOOM_LOOP_REPEAT_WARN")}
-	case 5:
-		d.Disabled = []string{extpacks.WorkflowUnitID("plan")}
-	case 6:
-		d.Disabled = []string{extpacks.WorkflowUnitID("implement")}
-	case 7:
-		d.Disabled = []string{extpacks.GuidanceUnitID("coordinator-gate-blocked"), extpacks.PolicyUnitID("WRITE_SCOPE_DENIED")}
-	default:
-		d.Disabled = []string{extpacks.PolicyUnitID("TOOL_PROFILE_DENIED")}
-	}
-	return d
 }

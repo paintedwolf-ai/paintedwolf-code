@@ -254,6 +254,7 @@ func TestSearchRefusals(t *testing.T) {
 	}{
 		{"unsupported option", []string{"grep", "--not-a-version-1-option", "x"}, "COMMAND_OPTION_UNSUPPORTED"},
 		{"unsupported PCRE", []string{"grep", "-P", "(?R)", "input"}, "GREP_REGEX_UNSUPPORTED"},
+		{"rg unsupported PCRE", []string{"rg", "-P", "(?R)", "input"}, "GREP_REGEX_UNSUPPORTED"},
 		{"variable lookbehind", []string{"grep", "-P", "(?<=a+)b", "input"}, "GREP_REGEX_UNSUPPORTED"},
 		{"pattern budget", []string{"grep", string(make([]byte, 600)), "input"}, "GREP_MATCH_BUDGET"},
 		{"BSD decompression", []string{"grep", "-J", "a", "input"}, "COMMAND_OPTION_UNSUPPORTED"},
@@ -282,6 +283,7 @@ func TestSearchUtilityErrors(t *testing.T) {
 		{"invalid ERE", []string{"grep", "-E", "(", "input"}, "grep: Unmatched ( or \\(\n"},
 		{"invalid BRE", []string{"grep", `\(`, "input"}, "grep: Unmatched ( or \\(\n"},
 		{"RE2 lacks references", []string{"rg", `(a)\1`, "input"}, ""},
+		{"rg unclosed class", []string{"rg", "[unclosed", "input"}, ""},
 		{"conflicting matchers", []string{"grep", "-E", "-F", "x", "input"}, "grep: one matcher; conflicting matchers specified\n"},
 		{"egrep with fixed", []string{"egrep", "-F", "x", "input"}, "egrep: one matcher; conflicting matchers specified\n"},
 		{"missing pattern", []string{"grep"}, "grep: a PATTERN operand or -e PATTERN\n"},

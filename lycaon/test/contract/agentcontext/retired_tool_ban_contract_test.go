@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,30 +11,20 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/test/contract/laws/promptrender"
-
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/laws/promptrender"
 	"gopkg.in/yaml.v3"
 )
-
-// fullyRetiredTools are tool names no longer registered anywhere. UnreachableNames
-// only sees registered tools and operations, so retired names need a direct check.
-var fullyRetiredTools = []string{
-	"git_read", "git_write", "web_fetch", "archive_extract", "archive_create", "file_info", "jq_query",
-	"git-read", "git-write", "web-fetch", "archive-extract", "archive-create", "file-info", "jq-query",
-	"extend_worker_budget", "decline_worker_budget", "request_budget", "request_budget_extension",
-	"extend-worker-budget", "decline-worker-budget", "request-budget", "request-budget-extension",
-	"delegate_init", "delegate_decompose", "delegate_dispatch", "delegate_status", "parse_decomposition", "parse_delegation_plan",
-	"delegate-init", "delegate-decompose", "delegate-dispatch", "delegate-status", "parse-decomposition", "parse-delegation-plan",
-}
 
 // backtickedNameMention matches a backtick-opened name in a call-like shape:
 // closed span, JSON-call parenthesis, or a following flag. A longer name that
@@ -46,8 +37,6 @@ func backtickedNameMention(names []string) *regexp.Regexp {
 	}
 	return regexp.MustCompile("`(?:" + strings.Join(quoted, "|") + ")(?:`|\\(|\\s|$)")
 }
-
-var retiredToolMention = backtickedNameMention(fullyRetiredTools)
 
 func checkBannedMention(t *testing.T, mention *regexp.Regexp, label, corpus string) {
 	t.Helper()
@@ -68,6 +57,7 @@ func checkBannedMention(t *testing.T, mention *regexp.Regexp, label, corpus stri
 // matrix — coordinator surfaces, worker personas, and kicks — and fails when
 // rendered copy presents a fully retired tool name as a call.
 func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
+	retired := retiredToolMention(t)
 	root := contractcheck.RepoRoot(t)
 
 	for _, rootCount := range []int{0, 1, 2} {
@@ -78,7 +68,7 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 				continue
 			}
 			t.Run(fmt.Sprintf("coordinator/%s/%d-roots", id, rootCount), func(t *testing.T) {
-				checkBannedMention(t, retiredToolMention,
+				checkBannedMention(t, retired,
 					fmt.Sprintf("coordinator surface %s at %d roots", id, rootCount),
 					renderCoordinatorTripartiteAtRootCount(t, root, rootCount, id))
 			})
@@ -98,7 +88,7 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 			contractcheck.FailErr(t, "DeclaredReader "+agent.ID, err)
 			corpus, err := prompts.RenderPersona(context.Background(), personaEngine, agent.ID, reader, nil)
 			contractcheck.FailErr(t, "render persona", err)
-			checkBannedMention(t, retiredToolMention, "persona "+agent.ID, corpus)
+			checkBannedMention(t, retired, "persona "+agent.ID, corpus)
 		})
 	}
 
@@ -135,7 +125,7 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 					contractcheck.FailErr(t, "prompts.Vars", err)
 					corpus, err := kickEngine.RenderKick(context.Background(), binding.Render, data)
 					contractcheck.FailErr(t, "render kick", err)
-					checkBannedMention(t, retiredToolMention, fmt.Sprintf("kick %s for %s", binding.Render, profile.ID), corpus)
+					checkBannedMention(t, retired, fmt.Sprintf("kick %s for %s", binding.Render, profile.ID), corpus)
 				})
 			}
 			continue
@@ -150,7 +140,7 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 				prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, id, 1))
 				corpus, err := kickEngine.RenderKick(context.Background(), binding.Render, data)
 				contractcheck.FailErr(t, "render kick", err)
-				checkBannedMention(t, retiredToolMention, fmt.Sprintf("kick %s on %s", binding.Render, id), corpus)
+				checkBannedMention(t, retired, fmt.Sprintf("kick %s on %s", binding.Render, id), corpus)
 			})
 		}
 	}
@@ -159,6 +149,7 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 // Phase guidance opens on the surface its workflow declares, so the retired
 // ban checks each phase kick there too.
 func TestRenderedPhaseKicksNeverNameFullyRetiredTools(t *testing.T) {
+	retired := retiredToolMention(t)
 	root := contractcheck.RepoRoot(t)
 	files, err := filepath.Glob(filepath.Join(root, "lycaon/config/packs/painted-wolf/*/workflows/*/workflow.yaml"))
 	contractcheck.FailErr(t, "list workflows", err)
@@ -188,23 +179,65 @@ func TestRenderedPhaseKicksNeverNameFullyRetiredTools(t *testing.T) {
 				prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, id, 1))
 				corpus, err := kickEngine.RenderKick(context.Background(), inject.Render, data)
 				contractcheck.FailErr(t, "render kick", err)
-				checkBannedMention(t, retiredToolMention, fmt.Sprintf("phase kick %s on %s", inject.Render, id), corpus)
+				checkBannedMention(t, retired, fmt.Sprintf("phase kick %s on %s", inject.Render, id), corpus)
 			})
 		}
 	}
 }
 
 func TestRenderedSkillsAndHintsNeverNameFullyRetiredTools(t *testing.T) {
-	forEachStockSkillRender(t, func(t *testing.T, _ skills.Skill, reader string, _ prompts.Reader, _ map[string]any, parts []promptrender.Text) {
+	retired := retiredToolMention(t)
+	forEachStockSkillRender(t, func(t *testing.T, _ skills.Skill, reader string, _ prompts.Reader, _ map[string]any, parts []renderedText) {
 		for _, part := range parts {
-			checkBannedMention(t, retiredToolMention, fmt.Sprintf("skill %s for %s", part.Label, reader), part.Text)
+			checkBannedMention(t, retired, fmt.Sprintf("skill %s for %s", part.label, reader), part.text)
 		}
 	})
 	hints, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load hint config", err)
 	for code, entry := range hints.HintCodes {
 		for _, text := range []string{entry.What, entry.Cause, entry.Why, entry.Fix, entry.Instead} {
-			checkBannedMention(t, retiredToolMention, "hint "+code, text)
+			checkBannedMention(t, retired, "hint "+code, text)
 		}
 	}
+}
+
+// fullyRetiredTools derives the retired public tool names from the release
+// retirement record that no shipped tool, operation or command program still
+// answers to, in both spellings. UnreachableNames sees only registered names,
+// so these need a direct check.
+func fullyRetiredTools(t *testing.T) []string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(contractcheck.RepoRoot(t), "schemas", "agent-public-retirements.json"))
+	contractcheck.FailErr(t, "read retirement record", err)
+	var record struct {
+		Vocabularies struct {
+			Tools map[string]json.RawMessage `json:"tools"`
+		} `json:"vocabularies"`
+	}
+	contractcheck.FailErr(t, "decode retirement record", json.Unmarshal(raw, &record))
+	language, err := toolcontract.ReadOnlyLanguageV1()
+	contractcheck.FailErr(t, "load command language", err)
+	programs := map[string]bool{}
+	for _, name := range language.Language.RequiredCommands {
+		programs[name] = true
+	}
+	catalog, _ := promptNameCatalog(t)
+	var out []string
+	for name := range record.Vocabularies.Tools {
+		hyphen := strings.ReplaceAll(name, "_", "-")
+		if len(toolvocab.ToolsIn(catalog, "`"+name+"`")) > 0 || programs[name] || programs[hyphen] {
+			continue
+		}
+		out = append(out, name, hyphen)
+	}
+	if len(out) == 0 {
+		t.Fatal("the retirement record yields no fully retired tool")
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+func retiredToolMention(t *testing.T) *regexp.Regexp {
+	t.Helper()
+	return backtickedNameMention(fullyRetiredTools(t))
 }

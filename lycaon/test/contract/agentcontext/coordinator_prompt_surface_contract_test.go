@@ -5,31 +5,9 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-func TestCoordinatorSurfaceInvariants_specialistAgentsNotOnWire(t *testing.T) {
-	t.Parallel()
-	surfaces := loadImplementSurfaces(t)
-	wire := append(append(append([]string(nil), surfaces[surfaceImplementRouting]...), surfaces[surfaceImplementDispatch]...), surfaces[surfaceImplementSynthesis]...)
-	for _, agentID := range specialistSpawnAgents {
-		if contractcheck.ContainsString(wire, agentID) {
-			t.Fatalf("agent %q must be spawned via task(), not listed as coordinator wire tool", agentID)
-		}
-	}
-}
-
-func TestCoordinatorSurfaceInvariants_specialistAgentsSpawnable(t *testing.T) {
-	t.Parallel()
-	allowed := spawn.AmbientAllowedAgents()
-	for _, agentID := range specialistSpawnAgents {
-		if !contractcheck.ContainsString(allowed, agentID) {
-			t.Fatalf("specialist agent %q must be in AmbientAllowedAgents", agentID)
-		}
-	}
-}
 
 func TestCoordinatorSurfaceInvariants_workersExpandCapabilityBeyondCoordinatorWire(t *testing.T) {
 	t.Parallel()

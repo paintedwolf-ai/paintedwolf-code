@@ -24,10 +24,6 @@ var readerFacts = []laws.Rule{{
 	// else renders a template without that check.
 	Name:    "prompt-vars-through-vars",
 	Anchors: []laws.Anchor{laws.Func("internal/prompts", "Vars"), laws.Func("internal/prompts", "buildReaderFacts"), laws.Decl("internal/prompts", "Reader.Facts"), laws.Decl("internal/prompts", "ReaderFacts.Map")},
-	Exempt: []laws.Exemption{
-		{Key: "internal/prompts/command_guidance_debug.go:BuildCommandGuidanceSnapshot", Reason: "the debug snapshot renders raw facts; TS11 #2435 moves it to Vars"},
-		{Key: "internal/prompts/skill_template_vars.go:SkillVars", Reason: "falls back to raw facts when Vars fails; TS11 #2435 returns the error instead"},
-	},
 	Check: func(r *laws.Run) {
 		for _, pkg := range r.TypedPackages(laws.Source...) {
 			for _, f := range pkg.Files {

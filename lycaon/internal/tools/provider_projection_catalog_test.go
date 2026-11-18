@@ -1,13 +1,18 @@
 package tools
 
 import (
+	"maps"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
+// Every catalog tool projects with its trimmed description, its root
+// properties and locally declared required fields.
 func TestProviderProjectionCatalogRequiredFieldsAreLocal(t *testing.T) {
 	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "load catalog", err)
@@ -17,11 +22,22 @@ func TestProviderProjectionCatalogRequiredFieldsAreLocal(t *testing.T) {
 			if !ok {
 				t.Fatal("catalog metadata missing")
 			}
-			projected := ProjectProviderToolMeta(ToolMeta{Name: name, ArgsSchema: meta.ArgsSchema})
+			projected := ProjectProviderToolMeta(ToolMeta{Name: name, Description: meta.Description, ArgsSchema: meta.ArgsSchema})
 			testutil.FailErr(t, "provider root", ValidateFunctionParametersRoot(projected.ArgsSchema))
 			assertLocalRequired(t, projected.ArgsSchema)
+			if want := strings.TrimSpace(meta.Description); projected.Description != want {
+				t.Fatalf("description = %q, want %q", projected.Description, want)
+			}
+			if got, want := propertyNames(projected.ArgsSchema), propertyNames(meta.ArgsSchema); !slices.Equal(got, want) {
+				t.Fatalf("projected properties = %v, want %v", got, want)
+			}
 		})
 	}
+}
+
+func propertyNames(schema map[string]any) []string {
+	props, _ := schema["properties"].(map[string]any)
+	return slices.Sorted(maps.Keys(props))
 }
 
 func assertLocalRequired(t *testing.T, value any) {

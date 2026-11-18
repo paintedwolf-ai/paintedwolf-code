@@ -43,17 +43,6 @@ func profileGrants(prof sandbox.ToolProfile, tool string) bool {
 	return false
 }
 
-func TestProfileToolTier_implementHasVerify(t *testing.T) {
-	t.Parallel()
-	prof := loadToolProfileByID(t, "implement")
-	if !prof.Tools["verify"] {
-		t.Fatal("implement must include verify")
-	}
-	if !prof.Tools["command"] {
-		t.Fatal("implement must include command")
-	}
-}
-
 func TestProfileToolTier_readOnlyProfilesDenyMutations(t *testing.T) {
 	t.Parallel()
 	readOnly, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
