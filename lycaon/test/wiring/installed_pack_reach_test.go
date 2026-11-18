@@ -118,7 +118,16 @@ func TestInstalledPacksReachEngines(t *testing.T) {
 		// The workflow above binds this topology. An unreachable one fails the run
 		// at start with topology_missing rather than at load, so the resolved path
 		// itself is asserted.
-		path := filepath.ToSlash(orchestration.TopologyPathForID(cat, "example-triage-sweep").String())
+		spec, err := orchestration.TopologySpecForID(cat, "example-triage-sweep")
+		testutil.FailErr(t, "load topology from installed pack", err)
+		if spec.ID != "example-triage-sweep" {
+			t.Fatalf("topology id = %q", spec.ID)
+		}
+		source, ok := cat.UnitPath(extpacks.TopologyUnitID(spec.ID))
+		if !ok {
+			t.Fatal("missing topology source in effective catalog")
+		}
+		path := filepath.ToSlash(source.String())
 		if !strings.Contains(path, "example-packs/team-flow") {
 			t.Fatalf("topology resolved to %q, want the installed pack's own file", path)
 		}

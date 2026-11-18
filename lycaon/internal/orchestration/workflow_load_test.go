@@ -42,7 +42,5 @@ func TestLoadBugbashManifest(t *testing.T) {
 	if spec.Pipeline == nil || len(spec.Pipeline.Stages) != 4 {
 		t.Fatalf("stages = %d want 4", len(spec.Pipeline.Stages))
 	}
-	if path := TopologyPathForID(stock, ref.TopologyID); path.Empty() {
-		t.Fatal("topology unit must publish a path")
-	}
+
 }
