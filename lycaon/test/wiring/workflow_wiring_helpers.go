@@ -215,7 +215,7 @@ func settleScanObligationAndAdvance(t *testing.T, h *Harness, ctx context.Contex
 		t.Fatalf("phase = %q want ingest", run.CurrentPhase)
 	}
 	store := scan.NewSQLStore(h.DB)
-	scans, err := store.ListByWorkflowRunID(ctx, run.ID)
+	scans, err := store.Reads.ListByWorkflowRunID(ctx, run.ID)
 	testutil.FailErr(t, "ListByWorkflowRunID", err)
 	if len(scans) == 0 {
 		t.Fatal("scan obligation did not enqueue work")
@@ -226,13 +226,13 @@ func settleScanObligationAndAdvance(t *testing.T, h *Harness, ctx context.Contex
 			api.CodeScanStatusCanceled, api.CodeScanStatusSuperseded:
 			continue
 		case api.CodeScanStatusPending:
-			if _, err := store.FinalizePendingFailure(ctx, scans[i].ID, "SCAN_WIRING_SETTLE", "wiring obligation settle"); err != nil {
+			if _, err := store.Runs.FinalizePendingFailure(ctx, scans[i].ID, "SCAN_WIRING_SETTLE", "wiring obligation settle"); err != nil {
 				testutil.FailErr(t, "FinalizePendingFailure "+scans[i].ID, err)
 			}
 			continue
 		case api.CodeScanStatusRunning:
 		}
-		if _, err := store.FinalizeFailure(ctx, &scans[i], api.CodeScanStatusFailed, "SCAN_WIRING_SETTLE", "wiring obligation settle"); err != nil {
+		if _, err := store.Runs.FinalizeFailure(ctx, &scans[i], api.CodeScanStatusFailed, "SCAN_WIRING_SETTLE", "wiring obligation settle"); err != nil {
 			testutil.FailErr(t, "FinalizeFailure "+scans[i].ID, err)
 		}
 	}

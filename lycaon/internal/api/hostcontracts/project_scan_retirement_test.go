@@ -33,7 +33,7 @@ func TestProjectRemovalRetiresScansOnlyAfterLastAttachment(t *testing.T) {
 			second := contractfixture.CreateProjectForTest(t, srv, root)
 			contractfixture.DrainBackground(t, srv)
 			canonical := first.Roots[0].Path
-			testutil.FailErr(t, "seed queued scan demand", store.UpsertSeries(t.Context(), scan.SeriesRow{
+			testutil.FailErr(t, "seed queued scan demand", store.Series.UpsertSeries(t.Context(), scan.SeriesRow{
 				CanonicalPath: canonical, ScannerID: "test-scanner", DesiredPaths: []string{"main.go"},
 				DesiredTrigger: wire.ScanTriggerWriteBurst, DueAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
 			}))
@@ -58,13 +58,13 @@ func TestProjectRemovalRetiresScansOnlyAfterLastAttachment(t *testing.T) {
 				contractfixture.DrainBackground(t, srv)
 			}
 			remove(first)
-			rows, err := store.ListSeriesForPath(t.Context(), canonical)
+			rows, err := store.Series.ListSeriesForPath(t.Context(), canonical)
 			testutil.FailErr(t, "shared scan demand", err)
 			if len(rows) != 1 {
 				t.Fatalf("shared folder lost scan demand: %d series", len(rows))
 			}
 			remove(second)
-			rows, err = store.ListSeriesForPath(t.Context(), canonical)
+			rows, err = store.Series.ListSeriesForPath(t.Context(), canonical)
 			testutil.FailErr(t, "unattached scan demand", err)
 			if len(rows) != 0 {
 				t.Fatalf("unattached folder retained %d scan series", len(rows))

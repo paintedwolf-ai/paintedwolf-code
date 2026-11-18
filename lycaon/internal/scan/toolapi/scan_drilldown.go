@@ -59,7 +59,7 @@ func runScanList(ctx context.Context, args map[string]any, tctx tools.ToolContex
 	return marshalDrilldownJSON(NewListScansResponse(ctx, scans))
 }
 
-func runScanSummary(ctx context.Context, args map[string]any, tctx tools.ToolContext, coord scanbase.ScanCoordinator, rejectFmt *guidance.StaticRejectFormatter) (string, error) {
+func (v ResultViews) runScanSummary(ctx context.Context, args map[string]any, tctx tools.ToolContext, coord scanbase.ScanCoordinator, rejectFmt *guidance.StaticRejectFormatter) (string, error) {
 	if err := rejectSuppliedProjectDir(args, tctx.ActiveRootPath()); err != nil {
 		return "", err
 	}
@@ -74,13 +74,13 @@ func runScanSummary(ctx context.Context, args map[string]any, tctx tools.ToolCon
 	case passID != "" && len(scanIDs) > 0:
 		return "", fmt.Errorf("give scan_ids or pass_id, not both")
 	case passID != "":
-		captureFullPassSubject(ctx, tctx, coord, passID)
-		return SummarizeFullPass(ctx, coord, passID, view, rejectFmt)
+		v.captureFullPassSubject(ctx, tctx, passID)
+		return v.SummarizeFullPass(ctx, passID, view, rejectFmt)
 	case len(scanIDs) == 0:
 		return "", fmt.Errorf("scan_ids or pass_id is required")
 	}
 	if len(scanIDs) > 1 {
-		return scanPackReceipt(ctx, coord, scanIDs, ReceiptOptions{full: view == "full"})
+		return v.scanPackReceipt(ctx, scanIDs, ReceiptOptions{full: view == "full"})
 	}
 	scanID := scanIDs[0]
 	read := coord.Summary
@@ -120,12 +120,11 @@ func stateFindings(tctx tools.ToolContext, scan api.CodeScan) {
 }
 
 // SummarizeFullPass reads a full pass by id, including members that have not started.
-func SummarizeFullPass(ctx context.Context, coord scanbase.ScanCoordinator, passID, view string, rejectFmt *guidance.StaticRejectFormatter) (string, error) {
-	store := scanbase.StoreFromCoordinator(coord)
-	if store == nil {
+func (v ResultViews) SummarizeFullPass(ctx context.Context, passID, view string, rejectFmt *guidance.StaticRejectFormatter) (string, error) {
+	if v.FullPasses == nil {
 		return "", fmt.Errorf("scan coordinator not configured")
 	}
-	pass, err := store.FullPass(ctx, passID)
+	pass, err := v.FullPasses.FullPass(ctx, passID)
 	if err != nil {
 		return "", err
 	}
@@ -135,10 +134,10 @@ func SummarizeFullPass(ctx context.Context, coord scanbase.ScanCoordinator, pass
 			Data: map[string]any{"pass_id": passID},
 		}, rejectFmt)
 	}
-	return FullPassReceipt(ctx, coord, *pass, ReceiptOptions{full: view == "full"})
+	return v.FullPassReceipt(ctx, *pass, ReceiptOptions{full: view == "full"})
 }
 
-func runScanQuery(ctx context.Context, args map[string]any, tctx tools.ToolContext, coord scanbase.ScanCoordinator, rejectFmt *guidance.StaticRejectFormatter) (string, error) {
+func (v ResultViews) runScanQuery(ctx context.Context, args map[string]any, tctx tools.ToolContext, coord scanbase.ScanCoordinator, rejectFmt *guidance.StaticRejectFormatter) (string, error) {
 	if err := rejectSuppliedProjectDir(args, tctx.ActiveRootPath()); err != nil {
 		return "", err
 	}
@@ -197,7 +196,7 @@ func runScanQuery(ctx context.Context, args map[string]any, tctx tools.ToolConte
 	var resp *api.ScanQueryResponse
 	var err error
 	if len(scanIDs) > 1 {
-		resp, err = queryScanPack(ctx, scanbase.StoreFromCoordinator(coord), scanIDs, req)
+		resp, err = v.queryScanPack(ctx, scanIDs, req)
 	} else {
 		resp, err = coord.Query(ctx, req)
 	}
@@ -255,12 +254,12 @@ func queryFindingGroups(ctx context.Context, coord scanbase.ScanCoordinator, ids
 	}{tooloutput.PageContract{Collection: "groups", Revision: revision}, revision, ids, groups[offset:end], len(groups), offset, next, next != nil})
 }
 
-func queryScanPack(ctx context.Context, store *scanbase.SQLStore, scanIDs []string, req scanbase.QueryRequest) (*api.ScanQueryResponse, error) {
-	records, err := loadScanPackRecords(ctx, store, scanIDs)
+func (v ResultViews) queryScanPack(ctx context.Context, scanIDs []string, req scanbase.QueryRequest) (*api.ScanQueryResponse, error) {
+	records, err := loadScanPackRecords(ctx, v.Reads, scanIDs)
 	if err != nil {
 		return nil, err
 	}
-	findings, guidance, err := aggregateScanPack(ctx, store, records)
+	findings, guidance, err := aggregateScanPack(ctx, v.Reads, records)
 	if err != nil {
 		return nil, err
 	}

@@ -55,8 +55,14 @@ type ReceiptOptions struct {
 	waitTimedOut bool
 }
 
-func scanPackReceipt(ctx context.Context, coord scanbase.ScanCoordinator, scanIDs []string, options ReceiptOptions) (string, error) {
-	out, err := scanPackResult(ctx, coord, scanIDs, options)
+// ResultViews reads scan and full pass results for tool responses.
+type ResultViews struct {
+	Reads      *scanbase.ReadStore
+	FullPasses *scanbase.FullPassStore
+}
+
+func (v ResultViews) scanPackReceipt(ctx context.Context, scanIDs []string, options ReceiptOptions) (string, error) {
+	out, err := v.scanPackResult(ctx, scanIDs, options)
 	if err != nil {
 		return "", err
 	}
@@ -64,10 +70,10 @@ func scanPackReceipt(ctx context.Context, coord scanbase.ScanCoordinator, scanID
 }
 
 // Include unstarted members; aggregate results only after every member finishes.
-func FullPassReceipt(ctx context.Context, coord scanbase.ScanCoordinator, pass scanbase.FullPass, options ReceiptOptions) (string, error) {
+func (v ResultViews) FullPassReceipt(ctx context.Context, pass scanbase.FullPass, options ReceiptOptions) (string, error) {
 	out := ScanPackToolResult{ScanIDs: pass.ScanIDs(), PerScan: []ScanPackPerScan{}}
 	if len(out.ScanIDs) > 0 {
-		started, err := scanPackResult(ctx, coord, out.ScanIDs, options)
+		started, err := v.scanPackResult(ctx, out.ScanIDs, options)
 		if err != nil {
 			return "", err
 		}
@@ -111,15 +117,14 @@ func FullPassReceipt(ctx context.Context, coord scanbase.ScanCoordinator, pass s
 }
 
 // waitForFullPass blocks until the pass finishes or ctx ends and returns its latest state.
-func waitForFullPass(ctx context.Context, coord scanbase.ScanCoordinator, passID string) (scanbase.FullPass, error) {
-	store := scanbase.StoreFromCoordinator(coord)
-	if store == nil {
+func (v ResultViews) waitForFullPass(ctx context.Context, passID string) (scanbase.FullPass, error) {
+	if v.FullPasses == nil {
 		return scanbase.FullPass{}, fmt.Errorf("scan coordinator not configured")
 	}
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		pass, err := store.FullPass(ctx, passID)
+		pass, err := v.FullPasses.FullPass(ctx, passID)
 		if err != nil {
 			return scanbase.FullPass{}, err
 		}
@@ -137,9 +142,8 @@ func waitForFullPass(ctx context.Context, coord scanbase.ScanCoordinator, passID
 	}
 }
 
-func scanPackResult(ctx context.Context, coord scanbase.ScanCoordinator, scanIDs []string, options ReceiptOptions) (ScanPackToolResult, error) {
-	store := scanbase.StoreFromCoordinator(coord)
-	if store == nil {
+func (v ResultViews) scanPackResult(ctx context.Context, scanIDs []string, options ReceiptOptions) (ScanPackToolResult, error) {
+	if v.Reads == nil {
 		return ScanPackToolResult{}, fmt.Errorf("scan coordinator not configured")
 	}
 	scanIDs = normalizeScanIDs(scanIDs)
@@ -155,7 +159,7 @@ func scanPackResult(ctx context.Context, coord scanbase.ScanCoordinator, scanIDs
 		records       []*api.CodeScan
 	)
 	for _, id := range scanIDs {
-		rec, err := store.Get(ctx, id)
+		rec, err := v.Reads.Get(ctx, id)
 		if err != nil {
 			return ScanPackToolResult{}, err
 		}
@@ -209,7 +213,7 @@ func scanPackResult(ctx context.Context, coord scanbase.ScanCoordinator, scanIDs
 		Error:         errMsg,
 	}
 	if !anyRunning && !anyFailed && len(records) == len(scanIDs) {
-		merged, guidance, err := aggregateScanPack(ctx, store, records)
+		merged, guidance, err := aggregateScanPack(ctx, v.Reads, records)
 		if err != nil {
 			return ScanPackToolResult{}, err
 		}
@@ -260,9 +264,8 @@ type scanPackWaitResult struct {
 	err    error
 }
 
-func waitForScanPack(ctx context.Context, coord scanbase.ScanCoordinator, scanIDs []string) ([]string, error) {
-	store := scanbase.StoreFromCoordinator(coord)
-	if store == nil {
+func (v ResultViews) waitForScanPack(ctx context.Context, scanIDs []string) ([]string, error) {
+	if v.Reads == nil {
 		return nil, fmt.Errorf("scan coordinator not configured")
 	}
 	ids := normalizeScanIDs(scanIDs)
@@ -274,7 +277,7 @@ func waitForScanPack(ctx context.Context, coord scanbase.ScanCoordinator, scanID
 	results := make(chan scanPackWaitResult, len(ids))
 	for index, id := range ids {
 		go func() {
-			record, err := scanbase.WaitForScanID(waitCtx, store, id, 250*time.Millisecond)
+			record, err := scanbase.WaitForScanID(waitCtx, v.Reads, id, 250*time.Millisecond)
 			results <- scanPackWaitResult{index: index, record: record, err: err}
 		}()
 	}
@@ -292,7 +295,7 @@ func waitForScanPack(ctx context.Context, coord scanbase.ScanCoordinator, scanID
 	return normalizeScanIDs(ids), firstErr
 }
 
-func aggregateScanPack(ctx context.Context, store *scanbase.SQLStore, records []*api.CodeScan) ([]api.SecurityFinding, []api.ScanGuidanceSummary, error) {
+func aggregateScanPack(ctx context.Context, store *scanbase.ReadStore, records []*api.CodeScan) ([]api.SecurityFinding, []api.ScanGuidanceSummary, error) {
 	if store == nil || len(records) == 0 {
 		return nil, nil, nil
 	}
@@ -352,7 +355,7 @@ func previewPackGuidance(rows []api.ScanGuidanceSummary, limit int) []api.ScanGu
 	return rows[:limit]
 }
 
-func loadScanPackRecords(ctx context.Context, store *scanbase.SQLStore, scanIDs []string) ([]*api.CodeScan, error) {
+func loadScanPackRecords(ctx context.Context, store *scanbase.ReadStore, scanIDs []string) ([]*api.CodeScan, error) {
 	if store == nil {
 		return nil, fmt.Errorf("scan store not configured")
 	}

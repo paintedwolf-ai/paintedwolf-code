@@ -31,7 +31,7 @@ func TestCadenceRunPreparesIndependentRootsAndDrainsOnCancel(t *testing.T) {
 	for _, root := range roots {
 		canonical, err := scanbase.CanonicalPath(root)
 		testutil.FailErr(t, "canonical root", err)
-		rows, err := store.ListSeriesForPath(t.Context(), canonical)
+		rows, err := store.Series.ListSeriesForPath(t.Context(), canonical)
 		testutil.FailErr(t, "read claims after shutdown", err)
 		if len(rows) == 0 {
 			t.Fatal("fixture did not create series")

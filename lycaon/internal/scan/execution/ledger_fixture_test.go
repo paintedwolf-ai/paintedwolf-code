@@ -21,7 +21,7 @@ func ledgerRoot(t *testing.T) string {
 func ledgerFixture(t *testing.T, root, scanner, execution string) *scanbase.SQLStore {
 	t.Helper()
 	store := authorityTestStore(t)
-	testutil.FailErr(t, "upsert series", store.UpsertSeries(t.Context(), scanbase.SeriesRow{
+	testutil.FailErr(t, "upsert series", store.Series.UpsertSeries(t.Context(), scanbase.SeriesRow{
 		CanonicalPath:                   root,
 		ScannerID:                       scanner,
 		Categories:                      []api.ScanCategory{api.ScanCategorySAST},
@@ -35,7 +35,7 @@ func ledgerFixture(t *testing.T, root, scanner, execution string) *scanbase.SQLS
 func ledgerScan(t *testing.T, store *scanbase.SQLStore, id, root, scanner string, target api.ScanTargetKind, coverage api.ScanCoverageStatus, findings ...api.SecurityFinding) api.CodeScan {
 	t.Helper()
 	job := authorityScan(id, "assessment-"+id, root, "snapshot-"+id, scanner, target, nil)
-	testutil.FailErr(t, "insert scan", store.Insert(t.Context(), job, []string{"a.go"}, ""))
+	testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), job, []string{"a.go"}, ""))
 	completed := completeNextScan(t, store, findings...)
 	completed.CoverageStatus = coverage
 	return completed
@@ -43,7 +43,7 @@ func ledgerScan(t *testing.T, store *scanbase.SQLStore, id, root, scanner string
 
 func ledgerStates(t *testing.T, store *scanbase.SQLStore, root string) map[string]api.FindingLedgerState {
 	t.Helper()
-	page, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
+	page, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: 100})
 	testutil.FailErr(t, "read ledger", err)
 	out := make(map[string]api.FindingLedgerState, len(page.Entries))
 	for _, entry := range page.Entries {

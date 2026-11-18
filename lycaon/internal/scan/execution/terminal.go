@@ -19,12 +19,12 @@ import (
 )
 
 func (r *Runner) cancel(ctx context.Context, job *api.CodeScan, reason string) {
-	if r == nil || r.Store == nil || job == nil {
+	if r == nil || r.runs == nil || job == nil {
 		return
 	}
 	ctx, stop := terminalCallbackContext(ctx)
 	defer stop()
-	won, err := r.Store.FinalizeFailure(ctx, job, api.CodeScanStatusCanceled, "SCAN_CANCELED", reason)
+	won, err := r.runs.FinalizeFailure(ctx, job, api.CodeScanStatusCanceled, "SCAN_CANCELED", reason)
 	if err != nil {
 		slog.ErrorContext(ctx, "record scan cancellation", "scan_id", job.ID, "error", err)
 		return
@@ -42,7 +42,7 @@ func (r *Runner) cancel(ctx context.Context, job *api.CodeScan, reason string) {
 }
 
 func (r *Runner) markCompleteWithAuthority(ctx context.Context, job *api.CodeScan, result *scanoutput.Result, findings []api.SecurityFinding, warnings []api.ScanWarning, coverage api.ScanCoverageStatus) (bool, error) {
-	if r == nil || r.Store == nil {
+	if r == nil || r.runs == nil {
 		return false, errors.New("scan runner: store required")
 	}
 	spillCap := r.ResultSpillBytes
@@ -51,7 +51,7 @@ func (r *Runner) markCompleteWithAuthority(ctx context.Context, job *api.CodeSca
 		if err != nil {
 			return false, err
 		}
-		return r.Store.FinalizeCompleteJSON(ctx, job, raw, findings, warnings, coverage)
+		return r.runs.FinalizeCompleteJSON(ctx, job, raw, findings, warnings, coverage)
 	}
 	evidenceRoot := r.hostDataDir(ctx, job)
 	if evidenceRoot == "" {
@@ -59,7 +59,7 @@ func (r *Runner) markCompleteWithAuthority(ctx context.Context, job *api.CodeSca
 		if err != nil {
 			return false, err
 		}
-		return r.Store.FinalizeCompleteJSON(ctx, job, raw, findings, warnings, coverage)
+		return r.runs.FinalizeCompleteJSON(ctx, job, raw, findings, warnings, coverage)
 	}
 	_ = os.MkdirAll(evidenceRoot, 0o700)
 	spillDir := filepath.Join(evidenceRoot, scanbase.ScanResultSpillDir)
@@ -67,7 +67,7 @@ func (r *Runner) markCompleteWithAuthority(ctx context.Context, job *api.CodeSca
 	if err != nil {
 		return false, err
 	}
-	return r.Store.FinalizeCompleteJSON(ctx, job, raw, findings, warnings, coverage)
+	return r.runs.FinalizeCompleteJSON(ctx, job, raw, findings, warnings, coverage)
 }
 
 // failTerminal records a terminal failure without retry.
@@ -81,7 +81,7 @@ func (r *Runner) failTerminal(ctx context.Context, job *api.CodeScan, cause erro
 	}
 	ctx, stop := terminalCallbackContext(ctx)
 	defer stop()
-	won, err := r.Store.FinalizeFailure(ctx, job, api.CodeScanStatusFailed, scanbase.FailureSourceUnavailable, cause.Error())
+	won, err := r.runs.FinalizeFailure(ctx, job, api.CodeScanStatusFailed, scanbase.FailureSourceUnavailable, cause.Error())
 	if err != nil || !won {
 		return
 	}
@@ -106,7 +106,7 @@ func (r *Runner) failWithCode(ctx context.Context, job *api.CodeScan, code strin
 	if cause == nil {
 		cause = errors.New("scan failed")
 	}
-	won, err := r.Store.FinalizeFailure(ctx, job, api.CodeScanStatusFailed, code, cause.Error())
+	won, err := r.runs.FinalizeFailure(ctx, job, api.CodeScanStatusFailed, code, cause.Error())
 	if err != nil {
 		slog.ErrorContext(ctx, "record scan failure", "scan_id", job.ID, "error", err)
 		return
@@ -126,7 +126,7 @@ func (r *Runner) timeout(ctx context.Context, job *api.CodeScan, policy scancata
 	ctx, stop := terminalCallbackContext(ctx)
 	defer stop()
 	message := fmt.Sprintf("scanner exceeded hard runtime limit of %s", time.Duration(policy.HardLimitSec)*time.Second)
-	won, err := r.Store.FinalizeFailure(ctx, job, api.CodeScanStatusTimedOut, scanbase.FailureTimeout, message)
+	won, err := r.runs.FinalizeFailure(ctx, job, api.CodeScanStatusTimedOut, scanbase.FailureTimeout, message)
 	if err != nil || !won {
 		return
 	}
@@ -134,7 +134,7 @@ func (r *Runner) timeout(ctx context.Context, job *api.CodeScan, policy scancata
 	job.Error = message
 	job.FailureCode = scanbase.FailureTimeout
 	job.CoverageStatus = api.ScanCoverageUnavailable
-	if updated, getErr := r.Store.Get(ctx, job.ID); getErr == nil && updated != nil {
+	if updated, getErr := r.reads.Get(ctx, job.ID); getErr == nil && updated != nil {
 		r.notifyTerminal(ctx, updated)
 		return
 	}

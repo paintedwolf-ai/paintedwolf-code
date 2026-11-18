@@ -30,7 +30,7 @@ func TestCadenceSettlesScanThatFinishesBeforeSeriesBinding(t *testing.T) {
 	}
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	series, err := store.ListSeriesForPath(context.Background(), canonical)
+	series, err := store.Series.ListSeriesForPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListSeriesForPath", err)
 	for _, row := range series {
 		if row.ActiveScanID != "" || row.LastSuccessfulScanID == "" {
@@ -52,12 +52,12 @@ func TestCadenceSettleFailureRearmsAndRetries(t *testing.T) {
 	cadence.Tick(context.Background())
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath after failure", err)
 	if len(scans) != 0 {
 		t.Fatalf("failed pack enqueued %d scans", len(scans))
 	}
-	series, err := store.ListSeriesForPath(context.Background(), canonical)
+	series, err := store.Series.ListSeriesForPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListSeriesForPath", err)
 	for _, row := range series {
 		if row.DueAt.IsZero() || !row.DueAt.After(clock.Now()) {
@@ -67,7 +67,7 @@ func TestCadenceSettleFailureRearmsAndRetries(t *testing.T) {
 
 	clock.Advance(46 * time.Second)
 	cadence.Tick(context.Background())
-	scans, err = store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err = store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath after retry", err)
 	if len(scans) != 3 {
 		t.Fatalf("retry pack len = %d want 3", len(scans))
@@ -83,14 +83,14 @@ func TestCadenceRecoversAbandonedDispatchClaims(t *testing.T) {
 
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	rows, err := store.ListSeriesForPath(context.Background(), canonical)
+	rows, err := store.Series.ListSeriesForPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListSeriesForPath", err)
 	scannerIDs := make([]string, 0, len(rows))
 	for _, row := range rows {
 		scannerIDs = append(scannerIDs, row.ScannerID)
 	}
 	const passID = "abandoned-pass"
-	testutil.FailErr(t, "record abandoned pass", store.InsertFullPass(context.Background(), scanbase.FullPassDraft{
+	testutil.FailErr(t, "record abandoned pass", store.FullPasses.InsertFullPass(context.Background(), scanbase.FullPassDraft{
 		ID: passID, CanonicalPath: canonical, Scanners: scannerIDs, Trigger: api.ScanTriggerManual, RequestedAt: clock.Now(),
 	}))
 	for i := range rows {
@@ -98,11 +98,11 @@ func TestCadenceRecoversAbandonedDispatchClaims(t *testing.T) {
 		rows[i].DispatchPassID = passID
 		rows[i].DispatchTrigger = api.ScanTriggerManual
 		rows[i].UpdatedAt = clock.Now().Add(-scanbase.DispatchClaimTTL - time.Second)
-		testutil.FailErr(t, "Upsert abandoned dispatch", store.UpsertSeries(context.Background(), rows[i]))
+		testutil.FailErr(t, "Upsert abandoned dispatch", store.Series.UpsertSeries(context.Background(), rows[i]))
 	}
 
 	cadence.Tick(context.Background())
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	if len(scans) != 3 {
 		t.Fatalf("recovered dispatch pack len = %d want 3", len(scans))

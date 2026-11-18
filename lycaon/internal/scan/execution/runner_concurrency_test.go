@@ -51,7 +51,7 @@ func TestRunnerConcurrencyCap(t *testing.T) {
 	}()
 
 	testutil.WaitFor(t, "every scan is done", func() bool {
-		list, err := store.ListByCanonicalPath(ctx, dir)
+		list, err := store.Reads.ListByCanonicalPath(ctx, dir)
 		testutil.FailErr(t, "store.ListByCanonicalPath failed", err)
 		doneCount := 0
 		for _, item := range list {

@@ -52,7 +52,7 @@ func ReconcileSpills(ctx context.Context, dataDir string, store *SQLStore) (int,
 			if scanID == "" {
 				continue
 			}
-			scan, err := store.Get(ctx, scanID)
+			scan, err := store.Reads.Get(ctx, scanID)
 			if err != nil {
 				errs = append(errs, err)
 				continue

@@ -15,7 +15,12 @@ import (
 
 // Service schedules proactive scans for immutable source generations.
 type Service struct {
-	IgnoreService
+	Ignores     *IgnoreService
+	series      *scanbase.SeriesStore
+	fullPasses  *scanbase.FullPassStore
+	reads       *scanbase.ReadStore
+	runs        *scanbase.RunStore
+	findings    *scanbase.FindingStore
 	Coordinator scanbase.ScanCoordinator
 	Registry    scanbase.CodeScannerRegistry
 	Settings    *settings.SecurityScannersStore
@@ -32,14 +37,22 @@ type Service struct {
 }
 
 func New(store *scanbase.SQLStore, coord scanbase.ScanCoordinator, registry scanbase.CodeScannerRegistry, settingsStore *settings.SecurityScannersStore, gates scancfg.GatesConfig, triggers *scanbase.TriggerService) *Service {
-	return &Service{
-		IgnoreService: IgnoreService{Store: store},
-		Coordinator:   coord,
-		Registry:      registry,
-		Settings:      settingsStore,
-		Gates:         gates,
-		Triggers:      triggers,
+	service := &Service{
+		Coordinator: coord,
+		Registry:    registry,
+		Settings:    settingsStore,
+		Gates:       gates,
+		Triggers:    triggers,
 	}
+	if store != nil {
+		service.series = store.Series
+		service.fullPasses = store.FullPasses
+		service.reads = store.Reads
+		service.runs = store.Runs
+		service.findings = store.Findings
+		service.Ignores = &IgnoreService{Store: store.Ignores}
+	}
+	return service
 }
 
 func nowUTC(c *Service) time.Time {
@@ -57,7 +70,7 @@ func cadenceCfg(c *Service) scancfg.CadenceConfig {
 }
 
 func configured(c *Service) bool {
-	return c != nil && c.Store != nil && c.Coordinator != nil && c.Registry != nil
+	return c != nil && c.series != nil && c.Coordinator != nil && c.Registry != nil
 }
 
 func securityOn(c *Service) bool {
@@ -164,7 +177,7 @@ func (c *Service) NoteTree(ctx context.Context, projectDir string, fileCount int
 		previous := row.LastFileCount
 		row.LastFileCount = fileCount
 		row.UpdatedAt = nowUTC(c)
-		if err := c.Store.UpsertSeries(ctx, *row); err != nil {
+		if err := c.series.UpsertSeries(ctx, *row); err != nil {
 			return err
 		}
 		if fileCount <= 0 {

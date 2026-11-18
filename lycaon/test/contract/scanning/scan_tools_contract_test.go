@@ -38,8 +38,9 @@ func TestScanToolsContractAllowlistAndRegistration(t *testing.T) {
 	contractcheck.FailErr(t, "load scan tool schemas", err)
 	reg, err := tools.NewCatalogRegistry(schemas)
 	contractcheck.FailErr(t, "new catalog registry", err)
-	coord := scantest.Coordinator(t, scan.NewSQLStore(sqlDB), nil)
-	if err := scantoolapi.RegisterScanTools(reg, coord, &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{}}, scancadence.New(scan.StoreFromCoordinator(coord), coord, &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
+	scanStore := scan.NewSQLStore(sqlDB)
+	coord := scantest.Coordinator(t, scanStore, nil)
+	if err := scantoolapi.RegisterScanTools(reg, coord, scantoolapi.ResultViews{Reads: scanStore.Reads, FullPasses: scanStore.FullPasses}, &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{}}, scancadence.New(scanStore, coord, &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
 		contractcheck.FailErr(t, "scan.RegisterScanTools failed", err)
 	}
 	meta, ok := reg.Meta("scan_pack")

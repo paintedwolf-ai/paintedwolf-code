@@ -39,7 +39,7 @@ func seedCompareScan(t *testing.T, store *scanbase.SQLStore, opts compareSeedOpt
 		rawCount = len(opts.findings)
 	}
 	claimed := claimScan(t, store, created.ID)
-	if _, err := store.MarkComplete(context.Background(), claimed, &scanoutput.Result{
+	if _, err := store.Runs.MarkComplete(context.Background(), claimed, &scanoutput.Result{
 		FindingsCount: rawCount,
 		Findings:      opts.findings,
 	}); err != nil {
@@ -51,7 +51,7 @@ func seedCompareScan(t *testing.T, store *scanbase.SQLStore, opts compareSeedOpt
 		"findings_count":  rawCount,
 		"findings_stored": len(opts.findings),
 	}
-	if err := store.SaveIngest(context.Background(), created.ID, evidence.Record{
+	if err := store.Findings.SaveIngest(context.Background(), created.ID, evidence.Record{
 		GateVerdict: string(evidence.GateVerdictPassed),
 		Artifacts:   artifacts,
 	}); err != nil {

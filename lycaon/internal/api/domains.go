@@ -83,7 +83,7 @@ type Findings struct {
 	Scan            *scanadmin.Handler
 	projectRegistry project.Registry
 	responses       *httpio.Responder
-	scanCadence     *scancadence.Service
+	findingIgnores  *scancadence.IgnoreService
 }
 
 type HarnessControl struct {
@@ -158,7 +158,11 @@ func composeDomains(s *Server, deps Dependencies) {
 	s.Routes.Activity = &Activity{attachmentCaps: s.Admin.Prompt.Submission.Caps, ShuttingDown: s.ShuttingDown, editorClients: s.Sources.Editor.EditorClients, agentPresence: deps.Source.AgentPresence, attention: deps.Host.Attention, costTracker: deps.Providers.CostTracker, dataDir: s.dataDir, events: s.events, healthPayload: s.healthPayload, hostIdentity: deps.Host.HostIdentity, hostResources: deps.Host.HostResources, preflightEnv: deps.Host.PreflightEnv, projectLiveness: deps.Source.ProjectLiveness, projectRegistry: deps.Core.Projects, responses: &s.responses, scheduleSourceWatch: s.Sources.Watch.ScheduleSourceWatch, sessionStore: s.sessionStore, settingsSvc: deps.Core.Settings}
 	s.Routes.Artifacts = &Artifacts{projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: s.sessionStore, visualStore: deps.Source.VisualStore}
 	s.Routes.Conversation = &Conversation{ShuttingDown: s.ShuttingDown, preview: deps.Host.Preview, progressStore: deps.Source.ProgressStore, responses: &s.responses, sessionStore: s.sessionStore, sessions: s.sessions}
-	s.Routes.Findings = &Findings{Scan: &s.Admin.Scan, projectRegistry: deps.Core.Projects, responses: &s.responses, scanCadence: deps.Scans.ScanCadence}
+	var findingIgnores *scancadence.IgnoreService
+	if deps.Scans.ScanCadence != nil {
+		findingIgnores = deps.Scans.ScanCadence.Ignores
+	}
+	s.Routes.Findings = &Findings{Scan: &s.Admin.Scan, projectRegistry: deps.Core.Projects, responses: &s.responses, findingIgnores: findingIgnores}
 	s.Routes.HarnessControl = &HarnessControl{Workflow: deps.Workflow.Workflows, checkpoints: deps.Approvals.Checkpoints, eventPublisher: s.eventPublisher, harness: &s.harness, manualLLM: deps.Harness.ManualLLM, requireClientAuth: s.requireClientAuth, responses: &s.responses, router: s.router, sessionStore: s.sessionStore, sessions: s.sessions, visualStore: deps.Source.VisualStore}
 	s.Routes.HarnessPreparation = &HarnessPreparation{Workflow: deps.Workflow.Workflows, dataDir: s.dataDir, database: deps.Core.Database, harness: &s.harness, harnessWorkers: deps.Harness.HarnessWorkers, llmSvc: deps.Providers.LLM, projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: s.sessionStore, sessions: s.sessions, workers: deps.Workflow.Workers}
 	s.Routes.HarnessProviders = &HarnessProviders{costTracker: deps.Providers.CostTracker, llmSvc: deps.Providers.LLM, responses: &s.responses}

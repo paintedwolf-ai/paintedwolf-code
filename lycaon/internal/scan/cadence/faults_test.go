@@ -51,7 +51,7 @@ func TestCadenceConfigFaultMarksSeriesUnavailableWithoutRequeueingAndClearsOnEng
 
 	testutil.FailErr(t, "BaselineRoot with broken scanner", cadence.BaselineRoot(ctx, dir))
 
-	sastRow, err := store.GetSeries(ctx, canonical, "lycaon-sast")
+	sastRow, err := store.Series.GetSeries(ctx, canonical, "lycaon-sast")
 	testutil.FailErr(t, "GetSeries lycaon-sast", err)
 	if sastRow == nil || !sastRow.Unavailable() {
 		t.Fatalf("lycaon-sast series = %+v, want marked unavailable", sastRow)
@@ -82,14 +82,14 @@ func TestCadenceConfigFaultMarksSeriesUnavailableWithoutRequeueingAndClearsOnEng
 		clock.Advance(5 * time.Second)
 		cadence.Tick(ctx)
 	}
-	scans, err := store.ListByCanonicalPath(ctx, canonical)
+	scans, err := store.Reads.ListByCanonicalPath(ctx, canonical)
 	testutil.FailErr(t, "ListByCanonicalPath while sast unavailable", err)
 	if len(scans) != 2 {
 		t.Fatalf("scans len = %d, want 2 (only healthy scanners)", len(scans))
 	}
 	completeCadenceScans(t, cadence, store)
 
-	sastRow, err = store.GetSeries(ctx, canonical, "lycaon-sast")
+	sastRow, err = store.Series.GetSeries(ctx, canonical, "lycaon-sast")
 	testutil.FailErr(t, "GetSeries lycaon-sast after ticks", err)
 	if !sastRow.Unavailable() || !sastRow.DueAt.IsZero() {
 		t.Fatalf("unavailable scanner re-armed during writes/ticks: %+v", sastRow)
@@ -106,7 +106,7 @@ func TestCadenceConfigFaultMarksSeriesUnavailableWithoutRequeueingAndClearsOnEng
 	}
 
 	cadence.Tick(ctx)
-	sastRow, err = store.GetSeries(ctx, canonical, "lycaon-sast")
+	sastRow, err = store.Series.GetSeries(ctx, canonical, "lycaon-sast")
 	testutil.FailErr(t, "GetSeries lycaon-sast after recovery tick", err)
 	if sastRow.Unavailable() || sastRow.LastCoveredSnapshotID == "" {
 		t.Fatalf("lycaon-sast did not recover baseline after engine fix: %+v", sastRow)
@@ -146,7 +146,7 @@ func TestCadenceIncrementalConfigFaultPreservesPendingPathsUntilEngineRecovers(t
 	}
 	completeCadenceScans(t, cadence, store)
 
-	scansBeforeFix, err := store.ListByCanonicalPath(ctx, canonical)
+	scansBeforeFix, err := store.Reads.ListByCanonicalPath(ctx, canonical)
 	testutil.FailErr(t, "ListByCanonicalPath before fix", err)
 	for _, scan := range scansBeforeFix {
 		if scan.ScannerID == "lycaon-sast" {
@@ -158,7 +158,7 @@ func TestCadenceIncrementalConfigFaultPreservesPendingPathsUntilEngineRecovers(t
 	registry.Contracts["lycaon-sast"] = healthyBundledContract("lycaon-sast")
 	cadence.Tick(ctx)
 
-	scansAfterFix, err := store.ListByCanonicalPath(ctx, canonical)
+	scansAfterFix, err := store.Reads.ListByCanonicalPath(ctx, canonical)
 	testutil.FailErr(t, "ListByCanonicalPath after fix", err)
 	var sastScan *api.CodeScan
 	for i := range scansAfterFix {
@@ -208,7 +208,7 @@ func TestCadenceTransientFailureAppliesBoundedExponentialBackoffAndResetsOnSucce
 		attemptAt := clock.Now()
 		cadence.Tick(ctx)
 
-		row, err := store.GetSeries(ctx, canonical, "lycaon-sast")
+		row, err := store.Series.GetSeries(ctx, canonical, "lycaon-sast")
 		testutil.FailErr(t, "GetSeries after transient failure", err)
 		if row.ConsecutiveFailures != attempt {
 			t.Fatalf("attempt %d: ConsecutiveFailures = %d, want %d", attempt, row.ConsecutiveFailures, attempt)
@@ -220,7 +220,7 @@ func TestCadenceTransientFailureAppliesBoundedExponentialBackoffAndResetsOnSucce
 
 		// A write during backoff must not pull DueAt earlier than the backoff deadline.
 		testutil.FailErr(t, "NoteWrites during backoff", noteCadenceWrites(ctx, cadence, dir, []string{"main.go"}))
-		rowAfterWrite, err := store.GetSeries(ctx, canonical, "lycaon-sast")
+		rowAfterWrite, err := store.Series.GetSeries(ctx, canonical, "lycaon-sast")
 		testutil.FailErr(t, "GetSeries after write during backoff", err)
 		if !rowAfterWrite.DueAt.Equal(wantDue) {
 			t.Fatalf("attempt %d: write during backoff pulled DueAt to %v, want %v", attempt, rowAfterWrite.DueAt, wantDue)
@@ -230,7 +230,7 @@ func TestCadenceTransientFailureAppliesBoundedExponentialBackoffAndResetsOnSucce
 		if wantDelay > 4*time.Second {
 			clock.Advance(4 * time.Second)
 			cadence.Tick(ctx)
-			checkRow, err := store.GetSeries(ctx, canonical, "lycaon-sast")
+			checkRow, err := store.Series.GetSeries(ctx, canonical, "lycaon-sast")
 			testutil.FailErr(t, "GetSeries after flat settle advance", err)
 			if checkRow.ConsecutiveFailures != attempt {
 				t.Fatalf("attempt %d: retried after flat settle interval (ConsecutiveFailures=%d)", attempt, checkRow.ConsecutiveFailures)
@@ -243,12 +243,12 @@ func TestCadenceTransientFailureAppliesBoundedExponentialBackoffAndResetsOnSucce
 
 	// Next tick succeeds for all 3 scanners and resets ConsecutiveFailures to 0.
 	cadence.Tick(ctx)
-	scans, err := store.ListByCanonicalPath(ctx, canonical)
+	scans, err := store.Reads.ListByCanonicalPath(ctx, canonical)
 	testutil.FailErr(t, "ListByCanonicalPath after recovery", err)
 	if len(scans) != 3 {
 		t.Fatalf("scans after transient recovery = %d, want 3", len(scans))
 	}
-	series, err := store.ListSeriesForPath(ctx, canonical)
+	series, err := store.Series.ListSeriesForPath(ctx, canonical)
 	testutil.FailErr(t, "ListSeriesForPath after recovery", err)
 	for _, row := range series {
 		if row.ConsecutiveFailures != 0 {

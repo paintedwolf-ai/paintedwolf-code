@@ -77,7 +77,7 @@ func composeWorkerTaskAssignment(
 			return "", err
 		}
 		if def, ok := manifest.PhaseByID(run.CurrentPhase); ok && def.ReviewLoop != nil && def.ReviewLoop.IncludeScanInventory && (in.CoverageAssignment == nil || in.CoverageAssignment.QuestionID == "") {
-			inventory, err := scan.WorkflowAdvisoryInventory(ctx, scanningRT.Store, run.ID)
+			inventory, err := scan.WorkflowAdvisoryInventory(ctx, scanningRT.Store.Reads, run.ID)
 			if err != nil {
 				return "", err
 			}

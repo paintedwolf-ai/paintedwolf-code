@@ -28,7 +28,7 @@ func TestMultiRootScanLifecycleInvariantI12(t *testing.T) {
 
 	insert := func(path, id, scanner string) {
 		t.Helper()
-		if err := store.Insert(ctx, api.CodeScan{
+		if err := store.Runs.Insert(ctx, api.CodeScan{
 			ID:            id,
 			CanonicalPath: path,
 			Categories:    []api.ScanCategory{api.ScanCategorySecurity},
@@ -80,7 +80,7 @@ func TestMultiRootScanLifecycleInvariantI12(t *testing.T) {
 		}
 	}
 
-	retained, err := store.Get(ctx, "s2")
+	retained, err := store.Reads.Get(ctx, "s2")
 	contractcheck.FailErr(t, "Get retained", err)
 	if retained == nil {
 		t.Fatal("detach must retain scan row")
