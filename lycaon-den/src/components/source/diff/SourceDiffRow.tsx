@@ -183,22 +183,11 @@ export function SourceDiffRow(props: Props) {
       <div
         ref={(el) => {
           header = el;
-          bindDisclosureSummary(el, { open: bodyOpen, toggle: () => toggle });
+          bindDisclosureSummary(el, () => toggle);
         }}
         class="den-file-edit-diff-header"
       >
-        <SourcePathLink
-          truncate
-          strong
-          path={path()}
-          rootId={props.source.rootId(activeIndex())}
-          openable={props.source.openable(activeIndex())}
-          change={wholeFileChange(change())}
-          projectId={props.source.projectId}
-          jobId={props.source.jobId}
-          rootRefs={props.source.rootRefs}
-          chatDestination={props.source.chatDestination}
-        />
+        <SourcePathLink truncate strong path={path()} openable={false} change={wholeFileChange(change())} />
         <span class="den-file-edit-diff-fill" aria-hidden="true" />
         <SourceChangeChip change={change()} />
         <Show
@@ -301,6 +290,17 @@ export function SourceDiffRow(props: Props) {
           </div>
 
           <footer class="den-file-edit-diff-footer">
+            <Show when={props.source.openable(activeIndex())}>
+              <SourcePathLink
+                label="Open in Files"
+                path={path()}
+                rootId={props.source.rootId(activeIndex())}
+                projectId={props.source.projectId}
+                jobId={props.source.jobId}
+                rootRefs={props.source.rootRefs}
+                chatDestination={props.source.chatDestination}
+              />
+            </Show>
             <button
               type="button"
               class="den-file-edit-diff-fullscreen-btn den-inset-icon-btn"

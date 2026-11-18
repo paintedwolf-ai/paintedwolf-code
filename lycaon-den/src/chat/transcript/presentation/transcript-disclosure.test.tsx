@@ -195,7 +195,7 @@ describe("transcript disclosure leases", () => {
     expect(layouts).toHaveBeenCalled();
   });
 
-  it("routes a click anywhere in a closed summary to the toggle it holds", () => {
+  it("routes a click anywhere in a summary to the toggle it holds", () => {
     const onClick = vi.fn();
     const view = render(() => {
       const disclosure = useTranscriptDisclosure();
@@ -216,7 +216,8 @@ describe("transcript disclosure leases", () => {
     fireEvent.click(view.getByTestId("words"));
     expect(onClick).toHaveBeenCalledOnce();
     expect(view.getByTestId("shell").getAttribute("data-expanded")).toBe("true");
-    expect(view.getByTestId("summary").getAttribute("data-disclosure-summary")).toBe("open");
+    fireEvent.click(view.getByTestId("summary"));
+    expect(view.getByTestId("shell").getAttribute("data-expanded")).toBe("false");
   });
 
   it("ignores a toggle outside any disclosure card", () => {

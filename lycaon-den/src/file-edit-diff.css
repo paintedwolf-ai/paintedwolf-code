@@ -255,6 +255,10 @@
   background: var(--den-tint-1);
 }
 
+.den-file-edit-diff-footer > .den-source-path-link {
+  margin-inline-end: auto;
+}
+
 .den-diff-group-stat {
   flex-shrink: 0;
   font-family: var(--den-font-mono);

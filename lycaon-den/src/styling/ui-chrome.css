@@ -14,9 +14,9 @@ button,
   cursor: auto;
 }
 
-/* A closed disclosure's summary is one click target, so none of its words select. */
-[data-disclosure-summary="closed"],
-[data-disclosure-summary="closed"] :not([data-disclosure-action], [data-disclosure-action] *) {
+/* A disclosure's summary is one click target, so none of its words select. */
+[data-disclosure-summary],
+[data-disclosure-summary] :not([data-disclosure-action], [data-disclosure-action] *) {
   user-select: none;
   cursor: pointer;
 }

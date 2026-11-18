@@ -119,7 +119,7 @@ function summaryOf(card: HTMLElement): HTMLElement {
   return summary;
 }
 
-/** Every element of a closed summary except declared actions. */
+/** Every element of a summary except declared actions. */
 function clickTargets(card: HTMLElement): HTMLElement[] {
   const summary = summaryOf(card);
   return [summary, ...summary.querySelectorAll<HTMLElement>("*")].filter(
@@ -127,26 +127,36 @@ function clickTargets(card: HTMLElement): HTMLElement[] {
   );
 }
 
-describe("a closed transcript card", () => {
-  it.each(CARDS)("opens $name from anywhere in its summary", ({ mount }) => {
-    const count = clickTargets(mount()).length;
+const isOpen = (card: HTMLElement) => card.getAttribute("data-expanded") === "true";
+
+/** Clicks each summary element of a freshly mounted card in the given state and expects the card to flip. */
+function expectEveryTargetToggles(mount: () => HTMLElement, startOpen: boolean): void {
+  const ready = () => {
+    const card = mount();
+    if (startOpen) fireEvent.click(summaryOf(card));
+    expect(isOpen(card)).toBe(startOpen);
+    return card;
+  };
+  const count = clickTargets(ready()).length;
+  cleanup();
+  expect(count).toBeGreaterThan(2);
+  for (let index = 0; index < count; index += 1) {
+    const card = ready();
+    const target = clickTargets(card)[index]!;
+    fireEvent.click(target);
+    expect(isOpen(card), target.outerHTML).toBe(!startOpen);
     cleanup();
-    expect(count).toBeGreaterThan(2);
-    for (let index = 0; index < count; index += 1) {
-      const card = mount();
-      const target = clickTargets(card)[index]!;
-      expect(summaryOf(card).getAttribute("data-disclosure-summary")).toBe("closed");
-      fireEvent.click(target);
-      expect(card.getAttribute("data-expanded"), target.outerHTML).toBe("true");
-      cleanup();
-    }
+  }
+}
+
+describe("a transcript card's summary", () => {
+  it.each(CARDS)("opens $name from anywhere in it", ({ mount }) => {
+    expectEveryTargetToggles(mount, false);
     expect(openSourceLocation).not.toHaveBeenCalled();
   });
 
-  it("keeps an open file's path a link to the file", () => {
-    const row = CARDS[3]!.mount();
-    fireEvent.click(summaryOf(row));
-    fireEvent.click(row.querySelector<HTMLElement>('[data-testid="source-path-link"]')!);
-    expect(openSourceLocation).toHaveBeenCalledOnce();
+  it.each(CARDS)("closes $name from anywhere in it", ({ mount }) => {
+    expectEveryTargetToggles(mount, true);
+    expect(openSourceLocation).not.toHaveBeenCalled();
   });
 });

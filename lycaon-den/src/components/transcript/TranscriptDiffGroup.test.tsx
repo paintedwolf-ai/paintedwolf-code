@@ -220,7 +220,7 @@ describe("TranscriptDiffGroup", () => {
     expect(openState()).toEqual(["false", "false", "false"]);
   });
 
-  it("keeps every row's own way into Files", () => {
+  it("keeps every row's own way into Files once it is open", () => {
     const folds = foldFileEdits(RUN);
     render(() => (
       <TranscriptDiffGroup
@@ -231,29 +231,28 @@ describe("TranscriptDiffGroup", () => {
         entryKey="group-2"
       />
     ));
-    const links = screen
-      .getAllByTestId("source-path-link")
-      .map((el) => el.getAttribute("data-den-source-path"));
-    expect(links).toEqual(["src/pipeline.py", "src/cli.py", "tests/test_cli.py"]);
+    expect(screen.queryAllByTestId("source-path-link")).toEqual([]);
+    const opened = ["src/pipeline.py", "src/cli.py", "tests/test_cli.py"].map((path) => {
+      diffToggle(path).click();
+      const link = screen.getByTestId("source-path-link");
+      return [link.textContent, link.getAttribute("data-den-source-path")];
+    });
+    expect(opened).toEqual([
+      ["Open in Files", "src/pipeline.py"],
+      ["Open in Files", "src/cli.py"],
+      ["Open in Files", "tests/test_cli.py"],
+    ]);
   });
 
-  it("opens a closed diff from its path and leaves an open diff's path to Files", () => {
-    const folds = foldFileEdits(RUN);
-    render(() => (
-      <TranscriptDiffGroup
-        folds={folds}
-        layout="chat"
-        sessionId="s1"
-        projectId="p1"
-        entryKey="group-3"
-      />
-    ));
-    const openState = () =>
-      screen.getAllByTestId("file-edit-diff").map((row) => row.getAttribute("data-expanded"));
-    screen.getAllByTestId("source-path-link")[0]!.click();
-    expect(openState()).toEqual(["true", "false", "false"]);
-    screen.getAllByTestId("source-path-link")[0]!.click();
-    expect(openState()).toEqual(["true", "false", "false"]);
+  it("toggles a diff from its path either way", () => {
+    renderGroup();
+    const row = screen.getAllByTestId("file-edit-diff")[0]!;
+    const path = row.querySelector<HTMLElement>(".den-file-edit-diff-header .den-source-path-plain")!;
+    expect(path.textContent).toContain("pipeline.py");
+    path.click();
+    expect(row.getAttribute("data-expanded")).toBe("true");
+    path.click();
+    expect(row.getAttribute("data-expanded")).toBe("false");
   });
 
   it("toggles from anywhere else on the row", () => {

@@ -57,9 +57,9 @@ describe("SessionTranscript workers and synthesis", () => {
       ] },
     }]);
     expect(container.querySelector('[data-testid="diff-group"]')?.getAttribute("data-files")).toBe("2");
+    container.querySelector<HTMLButtonElement>('[data-path="new.ts"] [data-testid="file-edit-diff-toggle"]')!.click();
     const links = container.querySelectorAll<HTMLButtonElement>('[data-testid="source-path-link"]');
     expect(links).toHaveLength(1);
-    container.querySelector<HTMLButtonElement>('[data-path="new.ts"] [data-testid="file-edit-diff-toggle"]')!.click();
     links[0]!.click();
     expect(sink).toHaveBeenCalledWith(expect.objectContaining({
       projectId: "p1", path: "new.ts", rootId: "secondary", absolutePath: "/shared/new.ts",

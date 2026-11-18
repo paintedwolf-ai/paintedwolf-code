@@ -183,7 +183,7 @@ export function TranscriptDisclosureSummary(props: SummaryProps) {
   const [toggle, setToggle] = createSignal<HTMLElement>();
   return (
     <SummaryToggleContext.Provider value={setToggle}>
-      <div {...rest} ref={(element) => bindDisclosureSummary(element, { open: local.disclosure.open, toggle })}>
+      <div {...rest} ref={(element) => bindDisclosureSummary(element, toggle)}>
         {local.children}
       </div>
     </SummaryToggleContext.Provider>
@@ -210,7 +210,7 @@ export function TranscriptDisclosureToggle(props: ToggleProps) {
       ref={(element) => {
         local.ref?.(element);
         if (registerInSummary) registerInSummary(element);
-        else bindDisclosureSummary(element, { open: local.disclosure.open, toggle: () => element });
+        else bindDisclosureSummary(element, () => element);
       }}
       type="button"
       class={classes()}
