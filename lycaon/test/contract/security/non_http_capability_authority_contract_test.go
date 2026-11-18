@@ -2,9 +2,6 @@ package contract
 
 import (
 	"context"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"path/filepath"
 	"testing"
 
@@ -179,16 +176,4 @@ func TestNonHTTPContractDirectAndExecutionSocketOfferScopes(t *testing.T) {
 	if enabled == 0 {
 		t.Fatalf("direct-IP card offered no rung for a complete lease: %+v", offers)
 	}
-}
-
-func mustFindFunc(t *testing.T, src, name, fnName string) *ast.FuncDecl {
-	t.Helper()
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, name, src, 0)
-	contractcheck.FailErr(t, "parse "+name, err)
-	fn := findNamedFunc(file, fnName)
-	if fn == nil || fn.Body == nil {
-		t.Fatalf("%s missing", fnName)
-	}
-	return fn
 }

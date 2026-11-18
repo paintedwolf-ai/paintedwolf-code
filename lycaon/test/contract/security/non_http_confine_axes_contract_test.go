@@ -1,7 +1,6 @@
 package contract
 
 import (
-	"go/ast"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -32,14 +31,4 @@ func TestContractNoAmbientNetworkAllowAlias(t *testing.T) {
 			t.Errorf("LYCAON_SANDBOX_NETWORK=%q gave network %v, want the mediated default", alias, got)
 		}
 	}
-}
-
-func findNamedFunc(file *ast.File, name string) *ast.FuncDecl {
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if ok && fn.Name != nil && fn.Name.Name == name {
-			return fn
-		}
-	}
-	return nil
 }
