@@ -309,3 +309,7 @@ WHERE workflow_runs.session_id = sqlc.arg(target_session_id)
         AND expected.parent_run_id IS NULL
         AND expected.status IN ('running', 'paused', 'paused_on_child')
   );
+
+-- name: GetLatestWorkflowResumeAt :one
+SELECT CAST(COALESCE(MAX(committed_at), '') AS TEXT) AS committed_at
+FROM workflow_commands WHERE run_id = ? AND kind = 'resume';

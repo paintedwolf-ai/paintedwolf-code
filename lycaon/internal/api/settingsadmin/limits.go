@@ -23,9 +23,10 @@ func (s *Handler) HandleGetLimits(w http.ResponseWriter, r *http.Request) {
 	// Fill unset display fields from the default model window.
 	lim = settings.ApplyDerivedSessionLimits(lim, llm.ScaleLimitsFromTrueWindow(modelinfo.DefaultFallbackTrueWindow))
 	httpio.WriteJSON(w, http.StatusOK, settings.LimitsToDTO(
-		settings.WireScope(string(scope)),
+		wire.SettingsScope(string(scope)),
 		lim,
 		s.Service.Limits.MergedFrom(scope, projectDir),
+		s.Service.Limits.ProjectRejected(projectDir),
 	))
 }
 
@@ -60,7 +61,9 @@ func (s *Handler) HandleUpdateLimits(w http.ResponseWriter, r *http.Request) {
 	case llm.SettingsScopeProject:
 		lim = settings.ProjectSpendOverlay(lim, s.Service.Limits.Get(llm.SettingsScopeGlobal, ""))
 		if err := s.Service.Limits.PutProject(projectDir, lim); err != nil {
-			s.responses.InternalError(w, r, err)
+			if !ProjectSettingsWriteError(s.responses, w, err) {
+				s.responses.InternalError(w, r, err)
+			}
 			return
 		}
 	default:
@@ -71,8 +74,9 @@ func (s *Handler) HandleUpdateLimits(w http.ResponseWriter, r *http.Request) {
 	}
 	projectview.PublishSettings(s.Events, s.Projects, r.Context(), wire.SettingsAreaLimits, string(scope), projectDir, "updated")
 	httpio.WriteJSON(w, http.StatusOK, settings.LimitsToDTO(
-		settings.WireScope(string(scope)),
+		wire.SettingsScope(string(scope)),
 		s.Service.Limits.Get(scope, projectDir),
 		s.Service.Limits.MergedFrom(scope, projectDir),
+		s.Service.Limits.ProjectRejected(projectDir),
 	))
 }

@@ -89,7 +89,7 @@ func TestOutboxWiringPassesTheBuiltOutbox(t *testing.T) {
 	// The typed dependency ports below derive from the one eventing runtime.
 	for file, bindings := range map[string][]string{
 		"build_infra.go":     {"eventRuntime, err := eventing.Build(", "b.events = eventRuntime"},
-		"build_workflows.go": {"delegations.New(b.storage.Database, b.events.Outbox,", "EventsOutbox:        b.events.Outbox", "Events:                b.events.Outbox"},
+		"build_workflows.go": {"workerruntime.New(b.storage.Database, b.events.Outbox,", "EventsOutbox:        b.events.Outbox", "Events:                b.events.Outbox"},
 		"build_session.go":   {"EventsOutbox:    b.events.Outbox"},
 	} {
 		source := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/"+file)
@@ -104,11 +104,11 @@ func TestOutboxWiringPassesTheBuiltOutbox(t *testing.T) {
 	walkOutboxCalls(t, func(pkg *packages.Package, call *ast.CallExpr, _ *ast.SelectorExpr) {
 		count++
 		allowed := map[string]string{
-			outboxImportPrefix + "internal/app/eventing":    "b.Outbox",
-			outboxImportPrefix + "internal/app/delegations": "outbox",
-			outboxImportPrefix + "internal/app/scanning":    "deps.Events",
-			outboxImportPrefix + "internal/app/sessions":    "deps.EventsOutbox",
-			outboxImportPrefix + "internal/app/workflows":   "deps.EventsOutbox",
+			outboxImportPrefix + "internal/app/eventing":      "b.Outbox",
+			outboxImportPrefix + "internal/app/workerruntime": "outbox",
+			outboxImportPrefix + "internal/app/scanning":      "deps.Events",
+			outboxImportPrefix + "internal/app/sessions":      "deps.EventsOutbox",
+			outboxImportPrefix + "internal/app/workflows":     "deps.EventsOutbox",
 		}
 		if len(call.Args) != 1 || allowed[pkg.PkgPath] == "" || exprText(call.Args[0]) != allowed[pkg.PkgPath] {
 			violations = append(violations, pkg.Fset.Position(call.Pos()).String()+": setter does not receive its canonical outbox port")

@@ -4,15 +4,165 @@ package api
 
 import "time"
 
-// AbortDelegationRequest
-type AbortDelegationRequest struct {
-	Reason string `json:"reason,omitempty"`
-}
-
 // AbortSessionRequest
 type AbortSessionRequest struct {
 	// Optional note for worker cancellation envelopes
 	Reason string `json:"reason,omitempty"`
+}
+
+// ActionDescriptor The host's account of one visible action, composed from typed facts on the call, its result or its command activity. Den draws every action card from this and owns only copy and formatting.
+type ActionDescriptor struct {
+	// Verb-first action name from the tool presentation catalog.
+	Label  string    `json:"label"`
+	Status string    `json:"status"`
+	Ran    ActionRan `json:"ran"`
+	// At most four facts, in vocabulary order, at most one of each kind.
+	Facts []ActionFact `json:"facts"`
+	// Fact kinds whose compact form makes the row's outcome text, in order.
+	Row     []ActionFactKind `json:"row"`
+	Preview *ActionPreview   `json:"preview,omitempty"`
+	// Records the action has, in the order Input, Output, Receipt; absent kinds are omitted.
+	Links  []ActionLink  `json:"links"`
+	Opener *ActionOpener `json:"opener,omitempty"`
+	// Actions sharing a key render as one card: one terminal session, one page session, repeated reads of one path, or a burst of one coordination family. Empty for an action that stands alone.
+	FoldKey string `json:"fold_key,omitempty"`
+}
+
+// ActionFact One typed fact. The fields a kind uses are listed on each field; Den formats the values and owns the label for each kind.
+type ActionFact struct {
+	Kind ActionFactKind `json:"kind"`
+	// result: how the action ended.
+	Outcome string `json:"outcome,omitempty"`
+	// result: process exit status.
+	ExitCode *int `json:"exit_code,omitempty"`
+	// result: HTTP response status.
+	HTTPStatus *int `json:"http_status,omitempty"`
+	// result: a short identifier the outcome produced, such as a commit.
+	Ref string `json:"ref,omitempty"`
+	// changed: files touched. found: files the matches are in.
+	Files int `json:"files,omitempty"`
+	// changed: lines added.
+	Added int `json:"added,omitempty"`
+	// changed: lines removed.
+	Removed int `json:"removed,omitempty"`
+	// changed: hunks.
+	Hunks int `json:"hunks,omitempty"`
+	// changed: new files.
+	Created int `json:"created,omitempty"`
+	// found: how many. steps: how many members.
+	Count int `json:"count,omitempty"`
+	// found: what was counted.
+	Noun string `json:"noun,omitempty"`
+	// found: up to three named items, such as loaded tools.
+	Items []string `json:"items,omitempty"`
+	// found: high-severity findings.
+	High int `json:"high,omitempty"`
+	// found: medium-severity findings.
+	Medium int `json:"medium,omitempty"`
+	// found: low-severity findings.
+	Low int `json:"low,omitempty"`
+	// took: elapsed time of a settled action.
+	DurationMs int64 `json:"duration_ms,omitempty"`
+	// steps: members that failed, were refused or were interrupted.
+	Failed int `json:"failed,omitempty"`
+	// steps: what a member is.
+	Unit string `json:"unit,omitempty"`
+	// steps: the members' actions in order, for a session such as a terminal.
+	Sequence []string `json:"sequence,omitempty"`
+	// stopped_by: what stopped or approved the action. loaded_by: how a tool or skill was resolved.
+	By string `json:"by,omitempty"`
+	// stopped_by: the host stop or rejection code.
+	Code string `json:"code,omitempty"`
+	// stopped_by: who decided an approval.
+	DecidedBy string `json:"decided_by,omitempty"`
+	// stopped_by: when an approval was decided.
+	DecidedAt *time.Time `json:"decided_at,omitempty"`
+	// network: hosts reached.
+	Hosts []string `json:"hosts,omitempty"`
+	// network: how traffic left the host.
+	Egress string `json:"egress,omitempty"`
+	// worker: the worker's role.
+	Role string `json:"role,omitempty"`
+	// worker: the worker's state. process: the process state.
+	State string `json:"state,omitempty"`
+	// budget: amount used.
+	Used int64 `json:"used,omitempty"`
+	// budget: amount allowed.
+	Limit int64 `json:"limit,omitempty"`
+	// process: listening port.
+	Port *int `json:"port,omitempty"`
+	// captured: the artifact's caption.
+	Caption string `json:"caption,omitempty"`
+	// captured: the artifact.
+	ArtifactID string `json:"artifact_id,omitempty"`
+	// containment: the confinement mode.
+	Mode string `json:"mode,omitempty"`
+}
+
+// ActionLink
+type ActionLink struct {
+	Kind       string                `json:"kind"`
+	ContentRef *ChatContentReference `json:"content_ref,omitempty"`
+	// output: a background process whose output is the record.
+	ProcessHandle string `json:"process_handle,omitempty"`
+	// receipt: the program activities the receipt document covers.
+	Receipts []ActionReceiptScope `json:"receipts,omitempty"`
+}
+
+// ActionOpener Where the action's subject opens, beyond its records.
+type ActionOpener struct {
+	Kind string `json:"kind"`
+	// file: the path, as the action named it.
+	Path string `json:"path,omitempty"`
+	// file: the line to open at.
+	Line *int `json:"line,omitempty"`
+	// search: what to search for.
+	Query string `json:"query,omitempty"`
+	// terminal: the session whose output opens.
+	ProcessHandle string `json:"process_handle,omitempty"`
+}
+
+// ActionPreview
+type ActionPreview struct {
+	Kind  string              `json:"kind"`
+	Lines []ActionPreviewLine `json:"lines,omitempty"`
+	// Further lines not shown.
+	LinesOmitted int `json:"lines_omitted,omitempty"`
+	// output: the lines are the end of the stream.
+	Tail bool `json:"tail,omitempty"`
+	// output: the lines are in these activities' execution receipts, which Den reads when the card opens; head for a success, tail for a failure or a running activity.
+	Receipts []ActionReceiptScope `json:"receipts,omitempty"`
+	// image: the artifact to show.
+	ArtifactID string `json:"artifact_id,omitempty"`
+	// image: the artifact's caption.
+	Caption string `json:"caption,omitempty"`
+}
+
+// ActionPreviewLine
+type ActionPreviewLine struct {
+	Text   string `json:"text"`
+	Stream string `json:"stream,omitempty"`
+	// diff: added or removed.
+	Sign string `json:"sign,omitempty"`
+	// hits: where the line is.
+	Location string `json:"location,omitempty"`
+	// steps: how the step ended.
+	State string `json:"state,omitempty"`
+}
+
+// ActionRan
+type ActionRan struct {
+	// What the action ran or addressed, already screened for secrets.
+	Text string `json:"text"`
+	// What the text is, for the copy control's name.
+	Noun      string                   `json:"noun"`
+	Redaction *HostSecretRedactionMeta `json:"redaction,omitempty"`
+}
+
+// ActionReceiptScope
+type ActionReceiptScope struct {
+	ProgramID  string `json:"program_id"`
+	ActivityID string `json:"activity_id"`
 }
 
 // ActiveWorkflowRunResponse
@@ -833,13 +983,6 @@ type BlueprintSummary struct {
 	UpdatedAt           time.Time       `json:"updated_at"`
 }
 
-// BoardDelegationEntry
-type BoardDelegationEntry struct {
-	ID    string          `json:"id"`
-	Phase DelegationPhase `json:"phase"`
-	Task  string          `json:"task,omitempty"`
-}
-
 // BoardEvent
 type BoardEvent struct {
 	ProjectID   string           `json:"project_id"`
@@ -948,14 +1091,18 @@ type BoardView struct {
 	// Coordinator session this board snapshot belongs to.
 	SessionID string `json:"session_id,omitempty"`
 	// One-line coordination headline (worker counts, merge status, conflicts).
-	Summary           string                       `json:"summary"`
-	Repo              RepoBrief                    `json:"repo"`
-	Git               *BoardGitSlice               `json:"git,omitempty"`
-	Scans             *BoardScansSlice             `json:"scans,omitempty"`
-	Roster            []BoardWorkerRosterEntry     `json:"roster,omitempty"`
+	Summary string           `json:"summary"`
+	Repo    RepoBrief        `json:"repo"`
+	Git     *BoardGitSlice   `json:"git,omitempty"`
+	Scans   *BoardScansSlice `json:"scans,omitempty"`
+	// Open workers in the session, needing the coordinator and most recent first.
+	Workers []BoardWorker `json:"workers,omitempty"`
+	// Opaque cursor for the next page of workers when workers_has_more is true.
+	WorkersNextCursor string                       `json:"workers_next_cursor,omitempty"`
+	WorkersHasMore    bool                         `json:"workers_has_more,omitempty"`
+	WorkersOmitted    int                          `json:"workers_omitted,omitempty"`
 	PromotePaths      []WorkerPromoteJobPathStatus `json:"promote_paths,omitempty"`
 	OverlayMergePlan  *OverlayMergePlan            `json:"overlay_merge_plan,omitempty"`
-	Delegation        []BoardDelegationEntry       `json:"delegation,omitempty"`
 	ActiveWorkflowRun *WorkflowRun                 `json:"active_workflow_run,omitempty"`
 	ForensicWorkers   *BoardForensicWorkers        `json:"forensic_workers,omitempty"`
 	Cost              *CostSummary                 `json:"cost"`
@@ -969,30 +1116,52 @@ type BoardView struct {
 	NowLine           string                       `json:"now_line"`
 }
 
-// BoardWorkerRosterEntry
-type BoardWorkerRosterEntry struct {
-	Dependencies []WorkerDependency `json:"dependencies,omitempty"`
-	WorkerID     string             `json:"worker_id"`
-	AgentType    string             `json:"agent_type"`
-	Status       WorkerStatus       `json:"status"`
-	MergeStatus  WorkerMergeStatus  `json:"merge_status,omitempty"`
-	OverlayID    string             `json:"overlay_id,omitempty"`
-	ScopeSummary string             `json:"scope_summary,omitempty"`
-	ChangedPaths []string           `json:"changed_paths,omitempty"`
-	TouchedPaths []string           `json:"touched_paths,omitempty"`
-	// Worker assignment goal included in full board detail.
-	Brief string `json:"brief,omitempty"`
-	Error string `json:"error,omitempty"`
-	// Effective worker tool-round ceiling when known (host default 20, maximum 120)
-	MaxToolLoops int `json:"max_tool_loops,omitempty"`
-	// The worker's unanswered request for more tool rounds; grant it with extend_worker_budget
-	BudgetRequest *WorkerBudgetRequest `json:"budget_request,omitempty"`
-	// Completed tool rounds this worker run
-	ToolLoopsUsed int `json:"tool_loops_used,omitempty"`
-	// Repo-relative paths held by handoff_reserve for this worker
+// BoardWorker One worker as its coordinator sees it, with the state admission reads.
+type BoardWorker struct {
+	// Durable worker record identity across rounds.
+	WorkerID  string `json:"worker_id,omitempty"`
+	Name      string `json:"name"`
+	AgentType string `json:"agent_type"`
+	// Child session reused across rounds once spawned.
+	ChildSessionID string `json:"child_session_id,omitempty"`
+	// Latest round job identity when at least one round exists.
+	LatestJobID string `json:"latest_job_id,omitempty"`
+	// Latest 1-based round ordinal when at least one round exists.
+	Round     int    `json:"round,omitempty"`
+	ScopeMode string `json:"scope_mode,omitempty"`
+	// Derived workspace state for this worker (shared, retained, preparing, refreshed, reset, recovering).
+	WorkspaceState string            `json:"workspace_state,omitempty"`
+	State          WorkerState       `json:"state"`
+	Reason         WorkerStateReason `json:"reason,omitempty"`
+	// Derived display label for state and reason.
+	StateLabel string `json:"state_label,omitempty"`
+	// The worker's latest instruction, else its brief, clipped to one line.
+	About string `json:"about,omitempty"`
+	// The pending decision an asking worker waits on.
+	Question string `json:"question,omitempty"`
+	// Active wait lease reason when the round is parked.
+	ParkedReason string `json:"parked_reason,omitempty"`
+	// Active wait lease deadline when the round is parked.
+	ParkedUntilAt string `json:"parked_until_at,omitempty"`
+	// Handle of the worker's latest result.
+	ResultHandle      string                  `json:"result_handle,omitempty"`
+	ResultDisposition WorkerResultDisposition `json:"result_disposition,omitempty"`
+	// Coordinator reason recorded when the latest result is shelved.
+	ShelveReason string `json:"shelve_reason,omitempty"`
+	// Derived display label for result_disposition.
+	DispositionLabel string `json:"disposition_label,omitempty"`
+	// Derived display label for workspace_state.
+	WorkspaceLabel string `json:"workspace_label,omitempty"`
+	// Worker messages not yet delivered to a coordinator turn.
+	UnreadMessageCount int `json:"unread_message_count,omitempty"`
+	// Most recent activity timestamp for recency ordering.
+	UpdatedAt      string   `json:"updated_at,omitempty"`
+	ReadPaths      []string `json:"read_paths,omitempty"`
+	ReadOmitted    int      `json:"read_omitted,omitempty"`
+	ChangedPaths   []string `json:"changed_paths,omitempty"`
+	ChangedOmitted int      `json:"changed_omitted,omitempty"`
+	// Repo-relative paths the worker's live round holds with handoff_reserve.
 	Reservations []string `json:"reservations,omitempty"`
-	// True when checkpoint SSE reports a pending human checkpoint for this worker child session
-	BlockedOnApproval bool `json:"blocked_on_approval,omitempty"`
 }
 
 // BriefingEvent A snapshot of one target, or a reset clearing earlier epochs for the listed profiles.
@@ -1443,6 +1612,8 @@ type CommandActivity struct {
 	// First execution of each structural step; use activity_id to page all member receipts.
 	ExecutionIDs []string              `json:"execution_ids"`
 	Spans        []CommandActivitySpan `json:"spans"`
+	// Card for this activity; projected on read and in live snapshots, never stored.
+	Action *ActionDescriptor `json:"action,omitempty"`
 }
 
 // CommandActivitySpan
@@ -2436,22 +2607,6 @@ type CreateCustomScannerRequest struct {
 	Env []string `json:"env,omitempty"`
 }
 
-// CreateDelegationRequest
-type CreateDelegationRequest struct {
-	// Idempotency key. Repeating a create with the same key and body answers the delegation the first create made; the same key with a different body is an idempotency_conflict.
-	OperationID string `json:"operation_id"`
-	ProjectID   string `json:"project_id"`
-	Task        string `json:"task"`
-	// Decomposition strategy. The host uses file-based when the request omits it.
-	Strategy        HuntStrategy `json:"strategy,omitempty"`
-	InspectMode     InspectMode  `json:"inspect_mode,omitempty"`
-	WorkflowID      string       `json:"workflow_id,omitempty"`
-	WorkflowVersion string       `json:"workflow_version,omitempty"`
-	WorkflowRunID   string       `json:"workflow_run_id,omitempty"`
-	// Project-relative path under the overlay blueprints/ directory
-	BlueprintPath string `json:"blueprint_path,omitempty"`
-}
-
 // CreateManagedSecretRequest Stores a value a person entered in project settings. This is the one managed-secret path where a credential travels in a request body: every other path either generates the bytes host-side or slices them from a document the host already holds. The response carries only the capability. Ordinary reads never return the value; authenticated reveal is the sole disclosure path.
 type CreateManagedSecretRequest struct {
 	Name string `json:"name"`
@@ -2559,43 +2714,6 @@ type CurrentComparisonSource struct {
 	DecodeAs string `json:"decode_as,omitempty"`
 }
 
-// Delegation
-type Delegation struct {
-	ID              string `json:"id"`
-	ProjectID       string `json:"project_id"`
-	WorkspaceRootID string `json:"workspace_root_id,omitempty"`
-	WorkspacePath   string `json:"workspace_path,omitempty"`
-	// Coordinator session created with the delegation (for prompts and grounding)
-	CoordinatorSessionID string       `json:"coordinator_session_id,omitempty"`
-	Task                 string       `json:"task"`
-	Strategy             HuntStrategy `json:"strategy"`
-	InspectMode          InspectMode  `json:"inspect_mode,omitempty"`
-	WorkflowID           string       `json:"workflow_id,omitempty"`
-	WorkflowVersion      string       `json:"workflow_version,omitempty"`
-	WorkflowRunID        string       `json:"workflow_run_id,omitempty"`
-	// Project-relative path under the overlay blueprints/ directory
-	BlueprintPath string           `json:"blueprint_path,omitempty"`
-	BaseHeadSHA   string           `json:"base_head_sha,omitempty"`
-	Status        DelegationStatus `json:"status"`
-	Reason        string           `json:"reason,omitempty"`
-	Phase         DelegationPhase  `json:"phase,omitempty"`
-	Legs          []Leg            `json:"legs,omitempty"`
-	CreatedAt     time.Time        `json:"created_at"`
-}
-
-// DelegationEvent
-type DelegationEvent struct {
-	DelegationID string           `json:"delegation_id"`
-	Status       DelegationStatus `json:"status"`
-	LegID        string           `json:"leg_id"`
-	Phase        DelegationPhase  `json:"phase"`
-}
-
-// DelegationLegListResponse
-type DelegationLegListResponse struct {
-	Legs []Leg `json:"legs"`
-}
-
 // DenPerfEvent
 type DenPerfEvent struct {
 	// Den-side observation time (RFC 3339)
@@ -2693,11 +2811,6 @@ type DetectionRuleSummary struct {
 // DismissVerifySettingsRequest
 type DismissVerifySettingsRequest struct {
 	Dismissed bool `json:"dismissed"`
-}
-
-// DispatchRequest
-type DispatchRequest struct {
-	LegID string `json:"leg_id,omitempty"`
 }
 
 // DraftVersion
@@ -4725,29 +4838,36 @@ type OpenEditorDocumentRequest struct {
 
 // OverlayMergePlan
 type OverlayMergePlan struct {
-	PendingCount    int                      `json:"pending_count"`
+	PendingCount int `json:"pending_count"`
+	// Result handles in landing order.
 	PromoteSequence []string                 `json:"promote_sequence,omitempty"`
 	SharedPaths     []OverlayMergeSharedPath `json:"shared_paths,omitempty"`
 	Entries         []OverlayMergePlanEntry  `json:"entries,omitempty"`
 }
 
-// OverlayMergePlanEntry
+// OverlayMergePlanEntry One worker's latest pending result.
 type OverlayMergePlanEntry struct {
-	WorkerID      string                 `json:"worker_id"`
+	// Handle of the result.
+	OverlayID string `json:"overlay_id"`
+	// Name of the worker that delivered it.
+	Worker        string                 `json:"worker"`
 	AgentType     string                 `json:"agent_type,omitempty"`
 	ChangedPaths  []string               `json:"changed_paths,omitempty"`
 	CleanPaths    []string               `json:"clean_paths,omitempty"`
 	ConflictPaths []string               `json:"conflict_paths,omitempty"`
 	PromoteOrder  WorkerPromoteOrderKind `json:"promote_order,omitempty"`
-	PromoteAfter  []string               `json:"promote_after,omitempty"`
-	BlockedBy     []string               `json:"blocked_by,omitempty"`
-	PreviewStale  bool                   `json:"preview_stale,omitempty"`
+	// Handles of results that must land before this one is clean.
+	PromoteAfter []string `json:"promote_after,omitempty"`
+	// Handles of results this one must land before.
+	BlockedBy    []string `json:"blocked_by,omitempty"`
+	PreviewStale bool     `json:"preview_stale,omitempty"`
 }
 
 // OverlayMergeSharedPath
 type OverlayMergeSharedPath struct {
-	Path      string   `json:"path"`
-	WorkerIDs []string `json:"worker_ids"`
+	Path string `json:"path"`
+	// Handles of the pending results that change this path.
+	OverlayIDs []string `json:"overlay_ids"`
 }
 
 // OverlayPromotion Project file snapshots recorded by the host at the merge event.
@@ -4997,7 +5117,7 @@ type ProgressStep struct {
 	Label string `json:"label"`
 }
 
-// ProgressUpdateMeta Incremental progress update with a plan, delta, or aggregate summary.
+// ProgressUpdateMeta Incremental progress update. `summary` states the plan it leaves; `steps` or `changes` list its rows unless they are too many to show.
 type ProgressUpdateMeta struct {
 	Changes []ProgressChange       `json:"changes,omitempty"`
 	Steps   []ProgressStep         `json:"steps,omitempty"`
@@ -5006,7 +5126,7 @@ type ProgressUpdateMeta struct {
 	Seq     int                    `json:"seq"`
 }
 
-// ProgressUpdateSummary Aggregate progress update; the full checklist remains in ProgressDigest.
+// ProgressUpdateSummary The plan's state after a progress update; the full checklist remains in ProgressDigest.
 type ProgressUpdateSummary struct {
 	ChangeCount int `json:"change_count"`
 	TotalSteps  int `json:"total_steps"`
@@ -5229,6 +5349,14 @@ type ProjectRoot struct {
 	Admitted bool `json:"admitted"`
 	// Why agents do not work in this folder; null when admitted. write_root_under_secret_store: the folder is inside the engine's state, key material or a credential store. write_root_contains_control_plane: the folder contains the engine's state.
 	AdmissionCode *string `json:"admission_code"`
+}
+
+// ProjectSettingsRejectedRow
+type ProjectSettingsRejectedRow struct {
+	// Why the project's file was not applied. project_unreadable means the file could not be read or holds a key or value the host does not accept, so none of it applied. Clients branch on this rather than on detail.
+	Code string `json:"code"`
+	// What was wrong, naming the file.
+	Detail string `json:"detail"`
 }
 
 // ProjectSourceEntryCreatedResponse Completed in-app creation. Only the normalized path comes back — a new
@@ -5810,6 +5938,8 @@ type ReviewSettingsResponse struct {
 	Scope       SettingsScope       `json:"scope"`
 	ReviewPaths []ContentReviewRule `json:"review_paths"`
 	MergedFrom  []string            `json:"merged_from"`
+	// Present on project scope when the project's review.yaml could not be applied. Every edit asks for review until it is fixed, and the project's review settings cannot be saved until then.
+	Rejected []ProjectSettingsRejectedRow `json:"rejected,omitempty"`
 }
 
 // ReviewedComparisonSource
@@ -6605,16 +6735,14 @@ type Session struct {
 	// Active root for this session; omitted when no roots
 	WorkspaceRootID string `json:"workspace_root_id,omitempty"`
 	// Computed on read from workspace_root_id or primary root; omitted when project has no roots
-	WorkspacePath   string         `json:"workspace_path,omitempty"`
-	Posture         SessionPosture `json:"posture"`
-	AgentType       string         `json:"agent_type,omitempty"`
-	ProviderID      string         `json:"provider_id,omitempty"`
-	Model           string         `json:"model,omitempty"`
-	Status          SessionStatus  `json:"status"`
-	ParentSessionID string         `json:"parent_session_id,omitempty"`
-	// Effective worker tool-loop cap. Omitted task budgets default to 12 for read scope and 20 for write scope; maximum 120. The final iteration is prose-only.
-	MaxToolLoops         int `json:"max_tool_loops,omitempty"`
-	CompactionGeneration int `json:"compaction_generation,omitempty"`
+	WorkspacePath        string         `json:"workspace_path,omitempty"`
+	Posture              SessionPosture `json:"posture"`
+	AgentType            string         `json:"agent_type,omitempty"`
+	ProviderID           string         `json:"provider_id,omitempty"`
+	Model                string         `json:"model,omitempty"`
+	Status               SessionStatus  `json:"status"`
+	ParentSessionID      string         `json:"parent_session_id,omitempty"`
+	CompactionGeneration int            `json:"compaction_generation,omitempty"`
 	// Server-derived: true once this session has ingested untrusted external content (web tools, MCP, or web-researcher worker summary). Read-only; ignored on input.
 	UntrustedContent bool `json:"untrusted_content,omitempty"`
 	// Server-derived 1-based ordinal of the session's newest user turn, and the same number the source ledger stamps on writes made during it. A client addressing a turn (source `baseline=turn:{session_id},{n}`) cites this value rather than counting transcript messages itself; `baseline=turn:{session_id}` lets the host resolve it. 0 means no user turn has started. Read-only; ignored on input.
@@ -6837,12 +6965,6 @@ type SettingsLimitsPatch struct {
 	CoordinatorMaxSleepMs *int `json:"coordinator_max_sleep_ms,omitempty"`
 	// Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds.
 	AwaitParentWorkersTimeoutMs *int `json:"await_parent_workers_timeout_ms,omitempty"`
-	// Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget.
-	WorkerToolBudgetDefault *int `json:"worker_tool_budget_default,omitempty"`
-	// Smallest worker tool-round ceiling the coordinator may set (host floor is 2).
-	WorkerToolBudgetMin *int `json:"worker_tool_budget_min,omitempty"`
-	// Largest worker tool-round ceiling the coordinator may set or grant.
-	WorkerToolBudgetMax *int `json:"worker_tool_budget_max,omitempty"`
 	// Opt-in per-session nano-USD spend limit (enforced only when spend_ceiling_enabled is true and spend is priced).
 	SessionSpendCeilingNanoUSD *int64 `json:"session_spend_ceiling_nano_usd,omitempty"`
 	// Share of the session spend limit at which the host emits a one-shot warning.
@@ -6874,12 +6996,6 @@ type SettingsLimitsResponse struct {
 	CoordinatorMaxSleepMs int `json:"coordinator_max_sleep_ms"`
 	// Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds.
 	AwaitParentWorkersTimeoutMs int `json:"await_parent_workers_timeout_ms"`
-	// Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget.
-	WorkerToolBudgetDefault int `json:"worker_tool_budget_default"`
-	// Smallest worker tool-round ceiling the coordinator may set (host floor is 2).
-	WorkerToolBudgetMin int `json:"worker_tool_budget_min"`
-	// Largest worker tool-round ceiling the coordinator may set or grant.
-	WorkerToolBudgetMax int `json:"worker_tool_budget_max"`
 	// Opt-in per-session nano-USD spend limit (enforced only when spend_ceiling_enabled is true and spend is priced).
 	SessionSpendCeilingNanoUSD int64 `json:"session_spend_ceiling_nano_usd,omitempty"`
 	// Share of the session spend limit at which the host emits a one-shot warning.
@@ -6889,6 +7005,8 @@ type SettingsLimitsResponse struct {
 	// When true, a coordinator that crosses the ceiling while already running receives one final tool-capable wind-down round. A response without tool calls is final; after tool calls, the host requests one prose-only closeout. New prompts and worker sessions remain blocked at the ceiling.
 	SpendSoftStop bool     `json:"spend_soft_stop"`
 	MergedFrom    []string `json:"merged_from"`
+	// Present on project scope when the project's limits.yaml could not be applied. The limits shown are the device's, and the project's limits cannot be saved until the file is fixed.
+	Rejected []ProjectSettingsRejectedRow `json:"rejected,omitempty"`
 }
 
 // SettingsPricing
@@ -8530,6 +8648,8 @@ type ToolCall struct {
 	ArgsMalformed bool `json:"args_malformed,omitempty"`
 	// Provider-specific tool-call metadata required on replay.
 	ExtraContent map[string]any `json:"extra_content,omitempty"`
+	// Card for the call before its result arrives; projected on read, never stored.
+	Action *ActionDescriptor `json:"action,omitempty"`
 }
 
 // ToolCompletion A call's lifecycle outcome as its producer states it. State `parked` with resource_kind `wait` means the call ended its turn on the session's wait lease (resource_id): a `wait` call, or a `command` call whose program keeps running while it waits. The lease's awaiting_wake activity carries the call's tool_call_id; when that activity closes, the wait has ended and the call's outcome arrives in a later message.
@@ -8599,6 +8719,10 @@ type ToolResult struct {
 	Codes []string `json:"codes,omitempty"`
 	// Structured facts for every raised guidance code, in the same order as codes. Agents branch on code and details, never on rendered content.
 	Feedback []ToolFeedback `json:"feedback,omitempty"`
+	// Card for a settled call that is not a command program; projected on read, never stored.
+	Action *ActionDescriptor `json:"action,omitempty"`
+	// Facts the tool's handler stated for its action card, such as what it found or the HTTP status it got. Stored with the result; never part of the model's tool result.
+	CardFacts []ActionFact `json:"card_facts,omitempty"`
 	// Quiet-chrome for Den verbose prefs. Host stamps from the policy registry (`guard:` emit, advisory/informational/expected_behavior categories, info|warning severity) or a structured reject `code` with no registry row. `benign` hides unless verbose; `normal` stays visible (worker_dispatch, SPEC_POSTURE, …).
 	UiVisibility ToolResultUiVisibility `json:"ui_visibility,omitempty"`
 	// Producer-stated worker dispatch identity.
@@ -9017,6 +9141,8 @@ type VerifySettingsResponse struct {
 	BackendConfigured bool                  `json:"backend_configured"`
 	SuggestionState   VerifySuggestionState `json:"suggestion_state,omitempty"`
 	Dismissed         bool                  `json:"dismissed,omitempty"`
+	// Present on project scope when the project's verify.yaml could not be applied. No test command is declared while it stands, and the project's verify settings cannot be saved until the file is fixed.
+	Rejected []ProjectSettingsRejectedRow `json:"rejected,omitempty"`
 }
 
 // VersionComparisonSource
@@ -9230,19 +9356,6 @@ type WebResearchWarmActivity struct {
 	SessionID  string   `json:"session_id,omitempty"`
 }
 
-// WorkerBudgetRequest A running worker's request that its coordinator raise its tool-round ceiling.
-type WorkerBudgetRequest struct {
-	// Additional tool rounds the worker asked for beyond its ceiling at request time
-	Rounds int `json:"rounds"`
-	// Ceiling the worker asked for, bounded by the host maximum
-	RequestedMax int `json:"requested_max"`
-	// Worker-authored work the extra rounds would cover; data for the coordinator, not instructions
-	RemainingWork []string `json:"remaining_work"`
-	// Rounds the worker had completed when it asked
-	ToolLoopsUsed int       `json:"tool_loops_used"`
-	RequestedAt   time.Time `json:"requested_at"`
-}
-
 // WorkerChangeReport
 type WorkerChangeReport struct {
 	ChangedPaths   []string         `json:"changed_paths,omitempty"`
@@ -9276,14 +9389,16 @@ type WorkerCompletionReport struct {
 	// Leg status the worker declared; leg_status is the host-graded status.
 	DeclaredLegStatus string `json:"declared_leg_status,omitempty"`
 	// Host-graded leg status.
-	LegStatus           string                     `json:"leg_status"`
-	FilesModified       []string                   `json:"files_modified,omitempty"`
-	ObjectivesMet       []string                   `json:"objectives_met,omitempty"`
-	RemainingRisk       []string                   `json:"remaining_risk,omitempty"`
-	SuggestedNextTask   string                     `json:"suggested_next_task,omitempty"`
-	Brief               string                     `json:"brief,omitempty"`
-	Findings            []WorkerCompletionFinding  `json:"findings,omitempty"`
-	CitedURLs           []string                   `json:"cited_urls,omitempty"`
+	LegStatus         string                    `json:"leg_status"`
+	FilesModified     []string                  `json:"files_modified,omitempty"`
+	ObjectivesMet     []string                  `json:"objectives_met,omitempty"`
+	RemainingRisk     []string                  `json:"remaining_risk,omitempty"`
+	SuggestedNextTask string                    `json:"suggested_next_task,omitempty"`
+	Brief             string                    `json:"brief,omitempty"`
+	Findings          []WorkerCompletionFinding `json:"findings,omitempty"`
+	CitedURLs         []string                  `json:"cited_urls,omitempty"`
+	// Handles of the worker's own earlier results this report builds on, cited as historical evidence.
+	CitedResults        []string                   `json:"cited_results,omitempty"`
 	EvidenceObligations []WorkerEvidenceObligation `json:"evidence_obligations,omitempty"`
 }
 
@@ -9343,18 +9458,24 @@ type WorkerDispatch struct {
 
 // WorkerEvent
 type WorkerEvent struct {
-	Dependencies    []WorkerDependency `json:"dependencies,omitempty"`
-	WorkerID        string             `json:"worker_id"`
-	Status          WorkerStatus       `json:"status"`
-	AgentType       string             `json:"agent_type,omitempty"`
-	ChildSessionID  string             `json:"child_session_id,omitempty"`
-	ParentSessionID string             `json:"parent_session_id,omitempty"`
+	Dependencies      []WorkerDependency      `json:"dependencies,omitempty"`
+	WorkerID          string                  `json:"worker_id"`
+	WorkerRecordID    string                  `json:"worker_record_id,omitempty"`
+	WorkerName        string                  `json:"worker_name,omitempty"`
+	Round             int                     `json:"round,omitempty"`
+	ResultHandle      string                  `json:"result_handle,omitempty"`
+	ResultDisposition WorkerResultDisposition `json:"result_disposition,omitempty"`
+	ShelveReason      string                  `json:"shelve_reason,omitempty"`
+	ReviewOf          string                  `json:"review_of,omitempty"`
+	ParkedReason      string                  `json:"parked_reason,omitempty"`
+	ParkedUntilAt     string                  `json:"parked_until_at,omitempty"`
+	Status            WorkerStatus            `json:"status"`
+	AgentType         string                  `json:"agent_type,omitempty"`
+	ChildSessionID    string                  `json:"child_session_id,omitempty"`
+	ParentSessionID   string                  `json:"parent_session_id,omitempty"`
 	// Worker assignment goal used for card titles.
-	Brief        string            `json:"brief,omitempty"`
-	MergeStatus  WorkerMergeStatus `json:"merge_status,omitempty"`
-	MaxToolLoops int               `json:"max_tool_loops,omitempty"`
-	// The worker's unanswered request for more tool rounds; absent once granted
-	BudgetRequest        *WorkerBudgetRequest  `json:"budget_request,omitempty"`
+	Brief                string                `json:"brief,omitempty"`
+	MergeStatus          WorkerMergeStatus     `json:"merge_status,omitempty"`
 	ToolLoopsUsed        int                   `json:"tool_loops_used,omitempty"`
 	ToolCallsUsed        int                   `json:"tool_calls_used,omitempty"`
 	TurnToolCalls        int                   `json:"turn_tool_calls,omitempty"`
@@ -9387,6 +9508,54 @@ type WorkerFailure struct {
 	Scope NoticeScope `json:"scope,omitempty"`
 	// Which declared resolution produced `tier`/`scope`.
 	Resolution string `json:"resolution,omitempty"`
+}
+
+// WorkerHistoryMessage
+type WorkerHistoryMessage struct {
+	Seq               int                     `json:"seq"`
+	SenderRole        WorkerMessageSenderRole `json:"sender_role"`
+	RoundOrdinal      int                     `json:"round_ordinal,omitempty"`
+	Body              string                  `json:"body"`
+	ArtifactRef       string                  `json:"artifact_ref,omitempty"`
+	NeedsReply        bool                    `json:"needs_reply,omitempty"`
+	ReplyToSeq        int                     `json:"reply_to_seq,omitempty"`
+	Delivered         bool                    `json:"delivered"`
+	InstructionStatus WorkerInstructionStatus `json:"instruction_status,omitempty"`
+	CreatedAt         string                  `json:"created_at"`
+}
+
+// WorkerHistoryResponse
+type WorkerHistoryResponse struct {
+	WorkerID       string                 `json:"worker_id"`
+	Name           string                 `json:"name"`
+	AgentType      string                 `json:"agent_type"`
+	Brief          string                 `json:"brief,omitempty"`
+	ChildSessionID string                 `json:"child_session_id,omitempty"`
+	State          WorkerState            `json:"state"`
+	Reason         WorkerStateReason      `json:"reason,omitempty"`
+	Rounds         []WorkerHistoryRound   `json:"rounds"`
+	Messages       []WorkerHistoryMessage `json:"messages"`
+	Before         int                    `json:"before,omitempty"`
+	BeforeRound    int                    `json:"before_round,omitempty"`
+}
+
+// WorkerHistoryRound
+type WorkerHistoryRound struct {
+	Ordinal int `json:"ordinal"`
+	// Worker job identity for this round.
+	WorkerID            string                  `json:"worker_id"`
+	Status              WorkerStatus            `json:"status,omitempty"`
+	InstructionFirstSeq int                     `json:"instruction_first_seq,omitempty"`
+	InstructionLastSeq  int                     `json:"instruction_last_seq,omitempty"`
+	ResultHandle        string                  `json:"result_handle,omitempty"`
+	ResultDisposition   WorkerResultDisposition `json:"result_disposition,omitempty"`
+	ShelveReason        string                  `json:"shelve_reason,omitempty"`
+	CheckpointID        string                  `json:"checkpoint_id,omitempty"`
+	ReviewOf            string                  `json:"review_of,omitempty"`
+	Result              *WorkerResult           `json:"result,omitempty"`
+	Failure             *WorkerFailure          `json:"failure,omitempty"`
+	CreatedAt           string                  `json:"created_at"`
+	SettledAt           string                  `json:"settled_at,omitempty"`
 }
 
 // WorkerJobChangedFile One overlay-modified file, addressed by root.
@@ -9427,12 +9596,14 @@ type WorkerPromoteJobPathStatus struct {
 
 // WorkerPromotePathStatus
 type WorkerPromotePathStatus struct {
-	Path             string                    `json:"path"`
-	Status           WorkerPromotePathOutcome  `json:"status"`
-	Reason           string                    `json:"reason,omitempty"`
-	HunkCount        int                       `json:"hunk_count,omitempty"`
-	PromoteOrder     WorkerPromoteOrderKind    `json:"promote_order,omitempty"`
-	PromoteAfter     []string                  `json:"promote_after,omitempty"`
+	Path         string                   `json:"path"`
+	Status       WorkerPromotePathOutcome `json:"status"`
+	Reason       string                   `json:"reason,omitempty"`
+	HunkCount    int                      `json:"hunk_count,omitempty"`
+	PromoteOrder WorkerPromoteOrderKind   `json:"promote_order,omitempty"`
+	// Handles of results that must land before this path is clean.
+	PromoteAfter []string `json:"promote_after,omitempty"`
+	// Handles of results this path must land before.
 	BlockedBy        []string                  `json:"blocked_by,omitempty"`
 	PromoteOrderNote string                    `json:"promote_order_note,omitempty"`
 	ConflictTier     WorkerPromoteConflictTier `json:"conflict_tier,omitempty"`
@@ -9456,14 +9627,12 @@ type WorkerResult struct {
 	Status           string                  `json:"status,omitempty"`
 	HintCode         string                  `json:"hint_code,omitempty"`
 	PolicyFeedback   *WorkerPolicyFeedback   `json:"policy_feedback,omitempty"`
-	HostAssembled    bool                    `json:"host_assembled,omitempty"`
 }
 
 // WorkerResultBriefingTarget
 type WorkerResultBriefingTarget struct {
-	WorkerID string `json:"worker_id"`
-	// The worker's completion time; a rerun is a new revision.
-	ResultRevision string `json:"result_revision"`
+	// Settled worker round result handle.
+	ResultHandle string `json:"result_handle"`
 }
 
 // WorkerSummaryMeta
@@ -9471,6 +9640,11 @@ type WorkerSummaryMeta struct {
 	SourceContext   *SourceContext         `json:"source_context,omitempty"`
 	DelegationID    string                 `json:"delegation_id,omitempty"`
 	LegID           string                 `json:"leg_id,omitempty"`
+	WorkerRecordID  string                 `json:"worker_record_id,omitempty"`
+	WorkerName      string                 `json:"worker_name,omitempty"`
+	Round           int                    `json:"round,omitempty"`
+	ResultHandle    string                 `json:"result_handle,omitempty"`
+	ReviewOf        string                 `json:"review_of,omitempty"`
 	WorkerID        string                 `json:"worker_id"`
 	ChildSessionID  string                 `json:"child_session_id"`
 	AgentType       string                 `json:"agent_type"`

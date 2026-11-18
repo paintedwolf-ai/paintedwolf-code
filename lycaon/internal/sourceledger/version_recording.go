@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -36,11 +37,7 @@ func entryState(kind, sha string) string {
 	return "content"
 }
 
-func (s *Store) insertVersion(ctx context.Context, q *db.Queries, spec versionSpec) (string, error) {
-	return s.insertVersionWithCache(ctx, q, spec, nil)
-}
-
-func (s *Store) insertVersionWithCache(ctx context.Context, q *db.Queries, spec versionSpec, cache *TxBatchCache) (string, error) {
+func (s *Store) insertVersion(ctx context.Context, q *db.Queries, spec versionSpec, cache *TxBatchCache) (string, error) {
 	state := spec.State
 	if state == "" {
 		state = entryState(spec.EntryKind, spec.SHA256)
@@ -54,7 +51,7 @@ func (s *Store) insertVersionWithCache(ctx context.Context, q *db.Queries, spec 
 	case "content", "link":
 		captureState = "metadata_only"
 		captureReason = "content_not_captured"
-		if spec.Size > MaxRevisionContentBytes {
+		if spec.Size > sourceblob.MaxRevisionContentBytes {
 			captureReason = "content_too_large"
 		}
 		if s.contentWithheld(ctx, spec.ProjectID, spec.RootID, spec.Path) {
@@ -131,7 +128,7 @@ func (s *Store) preserveObservedPreimageWithCache(ctx context.Context, q *db.Que
 		}
 	}
 	if needsPreimage {
-		return s.insertVersionWithCache(ctx, q, versionSpec{
+		return s.insertVersion(ctx, q, versionSpec{
 			FileID: tracked.FileID, ProjectID: in.ProjectID, BranchID: in.BranchID,
 			ParentVersionID:      tracked.VersionID,
 			DerivedFromVersionID: in.DerivedFromVersionID,

@@ -105,13 +105,6 @@ func TestToolRejectFormatterRetainsFrozenRecovery(t *testing.T) {
 	}
 }
 
-func TestHostRejectCode(t *testing.T) {
-	raw := ">>> Spec posture blocked\nCode: SPEC_POSTURE_STUB_REQUIRED\n"
-	if got := HostRejectCode(raw); got != "SPEC_POSTURE_STUB_REQUIRED" {
-		t.Fatalf("HostRejectCode = %q", got)
-	}
-}
-
 func TestToolRejectFormatter_ProgressCompactFromChecklist(t *testing.T) {
 	setTestRenderer(t)
 	f := NewToolRejectFormatter(NewFeedbackDeduper())
@@ -124,7 +117,7 @@ func TestToolRejectFormatter_ProgressCompactFromChecklist(t *testing.T) {
 		ProgressChecklist: "[x] Phase 0 — Infer\n[ ] Phase 1 — Research depth (stub plan file)\n",
 		ChecklistHash:     "h2",
 	}
-	block, err := f.FormatBlock(t.Context(), "s1", "delegate_dispatch", out, progress, phaseFixtureCopy())
+	block, err := f.FormatBlock(t.Context(), "s1", "plan_from_blueprint", out, progress, phaseFixtureCopy())
 	testutil.FailErr(t, "f.FormatBlock failed", err)
 	if !strings.Contains(block, "Progress:") || !strings.Contains(block, "Phase 1 — Research depth") {
 		t.Fatalf("expected phase line in progress:\n%s", block)

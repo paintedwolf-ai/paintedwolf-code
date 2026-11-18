@@ -234,7 +234,7 @@ export function WorklogPanel(props: WorklogPanelProps) {
                     <div class="worklog-panel__reservation-group">
                       <p class="worklog-panel__reservation-head">
                         <span class="worklog-panel__reservation-agent">
-                          {group.agentType}
+                          {group.worker}
                         </span>
                         <span class="worklog-panel__reservation-job">{group.jobId}</span>
                       </p>

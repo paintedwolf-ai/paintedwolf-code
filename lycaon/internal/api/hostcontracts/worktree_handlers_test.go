@@ -307,52 +307,6 @@ func TestGitWorktreeLandHappyAndNothingToLand(t *testing.T) {
 	}
 }
 
-func TestGitWorktreeLandBaseDirty(t *testing.T) {
-	srv, _, projectID := contractfixture.NewWorktreeTestServer(t)
-	sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
-	binding, _, _ := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
-	testutil.FailErr(t, "write wt", os.WriteFile(filepath.Join(binding.WorktreePath, "a.txt"), []byte("a\n"), 0o644))
-	contractfixture.RunGitIn(t, binding.WorktreePath, "add", "a.txt")
-	contractfixture.RunGitIn(t, binding.WorktreePath, "commit", "-m", "a")
-	testutil.FailErr(t, "dirty base", os.WriteFile(filepath.Join(binding.Toplevel, "base-dirty.txt"), []byte("d\n"), 0o644))
-	w := contractfixture.LandWorktree(t, srv, sess.ID)
-	resp := contractfixture.DecodeErr(t, w)
-	if w.Code != http.StatusConflict || resp.Code != "worktree_land_blocked" || resp.Details["reason"] != "base_dirty" {
-		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
-	}
-}
-
-func TestGitWorktreeLandBaseOnOtherBranch(t *testing.T) {
-	srv, _, projectID := contractfixture.NewWorktreeTestServer(t)
-	sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
-	binding, _, _ := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
-	testutil.FailErr(t, "write wt", os.WriteFile(filepath.Join(binding.WorktreePath, "a.txt"), []byte("a\n"), 0o644))
-	contractfixture.RunGitIn(t, binding.WorktreePath, "add", "a.txt")
-	contractfixture.RunGitIn(t, binding.WorktreePath, "commit", "-m", "a")
-	contractfixture.RunGitIn(t, binding.Toplevel, "checkout", "-b", "other")
-	w := contractfixture.LandWorktree(t, srv, sess.ID)
-	resp := contractfixture.DecodeErr(t, w)
-	if w.Code != http.StatusConflict || resp.Details["reason"] != "base_on_other_branch" {
-		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
-	}
-}
-
-func TestGitWorktreeLandBaseBranchDeleted(t *testing.T) {
-	srv, _, projectID := contractfixture.NewWorktreeTestServer(t)
-	sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
-	binding, _, _ := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
-	testutil.FailErr(t, "write wt", os.WriteFile(filepath.Join(binding.WorktreePath, "a.txt"), []byte("a\n"), 0o644))
-	contractfixture.RunGitIn(t, binding.WorktreePath, "add", "a.txt")
-	contractfixture.RunGitIn(t, binding.WorktreePath, "commit", "-m", "a")
-	contractfixture.RunGitIn(t, binding.Toplevel, "checkout", "-b", "other")
-	contractfixture.RunGitIn(t, binding.Toplevel, "branch", "-D", binding.BaseBranch)
-	w := contractfixture.LandWorktree(t, srv, sess.ID)
-	resp := contractfixture.DecodeErr(t, w)
-	if w.Code != http.StatusConflict || resp.Details["reason"] != "base_branch_missing" {
-		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
-	}
-}
-
 func TestGitWorktreeLandConflict(t *testing.T) {
 	srv, _, projectID := contractfixture.NewWorktreeTestServer(t)
 	sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
@@ -385,17 +339,6 @@ func TestGitWorktreeLandConflict(t *testing.T) {
 	testutil.FailErr(t, "status", err)
 	if st.Dirty {
 		t.Fatal("base tree must be clean after abort")
-	}
-}
-
-func TestGitWorktreeLandWorktreeDirty(t *testing.T) {
-	srv, _, projectID := contractfixture.NewWorktreeTestServer(t)
-	sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
-	binding, _, _ := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
-	testutil.FailErr(t, "dirty", os.WriteFile(filepath.Join(binding.WorktreePath, "d.txt"), []byte("d\n"), 0o644))
-	w := contractfixture.LandWorktree(t, srv, sess.ID)
-	if w.Code != http.StatusConflict || contractfixture.DecodeErr(t, w).Code != "worktree_dirty" {
-		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
 }
 
@@ -443,14 +386,30 @@ func TestGitWorktreeLandBusy(t *testing.T) {
 	}
 }
 
-func TestGitWorktreeLandStale(t *testing.T) {
+// The git package proves each blocked state; here the two that keep their own
+// codes reach the client with them. Both sessions share one server and base.
+func TestGitWorktreeLandRefusalsKeepTheirCodes(t *testing.T) {
 	srv, _, projectID := contractfixture.NewWorktreeTestServer(t)
-	sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
-	binding, _, _ := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
-	testutil.FailErr(t, "remove", os.RemoveAll(binding.WorktreePath))
-	w := contractfixture.LandWorktree(t, srv, sess.ID)
-	if w.Code != http.StatusConflict || contractfixture.DecodeErr(t, w).Code != "worktree_stale" {
-		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	for _, tc := range []struct {
+		code  wire.ApiErrorCode
+		block func(*testing.T, string)
+	}{
+		{wire.ApiErrorCodeWorktreeDirty, func(t *testing.T, worktree string) {
+			testutil.FailErr(t, "dirty", os.WriteFile(filepath.Join(worktree, "d.txt"), []byte("d\n"), 0o644))
+		}},
+		{wire.ApiErrorCodeWorktreeStale, func(t *testing.T, worktree string) {
+			testutil.FailErr(t, "remove", os.RemoveAll(worktree))
+		}},
+	} {
+		t.Run(string(tc.code), func(t *testing.T) {
+			sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
+			binding, _, _ := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
+			tc.block(t, binding.WorktreePath)
+			w := contractfixture.LandWorktree(t, srv, sess.ID)
+			if w.Code != http.StatusConflict || contractfixture.DecodeErr(t, w).Code != tc.code {
+				t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+			}
+		})
 	}
 }
 

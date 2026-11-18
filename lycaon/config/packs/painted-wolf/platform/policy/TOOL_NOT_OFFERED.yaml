@@ -36,7 +36,7 @@ x-paintedwolf-scenarios:
       tool_loadable: false
   - id: unavailable-name-with-discovery
     vars:
-      tool: delegate_dispatch
+      tool: plan_from_blueprint
       tool_loadable: false
       tool_discovery_available: true
       offered_tools: [read, request_tools]

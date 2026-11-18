@@ -8,13 +8,14 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/findings"
+	"github.com/lycaon/lycaon/internal/findings/findingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestFindingPagesAndDetailsAreRootScoped(t *testing.T) {
-	store := findings.NewMemoryStore()
+	store := findingstest.New(t, "root", "other")
 	for i := 0; i < 19; i++ {
 		_, err := store.Append(t.Context(), "root", "peer", fmt.Sprint(i), "source.go", "large private detail")
 		testutil.FailErr(t, "append finding", err)
@@ -61,5 +62,50 @@ func TestFindingPagesAndDetailsAreRootScoped(t *testing.T) {
 		Identity: tools.InvocationIdentity{SessionID: "child"},
 	}, deps); err == nil {
 		t.Fatal("read another root's finding")
+	}
+}
+
+func TestReadFindingsToolRegistrationAndValidation(t *testing.T) {
+	store := findingstest.New(t, "root", "other")
+	_, err := store.Append(t.Context(), "root", "scout", "note-1", "a.go", "full body")
+	testutil.FailErr(t, "append finding", err)
+
+	reg := tools.NewDefaultRegistry()
+	deps := ToolDeps{
+		Builder:     &SnapshotBuilder{},
+		Findings:    func() findings.Store { return store },
+		RootSession: func(_ context.Context, s string) string { return s },
+	}
+	testutil.FailErr(t, "register board tools", RegisterBoardTools(reg, deps))
+
+	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "root"}}
+	raw, err := reg.Run(t.Context(), "read_findings", map[string]any{"finding_id": float64(1)}, tctx)
+	testutil.FailErr(t, "run read_findings by id", err)
+	var item api.Finding
+	testutil.FailErr(t, "decode finding", json.Unmarshal([]byte(raw), &item))
+	if item.ID != 1 || item.Body != "full body" {
+		t.Fatalf("finding = %+v", item)
+	}
+
+	invalidCases := []map[string]any{
+		{},
+		{"finding_id": 1, "findings_after": 0},
+		{"finding_id": 1, "extra": true},
+		{"finding_id": 0},
+		{"finding_id": -1},
+		{"findings_after": "bad"},
+		{"finding_id": 999},
+	}
+	for i, args := range invalidCases {
+		if _, err := reg.Run(t.Context(), "read_findings", args, tctx); err == nil {
+			t.Fatalf("case %d (%v) expected rejection", i, args)
+		}
+	}
+
+	if _, err := readFindings(t.Context(), map[string]any{"findings_after": 0}, tctx, ToolDeps{}); err == nil {
+		t.Fatal("expected error when findings store is nil")
+	}
+	if _, err := readFindings(t.Context(), map[string]any{"findings_after": 0}, tools.ToolContext{}, deps); err == nil {
+		t.Fatal("expected error when root session is empty")
 	}
 }

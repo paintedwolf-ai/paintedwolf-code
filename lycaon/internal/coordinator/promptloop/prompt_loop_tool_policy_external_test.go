@@ -69,7 +69,7 @@ func TestPromptLoop_SpecDenyToolMessageShape(t *testing.T) {
 	client := &sequentialLLMClient{completions: []*modelcall.Completion{
 		{ToolCalls: []api.ToolCall{{
 			ID:   "tc1",
-			Name: "delegate_dispatch",
+			Name: "task",
 			Args: map[string]any{},
 		}}},
 		{Content: "Plan workflow continues."},
@@ -78,7 +78,7 @@ func TestPromptLoop_SpecDenyToolMessageShape(t *testing.T) {
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
 	deps.Context.Policy = listedEvaluatingPolicy{
-		metas:     []tools.ToolMeta{{Name: "delegate_dispatch", ArgsSchema: map[string]any{"type": "object"}}},
+		metas:     []tools.ToolMeta{{Name: "task", ArgsSchema: map[string]any{"type": "object"}}},
 		evaluator: policy,
 	}
 	deps.Context.CoordinatorFrame = staticCoordinatorContext{run: api.CoordinatorRunContext{
@@ -105,7 +105,7 @@ func TestPromptLoop_SpecDenyToolMessageShape(t *testing.T) {
 	if got == "" {
 		t.Fatalf("expected paired spec posture rejection, got %+v", msgs)
 	}
-	for _, want := range []string{"Tool: delegate_dispatch", "Blocked at: Phase 1 — Research depth (stub plan file)", "Progress:", "Code: SPEC_POSTURE_DELEGATION_FORBIDDEN"} {
+	for _, want := range []string{"Tool: task", "Blocked at: Phase 1 — Research depth (stub plan file)", "Progress:", "Code: SPEC_POSTURE_DELEGATION_FORBIDDEN"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q in:\n%s", want, got)
 		}
@@ -207,7 +207,7 @@ func TestLoopTruncatesLargeToolResult(t *testing.T) {
 			Identity: tools.InvocationIdentity{SessionID: sess.ID},
 		},
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "loop.Run failed", err)
 	}
 	msgs, err := store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 	"unicode/utf8"
 
@@ -55,7 +56,7 @@ func (s storeCore) inTx(ctx context.Context, fn func(q *db.Queries) error) error
 	return db.InTx(ctx, s.database, s.queries, nil, func(q *db.Queries, _ *sql.Tx) error { return fn(q) })
 }
 
-func (s storeCore) stamp() string { return db.FormatTime(s.now()) }
+func (s storeCore) stamp() string { return timelayout.Format(s.now()) }
 
 // Epoch returns the project's cache epoch, starting it at 1.
 func (s *Results) Epoch(ctx context.Context, projectID string) (int64, error) {
@@ -150,7 +151,7 @@ func (s *Results) PutResult(ctx context.Context, projectID string, epoch int64, 
 		}
 		_, err := q.PutBriefingResult(ctx, db.PutBriefingResultParams{
 			ProjectID: projectID, ManifestHash: hash, Text: result.Text, Source: string(result.Source),
-			ProviderID: result.Provider, Model: result.Model, QualityJson: string(quality), CreatedAt: db.FormatTime(created),
+			ProviderID: result.Provider, Model: result.Model, QualityJson: string(quality), CreatedAt: timelayout.Format(created),
 		})
 		return err
 	})

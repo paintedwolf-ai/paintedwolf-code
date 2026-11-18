@@ -1,7 +1,7 @@
 steps:
-  - tool: "pack_board"
+  - tool: "read_review"
     args:
-      review_view: "subject"
+      view: "subject"
     say: "If next_cursor is present, continue with {{ call }}, passing assignment_id and cursor from that result."
   - tool: "scan_query"
     args:

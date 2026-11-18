@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -62,7 +62,7 @@ func TestWorkerBranchPinnedMutationsApplyAcrossCommandAndFormTool(t *testing.T) 
 	path := filepath.Join(f.Dir, "main.go")
 	testutil.FailErr(t, "seed main.go", os.WriteFile(path, []byte("package main\n\nfunc run() string { return wrap(\"alpha\") }\n"), 0o644))
 
-	outcome := runFormTool(t, f, "code_rewrite", native.CodeRewriteArgv, map[string]any{
+	outcome := runFormTool(t, f, "code_rewrite", toolreach.CodeRewriteArgv, map[string]any{
 		"path": "main.go", "pattern": "wrap($A)", "rewrite": "unwrap($A)",
 	})
 	if outcome.State != "completed" || outcome.Status != 0 {

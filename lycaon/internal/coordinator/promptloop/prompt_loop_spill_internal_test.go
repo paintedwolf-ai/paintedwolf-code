@@ -36,7 +36,7 @@ func TestTruncateToolResultForSessionClampAppendsRegisteredCode(t *testing.T) {
 			HintConfig: loadCoordinatorTestHintConfig(t),
 		},
 	})
-	got := loop.Tools.truncateToolResultForSession(t.Context(), "find", toolResultStorageProjection{content: string(payload)}, string(payload), 8192, 0, &api.Session{ID: "s1"})
+	got := loop.Tools.truncateToolResultForSession(t.Context(), "find", "", toolResultStorageProjection{content: string(payload)}, string(payload), 8192, 0, &api.Session{ID: "s1"})
 	if !strings.Contains(got.content, "Code: TOOL_SURVEY_BYTE_CLAMPED") {
 		t.Fatalf("expected registered clamp banner, got %q", got.content)
 	}
@@ -53,8 +53,6 @@ func TestTruncateToolResultForSessionClampAppendsRegisteredCode(t *testing.T) {
 
 func TestTruncateToolResultForSessionOverlaySpillsUnderProject(t *testing.T) {
 	dataDir := t.TempDir()
-	tail := `{"job_id":"job-1","conflicts":[{"path":"a.go"}],"mode":"preview"}`
-	payload := strings.Repeat("x", (512<<10)+len(tail)+64) + tail
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
 			HintConfig: loadCoordinatorTestHintConfig(t),
@@ -63,20 +61,27 @@ func TestTruncateToolResultForSessionOverlaySpillsUnderProject(t *testing.T) {
 			DataDir: dataDir,
 		},
 	})
-	got := loop.Tools.truncateToolResultForSession(t.Context(), "preview_overlay", toolResultStorageProjection{content: payload}, payload, 4096, 0, &api.Session{
-		ID:        "s1",
-		ProjectID: "proj-spill",
-	})
-	if !strings.Contains(got.content, "Code: OVERLAY_PROMOTE_SPILL") {
-		t.Fatalf("expected overlay spill banner, got tail=%q", got.content[len(got.content)-120:])
-	}
-	if !strings.Contains(got.content, "job-1") || !strings.Contains(got.content, tooloutput.PromoteSpillDir) {
-		t.Fatalf("expected registry spill hint with job id and spill path, got tail=%q", got.content[len(got.content)-200:])
-	}
-	spillRel := tooloutput.PromoteSpillRelPath("job-1")
 	host := project.HostDataDir(dataDir, "proj-spill")
-	if _, err := os.Stat(filepath.Join(host, filepath.FromSlash(spillRel))); err != nil {
-		t.Fatalf("expected spill at %s under host data dir: %v", spillRel, err)
+	// Two promotions spill side by side; each is named by its job, which the model-facing JSON omits.
+	for _, job := range []string{"job-1", "job-2"} {
+		tail := `{"result_handle":"w-` + job + `","conflicts":[{"path":"a.go"}],"mode":"preview"}`
+		payload := strings.Repeat("x", (512<<10)+len(tail)+64) + tail
+		got := loop.Tools.truncateToolResultForSession(t.Context(), "preview_overlay", job, toolResultStorageProjection{content: payload}, payload, 4096, 0, &api.Session{
+			ID:        "s1",
+			ProjectID: "proj-spill",
+		})
+		if !strings.Contains(got.content, "Code: OVERLAY_PROMOTE_SPILL") {
+			t.Fatalf("expected overlay spill banner, got tail=%q", got.content[len(got.content)-120:])
+		}
+		spillRel := tooloutput.PromoteSpillRelPath(job)
+		if !strings.Contains(got.content, spillRel) {
+			t.Fatalf("expected spill hint naming %s, got tail=%q", spillRel, got.content[len(got.content)-200:])
+		}
+		raw, err := os.ReadFile(filepath.Join(host, filepath.FromSlash(spillRel)))
+		testutil.FailErr(t, "read spill "+job, err)
+		if !strings.Contains(string(raw), `"w-`+job+`"`) {
+			t.Fatalf("spill %s holds another promotion's result", spillRel)
+		}
 	}
 }
 
@@ -98,7 +103,7 @@ func TestTruncateToolResultForSessionGenericSpillsInHostData(t *testing.T) {
 			DataDir: dataDir,
 		},
 	})
-	got := loop.Tools.truncateToolResultForSession(ctx, "read", toolResultStorageProjection{content: payload}, payload, 512, 0, &api.Session{
+	got := loop.Tools.truncateToolResultForSession(ctx, "read", "", toolResultStorageProjection{content: payload}, payload, 512, 0, &api.Session{
 		ID:        "s1",
 		ProjectID: "proj-spill",
 	})

@@ -27,9 +27,6 @@ type BoardReservationEntry struct {
 	LegLabel string `json:"leg_label,omitempty"`
 }
 
-// BoardDelegationSlice holds delegation board data keyed by section, such as delegations.
-type BoardDelegationSlice map[string]any
-
 // BoardWorkersSlice holds worker board data keyed by section, such as tasks.
 type BoardWorkersSlice map[string]any
 
@@ -56,7 +53,6 @@ type BoardSnapshot struct {
 	Repo              RepoBrief              `json:"repo"`
 	OrientationRoots  []BoardOrientationRoot `json:"orientation_roots,omitempty"`
 	Host              *BoardHostSlice        `json:"host,omitempty"`
-	Delegation        *BoardDelegationSlice  `json:"delegation,omitempty"`
 	Workers           *BoardWorkersSlice     `json:"workers,omitempty"`
 	Git               *BoardGitSlice         `json:"git,omitempty"`
 	Scans             *BoardScansSlice       `json:"scans,omitempty"`

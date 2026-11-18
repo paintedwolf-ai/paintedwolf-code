@@ -176,8 +176,12 @@ type Manager struct {
 	servicesErr error
 }
 
-// NewManager returns a workspace manager rooted at an out-of-repo branch base.
-func NewManager(branchRoot string) *Manager {
+// NewManager returns a workspace manager rooted at an out-of-repo branch base that chooses each
+// worker's adapter with selector.
+func NewManager(branchRoot string, selector *adapter.Selector) *Manager {
+	if selector == nil {
+		panic("workspace: NewManager requires a selector")
+	}
 	branchRoot = strings.TrimSpace(branchRoot)
 	stateRoot := filepath.Dir(branchRoot)
 	if registry, err := workerplacement.Load(stateRoot); err == nil {
@@ -186,6 +190,7 @@ func NewManager(branchRoot string) *Manager {
 	return &Manager{
 		branchRoot: branchRoot,
 		stateRoot:  stateRoot,
+		selector:   selector,
 		views:      make(map[string]branchViewState),
 	}
 }
@@ -196,12 +201,6 @@ func (m *Manager) BranchBase() string { return m.branchRoot }
 // WithRecovery settles and rebuilds this manager's worker views through coord.
 func (m *Manager) WithRecovery(coord *recovery.Coordinator) *Manager {
 	m.recovery = coord
-	return m
-}
-
-// WithSelector configures an explicit workspace adapter Selector on the Manager.
-func (m *Manager) WithSelector(selector *adapter.Selector) *Manager {
-	m.selector = selector
 	return m
 }
 
@@ -331,6 +330,15 @@ func LookupBranchPreparedView(branchRoot string) (*adapter.PreparedView, adapter
 		viewID = jobIDForBranch(clean)
 	}
 	return nil, *meta.AdapterFacts, viewID, true
+}
+
+// BranchViewKind returns "mounted" or "materialized" when a prepared branch
+// view is recorded for branchRoot, or empty when none is prepared yet.
+func BranchViewKind(branchRoot string) string {
+	if _, facts, _, ok := LookupBranchPreparedView(branchRoot); ok && facts.PreparationKind != "" {
+		return string(facts.PreparationKind)
+	}
+	return ""
 }
 
 func absDir(dir string) (string, error) {

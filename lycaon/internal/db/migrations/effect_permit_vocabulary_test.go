@@ -121,7 +121,9 @@ func assertApprovalMigrationRollback(t *testing.T, payload []byte) {
 	database, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "fixture.db"))
 	testutil.FailErr(t, "open refusal fixture", err)
 	defer database.Close()
-	_, err = database.Exec(`
+	seed, err := database.BeginTx(t.Context(), nil)
+	testutil.FailErr(t, "begin retained tables", err)
+	_, err = seed.Exec(`
 CREATE TABLE checkpoints(id TEXT PRIMARY KEY,kind TEXT,payload_json TEXT);
 CREATE TABLE approval_operations(checkpoint_id TEXT PRIMARY KEY,session_id TEXT,option_id TEXT,option_json TEXT,status TEXT,committed_at TEXT);
 CREATE INDEX retained_operation_status ON approval_operations(status);
@@ -134,8 +136,9 @@ INSERT INTO chat_grants VALUES
  ('session','grant','fixture','{"retained":"chat"}',NULL),
  ('other-session','other-grant','unrelated','{"retained":"day"}','2026-10-02T00:00:00Z');`)
 	testutil.FailErr(t, "create populated retained tables", err)
-	_, err = database.Exec(`INSERT INTO checkpoints VALUES('fixture','tool_approval',?),('unrelated','content_apply','{"retained":true}')`, string(payload))
+	_, err = seed.Exec(`INSERT INTO checkpoints VALUES('fixture','tool_approval',?),('unrelated','content_apply','{"retained":true}')`, string(payload))
 	testutil.FailErr(t, "persist unrecognized retained authority", err)
+	testutil.FailErr(t, "commit retained tables", seed.Commit())
 	before := approvalDatabaseSnapshot(t, database)
 	tx, err := database.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin refused migration", err)

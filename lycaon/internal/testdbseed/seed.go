@@ -172,3 +172,22 @@ func OwnerCaller(t testing.TB, ctx context.Context, sqlDB store) context.Context
 	t.Helper()
 	return people.WithCaller(ctx, people.Person{ID: OwnerID(t, sqlDB), Role: api.PersonRoleOwner})
 }
+
+// InsertWorkerJob inserts a minimal worker job and, when missing, its child
+// session, for stores keyed by job and child.
+func InsertWorkerJob(t testing.TB, sqlDB store, jobID, childSessionID string) {
+	t.Helper()
+	InsertProject(t, sqlDB, DefaultProjectID)
+	now := formatTime(time.Now().UTC())
+	_, err := sqlDB.ExecContext(t.Context(), `
+		INSERT OR IGNORE INTO sessions (
+			id, project_id, owner_person_id, posture, status, created_at, activity_at, updated_at
+		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', ?, ?, ?)
+	`, childSessionID, DefaultProjectID, now, now, now)
+	testutil.FailErr(t, "insert child session", err)
+	_, err = sqlDB.ExecContext(t.Context(), `
+		INSERT INTO worker_jobs (id, project_id, child_session_id, agent_type, prompt, brief, created_at)
+		VALUES (?, ?, ?, 'implementer', '', '', ?)
+	`, jobID, DefaultProjectID, childSessionID, now)
+	testutil.FailErr(t, "insert worker job", err)
+}

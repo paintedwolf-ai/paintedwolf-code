@@ -7,6 +7,7 @@ import { TranscriptViewportProvider, createTranscriptViewportController } from "
 import { ApprovalCard as ApprovalCardView } from "./ApprovalCard.tsx";
 import type { ComponentProps } from "solid-js";
 import { openFilesSurface } from "../../platform/navigation/open-files-surface.ts";
+import { APPROVALS_COPY } from "../../settings/security/approvals-copy.ts";
 vi.mock("../../platform/navigation/open-files-surface.ts", () => ({openFilesSurface: vi.fn()}));
 function ApprovalCard(props: ComponentProps<typeof ApprovalCardView>) {
   return <ApprovalCardView projectId="project" {...props} />;
@@ -60,10 +61,9 @@ describe("ApprovalCard approval plan", () => {
       />
     ));
     const text = openedText(view);
-    expect(text).toContain("db.example.test:5432");
-    expect(text).toContain(
-      "declared by the agent, not observed by the app",
-    );
+    const details = APPROVALS_COPY.card.details;
+    expect(text).toContain(`${details.declaredDestinationsLabel}: db.example.test:5432`);
+    expect(text).toContain(`${details.directIPVisibilityLabel}: ${details.directIPUnobserved}`);
   });
 
   it("makes wide direct-IP access explicit when nothing was declared", () => {
@@ -74,9 +74,8 @@ describe("ApprovalCard approval plan", () => {
         onContentApply={noopContent}
       />
     ));
-    expect(openedText(view)).toContain(
-      "not narrowed to declared ports",
-    );
+    const details = APPROVALS_COPY.card.details;
+    expect(openedText(view)).toContain(`${details.declaredDestinationsLabel}: ${details.directIPUndeclared}`);
   });
 
   it("shows the resolved path behind a requested local-service socket", () => {

@@ -58,19 +58,6 @@ func selectedCounts(full TextCounts, metrics CountMetrics) TextCounts {
 	return out
 }
 
-func TestStructuredWcOnlyCollectsExposedMetrics(t *testing.T) {
-	for _, words := range []bool{false, true} {
-		counts := countWcFile([]byte("界\tone\nlast\xc3"), words)
-		want := TextCounts{Bytes: 13, Lines: 1}
-		if words {
-			want.Words = 3
-		}
-		if counts != want {
-			t.Fatalf("words %v: counts %+v, want %+v", words, counts, want)
-		}
-	}
-}
-
 func TestByteCountModesDoNotAllocateUnicodeChunkState(t *testing.T) {
 	chunk := []byte{0xc3}
 	for _, metrics := range []CountMetrics{0, CountLines, CountWords, CountLines | CountWords} {

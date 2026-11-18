@@ -4,7 +4,6 @@ import (
 	"context"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
@@ -54,13 +53,9 @@ func TestActiveDirectIPJobsActiveUnknownAndCompleted(t *testing.T) {
 
 	_, err = reg.Lifecycle.Stop("sess-1", handle, bgprocess.TerminationStoppedByAgent)
 	testutil.FailErr(t, "stop", err)
-	for t.Context().Err() == nil {
-		if len(reg.ActiveDirectIPJobs("sess-1")) == 0 {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("completed direct-ip job must leave protection set, got %+v", reg.ActiveDirectIPJobs("sess-1"))
+	testutil.WaitFor(t, "the completed direct-ip job leaves the protection set", func() bool {
+		return len(reg.ActiveDirectIPJobs("sess-1")) == 0
+	})
 }
 
 func TestActiveDirectIPJobsOmitsNonDirect(t *testing.T) {

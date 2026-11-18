@@ -403,7 +403,7 @@ func TestDeterministicFitUnderBudget(t *testing.T) {
 	msgs := []ContextMessage{
 		{ID: "1", Role: string(api.MessageRoleUser), Content: "short"},
 	}
-	out := DeterministicFit(cfg, msgs, 1000)
+	out := DeterministicFitWithReserve(cfg, msgs, 1000, 0)
 	if len(out) != 1 || out[0].Content != "short" {
 		t.Fatalf("out = %+v", out)
 	}
@@ -420,7 +420,7 @@ func TestDeterministicFitPreservesCheckpoint(t *testing.T) {
 		{ID: "old", Role: string(api.MessageRoleUser), Content: paste},
 		{ID: "tail", Role: string(api.MessageRoleUser), Content: "recent"},
 	}
-	out := DeterministicFit(cfg, msgs, 50)
+	out := DeterministicFitWithReserve(cfg, msgs, 50, 0)
 	if !out[0].CompactionCheckpoint || out[1].Content != "summary" {
 		t.Fatalf("checkpoint head = %+v", out[:minInt(2, len(out))])
 	}
@@ -523,8 +523,8 @@ func TestDeterministicFitIdempotent(t *testing.T) {
 		{ID: "2", Role: string(api.MessageRoleAssistant), Content: "ok"},
 		{ID: "3", Role: string(api.MessageRoleUser), Content: "tail"},
 	}
-	once := DeterministicFit(cfg, msgs, 200)
-	twice := DeterministicFit(cfg, once, 200)
+	once := DeterministicFitWithReserve(cfg, msgs, 200, 0)
+	twice := DeterministicFitWithReserve(cfg, once, 200, 0)
 	if EstimateMessagesTokens(once) != EstimateMessagesTokens(twice) || len(once) != len(twice) {
 		t.Fatalf("once=%d twice=%d", len(once), len(twice))
 	}

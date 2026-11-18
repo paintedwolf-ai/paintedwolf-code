@@ -97,44 +97,47 @@ func taskLatestCheckpointID(task *api.WorkerTask, store *checkpoint.Store) (stri
 	return store.LatestCheckpointID()
 }
 
-// TargetRootsForTaskCheckpoint resolves the target root map for a task's checkpoint manifest and
-// rejects unmapped RootIDs.
-func TargetRootsForTaskCheckpoint(task *api.WorkerTask, roots []projectroot.RootRef, manifest checkpoint.Manifest) (map[string]string, error) {
-	targetRoots := make(map[string]string, len(roots)+4)
-	primaryDir := ""
-	if task != nil {
-		primaryDir = strings.TrimSpace(task.WorkspacePath)
+// taskPrimaryRoot names the root that holds a task's top-level checkpoint Git refs: the project's
+// primary root, or the task's own workspace root when the task records no roots.
+func taskPrimaryRoot(task *api.WorkerTask, roots []projectroot.RootRef) (id, dir string) {
+	for _, r := range roots {
+		if r.IsPrimary {
+			return r.ID, r.Path
+		}
 	}
+	if task != nil {
+		return strings.TrimSpace(task.WorkspaceRootID), strings.TrimSpace(task.WorkspacePath)
+	}
+	return "", ""
+}
+
+// TargetRootsForTaskCheckpoint maps each root id a task's checkpoint names to its directory and
+// names the primary root. A root id the task's roots do not hold is refused.
+func TargetRootsForTaskCheckpoint(task *api.WorkerTask, roots []projectroot.RootRef, manifest checkpoint.Manifest) (map[string]string, string, error) {
+	targetRoots := make(map[string]string, len(roots)+1)
 	for _, r := range roots {
 		if r.ID != "" && r.Path != "" {
 			targetRoots[r.ID] = r.Path
 		}
-		if r.IsPrimary && r.Path != "" {
-			primaryDir = r.Path
-		}
 	}
-	if primaryDir != "" {
-		aliases := []string{"primary", "root-0", ""}
-		if task != nil && strings.TrimSpace(task.WorkspaceRootID) != "" {
-			aliases = append(aliases, strings.TrimSpace(task.WorkspaceRootID))
-		}
-		for _, alias := range aliases {
-			if _, exists := targetRoots[alias]; !exists {
-				targetRoots[alias] = primaryDir
-			}
-		}
+	primaryID, primaryDir := taskPrimaryRoot(task, roots)
+	if primaryID == "" || primaryDir == "" {
+		return nil, "", fmt.Errorf("%w: checkpoint has no primary root", layeredfs.ErrInvalidRoot)
+	}
+	if _, ok := targetRoots[primaryID]; !ok {
+		targetRoots[primaryID] = primaryDir
 	}
 	for _, obs := range manifest.SourceObservations {
 		if strings.TrimSpace(targetRoots[obs.Path.RootID]) == "" {
-			return nil, fmt.Errorf("%w: unresolved checkpoint source root id %q", layeredfs.ErrInvalidRoot, obs.Path.RootID)
+			return nil, "", fmt.Errorf("%w: unresolved checkpoint source root id %q", layeredfs.ErrInvalidRoot, obs.Path.RootID)
 		}
 	}
 	for _, entry := range manifest.Entries {
 		if strings.TrimSpace(targetRoots[entry.Path.RootID]) == "" {
-			return nil, fmt.Errorf("%w: unresolved checkpoint root id %q", layeredfs.ErrInvalidRoot, entry.Path.RootID)
+			return nil, "", fmt.Errorf("%w: unresolved checkpoint root id %q", layeredfs.ErrInvalidRoot, entry.Path.RootID)
 		}
 	}
-	return targetRoots, nil
+	return targetRoots, primaryID, nil
 }
 
 // NewTaskCheckpointPromoter creates a checkpoint.Promoter bound to task's published checkpoint store and target roots.
@@ -143,12 +146,12 @@ func NewTaskCheckpointPromoter(task *api.WorkerTask, roots []projectroot.RootRef
 	if err != nil || !ok {
 		return nil, checkpoint.Manifest{}, nil, ok, err
 	}
-	targetRoots, err := TargetRootsForTaskCheckpoint(task, roots, manifest)
+	targetRoots, primaryRoot, err := TargetRootsForTaskCheckpoint(task, roots, manifest)
 	if err != nil {
 		return nil, checkpoint.Manifest{}, nil, true, err
 	}
 	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{
-		Store: store, TargetRoots: targetRoots, RetainedGitObjects: workspace.BranchGitObjectStores(task.WorkspaceRoot),
+		Store: store, TargetRoots: targetRoots, PrimaryRoot: primaryRoot, RetainedGitObjects: workspace.BranchGitObjectStores(task.WorkspaceRoot),
 	})
 	if err != nil {
 		return nil, checkpoint.Manifest{}, nil, true, err
@@ -197,8 +200,7 @@ func checkpointBranchDir(task *api.WorkerTask, roots []projectroot.RootRef, root
 	}
 	rootID = strings.TrimSpace(rootID)
 	for _, root := range roots {
-		alias := rootID == "primary" || rootID == "root-0" || rootID == "" || rootID == strings.TrimSpace(task.WorkspaceRootID)
-		if root.ID == rootID || (root.IsPrimary && alias) {
+		if root.ID == rootID {
 			dir, err := projectroot.BranchDirForID(root.ID)
 			if err != nil {
 				return "", err
@@ -329,30 +331,17 @@ func CheckpointKeepTargetResolutions(task *api.WorkerTask, manifest checkpoint.M
 			add(entry.Path)
 		}
 	}
-	primaryAliases := []string{"primary", "root-0", ""}
-	if task != nil && strings.TrimSpace(task.WorkspaceRootID) != "" {
-		primaryAliases = append(primaryAliases, strings.TrimSpace(task.WorkspaceRootID))
-	}
-	for _, r := range roots {
-		if r.IsPrimary && r.ID != "" {
-			primaryAliases = append(primaryAliases, r.ID)
-		}
-	}
+	primaryID, _ := taskPrimaryRoot(task, roots)
 	for rel := range resolvedSet {
 		if len(roots) > 0 {
 			if abs, rootRef, err := projectroot.ResolveAbs(roots, "", rel); err == nil {
 				cleanSub := filepath.ToSlash(filepath.Clean(projectroot.ScopeRel(rootRef, abs)))
 				add(layeredfs.QualifiedPath{RootID: rootRef.ID, Rel: cleanSub})
-				if rootRef.IsPrimary {
-					for _, alias := range primaryAliases {
-						add(layeredfs.QualifiedPath{RootID: alias, Rel: cleanSub})
-					}
-				}
 				continue
 			}
 		}
-		for _, alias := range primaryAliases {
-			add(layeredfs.QualifiedPath{RootID: alias, Rel: rel})
+		if primaryID != "" {
+			add(layeredfs.QualifiedPath{RootID: primaryID, Rel: rel})
 		}
 	}
 	return out

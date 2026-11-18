@@ -3,13 +3,14 @@ package coordinator_test
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator"
@@ -76,7 +77,7 @@ func ensureAnchorRegistry(t *testing.T) {
 func TestKickEngineQueueAndTake(t *testing.T) {
 	engine := kickEngineWithPrompts(t)
 	engine.QueueDeferred("sess-1", anchor.InformRender(anchor.ComposeDone))
-	if id := engine.TakePendingKickID("sess-1"); id != anchor.InformRender(anchor.ComposeDone) {
+	if id := engine.TakePendingKickIDUnless("sess-1", nil); id != anchor.InformRender(anchor.ComposeDone) {
 		t.Fatalf("kick id = %q", id)
 	}
 	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{})
@@ -88,7 +89,7 @@ func TestKickEngineQueueAndTake(t *testing.T) {
 func TestKickEngineWorkerTaskFinishedIncludesDigest(t *testing.T) {
 	engine := kickEngineWithPrompts(t)
 	engine.QueueDeferred("sess-1", anchor.InformRender(anchor.WorkerTaskFinished), kick.WithWorkerDigest("Host worker digest — agent=implementer status=complete"))
-	if id := engine.TakePendingKickID("sess-1"); id != anchor.InformRender(anchor.WorkerTaskFinished) {
+	if id := engine.TakePendingKickIDUnless("sess-1", nil); id != anchor.InformRender(anchor.WorkerTaskFinished) {
 		t.Fatalf("kick id = %q", id)
 	}
 	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{})
@@ -100,7 +101,7 @@ func TestKickEngineWorkerTaskFinishedIncludesDigest(t *testing.T) {
 func TestKickEngineWorkerTaskFinishedNudge(t *testing.T) {
 	engine := kickEngineWithPrompts(t)
 	engine.QueueDeferred("sess-1", anchor.InformRender(anchor.WorkerTaskFinished))
-	if id := engine.TakePendingKickID("sess-1"); id != anchor.InformRender(anchor.WorkerTaskFinished) {
+	if id := engine.TakePendingKickIDUnless("sess-1", nil); id != anchor.InformRender(anchor.WorkerTaskFinished) {
 		t.Fatalf("kick id = %q", id)
 	}
 	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{})
@@ -113,7 +114,7 @@ func TestKickEngineClearPending(t *testing.T) {
 	engine := kickEngineWithPrompts(t)
 	engine.QueueDeferred("sess-1", anchor.InformRender(anchor.WorkerTaskFinished))
 	engine.ClearPending("sess-1")
-	if id := engine.TakePendingKickID("sess-1"); id != "" {
+	if id := engine.TakePendingKickIDUnless("sess-1", nil); id != "" {
 		t.Fatalf("kick id = %q want empty", id)
 	}
 	if text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{}); ok || text != "" {
@@ -125,7 +126,7 @@ func TestKickEngineQueuesMultipleCoordinatorKicksFIFO(t *testing.T) {
 	engine := kickEngineWithPrompts(t)
 	engine.QueueDeferred("sess-race", anchor.InformRender(anchor.WorkerTaskFinished))
 	engine.QueueDeferred("sess-race", anchor.InformRender(anchor.LegFinished))
-	if id := engine.TakePendingKickID("sess-race"); id != anchor.InformRender(anchor.WorkerTaskFinished) {
+	if id := engine.TakePendingKickIDUnless("sess-race", nil); id != anchor.InformRender(anchor.WorkerTaskFinished) {
 		t.Fatalf("first kick id = %q want %q", id, anchor.InformRender(anchor.WorkerTaskFinished))
 	}
 	text, lease, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-race", kick.CoordinatorKickRenderContext{})
@@ -133,7 +134,7 @@ func TestKickEngineQueuesMultipleCoordinatorKicksFIFO(t *testing.T) {
 		t.Fatalf("first nudge = %q ok=%v want worker-task-finished", text, ok)
 	}
 	engine.AckPendingNudge("sess-race", lease)
-	if id := engine.TakePendingKickID("sess-race"); id != anchor.InformRender(anchor.LegFinished) {
+	if id := engine.TakePendingKickIDUnless("sess-race", nil); id != anchor.InformRender(anchor.LegFinished) {
 		t.Fatalf("second kick id = %q want %q", id, anchor.InformRender(anchor.LegFinished))
 	}
 }
@@ -142,7 +143,7 @@ func TestKickEngineLegFinishedRelativeAgo(t *testing.T) {
 	engine := kickEngineWithPrompts(t)
 	done := time.Now().UTC().Add(-2 * time.Hour)
 	engine.QueueDeferred("sess-2", anchor.InformRender(anchor.LegFinished), kick.WithLegCompletedAt(done))
-	if id := engine.TakePendingKickID("sess-2"); id != anchor.InformRender(anchor.LegFinished) {
+	if id := engine.TakePendingKickIDUnless("sess-2", nil); id != anchor.InformRender(anchor.LegFinished) {
 		t.Fatalf("kick id = %q", id)
 	}
 	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-2", kick.CoordinatorKickRenderContext{})
@@ -154,7 +155,7 @@ func TestKickEngineLegFinishedRelativeAgo(t *testing.T) {
 func TestKickEngineRawNudge(t *testing.T) {
 	engine := &kick.KickEngine{}
 	engine.QueuePendingText("sess-3", "custom nudge", anchor.InformRender(anchor.GateBlocked))
-	if id := engine.TakePendingKickID("sess-3"); id != anchor.InformRender(anchor.GateBlocked) {
+	if id := engine.TakePendingKickIDUnless("sess-3", nil); id != anchor.InformRender(anchor.GateBlocked) {
 		t.Fatalf("kick id = %q", id)
 	}
 	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-3", kick.CoordinatorKickRenderContext{})
@@ -166,7 +167,7 @@ func TestKickEngineRawNudge(t *testing.T) {
 func TestRenderKickMissingEngine(t *testing.T) {
 	engine := &kick.KickEngine{}
 	engine.QueueDeferred("sess-x", anchor.InformRender(anchor.GateBlocked))
-	if id := engine.TakePendingKickID("sess-x"); id != anchor.InformRender(anchor.GateBlocked) {
+	if id := engine.TakePendingKickIDUnless("sess-x", nil); id != anchor.InformRender(anchor.GateBlocked) {
 		t.Fatalf("kick id = %q want %s", id, anchor.InformRender(anchor.GateBlocked))
 	}
 	if text, _, ok, err := engine.RenderPendingNudge(t.Context(), "sess-x", kick.CoordinatorKickRenderContext{}); ok || text != "" || err == nil {
@@ -223,7 +224,7 @@ func TestRuntimeSetKickAndBoard(t *testing.T) {
 	rt.SetBoardInject(stubBoardBuilder{hash: "h1"}, stubBoardFormatter{}, func() bool { return true })
 
 	// No kick was queued — the kick surface stays empty.
-	if rt.Kicks().TakePendingKickID("x") != "" {
+	if rt.Kicks().TakePendingKickIDUnless("x", nil) != "" {
 		t.Fatal("unexpected kick")
 	}
 
@@ -274,10 +275,10 @@ func TestBuildCompletionMessagesWorkerLeg(t *testing.T) {
 	root := kickTestRoot(t)
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
 	deps := assembly.AssemblyDeps{
-		Prompts:       pe,
-		Injects:       prompts.NewInjectRenderer(pe),
-		Limits:        func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-		WorkerContext: stubWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", Checklist: []string{"step"}}},
+		Prompts: pe,
+		Injects: prompts.NewInjectRenderer(pe),
+		Limits:  func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+		Workers: assembly.Workers{Leg: stubWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", Checklist: []string{"step"}}}},
 	}
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
 	msgs, err := rt.BuildCompletionMessages(context.Background(), &api.Session{
@@ -301,17 +302,6 @@ type stubWorkerCtx struct {
 
 func (s stubWorkerCtx) BuildWorkerPromptContext(_ context.Context, _ string, _ *api.Session) (inject.WorkerLegContext, error) {
 	return s.leg, nil
-}
-
-func TestScaffoldAnyDecisionPending(t *testing.T) {
-	vars := map[string]any{
-		"user_decision": map[string]any{
-			"risk": map[string]any{"pending": true},
-		},
-	}
-	if !scaffoldvars.AnyDecisionPending(vars) {
-		t.Fatal("expected decision pending")
-	}
 }
 
 func TestRenderCoordinatorTripartiteComposeDraft(t *testing.T) {
@@ -518,11 +508,11 @@ func TestAssemblyWorkerLegInjectUsesRenderer(t *testing.T) {
 	boardEng := assembly.NewBoardEngine(stubBoardBuilder{hash: "abc"}, stubBoardFormatter{}, nil)
 	boardEng.SetInjectRenderer(prompts.NewInjectRenderer(pe))
 	deps := assembly.AssemblyDeps{
-		Prompts:       pe,
-		Injects:       prompts.NewInjectRenderer(pe),
-		Limits:        func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-		WorkerContext: stubWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", PhaseID: "implement", Checklist: []string{"step"}}},
-		Board:         boardEng,
+		Prompts: pe,
+		Injects: prompts.NewInjectRenderer(pe),
+		Limits:  func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+		Workers: assembly.Workers{Leg: stubWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", PhaseID: "implement", Checklist: []string{"step"}}}},
+		Board:   boardEng,
 	}
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
 	dir := t.TempDir()
@@ -562,9 +552,9 @@ func TestQueueEagerDelivery(t *testing.T) {
 	testutil.FailErr(t, "LoadRegistryFromConfigRoot", err)
 	bus := anchor.NewBus(engine)
 	bus.SetRegistry(reg)
-	bus.EmitEager(t.Context(), "child-1", anchor.WorkerLegStarted, map[string]string{"leg_id": "leg-a"})
+	bus.EmitEager(t.Context(), "child-1", anchor.WorkerTaskStarted, map[string]string{"agent_type": "implementer"})
 	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "child-1", kick.CoordinatorKickRenderContext{})
-	if !ok || !strings.Contains(text, "leg-a") {
+	if !ok || !strings.Contains(text, "implementer") {
 		t.Fatalf("nudge=%q ok=%v", text, ok)
 	}
 }
@@ -741,5 +731,5 @@ type workerToolSelection struct{}
 func (workerToolSelection) FullCatalog(string) bool             { return false }
 func (workerToolSelection) OmittedUnits(string) map[string]bool { return nil }
 func (workerToolSelection) LoadedTools(string) map[string]bool {
-	return map[string]bool{"task": true, "pack_board": true, "worker_cancel": true, "answer_decision": true, "extend_worker_budget": true}
+	return map[string]bool{"task": true, "pack_board": true, "worker_cancel": true, "answer_decision": true}
 }

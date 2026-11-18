@@ -181,6 +181,11 @@ function workerSummaryEqual(
   if (!left || !right) return !left && !right;
   return (
     left.worker_id === right.worker_id &&
+    (left.worker_record_id ?? "") === (right.worker_record_id ?? "") &&
+    (left.worker_name ?? "") === (right.worker_name ?? "") &&
+    (left.round ?? 0) === (right.round ?? 0) &&
+    (left.result_handle ?? "") === (right.result_handle ?? "") &&
+    (left.review_of ?? "") === (right.review_of ?? "") &&
     left.status === right.status &&
     left.delegation_id === right.delegation_id &&
     left.leg_id === right.leg_id &&

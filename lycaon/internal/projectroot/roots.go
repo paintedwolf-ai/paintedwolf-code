@@ -28,7 +28,8 @@ type RootRef struct {
 // DisplayPath renders a ledger (root, relative path) pair in the canonical
 // display spelling for a session: bare off the session's active root,
 // @label-qualified off any other attached root, and unqualified when the root
-// is unknown.
+// is unknown. A bare path whose first segment starts with "@" is written
+// "./@…" so it cannot read as a label.
 func DisplayPath(roots []RootRef, activeRootID, rootID, rel string) string {
 	for _, root := range roots {
 		if root.ID == rootID && root.Outside {
@@ -41,6 +42,9 @@ func DisplayPath(roots []RootRef, activeRootID, rootID, rel string) string {
 			rel = "."
 		}
 		if rootID == activeRootIDOf(roots, activeRootID) || root.Label == "" {
+			if strings.HasPrefix(rel, "@") {
+				return "./" + rel
+			}
 			return rel
 		}
 		if rel == "." {
@@ -72,6 +76,15 @@ const (
 	VirtualScratchLabel = "scratch"
 	VirtualOutputLabel  = "output"
 )
+
+// WorkerBranchRootID identifies a worker's own branch when it is addressed as
+// one root rather than through the project roots it copies.
+const WorkerBranchRootID = "worker-branch"
+
+// SingleRootID identifies the only root of a view that holds one root and
+// never maps onto project roots: a sandbox copy, a private Git seed or a mount
+// probe.
+const SingleRootID = "primary"
 
 var (
 	ErrNoProjectRoots   = errors.New("project has no folder roots")

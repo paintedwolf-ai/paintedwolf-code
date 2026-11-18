@@ -48,7 +48,7 @@ func TestFinalizationUsesAcceptedReportWithoutReevaluation(t *testing.T) {
 				t.Fatalf("accepted outcome changed: %+v, prompts=%d", out, history.prompts)
 			}
 
-			canceled, err := workercloseout.FinalizeWorkerSummaryForCanceled(t.Context(), history, history, "child", "repo-researcher", "User stopped the job", workercloseout.WorkerSummaryFinalizeOpts{WorkerJobID: "job", Ledger: history})
+			canceled, err := workercloseout.FinalizeWorkerSummaryForCanceled(t.Context(), history, history, "child", "User stopped the job", workercloseout.WorkerSummaryFinalizeOpts{WorkerJobID: "job", Ledger: history})
 			testutil.FailErr(t, "retain accepted report after cancellation", err)
 			if canceled.Status != "partial" || canceled.Report.DeclaredLegStatus != status || canceled.Summary != "Observed result" || len(canceled.Report.RemainingRisk) != 1 || history.prompts != 0 {
 				t.Fatalf("cancellation lost accepted report: %+v prompts=%d", canceled, history.prompts)

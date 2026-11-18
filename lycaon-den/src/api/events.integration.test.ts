@@ -42,6 +42,7 @@ describe("subscribeEvents integration", () => {
       },
     ]);
 
+    const delivered = emit;
     emit!({
       data: JSON.stringify({
         v: 1,
@@ -57,6 +58,11 @@ describe("subscribeEvents integration", () => {
     await vi.waitFor(() => {
       expect(appStore.state.workers[0]?.status).toBe("complete");
     });
+
+    // The stream ends: the subscription reports a reconnect attempt.
+    await vi.waitFor(() => expect(emit).not.toBe(delivered));
+    emit!({ data: "END" });
+    await vi.waitFor(() => expect(appStore.state.sidecarStatus).toBe("reconnecting"));
 
     void sub.close();
   });

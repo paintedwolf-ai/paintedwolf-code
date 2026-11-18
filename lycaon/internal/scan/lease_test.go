@@ -1,10 +1,10 @@
 package scan
 
 import (
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -33,7 +33,7 @@ func TestExpiredScanClaimBecomesExplicitFailure(t *testing.T) {
 	if ok {
 		t.Fatal("wrong token renewed claim")
 	}
-	_, err = sqlDB.ExecContext(t.Context(), `UPDATE code_scans SET lease_expires_at = ? WHERE id = ?`, db.FormatTime(time.Now().Add(-time.Minute)), claimed.ID)
+	_, err = sqlDB.ExecContext(t.Context(), `UPDATE code_scans SET lease_expires_at = ? WHERE id = ?`, timelayout.Format(time.Now().Add(-time.Minute)), claimed.ID)
 	testutil.FailErr(t, "expire", err)
 	recovered, err := store.RecoverExpiredClaims(t.Context())
 	testutil.FailErr(t, "recover", err)

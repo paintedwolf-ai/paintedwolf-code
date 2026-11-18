@@ -4,7 +4,7 @@ import { createSignal } from "solid-js";
 import { at } from "../../test/at.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import { SCANS_LIVE_REFRESH_MS } from "../../lib/scan-display.ts";
+import { SCANS_LIVE_REFRESH_MS, scanEmptyState } from "../../lib/scan-display.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { SecurityFindingsPane } from "./SecurityFindingsPane.tsx";
 
@@ -560,12 +560,15 @@ describe("SecurityFindingsPane", () => {
   });
 
   it.each(["partial", "bounded", "unavailable"] as const)("qualifies empty results for %s coverage", async (coverage) => {
-    client.getCodeScan.mockResolvedValue({ ...summaryScan, findings_count: 0,
-      findings_stored: 0, findings_by_level: {}, coverage_status: coverage });
+    const scan = { ...summaryScan, findings_count: 0,
+      findings_stored: 0, findings_by_level: {}, coverage_status: coverage };
+    client.getCodeScan.mockResolvedValue(scan);
     client.queryCodeScan.mockResolvedValue({ scan_id: "scan-1", findings: [], guidance: [], total_match: 0 });
     await renderPane();
     const empty = await screen.findByTestId("scans-empty");
-    expect(empty.textContent).toContain(coverage === "unavailable" ? "No findings available" : "No findings in analyzed code");
+    // The empty state says what the model says for this coverage, and that differs from a complete scan.
+    expect(empty.querySelector(".den-scans-empty-title")?.textContent).toBe(scanEmptyState(scan).title);
+    expect(scanEmptyState(scan).title).not.toBe(scanEmptyState({ ...scan, coverage_status: "complete" }).title);
     expect(screen.getByTestId("scans-issues-trigger")).toBeTruthy();
     expect(screen.queryByTestId("scans-limitations")).toBeNull();
   });
@@ -1133,8 +1136,8 @@ describe("SecurityFindingsPane", () => {
       last_full: { ...completeOverview.last_full!, coverage_status: "bounded" },
     });
     await renderPane();
-    await waitFor(() => expect(screen.getByTestId("scans-coverage-line").textContent).toContain("· some directories were not analyzed"));
-    expect(screen.getByTestId("scans-coverage-chip").textContent).toBe("Bounded");
+    await waitFor(() => expect(screen.getByTestId("scans-coverage-chip").getAttribute("data-coverage")).toBe("bounded"));
+    expect(screen.getByTestId("scans-coverage-chip").getAttribute("data-state")).toBe("partial");
   });
 
   it("shows all findings by default and filters by introduced time on request", async () => {
@@ -1176,7 +1179,9 @@ describe("SecurityFindingsPane", () => {
     await waitFor(() => expect(screen.getByTestId("scans-new-since-chip").getAttribute("aria-pressed")).toBe("false"));
     fireEvent.click(screen.getByTestId("scans-new-since-chip"));
     // The later full pass is the baseline, and nothing was introduced after it.
-    await waitFor(() => expect(screen.getByTestId("scans-filter-empty").textContent).toContain("No findings with a recorded introduction since the baseline."));
+    await screen.findByTestId("scans-filter-empty");
+    expect(screen.getByTestId("scans-new-since-chip").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryAllByTestId("scans-finding-row")).toHaveLength(0);
   });
 
   it("starts a full scan with the checked scanners and polls the overview while it runs", async () => {

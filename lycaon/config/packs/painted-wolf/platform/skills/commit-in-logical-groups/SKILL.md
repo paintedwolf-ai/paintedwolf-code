@@ -7,7 +7,7 @@ description: When the user asks to commit, split the working tree into coherent 
 
 **Entry check:** the user asked for the work to be committed; committing is never implicit.
 
-Use native Git commands through `command` for inspection, staging, and commits; on a write leg, prepare the groups as overlay file edits and report the planned grouping to the coordinator. Each operation retains host review and session attribution.
+Use native Git commands through `command` for inspection, staging, and commits; on a write worker, prepare the groups as overlay file edits and report the planned grouping to the coordinator. Each operation retains host review and session attribution.
 
 ## Mechanics
 
@@ -16,7 +16,7 @@ Use native Git commands through `command` for inspection, staging, and commits; 
 
 ## Workflow
 
-1. **Survey once, before staging anything.**{% if has_git and not on_worker_branch %} The inventory is `git status --short`, `git diff --stat`, and bounded `git log` in `command`.{% else %} The inventory is this leg's own change record — the files it wrote or edited.{% endif %} Write the groups, one line each{% if profile_has_update_progress %} in `update_progress`{% endif %}, before reading any hunk, then read hunks in one batch, only where a group is ambiguous.
+1. **Survey once, before staging anything.**{% if has_git and not on_worker_branch %} The inventory is `git status --short`, `git diff --stat`, and bounded `git log` in `command`.{% else %} The inventory is this worker's own change record — the files it wrote or edited.{% endif %} Write the groups, one line each{% if profile_has_update_progress %} in `update_progress`{% endif %}, before reading any hunk, then read hunks in one batch, only where a group is ambiguous.
 2. **Leave what is not yours.** Work you did not write and the user has not claimed is left out of your groups: not reverted, not stashed, not finished for them. A repository-wide stash empties every concurrent worker's tree; never use one for a clean view.
 3. **Leave live work alone even when it is yours.** A file still being changed belongs in a later commit.
 4. **Group by the change, not by the directory.** One commit is one reason: a feature with its tests, a fix with its regression, a rename across every file it touched. Generated output travels with its source. State each group in one line; if you cannot, it is more than one commit. A group that needs a hunk to describe gets that hunk read, not the tree.

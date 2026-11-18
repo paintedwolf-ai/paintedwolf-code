@@ -22,7 +22,7 @@ rules:
 
   - id: coordinator_disallowed_agent
     when:
-      tool_is_task: true
+      tool_names_agent: true
       disallowed_agent: true
     then:
       deny:

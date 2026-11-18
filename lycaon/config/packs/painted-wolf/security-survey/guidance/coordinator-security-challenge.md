@@ -1,6 +1,6 @@
 Challenge stamped claims and run-bound dependency advisories. Preserve user limits in `brief.constraints`. If required review conflicts, `ask_user` before dispatch; available reviewers grant no exception.
 
-Read `pack_board(review_view: summary)` for exact review work IDs and current context. Dispatch each review with its supplied `workflow_work_id`.
+Read `read_review(view: "summary")` for exact review work IDs and current context. Dispatch each review with its supplied `workflow_work_id`.
 
 1. Brief `skeptic` (`scope.mode: read`) on the threat model and claims. Require the strongest evidence-backed case against each: revisit defaults, alternate callers, enforcement, errors, and bypasses. Test whether proposed controls distinguish the stated adversary and whether every relevant caller reaches them. Challenge exclusions and coverage judgments as well as claims. `done_when`: per-claim survives/refuted with observed `path:line`. Assign code-only applicability questions here.
 {% if spawnable_reviewers %}2. In the same assistant turn, brief `web-researcher` on claims and independent dependency review. The host attaches run-bound groups; page through `scan_query`, not just its sample. Check coordinates, published fixes, primary sources, and applicability. Return assessed group ids, conclusions, uncertainty, and verbatim fetched URLs. Coordinator omissions remain in scope. It cannot read project code.

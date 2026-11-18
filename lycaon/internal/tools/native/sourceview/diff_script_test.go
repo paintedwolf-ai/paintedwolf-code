@@ -3,10 +3,11 @@ package sourceview
 import (
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // TestDiffScriptComparesTransformedLinesAndBoundsItsStorage covers the shared
@@ -90,27 +91,6 @@ func TestDiffScriptScatteredChangesInFiftyThousandLinesStayBounded(t *testing.T)
 	}
 }
 
-func TestUnifiedDiffWithinRendersWhatUnifiedDiffRenders(t *testing.T) {
-	for _, c := range [][2]string{
-		{"", ""},
-		{"", "a\nb\n"},
-		{"a\nb\n", ""},
-		{"a\nb\n", "a\nb\n"},
-		{"a\nc\n", "a\nb\nc\n"},
-		{"a\nb\nc\n", "a\nc\n"},
-		{"a\nb\nc\n", "x\nb\ny\n"},
-		{"1\n2\n3\n4\n5\n6\n7\n8\n9\n", "1\nx\n3\n4\n5\n6\n7\ny\n9\n"},
-		{"same\n", "same\n\n"},
-	} {
-		want := UnifiedDiff("from", "to", SplitLines(c[0]), SplitLines(c[1]), 3)
-		got, err := UnifiedDiffWithin("from", "to", c[0], c[1], 3, 1<<20)
-		testutil.FailErr(t, "bounded diff", err)
-		if got != want {
-			t.Fatalf("%q to %q = %q, want %q", c[0], c[1], got, want)
-		}
-	}
-}
-
 func TestUnifiedDiffWithinStopsAtItsCeiling(t *testing.T) {
 	if _, err := UnifiedDiffWithin("from", "to", "1\n2\n3\n", "4\n5\n6\n", 3, 100); !errors.Is(err, ErrDiffTooLarge) {
 		t.Fatalf("err = %v, want the edit search over its ceiling", err)
@@ -147,5 +127,25 @@ func TestUnifiedDiffWithinNeedsNoSearchWhenOneSideOnlyGrew(t *testing.T) {
 	testutil.FailErr(t, "shrinkage", err)
 	if strings.Count(shrunk, "\n- ") != 20_000 || strings.Contains(shrunk, "\n+ ") {
 		t.Fatalf("diff has %d removed lines", strings.Count(shrunk, "\n- "))
+	}
+}
+
+func TestUnifiedDiffWithinRendersHunks(t *testing.T) {
+	for _, c := range []struct{ from, to, want string }{
+		{"", "", ""},
+		{"", "a\nb\n", "--- from\n+++ to\n@@ -1,0 +1,2 @@\n+ a\n+ b\n"},
+		{"a\nb\n", "", "--- from\n+++ to\n@@ -1,2 +1,0 @@\n- a\n- b\n"},
+		{"a\nb\n", "a\nb\n", ""},
+		{"a\nc\n", "a\nb\nc\n", "--- from\n+++ to\n@@ -1,2 +1,3 @@\n  a\n+ b\n  c\n"},
+		{"a\nb\nc\n", "a\nc\n", "--- from\n+++ to\n@@ -1,3 +1,2 @@\n  a\n- b\n  c\n"},
+		{"a\nb\nc\n", "x\nb\ny\n", "--- from\n+++ to\n@@ -1,3 +1,3 @@\n- a\n+ x\n  b\n- c\n+ y\n"},
+		{"1\n2\n3\n4\n5\n6\n7\n8\n9\n", "1\nx\n3\n4\n5\n6\n7\ny\n9\n", "--- from\n+++ to\n@@ -1,9 +1,9 @@\n  1\n- 2\n+ x\n  3\n  4\n  5\n  6\n  7\n- 8\n+ y\n  9\n"},
+		{"same\n", "same\n\n", "--- from\n+++ to\n@@ -1,1 +1,2 @@\n  same\n+ \n"},
+	} {
+		got, err := UnifiedDiffWithin("from", "to", c.from, c.to, 3, 1<<20)
+		testutil.FailErr(t, "bounded diff", err)
+		if got != c.want {
+			t.Fatalf("%q to %q = %q, want %q", c.from, c.to, got, c.want)
+		}
 	}
 }

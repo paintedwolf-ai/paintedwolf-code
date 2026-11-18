@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/cost/costtest"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -69,7 +70,7 @@ func TestPromptRecoveryPreservesIntentAndRejectsStaleActions(t *testing.T) {
 			testutil.FailErr(t, "append continuation", err)
 			history, err := st.GetMessages(ctx, sess.ID)
 			testutil.FailErr(t, "read history", err)
-			if api.UserTurnOrdinal(history) != 1 || history[len(history)-1].Kind != api.MessageKindUserContinuation {
+			if userIntentCount(history) != 1 || history[len(history)-1].Kind != api.MessageKindUserContinuation {
 				t.Fatalf("recovery opened another intent: %+v", history)
 			}
 		})
@@ -358,4 +359,14 @@ func TestPromptSubmissionResultFailedIsNotAStop(t *testing.T) {
 	if !strings.Contains(err.Error(), "connection refused") {
 		t.Fatalf("failed receipt error = %q want the stored cause", err)
 	}
+}
+
+func userIntentCount(history []api.Message) int {
+	n := 0
+	for _, msg := range history {
+		if api.IsUserIntentMessage(msg) {
+			n++
+		}
+	}
+	return n
 }

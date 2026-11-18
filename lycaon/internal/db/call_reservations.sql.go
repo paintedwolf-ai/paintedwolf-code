@@ -55,6 +55,10 @@ SELECT r.agent
 FROM call_reservations r
 JOIN sessions sess ON sess.id = r.session_id
 WHERE r.path = ?1 AND r.agent != ?2
+  -- A worker's earlier rounds hold for the worker, never against it.
+  AND r.agent NOT IN (SELECT mine.job_id FROM worker_rounds mine
+    JOIN worker_rounds own ON own.worker_id = mine.worker_id
+    WHERE own.job_id = ?2)
   AND COALESCE(
     (SELECT pr.path FROM project_roots pr WHERE pr.id = sess.workspace_root_id),
     (SELECT pr.path FROM project_roots pr WHERE pr.project_id = sess.project_id AND pr.is_primary = 1 LIMIT 1),

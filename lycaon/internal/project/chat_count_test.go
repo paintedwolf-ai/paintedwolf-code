@@ -2,10 +2,10 @@ package project
 
 import (
 	"database/sql"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -17,7 +17,7 @@ func TestProjectChatCountTracksRootLifecycleWithoutWorkers(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 	other, err := CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "create other project", err)
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	insert := func(id, projectID, parent string, archived bool) {
 		t.Helper()
 		archive := sql.NullString{String: now, Valid: archived}

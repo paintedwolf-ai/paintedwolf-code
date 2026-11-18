@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"maps"
 	"strings"
@@ -184,10 +183,6 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 		data["offered_tools"] = append([]string(nil), toolCtx.Turn.TurnOfferedToolNames...)
 		data["tool_discovery_available"] = tools.ToolOffered(ctx, "request_tools") && len(toolCtx.Turn.TurnToolPlan.DeferredNames()) > 0
 	}
-	if code == "COORDINATOR_DELEGATE_DISPATCH_USE_TASK" {
-		agents, constrained := toolpolicy.TaskSpawnAllowlistFromContext(ctx)
-		data["task_dispatchable"] = !constrained || len(agents) > 0
-	}
 	tr := &toolrejection.ToolReject{Code: code, FailureClass: api.FailureClassPolicyRejection, Data: data}
 	if code == "TOOL_NOT_OFFERED" && data["tool_loadable"] == false && data["tool_discovery_available"] == true && data["tool_retired_to_content"] == false {
 		tr = toolrejection.CompleteFailureMetadata(tr, tc.Name, "")
@@ -253,42 +248,6 @@ func (l *toolInvocations) toolResultMessage(toolName, toolCallID, assistantMessa
 		ToolResult: toolResult,
 		CreatedAt:  time.Now().UTC(),
 	}
-}
-
-func (l *toolInvocations) appendInFlightWorkerRosterNote(
-	ctx context.Context,
-	sessionID string,
-	sess *api.Session,
-	history []api.Message,
-	taskEnqueuedThisTurn int,
-	lastTaskMessageID string,
-) error {
-	if taskEnqueuedThisTurn < 2 || lastTaskMessageID == "" || l.Deps.InFlightWorkerRosterNote == nil {
-		return nil
-	}
-	roster := strings.TrimSpace(l.Deps.InFlightWorkerRosterNote(ctx, sess))
-	if roster == "" {
-		return nil
-	}
-	for i := range history {
-		if history[i].ID != lastTaskMessageID {
-			continue
-		}
-		history[i].Content += roster
-		if history[i].ToolResult != nil {
-			result := *history[i].ToolResult
-			result.Content += roster
-			facts := guidance.ToolResultFacts{Codes: result.Codes, Feedback: result.Feedback}.
-				WithCode("BANNER_WORKER_INFLIGHT_ROSTER")
-			result.Codes, result.Feedback = facts.Codes, facts.Feedback
-			history[i].ToolResult = &result
-		}
-		if l.Projection.Deps.UpdateMessage != nil {
-			return l.Projection.Deps.UpdateMessage(ctx, sessionID, lastTaskMessageID, history[i])
-		}
-		break
-	}
-	return nil
 }
 
 func isTaskToolName(tool string) bool {

@@ -17,7 +17,7 @@ import (
 func TestRetainedStrategiesPreserveTheSameLogicalStore(t *testing.T) {
 	source, _ := completeRetainedFixture(t)
 	sequenceTable, sequence := seedStrategySequence(t, source)
-	reader, err := openReader(t.Context(), source)
+	reader, err := OpenReadOnly(t.Context(), source)
 	testutil.FailErr(t, "open shared strategy source", err)
 	plan, err := PlanUpgrade(t.Context(), reader)
 	testutil.FailErr(t, "plan shared source", err)
@@ -43,7 +43,7 @@ func TestRetainedStrategiesPreserveTheSameLogicalStore(t *testing.T) {
 	}{{whole, prepared.sharedOriginal}, {rows, false}} {
 		testutil.FailErr(t, "execute identical registered route", executeRetainedRoute(t.Context(), image.path, plan, nil, registry, true, image.shared))
 		testutil.FailErr(t, "seal migrated strategy", sealRebuiltStore(t.Context(), image.path))
-		database, err := openReader(t.Context(), image.path)
+		database, err := OpenReadOnly(t.Context(), image.path)
 		testutil.FailErr(t, "open migrated strategy", err)
 		testutil.FailErr(t, "validate all strategy pages and foreign keys", auditSnapshot(t.Context(), database, nil))
 		var got int64
@@ -102,7 +102,7 @@ type strategyRows struct {
 
 func strategyStoreImage(t *testing.T, path string) map[string]strategyRows {
 	t.Helper()
-	database, err := openReader(t.Context(), path)
+	database, err := OpenReadOnly(t.Context(), path)
 	testutil.FailErr(t, "open logical strategy image", err)
 	defer func() { _ = database.Close() }()
 	out := map[string]strategyRows{

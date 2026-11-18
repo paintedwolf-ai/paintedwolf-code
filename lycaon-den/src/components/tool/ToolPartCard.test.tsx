@@ -102,7 +102,7 @@ describe("ToolPartCard", () => {
     expect(container.querySelector('[data-testid="tool-part-card"]')).toBeNull();
   });
 
-  it("renders in-flight summarize as a generic tool card, not a worker card", () => {
+  it("renders an in-flight call the host has not described as a pending action card", () => {
     const part: ToolPartView = {
       id: "tc-sum",
       toolCallId: "call_e4badb27",
@@ -118,6 +118,19 @@ describe("ToolPartCard", () => {
       <ToolPartCard part={part} layout="chat" onOpenWorker={() => {}} />
     ));
     expect(container.querySelector('[data-testid="task-card"]')).toBeNull();
-    expect(container.querySelector('[data-testid="tool-part-card"]')).toBeTruthy();
+    const card = container.querySelector('[data-testid="action-card"]');
+    expect(card?.getAttribute("data-status")).toBe("running");
+    expect(card?.textContent).toContain("Summarize");
+  });
+
+  it("draws the host's descriptor when the call has one", () => {
+    const part: ToolPartView = {
+      id: "tc-fetch", toolCallId: "tc-fetch", assistantMessageId: "a", messageId: "m", tool: "fetch_url", kind: "generic", status: "completed",
+      action: { label: "Fetch page", status: "done", ran: { text: "https://example.test", noun: "url" }, facts: [{ kind: "result", outcome: "completed", http_status: 200 }], row: ["result"], links: [{ kind: "input" }] },
+    };
+    const { container } = render(() => <ToolPartCard part={part} layout="chat" />);
+    const row = container.querySelector('[data-testid="action-card"] > button');
+    expect(row?.textContent).toContain("Fetch page");
+    expect(row?.textContent).toContain("200");
   });
 });

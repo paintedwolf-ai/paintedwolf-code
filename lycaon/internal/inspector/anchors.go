@@ -102,20 +102,3 @@ func SecurityEvidenceMatchesSnapshot(rec evidence.Record, sourceSnapshotID strin
 	}
 	return true, ""
 }
-
-// ExitCodePassed reports whether artifacts indicate a successful command run.
-func ExitCodePassed(artifacts map[string]any) bool {
-	if artifacts == nil {
-		return false
-	}
-	switch v := artifacts["exit_code"].(type) {
-	case float64:
-		return int(v) == 0
-	case int:
-		return v == 0
-	case int64:
-		return v == 0
-	default:
-		return false
-	}
-}

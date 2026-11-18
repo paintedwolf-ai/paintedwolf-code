@@ -37,16 +37,6 @@ func (s *Store) IntegrityAuditDue() bool {
 	return s != nil && s.integrityAuditDue
 }
 
-// RunIntegrityAudit audits the store once after boot, then parks until ctx
-// ends so the runner supervisor does not restart it.
-func RunIntegrityAudit(ctx context.Context, store *Store) error {
-	if err := AuditIntegrity(ctx, store); err != nil {
-		return err
-	}
-	<-ctx.Done()
-	return ctx.Err()
-}
-
 // AuditIntegrity quarantines confirmed damage and clears completed audit state.
 func AuditIntegrity(ctx context.Context, store *Store) error {
 	if store == nil || store.reader == nil {

@@ -64,13 +64,13 @@ func (m *Service) WaitResume(ctx context.Context, id string, delivery loopwake.W
 }
 
 func (m *Service) LoopWake(ctx context.Context, id string) (*promptresult.Result, error) {
-	return m.runHostTurn(ctx, id, store.PromptSubmissionOriginLoopWake, promptinput.Input{
+	return m.HostTurnWithAdmission(ctx, id, store.PromptSubmissionOriginLoopWake, promptinput.Input{
 		Text: surface.HostLoopWakeSentinel,
 		HostSignal: &promptinput.HostSignal{
 			Kind: api.MessageKindHostLoopWake,
 			ID:   string(anchor.LoopWake),
 		},
-	})
+	}, nil)
 }
 
 func (m *Service) Input(ctx context.Context, id string, in promptinput.Input) (*promptresult.Result, error) {

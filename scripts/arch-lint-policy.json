@@ -1,0 +1,82 @@
+{
+  "reach": {
+    "roots": [
+      "./cmd/..."
+    ],
+    "goos": {
+      "darwin": [
+        "darwin",
+        "linux"
+      ],
+      "linux": [
+        "linux"
+      ]
+    },
+    "report": "^github.com/lycaon/lycaon/",
+    "schema": "internal/db/schema.sql",
+    "scope": [
+      "./..."
+    ],
+    "product": [
+      "./cmd/lycaon"
+    ],
+    "config_fields": true
+  },
+  "vet": {
+    "packages": [
+      "./cmd/...",
+      "./internal/...",
+      "./pkg/..."
+    ],
+    "identity": {
+      "owner": "github.com/lycaon/lycaon/internal/projectroot",
+      "fields": [
+        "github.com/lycaon/lycaon/internal/projectroot.RootRef.ID",
+        "github.com/lycaon/lycaon/internal/layeredfs.QualifiedPath.RootID",
+        "github.com/lycaon/lycaon/internal/layeredfs.RootSpec.ID",
+        "github.com/lycaon/lycaon/internal/layeredfs/adapter.RootGrant.RootID",
+        "github.com/lycaon/lycaon/internal/tools.WorkerFileObservationFacts.RootID",
+        "github.com/lycaon/lycaon/pkg/api.WorkerTask.WorkspaceRootID"
+      ]
+    }
+  },
+  "test_support": [
+    "(^|/)test[a-z0-9]*(/|$)",
+    "[a-z0-9]test(/|$)",
+    "/contractfixture$"
+  ],
+  "den": {
+    "dir": "lycaon-den",
+    "command": [
+      "bun",
+      "node_modules/.bin/knip",
+      "--production",
+      "--reporter",
+      "json",
+      "--no-exit-code"
+    ]
+  },
+  "emitters": {
+    "registry": "schemas/guidance_registry.json",
+    "policies": "lycaon/config/packs",
+    "data": [
+      "lycaon/config/packs/painted-wolf/platform/host/posture-rules",
+      "lycaon/config/packs/painted-wolf/platform/host/agent-tool-profiles.yaml"
+    ],
+    "facts": "lycaon/config/packs/painted-wolf/platform/host/anchors/oar-profile.yaml",
+    "anchors": "lycaon/config/packs/painted-wolf/platform/host/anchors/catalog.yaml",
+    "plumbing": [
+      "internal/oar/catalogue.go",
+      "internal/oar/occurrence_facts.go",
+      "internal/oar/fact_projection.go",
+      "internal/oar/facts.go",
+      "internal/oar/fixture_facts.go",
+      "internal/oar/context_facts.go",
+      "internal/oar/context.go",
+      "internal/oar/env.go"
+    ],
+    "derived": [
+      "paintedwolf.can_"
+    ]
+  }
+}

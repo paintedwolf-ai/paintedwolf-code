@@ -265,7 +265,7 @@ func (s *Inventory) observedVersion(ctx context.Context, rootID string, entry so
 func (s *Inventory) versionFacts(ctx context.Context, entry sourcesnapshot.Entry) (string, []byte, error) {
 	sha := entry.SHA256
 	var raw []byte
-	if entry.Size <= MaxRevisionContentBytes {
+	if entry.Size <= sourceblob.MaxRevisionContentBytes {
 		bytes, err := s.snapshots.Bytes(ctx, entry)
 		switch {
 		case err == nil:

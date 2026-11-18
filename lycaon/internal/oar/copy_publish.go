@@ -1,6 +1,10 @@
 package oar
 
-import "maps"
+import (
+	"maps"
+
+	"github.com/lycaon/lycaon/pkg/api"
+)
 
 func decisionFromRule(r *Rule, gc *GuardContext, data map[string]any) Decision {
 	if data == nil {
@@ -15,7 +19,7 @@ func decisionFromRule(r *Rule, gc *GuardContext, data map[string]any) Decision {
 			if data == nil {
 				data = map[string]any{}
 			}
-			data[NextCallsDataKey] = steps.Calls
+			data[api.ToolFeedbackNextCalls] = steps.Calls
 		}
 	}
 	return Decision{

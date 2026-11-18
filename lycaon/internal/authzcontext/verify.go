@@ -88,7 +88,7 @@ func VerifyContexts(sessionID string, rows []Context) *Break {
 		}
 		payload := chainPayloadFromContext(row)
 		hashVersion := row.HashVersion
-		if hashVersion != HashVersion1 {
+		if hashVersion != HashVersion1 && hashVersion != HashVersion2 {
 			return &Break{SessionID: sessionID, Table: ChainTableContexts, ContextSeq: row.ContextSeq, Reason: "unsupported hash_version"}
 		}
 		got, err := ComputeRowHash(hashVersion, sessionID, row.ContextSeq, chainTimestamp(row), payload, row.PrevHash)

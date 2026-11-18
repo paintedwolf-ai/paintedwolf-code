@@ -1,8 +1,10 @@
+import { expectPaneChrome } from "../../test/files-pane-chrome.ts";
 import { ROOTS, loadedBuffer, resetProjectFilesViewTest } from "./project-files-view-test-harness.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { FilesInfoCard } from "./FilesInfoCard.tsx";
-import { applyFilesBufferLoadError, openFilesBuffer } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferLoadError } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
 import { selectProjectNoticeGroups } from "../../notices/notice-select.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
@@ -18,6 +20,7 @@ describe("File info presentation", () => {
     const buffer = loadedBuffer({ kind: "info", path: "database.sqlite3" });
     const reopen = vi.fn();
     render(() => <FilesInfoCard projectId="p1" buffer={buffer} roots={ROOTS} onInnerLayerChange={vi.fn()} onRevealSegment={vi.fn()} onReopenAsUTF16={reopen} />);
+    expectPaneChrome(document.body, "info");
     expect(screen.queryByTestId("files-info-open-utf16le-btn")).toBeNull();
     fireEvent.click(screen.getByTestId("files-info-open-text-btn"));
     fireEvent.click(await screen.findByTestId("files-info-open-utf16le-menu"));

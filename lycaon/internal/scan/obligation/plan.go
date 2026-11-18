@@ -14,6 +14,7 @@ type Plan struct {
 	AssessmentID         string
 	WorkerJobID          string
 	CanonicalPath        string
+	SessionID            string
 	DelegationID         string
 	WorkflowRunID        string
 	ScannerID            string
@@ -32,7 +33,7 @@ type Plan struct {
 // Empty reports whether no durable landed-change record should be written.
 func (p Plan) Empty() bool {
 	return p.ID == "" && p.ScanID == "" && p.AssessmentID == "" && p.WorkerJobID == "" && p.CanonicalPath == "" &&
-		p.DelegationID == "" && p.WorkflowRunID == "" && p.ScannerID == "" &&
+		p.SessionID == "" && p.DelegationID == "" && p.WorkflowRunID == "" && p.ScannerID == "" &&
 		len(p.ChangedPaths) == 0 && len(p.DeletedPaths) == 0 && !p.PathScoped &&
 		p.ExecutionManifest == (api.ScanExecutionManifest{}) && p.ExecutionFingerprint == "" && p.FingerprintScheme == "" &&
 		!p.Required && p.InitialFailure == "" && p.InitialFailureCode == "" && p.CreatedAt.IsZero()

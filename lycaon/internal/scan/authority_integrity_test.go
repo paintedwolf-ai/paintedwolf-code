@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
@@ -44,7 +45,7 @@ func TestIncrementalBaseBreaksTimestampTiesByAdmission(t *testing.T) {
 			ID: id, ScanID: record.ID, CanonicalPath: root, ScannerID: record.ScannerID,
 			SourceSnapshotID: record.SourceSnapshotID, ExecutionFingerprint: record.ExecutionFingerprint,
 			FingerprintScheme: record.FingerprintScheme, CoverageStatus: string(record.CoverageStatus),
-			WarningsJson: "[]", CreatedAt: db.FormatTime(time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)),
+			WarningsJson: "[]", CreatedAt: timelayout.Format(time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)),
 		}))
 		finding := scanfindings.FixtureFinding(id, api.FindingLevelHigh, id, "untouched.go", 1)
 		raw, err := json.Marshal(finding)

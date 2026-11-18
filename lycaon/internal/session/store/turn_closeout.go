@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -92,7 +93,7 @@ func (t *sqlTurns) MarkModelOutputProjected(ctx context.Context, outputID string
 		return fmt.Errorf("model output projection identity required")
 	}
 	rows, err := s.queries.MarkModelOutputProjected(ctx, db.MarkModelOutputProjectedParams{
-		ProjectedAt: db.FormatTime(time.Now().UTC()), ID: outputID,
+		ProjectedAt: timelayout.Format(time.Now().UTC()), ID: outputID,
 	})
 	if err != nil {
 		return err
@@ -164,7 +165,7 @@ func sealTurnCloseoutSQL(ctx context.Context, s *sqlCore, commit TurnCloseoutCom
 			return err
 		}
 	}
-	if err := checkpointTurnTx(ctx, q, turnID, attemptID, TurnPhaseFinalizing, commit.CheckpointJSON, db.FormatTime(time.Now().UTC())); err != nil {
+	if err := checkpointTurnTx(ctx, q, turnID, attemptID, TurnPhaseFinalizing, commit.CheckpointJSON, timelayout.Format(time.Now().UTC())); err != nil {
 		return err
 	}
 	return tx.Commit()

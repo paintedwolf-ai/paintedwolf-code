@@ -25,6 +25,13 @@ TOOLING_EXCEPTIONS = {".github/workflows/ci.yml", ".github/workflows/verificatio
 # CHANGELOG.md is not among them: Den embeds it.
 PROSE = {"AGENTS.md", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "README.md", "REPORTING.md", "SECURITY.md",
          "lycaon/AGENTS.md", "lycaon-den/AGENTS.md"}
+# What the script suites read: their own sources, the workflows and actions, packaging, and the task runner.
+SCRIPT_INPUTS = ("scripts/", ".github/", "packaging/")
+SCRIPT_FILES = {"Taskfile.yml", "task"}
+# What the Den suite builds from: its tree, the wire contract it generates types from, the changelog it
+# embeds, and its runtime pins.
+FRONTEND_INPUTS = ("lycaon-den/", "docs/openapi/")
+FRONTEND_FILES = {"CHANGELOG.md", ".bun-version", ".node-version"}
 
 
 def git(*args):
@@ -33,6 +40,12 @@ def git(*args):
 
 def event_base(event, name):
     if name == "pull_request":
+        # A pull request runs on its merge with the current base branch. The
+        # event's base sha is not updated when that branch moves, so the merge's
+        # first parent is what the change is applied onto.
+        parents = git("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
+        if len(parents) == 2 and parents[1] == event["pull_request"]["head"]["sha"]:
+            return parents[0]
         return git("merge-base", "HEAD", event["pull_request"]["base"]["sha"])
     if name == "merge_group":
         return event["merge_group"]["base_sha"]
@@ -63,19 +76,31 @@ def tooling(path):
     return path.startswith(TOOLING) and path not in TOOLING_EXCEPTIONS
 
 
+def script_change(paths):
+    return any(path.startswith(SCRIPT_INPUTS) or path in SCRIPT_FILES for path in paths)
+
+
+def frontend_change(paths):
+    return any(path.startswith(FRONTEND_INPUTS) or path in FRONTEND_FILES for path in paths)
+
+
+def docs_only(paths):
+    return bool(paths) and all(prose(path) for path in paths)
+
+
 def module_tree(path):
     """A file inside the Go module's package trees: source, embedded data, or test fixtures.
 
     Nested modules, such as the harness projects, are read by other lanes rather than compiled here;
     native trees declare their own dependencies.
     """
-    if not path.startswith(("lycaon/internal/", "lycaon/cmd/", "lycaon/test/")) or "/native/" in path:
+    if not path.startswith(("lycaon/internal/", "lycaon/cmd/", "lycaon/test/")):
         return False
     if Path(path).name in {"go.mod", "go.sum"}:
         return False
     directories = Path(path).parent.relative_to("lycaon").parts
-    return not any((ROOT / "lycaon" / Path(*directories[:depth]) / "go.mod").exists()
-                   for depth in range(1, len(directories) + 1))
+    return not any((ROOT / "lycaon" / Path(*directories[:depth]) / manifest).exists()
+                   for depth in range(1, len(directories) + 1) for manifest in ("go.mod", "Cargo.toml"))
 
 
 def broad_scope(paths):
@@ -91,18 +116,30 @@ def broad_scope(paths):
     return bool(reasons), reasons
 
 
+def fast_lanes(scope, lanes):
+    """A pull request's lanes. Prose alone leaves the static job, which checks its links, the only check;
+    the Den suite runs when its inputs change. A scope without a base runs every lane."""
+    paths = scope.get("paths", [])
+    if docs_only(paths):
+        return set()
+    if paths and not frontend_change(paths):
+        return set(lanes) - {"frontend"}
+    return set(lanes)
+
+
 def selected_lanes(scope, lanes):
     if scope["full"]:
-        return set(lanes)
+        paths = scope.get("paths", [])
+        return set(lanes) if not paths or script_change(paths) else set(lanes) - {"runner"}
     paths = [path for path in scope["paths"] if not prose(path) and not tooling(path)]
     native = [native_dependencies(path) for path in paths if native_dependencies(path) is not None]
     ordinary = [path for path in paths if native_dependencies(path) is None]
     areas = {"go" if p.startswith("lycaon/") else "den" for p in ordinary}
     # Repository contracts read source outside the package/import graph.
-    chosen = {"limits", "build", "behavior"}
+    chosen = {"build", "behavior"}
     for dependency in native:
         chosen |= dependency["lanes"]
-    if any(tooling(path) for path in scope["paths"]):
+    if script_change(scope["paths"]):
         chosen.add("runner")
     if "go" in areas:
         chosen |= {"behavior", "lint", "vulnerabilities", "command-scale"}

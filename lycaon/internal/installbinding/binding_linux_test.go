@@ -41,10 +41,10 @@ func (in *install) write(path, content string) {
 	// A package manager replaces files by rename, so the old inode stays intact.
 	staged := path + ".new"
 	if err := os.WriteFile(staged, []byte(content), 0o755); err != nil {
-		in.t.Fatal(err)
+		testutil.FailErr(in.t, "write file", err)
 	}
 	if err := os.Rename(staged, path); err != nil {
-		in.t.Fatal(err)
+		testutil.FailErr(in.t, "os.Rename failed", err)
 	}
 }
 
@@ -55,14 +55,14 @@ func (in *install) seal(paths ...string) {
 	for _, path := range paths {
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			in.t.Fatal(err)
+			testutil.FailErr(in.t, "read file", err)
 		}
 		sum := sha256.Sum256(raw)
 		digest := hex.EncodeToString(sum[:])
 		size := int64(len(raw))
 		rel, err := filepath.Rel(in.root, path)
 		if err != nil {
-			in.t.Fatal(err)
+			testutil.FailErr(in.t, "filepath.Rel failed", err)
 		}
 		executables = append(executables, pkgmanifest.Executable{Path: path, SHA256: digest, Size: size})
 		payload = append(payload, pkgmanifest.PayloadEntry{Path: filepath.ToSlash(rel), Kind: "file", Mode: 0o755, SHA256: &digest, Size: &size})
@@ -70,7 +70,7 @@ func (in *install) seal(paths ...string) {
 	raw, err := json.Marshal(pkgmanifest.Manifest{FormatVersion: pkgmanifest.FormatVersion, Package: "painted-wolf-code",
 		Version: "1.0.2", Architecture: "x86_64", InstallRoot: in.root, Executables: executables, Payload: payload})
 	if err != nil {
-		in.t.Fatal(err)
+		testutil.FailErr(in.t, "json.Marshal failed", err)
 	}
 	in.write(in.manifest, string(raw))
 }
@@ -79,12 +79,12 @@ func (in *install) capture() *installbinding.Binding {
 	in.t.Helper()
 	image, err := os.Open(in.engine)
 	if err != nil {
-		in.t.Fatal(err)
+		testutil.FailErr(in.t, "os.Open failed", err)
 	}
 	defer func() { _ = image.Close() }()
 	b, err := installbinding.Capture(in.root, in.manifest, in.engine, image)
 	if err != nil {
-		in.t.Fatal(err)
+		testutil.FailErr(in.t, "installbinding.Capture failed", err)
 	}
 	return b
 }

@@ -2,6 +2,7 @@ package toolexecution
 
 import (
 	"github.com/lycaon/lycaon/internal/capabilitygrants"
+	"github.com/lycaon/lycaon/pkg/api"
 
 	"testing"
 
@@ -120,7 +121,7 @@ func TestDirectIPIncompleteLeaseMintsNoOffers(t *testing.T) {
 
 // Ladder and lease stand-down follow Decision.Reuse — not a parallel withhold list.
 func TestDirectIPLadderFollowsDecisionReuse(t *testing.T) {
-	for _, g := range gate.All() {
+	for _, g := range api.AllApprovalGateValues() {
 		result := &hitl.ApprovalResult{Decision: &gate.Decision{
 			Primary: g, Cited: []gate.Fact{{Key: "test", Value: "fixture", Source: "test"}},
 		}}

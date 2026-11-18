@@ -1,5 +1,5 @@
 import { prettyStreamParserFacet } from "../editor/codemirror-lang.ts";
-import { getIndentUnit, syntaxTree } from "@codemirror/language";
+import { getIndentUnit, syntaxTree, syntaxTreeAvailable } from "@codemirror/language";
 import {
   type EditorState,
   type Range,
@@ -11,8 +11,9 @@ import {
 } from "@codemirror/state";
 import { Decoration, type DecorationSet } from "@codemirror/view";
 import { planHasLayout } from "./pretty-fenced.ts";
-import { prettyPlanFor, type PrettyTarget, prettyTargetFor } from "./pretty-recognition.ts";
-import { PrettyScanner, type PrettySnapshot, snapshotsEqual } from "./pretty-scan.ts";
+import { prettyPlanFor, prettyTargetFor } from "./pretty-recognition.ts";
+import { PrettyScanner } from "./pretty-scan.ts";
+import { type PrettySnapshot, snapshotsEqual } from "./pretty-snapshot.ts";
 import {
   PRETTY_CHECKPOINT_INTERVAL,
   type PrettyBlockFacts,
@@ -164,6 +165,7 @@ function planReadsTree(plan: PrettyPlan): boolean {
 function layoutEnd(state: EditorState, plan: PrettyPlan): number {
   const doc = state.doc;
   if (!planReadsTree(plan)) return doc.length;
+  if (plan.kind === "fenced" && !syntaxTreeAvailable(state, doc.length)) return 0;
   const tree = syntaxTree(state);
   return tree.length >= doc.length ? doc.length : doc.lineAt(tree.length).from;
 }
@@ -177,11 +179,6 @@ function tokensFor(state: EditorState, plan: PrettyPlan): TreeTokens | null {
     state.tabSize,
     getIndentUnit(state),
   );
-}
-
-/** Whether `target` can produce any layout on `doc`. */
-export function prettyPlanHasLayout(doc: Text, target: PrettyTarget | null): boolean {
-  return target !== null && planHasLayout(doc, prettyPlanFor(doc, target));
 }
 
 function collect(added: Range<Decoration>[]): PrettySink {

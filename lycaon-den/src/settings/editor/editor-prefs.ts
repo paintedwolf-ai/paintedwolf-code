@@ -82,8 +82,7 @@ export const DEN_EDITOR_PREF_KEYS = [
 ] as const satisfies ReadonlyArray<keyof DenEditorPrefs>;
 
 const [revealInTree, setRevealInTree] = createSignal(true);
-const [treeVisibleLevels, setTreeVisibleLevels] = createSignal<number>(DEN_FILES_TREE_LEVELS.default);
-export const editorTreeVisibleLevelsPref = treeVisibleLevels;
+const [editorTreeVisibleLevelsPref, setTreeVisibleLevels] = createSignal<number>(DEN_FILES_TREE_LEVELS.default);
 
 export function resolveEditorTreeVisibleLevels(prefs?: DenEditorPrefs): number {
   const value = prefs?.treeVisibleLevels;
@@ -135,13 +134,13 @@ const [fontFamily, setFontFamily] = createSignal(DEFAULT_EDITOR_FONT_FAMILY);
 const [lineHeight, setLineHeight] = createSignal(DEFAULT_EDITOR_LINE_HEIGHT);
 const [versionComparison, setVersionComparison] =
   createSignal<DenEditorVersionComparison>(DEFAULT_EDITOR_VERSION_COMPARISON);
-const [walkControlsDefault, setWalkControlsDefault] = createSignal<DenWalkControlsPlacement>("floating");
-const [walkControlsLocation, setWalkControlsLocation] = createSignal<DenWalkControlsLocation>();
+const [editorWalkControlsDefaultPref, setWalkControlsDefault] = createSignal<DenWalkControlsPlacement>("floating");
+const [editorWalkControlsLocationPref, setWalkControlsLocation] = createSignal<DenWalkControlsLocation>();
 
-export const editorWalkControlsDefaultPref = walkControlsDefault;
-export const editorWalkControlsLocationPref = walkControlsLocation;
+export { editorTreeVisibleLevelsPref, editorWalkControlsDefaultPref, editorWalkControlsLocationPref };
+
 export function editorWalkControlsPlacement(): DenWalkControlsLocation {
-  return walkControlsLocation() ?? { placement: walkControlsDefault() };
+  return editorWalkControlsLocationPref() ?? { placement: editorWalkControlsDefaultPref() };
 }
 export async function saveEditorWalkControlsDefault(value: DenWalkControlsPlacement): Promise<void> {
   setWalkControlsDefault(value);

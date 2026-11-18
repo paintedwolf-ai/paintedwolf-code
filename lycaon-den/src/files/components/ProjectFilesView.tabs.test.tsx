@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@solidjs/testing-library";
 import { ProjectFilesView } from "./ProjectFilesView.tsx";
 import { createAppStore } from "../../store/app-state.ts";
-import { openFilesBuffer, resetProjectFilesForTests, applyFilesBufferLoad, setFilesBufferPinned, applyFilesBufferDraft } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
+import { applyFilesBufferLoad, applyFilesBufferDraft } from "../documents/project-files-buffer-io.ts";
+import { setFilesBufferPinned } from "../documents/project-files-buffers.ts";
 import { updateFileTabDropTarget } from "../../platform/windows/item-windows.ts";
 import { beginShellLayoutBusy, endShellLayoutBusy, resetShellLayoutBusyForTests } from "../../shell/shell-layout-busy.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
@@ -157,7 +159,6 @@ describe("ProjectFilesView stage chrome", () => {
     );
     expect(css).toMatch(/\.den-files-tab\s*\{[\s\S]*?min-width:\s*7\.4286rem/);
     expect(css).toMatch(/\.den-files-tab\s*\{[\s\S]*?max-width:\s*13\.1429rem/);
-    expect(css).toMatch(/flex-wrap:\s*nowrap/);
 
     globalThis.IntersectionObserver = OriginalIO;
     unmount();

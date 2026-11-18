@@ -51,6 +51,7 @@ import type {
   CoordinatorRunContext,
   CreateSessionRequest,
   UpdateSessionRequest,
+  WorkerHistoryResponse,
   WorkerTask,
   WorkerListResponse,
 } from "../types.ts";
@@ -178,6 +179,17 @@ export interface SessionsClient {
     projectId: string,
     query?: { sessionId?: string },
   ): Promise<WorkerTask[]>;
+  getWorkerHistory(
+    projectId: string,
+    query: {
+      sessionId: string;
+      worker: string;
+      before?: number;
+      beforeRound?: number;
+      limit?: number;
+    },
+    opts?: { signal?: AbortSignal },
+  ): Promise<WorkerHistoryResponse>;
   cancelWorker(id: string): Promise<void>;
   getBoard(projectId: string, sessionId: string): Promise<BoardView>;
   listSessionBackgroundProcesses(sessionId: string): Promise<BackgroundProcess[]>;
@@ -376,6 +388,18 @@ export function createSessionsClient(j: JsonRequester, connection: BackendConnec
       } while (cursor);
       return workers;
     },
+    getWorkerHistory: (projectId, query, opts) =>
+      j(
+        `/v1/workers/history${formatQuery({
+          project_id: projectId,
+          session_id: query.sessionId,
+          worker: query.worker,
+          before: query.before,
+          before_round: query.beforeRound,
+          limit: query.limit,
+        })}`,
+        opts?.signal ? { signal: opts.signal } : undefined,
+      ),
     cancelWorker: (id) => j(`/v1/workers/${id}/cancel`, { method: "POST" }),
 
     getBoard: (projectId, sessionId) =>

@@ -1,6 +1,7 @@
 package contentblob_test
 
 import (
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"math/rand"
 	"strings"
 	"testing"
@@ -35,7 +36,7 @@ func TestRunDensityPassRecompressesShrinksAndFlipsColdRoundTrip(t *testing.T) {
 	ctx := t.Context()
 
 	old := time.Now().UTC().Add(-48 * time.Hour)
-	_, err := database.ExecContext(ctx, `UPDATE projects SET last_opened_at = ? WHERE id = ?`, db.FormatTime(old), projectID)
+	_, err := database.ExecContext(ctx, `UPDATE projects SET last_opened_at = ? WHERE id = ?`, timelayout.Format(old), projectID)
 	testutil.FailErr(t, "age project", err)
 
 	store := contentblob.StoreFor(dataDir, projectID)
@@ -46,7 +47,7 @@ func TestRunDensityPassRecompressesShrinksAndFlipsColdRoundTrip(t *testing.T) {
 	q := db.New(database)
 	testutil.FailErr(t, "upsert content blob object", q.UpsertContentBlobObject(ctx, db.UpsertContentBlobObjectParams{
 		ProjectID: projectID, Sha256: sha, ByteSize: byteSize, StoredSize: storedSize,
-		CreatedAt: db.FormatTime(time.Now().UTC()),
+		CreatedAt: timelayout.Format(time.Now().UTC()),
 	}))
 
 	var tierBefore string
@@ -90,7 +91,7 @@ func TestRunDensityPassRecompressesShrinksAndFlipsColdRoundTrip(t *testing.T) {
 
 	// The schema trigger makes reopened projects hot.
 	_, err = database.ExecContext(ctx, `UPDATE projects SET last_opened_at = ? WHERE id = ?`,
-		db.FormatTime(time.Now().UTC()), projectID)
+		timelayout.Format(time.Now().UTC()), projectID)
 	testutil.FailErr(t, "reopen project", err)
 	testutil.FailErr(t, "read project storage tier after reopen", database.QueryRowContext(ctx,
 		`SELECT storage_tier FROM projects WHERE id = ?`, projectID).Scan(&projectTier))
@@ -111,7 +112,7 @@ func TestRunDensityPassSkipsProjectsNotIdle(t *testing.T) {
 	q := db.New(database)
 	testutil.FailErr(t, "upsert content blob object", q.UpsertContentBlobObject(ctx, db.UpsertContentBlobObjectParams{
 		ProjectID: projectID, Sha256: sha, ByteSize: byteSize, StoredSize: storedSize,
-		CreatedAt: db.FormatTime(time.Now().UTC()),
+		CreatedAt: timelayout.Format(time.Now().UTC()),
 	}))
 
 	cfg := contentblob.DensityConfig{}

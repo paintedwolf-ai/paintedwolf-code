@@ -84,7 +84,7 @@ func TestBundledSpecRulesResolveViaRegistry(t *testing.T) {
 		t.Fatalf("ValidateBundled failed: %v", diags)
 	}
 	engine := rules.NewSimpleEngine(cfg, reg)
-	out, err := engine.Evaluate(t.Context(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "delegate_dispatch"}})
+	out, err := engine.Evaluate(t.Context(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint"}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if out.Allowed {
 		t.Fatal("expected deny for delegation in spec posture")

@@ -3,7 +3,6 @@
 # workflows/_topologies/example-triage-sweep
 id: example-triage-sweep
 pattern: fan_out
-iteration_cap: 4
 task: Parallel read-only sweep for the cause of a reported problem
 criterion: Prefer the explanation with the shortest evidence chain from symptom to code
 fan_out:

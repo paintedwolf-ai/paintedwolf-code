@@ -3,14 +3,11 @@ package approvals
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/approvalregistry"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -38,15 +35,6 @@ func newRegistry(cfg *Config) (*Registry, error) {
 		return nil, fmt.Errorf("approval explanation %q required", FallbackExplanationKey)
 	}
 	return &Registry{entries: cfg.Explanations}, nil
-}
-
-// LoadConfig reads and merges all explain.yaml files under dir.
-func LoadConfig(dir string) (*Config, error) {
-	entries, err := approvalregistry.List(extpacks.OnDisk(dir))
-	if err != nil {
-		return nil, err
-	}
-	return configFromEntries(entries)
 }
 
 func loadConfigStock() (*Config, error) {
@@ -81,34 +69,6 @@ func LoadConfigStock() (*Config, error) {
 		return nil, err
 	}
 	return cfg, nil
-}
-
-// WriteConfigDir writes cfg as one YAML file per key under dir.
-func WriteConfigDir(dir string, cfg *Config) error {
-	if cfg == nil {
-		return fmt.Errorf("nil config")
-	}
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return err
-	}
-	want := map[string]bool{}
-	keys := make([]string, 0, len(cfg.Explanations))
-	for key := range cfg.Explanations {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		featureDir := filepath.Join(dir, key)
-		if err := os.MkdirAll(featureDir, 0o750); err != nil {
-			return err
-		}
-		path := filepath.Join(featureDir, approvalregistry.ExplainManifestName)
-		if err := WriteExplainYAML(path, key, cfg.Explanations[key]); err != nil {
-			return err
-		}
-		want[key] = true
-	}
-	return approvalregistry.Prune(dir, want)
 }
 
 // Keys returns sorted registry keys.

@@ -17,9 +17,3 @@ type FileMatches struct {
 	Path, Language string
 	Matches        []Match
 }
-
-// SymbolRef locates a named definition node.
-type SymbolRef struct {
-	Name string
-	Kind string // optional disambiguator
-}

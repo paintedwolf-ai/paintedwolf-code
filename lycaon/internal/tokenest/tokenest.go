@@ -26,18 +26,6 @@ func Estimate(s string, divisor int) int {
 // EstimateDefault measures s at the host divisor.
 func EstimateDefault(s string) int { return Estimate(s, DefaultDivisor) }
 
-// EstimateBytes measures raw UTF-8 bytes without copying them to a string.
-func EstimateBytes(raw []byte, divisor int) int {
-	if divisor <= 0 {
-		divisor = DefaultDivisor
-	}
-	n := utf8.RuneCount(raw)
-	if n == 0 {
-		return 0
-	}
-	return (n + divisor - 1) / divisor
-}
-
 // FromUnitCount applies the same ceiling to a count a caller already tallied.
 // Callers that counted bytes rather than runes get a byte-scaled estimate; the
 // two agree on ASCII and the byte form over-counts multi-byte text, which is the

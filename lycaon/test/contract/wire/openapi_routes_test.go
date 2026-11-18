@@ -98,9 +98,6 @@ func stubPathParams(path string) map[string]string {
 	if strings.Contains(path, "/projects/") {
 		params["id"] = fixtureProjectID
 	}
-	if strings.Contains(path, "/delegations/") {
-		params["id"] = fixtureDelegationID
-	}
 	if strings.Contains(path, "/workers/") {
 		params["id"] = fixtureWorkerID
 	}

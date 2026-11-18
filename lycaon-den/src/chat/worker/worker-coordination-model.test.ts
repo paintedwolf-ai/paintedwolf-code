@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FindingsDigest } from "../../api/types.ts";
+import type { BoardView, FindingsDigest, WorkerTask } from "../../api/types.ts";
 import {
   findingAgentLabel,
   findingsByWorker,
@@ -48,32 +48,42 @@ describe("worker-coordination-model", () => {
     ).toEqual(["Posted by A", "Fresh sibling note"]);
   });
 
-  it("reservationsFor reads the roster entry for the job", () => {
-    expect(
-      reservationsFor(
-        [
-          {
-            worker_id: "job-a",
-            agent_type: "implementer",
-            status: "running",
-            reservations: ["pkg/a.go"],
-          },
-        ],
-        "job-a",
-      ),
-    ).toEqual(["pkg/a.go"]);
-    expect(reservationsFor([], "job-a")).toEqual([]);
+  it("reservationsFor reads the board worker's live round reservations", () => {
+    const board = {
+      workers: [
+        {
+          name: "parser",
+          agent_type: "implementer",
+          state: "working",
+          latest_job_id: "job-a",
+          reservations: ["pkg/a.go", " "],
+        },
+      ],
+    } as unknown as BoardView;
+    const row = (id: string, name?: string): WorkerTask => ({
+      id,
+      agent_type: "implementer",
+      status: "running",
+      created_at: "t",
+      worker_name: name,
+    });
+    expect(reservationsFor(board, row("job-a"))).toEqual(["pkg/a.go"]);
+    expect(reservationsFor(board, row("job-old", "parser"))).toEqual(["pkg/a.go"]);
+    expect(reservationsFor(board, row("job-b", "lexer"))).toEqual([]);
+    expect(reservationsFor(undefined, row("job-a"))).toEqual([]);
   });
 
-  it("findingAgentLabel prefers the roster agent type, else a short job id", () => {
-    const roster = [
-      { worker_id: "job-a", agent_type: "code-reviewer", status: "running" as const },
+  it("findingAgentLabel names the author's worker, else its agent type, else a short job id", () => {
+    const workers: WorkerTask[] = [
+      { id: "job-a", agent_type: "code-reviewer", status: "running", created_at: "t", worker_name: "reviewer" },
+      { id: "job-b", agent_type: "code-reviewer", status: "running", created_at: "t" },
     ];
-    expect(findingAgentLabel(roster, "job-a")).toBe("code-reviewer");
+    expect(findingAgentLabel(workers, "job-a")).toBe("reviewer");
+    expect(findingAgentLabel(workers, "job-b")).toBe("code-reviewer");
     expect(
-      findingAgentLabel(roster, "C7503D7A-EC68-4AE8-B6FC-CBDEC7350B17"),
+      findingAgentLabel(workers, "C7503D7A-EC68-4AE8-B6FC-CBDEC7350B17"),
     ).toBe("C7503D7A");
-    expect(findingAgentLabel(roster, "")).toBe("");
+    expect(findingAgentLabel(workers, "")).toBe("");
     expect(findingAgentLabel(undefined, "short")).toBe("short");
   });
 });

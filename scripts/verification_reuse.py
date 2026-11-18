@@ -46,7 +46,7 @@ SELECTION_FLAGS = {"-test.v", "-test.run", "-test.skip", "-test.short", "-test.c
                    "-test.paniconexit0", "-test.failfast", "-test.list"}
 # Admission-shaped settings: how much of the host a run had, not what it tested.
 RESOURCE_FLAGS = {"-test.timeout", "-test.parallel"}
-RESOURCE_ENV = {"PW_TEST_WORKERS", "PW_TEST_TIMEOUT_SCALE", "GOMAXPROCS", "GO_TEST_P", "GO_TEST_PARALLEL",
+RESOURCE_ENV = {"PW_TEST_CAPACITY", "PW_TEST_WORKERS", "GOMAXPROCS", "GO_TEST_P", "GO_TEST_PARALLEL",
                 "PW_VITEST_MAX_WORKERS", "PW_FUZZ_WORKERS", "CARGO_BUILD_JOBS", "RUST_TEST_THREADS"}
 # Settings the Go runtime reads without os.Getenv, so the test log cannot observe them.
 RUNTIME_ENV = ("GODEBUG", "GOTRACEBACK", "GOGC", "GOMEMLIMIT", "GORACE", "TZ")

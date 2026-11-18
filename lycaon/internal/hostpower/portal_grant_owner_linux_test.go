@@ -21,18 +21,14 @@ type portalAcquisition struct {
 
 func pendingPortalRequest(t *testing.T, fixture *fixturePortal) dbus.ObjectPath {
 	t.Helper()
-	deadline := time.Now().Add(testutil.Timeout(time.Minute))
-	for time.Now().Before(deadline) {
+	var request dbus.ObjectPath
+	testutil.WaitFor(t, "the portal receives the inhibition request", func() bool {
 		fixture.mu.Lock()
-		request := fixture.request
-		fixture.mu.Unlock()
-		if request != "" {
-			return request
-		}
-		time.Sleep(time.Millisecond)
-	}
-	t.Fatal("portal did not receive the inhibition request")
-	return ""
+		defer fixture.mu.Unlock()
+		request = fixture.request
+		return request != ""
+	})
+	return request
 }
 
 func TestPortalGrantRefusesMalformedTimeoutAndOwnerLossWithoutLeakingRequest(t *testing.T) {
@@ -64,28 +60,20 @@ func TestPortalGrantRefusesMalformedTimeoutAndOwnerLossWithoutLeakingRequest(t *
 				testutil.FailErr(t, "retire ungranted portal owner", err)
 				replacement = servePortal(t, path, false)
 			}
-			select {
-			case result := <-results:
-				if result.held != nil || result.err == nil {
-					t.Fatalf("ungranted inhibition = %+v", result)
-				}
-				if mode == "malformed" && !strings.Contains(result.err.Error(), "unknown shape") {
-					t.Fatalf("malformed grant result = %v", result.err)
-				}
-				if (mode == "timeout" || mode == "no-caller-deadline") && !errors.Is(result.err, context.DeadlineExceeded) {
-					t.Fatalf("bounded grant result = %v", result.err)
-				}
-				if mode == "owner-loss" && reasonFor(portalProvider{}, result.err).Code != ReasonDisconnected {
-					t.Fatalf("owner loss result = %v", result.err)
-				}
-			case <-time.After(testutil.Timeout(time.Minute)):
-				t.Fatal("ungranted inhibition did not settle")
+			result := testutil.Receive(t, "the ungranted inhibition settles", results)
+			if result.held != nil || result.err == nil {
+				t.Fatalf("ungranted inhibition = %+v", result)
 			}
-			select {
-			case <-fixture.closed:
-			case <-time.After(testutil.Timeout(time.Minute)):
-				t.Fatal("ungranted request was not closed on its original owner")
+			if mode == "malformed" && !strings.Contains(result.err.Error(), "unknown shape") {
+				t.Fatalf("malformed grant result = %v", result.err)
 			}
+			if (mode == "timeout" || mode == "no-caller-deadline") && !errors.Is(result.err, context.DeadlineExceeded) {
+				t.Fatalf("bounded grant result = %v", result.err)
+			}
+			if mode == "owner-loss" && reasonFor(portalProvider{}, result.err).Code != ReasonDisconnected {
+				t.Fatalf("owner loss result = %v", result.err)
+			}
+			testutil.AwaitClosed(t, "the ungranted request is closed on its original connection", fixture.closed)
 			fixture.mu.Lock()
 			releases := fixture.releases
 			fixture.mu.Unlock()
@@ -125,16 +113,12 @@ func TestForeignPortalResponseCannotGrantTheOwnedRequest(t *testing.T) {
 	case <-time.After(20 * time.Millisecond):
 	}
 	testutil.FailErr(t, "emit original owner's granting response", fixture.server.Emit(request, portalRequest+".Response", uint32(0), map[string]dbus.Variant{}))
-	select {
-	case result := <-results:
-		testutil.FailErr(t, "owned portal grant", result.err)
-		if result.held == nil {
-			t.Fatal("owned grant returned no lease")
-		}
-		testutil.FailErr(t, "close granted owned request", result.held.Release())
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("owned grant did not complete the inhibition")
+	result := testutil.Receive(t, "the owned grant completes the inhibition", results)
+	testutil.FailErr(t, "owned portal grant", result.err)
+	if result.held == nil {
+		t.Fatal("owned grant returned no lease")
 	}
+	testutil.FailErr(t, "close granted owned request", result.held.Release())
 }
 
 func TestPortalResponseRequiresTheDeclaredCodeAndDetails(t *testing.T) {

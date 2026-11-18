@@ -13,7 +13,7 @@ import (
 )
 
 // newProgressChangeEmitter persists coalesced nonterminal changes.
-// ChangedAt keeps transcript order tied to the write.
+// ChangedAt dates the row at the write, not the flush.
 func newProgressChangeEmitter(
 	store *store.SQL,
 	eventPub *events.Publisher,
@@ -47,7 +47,8 @@ func newProgressChangeEmitter(
 	}
 }
 
-// buildProgressUpdate omits terminal windows and summarizes large diffs.
+// buildProgressUpdate omits terminal windows. Every update states the plan it leaves;
+// rows are listed only while they are few.
 func buildProgressUpdate(baseline, latest progress.Snapshot, seq int) (*wire.ProgressUpdateMeta, bool) {
 	baselineSteps := progress.DeriveProgress(baseline.Content, progress.DefaultProgressCap).Items
 	latestSteps := progress.DeriveProgress(latest.Content, progress.DefaultProgressCap).Items
@@ -60,19 +61,14 @@ func buildProgressUpdate(baseline, latest progress.Snapshot, seq int) (*wire.Pro
 		return nil, false
 	}
 
-	meta := &wire.ProgressUpdateMeta{Seq: seq}
+	summary := progress.SummarizeUpdate(latestSteps, len(changes))
+	meta := &wire.ProgressUpdateMeta{Seq: seq, Summary: &summary}
 	if len(baselineSteps) == 0 {
 		meta.Initial = true
-		if len(latestSteps) > progress.MaxDetailedProgressUpdateRows {
-			summary := progress.SummarizeUpdate(latestSteps, len(changes))
-			meta.Summary = &summary
-		} else {
+		if len(latestSteps) <= progress.MaxDetailedProgressUpdateRows {
 			meta.Steps = latestSteps
 		}
-	} else if len(changes) > progress.MaxDetailedProgressUpdateRows {
-		summary := progress.SummarizeUpdate(latestSteps, len(changes))
-		meta.Summary = &summary
-	} else {
+	} else if len(changes) <= progress.MaxDetailedProgressUpdateRows {
 		meta.Changes = changes
 	}
 	return meta, true

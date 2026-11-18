@@ -2,11 +2,11 @@ package hitl_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -33,24 +33,32 @@ func TestCheckpointAutoExpiresToDenied(t *testing.T) {
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 
-	for t.Context().Err() == nil {
-		final, perr := mgr.PollCheckpoint(ctx, resp.CheckpointID)
-		testutil.FailErr(t, "PollCheckpoint", perr)
-		if final.Status == hitl.DecisionStatusPending {
-			time.Sleep(5 * time.Millisecond)
-			continue
-		}
-		if final.Status != hitl.DecisionStatusExpired {
-			t.Fatalf("status = %q, want expired (fail-safe deny)", final.Status)
-		}
-		denied, derr := mgr.SessionApprovalDenied(ctx, sessionID)
-		testutil.FailErr(t, "SessionApprovalDenied", derr)
-		if denied {
-			t.Fatal("expiry must not suppress a new approval review")
-		}
-		return
+	final := awaitCheckpointDecided(t, mgr, resp.CheckpointID)
+	if final.Status != hitl.DecisionStatusExpired {
+		t.Fatalf("status = %q, want expired (fail-safe deny)", final.Status)
 	}
-	t.Fatal("pending checkpoint never expired — timeout not wired")
+	denied, derr := mgr.SessionApprovalDenied(ctx, sessionID)
+	testutil.FailErr(t, "SessionApprovalDenied", derr)
+	if denied {
+		t.Fatal("expiry must not suppress a new approval review")
+	}
+}
+
+type checkpointPoller interface {
+	PollCheckpoint(context.Context, string) (*hitl.CheckpointResponse, error)
+}
+
+// awaitCheckpointDecided returns the checkpoint once it is no longer pending.
+func awaitCheckpointDecided(t *testing.T, mgr checkpointPoller, id string) *hitl.CheckpointResponse {
+	t.Helper()
+	var final *hitl.CheckpointResponse
+	testutil.WaitFor(t, "checkpoint "+id+" is decided", func() bool {
+		var err error
+		final, err = mgr.PollCheckpoint(t.Context(), id)
+		testutil.FailErr(t, "PollCheckpoint", err)
+		return final.Status != hitl.DecisionStatusPending
+	})
+	return final
 }
 
 func TestCheckpointExpiryNotifiesToolApprovalTerminal(t *testing.T) {
@@ -85,28 +93,19 @@ func TestCheckpointExpiryNotifiesToolApprovalTerminal(t *testing.T) {
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 
-	for t.Context().Err() == nil {
-		final, perr := mgr.PollCheckpoint(ctx, resp.CheckpointID)
-		testutil.FailErr(t, "PollCheckpoint", perr)
-		if final.Status == hitl.DecisionStatusPending {
-			time.Sleep(5 * time.Millisecond)
-			continue
-		}
-		if final.Status != hitl.DecisionStatusExpired {
-			t.Fatalf("status = %q want expired", final.Status)
-		}
-		if calls != 1 {
-			t.Fatalf("terminal hook calls = %d want 1", calls)
-		}
-		if gotChat != sessionID || gotKey != grantKey {
-			t.Fatalf("hook got chat=%q key=%q", gotChat, gotKey)
-		}
-		if gotStatus != hitl.DecisionStatusExpired {
-			t.Fatalf("hook status = %q want expired", gotStatus)
-		}
-		return
+	final := awaitCheckpointDecided(t, mgr, resp.CheckpointID)
+	if final.Status != hitl.DecisionStatusExpired {
+		t.Fatalf("status = %q want expired", final.Status)
 	}
-	t.Fatal("pending checkpoint never expired")
+	if calls != 1 {
+		t.Fatalf("terminal hook calls = %d want 1", calls)
+	}
+	if gotChat != sessionID || gotKey != grantKey {
+		t.Fatalf("hook got chat=%q key=%q", gotChat, gotKey)
+	}
+	if gotStatus != hitl.DecisionStatusExpired {
+		t.Fatalf("hook status = %q want expired", gotStatus)
+	}
 }
 
 func TestRestorePendingExpiresFromOriginalCreationTime(t *testing.T) {
@@ -125,7 +124,7 @@ func TestRestorePendingExpiresFromOriginalCreationTime(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "create pending checkpoint", err)
-	_, err = sqlDB.ExecContext(ctx, "UPDATE checkpoints SET created_at = ? WHERE id = ?", db.FormatTime(time.Now().UTC().Add(-time.Hour)), resp.CheckpointID)
+	_, err = sqlDB.ExecContext(ctx, "UPDATE checkpoints SET created_at = ? WHERE id = ?", timelayout.Format(time.Now().UTC().Add(-time.Hour)), resp.CheckpointID)
 	testutil.FailErr(t, "age pending checkpoint", err)
 
 	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), nil, authzcontext.SQLRecorder(sqlDB))
@@ -206,7 +205,7 @@ func TestStoppedCheckpointsPreservePendingRowsForRestart(t *testing.T) {
 	if pending.Status != hitl.DecisionStatusPending {
 		t.Fatalf("shutdown status=%s, want pending", pending.Status)
 	}
-	_, err = database.ExecContext(ctx, "UPDATE checkpoints SET created_at = ? WHERE id = ?", db.FormatTime(time.Now().UTC().Add(-2*time.Hour)), response.CheckpointID)
+	_, err = database.ExecContext(ctx, "UPDATE checkpoints SET created_at = ? WHERE id = ?", timelayout.Format(time.Now().UTC().Add(-2*time.Hour)), response.CheckpointID)
 	testutil.FailErr(t, "age original deadline", err)
 	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
 	t.Cleanup(func() {
