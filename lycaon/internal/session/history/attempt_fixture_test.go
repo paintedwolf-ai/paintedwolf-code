@@ -153,7 +153,7 @@ func (s *scanCountingStore) count() int {
 
 type attemptFixture struct {
 	svc      *Service
-	mem      *store.SQL
+	sqlStore *store.SQL
 	sess     *api.Session
 	clock    *virtualClock
 	provider *scriptedProvider
@@ -171,16 +171,16 @@ func attemptConfig() compaction.CompactionConfig {
 func newAttemptFixture(t *testing.T, script ...func() (string, error)) *attemptFixture {
 	t.Helper()
 	cfg := attemptConfig()
-	svc, mem := newCompactionManager(t, cfg)
+	svc, sqlStore := newCompactionManager(t, cfg)
 	provider := &scriptedProvider{script: script}
 	svc.SetCompactor(compaction.NewSimpleCompactor(cfg, provider))
 	clock := newVirtualClock()
 	svc.Runner.attempts.clock = clock
-	scans := &scanCountingStore{Store: mem}
+	scans := &scanCountingStore{Store: sqlStore}
 	svc.store = scans
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sqlStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	f := &attemptFixture{svc: svc, mem: mem, sess: sess, clock: clock, provider: provider, scans: scans}
+	f := &attemptFixture{svc: svc, sqlStore: sqlStore, sess: sess, clock: clock, provider: provider, scans: scans}
 	t.Cleanup(func() {
 		svc.Runner.Stop()
 		testutil.FailErr(t, "drain compaction", svc.Runner.WaitContext(context.Background()))
@@ -200,15 +200,15 @@ func (f *attemptFixture) seedRejectablePage(t *testing.T) {
 	testutil.FailErr(t, "render continuation", err)
 	summary := api.Message{ID: "previous", Role: api.MessageRoleAssistant, Content: text,
 		ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: text}}}
-	testutil.FailErr(t, "append covered row", f.mem.AppendMessages(t.Context(), f.sess.ID, summary))
-	rows, err := f.mem.GetMessages(t.Context(), f.sess.ID)
+	testutil.FailErr(t, "append covered row", f.sqlStore.AppendMessages(t.Context(), f.sess.ID, summary))
+	rows, err := f.sqlStore.GetMessages(t.Context(), f.sess.ID)
 	testutil.FailErr(t, "read covered row", err)
 	covered := rows[len(rows)-1]
 	summary.Ord = covered.Ord
-	testutil.FailErr(t, "publish view", f.mem.PutCompactionView(t.Context(), f.sess.ID, store.CompactionView{
+	testutil.FailErr(t, "publish view", f.sqlStore.PutCompactionView(t.Context(), f.sess.ID, store.CompactionView{
 		Generation: 1, CoveredThroughOrd: covered.Ord, CoveredThroughID: covered.ID, SourceSeq: covered.Seq,
 		Continuation: prior, Messages: []api.Message{summary}}))
-	testutil.FailErr(t, "append page", f.mem.AppendMessages(t.Context(), f.sess.ID,
+	testutil.FailErr(t, "append page", f.sqlStore.AppendMessages(t.Context(), f.sess.ID,
 		api.Message{ID: "observation", Role: api.MessageRoleAssistant, Content: strings.Repeat("new clue ", 12)},
 		api.Message{ID: "request", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Continue."}))
 }
@@ -216,7 +216,7 @@ func (f *attemptFixture) seedRejectablePage(t *testing.T) {
 // schedule runs one background pass and whatever synthesis it started.
 func (f *attemptFixture) schedule(t *testing.T) {
 	t.Helper()
-	sess, err := f.mem.Get(t.Context(), f.sess.ID)
+	sess, err := f.sqlStore.Get(t.Context(), f.sess.ID)
 	testutil.FailErr(t, "read session", err)
 	f.svc.Schedule(t.Context(), sess)
 	f.settle(t)
@@ -236,7 +236,7 @@ func (f *attemptFixture) appendRows(t *testing.T, n int) {
 	for i := range rows {
 		rows[i] = api.Message{Role: api.MessageRoleAssistant, Content: "progress"}
 	}
-	testutil.FailErr(t, "append rows", f.mem.AppendMessages(t.Context(), f.sess.ID, rows...))
+	testutil.FailErr(t, "append rows", f.sqlStore.AppendMessages(t.Context(), f.sess.ID, rows...))
 }
 
 func (f *attemptFixture) record(t *testing.T) attemptRecord {

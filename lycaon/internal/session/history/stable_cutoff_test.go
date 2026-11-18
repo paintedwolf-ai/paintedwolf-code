@@ -184,11 +184,11 @@ func TestBoundaryConstraintsAC_KV_06(t *testing.T) {
 }
 
 // tailStarts replays appends through Load and records where the canonical tail begins.
-func tailStarts(t *testing.T, svc *Service, mem *store.SQL, sess *api.Session, appends int, first int, body string) []int64 {
+func tailStarts(t *testing.T, svc *Service, sqlStore *store.SQL, sess *api.Session, appends int, first int, body string) []int64 {
 	t.Helper()
 	var starts []int64
 	for i := range appends {
-		testutil.FailErr(t, "append exchange", mem.AppendMessages(t.Context(), sess.ID, turnExchange(first+i, body)...))
+		testutil.FailErr(t, "append exchange", sqlStore.AppendMessages(t.Context(), sess.ID, turnExchange(first+i, body)...))
 		rows, err := svc.Load(t.Context(), sess)
 		testutil.FailErr(t, "load", err)
 		assertPairedExchanges(t, rows)
@@ -214,17 +214,17 @@ func burstConfig() compaction.CompactionConfig {
 // depends only on the appends a test makes.
 func stableTurnSession(t *testing.T, cfg compaction.CompactionConfig) (*Service, *store.SQL, *api.Session) {
 	t.Helper()
-	svc, mem, sess := newTurnSession(t, cfg)
+	svc, sqlStore, sess := newTurnSession(t, cfg)
 	svc.Runner = nil
-	return svc, mem, sess
+	return svc, sqlStore, sess
 }
 
 // appendEditBurst fills the tail near its byte bound, then appends one batch of
 // eight ~35 KB tool results that crosses it.
-func appendEditBurst(t *testing.T, mem *store.SQL, sessionID string) {
+func appendEditBurst(t *testing.T, sqlStore *store.SQL, sessionID string) {
 	t.Helper()
 	for i := range 120 {
-		testutil.FailErr(t, "append exchange", mem.AppendMessages(t.Context(), sessionID, turnExchange(100+i, strings.Repeat("o", 1000))...))
+		testutil.FailErr(t, "append exchange", sqlStore.AppendMessages(t.Context(), sessionID, turnExchange(100+i, strings.Repeat("o", 1000))...))
 	}
 	call := []api.ToolCall{}
 	for i := range 8 {
@@ -236,15 +236,15 @@ func appendEditBurst(t *testing.T, mem *store.SQL, sessionID string) {
 		batch = append(batch, api.Message{ID: fmt.Sprintf("edit-result-%d", i), Role: api.MessageRoleTool, Content: content,
 			ToolResult: &api.ToolResult{Tool: "edit", ToolCallID: call[i].ID, AssistantMessageID: "edits", Content: content, Outcome: api.ToolResultOutcomeCompleted}})
 	}
-	testutil.FailErr(t, "append edit batch", mem.AppendMessages(t.Context(), sessionID, batch...))
+	testutil.FailErr(t, "append edit batch", sqlStore.AppendMessages(t.Context(), sessionID, batch...))
 }
 
 func TestEightEditBurstDoesNotSlideTheTailAC_KV_06(t *testing.T) {
 	t.Run("without a view", func(t *testing.T) {
-		svc, mem, sess := stableTurnSession(t, burstConfig())
-		seedTurn(t, mem, sess.ID, 0, "")
-		appendEditBurst(t, mem, sess.ID)
-		starts := tailStarts(t, svc, mem, sess, 60, 1000, strings.Repeat("o", 1000))
+		svc, sqlStore, sess := stableTurnSession(t, burstConfig())
+		seedTurn(t, sqlStore, sess.ID, 0, "")
+		appendEditBurst(t, sqlStore, sess.ID)
+		starts := tailStarts(t, svc, sqlStore, sess, 60, 1000, strings.Repeat("o", 1000))
 		moves := distinctInOrder(starts)
 		t.Logf("tail starts: %v", moves)
 		if !slices.Equal(moves, burstTailStarts) {
@@ -252,11 +252,11 @@ func TestEightEditBurstDoesNotSlideTheTailAC_KV_06(t *testing.T) {
 		}
 	})
 	t.Run("behind a published view", func(t *testing.T) {
-		svc, mem, sess := stableTurnSession(t, burstConfig())
-		canonical := seedTurn(t, mem, sess.ID, 4, "short")
-		publishCoverage(t, mem, sess.ID, canonical, canonical[len(canonical)-1].Ord, 1, 196608)
-		appendEditBurst(t, mem, sess.ID)
-		starts := tailStarts(t, svc, mem, sess, 60, 2000, strings.Repeat("o", 1000))
+		svc, sqlStore, sess := stableTurnSession(t, burstConfig())
+		canonical := seedTurn(t, sqlStore, sess.ID, 4, "short")
+		publishCoverage(t, sqlStore, sess.ID, canonical, canonical[len(canonical)-1].Ord, 1, 196608)
+		appendEditBurst(t, sqlStore, sess.ID)
+		starts := tailStarts(t, svc, sqlStore, sess, 60, 2000, strings.Repeat("o", 1000))
 		moves := distinctInOrder(starts)
 		t.Logf("tail starts: %v", moves)
 		if !slices.Equal(moves, burstTailStarts) {
@@ -270,16 +270,16 @@ func TestEightEditBurstDoesNotSlideTheTailAC_KV_06(t *testing.T) {
 func TestOversizedBodiesHoldTheirProjectionAC_KV_06(t *testing.T) {
 	cfg := burstConfig()
 	cfg.HardCeilingTokens, cfg.TargetTokens = 40000, 20000
-	svc, mem, sess := stableTurnSession(t, cfg)
+	svc, sqlStore, sess := stableTurnSession(t, cfg)
 	svc.recallAvailable = func(context.Context, *api.Session) bool { return true }
-	seedTurn(t, mem, sess.ID, 0, "")
-	appendEditBurst(t, mem, sess.ID)
+	seedTurn(t, sqlStore, sess.ID, 0, "")
+	appendEditBurst(t, sqlStore, sess.ID)
 	budgets := fixedBudgets{window: cfg.ModelContextWindow}
 	frame := strings.Repeat("Standing instructions. ", 400)
 	var previous []api.Message
 	held, moved := 0, 0
 	for step := range 64 {
-		testutil.FailErr(t, "append exchange", mem.AppendMessages(t.Context(), sess.ID, turnExchange(5000+step, strings.Repeat("o", 1000))...))
+		testutil.FailErr(t, "append exchange", sqlStore.AppendMessages(t.Context(), sess.ID, turnExchange(5000+step, strings.Repeat("o", 1000))...))
 		history, err := svc.Load(t.Context(), sess)
 		testutil.FailErr(t, "load", err)
 		fitted, err := svc.FitRequest(t.Context(), sess, history, requestFor(sess, frame, history), budgets, nil)
@@ -335,9 +335,9 @@ func commonRows(a, b []api.Message) int {
 func TestTighterFitFeedsLaterProjectionAC_KV_04(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
 	cfg.ModelContextWindow, cfg.HardCeilingTokens, cfg.TargetTokens = 65536, 40000, 20000
-	svc, mem, sess := stableTurnSession(t, cfg)
+	svc, sqlStore, sess := stableTurnSession(t, cfg)
 	body := strings.Repeat("recorded observation ", 12)
-	seedTurn(t, mem, sess.ID, 40, body)
+	seedTurn(t, sqlStore, sess.ID, 40, body)
 	// A frame far above the cold-start estimate makes the final fit the tight bound.
 	frame := strings.Repeat("Standing instructions. ", 5000)
 	budgets := fixedBudgets{window: cfg.ModelContextWindow}
@@ -345,7 +345,7 @@ func TestTighterFitFeedsLaterProjectionAC_KV_04(t *testing.T) {
 	var starts []int64
 	fits, stableRequests := 0, 0
 	for step := range 260 {
-		testutil.FailErr(t, "append exchange", mem.AppendMessages(t.Context(), sess.ID, turnExchange(1000+step, body)...))
+		testutil.FailErr(t, "append exchange", sqlStore.AppendMessages(t.Context(), sess.ID, turnExchange(1000+step, body)...))
 		history, err := svc.Load(t.Context(), sess)
 		testutil.FailErr(t, "load", err)
 		fitted, err := svc.FitRequest(t.Context(), sess, history, requestFor(sess, frame, history), budgets, nil)
@@ -396,16 +396,16 @@ func TestSecondCollapseSignatureHoldsBehindAViewAC_KV_07(t *testing.T) {
 	// Fixture shape only: a stable prefix of view rows, then a long active turn.
 	cfg := compaction.DefaultCompactionConfig()
 	cfg.ModelContextWindow, cfg.HardCeilingTokens, cfg.TargetTokens = 196608, 40000, 20000
-	svc, mem, sess := stableTurnSession(t, cfg)
+	svc, sqlStore, sess := stableTurnSession(t, cfg)
 	body := strings.Repeat("recorded observation ", 40)
-	canonical := seedTurn(t, mem, sess.ID, 80, body)
-	publishCoverage(t, mem, sess.ID, canonical, canonical[20].Ord, 1, cfg.ModelContextWindow)
+	canonical := seedTurn(t, sqlStore, sess.ID, 80, body)
+	publishCoverage(t, sqlStore, sess.ID, canonical, canonical[20].Ord, 1, cfg.ModelContextWindow)
 	frame := strings.Repeat("Standing instructions. ", 400)
 	budgets := fixedBudgets{window: cfg.ModelContextWindow}
 	var previous []api.Message
 	moved, held := 0, 0
 	for step := range 120 {
-		testutil.FailErr(t, "append exchange", mem.AppendMessages(t.Context(), sess.ID, turnExchange(3000+step, body)...))
+		testutil.FailErr(t, "append exchange", sqlStore.AppendMessages(t.Context(), sess.ID, turnExchange(3000+step, body)...))
 		history, err := svc.Load(t.Context(), sess)
 		testutil.FailErr(t, "load", err)
 		fitted, err := svc.FitRequest(t.Context(), sess, history, requestFor(sess, frame, history), budgets, nil)
@@ -432,9 +432,9 @@ func TestCutoffStateInvalidatesAndRebuildsAC_KV_08(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
 	setup := func(t *testing.T) (*Service, *store.SQL, *api.Session) {
 		t.Helper()
-		svc, mem, sess := stableTurnSession(t, cfg)
-		seedTurn(t, mem, sess.ID, 100, "recorded observation")
-		return svc, mem, sess
+		svc, sqlStore, sess := stableTurnSession(t, cfg)
+		seedTurn(t, sqlStore, sess.ID, 100, "recorded observation")
+		return svc, sqlStore, sess
 	}
 	project := func(t *testing.T, svc *Service, sess *api.Session) (int64, modelcall.HistoryCutFacts) {
 		t.Helper()
@@ -444,7 +444,7 @@ func TestCutoffStateInvalidatesAndRebuildsAC_KV_08(t *testing.T) {
 		return start, svc.cutoffs.takeFacts(sess.ID)
 	}
 	t.Run("cache loss is one explained reset then stable appends", func(t *testing.T) {
-		svc, mem, sess := setup(t)
+		svc, sqlStore, sess := setup(t)
 		first, _ := project(t, svc, sess)
 		svc.ForgetSessionState(sess.ID)
 		rebuilt, facts := project(t, svc, sess)
@@ -452,7 +452,7 @@ func TestCutoffStateInvalidatesAndRebuildsAC_KV_08(t *testing.T) {
 			t.Fatalf("rebuilt start %d (first %d), change %q", rebuilt, first, facts.Change)
 		}
 		for i := range 8 {
-			testutil.FailErr(t, "append exchange", mem.AppendMessages(t.Context(), sess.ID, turnExchange(4000+i, "recorded observation")...))
+			testutil.FailErr(t, "append exchange", sqlStore.AppendMessages(t.Context(), sess.ID, turnExchange(4000+i, "recorded observation")...))
 			held, facts := project(t, svc, sess)
 			if held != rebuilt || facts.Change != "" {
 				t.Fatalf("append %d: start %d, change %q", i, held, facts.Change)
@@ -498,15 +498,15 @@ func TestCutoffStateInvalidatesAndRebuildsAC_KV_08(t *testing.T) {
 		}
 	})
 	t.Run("a stale view stops supplying summary coverage", func(t *testing.T) {
-		svc, mem, sess := newTurnSession(t, cfg)
-		canonical := seedTurn(t, mem, sess.ID, 100, "recorded observation")
-		publishCoverage(t, mem, sess.ID, canonical, 40, 20, cfg.ModelContextWindow)
+		svc, sqlStore, sess := newTurnSession(t, cfg)
+		canonical := seedTurn(t, sqlStore, sess.ID, 100, "recorded observation")
+		publishCoverage(t, sqlStore, sess.ID, canonical, 40, 20, cfg.ModelContextWindow)
 		if countID(loadProjected(t, svc, sess), "summary") != 1 {
 			t.Fatal("fixture summary absent")
 		}
 		edited := canonical[5]
 		edited.Content = "edited observation"
-		_, err := mem.UpdateMessage(t.Context(), sess.ID, edited.ID, edited)
+		_, err := sqlStore.UpdateMessage(t.Context(), sess.ID, edited.ID, edited)
 		testutil.FailErr(t, "edit covered row", err)
 		if countID(loadProjected(t, svc, sess), "summary") != 0 {
 			t.Fatal("summary survived its source being replaced")
