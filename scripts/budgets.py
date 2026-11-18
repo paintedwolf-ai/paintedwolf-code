@@ -80,7 +80,8 @@ def suite_findings(name, report):
                            f"{review['reason']}" if review else
                            "review cohesion, dependencies, and lifecycle; choose refactoring, consolidation, or bounded retention")
             severity = "notice" if review and review['state'] == 'retained' else "warning"
-            out.append(Finding(severity, name, f"{label}: {size(f)}, warning {f['bound']:,}, limit {limit:,}; {disposition}", source))
+            ceiling = f"limit {limit:,}" if limit is not None else "no hard limit"
+            out.append(Finding(severity, name, f"{label}: {size(f)}, warning {f['bound']:,}, {ceiling}; {disposition}", source))
         elif kind == "excepted":
             out.append(Finding("notice", name, f'{label}: {size(f)}, admitted up to {f["bound"]:,} because: '
                                f'{f["reason"]}', source))
