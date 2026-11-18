@@ -68,5 +68,5 @@ func DataDir(t testing.TB, database db.DBTX) string {
 // RecordBranch writes the topology that inspection reloads after capture.
 func RecordBranch(t testing.TB, rootID, project, branch string) {
 	t.Helper()
-	testutil.FailErr(t, "record branch topology", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{SnapshotComplete: true, Roots: []workspace.JobMetaRoot{{ID: rootID, Path: project, IsPrimary: true}}}))
+	testutil.FailErr(t, "record branch topology", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{SnapshotComplete: true, Roots: []workspace.JobMetaRoot{{ID: rootID, Label: "root", Path: project, IsPrimary: true}}}))
 }

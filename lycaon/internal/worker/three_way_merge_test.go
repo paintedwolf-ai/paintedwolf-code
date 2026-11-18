@@ -150,6 +150,7 @@ func TestPromoteOverlayDoesNotInferSatisfiedEditsFromLinePresence(t *testing.T) 
 				MergeStatus: api.WorkerMergeStatusPending, Status: api.WorkerStatusComplete,
 				Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{path}},
 			}
+			testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 			svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t), DataDir: t.TempDir()}
 			out, err := svc.PromoteOverlay(t.Context(), "parent", task.ID, api.PromoteOverlayInput{})
 			if err == nil || len(out.Conflicts) != 1 || out.OverlayPromotion != nil {
@@ -182,6 +183,7 @@ func TestAssessPromoteSafeWithPrimaryContentBaselineDespiteOverlayMtime(t *testi
 		WorkspaceRoot:         branchRoot,
 		WorkspaceBaselinePath: raw,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	assessment, err := worker.AssessPromotePaths3Way(context.Background(), nil, "sess", task, []string{"f.go"})
 	testutil.FailErr(t, "AssessPromotePaths3Way", err)
 	if len(assessment.CleanPaths) != 1 || assessment.CleanPaths[0] != "f.go" {
@@ -215,6 +217,7 @@ func TestAssessPromotePaths3WayDetectsDeletedBranchFile(t *testing.T) {
 		WorkspaceBaselinePath: raw,
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 
 	got, err := worker.AssessPromotePaths3Way(context.Background(), nil, "sess-1", task, []string{"main.go"})
 	testutil.FailErr(t, "assess deletion", err)

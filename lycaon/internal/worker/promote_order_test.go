@@ -42,9 +42,11 @@ func TestAssessPromotePaths3WayCleanIfFirstWhenSiblingWouldConflict(t *testing.T
 		WorkspaceBaselinePath: raw,
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", taskA.WorkspacePath, taskA.WorkspaceRoot)
 	taskB := *taskA
 	taskB.ID = "job-b"
 	taskB.WorkspaceRoot = branchB
+	testbaseline.RecordBranch(t, "root", taskB.WorkspacePath, taskB.WorkspaceRoot)
 
 	svc := &worker.MergeService{
 		Sessions: overlapSessionLister{tasks: []api.WorkerTask{*taskA, taskB}},
@@ -97,9 +99,11 @@ func TestAssessPromotePaths3WayIndependentWhenLineDistant(t *testing.T) {
 		WorkspaceBaselinePath: raw,
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", taskA.WorkspacePath, taskA.WorkspaceRoot)
 	taskB := *taskA
 	taskB.ID = "job-b"
 	taskB.WorkspaceRoot = branchB
+	testbaseline.RecordBranch(t, "root", taskB.WorkspacePath, taskB.WorkspaceRoot)
 
 	svc := &worker.MergeService{
 		Sessions: overlapSessionLister{tasks: []api.WorkerTask{*taskA, taskB}},

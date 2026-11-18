@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
@@ -191,7 +192,7 @@ func TestEmptyWorkspaceBaselineIsValidAndDetectsLaterCreation(t *testing.T) {
 	testutil.FailErr(t, "open empty baseline", err)
 	defer func() { _ = baseline.Close() }()
 	testutil.FailErr(t, "write greenfield file", os.WriteFile(filepath.Join(dir, "new.go"), []byte("package new\n"), 0o644))
-	changed, err := baseline.Changes(t.Context(), nil, dir)
+	changed, err := baseline.Changes(t.Context(), []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}}, dir)
 	testutil.FailErr(t, "compare empty baseline", err)
 	if len(changed) != 1 || changed[0] != "new.go" {
 		t.Fatalf("changed = %v", changed)

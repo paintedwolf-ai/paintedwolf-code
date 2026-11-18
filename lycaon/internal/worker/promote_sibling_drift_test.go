@@ -48,6 +48,7 @@ func TestPromoteExcludesUnchangedSiblingPath(t *testing.T) {
 		Scope:                 &scope,
 		WorkspaceBaselinePath: baseline,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 
 	deps := ChangeReportDeps{
 		Messages: func(context.Context, string) ([]api.Message, error) {

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -36,6 +37,7 @@ func TestPromoteOverlayLandsChangesOutsideSuggestedPaths(t *testing.T) {
 		WorkspaceBaselinePath: workspaceBaselinePath(t, dir),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
 		Queue: &mergeQueueStub{task: task},
 
@@ -80,6 +82,7 @@ func TestPromoteOverlayFolderDrop(t *testing.T) {
 		WorkspaceBaselinePath: workspaceBaselinePath(t, dir),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
 		Queue: &mergeQueueStub{task: task},
 

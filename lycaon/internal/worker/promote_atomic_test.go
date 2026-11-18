@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -41,6 +42,7 @@ func TestPromoteOverlayPreparesEveryMutationBeforeWriting(t *testing.T) {
 		Status:                api.WorkerStatusComplete,
 		Scope:                 &scope,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
 		Queue:   &mergeQueueStub{task: task},
 		Store:   &mergeStoreStub{},
@@ -78,6 +80,7 @@ func TestPromoteOverlayRollsBackFilesystemWhenDurableCommitFails(t *testing.T) {
 		WorkspacePath: primary, WorkspaceRoot: branch, WorkspaceBaselinePath: baseline,
 		MergeStatus: api.WorkerMergeStatusPending, Status: api.WorkerStatusComplete, Scope: &scope,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	store := &mergeStoreStub{commitErr: errors.New("durable promotion rejected")}
 	svc := &worker.MergeService{
 		Queue: &mergeQueueStub{task: task}, Store: store,
@@ -126,6 +129,7 @@ func TestPromoteOverlayConflictMenuCannotLandCleanOrResolvedSubset(t *testing.T)
 		MergeStatus: api.WorkerMergeStatusPending, Status: api.WorkerStatusComplete,
 		Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: paths},
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t), DataDir: t.TempDir()}
 	resolutions := []api.WorkerPromoteResolution{{Path: "first.txt", Content: "resolved\n"}, {Path: "second.txt", Content: "resolved\n"}}
 	for count := 0; count < len(resolutions); count++ {

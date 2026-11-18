@@ -33,6 +33,7 @@ func TestPreviewForSessionHunksOmitsFullBodies(t *testing.T) {
 		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"d.go": {Content: "original\n"}}),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
 		Queue:  &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
@@ -80,6 +81,7 @@ func TestPreviewForSessionIncludesOverlayIntent(t *testing.T) {
 		Status:                api.WorkerStatusComplete,
 		Result:                &api.WorkerResult{Summary: "Add who/uname builtins"},
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
 		Queue:  &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
@@ -113,6 +115,7 @@ func TestPreviewForSessionFullIncludesBodies(t *testing.T) {
 		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"d.go": {Content: "original\n"}}),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
 		Queue:  &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),

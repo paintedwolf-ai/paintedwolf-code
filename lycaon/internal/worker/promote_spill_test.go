@@ -37,6 +37,7 @@ func TestPreviewForSessionWritesSpillPathOnConflict(t *testing.T) {
 		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"d.go": {Content: "original\n"}}),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	dataDir := t.TempDir()
 	svc := &worker.MergeService{
 		Queue:   &mergeQueueStub{task: task},
@@ -79,6 +80,7 @@ func TestPreviewForSessionPathFilter(t *testing.T) {
 		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"a.go": {Content: "original-a\n"}, "b.go": {Content: "same-b\n"}}),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
 		Queue:  &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
@@ -109,6 +111,7 @@ func TestPreviewForSessionRejectsUnchangedPath(t *testing.T) {
 		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"in.go": {Content: "x\n"}}),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
 		Queue:  &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
