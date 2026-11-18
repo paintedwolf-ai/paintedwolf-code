@@ -419,7 +419,7 @@ func TestForwardedCallsAreRefusedWhenThePerformerStops(t *testing.T) {
 				receiveForwardedCall(t, peer)
 			}
 			testutil.FailErr(t, "acknowledge completed call", unix.Sendmsg(peer, []byte(`{"notification":1}`), nil, nil, 0))
-			testutil.WaitFor(t, func() bool {
+			testutil.WaitFor(t, "the first forwarded call is answered", func() bool {
 				client.mu.Lock()
 				defer client.mu.Unlock()
 				_, pending := client.pending[1]
@@ -430,7 +430,7 @@ func TestForwardedCallsAreRefusedWhenThePerformerStops(t *testing.T) {
 			} else {
 				testutil.FailErr(t, "malformed acknowledgment", unix.Sendmsg(peer, []byte(`{`), nil, nil, 0))
 			}
-			testutil.WaitFor(t, func() bool {
+			testutil.WaitFor(t, "the client is broken with nothing pending", func() bool {
 				client.mu.Lock()
 				defer client.mu.Unlock()
 				return client.broken && len(client.pending) == 0
@@ -469,7 +469,7 @@ func TestForwardedAcknowledgmentsDrainWhileSending(t *testing.T) {
 	for err := range errors {
 		testutil.FailErr(t, "forward call under backpressure", err)
 	}
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "every forwarded call is acknowledged", func() bool {
 		client.mu.Lock()
 		defer client.mu.Unlock()
 		return len(client.pending) == 0
@@ -523,7 +523,7 @@ func TestPerformerCloseJoinsABlockedForward(t *testing.T) {
 	}
 	forwarded := make(chan error, 1)
 	go func() { forwarded <- client.forward(pathCall{Op: callMkdir, Notification: 2}, nil) }()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the second forward is pending", func() bool {
 		client.mu.Lock()
 		defer client.mu.Unlock()
 		_, pending := client.pending[2]

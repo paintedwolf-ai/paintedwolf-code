@@ -90,7 +90,7 @@ func (f ambientAttachFixture) createSession(t *testing.T, posture wire.SessionPo
 func (f ambientAttachFixture) awaitPrepared(t *testing.T, sessionID string) wire.Session {
 	t.Helper()
 	var last wire.Session
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the session is prepared", func() bool {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sessionID, nil)
 		req.Header.Set("Authorization", api.TestAuthHeader())
 		w := httptest.NewRecorder()

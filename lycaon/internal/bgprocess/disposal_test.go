@@ -26,11 +26,7 @@ type controlledDrainJob struct {
 
 func awaitDrainSignal(t *testing.T, step string, signal <-chan struct{}) {
 	t.Helper()
-	select {
-	case <-signal:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatalf("%s: lifecycle signal did not arrive", step)
-	}
+	testutil.AwaitClosed(t, step, signal)
 }
 
 func startControlledDrainJob(t *testing.T, registry *Registry, session, project string) controlledDrainJob {
@@ -149,8 +145,7 @@ func TestDisposeSessionRetryWaitsForPhysicalJobs(t *testing.T) {
 	}
 	onExit := make(chan struct{})
 	registry.Lifecycle.OnExit("owned", owned.handle, func() { close(onExit) })
-	long, stop := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer stop()
+	long := t.Context()
 	retry := make(chan error, 1)
 	go func() { retry <- registry.Lifecycle.DisposeSession(long, "owned", TerminationChatDeleted) }()
 	assertDrainPending(t, retry)
@@ -193,8 +188,7 @@ func TestCloseRetryJoinsPendingSessionDrains(t *testing.T) {
 	awaitDrainSignal(t, "first cancellation", first.canceled)
 	awaitDrainSignal(t, "second cancellation", second.canceled)
 	assertDrainAdmissionSealed(t, registry, "third")
-	long, stop := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer stop()
+	long := t.Context()
 	retry := make(chan error, 1)
 	go func() { retry <- registry.Lifecycle.Close(long) }()
 	assertDrainPending(t, retry)

@@ -14,8 +14,7 @@ import (
 )
 
 func TestProgramSessionDisposalDrainsAndRefusesRetainedAdmission(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	registry := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	t.Cleanup(func() { _ = registry.Lifecycle.Close(context.Background()) })
 	supervisor := &ProgramSupervisor{Background: registry}
@@ -82,8 +81,7 @@ func TestProgramSessionDisposalDrainsAndRefusesRetainedAdmission(t *testing.T) {
 }
 
 func TestProgramRetainsFinishedRawHandleUntilRegistryEviction(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	registry := bgprocess.NewRegistry(bgprocess.Config{MaxBackground: 1, MaxRecent: 1}, bgprocess.Hooks{})
 	t.Cleanup(func() { _ = registry.Lifecycle.Close(context.Background()) })
 	supervisor := &ProgramSupervisor{Background: registry}
@@ -133,11 +131,7 @@ func TestProgramRetainsFinishedRawHandleUntilRegistryEviction(t *testing.T) {
 
 func awaitProgramDrainSignal(t *testing.T, step string, signal <-chan struct{}) {
 	t.Helper()
-	select {
-	case <-signal:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatalf("%s: lifecycle signal did not arrive", step)
-	}
+	testutil.AwaitClosed(t, step, signal)
 }
 
 func TestProgramSessionDisposalRetryWaitsForHeldJob(t *testing.T) {
@@ -180,8 +174,7 @@ func TestProgramSessionDisposalRetryWaitsForHeldJob(t *testing.T) {
 	if _, err := sibling.BeginProgram(t.Context(), ProgramJobOrigin{Tool: "command", ToolCallID: "call", RootSessionID: sibling.SessionID}); err != nil {
 		t.Fatalf("owned disposal closed sibling admission: %v", err)
 	}
-	long, stop := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer stop()
+	long := t.Context()
 	retry := make(chan error, 1)
 	go func() { retry <- supervisor.DisposeSession(long, "owned") }()
 	select {

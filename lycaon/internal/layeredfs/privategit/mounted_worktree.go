@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
 // SecondaryViewID names the managed view of a non-primary root of a mounted view. It has its own
@@ -108,7 +109,7 @@ func (m *Manager) RevokeMountedViewBinding(viewID, rootID string) {
 		return
 	}
 	if strings.TrimSpace(rootID) == "" {
-		rootID = "primary"
+		rootID = projectroot.SingleRootID
 	}
 	m.mu.Lock()
 	delete(m.mountBindings, mountBindingKey(viewID, rootID))
@@ -195,7 +196,7 @@ func (m *Manager) MountedClaimWithWorktree(
 		return fmt.Errorf("%w: viewID, trunkDir, and core are required", ErrMountedWorktreeUnavailable)
 	}
 	if strings.TrimSpace(rootID) == "" {
-		rootID = "primary"
+		rootID = projectroot.SingleRootID
 	}
 	binding, ok := getMountedViewBinding(m, viewID, rootID)
 	if !ok {
@@ -246,7 +247,7 @@ func registerMountedClaim(
 	authorizedGitDirs ...string,
 ) error {
 	if rootID == "" {
-		rootID = "primary"
+		rootID = projectroot.SingleRootID
 	}
 	if workerID == "" {
 		workerID = viewID

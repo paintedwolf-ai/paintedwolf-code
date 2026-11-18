@@ -5,10 +5,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -30,8 +28,7 @@ func TestKickTemplatesRenderWithKickEngineVars(t *testing.T) {
 		id := catalogfixture.BindingShortID(b.Render)
 		t.Run(id, func(t *testing.T) {
 			t.Parallel()
-			ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-			defer cancel()
+			ctx := t.Context()
 			out, err := engine.RenderKick(ctx, b.Render, data)
 			if err != nil {
 				t.Fatalf("RenderKick %s: %v", b.Render, err)
@@ -58,7 +55,7 @@ func TestKickTemplatesRenderWithMinimalDataAreNonEmpty(t *testing.T) {
 		if !strings.HasPrefix(id, "coordinator-") {
 			continue
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
+		ctx, cancel := context.WithCancel(t.Context())
 		out, err := engine.RenderKick(ctx, id, data)
 		cancel()
 		if err != nil {

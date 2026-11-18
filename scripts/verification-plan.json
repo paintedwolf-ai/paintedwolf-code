@@ -5,6 +5,7 @@
     ],
     "check-fast": [
       "build",
+      "build:cross",
       "lint:full",
       "budgets",
       "coverage:changes",
@@ -12,8 +13,9 @@
       "den:knip:changes",
       "den:typecheck",
       "den:lint",
-      "den:test:fast",
+      "den:coverage:changes",
       "test:short",
+      "test:integration:changes",
       "test:contract",
       "licenses:notices",
       "comments:check",
@@ -135,9 +137,7 @@
       "options": [
         "--full",
         "--tags",
-        "stress",
-        "--timeout",
-        "90m"
+        "stress"
       ],
       "packages": [
         "./internal/db",
@@ -162,9 +162,7 @@
       "options": [
         "--full",
         "--tags",
-        "integration",
-        "--timeout",
-        "40m"
+        "integration"
       ],
       "packages": [
         "./..."
@@ -172,10 +170,7 @@
       "bundled": true
     },
     "test:contract": {
-      "options": [
-        "--timeout",
-        "30m"
-      ],
+      "options": [],
       "packages": [
         "./test/contract/..."
       ],
@@ -185,9 +180,7 @@
       "options": [
         "--full",
         "--tags",
-        "integration",
-        "--timeout",
-        "40m"
+        "integration"
       ],
       "packages": [
         "./test/security/..."
@@ -198,9 +191,7 @@
         "--full",
         "--race",
         "--tags",
-        "integration",
-        "--timeout",
-        "40m"
+        "integration"
       ],
       "packages": [
         "./..."
@@ -245,7 +236,7 @@
         "./test/wiring"
       ],
       "flags": [
-        "-run=^(TestArtifactCLIRequiresConfinement|TestWithheldListenerRoutesToLocalListen|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinedLaunchStaysOutOfEditorOnlyRoots|TestConfinementIntegrityForeignTemporaryTreeWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestContainedPreservesReadOnlyRootAuthority|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestCommandInstructionGrantUsesOneOrdinaryApproval|TestCurrentReviewCannotReplaceExecutionPermit|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestExecutionReviewHonorsReviewedReasonAndLaterDeny|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport|TestSessionOutputReadUsesAppliedReadOnlyAuthority|TestPreparedGroupRefusesRemovedCaptureAfterOwnerRegistration|TestPreparedLaunchFreezesFinalPathEnvironmentAndLiteralArguments|TestPreparedLaunchPreservesRelativeScriptKernelFilename|TestPreparedLaunchRegistersBeforePayloadAndRechecksCurrentAuthority|TestPreparedLaunchRejectsChangedCapturedVectorsBeforeNativeStart|TestPreparedLaunchResolvesRelativeAndEmptyPathAtCapturedCwd|TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode|TestPreparedLinuxScriptPreservesOrdinaryPathAndNativeArgv|TestPreparedNativeCallbackFailureAndCancellationNeverReleasePayload|TestPreparedStrictBoundaryNeverFallsBackToHostExecution|TestOwnedProcessGroupCancellationRetainsNativeSettlement|TestOwnedProcessGroupRefusesConsumedPreparedCommand|TestOwnedProcessGroupWaitsOnceStopsTreeAndPreservesUnrelatedProcess|TestPinnedLaunchDoesNotGrantAnUnadmittedHardlinkOperand|TestPinnedLaunchPreservesOrdinaryScriptArgumentsAndDirectory|TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload|TestPinnedHostExecutionPreservesSetuidProcessInspection|TestRunInOwnGroupCancellationKillsAShellIgnoringTerm|TestRunInOwnGroupDetachesFromTheEnginesTerminal|TestRunInOwnGroupEndsWhatTheCommandLeftBehind|TestRunInOwnGroupReportsACommandRemovedAfterPreparation|TestRunInOwnGroupTerminalHelperProcess|TestNonHTTPContractStaleSymlinkGrantRevalidateDenies|TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata|TestExternalCommandSaveMergesWithHumanTyping|TestProgramAppendStopsOnUnsavedAcceptanceWithoutReplaying|TestProgramBackgroundReadTransfersUndeliveredDraftNotice|TestProgramHumanDraftKeepsOneSavedFileViewAndReadNote|TestProgramPublicationRedirectEffectsAdmitBeforeOpening|TestProgramPublicationRedirectRequiresCurrentWriteProgress|TestProgramPublicationRespectsCurrentEffectAuthority|TestProgramPublicationReviewRaceStopsBeforeRead|TestProgramPublicationSettlesBeforeRedirectCapture|TestProgramPublishesOwnAgentDraftBeforeNativeReadAndGoTest|TestProgramRepoMapReadsSavedContentAndReportsHumanDraft|TestRetainedCommandOutputCreditsOnlyDeliveredHeadAndTail|TestEveryTerminalResultStatesTheBox|TestTerminalAndCommandShareLaunchEnvironmentAndScratch|TestProgramExternalSystemToolsRunWithoutStderr|TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed|TestExternalSpawnUsesOnlyAdmittedWriteRoots|TestAgentGitAuthenticatesFromInsideItsConfinement|TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement|TestRealEnforcerSelectsAndVerifiesAMountedView|TestAvailabilityIsProvenByARealDenialAndLeavesNothing|TestDeniedPathNamedThroughAnAliasIsRefusedAtItsCanonicalPath|TestLaunchRefusesAProcessThatAnswersTooFewSteps|TestPlacedBranchIsUsableAndItsFolderIsClosed|TestMaterializedWorkerReachesOnlyItsOwnBranch|TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion|TestBranchTreeAnswersFromTheViewOnEveryProvider|TestDiagnosticSmallMaterializedLifecycleCompletion10m|TestMaterializedWorkerRetriesPromotionAfterSourceOutage|TestMountedWorkerRetriesPromotionAfterSourceOutage|TestNonPrimaryRootRefsReachPromotionAndRollBack|TestSmallMaterializedLifecycleAcrossProcessRestart|TestSmallMaterializedLifecyclePreservesSourceConflict|TestSmallMountedLifecycleAcrossProcessRestart|TestSmallMountedLifecyclePreservesSourceConflict|TestStackedWorkerClaimsAndPromotesThroughTheOneTransaction|TestStressFirefoxMountedSparseWorkerLifecycle)$"
+        "-run=^(TestArtifactCLIRequiresConfinement|TestWithheldListenerRoutesToLocalListen|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinedLaunchStaysOutOfEditorOnlyRoots|TestConfinementIntegrityForeignTemporaryTreeWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestContainedPreservesReadOnlyRootAuthority|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestCommandInstructionGrantUsesOneOrdinaryApproval|TestCurrentReviewCannotReplaceExecutionPermit|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestExecutionReviewHonorsReviewedReasonAndLaterDeny|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport|TestSessionOutputReadUsesAppliedReadOnlyAuthority|TestPreparedGroupRefusesRemovedCaptureAfterOwnerRegistration|TestPreparedLaunchFreezesFinalPathEnvironmentAndLiteralArguments|TestPreparedLaunchPreservesRelativeScriptKernelFilename|TestPreparedLaunchRegistersBeforePayloadAndRechecksCurrentAuthority|TestPreparedLaunchRejectsChangedCapturedVectorsBeforeNativeStart|TestPreparedLaunchResolvesRelativeAndEmptyPathAtCapturedCwd|TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode|TestPreparedLinuxScriptPreservesOrdinaryPathAndNativeArgv|TestPreparedNativeCallbackFailureAndCancellationNeverReleasePayload|TestPreparedStrictBoundaryNeverFallsBackToHostExecution|TestOwnedProcessGroupCancellationRetainsNativeSettlement|TestOwnedProcessGroupRefusesConsumedPreparedCommand|TestOwnedProcessGroupWaitsOnceStopsTreeAndPreservesUnrelatedProcess|TestPinnedLaunchDoesNotGrantAnUnadmittedHardlinkOperand|TestPinnedLaunchPreservesOrdinaryScriptArgumentsAndDirectory|TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload|TestPinnedHostExecutionPreservesSetuidProcessInspection|TestRunInOwnGroupCancellationKillsAShellIgnoringTerm|TestRunInOwnGroupDetachesFromTheEnginesTerminal|TestRunInOwnGroupEndsWhatTheCommandLeftBehind|TestRunInOwnGroupReportsACommandRemovedAfterPreparation|TestRunInOwnGroupTerminalHelperProcess|TestNonHTTPContractStaleSymlinkGrantRevalidateDenies|TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata|TestExternalCommandSaveMergesWithHumanTyping|TestProgramAppendStopsOnUnsavedAcceptanceWithoutReplaying|TestProgramBackgroundReadTransfersUndeliveredDraftNotice|TestProgramHumanDraftKeepsOneSavedFileViewAndReadNote|TestProgramPublicationRedirectEffectsAdmitBeforeOpening|TestProgramPublicationRedirectRequiresCurrentWriteProgress|TestProgramPublicationRespectsCurrentEffectAuthority|TestProgramPublicationReviewRaceStopsBeforeRead|TestProgramPublicationSettlesBeforeRedirectCapture|TestProgramPublishesOwnAgentDraftBeforeNativeAndExternalReads|TestProgramRepoMapReadsSavedContentAndReportsHumanDraft|TestRetainedCommandOutputCreditsOnlyDeliveredHeadAndTail|TestEveryTerminalResultStatesTheBox|TestTerminalAndCommandShareLaunchEnvironmentAndScratch|TestProgramExternalSystemToolsRunWithoutStderr|TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed|TestExternalSpawnUsesOnlyAdmittedWriteRoots|TestAgentGitAuthenticatesFromInsideItsConfinement|TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement|TestRealEnforcerSelectsAndVerifiesAMountedView|TestAvailabilityIsProvenByARealDenialAndLeavesNothing|TestDeniedPathNamedThroughAnAliasIsRefusedAtItsCanonicalPath|TestLaunchRefusesAProcessThatAnswersTooFewSteps|TestPlacedBranchIsUsableAndItsFolderIsClosed|TestMaterializedWorkerReachesOnlyItsOwnBranch|TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion|TestBranchTreeAnswersFromTheViewOnEveryProvider|TestMaterializedWorkerRetriesPromotionAfterSourceOutage|TestMountedWorkerRetriesPromotionAfterSourceOutage|TestNonPrimaryRootRefsReachPromotionAndRollBack|TestSmallMaterializedLifecycleAcrossProcessRestart|TestSmallMaterializedLifecyclePreservesSourceConflict|TestSmallMountedLifecycleAcrossProcessRestart|TestSmallMountedLifecyclePreservesSourceConflict|TestStackedWorkerClaimsAndPromotesThroughTheOneTransaction|TestStressFirefoxMountedSparseWorkerLifecycle)$"
       ],
       "bundled": true
     },
@@ -367,9 +358,6 @@
     "den:test:digest": [
       "den:test:digest"
     ],
-    "den:test:fast": [
-      "den:test:fast"
-    ],
     "den:test:rust": [
       "den:test:rust"
     ],
@@ -472,6 +460,9 @@
     "release:rehearse:rpm-metadata": [
       "release:rehearse:rpm-metadata"
     ],
+    "release:rehearse:deb-metadata": [
+      "release:rehearse:deb-metadata"
+    ],
     "release:rehearse:pacman-construction": [
       "release:rehearse:pacman-construction"
     ],
@@ -495,6 +486,12 @@
     ],
     "den:knip:changes": [
       "den:knip:changes"
+    ],
+    "test:integration:changes": [
+      "test:integration:changes"
+    ],
+    "lint:deadcode": [
+      "lint:deadcode"
     ]
   },
   "private": [
@@ -542,6 +539,7 @@
     "release:live-test": "passthrough",
     "release:rehearse:package-probe": "passthrough",
     "release:rehearse:rpm-metadata": "passthrough",
+    "release:rehearse:deb-metadata": "passthrough",
     "release:rehearse:pacman-construction": "passthrough",
     "userlands:build": "passthrough",
     "test:conformance:live": "passthrough",
@@ -645,12 +643,6 @@
       "workers": "shared"
     },
     "den:test:digest": {
-      "locks": [
-        "frontend"
-      ],
-      "workers": "shared"
-    },
-    "den:test:fast": {
       "locks": [
         "frontend"
       ],
@@ -984,6 +976,12 @@
       ],
       "workers": 1
     },
+    "release:rehearse:deb-metadata": {
+      "locks": [
+        "deb-metadata-fixture"
+      ],
+      "workers": 1
+    },
     "release:rehearse:pacman-construction": {
       "locks": [
         "pacman-substrate"
@@ -1045,6 +1043,21 @@
         "frontend"
       ],
       "workers": 1
+    },
+    "test:integration:changes": {
+      "locks": [
+        "go"
+      ],
+      "shared_locks": [
+        "go"
+      ],
+      "workers": "shared"
+    },
+    "lint:deadcode": {
+      "locks": [
+        "lint"
+      ],
+      "workers": "shared"
     }
   },
   "environment": {
@@ -1116,12 +1129,9 @@
     "ready": {
       "targets": [
         "build",
+        "build:cross",
         "budgets",
-        "coverage:changes",
-        "den:typecheck",
-        "den:lint",
-        "den:knip:changes",
-        "den:test:fast"
+        "coverage:changes"
       ],
       "minutes": 120,
       "profiles": [
@@ -1144,7 +1154,8 @@
     "ready-tests": {
       "targets": [
         "test:contract",
-        "test:short"
+        "test:short",
+        "test:integration:changes"
       ],
       "minutes": 120,
       "profiles": [
@@ -1152,25 +1163,12 @@
       ],
       "suite": "all",
       "setup": "verification",
-      "shards": 2
-    },
-    "limits": {
-      "targets": [
-        "budgets",
-        "coverage:changes"
-      ],
-      "minutes": 120,
-      "profiles": [
-        "check",
-        "integration",
-        "nightly"
-      ],
-      "suite": "all",
-      "setup": "verification",
-      "priority": "reject"
+      "shards": 4
     },
     "build": {
       "targets": [
+        "budgets",
+        "coverage:changes",
         "build",
         "build:cross",
         "licenses:notices",
@@ -1187,7 +1185,12 @@
         "nightly"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "verification",
+      "early_targets": [
+        "budgets",
+        "coverage:changes"
+      ],
+      "priority": "reject"
     },
     "lint": {
       "targets": [
@@ -1209,6 +1212,17 @@
         "comments:check",
         "test:fail-messages:check"
       ]
+    },
+    "deadcode": {
+      "targets": [
+        "lint:deadcode"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "all",
+      "setup": "analysis"
     },
     "vulnerabilities": {
       "targets": [
@@ -1266,6 +1280,7 @@
       ],
       "minutes": 90,
       "profiles": [
+        "fast",
         "check",
         "release",
         "integration",
@@ -1402,39 +1417,6 @@
         "./internal/worker"
       ]
     },
-    "go-coverage": {
-      "targets": [
-        "check:coverage"
-      ],
-      "minutes": 180,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "coverage",
-      "setup": "verification"
-    },
-    "frontend-coverage": {
-      "targets": [
-        "den:coverage-check"
-      ],
-      "minutes": 90,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "coverage",
-      "setup": "verification"
-    },
-    "transcript-scale": {
-      "targets": [
-        "den:test:transcript-scale"
-      ],
-      "minutes": 60,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "performance",
-      "setup": "verification"
-    },
     "vulnerability-freshness": {
       "targets": [
         "lint:vuln:fresh"
@@ -1457,22 +1439,12 @@
       "suite": "performance",
       "setup": "verification"
     },
-    "sidecar-performance": {
-      "targets": [
-        "perf:sidecar"
-      ],
-      "minutes": 120,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "performance",
-      "setup": "verification"
-    },
     "sidecar-soak": {
       "targets": [
+        "perf:sidecar",
         "perf:soak"
       ],
-      "minutes": 90,
+      "minutes": 120,
       "profiles": [
         "nightly"
       ],
@@ -1500,10 +1472,10 @@
   },
   "capacity": {
     "max_parallel": {
-      "fast": 4,
+      "fast": 6,
       "integration": 6,
       "check": 3,
-      "nightly": 2,
+      "nightly": 6,
       "release": 1
     }
   }

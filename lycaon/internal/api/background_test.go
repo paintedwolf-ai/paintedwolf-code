@@ -92,14 +92,12 @@ func TestServerCleanupReliablyReleasesResourcesInvariant(t *testing.T) {
 		}
 	})
 
-	drainCtx, drainCancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer drainCancel()
+	drainCtx := t.Context()
 	if err := sourcecatalog.Process().Drain(drainCtx); err != nil {
 		t.Fatalf("drain source catalog after server cleanup: %v", err)
 	}
 
-	settleCtx, settleCancel := context.WithTimeout(context.Background(), testutil.Timeout(5*time.Minute))
-	defer settleCancel()
+	settleCtx := t.Context()
 	for {
 		runtime.GC()
 		growth := runtime.NumGoroutine() - baselineGoroutines

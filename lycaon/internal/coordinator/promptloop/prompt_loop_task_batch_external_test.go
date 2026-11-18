@@ -25,7 +25,7 @@ func TestLoopContinuesAfterTaskEnqueue(t *testing.T) {
 	if err := store.AppendMessages(ctx, sess.ID, api.Message{
 		Role: api.MessageRoleUser, Content: "go", CreatedAt: time.Now().UTC(),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 	reg := tools.NewStubRegistry()
 	reg.Register("task", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {

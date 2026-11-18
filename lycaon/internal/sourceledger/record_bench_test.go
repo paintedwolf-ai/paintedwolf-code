@@ -105,6 +105,7 @@ func benchmarkOpenCommandWindow(b *testing.B, files int, committed, watched bool
 	}
 	store := New(sqlDB, b.TempDir())
 	store.Commands.SetWindowSettleForTest(0)
+	store.Commands.SetWindowStartQuietForTest(0, 0)
 	store.Commands.observationBudget = time.Minute
 	if watched {
 		repochange.MarkCoverageCompleteForTest(root)

@@ -1,13 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@solidjs/testing-library";
+import { render, screen, within } from "@solidjs/testing-library";
 import {
   buildCitationGroundingView,
   type CitationGroundingView,
 } from "../../chat/grounding/citation-grounding-model.ts";
+import { fidelityLabel } from "../../chat/grounding/evidence-shape-model.ts";
 import {
   GROUNDING_HEADLINE_GROUNDED,
   GROUNDING_PANEL_SCOPE,
+  GROUNDING_PROVENANCE_MARK,
   GROUNDING_SOURCE_AGENT,
+  GROUNDING_SOURCE_HOST,
+  GROUNDING_SOURCE_PREFIX,
+  groundingAdvisoryNote,
+  groundingHostAddedNote,
 } from "../../chat/grounding/grounding-copy.ts";
 import { CitationGroundingPanel } from "./CitationGroundingPanel.tsx";
 
@@ -79,7 +85,7 @@ describe("CitationGroundingPanel render-by-shape", () => {
     const record = screen.getByTestId("citation-grounding-record");
     expect(record.getAttribute("data-shape")).toBe("opaque");
     expect(record.getAttribute("data-fidelity")).toBe("opaque");
-    expect(record.querySelector(".den-citation-grounding-record-trust")).toBeTruthy();
+    expect(within(record).getByText(fidelityLabel("opaque"))).toBeTruthy();
     expect(screen.getByText("payload bytes captured verbatim")).toBeTruthy();
   });
 
@@ -235,19 +241,16 @@ describe("CitationGroundingPanel provenance presentation", () => {
   it("renders woven scope subhead without callout styling", () => {
     render(() => <CitationGroundingPanel view={tracedView()} />);
     const scope = screen.getByTestId("citation-grounding-scope");
-    expect(scope.classList.contains("den-citation-grounding-scope")).toBe(true);
-    expect(scope.classList.contains("den-citation-grounding-context--advisory")).toBe(
-      false,
-    );
     expect(scope.textContent).toBe(GROUNDING_PANEL_SCOPE);
+    expect(screen.queryByTestId("citation-grounding-advisory")).toBeNull();
   });
 
   it("renders styled citation rows with path, excerpt, and verdict", () => {
-    const { container } = render(() => (
+    render(() => (
       <CitationGroundingPanel view={tracedView()} projectId="proj-cite" />
     ));
     const row = screen.getByTestId("citation-grounding-citation");
-    expect(row.classList.contains("den-citation-grounding-citation")).toBe(true);
+    expect(row.getAttribute("data-verdict")).toBe("matched");
     expect(row.getAttribute("data-path")).toBe("src/a.go");
     expect(row.getAttribute("data-line")).toBe("10");
     expect(row.getAttribute("data-project-id")).toBe("proj-cite");
@@ -256,16 +259,14 @@ describe("CitationGroundingPanel provenance presentation", () => {
     );
     expect(screen.getByText("fn main()")).toBeTruthy();
     expect(screen.getByText("Traced — exact")).toBeTruthy();
-    expect(container.querySelector(".den-citation-grounding-citations")).toBeTruthy();
+    expect(row.parentElement?.tagName).toBe("UL");
   });
 
   it("uses neutral provenance mark on passed checks, not a green seal", () => {
     render(() => <CitationGroundingPanel view={tracedView()} />);
     const check = screen.getByTestId("citation-grounding-check");
-    expect(check.classList.contains("den-citation-grounding-check--passed")).toBe(true);
-    expect(check.querySelector(".den-citation-grounding-check-mark")?.textContent).toBe(
-      "↳",
-    );
+    expect(check.getAttribute("data-status")).toBe("passed");
+    expect(check.querySelector(".den-citation-grounding-check-mark")?.textContent).toBe(GROUNDING_PROVENANCE_MARK);
   });
 
   it("keeps attention styling on failed checks", () => {
@@ -284,7 +285,7 @@ describe("CitationGroundingPanel provenance presentation", () => {
     };
     render(() => <CitationGroundingPanel view={view} />);
     const check = screen.getByTestId("citation-grounding-check");
-    expect(check.classList.contains("den-citation-grounding-check--failed")).toBe(true);
+    expect(check.getAttribute("data-status")).toBe("failed");
     expect(check.querySelector(".den-citation-grounding-check-mark")?.textContent).toBe(
       "✕",
     );
@@ -307,8 +308,7 @@ describe("CitationGroundingPanel provenance presentation", () => {
     };
     render(() => <CitationGroundingPanel view={view} />);
     const check = screen.getByTestId("citation-grounding-check");
-    expect(check.classList.contains("den-citation-grounding-check--advisory")).toBe(true);
-    expect(check.classList.contains("den-citation-grounding-check--failed")).toBe(false);
+    expect(check.getAttribute("data-status")).toBe("advisory");
     expect(
       check.querySelector(".den-citation-grounding-check-mark")?.textContent,
     ).not.toBe("✕");
@@ -324,23 +324,15 @@ describe("CitationGroundingPanel provenance presentation", () => {
     };
     render(() => <CitationGroundingPanel view={view} />);
     const advisory = screen.getByTestId("citation-grounding-advisory");
-    expect(advisory.textContent).toContain("1 source mention outside the typed citations");
-    expect(advisory.textContent).toContain("surfaced for review");
-    // Inline citations in a narrative are the contract, so the narrative is not what lowers trust.
-    expect(advisory.textContent).not.toMatch(/lower-trust|in narrative/);
-    expect(advisory.classList.contains("den-citation-grounding-context--advisory")).toBe(
-      true,
-    );
-    expect(advisory.classList.contains("den-citation-grounding-check--failed")).toBe(
-      false,
-    );
+    expect(advisory.textContent).toBe(`${groundingAdvisoryNote(1)}: shell output`);
   });
 
   it("labels agent-authored grounding as Agent citations with no host note", () => {
     render(() => <CitationGroundingPanel view={tracedView()} />);
     const source = screen.getByTestId("citation-grounding-source");
-    expect(source.textContent).toContain("Source: Agent citations");
+    expect(source.textContent).toBe(`${GROUNDING_SOURCE_PREFIX} ${GROUNDING_SOURCE_AGENT}`);
     expect(screen.queryByTestId("citation-grounding-source-note")).toBeNull();
+    expect(screen.queryByTestId("citation-grounding-host-box")).toBeNull();
   });
 
   it("labels host-assembled grounding as host-added, positive, with the prose-kept note", () => {
@@ -354,15 +346,10 @@ describe("CitationGroundingPanel provenance presentation", () => {
     render(() => <CitationGroundingPanel view={view} />);
     const panel = screen.getByTestId("citation-grounding-panel");
     expect(panel.getAttribute("data-host-assembled")).toBe("true");
-    expect(panel.classList.contains("den-citation-grounding--traced")).toBe(true);
-    expect(panel.classList.contains("den-citation-grounding--partial")).toBe(false);
-    const box = screen.getByTestId("citation-grounding-host-box");
-    expect(box.classList.contains("den-citation-grounding-host-box")).toBe(true);
+    expect(screen.queryByTestId("citation-grounding-host-box")).not.toBeNull();
     const source = screen.getByTestId("citation-grounding-source");
-    expect(source.textContent).toContain("Source: Host-added (observed)");
-    expect(screen.getByTestId("citation-grounding-source-note").textContent).toContain(
-      "Answer kept as-is; supporting files and pages it looked at were attached automatically.",
-    );
+    expect(source.textContent).toBe(`${GROUNDING_SOURCE_PREFIX} ${GROUNDING_SOURCE_HOST}`);
+    expect(screen.getByTestId("citation-grounding-source-note").textContent).toBe(groundingHostAddedNote(0));
   });
 
   it("mentions the retry count in the host-assembled provenance box", () => {
@@ -378,9 +365,8 @@ describe("CitationGroundingPanel provenance presentation", () => {
     render(() => <CitationGroundingPanel view={view} />);
     expect(screen.getByTestId("citation-grounding-host-box")).toBeTruthy();
     const note = screen.getByTestId("citation-grounding-source-note");
-    expect(note.textContent).toContain("Answer kept as-is after 3 attempts");
-    expect(screen.queryByTestId("citation-grounding-host-reason")).toBeNull();
-    expect(screen.queryByTestId("citation-grounding-code")).toBeNull();
+    expect(note.textContent).toBe(groundingHostAddedNote(3));
+    expect(screen.getByTestId("citation-grounding-panel").textContent).not.toContain("INVEST_CITATIONS_REQUIRED");
   });
 });
 

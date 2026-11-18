@@ -653,8 +653,6 @@ describe("SessionTranscript virtual window", () => {
       grown = true;
       setText("a response that grew after its first row measurement");
       await Promise.resolve();
-      await new Promise((resolve) => setTimeout(resolve, 30));
-      await Promise.resolve();
 
       await waitFor(() => expect(Number(following!.dataset.virtualStart) - before).toBe(228));
       expect(following!.style.transform).toBe("");

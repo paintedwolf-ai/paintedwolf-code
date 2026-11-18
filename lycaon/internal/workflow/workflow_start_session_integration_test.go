@@ -59,7 +59,7 @@ phases:
 	if _, err := composer.Compose(context.Background(), workflowcomposition.ComposeRequest{
 		SessionID: sess.ID, ManifestYAML: []byte(manifestYAML), SessionPosture: sess.Posture, CreatedBy: "coordinator",
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "compose workflow manifest", err)
 	}
 
 	bundledReg, err := workflowdef.RegistryFromDirs("")
