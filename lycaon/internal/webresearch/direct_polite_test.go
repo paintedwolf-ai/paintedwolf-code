@@ -13,10 +13,8 @@ import (
 )
 
 func TestPoliteAcquirePacesRequestStarts(t *testing.T) {
-	crawler := newTestCrawler()
-
 	const interval = 40 * time.Millisecond
-	crawler = newTestCrawler()
+	crawler := newTestCrawler()
 	crawler.interval = interval
 
 	stats := newSearchStats("t-polite")
@@ -44,10 +42,8 @@ func TestPoliteAcquirePacesRequestStarts(t *testing.T) {
 }
 
 func TestPoliteAcquireBoundsInFlight(t *testing.T) {
-	crawler := newTestCrawler()
-
 	synctest.Test(t, func(t *testing.T) {
-		crawler = newTestCrawler()
+		crawler := newTestCrawler()
 		crawler.interval = time.Millisecond
 		var inFlight, peak int64
 		var wg sync.WaitGroup
@@ -80,8 +76,6 @@ func TestPoliteAcquireBoundsInFlight(t *testing.T) {
 
 func TestPoliteRecordCooldownOn429(t *testing.T) {
 	crawler := newTestCrawler()
-
-	crawler = newTestCrawler()
 	crawler.interval = time.Millisecond
 	crawler.politeRecord("busy.example", http.StatusTooManyRequests, "2")
 	if _, err := crawler.politeAcquire(t.Context(), "busy.example"); err == nil {
@@ -97,8 +91,6 @@ func TestPoliteRecordCooldownOn429(t *testing.T) {
 
 func TestPoliteRecordForbiddenStrikes(t *testing.T) {
 	crawler := newTestCrawler()
-
-	crawler = newTestCrawler()
 	crawler.interval = time.Millisecond
 	crawler.politeRecord("waf.example", http.StatusForbidden, "")
 	if _, err := crawler.politeAcquire(t.Context(), "waf.example"); err != nil {
@@ -120,13 +112,11 @@ func TestPoliteRecordForbiddenStrikes(t *testing.T) {
 }
 
 func TestRobotsCrawlDelayParsedAndCapped(t *testing.T) {
-	crawler := newTestCrawler()
-
 	body := "User-agent: *\nCrawl-delay: 2\n\nUser-agent: other\ncrawl-delay: 4.5\n"
 	if d := robotsCrawlDelay(body); d != 4500*time.Millisecond {
 		t.Fatalf("delay = %v want max declared value", d)
 	}
-	crawler = newTestCrawler()
+	crawler := newTestCrawler()
 	crawler.interval = time.Millisecond
 	crawler.politeSetCrawlDelay("slow.example", time.Hour)
 	if g := crawler.gateFor("slow.example"); g.interval != politeMaxCrawlDelay {
