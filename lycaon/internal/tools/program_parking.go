@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,8 +27,6 @@ type ProgramPark struct {
 	ProgramID string
 	// Reason is the waiting statement, e.g. `sleep 30` or `wait %1`.
 	Reason string
-	// Deadline is the program's outer bound.
-	Deadline time.Time
 	// Claim takes the park if the program still waits where it asked to park.
 	// The park arms nothing once Claim refuses.
 	Claim func() bool

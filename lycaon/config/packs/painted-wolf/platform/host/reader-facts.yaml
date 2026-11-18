@@ -110,9 +110,6 @@ facts:
   - name: runner_park_seconds
     type: int
     states: Seconds a command call holds a waiting program before parking it in the background.
-  - name: runner_program_lifetime_minutes
-    type: int
-    states: Minutes the host lets one command or verify program run before ending it.
   - name: runner_direct_ip_tools
     type: "[]string"
     states: Offered host-runner tools that can dial direct IP literals.

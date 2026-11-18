@@ -299,18 +299,18 @@ func TestRemainingBoundTakesTheEarliestBound(t *testing.T) {
 			t.Fatalf("%s: remaining = %v (bounded %v), want %v", step, got, bounded, remaining)
 		}
 	}
-	outer := WithBound(ctx, clock, 10*time.Second)
+	outer := withTimeoutBound(ctx, clock, 10*time.Second)
 	want("one timeout", outer, 10*time.Second)
-	want("a longer nested timeout keeps the outer", WithBound(outer, clock, time.Hour), 10*time.Second)
-	want("a shorter nested timeout wins", WithBound(outer, clock, 2*time.Second), 2*time.Second)
+	want("a longer nested timeout keeps the outer", withTimeoutBound(outer, clock, time.Hour), 10*time.Second)
+	want("a shorter nested timeout wins", withTimeoutBound(outer, clock, 2*time.Second), 2*time.Second)
 
 	longCall, cancelLong := context.WithDeadline(ctx, time.Now().Add(time.Hour))
 	defer cancelLong()
-	want("a timeout before the call's deadline", WithBound(longCall, clock, 10*time.Second), 10*time.Second)
+	want("a timeout before the call's deadline", withTimeoutBound(longCall, clock, 10*time.Second), 10*time.Second)
 
 	shortCall, cancelShort := context.WithDeadline(ctx, time.Now().Add(time.Minute))
 	defer cancelShort()
-	for step, bound := range map[string]context.Context{"the call's deadline alone": shortCall, "the call's deadline before a timeout": WithBound(shortCall, clock, time.Hour)} {
+	for step, bound := range map[string]context.Context{"the call's deadline alone": shortCall, "the call's deadline before a timeout": withTimeoutBound(shortCall, clock, time.Hour)} {
 		if got, bounded := RemainingBound(bound); !bounded || got <= 0 || got > time.Minute {
 			t.Fatalf("%s: remaining = %v (bounded %v)", step, got, bounded)
 		}

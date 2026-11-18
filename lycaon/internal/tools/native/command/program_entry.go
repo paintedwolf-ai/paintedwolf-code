@@ -160,7 +160,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 		return "", err
 	}
 	callCtx := ctx
-	ctx, call := r.newProgramCall(ctx, catalog)
+	ctx, call := r.newProgramCall(ctx)
 	handedOff := false
 	defer func() {
 		if !handedOff {
@@ -287,7 +287,6 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	run.tc.Effects.GitNoRepository = &atomic.Bool{}
 	park := call.park
 	ports.Waits = park
-	call.bindJobs(func(cause error) int { return r.Supervisor.EndJobs(run.root.Identity.ProgramID, cause) })
 	handedOff = true
 	return r.attend(callCtx, &programEvaluation{
 		ctx: ctx, run: run, call: call, park: park, plan: snapshot.Plan, ports: ports, dispatcher: dispatcher,
@@ -550,12 +549,8 @@ func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontrac
 func (r *ProgramRuntime) settleProgram(ctx context.Context, run *programRun, result toolcontract.ProducerResult, evaluated commandprogram.ProgramOutcome, stopped bool) error {
 	settlement := evaluated.Settlement("output:program-source:" + run.root.Identity.ProgramID)
 	if stopped || result.Terminal == toolcontract.ProducerInterrupted {
-		status, code := 130, toolrejection.ToolOwnerInterruptedCode
-		if !stopped && result.StopCode != "" {
-			// A typed stop such as the call deadline keeps its own code.
-			status, code = result.Status, result.StopCode
-		}
-		settlement.State, settlement.Status, settlement.StopCode = "interrupted", &status, code
+		status := 130
+		settlement.State, settlement.Status, settlement.StopCode = "interrupted", &status, toolrejection.ToolOwnerInterruptedCode
 	}
 	return r.Recorder.SettleProgram(context.WithoutCancel(ctx), run.root.Identity.ProgramID, settlement)
 }

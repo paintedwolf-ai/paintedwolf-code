@@ -6,15 +6,15 @@ selector:
   tools:
     - command
     - verify
-requires_facts: [paintedwolf.children_started, paintedwolf.children_started_known, paintedwolf.deadline_expired, paintedwolf.diagnostic_top_level, paintedwolf.jobs_stopped, paintedwolf.limit_id, paintedwolf.limit_observation_known, paintedwolf.maximum, paintedwolf.observed, paintedwolf.rejection_code, paintedwolf.resource_unit, paintedwolf.wait_refused, paintedwolf.waiting_statement]
+requires_facts: [paintedwolf.diagnostic_top_level, paintedwolf.limit_id, paintedwolf.limit_observation_known, paintedwolf.maximum, paintedwolf.observed, paintedwolf.rejection_code, paintedwolf.resource_unit]
 when: paintedwolf.rejection_code == "COMMAND_LIMIT_EXCEEDED"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 message: command reached a resource limit
-what: '{% if paintedwolf.deadline_expired %}The program reached its {{ paintedwolf.limit_id }} of {{ paintedwolf.maximum }} ms and was ended after {{ paintedwolf.observed }} ms{% if paintedwolf.waiting_statement %}, while waiting in `{{ paintedwolf.waiting_statement }}`{% endif %}.{% if paintedwolf.children_started_known %}{% if paintedwolf.children_started %} Commands started before the end: {{ paintedwolf.children_started }}.{% else %} No command had started.{% endif %}{% endif %}{% if paintedwolf.jobs_stopped %} Background jobs ended with it: {{ paintedwolf.jobs_stopped }}.{% endif %}{% else %}{% if paintedwolf.wait_refused %}`{{ paintedwolf.waiting_statement }}` would end {{ paintedwolf.observed }} ms after the program started, past its {{ paintedwolf.limit_id }} of {{ paintedwolf.maximum }} ms, so it was refused before waiting.{% else %}A command resource limit was reached{% if paintedwolf.limit_id %}: {{ paintedwolf.limit_id }}{% endif %}.{% if paintedwolf.limit_observation_known %} Observed {{ paintedwolf.observed }}{% if paintedwolf.resource_unit %} {{ paintedwolf.resource_unit }}{% endif %}; maximum {{ paintedwolf.maximum }}.{% endif %}{% endif %}{% endif %}'
-cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}{% if paintedwolf.deadline_expired %}The host ended the program and its `&` jobs at its lifetime; statements after that point did not run, and the status is 124.{% else %}The command stopped at the recorded boundary.{% endif %}{% endif %}'
-fix: '{% if paintedwolf.diagnostic_top_level %}Reduce the size or complexity of the submitted shell source before resubmitting it.{% endif %}{% if paintedwolf.deadline_expired %}Split the work so each program, with its `&` jobs, ends within its lifetime.{% endif %}{% if paintedwolf.wait_refused %}Wait for less than the program lifetime; a later call can wait again.{% endif %}'
+what: 'A command resource limit was reached{% if paintedwolf.limit_id %}: {{ paintedwolf.limit_id }}{% endif %}.{% if paintedwolf.limit_observation_known %} Observed {{ paintedwolf.observed }}{% if paintedwolf.resource_unit %} {{ paintedwolf.resource_unit }}{% endif %}; maximum {{ paintedwolf.maximum }}.{% endif %}'
+cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}The command stopped at the recorded boundary.{% endif %}'
+fix: '{% if paintedwolf.diagnostic_top_level %}Reduce the size or complexity of the submitted shell source before resubmitting it.{% endif %}'
 instead: ''
 x-paintedwolf-scenarios:
   - id: captured_unit
@@ -32,32 +32,3 @@ x-paintedwolf-scenarios:
       maximum: 65536
       observed: 65537
       diagnostic_top_level: true
-  - id: lifetime_expired_waiting
-    vars:
-      tool: command
-      limit_id: program_lifetime_ms
-      resource_unit: milliseconds
-      maximum: 3600000
-      observed: 3600000
-      deadline_expired: true
-      waiting_statement: wait %1
-      children_started: 2
-      jobs_stopped: 1
-  - id: lifetime_expired_before_launch
-    vars:
-      tool: verify
-      limit_id: program_lifetime_ms
-      resource_unit: milliseconds
-      maximum: 3600000
-      observed: 3600000
-      deadline_expired: true
-      children_started: 0
-  - id: wait_refused
-    vars:
-      tool: command
-      limit_id: program_lifetime_ms
-      resource_unit: milliseconds
-      maximum: 3600000
-      observed: 7200000
-      wait_refused: true
-      waiting_statement: sleep 7200

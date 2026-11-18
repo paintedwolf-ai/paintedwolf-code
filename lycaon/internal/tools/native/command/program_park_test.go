@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"runtime"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -140,35 +139,6 @@ func (f *parkFixture) settledProgram(t *testing.T, parked *recordedPark) command
 	return decodeOutcome(t, settled.result)
 }
 
-// A wait that would end after the program lifetime is refused before the
-// program parks, and the refusal names the lifetime and the statement.
-func TestProgramParkRefusesAWaitPastTheProgramLifetime(t *testing.T) {
-	f := newParkFixture(t, programtest.NewWaitingProgram(programtest.NewManualClock(), programtest.SleepState(7200*time.Second)))
-	content, err := f.CallArgs(t, t.Context(), map[string]any{"command": "sleep 7200"})
-	testutil.FailErr(t, "run refused wait", err)
-	outcome := decodeOutcome(t, content)
-	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_LIMIT_EXCEEDED" || outcome.Stdout != "start\n" {
-		t.Fatalf("refused wait outcome %s", content)
-	}
-	want := map[string]any{
-		"limit_id": "program_lifetime_ms", "resource_unit": "milliseconds", "maximum": float64(3600000),
-		"observed": float64(7200000), "wait_refused": true, "waiting_statement": "sleep 7200",
-	}
-	assertDetails(t, outcome.Refusal.Details, want)
-	if f.parking.count() != 0 {
-		t.Fatal("a refused wait parked")
-	}
-}
-
-func assertDetails(t *testing.T, details, want map[string]any) {
-	t.Helper()
-	for key, value := range want {
-		if details[key] != value {
-			t.Fatalf("refusal %s = %v, want %v; details %v", key, details[key], value, details)
-		}
-	}
-}
-
 func TestProgramParkKeepsAShortWaitInline(t *testing.T) {
 	program := programtest.NewWaitingProgram(programtest.NewManualClock(), func(now time.Time) commandprogram.WaitState {
 		return commandprogram.WaitState{Statement: "sleep 0.2", Until: now.Add(200 * time.Millisecond)}
@@ -237,7 +207,7 @@ func TestProgramParkSettlesWithTheCompleteResult(t *testing.T) {
 	if parked.State != "parked" || parked.Reason != "sleep 120" || parked.LeaseID != recorded.LeaseID() || parked.WakeAt != clock.Now().Add(120*time.Second).Format(time.RFC3339) {
 		t.Fatalf("parked result %s", result.content)
 	}
-	if recorded.park.Reason != "sleep 120" || recorded.park.ProgramID != parked.ProgramID || recorded.park.Deadline.IsZero() {
+	if recorded.park.Reason != "sleep 120" || recorded.park.ProgramID != parked.ProgramID {
 		t.Fatalf("park request %+v", recorded.park)
 	}
 	if programs := f.Programs(t); len(programs) != 1 || programs[0] != "running" {
@@ -275,8 +245,8 @@ func TestProgramParkParksAJobWaitWhenTheInlineBudgetEnds(t *testing.T) {
 	done := f.start(t, map[string]any{"command": "long_job & wait %1"})
 	<-program.Blocked
 	clock.Advance(toolcontract.ProgramParkThreshold - time.Second)
-	if due := clock.TimersDue(); f.parking.count() != 0 || len(due) == 0 || due[0] != time.Second {
-		t.Fatalf("job wait parked early: %d parks, timers due %v", f.parking.count(), due)
+	if f.parking.count() != 0 || clock.Pending() != 2 {
+		t.Fatalf("job wait parked early: %d parks, %d timers", f.parking.count(), clock.Pending())
 	}
 	clock.Advance(time.Second)
 	result := <-done
@@ -338,85 +308,13 @@ func TestProgramParkInterruptReportsAProgramThatDoesNotUnwind(t *testing.T) {
 
 	reported := make(chan string, 1)
 	go func() { reported <- recorded.park.Interrupt(t.Context()) }()
-	// The call's lifetime bound stays pending; wait for the interruption's grace.
-	for !slices.ContainsFunc(clock.TimersDue(), func(d time.Duration) bool { return d <= time.Minute }) {
+	for clock.Pending() == 0 {
 		runtime.Gosched()
 	}
 	clock.Advance(time.Minute)
 	if expired := decodeOutcome(t, <-reported); expired.State != "running" || expired.Status != 130 {
 		t.Fatalf("expired interruption %+v", expired)
 	}
-}
-
-// The program lifetime ends a waiting program on the program clock, whether
-// its call parked or returned a running handle. The result names the
-// lifetime, its value, how long the program ran, the wait it ended and how
-// many commands had started.
-func TestProgramLifetimeEndsAWaitingProgram(t *testing.T) {
-	want := map[string]any{
-		"limit_id": "program_lifetime_ms", "resource_unit": "milliseconds", "maximum": float64(3600000),
-		"observed": float64(3600000), "deadline_expired": true, "waiting_statement": "wait %1", "children_started": float64(0),
-	}
-	check := func(t *testing.T, outcome command.ProgramOutcome) {
-		t.Helper()
-		if outcome.State != "interrupted" || outcome.Status != commandprogram.TimedOutStatus || outcome.StopCode != "COMMAND_LIMIT_EXCEEDED" ||
-			outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_LIMIT_EXCEEDED" {
-			t.Fatalf("expired program %+v", outcome)
-		}
-		assertDetails(t, outcome.Refusal.Details, want)
-	}
-	jobWait := func(time.Time) commandprogram.WaitState {
-		return commandprogram.WaitState{Statement: "wait %1", Jobs: []string{"bg-1"}}
-	}
-	args := map[string]any{"command": "long_job & wait %1"}
-
-	t.Run("parked", func(t *testing.T) {
-		clock := programtest.NewManualClock()
-		program := programtest.NewWaitingProgram(clock, jobWait)
-		f := newParkFixture(t, program)
-		done := f.start(t, args)
-		<-program.Blocked
-		clock.Advance(toolcontract.ProgramParkThreshold)
-		parked := <-f.parking.parked
-		testutil.FailErr(t, "park waiting program", (<-done).err)
-		clock.Advance(time.Hour - toolcontract.ProgramParkThreshold)
-		outcome := f.settledProgram(t, parked)
-		check(t, outcome)
-		if outcome.Stdout != "start\n" {
-			t.Fatalf("expired program output %q", outcome.Stdout)
-		}
-		if programs := f.Programs(t); len(programs) != 1 || programs[0] != "interrupted" {
-			t.Fatalf("expired program state %v", programs)
-		}
-	})
-
-	t.Run("running handle", func(t *testing.T) {
-		clock := programtest.NewManualClock()
-		program := programtest.NewWaitingProgram(clock, jobWait)
-		f := newParkFixture(t, program)
-		f.parking.unavailable = true
-		done := f.start(t, args)
-		<-program.Blocked
-		clock.Advance(toolcontract.ProgramParkThreshold)
-		<-f.parking.refused
-		clock.Advance(toolcontract.ProgramInlineWait - toolcontract.ProgramParkThreshold)
-		result := <-done
-		testutil.FailErr(t, "return running handle", result.err)
-		var running command.RunningProgramResult
-		testutil.FailErr(t, "decode running program", json.Unmarshal([]byte(result.content), &running))
-		if running.State != "running" || running.Handle == "" {
-			t.Fatalf("result %s", result.content)
-		}
-		clock.Advance(time.Hour - toolcontract.ProgramInlineWait)
-		status, _, err := f.Background.Lifecycle.Wait(t.Context(), f.Session, running.Handle)
-		testutil.FailErr(t, "join expired continuation", err)
-		_, stderr := continuationStreams(t, f.Fixture, running.Handle)
-		lines := strings.Split(strings.TrimSpace(stderr), "\n")
-		if status != commandprogram.TimedOutStatus {
-			t.Fatalf("continuation status %d; stderr %q", status, stderr)
-		}
-		check(t, decodeOutcome(t, lines[len(lines)-1]))
-	})
 }
 
 func TestProgramParkStaysInlineWhenTheSessionCannotPark(t *testing.T) {
