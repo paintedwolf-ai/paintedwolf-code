@@ -28,7 +28,7 @@ func (s *Store) get(ctx context.Context, query string, args ...any) (*Document, 
 const documentColumns = `id, project_id, branch_id, file_id, root_id, path,
 draft, base_content, base_sha256, encoding, size_bytes, eol, base_eol,
 mixed_eol, base_mixed_eol, revision, dirty, diverged, created_at, updated_at,
-held_agent_version_id, absent`
+held_agent_version_id, absent, outside_parent_binding`
 
 func (s *Store) Get(ctx context.Context, id string) (*Document, error) {
 	return s.get(ctx, `SELECT `+documentColumns+` FROM editor_documents WHERE id = ?`, id)
@@ -74,7 +74,7 @@ func scanDocument(row rowScanner) (*Document, error) {
 	if err := row.Scan(&d.ID, &d.ProjectID, &d.BranchID, &d.FileID, &d.RootID, &d.Path,
 		&d.Draft, &d.BaseContent, &d.BaseSHA256, &d.Encoding, &d.SizeBytes, &d.EOL, &d.BaseEOL,
 		&mixed, &baseMixed, &d.Revision, &dirty, &diverged, &created, &updated,
-		&d.HeldAgentVersionID, &absent); errors.Is(err, sql.ErrNoRows) {
+		&d.HeldAgentVersionID, &absent, &d.OutsideParentBinding); errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	} else if err != nil {
 		return nil, err
@@ -86,11 +86,11 @@ func scanDocument(row rowScanner) (*Document, error) {
 }
 
 func (s *Store) Insert(ctx context.Context, d *Document) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO editor_documents (`+documentColumns+`, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	_, err := s.db.ExecContext(ctx, `INSERT INTO editor_documents (`+documentColumns+`, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		d.ID, d.ProjectID, d.BranchID, d.FileID, d.RootID, d.Path, d.Draft, d.BaseContent,
 		d.BaseSHA256, d.Encoding, d.SizeBytes, d.EOL, d.BaseEOL, d.MixedEOL, d.BaseMixedEOL,
 		d.Revision, d.Dirty, d.Diverged, d.CreatedAt.Format(time.RFC3339Nano), d.UpdatedAt.Format(time.RFC3339Nano),
-		d.HeldAgentVersionID, d.Absent, d.CreatedAt.Format(time.RFC3339Nano))
+		d.HeldAgentVersionID, d.Absent, d.OutsideParentBinding, d.CreatedAt.Format(time.RFC3339Nano))
 	return err
 }
 

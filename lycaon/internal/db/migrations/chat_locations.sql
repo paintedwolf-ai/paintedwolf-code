@@ -15,3 +15,5 @@ WHEN NOT EXISTS (SELECT 1 FROM sessions s WHERE s.id = new.session_id AND s.pare
 BEGIN
     SELECT RAISE(ABORT, 'source_chat_locations session_id is not a root chat');
 END;
+
+ALTER TABLE editor_documents ADD COLUMN outside_parent_binding TEXT NOT NULL DEFAULT '';
