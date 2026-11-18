@@ -1,15 +1,14 @@
-package contract
+package specsync
 
 import (
 	"fmt"
-	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
-	"testing"
 
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/laws"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -43,39 +42,28 @@ type openAPISourceTree struct {
 	definitions []openAPISourceRef
 }
 
-func loadOpenAPISourceTree(t *testing.T) openAPISourceTree {
-	t.Helper()
-	dir := filepath.Join(contractcheck.RepoRoot(t), "docs", "openapi")
+// sourceTree is the docs/openapi fragment tree, parsed once per corpus.
+func sourceTree(r *laws.Run) openAPISourceTree {
+	return laws.Part(r.Corpus, "openapi sources", func() (openAPISourceTree, error) {
+		return loadOpenAPISourceTree(r)
+	})
+}
+
+func loadOpenAPISourceTree(r *laws.Run) (openAPISourceTree, error) {
 	tree := openAPISourceTree{docs: make(map[string]any)}
-	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".yaml") {
-			return err
-		}
-		rel, err := filepath.Rel(dir, p)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		if _, skip := openAPINonFragmentFiles[rel]; skip {
-			return nil
-		}
-		if strings.HasPrefix(rel, "vocab/") {
-			return nil // Vocabulary reaches the bundle through generated fragments.
-		}
-		data, readErr := os.ReadFile(p)
-		if readErr != nil {
-			return readErr
+	for _, f := range r.Tree("docs/openapi", ".yaml") {
+		rel := filepath.ToSlash(f.Rel)
+		if _, skip := openAPINonFragmentFiles[rel]; skip || strings.HasPrefix(rel, "vocab/") {
+			continue // Vocabulary reaches the bundle through generated fragments.
 		}
 		var doc any
-		if unmarshalErr := yaml.Unmarshal(data, &doc); unmarshalErr != nil {
-			return fmt.Errorf("parse %s: %w", rel, unmarshalErr)
+		if err := yaml.Unmarshal(f.Bytes(), &doc); err != nil {
+			return tree, fmt.Errorf("parse %s: %w", rel, err)
 		}
 		tree.docs[rel] = doc
-		return nil
-	})
-	contractcheck.FailErr(t, "walk docs/openapi", err)
+	}
 	if _, ok := tree.docs[openAPISourceRoot]; !ok {
-		t.Fatalf("docs/openapi/%s missing", openAPISourceRoot)
+		return tree, fmt.Errorf("docs/openapi/%s missing", openAPISourceRoot)
 	}
 	for file, doc := range tree.docs {
 		if file == openAPISourceRoot {
@@ -101,7 +89,7 @@ func loadOpenAPISourceTree(t *testing.T) openAPISourceTree {
 	sort.Slice(tree.definitions, func(i, j int) bool {
 		return tree.definitions[i].String() < tree.definitions[j].String()
 	})
-	return tree
+	return tree, nil
 }
 
 func (tree openAPISourceTree) reachable() (reached map[string][]string, dangling []string) {
@@ -219,41 +207,39 @@ func openAPIEscapeToken(token string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(token, "~", "~0"), "/", "~1")
 }
 
-// Unreferenced definitions are invisible to checks of the bundled specification.
-func TestOpenAPISourceNoOrphanDefinitions(t *testing.T) {
-	t.Parallel()
-	tree := loadOpenAPISourceTree(t)
+// A definition root.yaml does not reach is invisible to every check of the
+// bundled document: reference it or delete it.
+func openAPISourceNoOrphanDefinitions(r *laws.Run) {
+	tree := sourceTree(r)
 	reached, _ := tree.reachable()
-	var violations []string
 	for _, def := range tree.definitions {
 		if !openAPIDefinitionLive(reached, def) {
-			violations = append(violations, def.String())
+			r.Report("docs/openapi/%s is unreachable from root.yaml", def)
 		}
 	}
-	contractcheck.FailViolations(t, "docs/openapi definitions unreachable from root.yaml"+
-		"\nfix: $ref the definition from root.yaml (or from a reachable fragment),"+
-		" or delete the unused definition", violations)
 }
 
-func TestOpenAPISourceRefsResolve(t *testing.T) {
-	t.Parallel()
-	tree := loadOpenAPISourceTree(t)
-	_, dangling := tree.reachable()
-	contractcheck.FailViolations(t, "docs/openapi $refs that resolve to nothing"+
-		"\nfix: correct the path or pointer, or add the missing definition", dangling)
+func openAPISourceRefsResolve(r *laws.Run) {
+	_, dangling := sourceTree(r).reachable()
+	for _, ref := range dangling {
+		r.Report("docs/openapi $ref resolves to nothing: %s", ref)
+	}
 }
 
-func TestOpenAPISourceFragmentsAllLive(t *testing.T) {
-	t.Parallel()
-	tree := loadOpenAPISourceTree(t)
+func openAPISourceFragmentsAllLive(r *laws.Run) {
+	tree := sourceTree(r)
 	reached, _ := tree.reachable()
-	var violations []string
 	for file := range tree.docs {
-		if file == openAPISourceRoot || len(reached[file]) > 0 {
-			continue
+		if file != openAPISourceRoot && len(reached[file]) == 0 {
+			r.Report("docs/openapi/%s has nothing reachable from root.yaml", file)
 		}
-		violations = append(violations, file)
 	}
-	contractcheck.FailViolations(t, "docs/openapi fragment files with nothing reachable from root.yaml"+
-		"\nfix: reference the fragment from root.yaml, or delete the unused fragment", violations)
 }
+
+var sourceRules = []laws.Rule{
+	{Name: "openapi-sources-have-no-orphan-definitions", Anchors: []laws.Anchor{sourceRoot}, Check: openAPISourceNoOrphanDefinitions},
+	{Name: "openapi-source-refs-resolve", Anchors: []laws.Anchor{sourceRoot}, Check: openAPISourceRefsResolve},
+	{Name: "openapi-source-fragments-are-live", Anchors: []laws.Anchor{sourceRoot}, Check: openAPISourceFragmentsAllLive},
+}
+
+var sourceRoot = laws.File("docs/openapi/" + openAPISourceRoot)

@@ -11,48 +11,57 @@ import (
 
 var pathParamRE = regexp.MustCompile(`\{[^}]+\}`)
 
-func LoadServerRoutes(repoRoot string) ([]openAPIRoute, error) {
-	operations, err := GeneratedOperations(repoRoot)
-	if err != nil {
-		return nil, err
-	}
-	var routes []openAPIRoute
+// LoadServerRoutes parses the route files of internal/api in a checkout.
+func LoadServerRoutes(repoRoot string) ([]Route, error) {
 	apiDir := filepath.Join(repoRoot, "lycaon", "internal", "api")
-	paths := []string{filepath.Join(apiDir, "server.go"), filepath.Join(apiDir, "routes.go")}
-	helpers, err := filepath.Glob(filepath.Join(apiDir, "*_routes.go"))
+	paths, err := filepath.Glob(filepath.Join(apiDir, "*_routes.go"))
 	if err != nil {
 		return nil, err
 	}
-	paths = append(paths, helpers...)
+	paths = append([]string{filepath.Join(apiDir, "server.go"), filepath.Join(apiDir, "routes.go")}, paths...)
+	fset := token.NewFileSet()
+	parse := func(path string) (*ast.File, error) { return parser.ParseFile(fset, path, nil, 0) }
+	generated, err := parse(filepath.Join(apiDir, "operations.generated.go"))
+	if err != nil {
+		return nil, err
+	}
+	var files []*ast.File
 	for _, path := range paths {
-		if err := collectServerRouteFile(path, operations, &routes); err != nil {
+		f, err := parse(path)
+		if err != nil {
 			return nil, err
 		}
+		files = append(files, f)
 	}
-	return routes, nil
+	return ServerRoutes(files, Operations(generated)), nil
 }
 
-func collectServerRouteFile(path string, operations map[string]openAPIRoute, routes *[]openAPIRoute) error {
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, path, nil, 0)
-	if err != nil {
-		return err
-	}
-	for _, decl := range f.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
-			continue
-		}
-		prefix := ""
-		if fn.Name.Name != "setupRoutes" {
-			prefix = "/v1"
-		}
-		collectServerRoutes(fn.Body, prefix, operations, routes)
-	}
-	return nil
+// IsRouteFile reports whether a file of internal/api registers routes.
+func IsRouteFile(name string) bool {
+	return name == "server.go" || name == "routes.go" || strings.HasSuffix(name, "_routes.go")
 }
 
-func collectServerRoutes(body *ast.BlockStmt, prefix string, operations map[string]openAPIRoute, routes *[]openAPIRoute) {
+// ServerRoutes returns the routes the route files register, resolving
+// generated operations through operations.
+func ServerRoutes(files []*ast.File, operations map[string]Route) []Route {
+	var routes []Route
+	for _, f := range files {
+		for _, decl := range f.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			prefix := ""
+			if fn.Name.Name != "setupRoutes" {
+				prefix = "/v1"
+			}
+			collectServerRoutes(fn.Body, prefix, operations, &routes)
+		}
+	}
+	return routes
+}
+
+func collectServerRoutes(body *ast.BlockStmt, prefix string, operations map[string]Route, routes *[]Route) {
 	for _, stmt := range body.List {
 		exprStmt, ok := stmt.(*ast.ExprStmt)
 		if !ok {
@@ -98,7 +107,7 @@ func collectServerRoutes(body *ast.BlockStmt, prefix string, operations map[stri
 			}
 			segment := strings.Trim(pathLit.Value, `"`)
 			full := joinRoutePath(prefix, segment)
-			*routes = append(*routes, openAPIRoute{
+			*routes = append(*routes, Route{
 				Method: method,
 				Path:   full,
 			})
@@ -120,16 +129,10 @@ func collectServerRoutes(body *ast.BlockStmt, prefix string, operations map[stri
 	}
 }
 
-// GeneratedOperations maps each generated operation variable in
-// lycaon/internal/api/operations.generated.go to its route and operationId.
-func GeneratedOperations(repoRoot string) (map[string]openAPIRoute, error) {
-	path := filepath.Join(repoRoot, "lycaon", "internal", "api", "operations.generated.go")
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, 0)
-	if err != nil {
-		return nil, err
-	}
-	operations := map[string]openAPIRoute{}
+// Operations maps each generated operation variable in
+// internal/api/operations.generated.go to its route and operationId.
+func Operations(file *ast.File) map[string]Route {
+	operations := map[string]Route{}
 	for _, decl := range file.Decls {
 		gen, ok := decl.(*ast.GenDecl)
 		if !ok || gen.Tok != token.VAR {
@@ -144,7 +147,7 @@ func GeneratedOperations(repoRoot string) (map[string]openAPIRoute, error) {
 			if !ok {
 				continue
 			}
-			route := openAPIRoute{}
+			route := Route{}
 			for _, element := range literal.Elts {
 				field, ok := element.(*ast.KeyValueExpr)
 				if !ok {
@@ -170,7 +173,7 @@ func GeneratedOperations(repoRoot string) (map[string]openAPIRoute, error) {
 			}
 		}
 	}
-	return operations, nil
+	return operations
 }
 
 func joinRoutePath(prefix, segment string) string {
@@ -194,8 +197,8 @@ func RouteKey(method, path string) string {
 	return method + " " + normalizeRoutePath(path)
 }
 
-func RouteSet(routes []openAPIRoute) map[string]openAPIRoute {
-	out := make(map[string]openAPIRoute, len(routes))
+func RouteSet(routes []Route) map[string]Route {
+	out := make(map[string]Route, len(routes))
 	for _, r := range routes {
 		out[RouteKey(r.Method, r.Path)] = r
 	}

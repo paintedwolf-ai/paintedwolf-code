@@ -9,7 +9,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -65,46 +64,6 @@ func TestHostConfigRootLeafSSOT(t *testing.T) {
 	}
 	if configdir.DirNameProd != "paintedwolf" {
 		t.Fatalf("DirNameProd = %q", configdir.DirNameProd)
-	}
-}
-
-func TestHostConfigRootMirrorsAcrossSurfaces(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-
-	brand := contractcheck.ReadRepoFile(t, root, filepath.Join("lycaon-den", "shared", "brand.ts"))
-	for _, needle := range []string{
-		`CONFIG_DIR_NAME = "paintedwolf"`,
-		`CONFIG_DIR_NAME_DEV = "paintedwolf-dev"`,
-	} {
-		if !strings.Contains(brand, needle) {
-			t.Fatalf("shared/brand.ts missing %s", needle)
-		}
-	}
-
-	rust := contractcheck.ReadRepoFile(t, root, filepath.Join("lycaon-den", "src-tauri", "src", "config_dir.rs"))
-	for _, needle := range []string{
-		`DIR_NAME_PROD: &str = "paintedwolf"`,
-		`DIR_NAME_DEV: &str = "paintedwolf-dev"`,
-	} {
-		if !strings.Contains(rust, needle) {
-			t.Fatalf("config_dir.rs missing %s", needle)
-		}
-	}
-
-	scripts := contractcheck.ReadRepoFile(t, root, filepath.Join("scripts", "config-dir.sh"))
-	for _, needle := range []string{
-		`paintedwolf`,
-		`paintedwolf-dev`,
-		`lycaon_config_dir()`,
-		`lycaon_channel_config_dir()`,
-		`lycaon_overlay_dir()`,
-		`OVERLAY_FIXTURE_DIR`,
-		testutil.OverlayFixtureDirName,
-	} {
-		if !strings.Contains(scripts, needle) {
-			t.Fatalf("scripts/config-dir.sh missing %s", needle)
-		}
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -39,7 +40,7 @@ func TestDenHostAuthorityFieldsInOpenAPI(t *testing.T) {
 			t.Fatalf("openapi schema %q missing", schema)
 		}
 		for _, field := range fields {
-			if _, ok := obj.Properties[field]; !ok {
+			if !slices.Contains(obj, field) {
 				t.Fatalf("schema %q missing property %q", schema, field)
 			}
 		}

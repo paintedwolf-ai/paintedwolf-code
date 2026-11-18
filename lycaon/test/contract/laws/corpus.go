@@ -126,8 +126,21 @@ type onceValue[T any] struct {
 	err   error
 }
 
+// get loads once. A load that ends its check through an accessor fails
+// every later get with the same error.
 func (o *onceValue[T]) get(load func() (T, error)) (T, error) {
-	o.once.Do(func() { o.value, o.err = load() })
+	o.once.Do(func() {
+		defer func() {
+			if p := recover(); p != nil {
+				failure, ok := p.(abort)
+				if !ok {
+					panic(p)
+				}
+				o.err = failure.err
+			}
+		}()
+		o.value, o.err = load()
+	})
 	return o.value, o.err
 }
 

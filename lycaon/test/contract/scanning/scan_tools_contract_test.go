@@ -2,7 +2,6 @@ package contract
 
 import (
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/scan"
@@ -13,9 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
-	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 )
 
 func TestScanToolsContractAllowlistAndRegistration(t *testing.T) {
@@ -88,42 +85,5 @@ func assertScanSummarySelectors(t *testing.T, schema map[string]any) {
 	}
 	if schema["additionalProperties"] != false {
 		t.Fatalf("scan_summary additionalProperties = %v, want false", schema["additionalProperties"])
-	}
-}
-
-// TestScanQueryRequestShapeMatchesGo binds the ScanQuery wire schema to its Go
-// twin: the openapi property set for each schema must equal the JSON field set
-// of the corresponding pkg/api struct, so a field added or renamed on either
-// side without the other fails here rather than drifting silently.
-func TestScanQueryRequestShapeMatchesGo(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	for _, tc := range []struct {
-		schema string
-		goType reflect.Type
-	}{
-		{"ScanQueryRequest", reflect.TypeOf(api.ScanQueryRequest{})},
-		{"ScanQueryResponse", reflect.TypeOf(api.ScanQueryResponse{})},
-	} {
-		props, err := wirespec.LoadOpenAPISchemaProperties(root, tc.schema)
-		contractcheck.FailErr(t, "loadOpenAPISchemaProperties "+tc.schema, err)
-		schemaFields := map[string]bool{}
-		for _, name := range props {
-			schemaFields[name] = true
-		}
-		goFields := map[string]bool{}
-		for _, name := range wirespec.JsonFieldNames(tc.goType) {
-			goFields[name] = true
-		}
-		for f := range goFields {
-			if !schemaFields[f] {
-				t.Fatalf("%s: Go json field %q missing from openapi schema", tc.schema, f)
-			}
-		}
-		for f := range schemaFields {
-			if !goFields[f] {
-				t.Fatalf("%s: openapi property %q missing from Go struct", tc.schema, f)
-			}
-		}
 	}
 }
