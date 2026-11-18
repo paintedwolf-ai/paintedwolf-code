@@ -411,16 +411,25 @@ storage growth from one browser's fixture capture cadence.
 The sidecar performance gate is a real-process workload, not an HTTP microbenchmark. It builds an optimized release-channel engine with the compile-time `paintedwolf_performance` isolation seam, starts it on a free loopback port with a disposable config root, file-backed disposable credentials, mock LLM, and a generated project, and stops only the PID it launched. The seam changes host storage dependencies only; release routing, wiring, SQLite, HTTP, SSE, session preparation, source projection, and coordinator execution remain the shipped paths.
 
 ```bash
-./task perf:sidecar                       # medium: 1,001 files; budgets enforced
+./task perf:sidecar                       # medium: 1,001 files
 ./task perf:sidecar -- --scale large      # 10,001 files
-SOAK=30m ./task perf:soak                 # default duration, written explicitly
+SOAK=30m ./task perf:soak                 # soak, then the scale fixture; SCALE_WORK=dir needs about 15 GB
 ./task perf:bench                         # six samples of every Go benchmark
 PERF_BENCH_BASELINE="$(python3 scripts/artifact_paths.py artifacts)/perf/old.json" ./task perf:bench
 ```
 
-`perf:sidecar` measures ready-to-serve boot, project creation, task acceptance and preparation, cold/warm/concurrent bootstrap, source-tree reads, prompt acceptance and settlement, stream replay, SSE delivery, RSS/heap/goroutines/file descriptors, SQLite pool wait, WAL size, capture drops, and database integrity. Its macOS descriptor ceiling is below the per-file kqueue shape on purpose: the medium fixture must remain on the recursive native watcher path. Unavailable process measurements or unreadable runtime captures fail the run instead of counting as zero usage. Short runs enforce peak limits; growth budgets apply to soak runs, which fail on insufficient samples.
+`perf:sidecar` measures ready-to-serve boot, project creation, task acceptance and preparation, cold/warm/concurrent bootstrap, source-tree reads, prompt acceptance and settlement, stream replay, SSE delivery, RSS/heap/goroutines/file descriptors, SQLite pool wait, WAL size, capture drops, and database integrity. Latency is measured and reported, never judged; the run fails on counted resource limits, on correctness, and when a scenario was not measured. Its macOS descriptor ceiling is below the per-file kqueue shape on purpose: the medium fixture must remain on the recursive native watcher path. Unavailable process measurements or unreadable runtime captures fail the run instead of counting as zero usage. Short runs enforce peak limits; growth limits apply to soak runs, which fail on insufficient samples.
 
 `perf:soak` gracefully restarts the exact engine it started against the same store, proves the persisted task and transcript recover, confirms the old in-memory SSE cursor receives `event_replay_unavailable`, reconnects from the new generation, and continues paced mixed concurrent reads and prompts. It finishes with `PRAGMA quick_check`, zero duplicate event ids, settled/replay parity, no dropped performance records, and bounded steady-state growth. Reports and embedded budgets live under `perf/` in the artifact root; the nightly job retains them for 30 days and runs a ten-minute soak.
+
+After the soak, `perf:soak` asserts bounded work on the scale fixture, and only by counts. It generates the fixture deterministically at two sizes, 50,000 and 500,000 files in one project, the large store at least 5 GiB with at least 1,310,720 free pages. The engine populates the inventory, its source ledger records the project's history, and a dropped scratch table leaves the free pages. The engine's own counters then report each operation's statements, rows changed and returned, pages fetched, and per-statement and per-transaction peaks; boot also counts project files opened, through Linux inotify:
+
+- Boot does the same work at both sizes: equal file opens and pages, statements and rows within declared spreads.
+- Deleting the project changes rows linear in what it owns, no statement or transaction above `deleteStepRows`, and work per owned row that does not grow between sizes.
+- The vacuum frees at most `db.VacuumPassPageLimit` pages per pass, takes a turn per pass, and needs no more passes than the freelist divided by the pass size, rounded up, plus one.
+- Upgrading the newest released corpus with an inventory of each size fetches a base plus a bounded number of pages per store page, with peak resident memory within a declared spread between sizes.
+
+Each bound is a named constant in `cmd/lycaon-perf/scale_bounds.go`, and `perf/scale.json` records the counts at both sizes. For a trial, `lycaon-perf scale --divisor N` divides both sizes; the gate uses the full sizes. `perf:bench` writes the large tree, and the benchmarks that measure a source tree read it through `PW_BENCH_ROOT`; outside the lane they use a small tree of the same shape.
 
 `perf:bench` discovers benchmark packages from source, records package-qualified medians plus allocation counts in the artifact root's `perf/go-bench.json`, and compares with any prior report through `PERF_BENCH_BASELINE`. Gated benchmarks fail on their median bytes or allocations per operation; time per operation, and its change against a baseline, is reported and never judged.
 

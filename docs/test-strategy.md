@@ -16,7 +16,7 @@ How Painted Wolf Code proves v1 behavior.
 | HTTP journey | `lycaon/test/security/` | Authenticated routes, project policy, sessions, workflows, tools, and recovery |
 | Den | `lycaon-den/src/**/*.test.*` | Stores, components, projections, accessibility, and client behavior |
 | Browser and desktop | `lycaon-den/e2e/` | Complete user journeys through the web harness and Tauri shell |
-| Performance | `cmd/lycaon-perf`, Go benchmarks | Release-channel boot and mixed workloads, latency distributions, resource stability, restart/replay recovery, and focused hot paths |
+| Performance | `cmd/lycaon-perf`, Go benchmarks | Release-channel boot and mixed workloads, latency distributions (reported), resource stability, restart/replay recovery, bounded work at scale, and focused hot paths |
 | Release | release workflow targets | Full Go behavior, race detection, scanner corpora, and Go and Den coverage floors |
 | Reference userlands | `lycaon/test/referenceuserland/` | Pinned GNU, BSD and busybox container images and the runner command conformance compares with ([Reference userlands](#reference-userlands)) |
 | Command conformance | `lycaon/test/commandconformance/`, `lycaon/test/wiring/conformance/` | Shell programs run through the `command` entry and compared with the reference userlands' results ([Command conformance](#command-conformance)) |
@@ -856,8 +856,8 @@ Run every task from the repository root through `./task`.
 | `./task e2e:den` | Browser user journeys |
 | `./task e2e:den:desktop` | Tauri desktop journeys |
 | `./task perf:bench` | Repeated Go microbenchmarks and an optional baseline comparison |
-| `./task perf:sidecar` | Representative isolated sidecar workload with enforced latency/resource/correctness budgets |
-| `./task perf:soak` | Long mixed workload with graceful restart, task recovery, SSE cursor reset, and leak checks |
+| `./task perf:sidecar` | Representative isolated sidecar workload; latency reported, resource and correctness limits enforced |
+| `./task perf:soak` | Long mixed workload with graceful restart, task recovery, SSE cursor reset, and leak checks; then work counts for boot, project delete, vacuum and upgrade on the scale fixture at two sizes |
 | `./task budgets` | Prompt and code size budgets for what the change touches |
 | `./task coverage:changes` / `./task den:coverage:changes` / `./task scripts:coverage:changes` | Coverage of the Go, Den, and scripts Python statements a change adds or modifies |
 | `./task check-fast` | Local handoff gate: build and cross-platform build, lint:full, size budgets, changed coverage, unit/component Go suite, integration tests of edited packages, repository contracts, Den typecheck, lint and complete suite, notices, comment and failure-message checks, and documentation links |
@@ -884,7 +884,7 @@ allocation before claiming an end-to-end speedup.
 | `./task upgrade:rehearse -- --bundle …` | Signed macOS automatic update discovery, staging, activation, startup confirmation, retained history, and another restart |
 | `./task test:scanners` | Bundled scanners against the committed corpus, with a staged engine |
 | `./task perf:sidecar` | Sidecar service-level objectives and integrity invariants |
-| `./task perf:soak` | Steady-state resource growth and restart/replay recovery |
+| `./task perf:soak` | Steady-state resource growth, restart/replay recovery, and bounded work at realistic size |
 
 The [desktop self-upgrade gate](dev-tasks.md#desktop-self-upgrade-release-gate)
 runs after signed packaging and before immutable publication. Harness tests prove

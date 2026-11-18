@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/scalefixture"
@@ -91,7 +90,7 @@ func scaleMain(args []string, stdout io.Writer) int {
 	flags.StringVar(&cfg.binary, "binary", "", "release sidecar binary to run")
 	flags.StringVar(&cfg.output, "output", "", "report JSON path")
 	flags.StringVar(&cfg.work, "work", os.TempDir(), "directory with room for the large fixture, about 12 GB")
-	flags.StringVar(&cfg.corpus, "corpus", filepath.Join("testdata", "upgrade-corpus", "1.0.2"), "released store the upgrade starts from")
+	flags.StringVar(&cfg.corpus, "corpus", "", "released corpus the upgrade starts from; the newest released one by default")
 	flags.IntVar(&cfg.divisor, "divisor", 1, "divide both sizes for a trial run; the gate uses 1")
 	flags.BoolVar(&cfg.keep, "keep", false, "keep each size's fixture")
 	if err := flags.Parse(args); err != nil {
@@ -100,6 +99,14 @@ func scaleMain(args []string, stdout io.Writer) int {
 	if cfg.binary == "" || cfg.output == "" || cfg.divisor < 1 {
 		fmt.Fprintln(os.Stderr, "lycaon-perf scale: --binary and --output are required; --divisor must be positive")
 		return 2
+	}
+	if cfg.corpus == "" {
+		corpus, err := newestReleasedCorpus(corpusRoot)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "lycaon-perf scale: %v\n", err)
+			return 2
+		}
+		cfg.corpus = corpus
 	}
 	ctx, stop := signalContext()
 	defer stop()

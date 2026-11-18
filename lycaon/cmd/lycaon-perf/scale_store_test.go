@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -35,7 +36,12 @@ VALUES ('v1', 'f1', 'owned', 'owned-root', 'a', 'content', 'aa', 1, 'metadata_on
 
 func TestReleasedCorpusTakesAnInventoryOfEverySize(t *testing.T) {
 	config := filepath.Join(t.TempDir(), "config")
-	testutil.FailErr(t, "materialize corpus", materializeCorpus(filepath.Join("..", "..", "testdata", "upgrade-corpus", "1.0.2"), config))
+	corpus, err := newestReleasedCorpus(filepath.Join("..", "..", corpusRoot))
+	testutil.FailErr(t, "find released corpus", err)
+	if strings.Contains(filepath.Base(corpus), "-") {
+		t.Fatalf("newest released corpus = %s, a release candidate", corpus)
+	}
+	testutil.FailErr(t, "materialize corpus", materializeCorpus(corpus, config))
 	store := filepath.Join(config, "store.db")
 	before, err := readStoreShape(t.Context(), store)
 	testutil.FailErr(t, "read shape", err)

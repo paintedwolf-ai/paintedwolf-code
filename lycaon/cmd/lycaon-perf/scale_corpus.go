@@ -10,7 +10,43 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/dotversion"
 )
+
+// corpusRoot holds one released store per version, release candidates beside them.
+var corpusRoot = filepath.Join("testdata", "upgrade-corpus")
+
+// newestReleasedCorpus is the last released version's corpus: the store an
+// upgrade starts from. Release candidates carry a hyphen and are skipped.
+func newestReleasedCorpus(root string) (string, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return "", err
+	}
+	newest := ""
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.IsDir() || strings.Contains(name, "-") {
+			continue
+		}
+		if newest == "" {
+			newest = name
+			continue
+		}
+		order, err := dotversion.Compare(name, newest)
+		if err != nil {
+			return "", fmt.Errorf("corpus %s: %w", name, err)
+		}
+		if order > 0 {
+			newest = name
+		}
+	}
+	if newest == "" {
+		return "", fmt.Errorf("no released corpus under %s", root)
+	}
+	return filepath.Join(root, newest), nil
+}
 
 type corpusManifest struct {
 	RetainedBranchTrees []string `json:"retained_branch_trees"`
