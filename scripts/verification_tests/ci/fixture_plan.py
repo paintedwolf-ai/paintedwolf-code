@@ -40,16 +40,18 @@ def plan(ci=None, provisions=None, check=("test:short",), fast=("test:short",), 
             yield data
 
 
-def live(phase=None, runs=None, area=None):
-    """The name of the live lane with `phase`, running target `runs`, or selected by change `area` alone,
-    so a test of live behaviour never spells a lane name."""
+def live(phase=None, runs=None, area=None, profiles=None):
+    """The name of the live lane with `phase`, running target `runs`, selected by change `area` alone, or
+    running in exactly `profiles`, so a test of live behaviour never spells a lane name."""
     from ci_policy.hosted_plan import lanes
     found = [name for name, spec in lanes().items()
              if (phase is None or spec.get("phases") == phase)
              and (runs is None or runs in spec["targets"])
-             and (area is None or spec.get("changes") == [area])]
+             and (area is None or spec.get("changes") == [area])
+             and (profiles is None or spec["profiles"] == list(profiles))]
     if len(found) != 1:
-        raise AssertionError(f"expected one live lane for phase={phase} runs={runs} area={area}: {found}")
+        raise AssertionError(f"expected one live lane for phase={phase} runs={runs} area={area} "
+                             f"profiles={profiles}: {found}")
     return found[0]
 
 

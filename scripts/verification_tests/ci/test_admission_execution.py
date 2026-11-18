@@ -22,7 +22,7 @@ class AdmissionTests(unittest.TestCase):
 
     def test_shared_unknown_deleted_inputs_expand_not_skip(self):
         for paths in [['docs/openapi/api.yaml'], ['lycaon/go.mod'], ['scripts/x.py'], ['new-area/data.bin'],
-                      ['lycaon/config/prompt.md']]:
+                      ['lycaon/config/gitengine/pin.yaml']]:
             full, reasons = impact.broad_scope(paths)
             self.assertTrue(full)
             self.assertEqual(reasons, paths)
@@ -33,10 +33,17 @@ class AdmissionTests(unittest.TestCase):
         full = {row['lane'] for row in ci.matrix('integration', scope=dict(full=True))['include']}
         self.assertEqual(full, {name for name, lane in ci.lanes().items() if 'integration' in lane['profiles']})
 
-    def test_broad_changes_run_the_whole_gate_and_every_platform_lane(self):
+    def test_broad_changes_run_every_queue_lane_their_paths_reach(self):
+        queue = {name for name, lane in ci.lanes().items() if 'integration' in lane['profiles']}
         full = {row['lane'] for row in ci.matrix('integration', scope=dict(full=True))['include']}
-        self.assertEqual(full, {row['lane'] for row in ci.matrix('check')['include']}
-                         | {name for name, lane in ci.lanes().items() if ci.supplemental(lane) and 'integration' in lane['profiles']})
+        self.assertEqual(full, queue)
+        # Lanes for the scripts, the dependencies and changed Go code wait for paths that reach them.
+        broad = dict(full=True, paths=['new-area/data.bin'])
+        gated = ci.lanes_of(ci.lanes(), {'scripts', 'dependencies', 'go-code'}) - ci.lanes_of(ci.lanes(), ci.AREAS - {'scripts', 'dependencies', 'go-code'})
+        self.assertTrue(gated)
+        self.assertEqual({row['lane'] for row in ci.matrix('integration', scope=broad)['include']}, queue - gated)
+        dependencies = dict(full=True, paths=['lycaon/go.sum'])
+        self.assertIn('dependencies', impact.change_areas(dependencies))
         # The check itself, its probe, and the harness fixtures widen the scope.
         for path in ['scripts/den-webkit-atspi.sh', 'scripts/harness/webkit_atspi_text_attributes.py',
                      'scripts/harness/webkit-atspi/2.54.Containerfile', 'lycaon/test/fixtures/e2e/minimal-go-project/go.mod',
@@ -69,8 +76,7 @@ class AdmissionTests(unittest.TestCase):
         # Prose beside code adds nothing to the code's own scope.
         self.assertEqual(impact.change_areas(dict(full=False, paths=['docs/git.md', 'lycaon/internal/a/a.go'])), {'always', 'go'})
         # Documentation that a build or contract parses still widens the gate.
-        for path in ['CHANGELOG.md', 'docs/openapi/vocab/README.md', 'docs/openapi.yaml',
-                     'lycaon/config/README.md']:
+        for path in ['CHANGELOG.md', 'docs/openapi/vocab/README.md', 'docs/openapi.yaml']:
             self.assertTrue(impact.broad_scope([path])[0], path)
 
     def test_confinement_changes_admit_the_other_architecture(self):

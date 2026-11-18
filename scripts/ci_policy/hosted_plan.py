@@ -19,21 +19,27 @@ SETUPS = {"verification", "shell", "harness", "frontend", "analysis"}
 # A platform lane runs a check that only its platform can run, so the cross-platform check gate,
 # which every development host runs, leaves it out; the merge queue runs it beside that gate.
 # Each platform names the runners it may use: architecture-specific code needs each architecture.
-PLATFORMS = {"linux": {"ubuntu-24.04", "ubuntu-24.04-arm"}}
+PLATFORMS = {"linux": {"ubuntu-24.04", "ubuntu-24.04-arm"}, "macos": {"macos-15"}}
+# Stages of the check gate the merge queue leaves to the pull request, which runs each against the change's
+# base: lint findings, comment and failure-message rules, and changed-statement coverage. A combination of
+# changes that each pass them is judged by the nightly.
+QUEUE_LEAVES = {"lint:full", "arch-lint:changes", "comments:check", "test:fail-messages:check", "coverage:changes"}
 # The setup inputs a lane can need, as the catalog's `provisions` declares them; `engine_free` names
 # targets that run without the runtime engines every other target needs.
 # Change areas a lane declares in `changes`; the change planner selects the lanes of each area it finds.
-AREAS = {"always", "go", "den", "scripts", "confinement", "command-language", "shell-native", "decide-native",
-         "documentcore-native"}
-# Execution a lane declares in `phases`: admission's check phases, admission's test phases, or the Go packages
-# a change affects. Each belongs to one lane.
-PHASES = {"admission", "admission-tests", "affected-packages"}
-INPUTS = ("containers", "browser", "userlands", "repository_tools", "nix", "linux_launch", "notices",
+AREAS = {"always", "go", "go-code", "den", "den-tests", "scripts", "dependencies", "confinement", "command-language",
+         "command-scale", "shell-native", "decide-native", "documentcore-native"}
+# Execution a lane declares in `phases`: admission's check phases, admission's test phases, the Go packages
+# a change affects, or the Go packages whose source it edits. Each belongs to one lane.
+PHASES = {"admission", "admission-tests", "affected-packages", "changed-packages"}
+INPUTS = ("containers", "browser", "playwright", "userlands", "repository_tools", "nix", "linux_launch", "notices",
           "analysis_lint", "analysis_vulnerabilities")
 
 
 def supplemental(lane):
-    return "platform" in lane or lane["suite"] == "performance" and "integration" in lane["profiles"]
+    """A lane beside the check gate: the merge queue or a release runs it, and the gate every development
+    host runs does not."""
+    return GATE not in lane["profiles"] and bool({"integration", "release"} & set(lane["profiles"]))
 
 
 def lanes():
@@ -46,12 +52,12 @@ def lanes():
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "priority",
                         "platform", "arguments", "admission_checks", "changes", "phases"}:
             raise ValueError(f"unknown CI lane fields: {name}")
-        if "arguments" in lane and (len(lane["targets"]) != 1 or not lane["arguments"]
+        # Every target of the lane receives its arguments.
+        if "arguments" in lane and (not lane["arguments"]
                                     or not all(isinstance(value, str) and value for value in lane["arguments"])):
-            raise ValueError(f"CI lane {name} arguments belong to exactly one target")
-        if supplemental(lane) and "platform" not in lane:
-            if (lane["targets"] != ["test:stress"] or not lane.get("arguments")
-                    or not {"integration", "nightly", "release"}.issubset(lane["profiles"])):
+            raise ValueError(f"CI lane {name} arguments must be non-empty strings")
+        if supplemental(lane) and "test:stress" in lane["targets"]:
+            if not lane.get("arguments") or not {"integration", "nightly", "release"}.issubset(lane["profiles"]):
                 raise ValueError(f"CI lane {name} requires explicit scale scope and complete qualification profiles")
         changes = lane.get("changes", [])
         if (not isinstance(changes, list) or not set(changes) <= AREAS or len(set(changes)) != len(changes)
@@ -109,11 +115,15 @@ def lanes():
                             if stage['name'] != 'licenses:notices' and stage['name'] not in STATIC_STAGES)
     if fast != expected_fast:
         raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: {dict(fast)}")
-    expected = Counter(stage["name"] for stage in expand([GATE]))
+    expected_check = Counter(stage["name"] for stage in expand([GATE]))
+    expected = Counter({name: count for name, count in expected_check.items() if name not in QUEUE_LEAVES})
     actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"] and not supplemental(lane)
                      for stage in expand(lane["targets"]))
     if actual != expected:
         raise ValueError(f"integration partition differs from check: {expected - actual}, {actual - expected}")
+    unjudged = QUEUE_LEAVES & set(expected_check) - set(fast) - STATIC_STAGES
+    if unjudged:
+        raise ValueError(f"the merge queue leaves stages no pull request runs: {sorted(unjudged)}")
     platform = {stage["name"] for lane in values.values() if "platform" in lane for stage in expand(lane["targets"])}
     repeated = platform & {stage["name"] for stage in expand([GATE])}
     if repeated:
@@ -122,7 +132,7 @@ def lanes():
         if ("check" in lane["profiles"] or "release" in lane["profiles"] and supplemental(lane)) and "nightly" not in lane["profiles"]:
             raise ValueError(f"nightly must include qualification lane {name}")
     stress = Counter(package for lane in values.values()
-                     if "nightly" in lane["profiles"] and lane["targets"] == ["test:stress"]
+                     if "nightly" in lane["profiles"] and "test:stress" in lane["targets"]
                      for package in lane.get("arguments", catalog()["go"]["test:stress"]["packages"]))
     expected_stress = Counter(catalog()["go"]["test:stress"]["packages"])
     if stress != expected_stress:
@@ -212,8 +222,6 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
         raise ValueError(f"unsupported CI selection: {profile}/{suite}")
     values = lanes()
     selected = {name for name, lane in values.items() if supplemental(lane)} if platform else set(values)
-    # A broad change runs the whole check gate and every platform lane of the merge queue.
-    broad = profile == "integration" and scope is not None and scope["full"]
     prose = False
     if profile in {"fast", "integration"} and scope is not None:
         from ci_policy.impact import docs_only, fast_lanes, selected_lanes
@@ -223,8 +231,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
     for name, lane in values.items():
         if name not in selected:
             continue
-        tier = GATE if broad and not supplemental(lane) else profile
-        if tier not in lane["profiles"] or suite != "all" and lane["suite"] not in {"all", suite}:
+        if profile not in lane["profiles"] or suite != "all" and lane["suite"] not in {"all", suite}:
             continue
         if profile == "nightly" and suite != "all" and lane["suite"] == "all" and GATE in lane["profiles"]:
             continue
@@ -240,6 +247,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "notices": needs["notices"],
                            "containers": needs["containers"],
                            "browser": needs["browser"],
+                           "playwright": needs["playwright"],
                            "userlands": needs["userlands"],
                            "linux_launch": needs["linux_launch"],
                            # Admission runs package metadata and script coverage in the ready lane when the change needs them.

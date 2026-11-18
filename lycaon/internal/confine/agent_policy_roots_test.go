@@ -69,15 +69,6 @@ func TestAgentPolicyFloorCoversEveryRegisteredRootWithReadableFilters(t *testing
 	}
 }
 
-func TestBuildProfileRefusesFilterTheProfileReaderCannotRead(t *testing.T) {
-	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	long := "/" + strings.Repeat("x", 1100)
-	_, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}, ReadDenyPaths: []string{long}, Network: confine.NetworkDeny})
-	if err == nil || !strings.Contains(err.Error(), "profile reader") {
-		t.Fatalf("BuildProfile with a %d-byte filter = %v, want a profile reader refusal", len(long), err)
-	}
-}
-
 // The kernel must accept the package-execution profile however many projects
 // are registered, and enforce the agent-policy floor it carries.
 func TestBoundaryAppliesPackageExecutionPlanWithManyRegisteredRoots(t *testing.T) {

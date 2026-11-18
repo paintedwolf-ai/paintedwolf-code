@@ -87,6 +87,9 @@
       "seatbelt:confine",
       "seatbelt:gated",
       "seatbelt:scanstress"
+    ],
+    "test:seatbelt:confine": [
+      "seatbelt:confine"
     ]
   },
   "go": {
@@ -1218,10 +1221,8 @@
     "build": {
       "targets": [
         "budgets",
-        "coverage:changes",
         "build",
         "build:cross",
-        "licenses:notices",
         "check:drift",
         "openapi:lint",
         "validate:workflows",
@@ -1248,20 +1249,17 @@
         "lint:full",
         "test:fail-messages:check",
         "comments:check",
-        "arch-lint:changes"
+        "arch-lint:changes",
+        "coverage:changes"
       ],
       "minutes": 90,
       "profiles": [
         "check",
-        "integration",
         "nightly"
       ],
       "suite": "all",
-      "setup": "analysis",
-      "priority": "reject",
-      "changes": [
-        "go"
-      ]
+      "setup": "verification",
+      "priority": "reject"
     },
     "deadcode": {
       "targets": [
@@ -1273,23 +1271,6 @@
       ],
       "suite": "all",
       "setup": "analysis"
-    },
-    "vulnerabilities": {
-      "targets": [
-        "lint:vuln"
-      ],
-      "minutes": 60,
-      "profiles": [
-        "check",
-        "release",
-        "integration",
-        "nightly"
-      ],
-      "suite": "all",
-      "setup": "analysis",
-      "changes": [
-        "go"
-      ]
     },
     "runner": {
       "targets": [
@@ -1322,7 +1303,7 @@
       "suite": "behavior",
       "setup": "verification",
       "workers": 2,
-      "shards": 2,
+      "shards": 3,
       "priority": "critical",
       "changes": [
         "always"
@@ -1348,6 +1329,7 @@
       "setup": "frontend",
       "changes": [
         "den",
+        "den-tests",
         "shell-native",
         "documentcore-native"
       ]
@@ -1529,7 +1511,8 @@
     },
     "command-scale": {
       "targets": [
-        "test:stress"
+        "test:stress",
+        "perf:bench"
       ],
       "arguments": [
         "./internal/tools/native/command",
@@ -1545,14 +1528,85 @@
       "suite": "performance",
       "setup": "verification",
       "changes": [
-        "go"
+        "command-scale"
+      ]
+    },
+    "dependencies": {
+      "targets": [
+        "lint:vuln",
+        "licenses:notices"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "check",
+        "release",
+        "integration",
+        "nightly"
+      ],
+      "suite": "all",
+      "setup": "verification",
+      "changes": [
+        "dependencies"
+      ]
+    },
+    "race-changes": {
+      "targets": [
+        "test:race"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "integration"
+      ],
+      "suite": "race",
+      "setup": "verification",
+      "changes": [
+        "go-code"
+      ],
+      "phases": "changed-packages"
+    },
+    "browser-smoke": {
+      "targets": [
+        "den:harness:canary"
+      ],
+      "minutes": 30,
+      "profiles": [
+        "integration",
+        "nightly"
+      ],
+      "suite": "e2e",
+      "setup": "harness",
+      "changes": [
+        "go",
+        "den",
+        "den-tests",
+        "shell-native",
+        "decide-native",
+        "documentcore-native"
+      ]
+    },
+    "confinement-macos": {
+      "targets": [
+        "test:seatbelt:confine"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "integration",
+        "nightly",
+        "release"
+      ],
+      "suite": "behavior",
+      "setup": "verification",
+      "runner": "macos-15",
+      "platform": "macos",
+      "changes": [
+        "confinement"
       ]
     }
   },
   "capacity": {
     "max_parallel": {
       "fast": 6,
-      "integration": 6,
+      "integration": 12,
       "check": 3,
       "nightly": 6,
       "release": 1
@@ -1690,6 +1744,12 @@
         "den:test:rust": [],
         "decide:test": [],
         "scripts:coverage:changes": []
+      }
+    },
+    "playwright": {
+      "targets": {
+        "den:harness:canary": [],
+        "den:harness:test": []
       }
     }
   }

@@ -328,6 +328,11 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:seatbelt -- {{.CLI_ARGS}}
 
+  test:seatbelt:confine:
+    desc: 'Applied Seatbelt confinement suites alone (--full, darwin); the merge queue''s confinement-macos lane'
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:seatbelt:confine -- {{.CLI_ARGS}}
+
   test:linux:installed:
     desc: 'Admit an exact-artifact Linux installed campaign and retain its required-row checklist'
     cmds:
@@ -502,7 +507,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/den-webkit-atspi.sh {{.CLI_ARGS}}
 
   den:harness:canary:
-    desc: 'Minimal harness e2e slice (boot + driver chat + prompt) — the tier-is-alive check run by check:digest'
+    desc: 'Browser journeys on the harness stack (boot, prompt, first run, project switch, approval, queue, CORS); the merge queue''s browser-smoke lane and check:digest'
     preconditions:
       - sh: command -v go
         msg: Go required — see lycaon/go.mod
