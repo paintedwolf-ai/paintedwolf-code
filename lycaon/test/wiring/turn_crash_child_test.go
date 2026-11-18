@@ -159,12 +159,16 @@ func runBootChild(t *testing.T, dir string) {
 	boot("second", crashBoot2)
 }
 
+// Generated identifiers differ between the reference run and a crashed one.
+var runIdentity = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+
 // promptLine is the model-facing part of one assembled history message.
 type promptLine struct {
 	Role       string          `json:"role"`
 	Content    string          `json:"content"`
 	ToolCalls  []wire.ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string          `json:"tool_call_id,omitempty"`
+	Codes      []string        `json:"codes,omitempty"`
 }
 
 func assembledPrompt(t *testing.T, h *Harness, dir string) []promptLine {
@@ -178,9 +182,11 @@ func assembledPrompt(t *testing.T, h *Harness, dir string) []promptLine {
 	assembled, _ := promptassembly.Assemble(sess, history, promptassembly.Config{})
 	lines := make([]promptLine, len(assembled))
 	for i, msg := range assembled {
-		lines[i] = promptLine{Role: string(msg.Role), Content: strings.ReplaceAll(msg.Content, dir, "<dir>"), ToolCalls: msg.ToolCalls}
+		content := runIdentity.ReplaceAllString(strings.ReplaceAll(msg.Content, dir, "<dir>"), "<id>")
+		lines[i] = promptLine{Role: string(msg.Role), Content: content, ToolCalls: msg.ToolCalls}
 		if msg.ToolResult != nil {
 			lines[i].ToolCallID = msg.ToolResult.ToolCallID
+			lines[i].Codes = msg.ToolResult.Codes
 		}
 	}
 	return lines

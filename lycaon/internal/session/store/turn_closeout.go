@@ -87,6 +87,11 @@ func (t *sqlTurns) ListPendingModelOutputProjections(ctx context.Context) ([]Pen
 	return out, nil
 }
 
+// ListUnsettledLiveDrafts names a session's live drafts whose model output never settled.
+func (t *sqlTurns) ListUnsettledLiveDrafts(ctx context.Context, sessionID string) ([]string, error) {
+	return t.core.queries.ListUnsettledLiveDrafts(ctx, sessionID)
+}
+
 func (t *sqlTurns) MarkModelOutputProjected(ctx context.Context, outputID string) error {
 	s := t.core
 	if strings.TrimSpace(outputID) == "" {

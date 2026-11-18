@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/contentblob"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // modelOutputBody is the content-addressed envelope for one settled model
@@ -177,6 +178,27 @@ func sameModelOutput(committed, proposed ModelOutput) bool {
 		committed.ToolCallsJSON == proposed.ToolCallsJSON &&
 		committed.ReasoningJSON == proposed.ReasoningJSON &&
 		committed.FinishReason == proposed.FinishReason && committed.Scripted == proposed.Scripted
+}
+
+func (t *memoryTurns) ListUnsettledLiveDrafts(ctx context.Context, sessionID string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	t.core.mu.RLock()
+	defer t.core.mu.RUnlock()
+	settled := map[string]bool{}
+	for _, output := range t.core.modelOutputs {
+		if output.SessionID == sessionID {
+			settled[output.MessageID] = true
+		}
+	}
+	var out []string
+	for _, msg := range t.core.messages[sessionID] {
+		if msg.DraftStatus == api.DraftStatusLive && !settled[msg.ID] {
+			out = append(out, msg.ID)
+		}
+	}
+	return out, nil
 }
 
 func (t *memoryTurns) ListPendingModelOutputProjections(ctx context.Context) ([]PendingModelOutputProjection, error) {

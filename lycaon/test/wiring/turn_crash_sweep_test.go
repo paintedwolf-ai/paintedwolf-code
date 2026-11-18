@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // storeDump is every row of every table keyed by its primary key, read
@@ -35,6 +36,10 @@ func dumpStore(t *testing.T, path string) storeDump {
 	testutil.FailErr(t, "close tables", rows.Close())
 	dump := storeDump{}
 	for _, table := range tables {
+		// Index segments are checked by integrity_check, not compared.
+		if ftsShadow.MatchString(table) {
+			continue
+		}
 		dump[table] = tableRows(t, database, table)
 	}
 	return dump
@@ -118,7 +123,8 @@ func diffDumps(before, after storeDump) []string {
 // reclaimedTables hold rows that recovery or delivery may remove after a
 // crash: each removal is the row's purpose being fulfilled.
 var reclaimedTables = map[string]string{
-	"event_outbox": "a delivered event leaves the outbox; delivery is checked separately",
+	"event_outbox":    "a delivered event leaves the outbox; delivery is checked separately",
+	"llm_cost_totals": "an aggregate keyed by call status: settling an abandoned call moves its count and drops the empty bucket",
 }
 
 // bootVolatile are the rows every boot rewrites.
@@ -226,18 +232,30 @@ func checkCrashRun(t *testing.T, run, reference crashRun) {
 			t.Errorf("tool call %s has %d results", id, count)
 		}
 	}
-	for _, table := range []string{"turns", "turn_attempts"} {
-		for _, row := range rowsOf(t, run.boot2, table) {
-			if status := row["status"]; status == "running" || status == "recovering" {
-				t.Errorf("%s %v left %v after boot", table, row["id"], status)
-			}
+	for _, attempt := range rowsOf(t, run.boot2, "turn_attempts") {
+		if attempt["status"] == "running" {
+			t.Errorf("turn attempt %v still running after boot", attempt["id"])
+		}
+	}
+	finalizing := map[any]bool{}
+	for _, attempt := range rowsOf(t, run.crashed, "turn_attempts") {
+		if attempt["status"] == "running" && attempt["phase"] == "finalizing" {
+			finalizing[attempt["turn_id"]] = true
+		}
+	}
+	for _, turn := range rowsOf(t, run.boot2, "turns") {
+		switch {
+		case turn["status"] == "running":
+			t.Errorf("turn %v still running after boot", turn["id"])
+		case finalizing[turn["id"]] && turn["status"] != "complete":
+			t.Errorf("turn %v committed its finalizing checkpoint but is %v after boot", turn["id"], turn["status"])
 		}
 	}
 	changed := diffDumps(withoutVolatile(run.boot1), withoutVolatile(run.boot2))
 	if len(changed) > 0 {
 		t.Errorf("second boot changed the store:\n%s", strings.Join(changed, "\n"))
 	}
-	if len(run.prompt) > len(reference.prompt) || !promptPrefix(run.prompt, reference.prompt) {
+	if !promptSettledPrefix(run.prompt, reference.prompt) {
 		t.Errorf("prompt after recovery is not the uninterrupted prompt up to its settled point:\n got %+v\nwant prefix of %+v", run.prompt, reference.prompt)
 	}
 }
@@ -250,10 +268,33 @@ func withoutVolatile(dump storeDump) storeDump {
 	return out
 }
 
-func promptPrefix(got, want []promptLine) bool {
-	for i := range got {
-		a, _ := json.Marshal(got[i])
-		b, _ := json.Marshal(want[i])
+// promptSettledPrefix holds a recovered prompt to the uninterrupted one line
+// by line. Two departures follow from an unsettled phase: a call no result
+// answers yet is left out of its assistant line, and a call whose effect was in
+// flight is answered by the host's interruption result.
+func promptSettledPrefix(got, want []promptLine) bool {
+	if len(got) > len(want) {
+		return false
+	}
+	answered := map[string]bool{}
+	for _, line := range got {
+		if line.ToolCallID != "" {
+			answered[line.ToolCallID] = true
+		}
+	}
+	for i, line := range got {
+		expected := want[i]
+		if line.Role == "assistant" {
+			expected.ToolCalls = slices.DeleteFunc(slices.Clone(expected.ToolCalls), func(call wire.ToolCall) bool { return !answered[call.ID] })
+			if len(line.ToolCalls) == 0 && len(expected.ToolCalls) == 0 {
+				line.ToolCalls, expected.ToolCalls = nil, nil
+			}
+		}
+		if line.Role == "tool" && line.ToolCallID == expected.ToolCallID && slices.Contains(line.Codes, "TOOL_OWNER_INTERRUPTED") {
+			continue
+		}
+		a, _ := json.Marshal(line)
+		b, _ := json.Marshal(expected)
 		if string(a) != string(b) {
 			return false
 		}
