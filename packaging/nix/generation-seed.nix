@@ -9,6 +9,7 @@ let
   validName = name: builtins.match "[A-Za-z0-9][A-Za-z0-9._-]{0,127}" name != null
     && name != "manifest.json";
 in
+assert builtins.elem signed.manifest.model [ "gemma4-e4b-paintedwolf" "gemma4-12b-paintedwolf" "gemma4-26b-paintedwolf" ];
 assert lib.assertMsg (names != [ ] && builtins.length names <= 65 && lib.all validName names)
   "Generation seeds require explicit, unique payload filenames";
 assert lib.assertMsg (builtins.stringLength raw <= 1048576
@@ -29,7 +30,7 @@ stdenvNoCC.mkDerivation {
       ''install -m644 ${lib.escapeShellArg (toString file)} "$bundle/"${lib.escapeShellArg name}'') payloads)}
     ${verifier}/bin/model-bundle -bundle "$bundle" \
       -authority "$out/engine-root/generation/release-keys.json" \
-      -model gemma4-e4b-paintedwolf -device vulkan > "$out/verified-manifest.json"
+      -model ${lib.escapeShellArg signed.manifest.model} -device vulkan > "$out/verified-manifest.json"
     runHook postInstall
   '';
   meta = {
