@@ -96,7 +96,26 @@ func TestReleaseBlastRadiusNoCredentialsInCorpus(t *testing.T) {
 			t.Errorf("forbidden sqlite sidecar in corpus: %s", path)
 		}
 		if _, ok := credNames[base]; ok {
-			t.Errorf("credential filename in corpus: %s", path)
+			relative, err := filepath.Rel(corpus, path)
+			if err != nil {
+				return err
+			}
+			projectMCP, err := filepath.Match(filepath.Join("*", "project-root", testutil.OverlayFixtureDirName, "mcp.yaml"), relative)
+			if err != nil {
+				return err
+			}
+			if projectMCP {
+				// Only an empty provider list belongs in this fixture.
+				data, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				if strings.TrimSpace(string(data)) != "providers: []" {
+					t.Errorf("project MCP fixture must declare an empty provider list: %s", path)
+				}
+			} else {
+				t.Errorf("credential filename in corpus: %s", path)
+			}
 		}
 		if strings.HasSuffix(base, ".pem") || strings.HasSuffix(base, ".key") {
 			t.Errorf("key-like file in corpus: %s", path)
