@@ -175,10 +175,14 @@ func (o *reachOracle) unschemaed(text string, named []string, schemas map[string
 	return bad
 }
 
+// lineWith quotes the line that names name, preferring a backticked mention.
 func lineWith(text, name string) string {
-	for _, line := range strings.Split(text, "\n") {
-		if strings.Contains(line, name) {
-			return fmt.Sprintf("%q", strings.TrimSpace(line))
+	lines := strings.Split(text, "\n")
+	for _, want := range []string{"`" + name, name} {
+		for _, line := range lines {
+			if strings.Contains(line, want) {
+				return fmt.Sprintf("%q", strings.TrimSpace(line))
+			}
 		}
 	}
 	return "(no single line)"
@@ -346,8 +350,16 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 				out.codes = append(out.codes, m.ToolResult.Codes...)
 			}
 		}
-		for _, v := range oracle.check(t, req, sc.posture) {
+		found := oracle.check(t, req, sc.posture)
+		for _, v := range found {
 			out.violations = append(out.violations, fmt.Sprintf("request %d on %s: %s", i, where, v))
+		}
+		if len(found) > 0 {
+			names := make([]string, 0, len(req.Tools))
+			for _, meta := range req.Tools {
+				names = append(names, meta.Name)
+			}
+			out.violations = append(out.violations, fmt.Sprintf("request %d on %s offers %v", i, where, names))
 		}
 	}
 	return out
