@@ -139,11 +139,6 @@ var configRootRegistry = []ConfigRootEntry{
 	{Name: "locks", IsDir: true, Class: ClassRuntime, Reason: "advisory process file locks for extension installations"},
 }
 
-// AllClassifiedEntries returns a copy of every classified config-root entry.
-func AllClassifiedEntries() []ConfigRootEntry {
-	return append([]ConfigRootEntry(nil), configRootRegistry...)
-}
-
 // LookupConfigRootEntry classifies name by its base name.
 func LookupConfigRootEntry(name string) (ConfigRootEntry, bool) {
 	base := filepath.Base(filepath.Clean(name))
