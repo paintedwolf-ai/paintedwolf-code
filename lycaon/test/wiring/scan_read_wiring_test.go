@@ -22,6 +22,7 @@ import (
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
+	scanmock "github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -55,14 +56,14 @@ func TestScanCompletedByRunnerReadsThroughServer(t *testing.T) {
 	scanStore := scan.NewSQLStore(sqlDB)
 	scanStore.SetEventOutbox(outbox)
 	coord := scantest.Coordinator(t, scanStore, nil)
-	mock := &scan.MockScanner{Result: &scanoutput.Result{
+	mock := &scanmock.MockScanner{Result: &scanoutput.Result{
 		FindingsCount: 2,
 		Findings: []wire.SecurityFinding{
 			scanfindings.FixtureFinding("mock:first", wire.FindingLevelHigh, "first finding", "main.go", 1),
 			scanfindings.FixtureFinding("mock:second", wire.FindingLevelMedium, "second finding", "main.go", 1),
 		},
 	}}
-	reg := &scan.MockRegistry{Scanner: mock}
+	reg := &scanmock.MockRegistry{Scanner: mock}
 	// The host's coordinator selects the scanner's contract for the execution manifest.
 	coord.Registry = reg
 	ing := &scan.IngesterImpl{
