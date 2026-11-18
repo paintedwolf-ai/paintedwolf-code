@@ -26,7 +26,7 @@ func (s *memorySessions) CreateWithStatus(ctx context.Context, req api.CreateSes
 	if err != nil {
 		return nil, err
 	}
-	return createMemorySession(ctx, s.core, owner.ID, req, projectID, "", "", status)
+	return createMemorySession(ctx, s.core, owner.ID, req, projectID, nil, "", status)
 }
 
 // CreateChild stores a child session linked to a parent coordinator session.
@@ -44,12 +44,9 @@ func (s *memorySessions) CreateChild(ctx context.Context, parent *api.Session, r
 		WorkspaceRootID: parent.WorkspaceRootID,
 		Posture:         mode,
 	}
-	sess, err := createMemorySession(ctx, s.core, parent.OwnerPersonID, childReq, parent.ProjectID, parent.ID, req.AgentType, api.SessionStatusIdle)
+	sess, err := createMemorySession(ctx, s.core, parent.OwnerPersonID, childReq, parent.ProjectID, parent, req.AgentType, api.SessionStatusIdle)
 	if err != nil {
 		return nil, err
-	}
-	if path := strings.TrimSpace(parent.WorkspacePath); path != "" {
-		sess.WorkspacePath = path
 	}
 	if strings.TrimSpace(req.Prompt) != "" {
 		userMsg := api.Message{
@@ -66,7 +63,7 @@ func (s *memorySessions) CreateChild(ctx context.Context, parent *api.Session, r
 	return sess, nil
 }
 
-func createMemorySession(ctx context.Context, s *memoryCore, ownerPersonID string, req api.CreateSessionRequest, projectID, parentID, agentType string, status api.SessionStatus) (*api.Session, error) {
+func createMemorySession(ctx context.Context, s *memoryCore, ownerPersonID string, req api.CreateSessionRequest, projectID string, parent *api.Session, agentType string, status api.SessionStatus) (*api.Session, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -87,6 +84,10 @@ func createMemorySession(ctx context.Context, s *memoryCore, ownerPersonID strin
 	if projectID == "" {
 		projectID = strings.TrimSpace(req.ProjectID)
 	}
+	var parentID, workspacePath string
+	if parent != nil {
+		parentID, workspacePath = parent.ID, strings.TrimSpace(parent.WorkspacePath)
+	}
 	agentType = strings.TrimSpace(agentType)
 	if agentType == "" {
 		agentType = defaultRootSessionAgentType(parentID)
@@ -96,6 +97,7 @@ func createMemorySession(ctx context.Context, s *memoryCore, ownerPersonID strin
 		ProjectID:       projectID,
 		OwnerPersonID:   ownerPersonID,
 		WorkspaceRootID: strings.TrimSpace(req.WorkspaceRootID),
+		WorkspacePath:   workspacePath,
 		Posture:         posture,
 		AgentType:       agentType,
 		ProviderID:      providerID,
@@ -107,8 +109,9 @@ func createMemorySession(ctx context.Context, s *memoryCore, ownerPersonID strin
 		UpdatedAt:       now,
 	}
 
+	stored := *sess
 	s.mu.Lock()
-	s.sessions[sess.ID] = sess
+	s.sessions[sess.ID] = &stored
 	s.mu.Unlock()
 
 	return sess, nil

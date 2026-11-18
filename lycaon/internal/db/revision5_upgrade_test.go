@@ -39,6 +39,7 @@ func releasedRevision4Store(t *testing.T, path string) *sql.DB {
 }
 
 func TestRevision5UpgradesEveryReleasedStore(t *testing.T) {
+	testutil.SkipIfRace(t, "single-goroutine corpus replay; test:full runs it")
 	for _, version := range []string{"1.0.0", "1.0.1", "1.0.2"} {
 		t.Run(version, func(t *testing.T) {
 			raw, err := os.ReadFile(filepath.Join(corpusDir(), version, "store.db"))

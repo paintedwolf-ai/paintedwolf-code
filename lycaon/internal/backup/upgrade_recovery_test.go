@@ -15,6 +15,7 @@ import (
 )
 
 func TestUpgradeRecoveryRetainsPreviousCopiesUntilReadiness(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, storeRelPath)
 	database := testdbfixture.OpenPath(t, path)
@@ -73,6 +74,7 @@ func TestUpgradeRecoveryRetainsPreviousCopiesUntilReadiness(t *testing.T) {
 }
 
 func TestRestoreSuspendsImportedRetentionAndRefreshesIntegrityMetadata(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, storeRelPath)
 	database := testdbfixture.OpenPath(t, path)
@@ -103,6 +105,7 @@ func TestRestoreSuspendsImportedRetentionAndRefreshesIntegrityMetadata(t *testin
 }
 
 func TestFailedUpgradeRecoveryRemainsDiscoverableAcrossNewTargets(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, storeRelPath)
 	database := testdbfixture.OpenPath(t, path)
@@ -137,6 +140,7 @@ func TestFailedUpgradeRecoveryRemainsDiscoverableAcrossNewTargets(t *testing.T) 
 }
 
 func TestAlternateVersionReadinessDetachesPendingWithoutSuccessStamp(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, storeRelPath)
 	database := testdbfixture.OpenPath(t, path)

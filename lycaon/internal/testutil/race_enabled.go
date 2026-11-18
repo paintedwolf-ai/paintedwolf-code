@@ -2,5 +2,5 @@
 
 package testutil
 
-// raceEnabled reports whether the binary was built with `-race`.
-const raceEnabled = true
+// RaceEnabled reports whether the binary was built with `-race`.
+const RaceEnabled = true

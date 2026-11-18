@@ -15,6 +15,7 @@ import (
 )
 
 func TestArchiveRejectsChangedSealedWorkerManifest(t *testing.T) {
+	t.Parallel()
 	database := testdbfixture.Open(t, "store.db")
 	root := testbaseline.DataDir(t, database)
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)

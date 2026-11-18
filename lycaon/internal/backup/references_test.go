@@ -24,6 +24,7 @@ import (
 )
 
 func TestBackupRequiresRetainedArtifactAndIgnoresTombstone(t *testing.T) {
+	t.Parallel()
 	config := t.TempDir()
 	dbPath := filepath.Join(config, "store.db")
 	database := testdbfixture.OpenPath(t, dbPath)
@@ -115,6 +116,7 @@ func omitRetainedFile(t *testing.T, raw []byte, manifest backup.Manifest, omitte
 }
 
 func TestBackupRequiresStoredSourceButAllowsMetadataOnly(t *testing.T) {
+	t.Parallel()
 	config := t.TempDir()
 	database := testdbfixture.OpenPath(t, filepath.Join(config, "store.db"))
 	rootID := testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
@@ -141,6 +143,7 @@ func TestBackupRequiresStoredSourceButAllowsMetadataOnly(t *testing.T) {
 }
 
 func TestFreshStartCanReplaceSemanticallyInvalidRestoreMarker(t *testing.T) {
+	t.Parallel()
 	config := t.TempDir()
 	database := testdbfixture.OpenPath(t, filepath.Join(config, "store.db"))
 	testutil.FailErr(t, "seed invalid restore marker", os.WriteFile(backup.PendingMarkerPath(config), []byte(`null`), 0o600))
@@ -161,6 +164,7 @@ func TestFreshStartCanReplaceSemanticallyInvalidRestoreMarker(t *testing.T) {
 }
 
 func TestPopulatedBackupRestoresRetainedFiles(t *testing.T) {
+	t.Parallel()
 	config := t.TempDir()
 	dbPath := filepath.Join(config, "store.db")
 	database := testdbfixture.OpenPath(t, dbPath)

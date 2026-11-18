@@ -14,6 +14,7 @@ import (
 )
 
 func TestRecoveryPruneFailureIsOptionalButMetadataFailureIsRequired(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	blockedRoot := filepath.Join(root, "not-a-directory")
 	testutil.FailErr(t, "block recovery directory", os.WriteFile(blockedRoot, []byte("occupied"), 0o600))
@@ -32,6 +33,7 @@ func TestRecoveryPruneFailureIsOptionalButMetadataFailureIsRequired(t *testing.T
 }
 
 func TestRecoveryPublicationCrashGapRetainsAndReusesSnapshot(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	opts, plan, record := publishFixtureRecoveryWithoutPointer(t, root)
 	recoveryRoot := filepath.Join(root, db.UpgradeRecoveryDirName)
@@ -69,6 +71,7 @@ func TestRecoveryPublicationCrashGapRetainsAndReusesSnapshot(t *testing.T) {
 }
 
 func TestRecoveryPublicationCorruptEmbeddedSnapshotRefusesRetry(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	opts, plan, record := publishFixtureRecoveryWithoutPointer(t, root)
 	manifest := filepath.Join(root, db.UpgradeRecoveryDirName, record.Snapshot, "manifest.json")
@@ -86,6 +89,7 @@ func TestRecoveryPublicationCorruptEmbeddedSnapshotRefusesRetry(t *testing.T) {
 }
 
 func TestRecoveryPublishedSnapshotDetachesWhenAnotherVersionBecomesReady(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	opts, plan, record := publishFixtureRecoveryWithoutPointer(t, root)
 	testutil.FailErr(t, "detach before older version starts writers", DetachUnclaimedUpgradeRecoveries(root, opts.AppVersion))
@@ -106,6 +110,7 @@ func TestRecoveryPublishedSnapshotDetachesWhenAnotherVersionBecomesReady(t *test
 }
 
 func TestRecoveryPendingSnapshotDetachesBeforeOlderVersionWriters(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	opts, plan, record := publishFixtureRecoveryWithoutPointer(t, root)
 	recoveryRoot := filepath.Join(root, db.UpgradeRecoveryDirName)
@@ -128,6 +133,7 @@ func TestRecoveryPendingSnapshotDetachesBeforeOlderVersionWriters(t *testing.T) 
 }
 
 func TestRecoveryIncompleteCaptureIsReclaimedWithoutDeletingUUIDDirectories(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	recoveryRoot := filepath.Join(root, db.UpgradeRecoveryDirName)
 	temporary := filepath.Join(recoveryRoot, ".backup-snapshot-"+uuid.NewString())

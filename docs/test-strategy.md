@@ -880,7 +880,7 @@ allocation before claiming an end-to-end speedup.
 | Task | Proof |
 |------|-------|
 | `./task test:full` | Complete Go behavior, wiring, smoke, HTTP, and required bundled scanner suites |
-| `./task test:race` | Go race detector with integration scenarios and no `-short`; the dedicated `test/security` HTTP journeys remain in `test:full`, and so does `internal/launchguard`: its identity transitions use `syscall.AllThreadsSyscall`, which Go refuses in a binary that links cgo, as every race-instrumented binary does |
+| `./task test:race` | Go race detector with integration scenarios and six nightly shards. Wiring and HTTP suites select concurrent worker, workflow, and event journeys by default. The shell reference corpus runs in `test:full`. The protected launch suite runs in `test:full` because its identity transitions require a binary built without cgo. |
 | `./task den:test:rust` | Tauri Rust tests |
 | `./task upgrade:rehearse -- --bundle …` | Signed macOS automatic update discovery, staging, activation, startup confirmation, retained history, and another restart |
 | `./task test:scanners` | Bundled scanners against the committed corpus, with a staged engine |
@@ -1492,13 +1492,8 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 |---|---|---|---|
 | Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
-<<<<<<< HEAD
-| Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then the two platform jobs, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
-| Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
-=======
-| Nightly | `nightly.yml` | `nightly` | 12 (4): the `nightly` profile capped at six, beside the two platform jobs, two browser shards with the desktop journey, and the upgrade rehearsal |
-| Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
->>>>>>> e4985d4fee
+| Nightly | `nightly.yml` | `nightly` | 12 (4): six verification runners, two platform jobs, two browser shards, the desktop journey, and the upgrade rehearsal |
+| Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build, then desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
 | Queue batching | `queue-batching.yml` | `queue-batching` | 1 |

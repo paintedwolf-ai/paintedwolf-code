@@ -18,6 +18,7 @@ import (
 )
 
 func TestRetainedReleaseArchiveCanStage(t *testing.T) {
+	t.Parallel()
 	// One archive per released schema route; platform rehearsal keeps every release.
 	fixtures := []struct {
 		version string
@@ -27,6 +28,7 @@ func TestRetainedReleaseArchiveCanStage(t *testing.T) {
 	}
 	for _, fixture := range fixtures {
 		t.Run(fixture.version, func(t *testing.T) {
+			t.Parallel()
 			archive := filepath.Join("..", "..", "testdata", "upgrade-corpus", fixture.version, "backup.zip")
 			root := t.TempDir()
 			path := filepath.Join(root, "store.db")
@@ -63,6 +65,7 @@ func TestRetainedReleaseArchiveCanStage(t *testing.T) {
 }
 
 func TestCreateArchiveExcludesSecretAndLegacyPaths(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")

@@ -250,7 +250,11 @@ func TestTwoWorkersSharingTrunkIsolatedViewResolution(t *testing.T) {
 		t.Fatalf("expected distinct private worktree dirs, got alpha=%q beta=%q", wtAlpha, wtBeta)
 	}
 
-	for i := 0; i < 30; i++ {
+	rounds := 30
+	if testutil.RaceEnabled {
+		rounds = 5
+	}
+	for i := range rounds {
 		gotA, finA, okA, errA := PrepareViewGitOperation(t.Context(), fix.trunkDir, "worker-view-alpha")
 		testutil.FailErr(t, "PrepareViewGitOperation alpha", errA)
 		_ = finA()

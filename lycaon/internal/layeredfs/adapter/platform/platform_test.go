@@ -146,11 +146,7 @@ func mountedHostView(t *testing.T, trunk string, mgr *privategit.Manager) (*adap
 	return view, chosen
 }
 
-// TestEngineStartersEnterAMountUnderForcedGC runs every real starter against a mount while a
-// collection is always pending, on one scheduler slot, repeatedly. The server runs in this process,
-// so a child that touched the mount before exec would wait on a server the pending stop-the-world
-// has parked. Nothing here is timed: a regression hangs until the test binary's own deadline, and
-// the assertion is that every start completed.
+// A child touching the mount before exec can deadlock during forced GC.
 func TestEngineStartersEnterAMountUnderForcedGC(t *testing.T) {
 	trunk, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve trunk", err)
@@ -215,7 +211,10 @@ func TestEngineStartersEnterAMountUnderForcedGC(t *testing.T) {
 		collector.Wait()
 	}()
 
-	const rounds = 40
+	rounds := 40
+	if testutil.RaceEnabled {
+		rounds = 4
+	}
 	completed := make(map[string]int, len(starters))
 	for round := range rounds {
 		// A root mutation drops any kernel attribute cache, so the next entry must reach the server.
