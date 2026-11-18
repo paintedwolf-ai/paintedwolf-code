@@ -1,7 +1,8 @@
-"""Release credentials stay in their custody, and release jobs read only bytes their own run produced."""
+"""Release credentials stay in their custody, and release jobs read only bytes their own run produced
+or that preparation produced and they verify against the source."""
 import unittest
 
-from verification_tests.ci.workflows import render, workflow
+from verification_tests.ci.workflows import invocation, render, workflow
 
 SIGNING, PUBLICATION = "release-signing", "release-publication"
 STORAGE = {"CLOUDFLARE_API_TOKEN", "R2_BUCKET"}
@@ -15,6 +16,8 @@ CHANNEL_SELECTION = "select-release-channels"
 # The diagnostic replay of a retained rehearsal reads another run's fixtures and holds nothing.
 REPLAY = "replay-bundle-upgrade"
 RELEASE_WORKFLOWS = ("release", "release-halt", "release-linux-delivery")
+PREPARED = {"needs": {"prepare": {"outputs": {"run_id": "prepared"}}}}
+PREPARATION = "scripts.release_preparation"
 
 
 def holders(spec, secret):
@@ -99,15 +102,19 @@ class CredentialCustodyLaws(unittest.TestCase):
                        {"publish-linux-repositories": {"result": "failure"}}):
             self.assertFalse(render(caller.condition, {"needs": {**admitted, **change}}), change)
 
-    def test_release_jobs_read_only_their_own_run_and_run_on_hosted_runners(self):
+    def test_release_jobs_read_only_their_own_run_or_verified_preparation_and_run_on_hosted_runners(self):
         for name in ("release", "release-halt"):
             for job in workflow(name).jobs.values():
                 runner = job.raw.get("runs-on", "")
                 self.assertNotIn("self-hosted", [runner] if isinstance(runner, str) else runner, job.name)
-                for step in job.steps:
+                for index, step in enumerate(job.steps):
                     self.assertFalse(any(argv[:3] == ["gh", "run", "download"] for argv in step.commands()), job.name)
-                    if step.inputs.get("run-id"):
-                        self.assertEqual((name, job.name), ("release", REPLAY))
+                    if step.inputs.get("run-id") and (name, job.name) != ("release", REPLAY):
+                        # Another run may supply only prepared artifacts, verified against the source before use.
+                        self.assertEqual(render(step.inputs["run-id"], PREPARED), "prepared", job.name)
+                        checked = [arguments for program, arguments in map(invocation, job.steps[index + 1].commands())
+                                   if program == PREPARATION]
+                        self.assertIn("verify", sum(checked, []), job.name)
         replay = workflow("release").jobs[REPLAY]
         self.assertIsNone(replay.environment)
         self.assertEqual(replay.secrets(), set())

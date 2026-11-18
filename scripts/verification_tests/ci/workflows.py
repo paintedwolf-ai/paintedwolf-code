@@ -226,7 +226,8 @@ def plan():
 
 TOKEN = re.compile(r"\s*(?:(?P<string>'(?:[^']|'')*')|(?P<number>-?\d+(?:\.\d+)?)"
                    r"|(?P<op>&&|\|\||==|!=|<=|>=|[!<>(),\[\]])"
-                   r"|(?P<name>[A-Za-z_][A-Za-z0-9_-]*(?:\.(?:[A-Za-z_*][A-Za-z0-9_-]*|\*))*))")
+                   r"|(?P<name>[A-Za-z_][A-Za-z0-9_-]*(?:\.(?:[A-Za-z_*][A-Za-z0-9_-]*|\*))*)"
+                   r"|(?P<property>\.[A-Za-z_][A-Za-z0-9_-]*))")
 
 
 TEMPLATE = re.compile(r"\$\{\{(.*?)\}\}", re.S)
@@ -362,11 +363,17 @@ class _Parser:
         if value in {"true", "false", "null"}:
             return {"true": True, "false": False, "null": None}[value]
         result = self.lookup(value)
-        while self.peek()[1] == "[":
-            self.take("[")
-            key = self.disjunction()
-            self.take("]")
-            result = result.get(key) if isinstance(result, dict) else None
+        while self.peek()[1] == "[" or self.peek()[0] == "property":
+            if self.peek()[0] == "property":
+                key = self.take()[1][1:]
+            else:
+                self.take("[")
+                key = self.disjunction()
+                self.take("]")
+            if isinstance(result, list) and type(key) is int:
+                result = result[key] if -len(result) <= key < len(result) else None
+            else:
+                result = result.get(key) if isinstance(result, dict) else None
         return result
 
     def lookup(self, path):

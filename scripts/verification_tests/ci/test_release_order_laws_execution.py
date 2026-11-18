@@ -32,14 +32,17 @@ class ReleaseGateLaws(unittest.TestCase):
     def setUp(self):
         self.jobs = workflow("release").jobs
 
-    def test_source_validation_and_compatibility_gate_every_publication(self):
+    def test_qualified_source_and_compatibility_gate_every_publication(self):
         gates = self.jobs["ship-gates"]
-        self.assertLessEqual({"classify", "validate-source", "compatibility"}, gates.ancestors())
+        self.assertLessEqual({"classify", "compatibility"}, gates.ancestors())
         self.assertTrue(truthy(evaluate(gates.condition, classified("true"), "failure")))
         self.assertFalse(truthy(evaluate(gates.condition, classified("true"), "cancelled")))
-        for name in ("validate-source", "build-release"):
-            self.assertLessEqual({"classify", "compatibility"}, set(self.jobs[name].needs), name)
-            self.assertEqual(self.jobs[name].condition, "", name)
+        self.assertLessEqual({"classify", "compatibility"}, set(self.jobs["build-release"].needs))
+        self.assertEqual(self.jobs["build-release"].condition, "")
+        # Publishing admits only a source that qualification verified.
+        (admission,) = [step for step in self.jobs["classify"].steps if step.invokes("scripts/release-source-validate.sh")]
+        self.assertTrue(admission.invokes("scripts/ci_verification.py", "verified"))
+        self.assertEqual((admission.condition, admission.continues), ("", False))
         for name, job in self.jobs.items():
             if job.environment == "release-publication":
                 self.assertIn("ship-gates", job.ancestors(), name)
@@ -88,14 +91,21 @@ class ReleaseGateLaws(unittest.TestCase):
         provisioning = {"./.github/actions/setup-verification", "./.github/actions/setup-bialy"}
         self.assertFalse({step.action() for step in compatibility.steps} & provisioning)
         self.assertFalse({task for step in compatibility.steps for task in step.tasks()} & {"setup-dev", "build:lycaon-dev"})
-        validation = self.jobs["validate-source"].steps
-        preflight = next(index for index, step in enumerate(validation) if "release:preflight" in step.tasks())
-        rehearsal = next(index for index, step in enumerate(validation) if "upgrade:rehearse" in step.tasks())
+
+    def test_qualification_verifies_the_upgrade_corpus_and_rehearses_the_upgrade(self):
+        self.assertIn("./.github/workflows/nightly-verification.yml",
+                      {job.raw.get("uses") for job in workflow("qualification").jobs.values()})
+        self.assertIn("./.github/workflows/platform-verification.yml",
+                      {job.raw.get("uses") for job in workflow("nightly-verification").jobs.values()})
+        steps = [step for job in workflow("platform-verification").jobs.values() for step in job.steps]
+        preflight = next(index for index, step in enumerate(steps) if step.invokes("release:preflight", "--require-corpus"))
+        rehearsal = next(index for index, step in enumerate(steps) if "upgrade:rehearse" in step.tasks())
         self.assertLess(preflight, rehearsal)
-        self.assertEqual((validation[rehearsal].condition, validation[rehearsal].continues), ("", False))
-        # A dry run has no frozen corpus; a publishing release cannot skip it.
-        self.assertTrue(truthy(evaluate(validation[preflight].condition or "true", classified("true"))))
-        self.assertFalse(validation[preflight].continues)
+        # Both run whenever the sidecar they reuse was built, even after an earlier step failed.
+        built = {"steps": {"browser": {"outcome": "success"}}}
+        for step in (steps[preflight], steps[rehearsal]):
+            self.assertTrue(truthy(evaluate(step.condition or "success()", built, "failure")))
+            self.assertFalse(step.continues)
 
 
 class ReleaseCheckoutLaws(unittest.TestCase):
