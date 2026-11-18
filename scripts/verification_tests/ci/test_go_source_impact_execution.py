@@ -140,7 +140,9 @@ class QueueScopeTests(unittest.TestCase):
         self.assertIn(live(phase="affected-packages"), lanes)
         self.assertIn(live(phase="changed-packages"), lanes)
         for runs in ("den:test:rust", "den:webkit:atspi", "test:confine:linux", "scripts:coverage:changes"):
-            self.assertNotIn(live(runs=runs), lanes, runs)
+            running = {name for name, spec in hosted_plan.lanes().items() if runs in spec["targets"]}
+            self.assertTrue(running, runs)
+            self.assertFalse(running & lanes, runs)
 
     def test_host_configuration_runs_the_build_behavior_and_den_suite_but_not_full_scope(self):
         paths = ["lycaon/config/packs/painted-wolf/platform/host/providers.yaml"]
