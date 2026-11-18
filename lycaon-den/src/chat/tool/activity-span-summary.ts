@@ -22,10 +22,9 @@ export function activitySpanSummary(
   const status = running || toolStatuses.includes("running")
     ? "running"
     : toolStatuses.at(-1) === "error" ? "error" : "done";
-  const failureCount = verboseMode || status === "error"
-    ? toolStatuses.filter((status) => status === "error").length
-    : 0;
-  const preferredStatus = !verboseMode && status === "done" ? "completed" : "error";
+  const failures = toolStatuses.filter((status) => status === "error").length;
+  const failureCount = verboseMode || status === "error" ? failures : 0;
+  const preferredStatus = !verboseMode && status === "done" && failures > 0 ? "completed" : "error";
   return { status, failureCount, hint: activitySpanHint(rows, label, preferredStatus) };
 }
 
