@@ -48,12 +48,7 @@ var outboxSilentMutators = map[string]string{
 	"lycaon/internal/sourceledger/gittrack.go:commitGitTransitions": "records observed git ref transitions; its projects write only allocates their source-history ordinals",
 	"lycaon/internal/sourceledger/commandwindow.go:insertWindow":    "opens a command window; its projects write only allocates the window's source-history ordinal, which is off the project wire",
 
-	// The session plan is published through progress write observers.
-
-	"lycaon/internal/progress/snapshot_store.go:Update": "commits one revision-aware progress update; ApplyAuthorUpdate notifies the registered progress write observers after the transaction",
-	"lycaon/internal/progress/sql.go:Set":               "writes the session plan; progress write observers publish it through events.Publisher.PublishProgress",
-	"lycaon/internal/progress/sql.go:EnsureRun":         "reseeds the session plan for a new workflow run; session.Manager.maybeBootstrapProgress notifies the progress write observers that publish it",
-	"lycaon/internal/progress/sql.go:BindRun":           "binds the session plan to its workflow run; the plan wire carries only the content, which the binding leaves unchanged",
+	"lycaon/internal/progress/sql_transition.go:writeTransition": "runs inside AppendMessagesWith; its returned transition rows enqueue message events in the same transaction, and post-commit observers invalidate the progress projection",
 
 	// Security scan bookkeeping; the scans announce through emitScanTx.
 	"lycaon/internal/scan/authority_store.go:EnsureAssessment":            "records the assessment a scan joins; the scans that join it announce through emitScanTx, which refreshes the assessment rollup",

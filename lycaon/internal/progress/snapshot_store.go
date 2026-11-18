@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"slices"
 	"strconv"
 	"time"
@@ -24,34 +23,45 @@ func (s *MemoryStore) Snapshot(ctx context.Context, sessionID string) (Snapshot,
 	return snapshotVersion(record.runID, record.content, record.itemIDs, strconv.FormatUint(record.revision, 10), record.revision), nil
 }
 
-func (s *MemoryStore) Update(ctx context.Context, sessionID string, change func(Snapshot) (Document, error)) (Snapshot, error) {
+func (s *MemoryStore) Update(ctx context.Context, sessionID string, change func(Snapshot) (Document, error)) (after Snapshot, err error) {
 	if err := ctx.Err(); err != nil {
 		return Snapshot{}, err
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return Snapshot{}, err
-	}
 	key := normalizeKey(sessionID)
 	record := s.bySess[key]
-	current := snapshotVersion(record.runID, record.content, record.itemIDs, strconv.FormatUint(record.revision, 10), record.revision)
-	doc, err := change(current)
+	before := snapshotVersion(record.runID, record.content, record.itemIDs, strconv.FormatUint(record.revision, 10), record.revision)
+	committed := false
+	defer func() {
+		s.mu.Unlock()
+		if committed && !before.Equal(after) {
+			NotifyWriteObservers(ctx, WriteEvent{SessionID: sessionID, Before: before, After: after})
+		}
+	}()
+	if err := ctx.Err(); err != nil {
+		return before, err
+	}
+	doc, err := change(before)
 	if err != nil {
-		return current, err
+		return before, err
 	}
 	if err := ctx.Err(); err != nil {
-		return current, err
+		return before, err
 	}
 	content := clampContent(doc.Content)
-	nextIDs := resolveDocumentItemIDs(current, Document{Content: content, ItemIDs: doc.ItemIDs})
-	if record.content != content || !slices.Equal(record.itemIDs, nextIDs) {
+	ids := resolveDocumentItemIDs(before, Document{Content: content, ItemIDs: doc.ItemIDs})
+	runID := normalizeKey(doc.RunID)
+	if runID == "" {
+		runID = before.RunID
+	}
+	if record.content != content || !slices.Equal(record.itemIDs, ids) || record.runID != runID {
 		record.revision++
 	}
-	record.content = content
-	record.itemIDs = nextIDs
+	record.content, record.itemIDs, record.runID = content, ids, runID
 	s.bySess[key] = record
-	return snapshotVersion(record.runID, record.content, record.itemIDs, strconv.FormatUint(record.revision, 10), record.revision), nil
+	after = snapshotVersion(runID, content, ids, strconv.FormatUint(record.revision, 10), record.revision)
+	committed = true
+	return after, nil
 }
 
 func querySnapshot(ctx context.Context, queries *db.Queries, key string) (Snapshot, error) {
@@ -74,51 +84,6 @@ func (s *SQLStore) Snapshot(ctx context.Context, sessionID string) (Snapshot, er
 		return Snapshot{}, fmt.Errorf("progress store not configured")
 	}
 	return querySnapshot(ctx, s.queries, normalizeKey(sessionID))
-}
-
-func (s *SQLStore) Update(ctx context.Context, sessionID string, change func(Snapshot) (Document, error)) (Snapshot, error) {
-	key := normalizeKey(sessionID)
-	if key == "" {
-		return Snapshot{}, fmt.Errorf("session id required")
-	}
-	var snapshot Snapshot
-	err := db.InTx(ctx, s.database, s.queries, nil, func(q *db.Queries, _ *sql.Tx) error {
-		var err error
-		snapshot, err = querySnapshot(ctx, q, key)
-		if err != nil {
-			return err
-		}
-		doc, err := change(snapshot)
-		if err != nil {
-			return err
-		}
-		content := clampContent(doc.Content)
-		nextIDs := resolveDocumentItemIDs(snapshot, Document{Content: content, ItemIDs: doc.ItemIDs})
-		if content == snapshot.Content && slices.Equal(nextIDs, snapshot.ItemIDs) {
-			return nil
-		}
-		itemIDsJSON, err := json.Marshal(nextIDs)
-		if err != nil {
-			return err
-		}
-		stamp := timelayout.Format(nextSnapshotTime(snapshot.version))
-		if err := q.UpsertSessionProgressContent(ctx, db.UpsertSessionProgressContentParams{
-			SessionID:     key,
-			WorkflowRunID: snapshot.RunID,
-			Content:       content,
-			UpdatedAt:     stamp,
-			ItemIdsJson:   string(itemIDsJSON),
-		}); err != nil {
-			return err
-		}
-		nextVer := snapshot.documentVersion + 1
-		if nextVer == 0 {
-			nextVer = 1
-		}
-		snapshot = snapshotVersion(snapshot.RunID, content, nextIDs, stamp, nextVer)
-		return nil
-	})
-	return snapshot, err
 }
 
 func nextSnapshotTime(previous string) time.Time {

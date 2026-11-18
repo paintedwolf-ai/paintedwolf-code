@@ -18,7 +18,7 @@ type runRecord struct {
 	revision uint64
 }
 
-var _ RunScopedStore = (*MemoryStore)(nil)
+var _ Store = (*MemoryStore)(nil)
 
 // NewMemoryStore returns an empty in-memory progress store.
 func NewMemoryStore() *MemoryStore {
@@ -26,21 +26,10 @@ func NewMemoryStore() *MemoryStore {
 }
 
 func (s *MemoryStore) Set(sessionID, content string) error {
-	if s == nil {
-		return nil
-	}
-	key := normalizeKey(sessionID)
-	if key == "" {
-		return nil
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	rec := s.bySess[key]
-	rec.content = clampContent(content)
-	rec.itemIDs = mintItemIDs(rec.content)
-	rec.revision++
-	s.bySess[key] = rec
-	return nil
+	_, err := s.Update(context.Background(), sessionID, func(Snapshot) (Document, error) {
+		return Document{Content: content, ItemIDs: mintItemIDs(clampContent(content))}, nil
+	})
+	return err
 }
 
 func (s *MemoryStore) Get(_ context.Context, sessionID string) string {
@@ -51,49 +40,4 @@ func (s *MemoryStore) Get(_ context.Context, sessionID string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.bySess[key].content
-}
-
-func (s *MemoryStore) BoundRunID(sessionID string) string {
-	if s == nil {
-		return ""
-	}
-	key := normalizeKey(sessionID)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.bySess[key].runID
-}
-
-func (s *MemoryStore) BindRun(sessionID, workflowRunID string) {
-	if s == nil {
-		return
-	}
-	key := normalizeKey(sessionID)
-	workflowRunID = normalizeKey(workflowRunID)
-	if key == "" || workflowRunID == "" {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	rec := s.bySess[key]
-	rec.runID = workflowRunID
-	s.bySess[key] = rec
-}
-
-func (s *MemoryStore) EnsureRun(sessionID, workflowRunID, goal string) (refreshed bool) {
-	if s == nil {
-		return false
-	}
-	key := normalizeKey(sessionID)
-	workflowRunID = normalizeKey(workflowRunID)
-	if key == "" || workflowRunID == "" {
-		return false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.bySess[key] = runRecord{
-		revision: s.bySess[key].revision + 1,
-		runID:    workflowRunID,
-		content:  clampContent(formatBootstrapContent(goal)),
-	}
-	return true
 }

@@ -55,7 +55,7 @@ func TestEveryTranscriptWritePathIsScreenedByTheStore(t *testing.T) {
 
 	t.Run("AppendMessagesWith", func(t *testing.T) {
 		msg := userMessage("tx-append", "token "+storedCredential+" here")
-		err := st.AppendMessagesWith(ctx, sess.ID, func(*sql.Tx) error { return nil }, msg)
+		err := st.AppendMessagesWith(ctx, sess.ID, func(*sql.Tx) ([]api.Message, error) { return []api.Message{msg}, nil })
 		testutil.FailErr(t, "append with mutation", err)
 		assertStoredRowIsScreened(t, ctx, st, sess.ID, "tx-append")
 	})

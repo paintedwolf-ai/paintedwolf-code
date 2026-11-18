@@ -87,7 +87,10 @@ func TestResumeRetainsUnfinishedPhaseWithoutReenteringIt(t *testing.T) {
 	paused, err := mgr.Controls.Pause(ctx, run.ID, "review")
 	testutil.FailErr(t, "pause run", err)
 	entries, wakes := 0, 0
-	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) { entries++ }
+	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) error {
+		entries++
+		return nil
+	}
 	mgr.Controls.OnRunResumed = func(ctx context.Context, resumed *api.WorkflowRun) {
 		wakes++
 		held, holdErr := mgr.Obligations.HostObligationHeld(ctx, resumed.SessionID)

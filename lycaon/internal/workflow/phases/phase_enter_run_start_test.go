@@ -24,10 +24,12 @@ func TestPhaseEnterHookReportsRunStartWhileObligationHeld(t *testing.T) {
 	var phases []string
 	var runStarts []bool
 	var entered []workflowphases.RunContext
-	mgr.Phases.PhaseEnterHook = func(_ context.Context, rc *workflowphases.RunContext, _ workflowdef.PhaseDef) {
+	mgr.Phases.PhaseEnterHook = func(_ context.Context, rc *workflowphases.RunContext, _ workflowdef.PhaseDef) error {
 		entered = append(entered, *rc)
 		phases = append(phases, rc.Phase)
 		runStarts = append(runStarts, rc.IsRunStart())
+
+		return nil
 	}
 
 	ctx := context.Background()

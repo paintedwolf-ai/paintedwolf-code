@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newClosureGuardManager(t *testing.T, store progress.RunScopedStore) *Host {
+func newClosureGuardManager(t *testing.T, store progress.Store) *Host {
 	t.Helper()
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	hints, err := guidance.LoadHintConfigStock()

@@ -77,7 +77,6 @@
       "visibility": "transcript",
       "workflow_run_id": "run-1",
       "progress_update": {
-        "seq": 0,
         "initial": true,
         "steps": [ { "label": "Plan", "state": "active" } ],
         "changes": []

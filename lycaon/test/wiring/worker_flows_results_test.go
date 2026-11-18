@@ -200,7 +200,6 @@ func TestFlowSmallEditNeedsNoWorker(t *testing.T) {
 	f.seed("direct.go", "package auth\n")
 	const edited = "package auth\n\nvar Direct = 1\n"
 
-	AttachDefaultAmbient(t, f.h, f.ctx, f.sess.ID)
 	f.scripts.results["coordinator"] = "Set Direct in direct.go. [command#1]\n[verify: inspection - edit applied]"
 	f.scripts.push("coordinator", writes("direct.go", edited),
 		api.ToolCall{ID: "progress", Name: "update_progress", Args: f.h.ProgressUpdateArgs(t, f.ctx, f.sess.ID, "## Progress\n- [x] direct edit\n")})

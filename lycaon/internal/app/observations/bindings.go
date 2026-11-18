@@ -10,14 +10,12 @@ import (
 	"github.com/lycaon/lycaon/internal/preflight"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/repochange"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/internal/workscope"
 )
 
 type RepositoryChanges interface{ Changed(context.Context, string) }
 
-func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progress.RunScopedStore, runs runstate.RunsRepository, repository RepositoryChanges, service *llm.Service) func(context.Context) error {
+func Bind(publisher *events.Publisher, repository RepositoryChanges, service *llm.Service) func(context.Context) error {
 	var work workscope.Group
 	if service != nil {
 		service.Lifecycle = utilityLanePublisher{pub: publisher}
@@ -36,15 +34,11 @@ func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progre
 			repository.Changed(ctx, ev.ProjectDir)
 		}
 	}))
-	activeRun := activeRunIDFromWorkflow(runs)
-	coalescer := progress.NewCoalescer(progress.DefaultCoalesceWindow, newProgressChangeEmitter(sessions, publisher, activeRun, progressStore))
 	releaseProgress := progress.RegisterWriteObserver(ownedObserver(&work, func(ctx context.Context, ev progress.WriteEvent) {
 		if strings.TrimSpace(ev.SessionID) == "" {
 			return
 		}
 		publisher.PublishProgress(ctx, ev.SessionID, progress.BumpRevision(ev.SessionID))
-		coalescer.Record(ev.SessionID, ev.Before, ev.After)
-		emitProgressCompletionFromContent(ctx, sessions, publisher, progressStore, activeRun, ev.SessionID, ev.After.Content)
 	}))
 	return func(ctx context.Context) error {
 		work.Stop()
@@ -54,7 +48,6 @@ func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progre
 		if err := work.Wait(ctx); err != nil {
 			return err
 		}
-		coalescer.Close()
 		return nil
 	}
 }

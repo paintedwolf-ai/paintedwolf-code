@@ -38,7 +38,7 @@ type Service struct {
 	Closeouts       Closeouts
 	ProgressClosure Forgetter
 	History         History
-	Progress        progress.RunScopedStore
+	Progress        progress.Store
 	Queue           *queue.Store
 	Drafts          Drafts
 	Submissions     Submissions

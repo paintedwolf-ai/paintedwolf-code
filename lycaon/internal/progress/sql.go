@@ -2,103 +2,38 @@ package progress
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
-	"strings"
-	"time"
-
+	"database/sql"
 	"github.com/lycaon/lycaon/internal/db"
+	api "github.com/lycaon/lycaon/pkg/api"
 )
 
-// SQLStore is the durable Store backed by the session_progress table.
-type SQLStore struct {
-	queries  *db.Queries
-	database db.Handle
+// TranscriptTransactions commits derived messages with their source mutation.
+type TranscriptTransactions interface {
+	AppendMessagesWith(context.Context, string, func(*sql.Tx) ([]api.Message, error)) error
 }
 
-var _ RunScopedStore = (*SQLStore)(nil)
+type SQLStore struct {
+	queries    *db.Queries
+	transcript TranscriptTransactions
+}
 
-// NewSQLStore returns a progress store backed by database.
-func NewSQLStore(database db.Handle) *SQLStore {
-	return &SQLStore{queries: db.New(database), database: database}
+var _ Store = (*SQLStore)(nil)
+
+func NewSQLStore(database db.Handle, transcript TranscriptTransactions) *SQLStore {
+	return &SQLStore{queries: db.New(database), transcript: transcript}
 }
 
 func (s *SQLStore) Set(sessionID, content string) error {
-	if s == nil || s.queries == nil {
-		return fmt.Errorf("progress store not configured")
-	}
-	key := normalizeKey(sessionID)
-	if key == "" {
-		return fmt.Errorf("session id required")
-	}
-	runID := s.BoundRunID(key)
-	clamped := clampContent(content)
-	itemIDsJSON, err := json.Marshal(mintItemIDs(clamped))
-	if err != nil {
-		return err
-	}
-	return s.queries.UpsertSessionProgressContent(context.Background(), db.UpsertSessionProgressContentParams{
-		SessionID:     key,
-		WorkflowRunID: runID,
-		Content:       clamped,
-		UpdatedAt:     timelayout.Format(time.Now().UTC()),
-		ItemIdsJson:   string(itemIDsJSON),
+	_, err := s.Update(context.Background(), sessionID, func(Snapshot) (Document, error) {
+		return Document{Content: content, ItemIDs: mintItemIDs(clampContent(content))}, nil
 	})
+	return err
 }
 
 func (s *SQLStore) Get(ctx context.Context, sessionID string) string {
-	if s == nil || s.queries == nil {
-		return ""
-	}
-	content, err := s.queries.GetSessionProgressContent(ctx, normalizeKey(sessionID))
+	snapshot, err := s.Snapshot(ctx, sessionID)
 	if err != nil {
 		return ""
 	}
-	return content
-}
-
-func (s *SQLStore) BoundRunID(sessionID string) string {
-	if s == nil || s.queries == nil {
-		return ""
-	}
-	runID, err := s.queries.GetSessionProgressRunID(context.Background(), normalizeKey(sessionID))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(runID)
-}
-
-func (s *SQLStore) BindRun(sessionID, workflowRunID string) {
-	if s == nil || s.queries == nil {
-		return
-	}
-	key := normalizeKey(sessionID)
-	workflowRunID = strings.TrimSpace(workflowRunID)
-	if key == "" || workflowRunID == "" {
-		return
-	}
-	_ = s.queries.BindSessionProgressRun(context.Background(), db.BindSessionProgressRunParams{
-		SessionID:     key,
-		WorkflowRunID: workflowRunID,
-		UpdatedAt:     timelayout.Format(time.Now().UTC()),
-	})
-}
-
-func (s *SQLStore) EnsureRun(sessionID, workflowRunID, goal string) (refreshed bool) {
-	if s == nil || s.queries == nil {
-		return false
-	}
-	key := normalizeKey(sessionID)
-	workflowRunID = strings.TrimSpace(workflowRunID)
-	if key == "" || workflowRunID == "" {
-		return false
-	}
-	_ = s.queries.EnsureSessionProgressRun(context.Background(), db.EnsureSessionProgressRunParams{
-		SessionID:     key,
-		WorkflowRunID: workflowRunID,
-		Content:       clampContent(formatBootstrapContent(goal)),
-		UpdatedAt:     timelayout.Format(time.Now().UTC()),
-	})
-	return true
+	return snapshot.Content
 }

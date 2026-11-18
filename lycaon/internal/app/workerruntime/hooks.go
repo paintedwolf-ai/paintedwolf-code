@@ -19,18 +19,16 @@ import (
 )
 
 // OnWorkflowPhaseEnter processes phase entry triggers, guidance, and topology hooks.
-func (r *Runtime) OnWorkflowPhaseEnter(ctx context.Context, rc *workflowphases.RunContext, def workflowdef.PhaseDef) {
+func (r *Runtime) OnWorkflowPhaseEnter(ctx context.Context, rc *workflowphases.RunContext, def workflowdef.PhaseDef) error {
 	if rc == nil {
-		return
+		return nil
 	}
 	r.deps.Sessions.Manager.Runner.Closeouts.BeginWorkflowPhase(ctx, rc.SessionID)
 	// Bind progress before checklist writes on this phase.
 	if r.deps.Progress != nil {
 		if pStore := r.deps.Progress(); pStore != nil {
-			before, _ := pStore.Snapshot(ctx, rc.SessionID)
-			if progress.AdoptActiveRun(ctx, pStore, rc.SessionID, rc.RunID, "") {
-				after, _ := pStore.Snapshot(ctx, rc.SessionID)
-				progress.NotifyWriteObservers(ctx, progress.WriteEvent{SessionID: rc.SessionID, Before: before, After: after})
+			if _, err := progress.AdoptActiveRun(ctx, pStore, rc.SessionID, rc.RunID, ""); err != nil {
+				return err
 			}
 		}
 	}
@@ -128,6 +126,7 @@ func (r *Runtime) OnWorkflowPhaseEnter(ctx context.Context, rc *workflowphases.R
 			}
 		}
 	}
+	return nil
 }
 
 // OnWorkflowPhaseReenter fires kicks configured on phase re-entry.

@@ -31,16 +31,13 @@ function row(fields: Partial<Message> & Pick<Message, "id" | "role">): Message {
   } as Message;
 }
 
-/**
- * The transcript after each event of a session, in the order the host publishes: a row is
- * appended with the next ordinal, then patched in place.
- */
+/** Snapshots after each append or patch. */
 function sessionStates(seed: number, nextTool: () => string): Message[][] {
   const rand = seeded(seed);
   const byId = new Map<string, Message>();
   const states: Message[][] = [];
   let ord = 0;
-  let planSeq = 0;
+  let planCount = 0;
   const append = (message: Message) => {
     byId.set(message.id, { ...message, ord: ++ord });
     states.push([...byId.values()]);
@@ -76,6 +73,18 @@ function sessionStates(seed: number, nextTool: () => string): Message[][] {
         const edits = rand(3) === 0
           ? [fileEditPreviewFixture({ path: PATHS[rand(PATHS.length)]!, before: "old", after: `new ${call!.id}` })]
           : undefined;
+        const appendPlan = () => {
+          if (call!.name !== "update_progress") return;
+          planCount += 1;
+          append(row({
+            id: `${call!.id}.plan`, role: "system", origin: "host", kind: "progress_update",
+            progress_update: planCount === 1
+              ? { initial: true, steps: [{ state: "pending", label: "Plan" }] }
+              : { initial: false, changes: [{ kind: "done", label: "Plan", state: "done" }] },
+          }));
+        };
+        const planBeforeResult = rand(2) === 0;
+        if (planBeforeResult) appendPlan();
         append(row({
           id: `${call!.id}.result`, role: "tool", origin: "tool", trust_tier: "untrusted", content: "ok",
           tool_result: {
@@ -84,15 +93,7 @@ function sessionStates(seed: number, nextTool: () => string): Message[][] {
             ...(edits ? { file_edit_previews: edits } : {}),
           },
         }));
-        if (call!.name === "update_progress") {
-          planSeq += 1;
-          append(row({
-            id: `${call!.id}.plan`, role: "system", origin: "host", kind: "progress_update",
-            progress_update: planSeq === 1
-              ? { seq: planSeq, initial: true, steps: [{ state: "pending", label: "Plan" }] }
-              : { seq: planSeq, initial: false, changes: [{ kind: "done", label: "Plan", state: "done" }] },
-          }));
-        }
+        if (!planBeforeResult) appendPlan();
       }
     }
     append(row({ id: `done${turn}`, role: "assistant", content: "Done.", draft_status: "committed" }));

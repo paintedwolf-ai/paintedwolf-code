@@ -60,9 +60,6 @@ func (m *Service) Apply(ctx context.Context, id string, in promptinput.Input) (s
 		userMsg.HostSignalID = in.HostSignal.ID
 	}
 	transcript.StampUserVisibility(&userMsg)
-	if userPrompt != "" {
-		m.BootstrapProgress(ctx, id, userMsg)
-	}
 	m.ReviewCheckpoint(ctx, id, userMsg)
 	// The rewind anchor precedes the user message.
 	if err := m.captures.SealPromptCheckpoint(ctx, id, userMsg.ID); err != nil {
@@ -75,6 +72,9 @@ func (m *Service) Apply(ctx context.Context, id string, in promptinput.Input) (s
 		}
 	}
 	if userPrompt != "" {
+		if err := m.BootstrapProgress(ctx, id, userMsg); err != nil {
+			return "", err
+		}
 		m.resetBatch(ctx, id, userMsg)
 		// Only visible user intent resolves pending feedback.
 		if m.workflows != nil && promptinput.VisibleIntent(userMsg) {

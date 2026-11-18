@@ -36,7 +36,6 @@ func TestSQLStoreProgressUpdateRoundTrip(t *testing.T) {
 	testutil.FailErr(t, "seed workflow run", err)
 
 	meta := &api.ProgressUpdateMeta{
-		Seq: 2,
 		Changes: []api.ProgressChange{
 			{Kind: api.ProgressChangeDone, Label: "Engine module", State: "done"},
 			{Kind: api.ProgressChangeDone, Label: "AI module", State: "done"},
@@ -50,23 +49,32 @@ func TestSQLStoreProgressUpdateRoundTrip(t *testing.T) {
 		ProgressUpdate: meta,
 		Visibility:     api.MessageVisibilityTranscript,
 	}))
+	testutil.FailErr(t, "append completion", store.AppendMessages(ctx, sess.ID, api.Message{ID: "pc-1", Role: api.MessageRoleSystem, Kind: api.MessageKindProgressComplete, WorkflowRunID: runID, Visibility: api.MessageVisibilityTranscript, ProgressComplete: &api.ProgressCompleteMeta{Steps: []api.ProgressStep{{Label: "Engine module", State: "done"}}}}))
+	_, err = sqlDB.ExecContext(ctx, `UPDATE messages SET progress_update_json=json_set(progress_update_json,'$.seq',2) WHERE id='pu-1'`)
+	testutil.FailErr(t, "retain historical update sequence", err)
+	_, err = sqlDB.ExecContext(ctx, `UPDATE messages SET progress_complete_json=json_set(progress_complete_json,'$.seq',3) WHERE id='pc-1'`)
+	testutil.FailErr(t, "retain historical completion sequence", err)
 	testutil.FailErr(t, "close database for reopen", sqlDB.Close())
 
 	sqlDB2 := testdbfixture.OpenPath(t, dbPath)
 
 	msgs, err := NewSQL(sqlDB2).GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
-	if len(msgs) != 1 {
-		t.Fatalf("messages len = %d, want 1", len(msgs))
+	if len(msgs) != 2 {
+		t.Fatalf("messages len = %d, want 2", len(msgs))
 	}
 	got := msgs[0].ProgressUpdate
 	if got == nil {
 		t.Fatal("ProgressUpdate nil after reload")
 	}
-	if got.Seq != meta.Seq || len(got.Changes) != len(meta.Changes) {
+	if len(got.Changes) != len(meta.Changes) {
 		t.Fatalf("ProgressUpdate = %+v, want %+v", got, meta)
 	}
 	if msgs[0].WorkflowRunID != runID {
 		t.Fatalf("workflow_run_id = %q want %q", msgs[0].WorkflowRunID, runID)
 	}
+	if got := msgs[1].ProgressComplete; got == nil || len(got.Steps) != 1 || got.Steps[0].Label != "Engine module" {
+		t.Fatalf("historical completion=%+v", got)
+	}
+
 }

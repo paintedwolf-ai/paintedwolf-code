@@ -248,20 +248,14 @@ func verifyOverlayHandlesAndWithdraw(
 	_, err = h.ToolRegistry.Run(ctx, "update_progress", h.ProgressUpdateArgs(t, ctx, sess.ID, "## Progress\n- [x] mod-fixer landed\n"), call)
 	testutil.FailErr(t, "update_progress", err)
 
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = h.DB.ExecContext(
-		ctx,
-		`INSERT INTO workflow_runs (id, session_id, project_id, workflow_id, workflow_version, status, current_phase, created_at, updated_at)
-		 VALUES (?, ?, ?, 'vet', '1.0.0', 'running', 'work', ?, ?)`,
-		"run-stop-check", sess.ID, sess.ProjectID, now, now,
-	)
-	testutil.FailErr(t, "seed workflow run for stop check", err)
+	run, err := h.Workflows.Manager.Store.Runs.ActiveBySession(ctx, sess.ID)
+	testutil.FailErr(t, "read session workflow run", err)
 	planned, err := h.Workers.Records.CreateWorker(ctx, actor, workerrecords.Op{ID: "seed-run-stop"}, workerrecords.WorkerSpec{
 		Name: "planned-stop-leg", AgentType: "implementer", ScopeMode: workerrecords.ScopeWrite,
-		WorkflowRunID: "run-stop-check", WorkflowPhase: "work", WorkflowWorkID: "leg-stop",
+		WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, WorkflowWorkID: "leg-stop",
 	})
 	testutil.FailErr(t, "seed planned leg", err)
-	testutil.FailErr(t, "withdraw planned workers on run stop", h.Workflows.Manager.Controls.Cleanup.Workers.WithdrawPlannedWorkersByRunID(ctx, "run-stop-check"))
+	testutil.FailErr(t, "withdraw planned workers on run stop", h.Workflows.Manager.Controls.Cleanup.Workers.WithdrawPlannedWorkersByRunID(ctx, run.ID))
 	reloaded, err := h.Workers.Records.Worker(ctx, actor, planned.WorkerID)
 	testutil.FailErr(t, "reload withdrawn planned leg", err)
 	if reloaded.ClosedAt == "" || workerstate.Derive(workerstate.Facts{Closed: reloaded.ClosedAt != "", Planned: true}).State != workerstate.Closed {

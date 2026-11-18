@@ -7,7 +7,7 @@ import (
 )
 
 // PhaseEnterHook runs after cross-phase auto-advance.
-type PhaseEnterHook func(ctx context.Context, run *RunContext, def workflowdef.PhaseDef)
+type PhaseEnterHook func(ctx context.Context, run *RunContext, def workflowdef.PhaseDef) error
 
 // PhaseReenterHook runs after same-phase auto-advance.
 type PhaseReenterHook func(ctx context.Context, run *RunContext, def workflowdef.PhaseDef)

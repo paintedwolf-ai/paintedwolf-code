@@ -75,15 +75,16 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Host, wfMgr *workf
 		}
 		mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
 	}
-	wfMgr.Phases.PhaseEnterHook = func(ctx context.Context, rc *workflowphases.RunContext, def workflowdef.PhaseDef) {
+	wfMgr.Phases.PhaseEnterHook = func(ctx context.Context, rc *workflowphases.RunContext, def workflowdef.PhaseDef) error {
 		if rc == nil {
-			return
+			return nil
 		}
 		mgr.Coordinator.Guidance.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, anchor.Envelope{}, anchor.MatchContext{
 			Surface:  "phase",
 			Phase:    rc.Phase,
 			Workflow: rc.WorkflowID,
 		})
+		return nil
 	}
 }
 

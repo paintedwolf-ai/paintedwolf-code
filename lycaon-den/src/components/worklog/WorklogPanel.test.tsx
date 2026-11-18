@@ -45,7 +45,6 @@ const progressMessages: Message[] = [
     ord: 1,
     created_at: "2026-01-01T00:00:01Z",
     progress_update: {
-      seq: 1,
       initial: true,
       steps: [
         { state: "pending", label: "Wire login form" },
@@ -61,7 +60,6 @@ const progressMessages: Message[] = [
     ord: 2,
     created_at: "2026-01-01T00:00:02Z",
     progress_update: {
-      seq: 2,
       initial: false,
       changes: [
         { kind: "done", label: "Wire login form", state: "done" },
@@ -82,7 +80,6 @@ const progressMessages: Message[] = [
     ord: 3,
     created_at: "2026-01-01T00:00:03Z",
     progress_complete: {
-      seq: 1,
       steps: [
         { state: "done", label: "Wire login form" },
         { state: "done", label: "Verify build" },

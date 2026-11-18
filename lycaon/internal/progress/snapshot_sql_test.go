@@ -3,6 +3,7 @@ package progress_test
 import (
 	"context"
 	"errors"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
@@ -13,8 +14,8 @@ import (
 
 func TestSQLProgressRevisionSurvivesReopenAndRejectsStaleABA(t *testing.T) {
 	database := testdbfixture.Open(t, "progress-snapshot")
-	testdbseed.InsertSession(t, database, "session", testdbseed.DefaultProjectID)
-	store := progress.NewSQLStore(database)
+	testdbseed.InsertWorkflowRun(t, database, "run", "session", testdbseed.DefaultProjectID)
+	store := progress.NewSQLStore(database, sessionstore.NewSQL(database))
 	testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Deliver"))
 	before, err := store.Snapshot(t.Context(), "session")
 	testutil.FailErr(t, "read checklist", err)
@@ -26,7 +27,7 @@ func TestSQLProgressRevisionSurvivesReopenAndRejectsStaleABA(t *testing.T) {
 		_, applyErr := update.ExpectRevision(observed.Revision).ExpectItemIDs(observed.ItemIDs...).Apply(t.Context(), store, "session", nil)
 		testutil.FailErr(t, "replace checklist", applyErr)
 	}
-	reopened := progress.NewSQLStore(database)
+	reopened := progress.NewSQLStore(database, sessionstore.NewSQL(database))
 	after, err := reopened.Snapshot(t.Context(), "session")
 	testutil.FailErr(t, "read reopened checklist", err)
 	if before.Content != after.Content || before.Revision == after.Revision {
@@ -52,8 +53,8 @@ func TestProgressStoresKeepAtomicSnapshotOnRejectedOrCanceledUpdates(t *testing.
 			var store progress.Store = progress.NewMemoryStore()
 			if name == "sql" {
 				database := testdbfixture.Open(t, "progress-store-atomic")
-				testdbseed.InsertSession(t, database, "session", testdbseed.DefaultProjectID)
-				store = progress.NewSQLStore(database)
+				testdbseed.InsertWorkflowRun(t, database, "run", "session", testdbseed.DefaultProjectID)
+				store = progress.NewSQLStore(database, sessionstore.NewSQL(database))
 			}
 			empty, err := store.Snapshot(t.Context(), "session")
 			testutil.FailErr(t, "read empty progress", err)

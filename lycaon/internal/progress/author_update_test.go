@@ -138,7 +138,11 @@ func TestAuthorUpdateRequiresAndPreservesStableItemIDs(t *testing.T) {
 
 func TestAuthorUpdateTreatsBootstrappedEmptyProgressAsFirstCreation(t *testing.T) {
 	store := NewMemoryStore()
-	store.EnsureRun("session", "run-1", "Build tic-tac-toe")
+	if _, err := store.Update(t.Context(), "session", func(Snapshot) (Document, error) {
+		return Document{RunID: "run-1", Content: "# Goal\n\n" + "Build tic-tac-toe" + "\n\n## Progress\n"}, nil
+	}); err != nil {
+		t.Fatalf("seed progress run: %v", err)
+	}
 	first, err := PrepareAuthorUpdate("# Goal\n\nBuild tic-tac-toe\n\n## Progress\n- [ ] Create board\n- [ ] Add AI")
 	testutil.FailErr(t, "prepare initial checklist after EnsureRun", err)
 	created, err := first.Apply(t.Context(), store, "session", nil)
@@ -153,7 +157,7 @@ func TestAuthorUpdateTreatsBootstrappedEmptyProgressAsFirstCreation(t *testing.T
 	_, err = done.ExpectRevision(created.Snapshot.Revision).ExpectItemIDs(created.Snapshot.ItemIDs...).Apply(t.Context(), store, "session", nil)
 	testutil.FailErr(t, "apply completed checklist", err)
 
-	if !EnsureBootstrap(t.Context(), store, "session", "run-1", "Make the AI harder") {
+	if refreshed, err := EnsureBootstrap(t.Context(), store, "session", "run-1", "Make the AI harder"); err != nil || !refreshed {
 		t.Fatal("expected EnsureBootstrap to reset terminal plan for new turn")
 	}
 	second, err := PrepareAuthorUpdate("# Goal\n\nMake the AI harder\n\n## Progress\n- [ ] Upgrade heuristic\n- [ ] Verify")
