@@ -357,6 +357,8 @@ func (o *OpenCommandWindow) IsSettled() bool {
 // SessionWindow is one of a session's windows that has not settled.
 type SessionWindow struct {
 	ID string
+	// Active windows can still claim observed changes.
+	Active bool
 	// Closing means its process ended and only settlement remains.
 	Closing bool
 	Settled <-chan struct{}
@@ -377,7 +379,7 @@ func (s *Commands) OpenSessionWindows(projectID, sessionID string) []SessionWind
 	var out []SessionWindow
 	for _, window := range s.openWindows[projectID] {
 		if window.sessionID == sessionID {
-			out = append(out, SessionWindow{ID: window.id, Closing: window.closing, Settled: window.settled, Incomplete: window.incomplete})
+			out = append(out, SessionWindow{ID: window.id, Active: window.active, Closing: window.closing, Settled: window.settled, Incomplete: window.incomplete})
 		}
 	}
 	return out
