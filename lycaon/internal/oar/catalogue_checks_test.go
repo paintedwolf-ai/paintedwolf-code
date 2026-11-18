@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/lycaon/lycaon/internal/oarcopy"
+	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
 func validateCatalogueTiers() error {
@@ -29,7 +29,7 @@ func validateCatalogueTiers() error {
 		}
 		fns[f.name] = f.tier
 	}
-	for _, name := range requiredCoreFacts {
+	for name := range oarcore.CoreFacts() {
 		tier, ok := facts[name]
 		if !ok {
 			return fmt.Errorf("core fact %q is not in FactCatalogue()", name)
@@ -38,7 +38,7 @@ func validateCatalogueTiers() error {
 			return fmt.Errorf("core fact %q is declared %q", name, tier)
 		}
 	}
-	for _, name := range requiredCoreFunctions {
+	for name := range oarcore.CoreFunctions() {
 		tier, ok := fns[name]
 		if !ok {
 			return fmt.Errorf("core fact %q is not in FactCatalogue()", name)
@@ -63,11 +63,6 @@ func validateCatalogueTiers() error {
 	}
 	return nil
 }
-
-var (
-	requiredCoreFacts     = oarcopy.RequiredCoreFacts()
-	requiredCoreFunctions = oarcopy.RequiredCoreFunctions()
-)
 
 // portabilityReport lists the non-portable references in a rule.
 type portabilityReport struct {
