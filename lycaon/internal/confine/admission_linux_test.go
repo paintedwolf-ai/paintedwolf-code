@@ -37,8 +37,8 @@ func TestRequireAppliedRejectsUnavailableLinuxBoundary(t *testing.T) {
 			if !errors.Is(err, ErrNotConfined) {
 				t.Fatalf("required unavailable boundary = %v, want ErrNotConfined", err)
 			}
-			unavailable, ok := linuxsandbox.AsUnavailable(err)
-			if !ok || unavailable.Code != code {
+			var unavailable *linuxsandbox.Unavailability
+			if !errors.As(err, &unavailable) || unavailable.Code != code {
 				t.Fatalf("required boundary error lost capability reason %s: %v", code, err)
 			}
 			box, applied = DefaultConfinement(Request{HostExecution: true})

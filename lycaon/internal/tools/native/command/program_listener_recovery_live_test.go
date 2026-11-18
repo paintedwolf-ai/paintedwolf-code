@@ -3,13 +3,12 @@
 package command_test
 
 import (
-	"context"
 	"os/exec"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	confinefixture "github.com/lycaon/lycaon/internal/testsetup/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -26,15 +25,7 @@ func TestWithheldListenerRoutesToLocalListen(t *testing.T) {
 	if err != nil {
 		t.Skip("python3 is required to open a TCP listener")
 	}
-	confine.StartRefusalWatch(t.Context(), "")
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
-	for !confine.RefusalWatchLive() {
-		if ctx.Err() != nil {
-			t.Skip("sandbox refusal reports are not readable on this host")
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	confinefixture.RequireRefusalReports(t)
 	f := newProgramFixture(t)
 	var effects tools.ToolInvocationOut
 	f.Configure = func(tc *tools.ToolContext) {

@@ -4,7 +4,7 @@
   "kind": "construction",
   "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "Retain the shared boundary declarations, pure profile validation/rendering and ordered filesystem rules under the unchanged existing ceiling. Command construction remains in command.go, which validates, performs authorized native cache preparation and renders before the existing protected process transport. Removing the unused BuildProfile forwarding wrapper leaves direct consumers on the actual boundary operations; BuildSeatbeltProfile remains the platform-independent policy inspection entry. Native cache preparation and process pinning do not create another authority resolver. Other changed boundary fingerprints remain unrenewed until their supporting contracts are verified.",
+  "reason": "Keep the shared boundary declarations, profile rendering, and ordered filesystem rules together under the recorded ceiling. Command construction uses the same validation and rendering before the protected process transport. Profile assertions use a test fixture, and live refusal checks use the settled action witness",
   "reviewed_commit": "03bffd933d0dd77bb28200d7f5672cba56897a6f",
   "ceiling": 506,
   "boundaries": {
