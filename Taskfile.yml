@@ -342,6 +342,10 @@ tasks:
 
   test:runner:
     desc: Verify execution scheduling, cancellation, and worker limits
+    # The upgrade semantics fixtures run Den's editor codecs from its installed packages.
+    preconditions:
+      - sh: test -d lycaon-den/node_modules
+        msg: lycaon-den/node_modules missing — run ./task setup-dev -- --frontend
     cmds:
       - python3 {{.SCRIPTS_DIR}}/ci_policy/runner_tests.py {{.CLI_ARGS}}
 
