@@ -5,10 +5,17 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 )
 
-// CommandOutputAdmission begins the write receipt before destination capture for
-// the resolved path and its workspace display path. Publish admits the original
-// captured write; abandonment has no destination effect.
-type CommandOutputAdmission func(ctx context.Context, destination commandprogram.OutputDestination, path, displayPath string) (CommandOutputWrite, error)
+// CommandOutputTarget identifies the resolved redirect destination.
+type CommandOutputTarget struct {
+	Path, DisplayPath, AttachedRootID string
+}
+
+// CommandOutputAdmission checks a destination and opens its receipt for staging.
+type CommandOutputAdmission struct {
+	Check func(context.Context, commandprogram.OutputDestination, CommandOutputTarget) error
+	Begin func(context.Context, commandprogram.OutputDestination, CommandOutputTarget) (CommandOutputWrite, error)
+}
+
 type CommandOutputWrite struct {
 	Publish func(context.Context, func(context.Context, ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error)
 	Abandon func(context.Context, error) error

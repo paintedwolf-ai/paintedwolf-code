@@ -19,10 +19,11 @@ func observeProgramActivities(ctx context.Context, recorder *invocation.SQLRecor
 	known := map[string]bool{}
 	report := func(ctx context.Context, program string) bool {
 		// Committed state is published even when the transition's own context ended.
-		receipt, err := recorder.ActivitySummary(context.WithoutCancel(ctx), tc.Identity.SessionID, program)
-		if err != nil {
+		receipt, err := recorder.LiveActivitySummary(context.WithoutCancel(ctx), tc.Identity.SessionID, program)
+		if err != nil || len(receipt.Activities) == 0 {
 			return false
 		}
+		tc.Effects.Out.MarkProgramProgressPublished()
 		tc.Effects.ReportProgress(api.ToolProgress{Phase: "executing", CommandProgram: &receipt})
 		return true
 	}

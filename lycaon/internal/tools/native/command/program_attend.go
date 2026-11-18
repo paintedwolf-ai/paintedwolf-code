@@ -117,6 +117,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 		program := e.run.tc.Effects.Out
 		out.MergeChild(program, tools.MergeProgram)
 		out.CommandProgram, out.SourceRun = program.CommandProgram, program.SourceRun
+		out.ProgramRefusal = program.ProgramRefusal
 	}
 	stateGitNoRepository(e)
 	return ending.result, ending.err
@@ -313,6 +314,12 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	}
 	outcome.Stderr = e.documents.appendNotes(outcome.Stderr)
 	outcome.Refusal = refusal
+	if refusal != nil && outcome.State == "rejected" {
+		run.tc.Effects.Out.ProgramRefusal = &tools.ProgramRefusalVisibility{
+			Code:            refusal.Code,
+			BeforeAdmission: !outcome.hasAdmittedActivity && outcome.CompletedEffects == 0 && outcome.UncertainEffects == 0,
+		}
+	}
 	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
 	outcome.SourceWindow = run.window.fact()
 	if settledNow {

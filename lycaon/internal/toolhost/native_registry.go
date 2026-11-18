@@ -88,7 +88,7 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 			return nil, nil, err
 		}
 		for _, form := range formTools {
-			tool := &native.FormTool{Programs: verifyTool.Programs, Argv: form.argv}
+			tool := &native.FormTool{Name: form.name, Programs: verifyTool.Programs, Argv: form.argv}
 			if err := register(form.name, tool.Run); err != nil {
 				return nil, nil, err
 			}

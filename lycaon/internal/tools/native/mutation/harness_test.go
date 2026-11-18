@@ -197,11 +197,11 @@ func (h *harness) absent(rel string) bool {
 }
 
 func (h *harness) publication() *Publication {
-	return &Publication{Owners: h.owners, Program: h.program, Tools: h.tc, Admission: func(context.Context, commandprogram.OutputDestination, string, string) (tools.CommandOutputWrite, error) {
+	return &Publication{Owners: h.owners, Program: h.program, Tools: h.tc, Admission: tools.CommandOutputAdmission{Begin: func(context.Context, commandprogram.OutputDestination, tools.CommandOutputTarget) (tools.CommandOutputWrite, error) {
 		return tools.CommandOutputWrite{Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
 			return apply(ctx, h.tc)
 		}, Abandon: func(context.Context, error) error { return nil }}, nil
-	}}
+	}}}
 }
 
 func (h *harness) destination(operator, target string) commandprogram.OutputDestination {

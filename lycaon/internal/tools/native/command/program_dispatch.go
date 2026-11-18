@@ -58,6 +58,7 @@ type NativePrepared struct {
 	RecordSourceRead func(context.Context) error
 	Review           commandprogram.ArgvReview
 	LoopbackPorts    []uint16
+	CheckAdmission   func(context.Context) error
 	Invoke           func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
 	// Command is the catalog command the bound form resolved to (git status
 	// for git -C DIR status); empty keeps the dispatched command.
@@ -328,7 +329,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		return result, joinSettle(reject, d.settle(ctx, child, result, false, ""))
 	}
 	effect := toolexecution.NativeEffect{
-		Operation: bound, Streams: streams, Inspection: d.run.capture,
+		Operation: bound, Streams: streams, Inspection: d.run.capture, CheckOutputs: request.CheckOutputAdmission,
 		// The existing command review, detection and policy read these fields.
 		Arguments: arguments,
 		Stage:     toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: argv, CommandLine: line, PipelineCommandLine: line},
@@ -463,7 +464,8 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	}()
 	effect := toolexecution.NativeEffect{
 		Operation: bound, Streams: runStreams, Arguments: inputs, Argv: &review, Inspection: d.run.capture,
-		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: operationDef.Facts().Identity, Argv: request.Argv.Values()},
+		CheckOutputs: request.CheckOutputAdmission,
+		Stage:        toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: operationDef.Facts().Identity, Argv: request.Argv.Values()},
 		PrepareReviewed: func(ctx context.Context, _ map[string]any, admitted tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 			// The program's directory frame predates this child's approval. Bind
 			// the owner again with the admitted context so exact file access is
@@ -539,7 +541,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 			if !reflect.DeepEqual(actual.Review, review) || !slices.Equal(actual.LoopbackPorts, prepared.LoopbackPorts) || actual.Mode != expectedMode || actual.Tool != prepared.Tool || actual.Command != prepared.Command {
 				return toolexecution.PreparedNativeEffect{}, fmt.Errorf("native binding changed after approval")
 			}
-			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			return toolexecution.PreparedNativeEffect{Operation: bound, CheckAdmission: actual.CheckAdmission, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				if disclosed == nil && actual.Release != nil {
 					defer actual.Release()
 				}
@@ -576,27 +578,6 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 		d.shared.mu.Unlock()
 	}
 	return native.Producer, joinSettle(runErr, d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: native.Producer, OwnerInvoked: native.OwnerInvoked || marker.OwnerStartRecorded, HostStopCode: native.HostStopCode, Conflict: revisionConflict(runErr)}))
-}
-
-// invokeHosted runs an owner whose bound form has no structured tool as the
-// catalog command's own execution: recorded, started and settled like a
-// builtin, on this frame.
-func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.CommandSpecification, prepared NativePrepared, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	request.OperationID = spec.Name
-	if prepared.Mode != "" {
-		request.EffectMode = prepared.Mode
-	}
-	return d.invokeHost(ctx, request, streams, prepared.LaunchesConfined, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-		if err := d.checkPreparedPolicy(ctx, tc, spec, request.EffectMode, request, d.paths.Cwd(), prepared.Review); err != nil {
-			return ownerFailure(err), err
-		}
-		noteJobNative(ctx, request.Argv.Values())
-		res, invokeErr := prepared.Invoke(ctx, tc, streams)
-		if invokeErr == nil && res.Status == 0 {
-			d.run.noteNativeFileMutation(ctx, spec.Name, prepared.Review.PathTargets)
-		}
-		return res, invokeErr
-	})
 }
 
 func absolutePathTargets(cwd, scratch string, targets []commandprogram.PathTarget) []commandprogram.PathTarget {

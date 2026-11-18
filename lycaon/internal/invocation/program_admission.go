@@ -3,6 +3,7 @@ package invocation
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -36,6 +37,16 @@ func (r *ProgramAdmissionRecorder) BeforeNativeOwner(ctx context.Context, bound 
 	r.OwnerStartRecorded = true
 	notifyActivity(ctx, in.Identity.ProgramID, in.Identity.ExecutionID)
 	return nil
+}
+
+// BeforeNativeApprovalWait records a prepared child waiting on its first checkpoint.
+func (r *ProgramAdmissionRecorder) BeforeNativeApprovalWait(ctx context.Context, bound toolcontract.BoundOperation, checkpointID string) {
+	if r.Recorder == nil {
+		return
+	}
+	if err := r.Recorder.WaitChild(ctx, bound.Invocation().Identity.ExecutionID, checkpointID); err != nil {
+		slog.DebugContext(ctx, "command approval wait could not be recorded", "error", err)
+	}
 }
 
 func validateReviewedInputs(inputs toolcontract.ReviewedOperationInputs) error {

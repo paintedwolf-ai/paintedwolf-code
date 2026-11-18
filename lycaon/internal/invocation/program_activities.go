@@ -58,8 +58,20 @@ func readProgramActivities(ctx context.Context, tx *sql.Tx, program api.CommandP
 	return activities, nil
 }
 
+// admittedProgramExecution excludes execution rows that only record preparation or refusal.
+const admittedProgramExecution = `(state NOT IN ('prepared','refused') OR owner_started=1 OR approval_ref<>'' OR effect_certainty IN ('completed','unknown','attempted'))`
+
 // ActivitySummary reads complete counts without paging execution bodies.
 func (r *SQLRecorder) ActivitySummary(ctx context.Context, session, program string) (api.CommandProgramReceipt, error) {
+	return r.activitySummary(ctx, session, program, false)
+}
+
+// LiveActivitySummary returns an empty receipt until the program reaches an operation.
+func (r *SQLRecorder) LiveActivitySummary(ctx context.Context, session, program string) (api.CommandProgramReceipt, error) {
+	return r.activitySummary(ctx, session, program, true)
+}
+
+func (r *SQLRecorder) activitySummary(ctx context.Context, session, program string, live bool) (api.CommandProgramReceipt, error) {
 	display := r.pathDisplay(ctx, session)
 	tx, err := r.beginProgramRead(ctx)
 	if err != nil {
@@ -69,6 +81,13 @@ func (r *SQLRecorder) ActivitySummary(ctx context.Context, session, program stri
 	result, err := readProgram(ctx, tx, session, program)
 	if err != nil {
 		return result, err
+	}
+	if live {
+		var admitted bool
+		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM invocation_program_executions WHERE program_id=? AND `+admittedProgramExecution+`)`, program).Scan(&admitted)
+		if err != nil || !admitted {
+			return api.CommandProgramReceipt{}, err
+		}
 	}
 	result.Activities, err = readProgramActivities(ctx, tx, result, display)
 	if err != nil {
