@@ -136,7 +136,7 @@ func TestFailedPromotionKeepsCheckpointForRepairAcrossRestart(t *testing.T) {
 				}
 				engine := f.boot()
 				targets := map[string]string{fixtureRootID: f.project}
-				promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{Store: checkpointStore(f), TargetRoots: targets})
+				promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{Store: checkpointStore(f), TargetRoots: targets, PrimaryRoot: fixtureRootID})
 				testutil.FailErr(t, "promoter", err)
 				txDir := filepath.Join(t.TempDir(), "promotion")
 				txn, err := checkpoint.BeginTransaction(checkpoint.TransactionConfig{Dir: txDir, ID: "cp-A"})

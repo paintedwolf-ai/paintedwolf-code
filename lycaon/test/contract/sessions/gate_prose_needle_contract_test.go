@@ -50,9 +50,14 @@ var gateProseScopeDirs = []string{
 	"lycaon/internal/confine",
 	"lycaon/internal/gate",
 	"lycaon/internal/guidance",
+	"lycaon/internal/hitl",
+	"lycaon/internal/llm/providers",
+	"lycaon/internal/mcp",
 	"lycaon/internal/oar",
 	"lycaon/internal/secretmint",
 	"lycaon/internal/settings",
+	"lycaon/internal/toolexecution",
+	"lycaon/internal/toolhost",
 	"lycaon/internal/tools",
 }
 

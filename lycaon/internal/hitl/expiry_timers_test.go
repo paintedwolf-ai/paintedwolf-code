@@ -78,14 +78,11 @@ func TestExpiryStopDrainsRunningCallback(t *testing.T) {
 		t.Fatal("callback did not start")
 	}
 	go func() { finished <- timers.stop(t.Context()) }()
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the timers stop", func() bool {
 		timers.mu.Lock()
-		stopped := timers.stopped
-		timers.mu.Unlock()
-		if stopped {
-			break
-		}
-	}
+		defer timers.mu.Unlock()
+		return timers.stopped
+	})
 	select {
 	case err := <-finished:
 		t.Fatalf("stop returned before callback drain: %v", err)

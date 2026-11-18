@@ -93,12 +93,8 @@ func TestFingerprintReadersOverlapAndJoinBeforeReleasingTheirArena(t *testing.T)
 			}()
 			seen := make(map[string]bool, sourceFingerprintReaders)
 			for range sourceFingerprintReaders {
-				select {
-				case name := <-started:
-					seen[name] = true
-				case <-time.After(testutil.Timeout(time.Minute)):
-					t.Fatal("bounded readers did not start before earlier input completed")
-				}
+				name := testutil.Receive(t, "a bounded reader starts before earlier input completes", started)
+				seen[name] = true
 			}
 			if len(seen) != sourceFingerprintReaders {
 				t.Fatalf("actual started inputs=%v", seen)

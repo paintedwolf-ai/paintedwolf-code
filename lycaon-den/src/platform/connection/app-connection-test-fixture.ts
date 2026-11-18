@@ -121,6 +121,7 @@ type SubscribeOptions = {
 };
 
 type SubscribeHandlers = {
+  project?: (event: { id: string; action: "created" | "updated" | "deleted" }, scope: EventScope) => void;
   session?: (
     event: {
       id: string;

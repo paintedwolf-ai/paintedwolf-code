@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
@@ -92,7 +91,7 @@ func TestProviderPromptAgainstStubBackend(t *testing.T) {
 	dir := t.TempDir()
 	sess := contractfixture.CreateTestSession(t, baseURL, dir)
 	contractfixture.AcceptPrompt(t, baseURL, sess.ID, "hello")
-	_, streamURL := contractfixture.WaitForAssistantStream(t, baseURL, sess.ID, 10*time.Second)
+	_, streamURL := contractfixture.WaitForAssistantStream(t, baseURL, sess.ID)
 
 	content, sawDone := contractfixture.ReadSSEStream(t, baseURL+streamURL)
 	if !sawDone {
@@ -167,7 +166,7 @@ agent_pool:
 	sess := contractfixture.CreateTestSession(t, baseURL, dir)
 
 	contractfixture.AcceptPrompt(t, baseURL, sess.ID, "hello")
-	contractfixture.WaitForSessionIdle(t, baseURL, sess.ID, 10*time.Second)
+	contractfixture.WaitForSessionIdle(t, baseURL, sess.ID)
 
 	msgs := contractfixture.GetSessionMessages(t, baseURL, sess.ID)
 	if len(msgs) != 1 || msgs[0].Role != wire.MessageRoleUser {

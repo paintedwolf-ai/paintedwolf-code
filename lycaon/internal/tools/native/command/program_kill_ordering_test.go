@@ -82,7 +82,7 @@ func TestProgramKillBeforeTheProcessStartsReportsItsSignal(t *testing.T) {
 		t.Fatalf("kill outcome: %+v", got)
 	}
 	jobs := f.Runtime.Supervisor.Jobs(f.Session, testdbseed.DefaultProjectID)
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "no job is live", func() bool {
 		live, err := jobs.List(t.Context())
 		return err == nil && len(live) == 0
 	})

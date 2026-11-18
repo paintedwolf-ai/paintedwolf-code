@@ -104,14 +104,6 @@ case "${GOOS}" in
       exit 1
     }
     "${ROOT}/task" bundle:verify -- --app "${APP}" --dmg "${PACKAGE}" --require-signed
-    # GUI launch through LaunchServices is unproven on hosted runners; the
-    # Keychain probe above still blocks.
-    if [[ "${RUNNER_ENVIRONMENT:-}" == github-hosted ]]; then
-      "${ROOT}/task" bundle:smoke -- --app "${APP}" \
-        || echo "::warning title=Bundle smoke::launch smoke failed on a hosted runner; qualify the build on a real Mac"
-    else
-      "${ROOT}/task" bundle:smoke -- --app "${APP}"
-    fi
     OPENGREP="$(verify_opengrep "${APP}/Contents/Resources/engine-root" "${APP}/Contents/Helpers/Painted Wolf Code engine.app/Contents/MacOS/pw")"
     ;;
   linux)

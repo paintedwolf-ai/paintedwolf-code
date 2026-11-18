@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -58,46 +59,53 @@ func TestWrapLLMClientIfDebugWritesCapture(t *testing.T) {
 }
 
 func TestWrapLLMClientIfDebugCapturesStreamTiming(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "stream.jsonl")
-	t.Setenv("LYCAON_LLM_DEBUG", "1")
-	t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
-	observability.CloseLLMDebug()
+	synctest.Test(t, func(t *testing.T) {
+		dir := t.TempDir()
+		logPath := filepath.Join(dir, "stream.jsonl")
+		t.Setenv("LYCAON_LLM_DEBUG", "1")
+		t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
+		observability.CloseLLMDebug()
 
-	inner := &delayedStreamProvider{firstDelay: 25 * time.Millisecond}
-	client := WrapLLMClientIfDebug(inner, "mock")
-	ch, err := client.Stream(t.Context(), modelcall.CompletionRequest{
-		Model: "mock",
-		Messages: []api.Message{{
-			Role:    api.MessageRoleUser,
-			Content: "hello",
-		}},
-	})
-	if err != nil {
-		t.Fatalf("stream: %v", err)
-	}
-	_, _, _ = modelcall.CollectStream(ch)
+		inner := &producedStreamProvider{produce: func(ch chan<- modelcall.StreamChunk) {
+			time.Sleep(25 * time.Millisecond)
+			ch <- modelcall.StreamChunk{Content: "tok"}
+			time.Sleep(20 * time.Millisecond)
+			ch <- modelcall.StreamChunk{Done: true}
+		}}
+		client := WrapLLMClientIfDebug(inner, "mock")
+		ch, err := client.Stream(t.Context(), modelcall.CompletionRequest{
+			Model: "mock",
+			Messages: []api.Message{{
+				Role:    api.MessageRoleUser,
+				Content: "hello",
+			}},
+		})
+		if err != nil {
+			t.Fatalf("stream: %v", err)
+		}
+		_, _, _ = modelcall.CollectStream(ch)
 
-	var data []byte
-	testutil.WaitFor(t, func() bool {
-		var err error
-		data, err = os.ReadFile(logPath)
-		return err == nil && len(data) > 0
+		var data []byte
+		testutil.WaitFor(t, "the capture log is written", func() bool {
+			var err error
+			data, err = os.ReadFile(logPath)
+			return err == nil && len(data) > 0
+		})
+		var entry struct {
+			Call       string `json:"call"`
+			DurationMs int64  `json:"duration_ms"`
+			TTFTMs     int64  `json:"ttft_ms"`
+		}
+		if err := json.Unmarshal(data[:len(data)-1], &entry); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if entry.Call != "stream" {
+			t.Fatalf("call = %q", entry.Call)
+		}
+		if entry.TTFTMs <= 0 || entry.DurationMs <= entry.TTFTMs {
+			t.Fatalf("timing = duration %d ttft %d want ttft < duration", entry.DurationMs, entry.TTFTMs)
+		}
 	})
-	var entry struct {
-		Call       string `json:"call"`
-		DurationMs int64  `json:"duration_ms"`
-		TTFTMs     int64  `json:"ttft_ms"`
-	}
-	if err := json.Unmarshal(data[:len(data)-1], &entry); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if entry.Call != "stream" {
-		t.Fatalf("call = %q", entry.Call)
-	}
-	if entry.TTFTMs <= 0 || entry.DurationMs <= entry.TTFTMs {
-		t.Fatalf("timing = duration %d ttft %d want ttft < duration", entry.DurationMs, entry.TTFTMs)
-	}
 }
 
 func TestLoggingProviderWrapsRegistryProviders(t *testing.T) {
@@ -151,22 +159,20 @@ func (p *recordingProvider) Stream(_ context.Context, req modelcall.CompletionRe
 	return ch, nil
 }
 
-type delayedStreamProvider struct {
-	firstDelay time.Duration
+// producedStreamProvider streams whatever its test's produce function sends.
+type producedStreamProvider struct {
+	produce func(chan<- modelcall.StreamChunk)
 }
 
-func (p *delayedStreamProvider) Complete(context.Context, modelcall.CompletionRequest) (*modelcall.Completion, error) {
+func (p *producedStreamProvider) Complete(context.Context, modelcall.CompletionRequest) (*modelcall.Completion, error) {
 	return &modelcall.Completion{Content: "ok"}, nil
 }
 
-func (p *delayedStreamProvider) Stream(_ context.Context, _ modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
+func (p *producedStreamProvider) Stream(_ context.Context, _ modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
 	ch := make(chan modelcall.StreamChunk)
 	go func() {
 		defer close(ch)
-		time.Sleep(p.firstDelay)
-		ch <- modelcall.StreamChunk{Content: "tok"}
-		time.Sleep(20 * time.Millisecond)
-		ch <- modelcall.StreamChunk{Done: true}
+		p.produce(ch)
 	}()
 	return ch, nil
 }

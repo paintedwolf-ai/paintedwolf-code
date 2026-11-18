@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/heldcall"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -73,17 +74,15 @@ func TestDetachableCallOutlivingItsBudgetReturnsAHandleAndKeepsRunning(t *testin
 	}
 
 	close(release)
-	for t.Context().Err() == nil {
-		status, err := held.Status("s1", "held-1")
-		if err == nil && status.Settled != nil {
-			if status.Settled.Content != `{"results":["a.rs"]}` {
-				t.Fatalf("settled content = %q", status.Settled.Content)
-			}
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	var status heldcall.Status
+	testutil.WaitFor(t, "the held call settles", func() bool {
+		var err error
+		status, err = held.Status("s1", "held-1")
+		return err == nil && status.Settled != nil
+	})
+	if status.Settled.Content != `{"results":["a.rs"]}` {
+		t.Fatalf("settled content = %q", status.Settled.Content)
 	}
-	t.Fatal("the held call did not settle")
 }
 
 func TestDetachableCallInsideItsBudgetReturnsItsOwnResult(t *testing.T) {
@@ -115,15 +114,13 @@ func TestHeldCallSettlesWithTheOutcomeOfItsOwnResult(t *testing.T) {
 	runHeldTestCall(heldTestLoop(held), call)
 	close(release)
 
-	for t.Context().Err() == nil {
-		status, err := held.Status("s1", "held-1")
-		if err == nil && status.Settled != nil {
-			if status.Settled.Outcome != api.ToolResultOutcomeRejected || len(status.Settled.Facts.Codes) != 1 {
-				t.Fatalf("settled = %+v, want the rejection and its code", status.Settled)
-			}
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	var status heldcall.Status
+	testutil.WaitFor(t, "the held call settles", func() bool {
+		var err error
+		status, err = held.Status("s1", "held-1")
+		return err == nil && status.Settled != nil
+	})
+	if status.Settled.Outcome != api.ToolResultOutcomeRejected || len(status.Settled.Facts.Codes) != 1 {
+		t.Fatalf("settled = %+v, want the rejection and its code", status.Settled)
 	}
-	t.Fatal("the held call did not settle")
 }

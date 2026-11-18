@@ -38,7 +38,7 @@ func boardToolFixture(t *testing.T) (*toolexecution.Executor, *tools.DefaultRegi
 	if err := board.RegisterBoardTools(rt.Registry, board.ToolDeps{
 		Builder: builder,
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "board.RegisterBoardTools failed", err)
 	}
 	return rt.Executor, rt.Registry
 }

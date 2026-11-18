@@ -22,7 +22,8 @@ var guardedMarkers = []string{
 
 // A marker is the host reading back its own writing, true only while both sides
 // spell it the same way. Go reads internal/hostmarker; Den reads the generated
-// module. A second literal elsewhere breaks a reader with nothing failing.
+// module, and its lint law host-markers-one-spelling holds the same rule there.
+// A second literal elsewhere breaks a reader with nothing failing.
 //
 // The scan anchors on what precedes a marker rather than on quotes, so it sees
 // markers inside larger literals and regexes but not struct fields or properties
@@ -31,28 +32,21 @@ func TestHostMarkersHaveOneSpelling(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 
-	var hits []string
-	hits = append(hits, scanForMarkers(t, filepath.Join(root, "lycaon", "internal"),
+	hits := scanForMarkers(t, filepath.Join(root, "lycaon", "internal"),
 		func(rel string) bool {
 			return strings.HasPrefix(rel, "hostmarker"+string(filepath.Separator))
-		}, ".go")...)
-	hits = append(hits, scanForMarkers(t, filepath.Join(root, "lycaon-den", "src"),
-		func(rel string) bool {
-			return strings.HasSuffix(rel, "host-markers.generated.ts")
-		}, ".ts", ".tsx")...)
+		})
 
 	sort.Strings(hits)
 	contractcheck.FailViolations(t, `host markers spelled outside their definition
 
-Go reads and writes these through internal/hostmarker. Den reads
-src/chat/host-markers.generated.ts, produced by ./task codegen:host-markers.
-A literal elsewhere keeps matching text nobody writes once the constant is
+Go reads and writes these through internal/hostmarker. A literal elsewhere keeps matching text nobody writes once the constant is
 renamed, and nothing fails.`, hits)
 }
 
 // scanForMarkers reports guarded markers in dir, skipping tests, fixtures, and
 // the definition itself.
-func scanForMarkers(t *testing.T, dir string, isDefinition func(rel string) bool, exts ...string) []string {
+func scanForMarkers(t *testing.T, dir string, isDefinition func(rel string) bool) []string {
 	t.Helper()
 	var hits []string
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
@@ -63,7 +57,7 @@ func scanForMarkers(t *testing.T, dir string, isDefinition func(rel string) bool
 		if relErr != nil {
 			return relErr
 		}
-		if !hasAnySuffix(rel, exts) || isTestOrFixtureFile(rel) || isDefinition(rel) {
+		if !strings.HasSuffix(rel, ".go") || isTestOrFixtureFile(rel) || isDefinition(rel) {
 			return nil
 		}
 		// #nosec G304 -- paths come from walking the repository.
@@ -109,22 +103,11 @@ func spellsMarker(body, marker string) bool {
 	}
 }
 
-func hasAnySuffix(name string, suffixes []string) bool {
-	for _, suffix := range suffixes {
-		if strings.HasSuffix(name, suffix) {
-			return true
-		}
-	}
-	return false
-}
-
 // isTestOrFixtureFile skips files whose job is to hold example transcript text.
 func isTestOrFixtureFile(rel string) bool {
 	base := filepath.Base(rel)
 	switch {
 	case strings.HasSuffix(base, "_test.go"),
-		strings.Contains(base, ".test."),
-		strings.Contains(base, "-fixtures."),
 		strings.Contains(rel, "testdata"+string(filepath.Separator)):
 		return true
 	}

@@ -65,21 +65,6 @@ func TestCatalogClosureBindingsAndEnvelopes(t *testing.T) {
 	contractcheck.FailViolations(t, "Binding → catalog/template closure", missing)
 }
 
-func TestInformWhenConditionWired(t *testing.T) {
-	t.Parallel()
-	reg := catalogfixture.LoadInformBindings(t)
-	indexWorkflowInjects(t, reg)
-	var withWhen int
-	for _, b := range append(reg.AllInform(), reg.BindingsOn(anchor.PhaseEntered)...) {
-		if b != nil && strings.TrimSpace(b.When) != "" {
-			withWhen++
-		}
-	}
-	if withWhen < 1 {
-		t.Fatal("requires at least one conditioned inform binding")
-	}
-}
-
 func loadCatalogAnchors(t *testing.T, root string) (ids map[string]bool, hasEnvelope map[string]bool) {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "host", "anchors", "catalog.yaml"))

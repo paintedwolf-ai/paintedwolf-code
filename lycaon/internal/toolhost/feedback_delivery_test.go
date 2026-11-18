@@ -85,9 +85,7 @@ func TestCommandFeedbackDeliveryFailurePreservesActualPartialResult(t *testing.T
 				}
 				raw, err := env.Call(t, ctx, "printf before > kept\n"+stage+"\nprintf after > never")
 				release()
-				if err != nil {
-					t.Fatal(err)
-				}
+				testutil.FailErr(t, "run the program around the limited stage", err)
 				result := decodePipeOutcome(t, raw)
 				statement, subject := "<", "input"
 				if native {

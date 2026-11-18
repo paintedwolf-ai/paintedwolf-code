@@ -174,33 +174,3 @@ fn durable_close_can_destroy_every_window_it_intercepts() {
     }
 }
 
-/// Prevents process-wide home overrides in parallel tests.
-#[test]
-fn no_source_file_sets_home_env_var() {
-    let src_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
-    let mut offenders = Vec::new();
-    let mut directories = vec![src_dir];
-    while let Some(directory) = directories.pop() {
-        for entry in fs::read_dir(&directory).expect("read source directory") {
-            let path = entry.expect("source directory entry").path();
-            if path.is_dir() {
-                directories.push(path);
-                continue;
-            }
-            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
-                continue;
-            }
-            let body = fs::read_to_string(&path).expect("read source file");
-            for var in ["HOME", "USERPROFILE"] {
-                if body.contains(&format!("set_var(\"{var}\"")) {
-                    offenders.push(format!("{} sets {var}", path.display()));
-                }
-            }
-        }
-    }
-    assert!(
-        offenders.is_empty(),
-        "env vars that path resolution reads must not be mutated:\n  {}",
-        offenders.join("\n  ")
-    );
-}

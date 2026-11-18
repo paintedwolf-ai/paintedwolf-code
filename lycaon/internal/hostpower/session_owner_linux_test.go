@@ -28,13 +28,9 @@ func (p providerInhibitor) Acquire() (lease, error) {
 
 func awaitOwnerLoss(t *testing.T, held lease) {
 	t.Helper()
-	select {
-	case err := <-held.Done():
-		if err == nil || reasonFor(portalProvider{}, err).Code != ReasonDisconnected {
-			t.Fatalf("owner loss result = %v", err)
-		}
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("service loss left an inhibition active on a live bus")
+	err := testutil.Receive(t, "the service loss ends the inhibition on a live bus", held.Done())
+	if err == nil || reasonFor(portalProvider{}, err).Code != ReasonDisconnected {
+		t.Fatalf("owner loss result = %v", err)
 	}
 }
 
@@ -63,19 +59,12 @@ func TestPortalOwnerReplacementSettlesConcurrentLeasesAndRecoversWithoutReusingR
 	awaitOwnerLoss(t, second)
 	testutil.FailErr(t, "release first old request", first.Release())
 	testutil.FailErr(t, "release second old request", second.Release())
-	deadline := time.Now().Add(testutil.Timeout(time.Minute))
-	for {
+	testutil.WaitFor(t, "the replacement provider is acquired", func() bool {
 		current.mu.Lock()
 		acquired := current.request != ""
 		current.mu.Unlock()
-		if acquired && controller.Snapshot().Inhibiting {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("replacement provider was not acquired: %+v", controller.Snapshot())
-		}
-		time.Sleep(time.Millisecond)
-	}
+		return acquired && controller.Snapshot().Inhibiting
+	})
 	old.mu.Lock()
 	oldReleases := old.releases
 	old.mu.Unlock()

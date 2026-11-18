@@ -51,10 +51,7 @@ func TestUnixGuardTerminateEndsJobsOutsideTheLeadersGroup(t *testing.T) {
 	if !errors.As(waitErr, &exitErr) || exitErr.Sys().(syscall.WaitStatus).Signal() != syscall.SIGTERM {
 		t.Fatalf("leader exit = %v, want SIGTERM before kill escalation", waitErr)
 	}
-	if err := waitForProcessGone(t.Context(), job); err != nil {
-		_ = syscall.Kill(job, syscall.SIGKILL)
-		testutil.FailErr(t, "job outside the leader's group outlived terminate", err)
-	}
+	waitForProcessGone(t, job)
 }
 
 func TestUnixGuardTerminateEndsJobsOutsideTheLeadersGroupAfterLeaderExits(t *testing.T) {
@@ -77,10 +74,7 @@ func TestUnixGuardTerminateEndsJobsOutsideTheLeadersGroupAfterLeaderExits(t *tes
 	guard.terminate(cmd)
 	guard.release()
 
-	if err := waitForProcessGone(t.Context(), job); err != nil {
-		_ = syscall.Kill(job, syscall.SIGKILL)
-		testutil.FailErr(t, "job outside the leader's group outlived post-reap terminate", err)
-	}
+	waitForProcessGone(t, job)
 }
 
 func TestUnixGuardTerminateKillsATreeIgnoringTerm(t *testing.T) {
@@ -104,10 +98,7 @@ func TestUnixGuardTerminateKillsATreeIgnoringTerm(t *testing.T) {
 	if !errors.As(waitErr, &exitErr) || exitErr.Sys().(syscall.WaitStatus).Signal() != syscall.SIGKILL {
 		t.Fatalf("leader exit = %v, want SIGKILL after grace escalation", waitErr)
 	}
-	if err := waitForProcessGone(t.Context(), job); err != nil {
-		_ = syscall.Kill(job, syscall.SIGKILL)
-		testutil.FailErr(t, "job ignoring SIGTERM outlived the kill fallback", err)
-	}
+	waitForProcessGone(t, job)
 }
 
 // A job in its own group inherits the pipeline's output pipe; the async wait
@@ -133,8 +124,5 @@ func TestAsyncPipelineKillEndsJobsHoldingItsOutputPipe(t *testing.T) {
 		_ = syscall.Kill(job, syscall.SIGKILL)
 		t.Fatal("async pipeline never settled after Kill")
 	}
-	if err := waitForProcessGone(t.Context(), job); err != nil {
-		_ = syscall.Kill(job, syscall.SIGKILL)
-		testutil.FailErr(t, "job holding the output pipe outlived Kill", err)
-	}
+	waitForProcessGone(t, job)
 }
