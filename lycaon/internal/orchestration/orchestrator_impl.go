@@ -22,7 +22,6 @@ type CatalogResolver func() (*extpacks.EffectiveCatalog, error)
 type OrchestratorDeps struct {
 	Workers    TopologyWorkers
 	Agents     AgentRegistry
-	Models     ModelGroupSelector
 	Workflows  *WorkflowRunLifecycle
 	Catalog    CatalogResolver
 	Workspaces WorkspaceBinder
@@ -32,7 +31,6 @@ type OrchestratorDeps struct {
 type OrchestratorImpl struct {
 	workers    TopologyWorkers
 	agents     AgentRegistry
-	models     ModelGroupSelector
 	workflows  *WorkflowRunLifecycle
 	catalog    CatalogResolver
 	workspaces WorkspaceBinder
@@ -78,7 +76,6 @@ func NewOrchestratorImpl(deps OrchestratorDeps) *OrchestratorImpl {
 	return &OrchestratorImpl{
 		workers:    deps.Workers,
 		agents:     deps.Agents,
-		models:     deps.Models,
 		workflows:  deps.Workflows,
 		catalog:    deps.Catalog,
 		workspaces: deps.Workspaces,
