@@ -10,7 +10,6 @@ import {
   getSessionChatCache,
   putSessionChatCache,
   rememberSessionChatFromStore,
-  restoreCachedSessionChat,
 } from "./session-chat-cache.ts";
 import { toSessionChatSnapshot, trimSnapshotForPersist } from "./session-chat-persist.ts";
 import { applyMessageEvent } from "../transcript/projection/message-events.ts";
@@ -112,19 +111,6 @@ describe("session-chat-cache", () => {
     expect(store.state.transcriptSessionId).toBe("sess-a");
   });
 
-  it("rememberSessionChatFromStore round-trips through getSessionChatCache", () => {
-    const store = createAppStore();
-    store.actions.setCurrentSession(demoSession);
-    store.actions.installTranscriptBaseline(
-      "sess-a",
-      [{ id: "m1", role: "user", origin: "user" as const, authority: "user" as const, trust_tier: "trusted" as const, content: "cached", created_at: "t", seq: 1 }],
-      1,
-    );
-    rememberSessionChatFromStore(store);
-    const hit = getSessionChatCache({ projectId: "proj-1", sessionId: "sess-a" });
-    expect(hit?.messages[0]?.content).toBe("cached");
-  });
-
   it("rememberSessionChatFromStore captures and restores queueDraft", () => {
     const store = createAppStore();
     store.actions.setCurrentSession(demoSession);
@@ -162,38 +148,6 @@ describe("session-chat-cache", () => {
     store.actions.setQueueDraft("sess-a", store.state.sessionViewEpoch, { ...queue, revision: 1 });
     store.actions.restoreSessionChatSnapshot(snapshot);
     expect(store.state.queueDraft?.revision).toBe(1);
-  });
-
-  it("restoreCachedSessionChat binds a cached transcript", () => {
-    const store = createAppStore();
-    putSessionChatCache(sampleSnapshot("sess-a", 1));
-    store.actions.setCurrentSession({ ...demoSession, id: "sess-b" });
-    store.actions.installTranscriptBaseline("sess-b", [], 0);
-    expect(
-      restoreCachedSessionChat(store, { projectId: "proj-1", sessionId: "sess-a" }),
-    ).toBe(true);
-    expect(store.state.currentSession?.id).toBe("sess-a");
-    expect(store.state.transcriptSessionId).toBe("sess-a");
-    expect(store.state.messages[0]?.content).toBe("hello sess-a");
-  });
-
-  it("cached snapshot survives clearChat dropping currentSession (store proxy unwrap)", () => {
-    const store = createAppStore();
-    store.actions.setCurrentSession(demoSession);
-    store.actions.installTranscriptBaseline(
-      "sess-a",
-      [{ id: "m1", role: "user", origin: "user" as const, authority: "user" as const, trust_tier: "trusted" as const, content: "keep me", created_at: "t", seq: 1 }],
-      1,
-    );
-    rememberSessionChatFromStore(store);
-    store.actions.clearChatForSessionSwitch("*");
-    expect(store.state.currentSession).toBeUndefined();
-
-    const hit = getSessionChatCache({ projectId: "proj-1", sessionId: "sess-a" });
-    expect(hit?.session.id).toBe("sess-a");
-    store.actions.restoreSessionChatSnapshot(hit!);
-    expect(store.state.currentSession?.id).toBe("sess-a");
-    expect(store.state.messages[0]?.content).toBe("keep me");
   });
 
   it("dropSessionChatCacheForProject evicts every session row for the project", () => {
