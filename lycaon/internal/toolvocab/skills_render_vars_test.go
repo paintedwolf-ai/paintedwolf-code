@@ -15,7 +15,10 @@ func TestSkillRenderVarsSkipsInvalidToolNames(t *testing.T) {
 	if err != nil {
 		t.Fatalf("offeredReader: %v", err)
 	}
-	vars := prompts.SkillVars(reader)
+	vars, err := prompts.SkillVars(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := vars["profile_has_mcp_*"]; ok {
 		t.Fatalf("wildcard family leaked into template facts: %#v", vars)
 	}

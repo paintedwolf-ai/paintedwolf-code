@@ -222,7 +222,11 @@ func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResou
 			if err != nil {
 				return spawn.PolicyTemplateVars()
 			}
-			return prompts.SkillVars(reader)
+			vars, err := prompts.SkillVars(reader)
+			if err != nil {
+				return spawn.PolicyTemplateVars()
+			}
+			return vars
 		})
 		host.Skills.SetSkillPackConfiguration(
 			func(ctx context.Context, tctx tools.ToolContext, packID string) map[string]any {

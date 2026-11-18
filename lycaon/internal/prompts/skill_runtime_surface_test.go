@@ -39,7 +39,10 @@ func TestSkillRuntimePlanBoundsCatalogCapabilities(t *testing.T) {
 				}
 				reader, err := NewReader(in)
 				testutil.FailErr(t, "new reader", err)
-				vars := SkillVars(reader)
+				vars, err := SkillVars(reader)
+				if err != nil {
+					t.Fatal(err)
+				}
 				for name, want := range map[string]bool{"web_search": state.search, "fetch_url": state.fetch, "command": false, "task": false} {
 					if vars["profile_has_"+name] != want {
 						t.Fatalf("%s=%v want=%v", name, vars["profile_has_"+name], want)
@@ -71,7 +74,10 @@ func TestCoordinatorSkillCanTeachDeferredToolWithinRuntimePlan(t *testing.T) {
 		WebSearch: true,
 	})
 	testutil.FailErr(t, "new reader", err)
-	vars := SkillVars(reader)
+	vars, err := SkillVars(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if vars["profile_has_fetch_url"] != true || vars["profile_has_web_search"] != true {
 		t.Fatal("reachable research workflow was blanked")
 	}

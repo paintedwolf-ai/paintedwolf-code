@@ -162,7 +162,9 @@ func preloadRenderService(t *testing.T) *Service {
 				WebSearch: true,
 			})
 			testutil.FailErr(t, "new reader", err)
-			return prompts.SkillVars(reader)
+			vars, err := prompts.SkillVars(reader)
+			testutil.FailErr(t, "skill vars", err)
+			return vars
 		},
 		PackConfiguration: func(context.Context, tools.ToolContext, string) map[string]any {
 			return map[string]any{"mode": "bounded"}
