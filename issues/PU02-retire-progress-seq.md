@@ -8,7 +8,7 @@
 
 ## Problem
 
-`ProgressUpdateMeta.seq` and `ProgressCompleteMeta.seq` are required wire fields fed by in-memory counters. Nothing reads them, and they restart with the engine. See `evidence.md` § 3.
+`ProgressUpdateMeta.seq` and `ProgressCompleteMeta.seq` are required wire fields fed by in-memory counters. They restart with the engine and no longer determine row position. Den message equality still read them and must change with the wire. See `evidence.md` § 3.
 
 ## Change
 
@@ -16,7 +16,7 @@
 2. Remove the legacy plan-update sequence field/counter alongside PU01 at the transaction-composition location. There is no post-commit `Publisher` in the revised design.
 3. Remove remaining completion sequence production alongside PU01. Completion eligibility must already derive from transactional before/after state; no in-memory reservation remains authoritative.
 4. Update the row builders at their post-PU01 locations to stop setting `Seq`; remove sequence parameters. Implemented in `internal/progress/transcript.go`.
-5. **Den tests**: drop `seq` from the progress literals in the seven test files that carry it (`progress-model.test.ts`, `messages-equal.test.ts`, `transcript-row-stability.test.ts`, `transcript-progress.test.ts`, `transcript-ordering.test.ts`, `SessionTranscript.tools.test.tsx`, `WorklogPanel.test.tsx`). No Den source file reads the field.
+5. **Den tests**: drop `seq` from the progress literals in the seven test files that carry it (`progress-model.test.ts`, `messages-equal.test.ts`, `transcript-row-stability.test.ts`, `transcript-progress.test.ts`, `transcript-ordering.test.ts`, `SessionTranscript.tools.test.tsx`, `WorklogPanel.test.tsx`). Update `messages-equal.ts` to compare progress content without the retired metadata fields; also remove them from end-to-end and ordering fixtures.
 6. **`transcript-row-stability.test.ts`**: the session generator stores each plan update on either side of its call's result, chosen by the seeded generator, so the invariant holds for both host orders (`I6`).
 
 ## Tests

@@ -30,7 +30,7 @@ Original baseline observations below are from `origin/main` `1c29645396` (2026-1
 - `FlushPayload.Seq`, a per-session counter in process memory (`lycaon/internal/progress/coalesce.go:148`), written to the wire as `ProgressUpdateMeta.seq` (`progress_changes.go:65`). It restarts at 1 on every engine start.
 - `ProgressCompleteMeta.seq` comes from a second in-memory counter (`lycaon/internal/progress/completion.go:55`, `progress_completion.go:41`).
 - Both are required wire fields (`docs/openapi/components/schemas/progress.yaml:55-59`, `:196-199`).
-- Nothing reads either. Go producers are the only Go references to these fields outside tests and generated code. In Den, no file under `lycaon-den/src` outside tests and generated types reads `progress_update.seq` or `progress_complete.seq`; #2370 removed the last reader (the per-message progress sequence in the sort key).
+- **Corrected during implementation:** the original search missed the reads in Den `messages-equal.ts`. #2370 removed sequence-based ordering, but message equality still compared the metadata. PR #2467 removes those comparison reads together with the wire fields; row placement continues to use message ordinals.
 - Stored rows decode with `db.UnmarshalJSON` into the generated structs (`lycaon/internal/session/store/sql_message_codec.go:44-55`), which ignores unknown keys.
 
 ## 4. How Den places these rows

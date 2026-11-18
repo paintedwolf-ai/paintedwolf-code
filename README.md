@@ -16,7 +16,7 @@ Start at `STATUS.md`. Source evidence is recorded in `evidence.md` against `1c29
 | Id | Ships | Layer |
 |---|---|---|
 | `PU01` | Atomic plan/transcript persistence across all four mutation paths; coalescer and observer-owned row creation removed | Backend progress, session persistence, callers, and observations |
-| `PU02` | Unused `seq` fields and legacy production removed; Den stability tests cover historical and new host orders | OpenAPI + backend + generated Den types/tests |
+| `PU02` | Redundant progress `seq` fields, comparison reads, and production removed; Den stability tests cover historical and new host orders | OpenAPI + backend + generated Den types/tests |
 
 PU01 and PU02 are implemented together in [PR #2467](https://github.com/paintedwolf-ai/paintedwolf-code/pull/2467), based on `main`. The transactional row builder eliminates the sequence producers directly, so a separate intermediate implementation would add disposable machinery. See `STATUS.md` for the verified head and remaining qualification.
 
@@ -29,7 +29,7 @@ A visible plan transition has its transcript row when the mutation commits. For 
 - Preserve existing visible diff rules, including terminal-to-terminal edits; completion is emitted for the nonterminal-to-terminal edge instead of an update. No visible change yields no row.
 - Keep `update_progress` arguments, successful result shape, existing validation/revision refusal codes, and model-visible copy unchanged. A required row insertion failure rolls back the mutation and surfaces through the existing operation error path.
 - PU01 includes transactional composition and all four write paths, not just the observer. Use existing tables; a newly discovered schema requirement needs compatibility classification and a plan revision.
-- PU02 removes only unused JSON fields/types and their producers. Older stored rows retain ignored `seq` keys without rewriting history.
+- PU02 removes the redundant progress JSON fields/types, their producers, and their reads in Den message equality. Older stored rows retain ignored `seq` keys without rewriting history.
 - No Den projection changes are planned. The dev replay is separate qualification evidence; CI is the default implementation verification route.
 
 ## Files
