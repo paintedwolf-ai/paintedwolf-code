@@ -3,6 +3,7 @@ package phases_test
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	"testing"
@@ -62,7 +63,7 @@ func seedValidPlanContent(t *testing.T, blueprintMgr *blueprint.Manager, bluepri
 	ctx := context.Background()
 	bp, err := blueprintMgr.Get(ctx, testdbseed.DefaultProjectID, blueprintPath)
 	testutil.FailErr(t, "blueprintMgr.Get", err)
-	content := conditions.TestPlanContentWithTasks
+	content := conditionstest.PlanWithTasks
 	if _, err := blueprintMgr.Store.UpdateContent(ctx, testdbseed.DefaultProjectID, blueprintPath, content, blueprint.ContentDigest(bp.Content)); err != nil {
 		testutil.FailErr(t, "seed blueprint content", err)
 	}
@@ -100,7 +101,7 @@ func setTestRegistry(t *testing.T, mgr *workflow.RunManager, blueprintMgr *bluep
 func testManagerWithRegistry(t *testing.T) (*workflow.RunManager, session.Store, *blueprint.Manager, string) {
 	t.Helper()
 	mgr, store, blueprintMgr, projectDir := testManager(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	return mgr, store, blueprintMgr, projectDir
 }
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -19,7 +20,7 @@ func TestCompoundCompleteWhenValidInTestdata(t *testing.T) {
 	contractcheck.FailErr(t, "read file", err)
 	m, err := workflowdef.ParseManifestYAML(data)
 	contractcheck.FailErr(t, "workflow.ParseManifestYAML failed", err)
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDepsWithEvidence())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.DependenciesWithEvidence())
 	contractcheck.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	if diags := vocabulary.ValidateBundled(reg, workflowdef.NewRegistry(map[string]workflowdef.Manifest{
 		m.ID + "@" + m.Version: m,

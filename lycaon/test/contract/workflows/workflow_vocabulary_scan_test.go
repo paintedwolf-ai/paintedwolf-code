@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"github.com/lycaon/lycaon/internal/vocabulary/vocabularytest"
 	"testing"
 
@@ -16,7 +17,7 @@ func TestScanDomainShippedInCatalog(t *testing.T) {
 			seen[row.ID] = row
 		}
 	}
-	for _, id := range conditions.ShippedScanDomainIDs() {
+	for _, id := range conditionstest.ScanIDs {
 		row, ok := seen[id]
 		if !ok {
 			t.Fatalf("missing shipped scan domain catalog row for %q", id)
@@ -25,7 +26,7 @@ func TestScanDomainShippedInCatalog(t *testing.T) {
 			t.Fatalf("scan domain %q catalog = %+v", id, row)
 		}
 	}
-	for _, id := range conditions.ScanCatalogStubIDs() {
+	for _, id := range conditionstest.DeferredScanIDs {
 		row, ok := seen[id]
 		if !ok {
 			t.Fatalf("missing scan catalog stub row for %q", id)

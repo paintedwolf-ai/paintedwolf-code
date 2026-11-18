@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -16,7 +16,7 @@ import (
 
 func TestCoverageAdmissionRejectsStaleReviewWithoutSpendingRound(t *testing.T) {
 	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	manifest := reviewLoopTestManifest()
 	manifest.PhaseDefs[0].ReviewLoop.VerdictSchema = map[string]string{"verdict": "SELECTED", "coverage": workflowdef.VerdictCoverageType}
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rltest@1.0.0": manifest})
@@ -59,7 +59,7 @@ func TestCoverageAdmissionRejectsStaleReviewWithoutSpendingRound(t *testing.T) {
 
 func TestCoverageAdmissionWaitsForBoundScansAsARejection(t *testing.T) {
 	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	manifest := reviewLoopTestManifest()
 	manifest.PhaseDefs[0].ReviewLoop.VerdictSchema = map[string]string{"verdict": "SELECTED", "coverage": workflowdef.VerdictCoverageType}
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rltest@1.0.0": manifest})
@@ -87,7 +87,7 @@ func TestCoverageAdmissionWaitsForBoundScansAsARejection(t *testing.T) {
 
 func TestCoverageAdmissionJudgesReviewersAgainstTheirAssignment(t *testing.T) {
 	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	manifest := reviewLoopTestManifest()
 	candidate := manifest.PhaseDefs[0]
 	candidate.ID = "candidate"

@@ -3,10 +3,10 @@ package review_test
 import (
 	context "context"
 	json "encoding/json"
-	conditions "github.com/lycaon/lycaon/internal/conditions"
 	db "github.com/lycaon/lycaon/internal/db"
 	reviewcoverage "github.com/lycaon/lycaon/internal/reviewcoverage"
 	testutil "github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	toolrejection "github.com/lycaon/lycaon/internal/toolrejection"
 	tools "github.com/lycaon/lycaon/internal/tools"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
@@ -37,7 +37,7 @@ func assertReviewApplicable(t *testing.T, mgr *workflow.RunManager, run *api.Wor
 func reviewAssignmentDatabaseFixture(t *testing.T) (*workflow.RunManager, *api.WorkflowRun, workflowdef.Manifest, db.Handle) {
 	t.Helper()
 	mgr, blueprints, sqlDB := receiptManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	manifest := reviewLoopTestManifest()
 	candidate := manifest.PhaseDefs[0]
 	candidate.ID = "candidate"

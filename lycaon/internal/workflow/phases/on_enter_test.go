@@ -2,6 +2,7 @@ package phases_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"testing"
 
@@ -144,7 +145,7 @@ func TestApplyPhaseOnEnterInvalidExecutionMode(t *testing.T) {
 
 func TestRefreshHumanApprovalReadyStubOnly(t *testing.T) {
 	const lockedReadiness = "plan_stub_valid"
-	planBody := conditions.TestPlanContentStubOnly
+	planBody := conditionstest.PlanStub
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		BlueprintGet: func(_ context.Context, planID string) (*api.Blueprint, error) {
 			if planID == "empty-plan" {

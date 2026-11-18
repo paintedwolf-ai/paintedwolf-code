@@ -5,12 +5,12 @@ package blueprints_test
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -21,7 +21,7 @@ import (
 
 func TestPlanCatalogHappyPathReachesExecutionSubroutine(t *testing.T) {
 	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.DependenciesWithEvidence())
 	ctx := context.Background()
 
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
@@ -61,7 +61,7 @@ func TestPlanResearchDepthNoneReachesExecutionSubroutine(t *testing.T) {
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	mgr := workflow.NewManager(testRunStore(t, sqlDB), sessStore, reg, nil)
 	workflowtest.WireBlueprintDeps(mgr, dir)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.DependenciesWithEvidence())
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)

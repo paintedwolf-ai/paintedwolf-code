@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
@@ -36,7 +37,7 @@ func TestPlanWorkflowPostureLifecycleContract(t *testing.T) {
 	}
 	seed, err := blueprintMgr.Get(ctx, run.ProjectID, run.BlueprintPath)
 	contractcheck.FailErr(t, "blueprintMgr.Get before seed", err)
-	bp, err := blueprintMgr.Store.UpdateContent(ctx, run.ProjectID, run.BlueprintPath, conditions.TestPlanContentWithTasks, blueprint.ContentDigest(seed.Content))
+	bp, err := blueprintMgr.Store.UpdateContent(ctx, run.ProjectID, run.BlueprintPath, conditionstest.PlanWithTasks, blueprint.ContentDigest(seed.Content))
 	if err != nil {
 		contractcheck.FailErr(t, "seed blueprint content", err)
 	}

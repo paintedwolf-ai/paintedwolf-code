@@ -3,6 +3,7 @@ package conditions_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestCoreToolPredicates(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "build conditions registry", err)
 	ec := conditions.EvalContext{
 		ToolName: "write",
@@ -136,7 +137,7 @@ func TestCoreHostGuards(t *testing.T) {
 }
 
 func TestCoreAgentIsPredicate(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "build conditions registry", err)
 	ec := conditions.EvalContext{
 		ToolName: "task",

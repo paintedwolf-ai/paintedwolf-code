@@ -2,6 +2,7 @@ package orchestration_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 	"strings"
@@ -74,7 +75,7 @@ func newWorkflowOrchestrator(t *testing.T, rec *recordingWorkers, spy *spyWorkfl
 	projectDir := t.TempDir()
 	blueprintMgr := workflowtest.WireBlueprintDeps(wfMgr, projectDir)
 	blueprintMgr.Approvals = blueprint.NewApprovalStore(sqlDB, authzcontext.SQLRecorder(sqlDB))
-	deps := conditions.TestRegistryDeps()
+	deps := conditionstest.Dependencies()
 	deps.BlueprintContent = func(_ context.Context, projectDir, relPath string) (string, error) {
 		return workflowblueprintfiles.ReadBlueprintFile(projectDir, relPath)
 	}

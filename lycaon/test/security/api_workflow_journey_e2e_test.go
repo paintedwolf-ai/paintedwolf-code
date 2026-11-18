@@ -3,6 +3,7 @@ package security
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api"
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -111,7 +111,7 @@ func assertPlanWriteAllowed(t *testing.T, h *wiring.Harness, sessionID string) {
 	testutil.FailErr(t, "h.Store.Get failed", err)
 	planPath := settingsoverlay.Rel("blueprints/plan.md")
 	err = h.Sessions.Manager.Coordinator.Guards.Policy().EvaluateInvoke(ctx, loaded, "write", map[string]any{
-		"path": planPath, "content": conditions.TestPlanContentWithTasks,
+		"path": planPath, "content": conditionstest.PlanWithTasks,
 	})
 	testutil.FailErr(t, "write invoke policy", err)
 }

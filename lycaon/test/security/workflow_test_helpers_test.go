@@ -3,6 +3,7 @@ package security
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/blueprint"
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -46,7 +46,7 @@ func seedPlanStub(t *testing.T, blueprintMgr *blueprint.Manager, projectID, blue
 	}
 	bp, err := blueprintMgr.Get(context.Background(), projectID, blueprintPath)
 	testutil.FailErr(t, "get blueprint before seed", err)
-	if _, err := blueprintMgr.Store.UpdateContent(context.Background(), projectID, blueprintPath, conditions.TestPlanContentWithTasks, blueprint.ContentDigest(bp.Content)); err != nil {
+	if _, err := blueprintMgr.Store.UpdateContent(context.Background(), projectID, blueprintPath, conditionstest.PlanWithTasks, blueprint.ContentDigest(bp.Content)); err != nil {
 		testutil.FailErr(t, "seed plan stub", err)
 	}
 }

@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"go/parser"
 	"go/token"
 	"path/filepath"
@@ -134,7 +135,7 @@ func TestPlanResearchObligationsInInject(t *testing.T) {
 	}
 	seed, err := blueprintMgr.Get(ctx, run.ProjectID, run.BlueprintPath)
 	contractcheck.FailErr(t, "blueprintMgr.Get", err)
-	researchPlan := strings.Replace(conditions.TestPlanContentWithTasks, "research_depth: none", "research_depth: light", 1)
+	researchPlan := strings.Replace(conditionstest.PlanWithTasks, "research_depth: none", "research_depth: light", 1)
 	_, err = blueprintMgr.Store.UpdateContent(
 		ctx, run.ProjectID, run.BlueprintPath, researchPlan, blueprint.ContentDigest(seed.Content),
 	)

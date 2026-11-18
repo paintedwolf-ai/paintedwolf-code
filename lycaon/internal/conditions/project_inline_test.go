@@ -5,10 +5,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 )
 
 func TestRootlessSummarizeRequiresInlineContentOnly(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "build conditions", err)
 	for _, row := range []struct {
 		args  map[string]any
