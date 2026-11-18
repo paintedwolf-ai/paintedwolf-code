@@ -115,11 +115,13 @@ def read_stamp(path: Path) -> dict:
     return record
 
 
-def verify(root: Path, name: str, commit: str, tree: str) -> dict:
+def verify(root: Path, name: str, commit: str, tree: str, digest: str | None = None) -> dict:
     """Refuse an artifact unless its recorded source and bytes are exactly the requested ones."""
     record = read_stamp(root / STAMP)
     if record["name"] != name:
         raise Refused(f"artifact {record['name']!r} is not {name!r}")
+    if digest is not None and record["digest"] != digest:
+        raise Refused(f"{name} is not the preparation its receipt names")
     if record["source_commit"] != commit or record["source_tree"] != tree:
         raise Refused(f"{name} was prepared from {record['source_commit']}, not {commit}")
     rows = inventory(root)
@@ -177,8 +179,9 @@ def on_main(repository: str, commit: str) -> bool:
     return comparison.get("status") in {"identical", "ahead"}
 
 
-def find(repository: str, commit: str, prepared: dict, *, fetch=None) -> dict | None:
-    """Return the newest trusted receipt for exactly this commit and tree whose artifacts are all retained."""
+def find(repository: str, commit: str, prepared: dict, *, fetch=None, run_id: int | None = None) -> dict | None:
+    """Return the newest trusted receipt for exactly this commit and tree whose artifacts are all retained,
+    from `run_id` when given."""
     fetch = fetch or (lambda artifact: subprocess.check_output(
         ["gh", "api", f"repos/{repository}/actions/artifacts/{artifact}/zip"]))
     tree = source_tree(commit)
@@ -189,7 +192,8 @@ def find(repository: str, commit: str, prepared: dict, *, fetch=None) -> dict | 
         origin = row.get("workflow_run") or {}
         if (row.get("name") != RECEIPT + commit or row.get("expired") is not False
                 or not 0 < row.get("size_in_bytes", 0) <= RECEIPT_LIMIT
-                or origin.get("repository_id") != identity or origin.get("head_repository_id") != identity):
+                or origin.get("repository_id") != identity or origin.get("head_repository_id") != identity
+                or run_id is not None and origin.get("id") != run_id):
             continue
         run = api(f"repos/{repository}/actions/runs/{origin['id']}")
         if (run.get("event") not in TRUSTED_EVENTS or not isinstance(run.get("head_sha"), str)
@@ -214,18 +218,30 @@ def summarize(text: str) -> None:
             stream.write(text)
 
 
-def resolve(commit: str, prepared: dict) -> None:
+def index(record: dict) -> str:
+    """Each artifact's id and digest by name, as consumers select and verify them."""
+    return json.dumps({row["name"]: {"id": row["artifact_id"], "digest": row["digest"]} for row in record["artifacts"]},
+                      sort_keys=True, separators=(",", ":"))
+
+
+def resolve(commit: str, prepared: dict, run_id: int | None = None) -> None:
+    """Reuse a trusted preparation of the commit, or build one. A required run is reused or refused, never rebuilt."""
     repository = os.environ["GITHUB_REPOSITORY"]
-    try:
-        record = find(repository, commit, prepared)
-    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, zipfile.BadZipFile) as error:
-        # A failed lookup costs a build; it never grants reuse.
-        print(f"::warning title=Preparation lookup::{error}")
-        record = None
+    if run_id is not None:
+        record = find(repository, commit, prepared, run_id=run_id)
+        if not record:
+            raise Refused(f"run {run_id} holds no retained preparation of {commit}; qualify the source again")
+    else:
+        try:
+            record = find(repository, commit, prepared)
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, zipfile.BadZipFile) as error:
+            # A failed lookup costs a build; it never grants reuse.
+            print(f"::warning title=Preparation lookup::{error}")
+            record = None
     if record:
         url = f"https://github.com/{repository}/actions/runs/{record['run_id']}"
         summarize(f"Reusing the preparation of `{commit}` from [run {record['run_id']}]({url}); nothing compiles.\n")
-        write_output(run_id=str(record["run_id"]), reused="true")
+        write_output(run_id=str(record["run_id"]), reused="true", artifacts=index(record))
     else:
         summarize(f"No retained preparation of `{commit}`; every artifact builds.\n")
         write_output(run_id=os.environ["GITHUB_RUN_ID"], reused="false")
@@ -239,6 +255,7 @@ def main(argv=None) -> int:
     command = commands.add_parser("resolve", help="find a reusable preparation of the source commit")
     command.add_argument("--source-commit", required=True)
     command.add_argument("--plan", required=True)
+    command.add_argument("--run-id", type=int, help="the preparation Qualification checked; refused unless retained")
     command = commands.add_parser("stamp", help="bind an artifact directory to the checked-out source")
     command.add_argument("--artifact", type=Path, required=True)
     command.add_argument("--name", required=True)
@@ -253,12 +270,13 @@ def main(argv=None) -> int:
     command.add_argument("--artifact", type=Path, required=True)
     command.add_argument("--name", required=True)
     command.add_argument("--source-commit", required=True)
+    command.add_argument("--digest", help="the content digest the preparation receipt names")
     args = parser.parse_args(argv)
     try:
         if args.command == "plan":
             print(json.dumps(plan(json.loads(args.catalog.read_text())), separators=(",", ":")))
         elif args.command == "resolve":
-            resolve(args.source_commit, json.loads(args.plan))
+            resolve(args.source_commit, json.loads(args.plan), args.run_id)
         elif args.command == "stamp":
             record = stamp(args.artifact, args.name, args.kind, args.source_commit)
             print(f"{record['name']}: {record['digest']} from {record['source_commit']}")
@@ -268,10 +286,11 @@ def main(argv=None) -> int:
             record = receipt(args.stamps, json.loads(args.plan), args.source_commit, os.environ, listed)
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(record, indent=1) + "\n")
+            write_output(artifacts=index(record))
             summarize("| Artifact | Digest |\n|---|---|\n"
                       + "".join(f"| {row['name']} | `{row['digest']}` |\n" for row in record["artifacts"]))
         else:
-            record = verify(args.artifact, args.name, args.source_commit, source_tree(args.source_commit))
+            record = verify(args.artifact, args.name, args.source_commit, source_tree(args.source_commit), args.digest)
             print(f"{record['name']}: {record['digest']} from {record['source_commit']}")
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(f"error: {error}", file=sys.stderr)

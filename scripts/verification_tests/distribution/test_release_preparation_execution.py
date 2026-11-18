@@ -102,6 +102,8 @@ class StampTests(SourceFixture):
                                           preparation.verify(directory, "prepared-linux-x86_64", self.second, tree)),
             "linked": lambda directory: ((directory / "link").symlink_to(directory / "package.deb"),
                                          preparation.verify(directory, "prepared-linux-x86_64", self.second, tree)),
+            "other preparation": lambda directory: preparation.verify(
+                directory, "prepared-linux-x86_64", self.second, tree, "sha256:" + "0" * 64),
         }
         for label, mutate in mutations.items():
             with self.subTest(label), self.assertRaises(preparation.Refused):
@@ -142,6 +144,19 @@ class ReceiptTests(ReceiptFixture):
         self.assertEqual(len(record["artifacts"]), 5)
         self.assertTrue(all(row["artifact_id"] >= 100 and row["digest"].startswith("sha256:") for row in record["artifacts"]))
 
+    def test_receipt_command_records_the_receipt_and_each_artifact_id_and_digest(self):
+        stamps, output = self.stamps(), self.root / "output"
+        environment = {**self.environment(), "GITHUB_OUTPUT": str(output)}
+        with patch.dict(os.environ, environment), patch.object(preparation, "pages", return_value=self.listed()):
+            self.assertEqual(preparation.main(["receipt", "--stamps", str(stamps), "--plan", json.dumps(self.plan),
+                                               "--source-commit", self.second, "--output", str(self.root / "r.json")]), 0)
+        record = json.loads((self.root / "r.json").read_text())
+        artifacts = json.loads(output.read_text().removeprefix("artifacts="))
+        self.assertEqual(artifacts, {row["name"]: {"id": row["artifact_id"], "digest": row["digest"]}
+                                     for row in record["artifacts"]})
+        preparation.verify(self.root / "prepared-linux-x86_64", "prepared-linux-x86_64", self.second,
+                           preparation.source_tree(self.second), artifacts["prepared-linux-x86_64"]["digest"])
+
     def test_receipt_refuses_a_missing_artifact_or_a_stamp_of_another_source(self):
         stamps = self.stamps()
         with self.assertRaises(preparation.Refused):
@@ -165,7 +180,7 @@ class ReuseTests(ReceiptFixture):
             archive.writestr("receipt.json", json.dumps(record))
         return output.getvalue()
 
-    def find(self, source=None, rows=None, run=None, record=None, listed=None):
+    def find(self, source=None, rows=None, run=None, record=None, listed=None, run_id=None):
         source = source or self.second
 
         def api(path):
@@ -183,11 +198,15 @@ class ReuseTests(ReceiptFixture):
 
         with patch.object(preparation, "api", side_effect=api), \
                 patch.object(preparation, "pages", return_value=self.listed() if listed is None else listed):
-            return preparation.find(REPOSITORY, source, self.plan,
+            return preparation.find(REPOSITORY, source, self.plan, run_id=run_id,
                                     fetch=lambda _: self.archive(self.record if record is None else record))
 
     def test_second_call_for_the_same_commit_and_tree_reuses_the_receipt(self):
         self.assertEqual(self.find(), self.record)
+
+    def test_a_required_run_is_the_only_one_read(self):
+        self.assertEqual(self.find(run_id=50), self.record)
+        self.assertIsNone(self.find(run_id=51))
 
     def test_call_for_another_commit_builds(self):
         self.assertIsNone(self.find(source=self.first))
@@ -217,12 +236,29 @@ class ReuseTests(ReceiptFixture):
         environment = {"GITHUB_REPOSITORY": REPOSITORY, "GITHUB_RUN_ID": "60", "GITHUB_OUTPUT": str(output)}
         with patch.dict(os.environ, environment), patch.object(preparation, "find", return_value=self.record):
             preparation.resolve(self.second, self.plan)
-        self.assertEqual(output.read_text(), "run_id=50\nreused=true\n")
+        self.assertEqual(output.read_text(), f"run_id=50\nreused=true\nartifacts={preparation.index(self.record)}\n")
         output.unlink()
         with patch.dict(os.environ, environment), \
                 patch.object(preparation, "find", side_effect=subprocess.CalledProcessError(1, ["gh"])):
             preparation.resolve(self.second, self.plan)
         self.assertEqual(output.read_text(), "run_id=60\nreused=false\n")
+
+    def test_a_required_preparation_is_reused_or_refused_never_rebuilt(self):
+        output = self.root / "output"
+        environment = {"GITHUB_REPOSITORY": REPOSITORY, "GITHUB_RUN_ID": "60", "GITHUB_OUTPUT": str(output)}
+        with patch.dict(os.environ, environment), patch.object(preparation, "find", return_value=self.record) as find:
+            preparation.resolve(self.second, self.plan, 50)
+        self.assertEqual(find.call_args.kwargs["run_id"], 50)
+        self.assertTrue(output.read_text().startswith("run_id=50\nreused=true\n"))
+        output.unlink()
+        for failure in (dict(return_value=None), dict(side_effect=subprocess.CalledProcessError(1, ["gh"]))):
+            with self.subTest(failure), patch.dict(os.environ, environment), \
+                    patch.object(preparation, "find", **failure), self.assertRaises(Exception):
+                preparation.resolve(self.second, self.plan, 50)
+            self.assertFalse(output.exists())
+        with patch.dict(os.environ, environment), patch.object(preparation, "find", return_value=None):
+            self.assertEqual(preparation.main(["resolve", "--source-commit", self.second,
+                                               "--plan", json.dumps(self.plan), "--run-id", "50"]), 1)
 
 
 class LinuxCandidateTests(unittest.TestCase):

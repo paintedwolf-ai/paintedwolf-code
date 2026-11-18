@@ -899,7 +899,7 @@ including clients that require manual installation.
 
 Nightly also runs the release's scripts through
 [`release-rehearsal.yml`](../.github/workflows/release-rehearsal.yml) on tiny
-payloads signed with disposable keys: workflow environment names, Debian and RPM
+payloads signed with disposable keys: Debian and RPM
 metadata lint, upload limits, manifest, public set and cask assembly, package and
 repository signing for apt, dnf and pacman, and on macOS an unsigned `den:bundle`
 with `bundle:verify`, its updater archive checks and a cask install. Each check

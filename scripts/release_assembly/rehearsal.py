@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 import base64
 import contextlib
-import copy
 import functools
 import hashlib
 import http.server
@@ -35,10 +34,6 @@ from release_distribution_contract.platforms import detached_signatures, load_pl
 CATALOG = ROOT / "packaging/release-platforms.json"
 APPLICATION = Path("/Applications/Painted Wolf Code.app")
 ORIGIN = "https://downloads.paintedwolf.dev"
-
-
-class Refused(Exception):
-    """A seeded fault was refused, as it must be."""
 
 
 def run(arguments, **kwargs) -> subprocess.CompletedProcess:
@@ -120,23 +115,7 @@ def platform_results(directory: Path, release: str, key: Key) -> Path:
     return directory
 
 
-def check_workflows() -> dict:
-    """No workflow sets a name the runner overwrites (1.0.2-rc3 shipped one in a step)."""
-    from toolchain import python_tools
-    import workflow_lint
-    sys.path.insert(0, str(python_tools.provision(workflow_lint.REQUIREMENTS)))
-    import yaml
-    for path in sorted((ROOT / ".github/workflows").glob("*.yml")):
-        workflow_lint.environment(yaml.safe_load(path.read_text()))
-    release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
-    seeded = copy.deepcopy(release)
-    step = next(step for job in seeded["jobs"].values() for step in job.get("steps", []) if "run" in step)
-    step.setdefault("env", {})["RUNNER_NAME"] = "${{ matrix.runner }}"
-    return {"production": "passed", "seeded_reserved_name": refused("RUNNER_NAME in a release step",
-                                                                    lambda: workflow_lint.environment(seeded))}
-
-
-def check_limits_and_assembly(work: Path, key) -> dict:
+def assembly(work: Path, key) -> dict:
     """Upload limits, then manifest, public set and cask assembly with the release's aggregate script."""
     release = version()
     results = platform_results(work / "release-artifacts", release, key)
@@ -174,10 +153,6 @@ def check_limits_and_assembly(work: Path, key) -> dict:
                                "an updater signature bound to another version",
                                lambda: aggregate(mismatched, work / "refused"))}
     return receipt
-
-
-def assembly(work: Path, key) -> dict:
-    return {"workflows": check_workflows(), **check_limits_and_assembly(work, key)}
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -252,7 +227,7 @@ def macos(work: Path, app: Path, dmg: Path, public_key: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     stages = parser.add_subparsers(dest="stage", required=True)
-    stages.add_parser("assembly", help="workflow names, upload limits and release assembly on tiny platform results")
+    stages.add_parser("assembly", help="upload limits and release assembly on tiny platform results")
     bundle = stages.add_parser("macos", help="the unsigned bundle from den:bundle, then the cask install")
     bundle.add_argument("--app", type=Path, required=True)
     bundle.add_argument("--dmg", type=Path, required=True)

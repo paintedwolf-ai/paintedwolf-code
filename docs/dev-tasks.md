@@ -1129,7 +1129,7 @@ back from the signed file.
 | **HTTP API** | `/v1/` | Breaking wire only → `/v2/` (rare) |
 | **Workflow catalog** | `plan@1.0.0` | Manifest YAML; independent of host patch |
 
-**Primary distribution:** [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the platforms marked `publication: public` in [`packaging/release-platforms.json`](../packaging/release-platforms.json). The public set is the Apple Silicon macOS DMG and updater archive, plus Linux amd64 and arm64 DEB, RPM and pacman packages. They publish at `downloads.paintedwolf.dev`, Homebrew receives the matching cask, and the GitHub Release is a trailing mirror. Windows x86_64 remains a `candidate` outside the release matrix. Each catalog row lists its `package_extensions` (one build emits every family: `["deb", "rpm", "pkg.tar.zst"]` on Linux) and its `updater_extension`, which is `null` where the package manager owns updates. A public Linux platform uses the same lane and admission as macOS: `classify` requires the exact-source Qualification record, which carries the source verification, upgrade corpus and prior-release upgrade rehearsal, `prepare` reuses the unsigned packages, Nix closures and compiled macOS app that Qualification prepared for the same commit and tree (or builds them without secrets), `build-release` refuses any artifact prepared from another source and signs it, `aggregate-release` collects them, and publication follows `ship-gates`, `publish-artifacts` and the completed `publish-immutable` metadata gate; see [Linux in the next regular release](#linux-in-the-next-regular-release). The independent nonpublishing `linux-candidates` workflow retains development packages without release authority; regular releases use the public matrix once. The minimum supported macOS version is 14.0 (Sonoma), which clears the UI's WebKit requirement; the floor lives in [`lycaon/internal/platformfloor/macos_floor.txt`](../lycaon/internal/platformfloor/macos_floor.txt), and contract tests keep the catalog, Tauri, Homebrew, and compiled binary aligned.
+**Primary distribution:** [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the platforms marked `publication: public` in [`packaging/release-platforms.json`](../packaging/release-platforms.json). The public set is the Apple Silicon macOS DMG and updater archive, plus Linux amd64 and arm64 DEB, RPM and pacman packages. They publish at `downloads.paintedwolf.dev`, Homebrew receives the matching cask, and the GitHub Release is a trailing mirror. Windows x86_64 remains a `candidate` outside the release matrix. Each catalog row lists its `package_extensions` (one build emits every family: `["deb", "rpm", "pkg.tar.zst"]` on Linux) and its `updater_extension`, which is `null` where the package manager owns updates. A public Linux platform uses the same lane and admission as macOS: `classify` requires the exact-source Qualification record, which carries the source verification, upgrade corpus and prior-release upgrade rehearsal, `prepare` reuses exactly the preparation run Qualification checked (unsigned packages, Nix closures and the compiled macOS app), `build-release` refuses any artifact whose source or digest differs from that receipt and signs it, `aggregate-release` collects them, and publication follows `ship-gates`, `publish-artifacts` and the completed `publish-immutable` metadata gate; see [Linux in the next regular release](#linux-in-the-next-regular-release). The independent nonpublishing `linux-candidates` workflow retains development packages without release authority; regular releases use the public matrix once. The minimum supported macOS version is 14.0 (Sonoma), which clears the UI's WebKit requirement; the floor lives in [`lycaon/internal/platformfloor/macos_floor.txt`](../lycaon/internal/platformfloor/macos_floor.txt), and contract tests keep the catalog, Tauri, Homebrew, and compiled binary aligned.
 
 ```mermaid
 flowchart TD
@@ -1140,7 +1140,7 @@ flowchart TD
     compat --> gates["ship-gates: require every result"]
     prepare --> sign["build-release, in parallel<br/>macOS: sign, notarize, staple, dmg, verify<br/>Linux x86_64 and aarch64: verify source, sign"]
     compat --> sign
-    prepare --> nix["import-nix-closures<br/>Verify source and import both closures"]
+    prepare --> nix["verify-nix-closures<br/>Verify both closures against the receipt"]
     sign --> aggregate["aggregate-release<br/>Collect every public platform build"]
     aggregate --> plan["Select one retained monotonic channel plan"]
     gates --> plan
@@ -1761,12 +1761,17 @@ A call first looks for a receipt for the same commit and tree that is still
 retained (90 days) and reuses it, compiling nothing. Only a receipt from a
 schedule, push or dispatch run of this repository whose workflow commit is on
 `main` counts; pull request runs and branch dispatches never vouch for
-artifacts. A failed lookup builds.
+artifacts. A failed lookup builds. A caller that names a run, as a publishing release names
+the preparation its Qualification checked, reuses that run's receipt or stops;
+it never builds a replacement. The `artifacts` output gives each artifact's id
+and digest, and consumers download by id and pass the digest to `verify`.
 
-The release calls it for its source after the credential probe. It signs the
-macOS archive and the Linux packages and imports the Nix closures from it, so a
-release compiles nothing when Qualification prepared the same source, and a
-signing rerun repeats only the signing job. The
+A publishing release calls it after the credential probe with the run recorded
+in its Qualification receipt. It signs the macOS archive and the Linux packages
+and verifies the Nix closures from that run before anything is public, and
+imports the closures once, when it publishes the cache. It compiles nothing, and
+a signing rerun repeats only the signing job. A dry run reuses or builds a
+preparation of its source. The
 [Linux candidates workflow](../.github/workflows/linux-candidates.yml) calls it
 for packaging pull requests into `main` when they open ready or become ready,
 weekly for `main`, and by dispatch for any commit

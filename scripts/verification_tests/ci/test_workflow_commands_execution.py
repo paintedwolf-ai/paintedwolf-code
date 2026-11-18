@@ -1,4 +1,6 @@
 """Workflow commands preserve machine-readable plans and required-job verdicts."""
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -6,8 +8,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import yaml
+
+import ci_verification
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -42,6 +47,16 @@ class WorkflowCommandTests(unittest.TestCase):
         return subprocess.run([sys.executable, 'scripts/ci_verification.py', *arguments],
                               cwd=ROOT, env={**os.environ, **environment},
                               capture_output=True, text=True, timeout=30)
+
+    def test_a_qualified_source_reports_the_preparation_qualification_checked(self):
+        run = {'id': 7, 'receipt': {'preparation_run_id': 41}}
+        output = io.StringIO()
+        with patch.object(ci_verification.verification_verdict, 'require_qualification', return_value=run) as require, \
+                patch.object(sys, 'argv', ['ci_verification.py', 'verified', 'a' * 40]), \
+                patch.dict(os.environ, {'GITHUB_REPOSITORY': 'owner/repo'}), contextlib.redirect_stdout(output):
+            ci_verification.main()
+        require.assert_called_once_with('owner/repo', 'a' * 40)
+        self.assertEqual(output.getvalue(), 'preparation_run_id=41\n')
 
     def test_required_job_verdict_reaches_the_process_exit(self):
         results = json.dumps({'verification': {'result': 'success'}, 'platform': {'result': 'skipped'}})
