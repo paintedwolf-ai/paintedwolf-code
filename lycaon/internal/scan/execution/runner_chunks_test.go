@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -45,7 +46,7 @@ func (r *chunkRecorder) Run(_ context.Context, req scanbase.ScanRequest) (*scano
 func newChunkRunner(t *testing.T, engine *chunkRecorder, chunk int) (*Runner, *api.CodeScan) {
 	t.Helper()
 	store := scanbase.NewSQLStore(testdbfixture.Open(t, "chunks.db"))
-	reg := &scanbase.MockRegistry{Scanners: []scanbase.CodeScanner{engine}}
+	reg := &scantest.MockRegistry{Scanners: []scanbase.CodeScanner{engine}}
 	runner := NewRunner(store, reg, nil, scancfg.DefaultRunnerConfig(), nil)
 	runner.ChunkFiles = chunk
 	runner.DataDir = t.TempDir()

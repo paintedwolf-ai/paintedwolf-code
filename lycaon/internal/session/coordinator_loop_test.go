@@ -4,6 +4,7 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"strings"
@@ -135,7 +136,7 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
 	wfMgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(sqlDB)
 	dir := t.TempDir()
-	blueprintStore := blueprint.NewFileStoreForTest(dir)
+	blueprintStore := blueprinttest.NewFileStore(dir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
 	wfMgr.Blueprints.Getter = blueprintMgr

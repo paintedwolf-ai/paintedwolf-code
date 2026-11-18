@@ -2,11 +2,11 @@ package execution_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -22,8 +22,8 @@ func TestRunnerConcurrencyCap(t *testing.T) {
 	coord := newTestCoordinator(t, store, nil)
 	ctx := context.Background()
 	var running int32
-	slow := &scan.SlowMockScanner{Delay: 50 * time.Millisecond, Running: &running}
-	reg := &scan.MockRegistry{Scanner: slow}
+	slow := &scantest.SlowMockScanner{Delay: 50 * time.Millisecond, Running: &running}
+	reg := &scantest.MockRegistry{Scanner: slow}
 
 	cfg := scancfg.DefaultRunnerConfig()
 	cfg.Runner.MaxConcurrency = 2

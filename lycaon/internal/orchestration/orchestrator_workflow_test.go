@@ -3,6 +3,7 @@ package orchestration_test
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
+	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 	"strings"
 	"testing"
 
@@ -71,7 +72,7 @@ func newWorkflowOrchestrator(t *testing.T, rec *recordingWorkers, spy *spyWorkfl
 	runStore.Transactions.SetAuthzRecorder(authzcontext.SQLRecorder(sqlDB))
 	wfMgr := workflow.NewManager(runStore, sessStore, manifests, nil)
 	projectDir := t.TempDir()
-	blueprintMgr := workflow.WireBlueprintDepsForTest(wfMgr, projectDir)
+	blueprintMgr := workflowtest.WireBlueprintDeps(wfMgr, projectDir)
 	blueprintMgr.Approvals = blueprint.NewApprovalStore(sqlDB, authzcontext.SQLRecorder(sqlDB))
 	deps := conditions.TestRegistryDeps()
 	deps.BlueprintContent = func(_ context.Context, projectDir, relPath string) (string, error) {

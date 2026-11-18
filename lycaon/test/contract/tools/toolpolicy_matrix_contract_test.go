@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
@@ -169,7 +170,7 @@ func wireToolpolicyMatrixContract(
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	contractcheck.FailErr(t, "workflow.RegistryFromDirs failed", err)
 	sessionWF := workflowdrafts.NewSQL(sqlDB)
-	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
+	blueprintStore := blueprinttest.NewFileStore(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	workflowMgr := workflow.NewManager(workflowpersistence.New(sqlDB), store, manifestRegistry, nil)
 	workflowMgr.Resolver.SessionStore = sessionWF

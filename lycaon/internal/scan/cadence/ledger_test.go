@@ -1,11 +1,12 @@
 package cadence
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 	"time"
 
 	scanbase "github.com/lycaon/lycaon/internal/scan"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -56,8 +57,8 @@ func TestLedgerRecordsOpenFixedAndReopened(t *testing.T) {
 	execution := "execution-1"
 	store := ledgerFixture(t, root, "sast", execution)
 
-	kept := scanfindings.FixtureFinding("rule-kept", api.FindingLevelHigh, "kept", "a.go", 1)
-	gone := scanfindings.FixtureFinding("rule-gone", api.FindingLevelLow, "gone", "a.go", 2)
+	kept := findingstest.Finding("rule-kept", api.FindingLevelHigh, "kept", "a.go", 1)
+	gone := findingstest.Finding("rule-gone", api.FindingLevelLow, "gone", "a.go", 2)
 	first := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, kept, gone)
 	first.ExecutionFingerprint = execution
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
@@ -106,7 +107,7 @@ func TestLedgerBoundedFullPassLeavesNotObserved(t *testing.T) {
 	execution := "execution-1"
 	store := ledgerFixture(t, root, "sast", execution)
 
-	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
+	finding := findingstest.Finding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 	first := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetFull, api.ScanCoverageComplete, finding)
 	first.ExecutionFingerprint = execution
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
@@ -127,7 +128,7 @@ func TestLedgerPartialPathScanLeavesNotObserved(t *testing.T) {
 	execution := "execution-1"
 	store := ledgerFixture(t, root, "sast", execution)
 
-	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
+	finding := findingstest.Finding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 	first := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)
 	first.ExecutionFingerprint = execution
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
@@ -147,7 +148,7 @@ func TestLedgerMovedExecutionLeavesUnverified(t *testing.T) {
 	root := ledgerRoot(t)
 	store := ledgerFixture(t, root, "sast", "execution-2")
 
-	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
+	finding := findingstest.Finding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 	first := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)
 	first.ExecutionFingerprint = "execution-1"
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
@@ -174,9 +175,9 @@ func TestLedgerFiltersPagesAndCounts(t *testing.T) {
 	execution := "execution-1"
 	store := ledgerFixture(t, root, "sast", execution)
 
-	high := scanfindings.FixtureFinding("rule-high", api.FindingLevelHigh, "credential in a header", "api/authz.go", 11)
-	low := scanfindings.FixtureFinding("rule-low", api.FindingLevelLow, "deferred close in a loop", "scan/runner.go", 22)
-	gone := scanfindings.FixtureFinding("rule-gone", api.FindingLevelMedium, "unbounded read", "scan/parser.go", 33)
+	high := findingstest.Finding("rule-high", api.FindingLevelHigh, "credential in a header", "api/authz.go", 11)
+	low := findingstest.Finding("rule-low", api.FindingLevelLow, "deferred close in a loop", "scan/runner.go", 22)
+	gone := findingstest.Finding("rule-gone", api.FindingLevelMedium, "unbounded read", "scan/parser.go", 33)
 	first := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, high, low, gone)
 	first.ExecutionFingerprint = execution
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
@@ -240,7 +241,7 @@ func TestLedgerScopesToSelectedScanners(t *testing.T) {
 	root := ledgerRoot(t)
 	store := ledgerFixture(t, root, "sast", "execution-1")
 
-	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
+	finding := findingstest.Finding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 	scan := ledgerScan(t, store, "scan-1", root, "sast", api.ScanTargetPaths, api.ScanCoverageComplete, finding)
 	scan.ExecutionFingerprint = "execution-1"
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
@@ -269,8 +270,8 @@ func TestLedgerScopesToSelectedScanners(t *testing.T) {
 func TestLedgerSortOrdersPersistedFindings(t *testing.T) {
 	root := ledgerRoot(t)
 	store := ledgerFixture(t, root, "sast", "execution-1")
-	firstFinding := scanfindings.FixtureFinding("first", api.FindingLevelLow, "Zulu", "z.go", 20)
-	secondFinding := scanfindings.FixtureFinding("second", api.FindingLevelHigh, "alpha", "A.go", 10)
+	firstFinding := findingstest.Finding("first", api.FindingLevelLow, "Zulu", "z.go", 20)
+	secondFinding := findingstest.Finding("second", api.FindingLevelHigh, "alpha", "A.go", 10)
 	first := ledgerScan(t, store, "sort-first", root, "sast", api.ScanTargetFull, api.ScanCoverageComplete, firstFinding)
 	at := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
 	testutil.FailErr(t, "introduce first finding", store.RecordFindingEvents(t.Context(), &first, []api.SecurityFinding{firstFinding}, nil, at))

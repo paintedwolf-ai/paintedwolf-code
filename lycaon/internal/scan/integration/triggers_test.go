@@ -2,11 +2,11 @@ package integration
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -15,12 +15,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func sastRegistry(scanners ...string) *scan.MockRegistry {
+func sastRegistry(scanners ...string) *scantest.MockRegistry {
 	items := make([]scan.CodeScanner, 0, len(scanners))
 	for _, id := range scanners {
-		items = append(items, &scan.MockScanner{IDVal: id, CategoryList: []api.ScanCategory{api.ScanCategorySAST}})
+		items = append(items, &scantest.MockScanner{IDVal: id, CategoryList: []api.ScanCategory{api.ScanCategorySAST}})
 	}
-	return &scan.MockRegistry{Scanners: items}
+	return &scantest.MockRegistry{Scanners: items}
 }
 
 func promotionTask(dir, delegationID string) api.WorkerTask {

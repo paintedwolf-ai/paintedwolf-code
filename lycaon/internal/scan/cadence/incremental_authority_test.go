@@ -2,6 +2,8 @@ package cadence
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,14 +25,14 @@ func TestIncrementalFindingSetRequiresExactAncestor(t *testing.T) {
 			root := t.TempDir()
 			first := authorityScan("first", "first-assessment", root, "snapshot-1", "sast", api.ScanTargetFull, nil)
 			testutil.FailErr(t, "insert ancestor", store.Insert(t.Context(), first, nil, ""))
-			original := scanfindings.FixtureFinding("original", api.FindingLevelHigh, "original", "keep.go", 1)
+			original := findingstest.Finding("original", api.FindingLevelHigh, "original", "keep.go", 1)
 			completeNextScan(t, store, original)
 			unrelated := authorityScan("unrelated", "other-assessment", root, "snapshot-other", "sast", api.ScanTargetFull, nil)
 			testutil.FailErr(t, "insert unrelated base", store.Insert(t.Context(), unrelated, nil, ""))
-			completeNextScan(t, store, scanfindings.FixtureFinding("stale", api.FindingLevelHigh, "stale", "deleted.go", 1))
+			completeNextScan(t, store, findingstest.Finding("stale", api.FindingLevelHigh, "stale", "deleted.go", 1))
 			changed := authorityScan("changed", "changed-assessment", root, "snapshot-2", "sast", api.ScanTargetPaths, nil)
 			testutil.FailErr(t, "insert target", store.Insert(t.Context(), changed, []string{"a.go"}, baseID))
-			result := completeNextScan(t, store, scanfindings.FixtureFinding("new", api.FindingLevelHigh, "new", "a.go", 1))
+			result := completeNextScan(t, store, findingstest.Finding("new", api.FindingLevelHigh, "new", "a.go", 1))
 			wantCount, wantCoverage := 1, api.ScanCoveragePartial
 			if baseID == "snapshot-1" {
 				wantCount, wantCoverage = 2, api.ScanCoverageComplete
@@ -83,7 +85,7 @@ func TestCadenceExecutionChangeKeepsDeltasAndReportsStaleAuthority(t *testing.T)
 	}
 
 	// Rule or engine changes invalidate the full pass's coverage.
-	registry := cadence.Registry.(*scanbase.MockRegistry)
+	registry := cadence.Registry.(*scantest.MockRegistry)
 	registry.Command = []string{"new-engine-or-rules"}
 	stale := dispatchChange(1)
 	if stale.CoverageStatus != api.ScanCoveragePartial {

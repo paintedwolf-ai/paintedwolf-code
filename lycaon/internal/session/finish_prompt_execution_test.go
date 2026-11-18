@@ -4,6 +4,7 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"strings"
@@ -125,7 +126,7 @@ func setupPlanTripartiteFixture(t *testing.T) coordinatorPromptFixture {
 	wfMgr := workflow.NewManager(workflowpersistence.New(sqlDB), store, manifestReg, nil)
 	wfMgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(sqlDB)
 	dir := t.TempDir()
-	blueprintStore := blueprint.NewFileStoreForTest(dir)
+	blueprintStore := blueprinttest.NewFileStore(dir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
 	wfMgr.Blueprints.Getter = blueprintMgr

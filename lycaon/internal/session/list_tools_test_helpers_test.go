@@ -2,6 +2,7 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workerops"
@@ -94,7 +95,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	workflowMgr.Resolver.SessionStore = sessionWF
 	workflowMgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(sqlDB)
 	projectDir := t.TempDir()
-	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
+	blueprintStore := blueprinttest.NewFileStore(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	workflowMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
 	workflowMgr.Blueprints.Getter = blueprintMgr

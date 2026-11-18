@@ -3,6 +3,7 @@ package hostcontracts
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,7 +24,7 @@ func TestOptionalCommandBodiesHonorTransportFraming(t *testing.T) {
 	projects := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), projects, dir)
 	testutil.FailErr(t, "create project", err)
-	blueprints := blueprint.NewManager(blueprint.NewFileStoreForTest(dir))
+	blueprints := blueprint.NewManager(blueprinttest.NewFileStore(dir))
 	bp, err := blueprints.Create(t.Context(), p.ID, "Transport fixture", "", "plan", "# Transport fixture")
 	testutil.FailErr(t, "create blueprint", err)
 	server := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Projects: projects}, Workflow: hostapi.WorkflowDependencies{Blueprints: blueprints}}), nil, hostapi.TestAPIToken)

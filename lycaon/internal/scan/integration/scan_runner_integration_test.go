@@ -4,10 +4,10 @@ package integration
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
@@ -21,8 +21,8 @@ func TestScanRunnerIntegrationPendingToComplete(t *testing.T) {
 
 	store := scan.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, nil)
-	mock := &scan.MockScanner{IDVal: "mock", Result: &scanoutput.Result{FindingsCount: 3}}
-	reg := &scan.MockRegistry{Scanner: mock}
+	mock := &scantest.MockScanner{IDVal: "mock", Result: &scanoutput.Result{FindingsCount: 3}}
+	reg := &scantest.MockRegistry{Scanner: mock}
 
 	cfg := scancfg.DefaultRunnerConfig()
 	runner := scanexecution.NewRunner(store, reg, scan.NoopIngester{}, cfg, nil)
