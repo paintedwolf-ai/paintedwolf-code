@@ -142,7 +142,9 @@ func treeEntries(t *testing.T, root string) map[string]string {
 	return entries
 }
 
-// gitDigest records HEAD, every ref, the index bytes and porcelain status.
+// gitDigest records HEAD, every ref, the stash, the staged entries and
+// porcelain status. It reads without optional locks, so the read itself never
+// refreshes the index.
 func gitDigest(t *testing.T, dir string) string {
 	t.Helper()
 	if dir == "" {
@@ -157,20 +159,18 @@ func gitDigest(t *testing.T, dir string) string {
 		{"for-each-ref", "--format=%(refname) %(objectname)"},
 		{"stash", "list"},
 		{"status", "--porcelain=v2", "--untracked-files=all"},
+		{"ls-files", "--stage"},
 	} {
 		out, err := worldGit(dir, args...)
 		testutil.FailErr(t, "git "+strings.Join(args, " "), err)
 		parts = append(parts, out)
 	}
-	index, err := os.ReadFile(filepath.Join(dir, ".git", "index"))
-	testutil.FailErr(t, "read git index", err)
-	parts = append(parts, hex.EncodeToString(index))
 	return strings.Join(parts, "\x00")
 }
 
 func worldGit(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
 		"GIT_AUTHOR_NAME=fixture", "GIT_AUTHOR_EMAIL=fixture@example.invalid",
 		"GIT_COMMITTER_NAME=fixture", "GIT_COMMITTER_EMAIL=fixture@example.invalid")
 	out, err := cmd.CombinedOutput()
@@ -849,17 +849,13 @@ func runPathCell(t *testing.T, host *programHost, template refusalProject, tpl p
 	config := &llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: "run the program", FollowUpText: "Done."}}}
 	s = host.withClientAt(t, project.project, llm.NewMockProvider(config), wire.CreateSessionRequest{}, "")
 	s.h.SeedProgress(t, t.Context(), s.session)
-	configDir, err := configdir.UserConfigDir()
-	testutil.FailErr(t, "config dir", err)
-	probe := worldProbe{db: s.h.DB, session: s.session, outside: project.outside,
-		grantFile: filepath.Join(configDir, settingsoverlay.BasenameApprovals)}
-	before := probe.read(t)
+	// An escape can reach only the outside tree and its repository.
+	beforeTree, beforeGit := treeEntries(t, project.outside), gitDigest(t, project.outside)
 	config.Responses[0].ToolCalls = []llm.MockToolCall{{ID: "witness-1", Name: tpl.tool, Args: tpl.bind(chosen.file, chosen.dir)}}
 	promptDeciding(t, s, decide)
-	for _, part := range before.diff(probe.read(t)) {
-		if strings.HasPrefix(part, "outside:") || part == "git state" {
-			changed = append(changed, part)
-		}
+	changed = changedEntries("outside", beforeTree, treeEntries(t, project.outside))
+	if gitDigest(t, project.outside) != beforeGit {
+		changed = append(changed, "git state")
 	}
 	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
 	testutil.FailErr(t, "read transcript", err)
