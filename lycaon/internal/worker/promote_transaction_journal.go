@@ -89,11 +89,11 @@ func recoverShippedPromoteJournal(dataDir, jobID string, promote PromoteRoots, t
 	}
 	restores := make([]shippedPromoteRestore, 0, len(journal.Mutations))
 	for _, mutation := range journal.Mutations {
-		primaryAbs, _, err := promote.fileAbs(task, mutation.Path)
+		identity, err := promote.locateIdentity(task, mutation.Path)
 		if err != nil {
 			return true, err
 		}
-		current, exists, mode, err := readOptionalPromoteFile(primaryAbs)
+		current, exists, mode, err := readOptionalPromoteFile(identity.Primary)
 		if err != nil {
 			return true, err
 		}

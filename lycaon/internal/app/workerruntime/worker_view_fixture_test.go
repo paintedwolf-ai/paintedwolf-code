@@ -77,6 +77,7 @@ type engineFixture struct {
 	writeHook func(dir, name string, raw []byte) error
 	faults    recovery.FaultInjector
 	engine    *Runtime
+	views     *adapter.ActiveViewRegistry
 	// selector is the next boot's workspace selector; nil means this host's unenforced selector.
 	selector *adapter.Selector
 }
@@ -129,6 +130,7 @@ func (f *engineFixture) bindWorkspace(selector *adapter.Selector) {
 	if selector == nil {
 		selector = platform.NewSelector(platform.Config{})
 	}
+	f.views = selector.Registry
 	f.engine.Workspace = workspace.NewManager(f.engine.BranchRoot, selector, workspace.Filesystem{}).WithRecovery(f.engine.Recovery)
 	f.engine.Queue.Branches.SetWorkerWorkspaceManager(f.engine.Workspace)
 }
@@ -177,14 +179,17 @@ func (f *engineFixture) claimMountedWorker() *api.WorkerTask {
 	return claimed
 }
 
-// liveView returns the view the ordinary claim recorded for this branch.
 func (f *engineFixture) liveView(root string) *adapter.PreparedView {
 	f.t.Helper()
-	claimed, ok := workspace.LookupBranchClaimedView(root)
-	if !ok || claimed.Prepared == nil {
-		f.t.Fatalf("no claimed view for %s", root)
+	state, _, ok := workspace.BranchWorkspaceState(root)
+	if !ok {
+		f.t.Fatalf("no workspace state for %s", root)
 	}
-	return claimed.Prepared
+	_, view, ok := f.views.AdapterForView(state.Identity.ViewID)
+	if !ok || view == nil {
+		f.t.Fatalf("no registered view for %s", root)
+	}
+	return view
 }
 
 // publish captures view as a complete checkpoint, journaled as production publication is.

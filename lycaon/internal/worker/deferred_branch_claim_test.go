@@ -150,11 +150,8 @@ func TestClaimWorkerBranchMountedViewSkipsBaselineTreeWalkAndExposesWorkspaceSta
 		t.Fatalf("mounted checkpoint binding: root=%q baseline=%q", claimed.WorkspaceRoot, claimed.WorkspaceBaselinePath)
 	}
 
-	cv, ok := workspace.LookupBranchClaimedView(claimed.WorkspaceRoot)
-	if !ok || cv == nil || cv.Prepared == nil || cv.Prepared.Core == nil {
-		t.Fatalf("expected active mounted ClaimedView for %s, got ok=%v cv=%+v", claimed.WorkspaceRoot, ok, cv)
-	}
-	if stats := cv.Prepared.Core.Stats(); stats.LowerDirReads != 0 {
+	view := requireMountedView(t, sel.Registry, claimed.WorkspaceRoot)
+	if stats := view.Core.Stats(); stats.LowerDirReads != 0 {
 		t.Fatalf("expected 0 lower ReadDir walks across mounted ClaimWorkerBranch + baseline bind, got %d", stats.LowerDirReads)
 	}
 
