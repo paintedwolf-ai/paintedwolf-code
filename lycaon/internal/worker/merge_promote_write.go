@@ -36,7 +36,13 @@ func (s *MergeService) registerReconcilePaths(sessionID string, assessment Promo
 }
 
 func (s *MergeService) recordPromoteOutput(sessionID, jobID string, out *api.WorkerMergeResult) {
-	if s == nil || s.Reconcile == nil || out == nil {
+	if s == nil || out == nil {
+		return
+	}
+	if out.Status == api.WorkerMergeStatusMerged || out.Status == api.WorkerMergeStatusAborted {
+		s.reviews.replace(jobID, nil)
+	}
+	if s.Reconcile == nil {
 		return
 	}
 	if rows := promotionstate.NormalizePromotePathStatusRows(out.PathStatus); len(rows) > 0 {
@@ -55,10 +61,7 @@ func (s *MergeService) clearReconcilePaths(sessionID string) {
 	s.Reconcile.ClearMergeReconcilePaths(sessionID)
 }
 
-func prepareMergeMutations(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, assessment PromoteAssessment) ([]promoteMutation, error) {
-	if err := session.RevalidateTaskCheckpointPreview(ctx, task, roots); err != nil {
-		return nil, err
-	}
+func prepareMergeMutations(assessment PromoteAssessment) ([]promoteMutation, error) {
 	byPath := map[string]PromoteMergeResult{}
 	for _, mr := range assessment.MergeResults {
 		byPath[mr.Path] = mr
@@ -165,6 +168,7 @@ func promoteRecoveryChoices(assessment PromoteAssessment) []map[string]any {
 type promoteFinishInput struct {
 	sessionID     string
 	task          *api.WorkerTask
+	checkpointID  string
 	jobID         string
 	out           *api.WorkerMergeResult
 	resolved      []string
@@ -176,8 +180,8 @@ type promoteFinishInput struct {
 }
 
 func (s *MergeService) finishPromoteState(ctx context.Context, in promoteFinishInput) error {
-	fullPaths := s.jobPromotePaths(ctx, in.task)
-	fullAssessment, err := s.assessMerge(ctx, in.sessionID, in.task, fullPaths)
+	fullPaths := s.jobPromotePaths(ctx, in.task, in.checkpointID)
+	fullAssessment, err := s.assessMerge(ctx, in.sessionID, in.task, fullPaths, in.checkpointID)
 	if err != nil {
 		return err
 	}
@@ -268,12 +272,12 @@ func promoteCleanupContext(ctx context.Context) (context.Context, context.Cancel
 	return context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 }
 
-func assessCheckpointTask(ctx context.Context, svc *MergeService, sessionID string, task *api.WorkerTask, mergePaths []string) (PromoteAssessment, bool, error) {
+func assessCheckpointTask(ctx context.Context, svc *MergeService, sessionID string, task *api.WorkerTask, mergePaths []string, checkpointID string) (PromoteAssessment, bool, error) {
 	var roots []projectroot.RootRef
 	if svc != nil {
 		roots = svc.taskRootRefs(ctx, task)
 	}
-	store, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, roots)
+	store, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, roots, checkpointID)
 	if err != nil || !ok {
 		return PromoteAssessment{}, ok, err
 	}
@@ -287,7 +291,7 @@ func assessCheckpointTask(ctx context.Context, svc *MergeService, sessionID stri
 		wanted[filepath.ToSlash(filepath.Clean(strings.TrimSpace(p)))] = struct{}{}
 	}
 	promote := PromoteRootsForTask(task, roots)
-	out := PromoteAssessment{checkpointID: manifest.CheckpointID, primary: make(map[string]promotePrimarySnapshot, len(mergePaths))}
+	out := PromoteAssessment{checkpointID: manifest.CheckpointID, checkpointPreview: cpPreview, primary: make(map[string]promotePrimarySnapshot, len(mergePaths))}
 	for _, rel := range mergePaths {
 		if primaryAbs, _, fErr := promote.fileAbs(task, rel); fErr == nil {
 			b, ex, mode, _ := readOptionalPromoteFile(primaryAbs)
@@ -379,7 +383,6 @@ func taskCheckpointPreview(ctx context.Context, svc *MergeService, task *api.Wor
 	if err != nil {
 		return nil, err
 	}
-	session.MaybeBindTaskCheckpointPreview(task.ID, preview)
 	return preview, nil
 }
 
@@ -415,7 +418,7 @@ func (s *MergeService) stackedPromotionPlan(ctx context.Context, task *api.Worke
 }
 
 // applyTaskCheckpoint joins a task's checkpoint effects to its promotion transaction, stacked or not.
-func applyTaskCheckpoint(ctx context.Context, s *MergeService, tx *promoteTransaction, task *api.WorkerTask, resolvedPaths []string) error {
+func applyTaskCheckpoint(ctx context.Context, s *MergeService, tx *promoteTransaction, task *api.WorkerTask, checkpointID string, resolvedPaths []string) error {
 	if task == nil {
 		return nil
 	}
@@ -423,12 +426,12 @@ func applyTaskCheckpoint(ctx context.Context, s *MergeService, tx *promoteTransa
 	if s != nil {
 		roots = s.taskRootRefs(ctx, task)
 	}
-	_, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, roots)
+	_, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, roots, checkpointID)
 	if err != nil {
 		return errors.Join(err, tx.txn.Rollback(context.WithoutCancel(ctx)))
 	}
 	if !ok || len(manifest.ParentCheckpoints) == 0 {
-		return session.ApplyTaskCheckpoint(ctx, tx.txn, task, roots, resolvedPaths...)
+		return session.ApplyTaskCheckpoint(ctx, tx.txn, task, roots, checkpointID, resolvedPaths...)
 	}
 	coordinator, request, err := s.stackedPromotionRequest(task, roots, manifest, promoter, resolvedPaths)
 	if err != nil {

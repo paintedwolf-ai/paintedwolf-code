@@ -241,7 +241,7 @@ func TestOverlayChangedPathsFeedWorkerProof(t *testing.T) {
 		Scope:                 &scope,
 		WorkspaceBaselinePath: baseline,
 	}
-	changed := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil)
+	changed := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil, "")
 	proof := workercompletion.BuildWorkerCompletionProof(nil, changed, workercompletion.SourceRevision{
 		Revision: "revision-1", RootDigest: "root-1",
 	})

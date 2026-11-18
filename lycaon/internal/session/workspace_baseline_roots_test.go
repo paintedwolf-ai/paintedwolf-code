@@ -118,9 +118,9 @@ func TestInspectOverlayChangesReadsLegacyManifests(t *testing.T) {
 
 	currentTask := &api.WorkerTask{WorkspaceRoot: branch, WorkspaceBaselinePath: ref}
 	legacyTask := &api.WorkerTask{WorkspaceRoot: branch, WorkspaceBaselinePath: legacyPath}
-	want, err := InspectOverlayChanges(t.Context(), currentTask, roots)
+	want, err := InspectOverlayChanges(t.Context(), currentTask, roots, "")
 	testutil.FailErr(t, "inspect current baseline", err)
-	got, err := InspectOverlayChanges(t.Context(), legacyTask, roots)
+	got, err := InspectOverlayChanges(t.Context(), legacyTask, roots, "")
 	testutil.FailErr(t, "inspect legacy baseline", err)
 	if !slices.Equal(got, want) {
 		t.Fatalf("legacy promotion paths = %v, want %v", got, want)

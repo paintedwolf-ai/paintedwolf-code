@@ -69,8 +69,8 @@ func roundCheckpoint(jobID string) (string, bool) {
 	return checkpointID, ok && checkpointID != ""
 }
 
-// OpenTaskCheckpointStore loads the reviewed checkpoint, or latest when no preview is bound.
-func OpenTaskCheckpointStore(task *api.WorkerTask) (*checkpoint.Store, checkpoint.Manifest, bool, error) {
+// OpenTaskCheckpointStore loads the selected checkpoint or the current branch checkpoint.
+func OpenTaskCheckpointStore(task *api.WorkerTask, checkpointID string) (*checkpoint.Store, checkpoint.Manifest, bool, error) {
 	dir := CheckpointStoreDirForTask(task)
 	if dir == "" {
 		return nil, checkpoint.Manifest{}, false, nil
@@ -80,7 +80,6 @@ func OpenTaskCheckpointStore(task *api.WorkerTask) (*checkpoint.Store, checkpoin
 		return nil, checkpoint.Manifest{}, true, err
 	}
 	// The store is shared across workers, so only the branch's own record can name its checkpoint.
-	checkpointID := boundTaskCheckpointID(task.ID)
 	if checkpointID == "" {
 		_, checkpointID, _ = taskBranchCheckpoint(task)
 	}
@@ -92,10 +91,10 @@ func OpenTaskCheckpointStore(task *api.WorkerTask) (*checkpoint.Store, checkpoin
 }
 
 // OverlayWorkspaceChangedPaths returns overlay changes since the leg started.
-func OverlayWorkspaceChangedPaths(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) []string {
+func OverlayWorkspaceChangedPaths(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, checkpointID string) []string {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	paths, err := InspectOverlayChanges(ctx, task, roots)
+	paths, err := InspectOverlayChanges(ctx, task, roots, checkpointID)
 	if err != nil {
 		slog.WarnContext(ctx, "workspace baseline changes unavailable", "error", err)
 	}
@@ -103,14 +102,14 @@ func OverlayWorkspaceChangedPaths(ctx context.Context, task *api.WorkerTask, roo
 }
 
 // InspectOverlayChanges returns overlay changes and any baseline or checkpoint read error.
-func InspectOverlayChanges(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) ([]string, error) {
+func InspectOverlayChanges(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, checkpointID string) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if task == nil || !OverlayWorkspaceAvailable(task) {
 		return nil, nil
 	}
-	if _, manifest, hasCheckpoint, err := OpenTaskCheckpointStore(task); err != nil {
+	if _, manifest, hasCheckpoint, err := OpenTaskCheckpointStore(task, checkpointID); err != nil {
 		return nil, err
 	} else if hasCheckpoint {
 		return checkpointManifestChangedPaths(manifest, roots), nil
@@ -250,7 +249,7 @@ func OverlayAwaitingPromote(ctx context.Context, task *api.WorkerTask) bool {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	paths, err := InspectOverlayChanges(ctx, task, nil)
+	paths, err := InspectOverlayChanges(ctx, task, nil, "")
 	return err != nil || len(paths) > 0
 }
 
@@ -259,7 +258,7 @@ func OverlayWorkspaceDivergencePaths(task *api.WorkerTask, roots []projectroot.R
 	if task == nil || !task.EffectiveScope().IsWrite() {
 		return nil
 	}
-	if _, manifest, hasCheckpoint, err := OpenTaskCheckpointStore(task); err == nil && hasCheckpoint {
+	if _, manifest, hasCheckpoint, err := OpenTaskCheckpointStore(task, ""); err == nil && hasCheckpoint {
 		return checkpointManifestChangedPaths(manifest, roots)
 	}
 	overlay := strings.TrimSpace(task.WorkspaceRoot)

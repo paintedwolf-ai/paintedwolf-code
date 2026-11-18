@@ -109,7 +109,7 @@ func OverlaySourceProofWithWorkspaces(
 		return workercompletion.WorkerCompletionProof{}
 	}
 	proof := workercompletion.BuildWorkerCompletionProof(
-		childMessages, OverlayWorkspaceChangedPaths(ctx, task, nil),
+		childMessages, OverlayWorkspaceChangedPaths(ctx, task, nil, ""),
 		current,
 	)
 	declaredCommand = strings.TrimSpace(declaredCommand)

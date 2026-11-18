@@ -4,6 +4,8 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type checkpointReviews struct {
@@ -28,4 +30,12 @@ func (r *checkpointReviews) replace(jobID string, preview *checkpoint.PromotionP
 		r.byJob = make(map[string]*checkpoint.PromotionPreview)
 	}
 	r.byJob[jobID] = preview
+}
+
+func promotionCheckpointID(task *api.WorkerTask, review *checkpoint.PromotionPreview) (string, error) {
+	if review != nil {
+		return review.CheckpointID, nil
+	}
+	_, manifest, _, err := session.OpenTaskCheckpointStore(task, "")
+	return manifest.CheckpointID, err
 }

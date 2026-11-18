@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -142,7 +141,18 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 				t.Fatalf("preview CleanPaths = %v, want 3 clean paths", previewOut.CleanPaths)
 			}
 
-			// Mutate trunk after PreviewForSession to verify stale preview detection.
+			review := svc.reviews.get(jobID)
+			other := &MergeService{}
+			if review == nil || review.CheckpointID != manifest.CheckpointID || other.reviews.get(jobID) != nil {
+				t.Fatalf("checkpoint review binding = %+v", review)
+			}
+			if _, err := svc.PreviewForSession(ctx, "parent-cp", jobID, "summary", []string{"outside-review.txt"}); err == nil {
+				t.Fatal("preview accepted an unlisted file")
+			}
+			if svc.reviews.get(jobID) != review {
+				t.Fatal("failed preview replaced the existing review")
+			}
+
 			trunkStale := "package app\n\nfunc A() int { return 99 }\n\nfunc B() int { return 2 }\n"
 			testutil.FailErr(t, "write stale trunk", os.WriteFile(filepath.Join(primary, "app.go"), []byte(trunkStale), 0o644))
 			if _, err := svc.PromoteOverlay(ctx, "parent-cp", jobID, api.PromoteOverlayInput{}); !errors.Is(err, checkpoint.ErrStalePreviewTargetChanged) {
@@ -192,6 +202,9 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 			}
 			promoteOut, err := svc.PromoteOverlay(ctx, "parent-cp", jobID, api.PromoteOverlayInput{})
 			testutil.FailErr(t, "PromoteOverlay", err)
+			if svc.reviews.get(jobID) != nil {
+				t.Fatal("terminal promotion retained its checkpoint review")
+			}
 			wantStatus := api.WorkerMergeStatusMerged
 			if promoteOut.Status != wantStatus {
 				t.Fatalf("PromoteOverlay status = %q, want %q", promoteOut.Status, wantStatus)
@@ -247,6 +260,9 @@ func requireFailedCompletionRollsBack(t *testing.T, svc *MergeService, fixture p
 	}
 	if task, ok := q.Get(jobID); !ok || task.MergeStatus != api.WorkerMergeStatusPending {
 		t.Fatalf("failed completion status=%+v", task)
+	}
+	if review := svc.reviews.get(jobID); review == nil || review.CheckpointID != checkpointID {
+		t.Fatalf("failed completion lost the reviewed checkpoint: %+v", review)
 	}
 	if _, found, err := cpStore.LoadPromotionRecord("tx-" + manifest.CheckpointID); err != nil || found {
 		t.Fatalf("failed completion retained component record: found=%t err=%v", found, err)
@@ -334,7 +350,6 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 		Scope:           &api.TaskScope{Mode: api.TaskScopeModeWrite},
 	})
 	testutil.FailErr(t, "Enqueue", err)
-	t.Cleanup(func() { session.ClearTaskCheckpointPreview(jobID) })
 
 	overlay := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", jobID)
 	testutil.FailErr(t, "MkdirAll overlay", os.MkdirAll(overlay, 0o755))
