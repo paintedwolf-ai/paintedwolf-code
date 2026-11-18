@@ -35,8 +35,14 @@ func TestProjectStopPreservesReboundRootWhileOldCallbackDrains(t *testing.T) {
 		defer watchRegMu.Unlock()
 		return watchers[watchKey{projectID, ""}] == nil
 	})
-	changed := make(chan struct{}, 1)
+	changed, initial := make(chan struct{}, 1), make(chan struct{}, 1)
 	EnsureProjectWatch(t.Context(), nil, projectID, "", roots, func(_ context.Context, _ string, batch ExternalBatch) {
+		if batch.Resync {
+			select {
+			case initial <- struct{}{}:
+			default:
+			}
+		}
 		for _, change := range batch.Changes {
 			if change.Path == "changed.txt" {
 				select {
@@ -47,6 +53,7 @@ func TestProjectStopPreservesReboundRootWhileOldCallbackDrains(t *testing.T) {
 		}
 	})
 	testutil.WaitFor(t, "rebound root is covered", func() bool { return repochange.Coverage(root).Complete })
+	testutil.Receive(t, "rebound startup resync is delivered", initial)
 	unblock()
 	testutil.AwaitClosed(t, "old callback completes", completed)
 	testutil.FailErr(t, "old project stop completes", testutil.Receive(t, "old project stop", stopped))
