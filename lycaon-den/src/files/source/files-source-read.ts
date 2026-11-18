@@ -105,7 +105,8 @@ async function readOpenedFileBuffer(client: LycaonClient, projectId: string,
   const read = async (decode_as?: "utf-16le" | "utf-16be"): Promise<OpenedFileBufferSource> => {
     try {
       const opened = await openSourceDocument(client, projectId, {
-        ...(buffer.fileId && isOutsideRoot(projectId, buffer.rootId) ? { file_id: buffer.fileId } : { path: buffer.path, root_id: buffer.rootId }),
+        path: buffer.path, root_id: buffer.rootId,
+        ...(buffer.fileId && isOutsideRoot(projectId, buffer.rootId) ? { file_id: buffer.fileId } : {}),
         client_id: clientIdentity(), ...(decode_as ? { decode_as } : {}), ...(retained?.replica ? { replica: retained.replica } : {}),
       }, sessionId);
       if (!holdsDraft(opened.document)) {

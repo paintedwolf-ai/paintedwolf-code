@@ -225,7 +225,8 @@ export function FilesTree(props: FilesTreeProps) {
   });
   const modelForPresentation = (presentation: TreePresentation | undefined) => {
     if (!presentation?.frames.length && presentation?.state?.extent.rows !== 0) return buildKnownRootsModel(props.roots);
-    return buildPagedTreeModel(props.roots, presentation?.state?.extent.rows ?? 0, presentation?.frames ?? [],
+    const roots = [...(presentation?.state?.roots ?? props.roots), ...(presentation?.state?.outside_locations ?? [])];
+    return buildPagedTreeModel(roots, presentation?.state?.extent.rows ?? 0, presentation?.frames ?? [],
       Object.entries(dirStates()).flatMap(([key, draft]) => {
         const address = splitFilesTreeDirKey(key);
         return address && (draft.naming || draft.createError) ? [{ ...address, naming: draft.naming, createError: draft.createError }] : [];

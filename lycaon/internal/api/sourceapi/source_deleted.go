@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/lycaon/lycaon/internal/api/outsideaccess"
 	"github.com/lycaon/lycaon/internal/api/secretview"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
@@ -35,7 +36,7 @@ func (s *Workspace) resolveNavigationPath(ctx context.Context, p *project.Projec
 		file = head
 		ref.RootID, ref.Path = file.RootID, file.Path
 	}
-	scoped, err := admitOutside(ctx, s.SourceLedger, p, ref.RootID, ref.Path)
+	scoped, err := outsideaccess.Admit(ctx, s.SourceLedger, p, ref.RootID, ref.Path)
 	if err != nil {
 		ref.Status = wire.NavigationUnavailable
 		return ref

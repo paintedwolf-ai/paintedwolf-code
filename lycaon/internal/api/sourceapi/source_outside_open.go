@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/projectsource"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -32,6 +33,11 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 		s.responses.DecodeError(w, r, err)
 		return
 	}
+	release := requestscope.BeginRuntime(s.MutationGate, s.responses, w, r, chi.URLParam(r, "id"))
+	if release == nil {
+		return
+	}
+	defer release()
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -39,6 +45,10 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 	sess, err := s.SessionStore.Get(r.Context(), strings.TrimSpace(req.SessionID))
 	if err != nil || sess.ProjectID != p.ID || sess.ParentSessionID != "" || sess.OwnerPersonID != requestscope.Caller(r).ID {
 		s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found in this project")
+		return
+	}
+	p, ok = requestscope.ProjectForSession(s.SessionStore, s.responses, w, r, p, sess.ID)
+	if !ok {
 		return
 	}
 	abs := fspath.CanonicalPath(req.Path)
@@ -107,8 +117,8 @@ func observeOutsideFile(f *os.File) (sourceledger.TrackInput, error) {
 	if !info.Mode().IsRegular() {
 		return sourceledger.TrackInput{}, projectsource.ErrSourceIsDirectory
 	}
-	if info.Size() <= sourceledger.MaxRevisionContentBytes {
-		content, err := io.ReadAll(io.LimitReader(f, sourceledger.MaxRevisionContentBytes+1))
+	if info.Size() <= sourceblob.MaxRevisionContentBytes {
+		content, err := io.ReadAll(io.LimitReader(f, sourceblob.MaxRevisionContentBytes+1))
 		if err != nil {
 			return sourceledger.TrackInput{}, err
 		}
@@ -169,6 +179,11 @@ func (s *Workspace) HandleOpenChatLocationFile(w http.ResponseWriter, r *http.Re
 		s.responses.InvalidField(w, "path", "must name a file relative to the location")
 		return
 	}
+	release := requestscope.BeginRuntime(s.MutationGate, s.responses, w, r, chi.URLParam(r, "id"))
+	if release == nil {
+		return
+	}
+	defer release()
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -187,12 +202,20 @@ func (s *Workspace) HandleOpenChatLocationFile(w http.ResponseWriter, r *http.Re
 		s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")
 		return
 	}
+	p, ok = requestscope.ProjectForSession(s.SessionStore, s.responses, w, r, p, chat.ID)
+	if !ok {
+		return
+	}
 	file, err := openChatLocationFile(location, req.Path)
 	if err != nil {
 		s.writeOutsideFileOpenError(w, r, err)
 		return
 	}
 	defer func() { _ = file.Close() }()
+	if pathInsideAttached(p, file.Name()) {
+		s.responses.InvalidField(w, "path", "is inside a project folder")
+		return
+	}
 	rel, ok := projectroot.OutsideRel(file.Name())
 	if !ok {
 		s.responses.Fail(w, wire.ApiErrorCodeSourceNotFound, "file not found")

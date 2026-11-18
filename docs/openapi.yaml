@@ -3749,7 +3749,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: The project has no outside namespace on this platform
+          description: This project is changing
           content:
             application/json:
               schema:
@@ -3855,6 +3855,12 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           description: Project, location, or file not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: This project is changing
           content:
             application/json:
               schema:
@@ -34395,14 +34401,10 @@ components:
       type: object
       additionalProperties: false
       required:
+        - path
+        - root_id
         - client_id
-      description: Address a project file by root and path, or an outside file by its recorded file ID.
-      anyOf:
-        - required:
-            - root_id
-            - path
-        - required:
-            - file_id
+      description: A document opens at its current address when a file ID is supplied.
       properties:
         file_id:
           type: string

@@ -4845,14 +4845,14 @@ type OpenChatLocationFileRequest struct {
 	Path string `json:"path"`
 }
 
-// OpenEditorDocumentRequest Address a project file by root and path, or an outside file by its recorded file ID.
+// OpenEditorDocumentRequest A document opens at its current address when a file ID is supplied.
 type OpenEditorDocumentRequest struct {
 	// Recorded project file identity for an outside tab.
 	FileID string `json:"file_id,omitempty"`
 	// Root-relative, slash-separated file path.
-	Path string `json:"path,omitempty"`
+	Path string `json:"path"`
 	// Attached root that contains the file.
-	RootID string `json:"root_id,omitempty"`
+	RootID string `json:"root_id"`
 	// Stable id for the client view opening the document.
 	ClientID string `json:"client_id"`
 	// Explicit decoding for BOM-less UTF-16 text.
