@@ -731,3 +731,21 @@ func TestRequestEvidenceReplacesStaleManagedReferenceWithoutMutatingHarvest(t *t
 		t.Fatal("request-local evidence changed shared harvest memory")
 	}
 }
+
+// ScreenOutbound applies the installed final screen, and refuses before one is installed.
+func TestRegistryScreenOutboundUsesTheInstalledScreen(t *testing.T) {
+	reg := newEmptyRegistry()
+	req := modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: "token " + modelScreenGitHubToken}}}
+	var fault *ModelRequestSecretScreenFaultError
+	if _, err := reg.ScreenOutbound(t.Context(), ScreenDestination{ID: "test"}, req); !errors.As(err, &fault) {
+		t.Fatalf("unwired screen = %v, want a screen fault", err)
+	}
+	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
+	testutil.FailErr(t, "build matcher", err)
+	reg.SetOutboundSecretScreen(NewModelSecretScreen(matcher, func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
+		return secretmatch.Resolution{}, errors.New("declined")
+	}))
+	if _, err := reg.ScreenOutbound(t.Context(), ScreenDestination{ID: "test"}, req); err == nil {
+		t.Fatal("installed screen let a recognised token through without an answer")
+	}
+}
