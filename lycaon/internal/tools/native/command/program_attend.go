@@ -308,17 +308,8 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	// Settlement and bounded result projection survive cancellation; they cannot
 	// start another program operation.
 	outcome, err := r.outcome(context.WithoutCancel(ctx), run, e.outputs, result, e.stdout, e.stderr, e.scope)
-	var deliveryErr error
 	if err != nil {
-		var exit *int
-		if settledNow && outcome.State == "completed" {
-			exit = &outcome.Status
-		}
-		reject := rejectOutputScreenLimit(err, exit, outcome.Outputs)
-		if reject == nil {
-			return "", err
-		}
-		deliveryErr = reject
+		return "", err
 	}
 	outcome.Stderr = e.documents.appendNotes(outcome.Stderr)
 	outcome.Refusal = refusal
@@ -339,7 +330,7 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("command program encode: %w", err)
 	}
-	return string(out), deliveryErr
+	return string(out), nil
 }
 
 // programLifetime releases a program's plan and frame once both the tool call

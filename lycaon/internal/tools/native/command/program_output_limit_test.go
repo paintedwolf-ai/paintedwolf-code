@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -61,7 +62,7 @@ func TestRejectOutputScreenLimitPreservesExitAndAvailableOutput(t *testing.T) {
 		&secretmatch.StreamLimitError{Resource: "screen_work_units", Maximum: 8, Observed: 9},
 	} {
 		t.Run(fmt.Sprintf("%T", cause), func(t *testing.T) {
-			reject := rejectOutputScreenLimit(fmt.Errorf("deliver output: %w", cause), &exit, paths)
+			reject := rejectOutputScreenLimit(captureprojection.ScreeningLimit(fmt.Errorf("deliver output: %w", cause)), &exit, paths)
 			if reject == nil || reject.Code != "COMMAND_OUTPUT_SCREEN_LIMIT" {
 				t.Fatalf("limit classified as %+v", reject)
 			}
@@ -71,13 +72,31 @@ func TestRejectOutputScreenLimitPreservesExitAndAvailableOutput(t *testing.T) {
 				!slices.Equal(details["saved_output_paths"].([]string), []string{"@output/program.stdout"}) {
 				t.Fatalf("limit facts = %+v", details)
 			}
-			reject = rejectOutputScreenLimit(cause, nil, nil)
+			reject = rejectOutputScreenLimit(captureprojection.ScreeningLimit(cause), nil, nil)
 			if reject.Data["command_exit_recorded"] != nil || reject.Data["saved_output_paths"] != nil {
 				t.Fatalf("unobserved exit or path reported: %+v", reject.Data)
 			}
 		})
 	}
-	if reject := rejectOutputScreenLimit(errors.New("other fault"), nil, nil); reject != nil {
+	if reject := rejectOutputScreenLimit(captureprojection.ScreeningLimit(errors.New("other fault")), nil, nil); reject != nil {
 		t.Fatalf("non-limit classified as %+v", reject)
+	}
+}
+
+func TestProgramDeliveryLimitRetainsExecutionOutcome(t *testing.T) {
+	child := &tools.ToolInvocationOut{CommandStarted: true}
+	tc := tools.ToolContext{Effects: tools.InvocationEffects{Out: child}}
+	out := ProgramOutcome{State: "completed", Status: 7}
+	limit := &captureprojection.LimitError{Resource: "screen_work_units", Maximum: 8, Observed: 9}
+	if !recordOutputScreenLimit(tc, &out, &out.Status, limit) {
+		t.Fatal("output screen limit was not recorded")
+	}
+	if out.State != "completed" || out.Status != 7 || out.OutputLimit == nil || out.OutputLimit.Code != "COMMAND_OUTPUT_SCREEN_LIMIT" {
+		t.Fatalf("output delivery rewrote the execution outcome: %+v", out)
+	}
+	parent := &tools.ToolInvocationOut{}
+	parent.MergeChild(child, tools.MergeProgram)
+	if !parent.CommandStarted || parent.CommandDeliveryReject == nil || parent.CommandDeliveryReject.Data["command_exit_status"] != 7 {
+		t.Fatalf("call lost the program's invocation or delivery facts: %+v", parent.CommandDeliveryReject)
 	}
 }

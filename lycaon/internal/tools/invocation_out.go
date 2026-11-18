@@ -62,6 +62,10 @@ func (o *ToolInvocationOut) MergeChild(child *ToolInvocationOut, scope MergeScop
 		o.Facts.Confine = o.Facts.Confine.Merge(child.Facts.Confine)
 	case MergeProgram:
 		o.Facts = o.Facts.Merge(child.Facts)
+		o.CommandStarted = o.CommandStarted || child.CommandStarted
+		if child.CommandDeliveryReject != nil {
+			o.CommandDeliveryReject = child.CommandDeliveryReject
+		}
 	case MergeStageFailed:
 	}
 }

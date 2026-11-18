@@ -342,6 +342,10 @@ func (l *toolInvocations) executeToolCall(
 func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session, run completedToolRun) (result toolInvocation) {
 	ownerInvoked := run.toolCtx.Effects.Out != nil && run.toolCtx.Effects.Out.OwnerInvoked
 	captures := toolCapturesFrom(run.toolCtx.Effects.Out)
+	if out := run.toolCtx.Effects.Out; run.runErr == nil && out != nil && out.CommandDeliveryReject != nil {
+		reject := out.CommandDeliveryReject
+		run.runErr = l.toolReject(reject.Code, reject.Data).WithCause(reject)
+	}
 	toolContent := run.output
 	defer func() {
 		if run.toolCtx.Effects.Out != nil {

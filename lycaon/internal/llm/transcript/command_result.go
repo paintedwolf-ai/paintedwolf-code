@@ -90,15 +90,16 @@ type commandResultPayload struct {
 }
 
 type commandResultMetadata struct {
-	State                    string                  `json:"state"`
-	Status                   *int                    `json:"status"`
-	Outputs                  []commandStreamMetadata `json:"outputs,omitempty"`
-	NonzeroExecutions        []commandExitMetadata   `json:"nonzero_executions,omitempty"`
-	OmittedNonzeroExecutions int                     `json:"omitted_nonzero_executions,omitempty"`
-	CompletedEffects         int                     `json:"completed_effects,omitempty"`
-	UncertainEffects         int                     `json:"uncertain_effects,omitempty"`
-	CPUTimeUnmeasured        bool                    `json:"cpu_time_unmeasured,omitempty"`
-	Refusal                  *commandRefusalMetadata `json:"refusal,omitempty"`
+	State                    string                         `json:"state"`
+	Status                   *int                           `json:"status"`
+	Outputs                  []commandStreamMetadata        `json:"outputs,omitempty"`
+	OutputLimit              *api.CommandProgramOutputLimit `json:"output_limit,omitempty"`
+	NonzeroExecutions        []commandExitMetadata          `json:"nonzero_executions,omitempty"`
+	OmittedNonzeroExecutions int                            `json:"omitted_nonzero_executions,omitempty"`
+	CompletedEffects         int                            `json:"completed_effects,omitempty"`
+	UncertainEffects         int                            `json:"uncertain_effects,omitempty"`
+	CPUTimeUnmeasured        bool                           `json:"cpu_time_unmeasured,omitempty"`
+	Refusal                  *commandRefusalMetadata        `json:"refusal,omitempty"`
 }
 
 type commandStreamMetadata struct {

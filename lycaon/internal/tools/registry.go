@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -95,6 +96,8 @@ type ToolInvocationOut struct {
 	CommandProgram *api.CommandProgramReceipt
 	// CommandStarted records whether any operation started in the program.
 	CommandStarted bool
+	// CommandDeliveryReject records a refused output delivery after evaluation.
+	CommandDeliveryReject *toolrejection.ToolReject
 	// SourceDeliveries lists the source deliveries confirmed during the call.
 	SourceDeliveries []SourceDeliveryTag
 	// Listener is Den UI and wire metadata for loopback listener attribution on http_request.

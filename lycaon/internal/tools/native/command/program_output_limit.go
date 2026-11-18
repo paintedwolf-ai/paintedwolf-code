@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -32,8 +33,23 @@ func outputDeliveryLimit(err error) *api.CommandProgramOutputLimit {
 	return limit
 }
 
-func rejectOutputScreenLimit(err error, exit *int, saved []api.CommandProgramOutputWindow) *toolrejection.ToolReject {
+func recordOutputScreenLimit(tc tools.ToolContext, out *ProgramOutcome, exit *int, err error) bool {
+	if out.State != "completed" {
+		exit = nil
+	}
 	limit := captureprojection.ScreeningLimit(err)
+	reject := rejectOutputScreenLimit(limit, exit, out.Outputs)
+	if reject == nil {
+		return false
+	}
+	out.OutputLimit = &api.CommandProgramOutputLimit{
+		Code: reject.Code, LimitID: limit.Resource, Maximum: limit.Maximum, Observed: limit.Observed,
+	}
+	tc.Effects.Out.WithLock(func(out *tools.ToolInvocationOut) { out.CommandDeliveryReject = reject })
+	return true
+}
+
+func rejectOutputScreenLimit(limit *captureprojection.LimitError, exit *int, saved []api.CommandProgramOutputWindow) *toolrejection.ToolReject {
 	if limit == nil {
 		return nil
 	}

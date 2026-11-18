@@ -115,10 +115,10 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 			out.Stderr, out.StderrRef = delivered, window.Ref
 		}
 		if err != nil {
-			if captureprojection.ScreeningLimit(err) != nil {
-				r.commitProgramHTTPProvenance(ctx, run, out.Stdout != "" || out.Stderr != "")
+			if !recordOutputScreenLimit(run.tc, &out, projection.Program.StatusCode, err) {
+				return out, err
 			}
-			return out, err
+			break
 		}
 	}
 	r.commitProgramHTTPProvenance(ctx, run, out.Stdout != "" || out.Stderr != "")
