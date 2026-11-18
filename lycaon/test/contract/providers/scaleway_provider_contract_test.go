@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/modelfeed"
+	"github.com/lycaon/lycaon/internal/modelfeed/modelfeedtest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -88,8 +89,7 @@ func TestScalewayModelFeedMappingAndFixture(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	raw, err := os.ReadFile(filepath.Join(root, "lycaon", "internal", "modelfeed", "testdata", "models_dev_fixture.json"))
 	contractcheck.FailErr(t, "read models_dev_fixture.json", err)
-	doc, err := modelfeed.ParseDocument(raw)
-	contractcheck.FailErr(t, "modelfeed.ParseDocument", err)
+	doc := modelfeedtest.Document(t, raw)
 
 	eligible := doc.EligibleModels("scaleway")
 	if len(eligible) == 0 {
