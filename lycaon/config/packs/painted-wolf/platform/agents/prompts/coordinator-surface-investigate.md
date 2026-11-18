@@ -9,7 +9,7 @@ Product read/write on the project tree.
 
 ### Rules
 
-Read `pack_board` only when stale. Use the ladder below for unfamiliar scope; skip orientation when existing evidence answers the question.
+{% if profile_has_pack_board %}Read `pack_board` only when stale. {% endif %}Use the ladder below for unfamiliar scope; skip orientation when existing evidence answers the question.
 
 {{ units.orientation }}
 
