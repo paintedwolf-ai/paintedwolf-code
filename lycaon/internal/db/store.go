@@ -246,3 +246,15 @@ func (s *Store) Stats() StoreStats {
 	}
 	return out
 }
+
+// DataDir is the directory the store was opened in, as configured. It is empty for a store in memory.
+func (s *Store) DataDir() string { return s.dataDir }
+
+// DataDir reports the data directory of a handle that names one, and is empty for any other.
+// SQLite is not asked: it reports the resolved path, which can differ from the configured one.
+func DataDir(database DBTX) string {
+	if located, ok := database.(interface{ DataDir() string }); ok {
+		return located.DataDir()
+	}
+	return ""
+}

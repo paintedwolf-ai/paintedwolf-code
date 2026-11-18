@@ -243,7 +243,7 @@ func (h *harness) direct(dir string, args ...string) (string, string, int) {
 	if errors.As(err, &exit) {
 		status = exit.ExitCode()
 	} else if err != nil {
-		h.t.Fatal(err)
+		testutil.FailErr(h.t, "run the reference git", err)
 	}
 	return stdout.String(), stderr.String(), status
 }

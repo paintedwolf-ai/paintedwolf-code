@@ -53,7 +53,7 @@ func TestStaticWorkflowHintCodesRegisteredInYAML(t *testing.T) {
 
 	var unproduced []string
 	for code, entry := range cfg.HintCodes {
-		anchorID, ok := guidance.InjectAnchor(entry.Emit)
+		anchorID, ok := contractcheck.InjectAnchor(entry.Emit)
 		if !ok || anchorID != "inject.active_workflow" {
 			continue
 		}

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/scan/opengrep"
@@ -18,19 +17,16 @@ type projectEvaluationOptions struct {
 	Timeout time.Duration
 }
 
-type projectBudget struct {
-	Base      time.Duration
-	Scale     int
-	Effective time.Duration
-}
+// projectBudget is one project's scan deadline, the same on every host.
+type projectBudget time.Duration
 
-func resolveProjectBudget(base time.Duration, scale int) (projectBudget, error) {
-	if base <= 0 || scale < 1 || scale > 4 || int64(base) > math.MaxInt64/int64(scale) {
-		return projectBudget{}, fmt.Errorf("project timeout must be positive and fit the scaled duration")
+func resolveProjectBudget(timeout time.Duration) (projectBudget, error) {
+	if timeout <= 0 {
+		return 0, fmt.Errorf("project timeout must be positive")
 	}
-	return projectBudget{Base: base, Scale: scale, Effective: base * time.Duration(scale)}, nil
+	return projectBudget(timeout), nil
 }
 
 func (b projectBudget) context(parent context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(parent, b.Effective)
+	return context.WithTimeout(parent, time.Duration(b))
 }

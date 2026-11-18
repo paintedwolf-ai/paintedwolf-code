@@ -136,3 +136,18 @@ func TestDeclaredEvidenceMatchesAFourDigitPIN(t *testing.T) {
 		t.Fatal("guessed evidence must not have a lower floor than declared evidence")
 	}
 }
+
+func TestNeedleBoundCoversEverySpelling(t *testing.T) {
+	short := strings.Repeat("abcd\n", 40)
+	for _, secret := range []string{"abcd", "abcd\nefgh\nijkl", short, "\x01\x02<>&\xff\n\x01\x02<>&\xff", "🙂🙂🙂🙂\r\nλλλλ", strings.Repeat(" <", 4096)} {
+		for _, floor := range []int{MinManagedSecretRunes, MinHarvestNeedleRunes} {
+			retained := int64(0)
+			for _, n := range harvestNeedles(secret, floor) {
+				retained += 512 + int64(len(n.text))
+			}
+			if bound := needleBound(secret, floor, 512); retained > bound {
+				t.Fatalf("%q floor %d: needles retain %d, bound %d", secret, floor, retained, bound)
+			}
+		}
+	}
+}

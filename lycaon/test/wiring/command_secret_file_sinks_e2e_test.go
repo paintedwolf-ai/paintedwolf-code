@@ -188,7 +188,7 @@ func TestCommandFileSinkAsksBeforeWritingATrackedSecret(t *testing.T) {
 			}()
 			kind := wire.CheckpointKindToolApproval
 			var card wire.CheckpointEvent
-			testutil.WaitFor(t, func() bool {
+			testutil.WaitFor(t, "the card is pending", func() bool {
 				select {
 				case err := <-done:
 					testutil.FailErr(t, "prompt", err)

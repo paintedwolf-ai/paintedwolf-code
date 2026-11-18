@@ -35,6 +35,7 @@
 @import "./onboarding-utilities.css";
 @import "./shell-utilities.css";
 @import "./nav-brand-titlebar.css";
+@import "./window-edge-utilities.css";
 @import "./file-edit-diff.css";
 
 @import "./styling/recipes/theme.css";

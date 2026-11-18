@@ -116,33 +116,18 @@ func TestBackgroundOutputStreamsIncrementally(t *testing.T) {
 	testutil.FailErr(t, "start background", err)
 
 	var first bgprocess.OutputSnapshot
-	var firstFound, secondFound bool
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "incremental output arrives", func() bool {
 		snapshot, err := reg.Output.ReadRawOutput("sess-1", handle, 0)
 		testutil.FailErr(t, "command_output cursor 0", err)
-		if len(snapshot.Output.Chunks) > 0 {
-			first = snapshot
-			firstFound = true
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if !firstFound {
-		t.Fatal("expected incremental output")
-	}
+		first = snapshot
+		return len(snapshot.Output.Chunks) > 0
+	})
 	cursor := first.Output.Next
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "output arrives after the cursor", func() bool {
 		snapshot, err := reg.Output.ReadRawOutput("sess-1", handle, cursor)
 		testutil.FailErr(t, "command_output follow-up", err)
-		if len(snapshot.Output.Chunks) > 0 {
-			secondFound = true
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if !secondFound {
-		t.Fatal("expected output after cursor")
-	}
+		return len(snapshot.Output.Chunks) > 0
+	})
 }
 
 func TestBackgroundLiveAndReloadProjectionCatchSecretsSplitAcrossWrites(t *testing.T) {
@@ -251,18 +236,14 @@ func TestBackgroundStopKillsProcess(t *testing.T) {
 	testutil.FailErr(t, "start background", err)
 	_, err = reg.Lifecycle.Stop("sess-1", handle, bgprocess.TerminationStoppedByAgent)
 	testutil.FailErr(t, "stop background", err)
-	for t.Context().Err() == nil {
-		out, err := reg.Output.ReadOutput(context.Background(), "sess-1", handle)
+	testutil.WaitFor(t, "the stopped process reports it is not running", func() bool {
+		out, err := reg.Output.ReadOutput(t.Context(), "sess-1", handle)
 		testutil.FailErr(t, "output after stop", err)
-		if !out.Running {
-			if out.TerminationReason != api.BackgroundProcessTerminationReason(bgprocess.TerminationStoppedByAgent) {
-				t.Fatalf("output termination reason = %q, want %q", out.TerminationReason, bgprocess.TerminationStoppedByAgent)
-			}
-			return
+		if !out.Running && out.TerminationReason != api.BackgroundProcessTerminationReason(bgprocess.TerminationStoppedByAgent) {
+			t.Fatalf("output termination reason = %q, want %q", out.TerminationReason, bgprocess.TerminationStoppedByAgent)
 		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatal("expected process stopped")
+		return !out.Running
+	})
 }
 
 func TestBackgroundSessionEndKillsAll(t *testing.T) {
@@ -296,8 +277,7 @@ func TestRegistryCloseStopsAllSessionsAndRejectsNewStarts(t *testing.T) {
 		}, runner)
 		testutil.FailErr(t, "start process for "+sessionID, err)
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	testutil.FailErr(t, "close registry", reg.Lifecycle.Close(ctx))
 	if got := len(reg.Output.List(context.Background(), "sess-1")) + len(reg.Output.List(context.Background(), "sess-2")); got != 0 {
 		t.Fatalf("processes retained after close = %d", got)
@@ -498,8 +478,6 @@ func TestExecutionDeadlinePublishesOneTerminalCompletion(t *testing.T) {
 		Complete: func(_ context.Context, completion bgprocess.Completion) { completed <- completion },
 	})
 	runner := hostcmd.NewRunner()
-	// The execution deadline includes supervised process startup.
-	executionTimeout := testutil.Timeout(time.Second)
 	handle, err := reg.StartPipeline(context.Background(), bgprocess.PipelineSpec{
 		SessionID: "sess-1", Runner: runner, Mode: bgprocess.JobModeBackground,
 		// The execution deadline covers native launch handoff as well as payload time.
@@ -510,18 +488,14 @@ func TestExecutionDeadlinePublishesOneTerminalCompletion(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "start deadline command", err)
-	finished, err := reg.Lifecycle.Await(context.Background(), "sess-1", handle, executionTimeout+testutil.Timeout(5*time.Second))
+	// No await budget: the command's own one-second deadline is what ends it.
+	finished, err := reg.Lifecycle.Await(t.Context(), "sess-1", handle, 0)
 	testutil.FailErr(t, "await deadline command", err)
 	if !finished {
 		t.Fatal("deadline command did not finish")
 	}
-	select {
-	case completion := <-completed:
-		if completion.TerminationReason != bgprocess.TerminationTimedOut {
-			t.Fatalf("termination = %q want timed_out", completion.TerminationReason)
-		}
-	case <-t.Context().Done():
-		t.Fatal("terminal completion was not published")
+	if completion := testutil.Receive(t, "the terminal completion is published", completed); completion.TerminationReason != bgprocess.TerminationTimedOut {
+		t.Fatalf("termination = %q want timed_out", completion.TerminationReason)
 	}
 	_ = reg.Output.Promote(t.Context(), "sess-1", handle)
 	select {

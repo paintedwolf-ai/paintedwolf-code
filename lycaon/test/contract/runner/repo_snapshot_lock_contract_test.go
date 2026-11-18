@@ -6,11 +6,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -73,21 +75,16 @@ func snapshotPublish(t *testing.T, lockRoot, dest, content string) {
 
 func waitForFile(t *testing.T, path, what string) {
 	t.Helper()
-	for {
-		if _, err := os.Stat(path); err == nil {
-			return
-		}
-		if t.Context().Err() != nil {
-			t.Fatalf("%s never appeared at %s", what, path)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	testutil.WaitFor(t, what+" appears at "+path, func() bool {
+		_, err := os.Stat(path)
+		return err == nil
+	})
 }
 
 // awaitMarker is the reader-side half of the deterministic handshakes below: a
 // command that records one attempt and blocks until the test raises a marker.
 func awaitMarker(attempts, marker string) string {
-	return "echo run >>'" + attempts + "'; for _ in $(seq 300); do [ -f '" + marker + "' ] && exit 0; sleep 0.1; done; exit 90"
+	return "echo run >>'" + attempts + "'; until [ -f '" + marker + "' ]; do sleep 0.1; done"
 }
 
 func countLines(t *testing.T, path string) int {
@@ -136,14 +133,20 @@ func TestRepositorySnapshotLockWritersSerialize(t *testing.T) {
 	second := filepath.Join(lockRoot, "w2-ran")
 
 	w1 := snapshotCmd(t, lockRoot, "generate", "--", "bash", "-c",
-		"touch '"+started+"'; for _ in $(seq 300); do [ -f '"+release+"' ] && exit 0; sleep 0.1; done; exit 90")
+		"touch '"+started+"'; until [ -f '"+release+"' ]; do sleep 0.1; done")
 	contractcheck.FailErr(t, "start first writer", w1.Start())
 	waitForFile(t, started, "first writer gate")
 
 	w2 := snapshotCmd(t, lockRoot, "generate", "--", "bash", "-c", "touch '"+second+"'")
 	contractcheck.FailErr(t, "start second writer", w2.Start())
 
-	time.Sleep(500 * time.Millisecond)
+	// The second writer queues behind the first; while it waits it must not have run.
+	waiter := "waiter: pid " + strconv.Itoa(w2.Process.Pid) + " "
+	testutil.WaitFor(t, "the second writer queues for the writer slot", func() bool {
+		out, err := snapshotCmd(t, lockRoot, "status").CombinedOutput()
+		contractcheck.FailErr(t, "read lock status", err)
+		return bytes.Contains(out, []byte(waiter))
+	})
 	if _, err := os.Stat(second); err == nil {
 		t.Fatal("second writer ran while the first held the writer slot")
 	}
@@ -232,7 +235,7 @@ func TestRepositorySnapshotLockReaderFailsAfterRepeatedInvalidation(t *testing.T
 	attempts := filepath.Join(lockRoot, "attempts")
 
 	reader := snapshotCmd(t, lockRoot, "read", "--", "bash", "-c",
-		"echo run >>'"+attempts+"'; runs=$(($(wc -l <'"+attempts+"'))); for _ in $(seq 300); do [ -f '"+lockRoot+"/go-'\"$runs\" ] && exit 0; sleep 0.1; done; exit 90")
+		"echo run >>'"+attempts+"'; runs=$(($(wc -l <'"+attempts+"'))); until [ -f '"+lockRoot+"/go-'\"$runs\" ]; do sleep 0.1; done")
 	reader.Env = append(reader.Env, "PW_SNAPSHOT_READ_ATTEMPTS=2")
 	var readerOut bytes.Buffer
 	reader.Stdout = &readerOut
@@ -343,8 +346,9 @@ func TestRepositorySnapshotLockTerminationStopsProtectedCommand(t *testing.T) {
 	lockRoot := t.TempDir()
 	started := filepath.Join(lockRoot, "started")
 	continued := filepath.Join(lockRoot, "continued")
+	protected := filepath.Join(lockRoot, "protected.pid")
 	cmd := snapshotCmd(t, lockRoot, "generate", "--", "bash", "-c",
-		"touch '"+started+"'; sleep 5; touch '"+continued+"'")
+		"echo $$ >'"+protected+"'; touch '"+started+"'; sleep 5; touch '"+continued+"'")
 	contractcheck.FailErr(t, "start protected command", cmd.Start())
 	waitForFile(t, started, "protected command gate")
 
@@ -352,7 +356,14 @@ func TestRepositorySnapshotLockTerminationStopsProtectedCommand(t *testing.T) {
 	if err := cmd.Wait(); err == nil {
 		t.Fatal("terminated lock command succeeded")
 	}
-	time.Sleep(100 * time.Millisecond)
+	raw, err := os.ReadFile(protected)
+	contractcheck.FailErr(t, "read protected command pid", err)
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	contractcheck.FailErr(t, "parse protected command pid", err)
+	// Only the protected shell writes the marker, so once it is gone nothing can.
+	testutil.WaitFor(t, "the protected command exits", func() bool {
+		return errors.Is(syscall.Kill(pid, 0), syscall.ESRCH)
+	})
 	if _, err := os.Stat(continued); !os.IsNotExist(err) {
 		t.Fatalf("protected command continued after termination: %v", err)
 	}

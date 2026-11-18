@@ -15,12 +15,17 @@ it("keeps wide code lines horizontal while reserving every vertical line", () =>
   expect(markdownHeightEstimate(code, 300, 14)).toBeGreaterThan(80 * 14);
 });
 
-it("sizes progress snapshots from their displayed checklist", () => {
+it("sizes a plan from its checklist and a later progress row as one line", () => {
   const metrics = { widthPx: 800, remPx: 16, bodyPx: 14 };
   const steps = Array.from({ length: 8 }, (_, index) => ({ label: `Step ${index}`, state: "done" as const }));
-  const height = transcriptRowContentEstimate({ kind: "progress_complete", key: "p", steps }, metrics, []);
-  expect(height).toBeGreaterThan(190);
-  expect(transcriptRowContentEstimate({ kind: "progress_complete", key: "p", steps: steps.slice(0, 1) }, metrics, [])).toBeLessThan(height!);
+  const plan = (count: number) =>
+    transcriptRowContentEstimate({ kind: "progress_update", key: "p", initial: true, steps: steps.slice(0, count), changes: [] }, metrics, []);
+  expect(plan(8)).toBeGreaterThan(190);
+  expect(plan(1)).toBeLessThan(plan(8)!);
+  const done = (count: number) =>
+    transcriptRowContentEstimate({ kind: "progress_complete", key: "d", steps: steps.slice(0, count) }, metrics, []);
+  expect(done(8)).toBe(done(1));
+  expect(done(8)).toBeLessThan(plan(1)!);
 });
 
 it("accounts for wider inline code spans and CJK glyphs when estimating line wraps", () => {

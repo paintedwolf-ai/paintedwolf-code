@@ -92,22 +92,15 @@ func startFixtureBus(t *testing.T) *fixtureDaemon {
 	testutil.FailErr(t, "start isolated bus", cmd.Start())
 	daemon := &fixtureDaemon{path: path, cmd: cmd}
 	t.Cleanup(daemon.stop)
-	deadline := time.Now().Add(testutil.Timeout(time.Minute))
-	ctx, cancel := context.WithDeadline(t.Context(), deadline)
-	defer cancel()
-	var lastErr error
-	for ctx.Err() == nil {
-		connection, err := linuxbus.Connect(ctx, path)
-		if err == nil {
-			_ = connection.Close()
-			return daemon
+	testutil.WaitFor(t, "the isolated bus accepts a connection", func() bool {
+		connection, err := linuxbus.Connect(t.Context(), path)
+		if err != nil {
+			return false
 		}
-		lastErr = err
-		time.Sleep(time.Millisecond)
-	}
-	daemon.stop()
-	t.Fatalf("isolated bus did not start: %v; %s", lastErr, stderr.String())
-	return nil
+		_ = connection.Close()
+		return true
+	})
+	return daemon
 }
 
 func fixtureBus(t *testing.T) string { return startFixtureBus(t).path }
@@ -165,13 +158,9 @@ func TestLogindLeaseTransfersDescriptorAndBlocksAutomaticSuspend(t *testing.T) {
 	}
 	testutil.FailErr(t, "release inhibitor", held.Release())
 	testutil.FailErr(t, "repeat release", held.Release())
-	select {
-	case err := <-ended:
-		if !errors.Is(err, io.EOF) {
-			t.Fatalf("released inhibitor pipe = %v", err)
-		}
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("release left an inhibitor descriptor open")
+	err = testutil.Receive(t, "the release closes the inhibitor descriptor", ended)
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("released inhibitor pipe = %v", err)
 	}
 }
 
@@ -181,13 +170,9 @@ func TestLogindLeaseReportsServiceLossAndClosesItsDescriptor(t *testing.T) {
 	held := &logindLease{file: writer, done: make(chan error, 1), stop: make(chan struct{}), stopped: make(chan struct{})}
 	go held.watch()
 	testutil.FailErr(t, "end service lifetime", reader.Close())
-	select {
-	case err := <-held.Done():
-		if err == nil {
-			t.Fatal("lost inhibitor had no failure")
-		}
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("service loss was not detected")
+	err = testutil.Receive(t, "the service loss ends the inhibition", held.Done())
+	if err == nil {
+		t.Fatal("lost inhibitor had no failure")
 	}
 	testutil.FailErr(t, "release lost inhibitor", held.Release())
 	if _, err := writer.Stat(); !errors.Is(err, os.ErrClosed) {
@@ -202,13 +187,9 @@ func TestLogindLeaseRejectsAClosedDescriptor(t *testing.T) {
 	testutil.FailErr(t, "close fixture descriptor", writer.Close())
 	held := &logindLease{file: writer, done: make(chan error, 1), stop: make(chan struct{}), stopped: make(chan struct{})}
 	go held.watch()
-	select {
-	case err := <-held.Done():
-		if err == nil {
-			t.Fatal("closed descriptor had no failure")
-		}
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("closed descriptor was not detected")
+	err = testutil.Receive(t, "the closed descriptor ends the inhibition", held.Done())
+	if err == nil {
+		t.Fatal("closed descriptor had no failure")
 	}
 	if err := held.Release(); !errors.Is(err, os.ErrClosed) {
 		t.Fatalf("closed descriptor release = %v", err)
@@ -377,11 +358,7 @@ func TestPortalInhibitorRequestsOnlySuspendAndClosesOnRelease(t *testing.T) {
 	}
 	testutil.FailErr(t, "release portal inhibitor", held.Release())
 	testutil.FailErr(t, "repeat release", held.Release())
-	select {
-	case <-fixture.closed:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("release did not close the portal request")
-	}
+	testutil.AwaitClosed(t, "the release closes the portal request", fixture.closed)
 	if _, open := <-held.Done(); open {
 		t.Fatal("released lease still reports completion values")
 	}
@@ -404,13 +381,9 @@ func TestPortalDenialAndResponseEndTheLease(t *testing.T) {
 	request := fixture.request
 	fixture.mu.Unlock()
 	testutil.FailErr(t, "emit portal response", fixture.server.Emit(request, portalRequest+".Response", uint32(2), map[string]dbus.Variant{}))
-	select {
-	case err := <-held.Done():
-		if err == nil || !strings.Contains(err.Error(), "response 2") {
-			t.Fatalf("portal response = %v", err)
-		}
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("portal response did not end the lease")
+	err = testutil.Receive(t, "the portal response ends the lease", held.Done())
+	if err == nil || !strings.Contains(err.Error(), "response 2") {
+		t.Fatalf("portal response = %v", err)
 	}
 }
 
@@ -424,11 +397,7 @@ func TestPortalGrantDecidesTheInhibition(t *testing.T) {
 	if held, err := subject.Acquire(t.Context()); held != nil || err == nil || !strings.Contains(err.Error(), "refused the inhibitor (response 2)") {
 		t.Fatalf("refused grant lease=%v error=%v", held, err)
 	}
-	select {
-	case <-fixture.closed:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("refused request was not closed")
-	}
+	testutil.AwaitClosed(t, "the refused request is closed", fixture.closed)
 }
 
 func TestSessionLeaseReportsBusDisconnection(t *testing.T) {
@@ -437,13 +406,9 @@ func TestSessionLeaseReportsBusDisconnection(t *testing.T) {
 	held, err := portalProvider{connect: connectTo(daemon.path), appID: testAppID, unitAppID: inOwnUnit}.Acquire(t.Context())
 	testutil.FailErr(t, "acquire portal inhibitor", err)
 	daemon.stop()
-	select {
-	case err := <-held.Done():
-		if err == nil {
-			t.Fatal("bus loss had no failure")
-		}
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("bus loss was not detected")
+	err = testutil.Receive(t, "the bus loss ends the inhibition", held.Done())
+	if err == nil {
+		t.Fatal("bus loss had no failure")
 	}
 	testutil.FailErr(t, "release after bus loss", held.Release())
 }

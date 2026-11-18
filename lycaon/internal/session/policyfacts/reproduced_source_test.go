@@ -342,7 +342,7 @@ func BenchmarkMeasureReproducedSourceAtCap(b *testing.B) {
 		}
 		rel := fmt.Sprintf("file%02d.go", i)
 		if err := os.WriteFile(filepath.Join(wsDir, rel), buf.Bytes()[:MaxReproducedCandidateBytes], 0o600); err != nil {
-			b.Fatal(err)
+			testutil.FailErr(b, "write file", err)
 		}
 		records = append(records, evidence.Record{
 			Handle: fmt.Sprintf("read#%d", i+1),

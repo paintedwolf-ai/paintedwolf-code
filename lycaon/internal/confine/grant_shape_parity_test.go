@@ -150,9 +150,10 @@ func TestKernelAgreesWithVerdictUnderEveryGrantShape(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			c.Roots = liveBoundaryRoots(c.Roots...)
 			rules := confine.BoundaryOf(&c).Filesystem
-			for _, probe := range probes {
+			permitted := kernelPermits(t, helper, c, probes)
+			for i, probe := range probes {
 				verdict := rules.Verdict(probe.access, probe.path)
-				if allowed := kernelPermits(t, helper, c, probe); allowed != verdict.Allowed {
+				if allowed := permitted[i]; allowed != verdict.Allowed {
 					_, out := confinedRun(t, helper, c, "/bin/ls", "-l", probe.path)
 					t.Errorf("%s: kernel allowed=%v, verdict=%+v: %s", probe.name, allowed, verdict, out)
 				}

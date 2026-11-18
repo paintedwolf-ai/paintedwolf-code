@@ -45,18 +45,14 @@ func TestReaperKillsTrackedGroupWhenEngineInputCloses(t *testing.T) {
 	leader, descendant := startGroup(t)
 	reapLines(fmt.Sprintf("+g%d\n", leader))
 	for _, pid := range []int{leader, descendant} {
-		if err := waitForProcessGone(t.Context(), pid); err != nil {
-			testutil.FailErr(t, "tracked group outlived the engine", err)
-		}
+		waitForProcessGone(t, pid)
 	}
 }
 
 func TestReaperKillsATrackedSingleProcessOnly(t *testing.T) {
 	leader, descendant := startGroup(t)
 	reapLines(fmt.Sprintf("+p%d\n", descendant))
-	if err := waitForProcessGone(t.Context(), descendant); err != nil {
-		testutil.FailErr(t, "tracked process outlived the engine", err)
-	}
+	waitForProcessGone(t, descendant)
 	if !osprocess.Alive(leader) {
 		t.Fatal("reaping one tracked process took its untracked group leader with it")
 	}
@@ -75,9 +71,7 @@ func TestReaperSparesForgottenEntries(t *testing.T) {
 func TestReaperHoldsAGroupTrackedTwiceUntilBothForgetIt(t *testing.T) {
 	leader, _ := startGroup(t)
 	reapLines(fmt.Sprintf("+g%d\n", leader), fmt.Sprintf("+g%d\n", leader), fmt.Sprintf("-g%d\n", leader))
-	if err := waitForProcessGone(t.Context(), leader); err != nil {
-		testutil.FailErr(t, "group with one live registration survived", err)
-	}
+	waitForProcessGone(t, leader)
 }
 
 func TestReaperKillsSurvivingSessionMembersAfterLeaderExitsAndSparesMismatchedStart(t *testing.T) {
@@ -137,9 +131,7 @@ func TestReaperKillsSurvivingSessionMembersAfterLeaderExitsAndSparesMismatchedSt
 	)
 
 	for _, pid := range []int{memberPID, grandchildPID} {
-		if err := waitForProcessGone(t.Context(), pid); err != nil {
-			testutil.FailErr(t, "surviving session member outlived reaper", err)
-		}
+		waitForProcessGone(t, pid)
 	}
 	if !bystanderInc.Alive() {
 		t.Fatal("reaper killed process whose start time differed from its registration")
@@ -153,9 +145,7 @@ func TestReaperRemovesTrackedDirAfterKillingItsGroup(t *testing.T) {
 	testutil.FailErr(t, "write scratch file", os.WriteFile(filepath.Join(scratch, "nested", "report.json"), []byte("{}"), 0o600))
 	reapLines(fmt.Sprintf("+g%d\n", leader), "+d"+scratch+"\n")
 	for _, pid := range []int{leader, descendant} {
-		if err := waitForProcessGone(t.Context(), pid); err != nil {
-			testutil.FailErr(t, "tracked group outlived the engine", err)
-		}
+		waitForProcessGone(t, pid)
 	}
 	if _, err := os.Stat(scratch); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("tracked directory survived the engine: stat err=%v", err)
@@ -203,9 +193,7 @@ func assertEngineDeathReapsOwnedGroup(t *testing.T, role string) {
 	testutil.FailErr(t, "SIGKILL engine helper", engine.Process.Kill())
 	_ = engine.Wait()
 	for _, pid := range []int{leader, descendant} {
-		if err := waitForProcessGone(t.Context(), pid); err != nil {
-			testutil.FailErr(t, "tracked group outlived a SIGKILLed engine", err)
-		}
+		waitForProcessGone(t, pid)
 	}
 	scratch := filepath.Join(dir, "scratch")
 	for {

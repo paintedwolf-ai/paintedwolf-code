@@ -14,7 +14,7 @@ import (
 func AwaitComparisonScreen(t *testing.T, server *hostapi.Server, projectID, viewID string) wire.SourceComparisonView {
 	t.Helper()
 	var view wire.SourceComparisonView
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the comparison screen settles", func() bool {
 		response := httptest.NewRecorder()
 		server.ServeHTTP(response, NewAuthedRequest(http.MethodGet, sourceapi.SourceViewURL(projectID, viewID), nil))
 		view = *ReadSourceViewResponse(t, response, http.StatusOK).Comparison

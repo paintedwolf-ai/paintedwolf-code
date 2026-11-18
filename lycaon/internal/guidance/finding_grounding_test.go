@@ -1,8 +1,9 @@
 package guidance_test
 
 import (
-	"github.com/lycaon/lycaon/internal/evidence"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/evidence"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 )

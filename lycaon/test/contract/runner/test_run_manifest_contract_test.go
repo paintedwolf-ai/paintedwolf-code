@@ -52,7 +52,7 @@ func TestGoTestRunManifestPreservesReplayInputs(t *testing.T) {
 		"--source-ref", "refs/painted-wolf/test-failures/run-1",
 		"--source-root", "/recorded/source",
 		"--runner-argv", runnerArgv, "--go-argv", goArgv,
-		"--env", "GO_TEST_P=2", "--env", "PW_TEST_TIMEOUT_SCALE=4",
+		"--env", "GO_TEST_P=2", "--env", "GO_TEST_PARALLEL=4",
 		"--env", "LYCAON_OPENGREP_CANDIDATE=/candidate with spaces",
 		"--env", "LYCAON_SCANNER_SUITE_REQUIRED=1", "--env", "PATH=/recorded/source/.bin:/scanner/bin",
 	)
@@ -107,7 +107,7 @@ func TestGoTestRunManifestPreservesReplayInputs(t *testing.T) {
 	replayEnvPath := filepath.Join(tmp, "replay.env")
 	runner := `#!/bin/bash
 printf '%s\0' "$@" > "$REPLAY_ARGV_CAPTURE"
-printf '%s\n%s\n%s\n%s\n%s\n' "$GO_TEST_P" "$PW_TEST_TIMEOUT_SCALE" "$PATH" "$PW_TEST_REPLAY_MANIFEST" "$LYCAON_OPENGREP_CANDIDATE" > "$REPLAY_ENV_CAPTURE"
+printf '%s\n%s\n%s\n%s\n%s\n' "$GO_TEST_P" "$GO_TEST_PARALLEL" "$PATH" "$PW_TEST_REPLAY_MANIFEST" "$LYCAON_OPENGREP_CANDIDATE" > "$REPLAY_ENV_CAPTURE"
 `
 	contractcheck.FailErr(t, "write replay runner", os.WriteFile(runnerPath, []byte(runner), 0o700))
 	contractcheck.FailErr(t, "create replay root", os.Mkdir(replayRoot, 0o700))
