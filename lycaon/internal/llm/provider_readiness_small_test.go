@@ -263,7 +263,7 @@ func TestValidRegionIdentifier(t *testing.T) {
 
 // Explicit driver kinds declare protocol and base URL behavior.
 func TestEveryDriverKindHasAProtocolSpec(t *testing.T) {
-	for _, kind := range driverFactories.Kinds() {
+	for kind := range driverConstructors {
 		if _, ok := providerKindSpecs[kind]; !ok {
 			t.Errorf("providerKindSpecs is missing %q — declare its protocol and base URL", kind)
 		}

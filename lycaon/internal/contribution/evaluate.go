@@ -3,34 +3,6 @@ package contribution
 // FactLookup answers one typed fact query.
 type FactLookup func(fact, operand string) bool
 
-// EvaluateCondition evaluates a validated condition tree over every plane.
-// A nil condition is unconditionally true.
-func EvaluateCondition(c *Condition, lookup FactLookup) bool {
-	if c == nil {
-		return true
-	}
-	switch {
-	case len(c.All) > 0:
-		for _, child := range c.All {
-			if !EvaluateCondition(&child, lookup) {
-				return false
-			}
-		}
-		return true
-	case len(c.Any) > 0:
-		for _, child := range c.Any {
-			if EvaluateCondition(&child, lookup) {
-				return true
-			}
-		}
-		return false
-	case c.Not != nil:
-		return !EvaluateCondition(c.Not, lookup)
-	default:
-		return lookup(c.Fact, c.Is)
-	}
-}
-
 // HostVerdict is the three-valued host evaluation result.
 type HostVerdict int
 

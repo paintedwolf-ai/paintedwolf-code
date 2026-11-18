@@ -36,7 +36,7 @@ func TestDisplayedLinkIsCoveredOnlyWhileNoCredentialIsHeld(t *testing.T) {
 	}
 	for _, firstUse := range []bool{true, false} {
 		for _, e := range exposures {
-			for _, posture := range Postures() {
+			for _, posture := range testPostures() {
 				f := baseFacts(StagePreDial)
 				f.UntrustedIngested = true
 				f.SecretExposed = e.exposed

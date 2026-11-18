@@ -10,7 +10,7 @@ import (
 func TestLoadAllAnswersEveryMultiOptionYes(t *testing.T) {
 	res, err := LoadAll{}.Decide(t.Context(), decide.HeadTurnLoad, nil, map[string]decide.Question{
 		"tools": decide.Multi("Which tools?", map[string]string{"task": "Delegate", "copy": "Copy a file"}),
-		"ready": decide.Noul("Ready?"),
+		"ready": {Kind: decide.KindNoul, Instructions: "Ready?"},
 		"kind":  decide.Choice("Which kind?", map[string]string{"answer_only": "Answer"}),
 	})
 	testutil.FailErr(t, "LoadAll.Decide", err)

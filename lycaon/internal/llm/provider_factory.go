@@ -26,101 +26,101 @@ type providerBuild struct {
 	resolved        ResolvedProvider
 }
 
-// driverFactories selects a constructor by provider kind.
-var driverFactories = catalogruntime.NewFactorySet(
-	map[string]catalogruntime.Factory[providerBuild, modelcall.Provider]{
-		"nativegen": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return nativegenprovider.New(build.entry.ID, nativegenprovider.Options{
-				Runtime: build.localRuntime,
-				Models:  build.entry.Models,
-			}), nil
-		},
-		"ollama": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return ollamaprovider.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models), nil
-		},
-		"anthropic": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return anthropicprovider.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models), nil
-		},
-		"openai": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.OpenAIVendor()).
-				WithHTTPProfile(openaicompat.OpenAIHTTPProfile()), nil
-		},
-		"openai-compatible": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.LocalInference(providerprofile.OpenAI())), nil
-		},
-		"azure": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.resolved.ChatBaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.Azure()).
-				WithHTTPProfile(openaicompat.AzureHTTPProfile()), nil
-		},
-		"bedrock": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			// A blank key selects ambient credentials.
-			return bedrockprovider.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models), nil
-		},
-		"vertex": func(ctx context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.NewVertex(ctx, build.entry.ID, build.entry.Models), nil
-		},
-		"vertex-express": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			// Express mode uses a key on the global endpoint.
-			return vertexexpressprovider.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models), nil
-		},
-		"fireworks": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.Fireworks()), nil
-		},
-		"deepinfra": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.DeepInfra()), nil
-		},
-		"together": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.Together()), nil
-		},
-		"gemini": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.Gemini()), nil
-		},
-		"openrouter": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.Openrouter()).
-				WithExtraHeaders(OpenRouterRankingHeaders()), nil
-		},
-		"lmstudio": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.Lmstudio()), nil
-		},
-		"omlx": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.Omlx()), nil
-		},
-		"litellm-proxy": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.Litellm()), nil
-		},
-		"cloudflare-workers-ai": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.NewCloudflare(
-				build.entry.ID, build.entry.BaseURL, build.entry.Models, build.apiKey, build.cloudflareUsage, build.discoveryClient,
-			), nil
-		},
-		"cerebras": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.Cerebras()), nil
-		},
-		"scaleway": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.Scaleway()), nil
-		},
-		"mistral": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.Mistral()), nil
-		},
-		"doubleword": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
-			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
-				WithProfile(providerprofile.Doubleword()), nil
-		},
+var driverConstructors = map[string]catalogruntime.Factory[providerBuild, modelcall.Provider]{
+	"nativegen": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return nativegenprovider.New(build.entry.ID, nativegenprovider.Options{
+			Runtime: build.localRuntime,
+			Models:  build.entry.Models,
+		}), nil
 	},
+	"ollama": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return ollamaprovider.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models), nil
+	},
+	"anthropic": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return anthropicprovider.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models), nil
+	},
+	"openai": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.OpenAIVendor()).
+			WithHTTPProfile(openaicompat.OpenAIHTTPProfile()), nil
+	},
+	"openai-compatible": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.LocalInference(providerprofile.OpenAI())), nil
+	},
+	"azure": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.resolved.ChatBaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.Azure()).
+			WithHTTPProfile(openaicompat.AzureHTTPProfile()), nil
+	},
+	"bedrock": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		// A blank key selects ambient credentials.
+		return bedrockprovider.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models), nil
+	},
+	"vertex": func(ctx context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.NewVertex(ctx, build.entry.ID, build.entry.Models), nil
+	},
+	"vertex-express": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		// Express mode uses a key on the global endpoint.
+		return vertexexpressprovider.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models), nil
+	},
+	"fireworks": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.Fireworks()), nil
+	},
+	"deepinfra": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.DeepInfra()), nil
+	},
+	"together": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.Together()), nil
+	},
+	"gemini": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.Gemini()), nil
+	},
+	"openrouter": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.Openrouter()).
+			WithExtraHeaders(OpenRouterRankingHeaders()), nil
+	},
+	"lmstudio": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.Lmstudio()), nil
+	},
+	"omlx": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.Omlx()), nil
+	},
+	"litellm-proxy": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.Litellm()), nil
+	},
+	"cloudflare-workers-ai": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.NewCloudflare(
+			build.entry.ID, build.entry.BaseURL, build.entry.Models, build.apiKey, build.cloudflareUsage, build.discoveryClient,
+		), nil
+	},
+	"cerebras": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.Cerebras()), nil
+	},
+	"scaleway": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.Scaleway()), nil
+	},
+	"mistral": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.Mistral()), nil
+	},
+	"doubleword": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+			WithProfile(providerprofile.Doubleword()), nil
+	},
+}
+
+var driverFactories = catalogruntime.NewFactorySet(driverConstructors,
 	func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
 		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models), nil
 	},

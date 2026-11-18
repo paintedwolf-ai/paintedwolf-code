@@ -9,14 +9,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
-	"github.com/lycaon/lycaon/internal/platformfloor"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -71,7 +69,7 @@ func installGeneration(t *testing.T, base string, declared, present []string) ge
 	for _, name := range present {
 		controlledFile(t, filepath.Join(staging, "bin", name), content, 0o755)
 	}
-	arch, _ := platformfloor.ELFArchForGoArch(runtime.GOARCH)
+	arch := fixtureArchitecture(t)
 	manifest, err := json.Marshal(pkgmanifest.Manifest{
 		FormatVersion: pkgmanifest.FormatVersion,
 		Package:       "painted-wolf-code",

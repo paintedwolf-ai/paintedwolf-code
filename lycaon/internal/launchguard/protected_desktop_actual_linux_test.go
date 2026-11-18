@@ -29,7 +29,7 @@ func TestProtectedLaunchActualDesktop(t *testing.T) {
 	testutil.FailErr(t, "captured source tree", err)
 	artifact, manifest, err := loadDesktopArtifact(os.Getenv(desktopArtifactEnv), strings.TrimSpace(string(tree)))
 	testutil.FailErr(t, "real desktop artifact provenance and complete payload", err)
-	if manifest.Architecture != fixtureArchitecture() {
+	if manifest.Architecture != fixtureArchitecture(t) {
 		t.Fatal("desktop artifact architecture differs from this kernel lane")
 	}
 	var nonce [8]byte

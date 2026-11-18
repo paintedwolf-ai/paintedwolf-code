@@ -27,10 +27,3 @@ func TestFilterAgentsForDisclosureHideOmitted(t *testing.T) {
 		t.Fatalf("got %+v want only plan-reviewer", got)
 	}
 }
-
-func TestToolDisclosurePolicyDefaultHide(t *testing.T) {
-	reg := capability.DisclosureRegistry{DefaultTools: capability.DisclosureHide}
-	if got := capability.ToolDisclosurePolicy(reg, "read"); got != capability.DisclosureHide {
-		t.Fatalf("default tool policy = %q want hide", got)
-	}
-}

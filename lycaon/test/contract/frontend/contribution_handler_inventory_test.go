@@ -1,19 +1,21 @@
-package contribution
+package contract
 
 import (
 	"fmt"
 	"sort"
+
+	"github.com/lycaon/lycaon/internal/contribution"
 )
 
-// HandlerInventories carries native UI handler coverage.
-type HandlerInventories struct {
+// handlerInventories carries native UI handler coverage.
+type handlerInventories struct {
 	Den []string
 	// NonCommandCallbacks excludes callbacks that are not commands.
 	NonCommandCallbacks []string
 }
 
-// ValidateHandlerCoverage checks exact declaration and handler coverage.
-func ValidateHandlerCoverage(set *Set, inventories HandlerInventories) []error {
+// validateHandlerCoverage checks exact declaration and handler coverage.
+func validateHandlerCoverage(set *contribution.Set, inventories handlerInventories) []error {
 	den := map[string]bool{}
 	for _, id := range inventories.Den {
 		den[id] = true
@@ -26,7 +28,7 @@ func ValidateHandlerCoverage(set *Set, inventories HandlerInventories) []error {
 	var problems []string
 	declaredBy := map[string][]string{}
 	for _, command := range set.Commands() {
-		if command.Action.Kind != ActionNativeUI {
+		if command.Action.Kind != contribution.ActionNativeUI {
 			continue
 		}
 		handler := command.Action.Handler

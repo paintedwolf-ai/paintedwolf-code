@@ -12,7 +12,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,7 +22,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/launchverify"
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
-	"github.com/lycaon/lycaon/internal/platformfloor"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/vaultidentity"
 )
@@ -136,10 +134,7 @@ func marshalManifest(t *testing.T, version string, executables ...pkgmanifest.Ex
 		entries = append(entries, row)
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
-	arch, ok := platformfloor.ELFArchForGoArch(runtime.GOARCH)
-	if !ok {
-		arch = "x86_64"
-	}
+	const arch = "x86_64"
 	raw, err := json.Marshal(pkgmanifest.Manifest{
 		FormatVersion: pkgmanifest.FormatVersion, Package: "painted-wolf-code", Version: version,
 		Architecture: arch, InstallRoot: installRoot, Executables: executables, Payload: entries,
