@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	"github.com/lycaon/lycaon/internal/testutil/extstatetest"
+	"github.com/lycaon/lycaon/internal/testutil/processfixture"
 )
 
 func TestDiscoverEffectiveIncludesInstalledPacks(t *testing.T) {
@@ -55,18 +56,23 @@ func TestDiscoverEffectiveIncludesInstalledPacks(t *testing.T) {
 }
 
 func TestDiscoverEffectiveNilFailsClosedOnMissingLinkedPack(t *testing.T) {
-	cfgDir := t.TempDir()
-	t.Setenv("LYCAON_CONFIG_DIR", cfgDir)
+	if !processfixture.Startup(t, func() {
+		cfgDir := t.TempDir()
+		t.Setenv("LYCAON_CONFIG_DIR", cfgDir)
 
-	authorDir := filepath.Join(t.TempDir(), "gone-pack")
-	extpackstest.WriteMinimalPack(t, authorDir, "acme/gone", 1)
-	extstatetest.InstallPack(t, extstatetest.DeviceScope(), "path:"+authorDir, "", "")
-	if err := os.RemoveAll(authorDir); err != nil {
-		testutil.FailErr(t, "os.RemoveAll failed", err)
+		authorDir := filepath.Join(t.TempDir(), "gone-pack")
+		extpackstest.WriteMinimalPack(t, authorDir, "acme/gone", 1)
+		extstatetest.InstallPack(t, extstatetest.DeviceScope(), "path:"+authorDir, "", "")
+		if err := os.RemoveAll(authorDir); err != nil {
+			testutil.FailErr(t, "os.RemoveAll failed", err)
+		}
+
+	}) {
+		return
 	}
-
-	// Without an active snapshot, discovery resolves committed device state.
-	extpacks.ClearActive()
+	if extpacks.Active() != nil {
+		t.Fatal("startup must have no active catalog")
+	}
 	if _, err := extpacks.DiscoverEffective(nil); err == nil || !strings.Contains(err.Error(), "development source is unavailable") {
 		t.Fatalf("missing locked author folder error = %v, want fail-closed refusal", err)
 	}

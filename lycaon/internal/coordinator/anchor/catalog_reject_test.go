@@ -27,7 +27,7 @@ func TestLoadRegistryRejectsUnknownOn(t *testing.T) {
 }
 
 func TestInstallCatalogRequiredForParseID(t *testing.T) {
-	if !processfixture.Startup(t) {
+	if !processfixture.Startup(t, nil) {
 		return
 	}
 	if _, ok := anchor.ParseID("leg.finished"); ok {

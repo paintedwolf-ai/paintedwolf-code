@@ -38,7 +38,6 @@ func TestDesiredStampTracksProjectFile(t *testing.T) {
 func TestActiveIsStaleAfterExternalDeviceWrite(t *testing.T) {
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	t.Cleanup(ClearActive)
 
 	if _, err := ApplyCatalog(t.Context(), nil, nil); err != nil {
 		testutil.FailErr(t, "apply", err)
@@ -67,7 +66,6 @@ func TestActiveIsStaleAfterExternalDeviceWrite(t *testing.T) {
 func TestRefusedResolveStopsRetrying(t *testing.T) {
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	t.Cleanup(ClearActive)
 
 	if _, err := ApplyCatalog(t.Context(), nil, nil); err != nil {
 		testutil.FailErr(t, "apply", err)
@@ -94,8 +92,11 @@ func TestRefusedResolveStopsRetrying(t *testing.T) {
 
 func TestActiveRefresherReleasePreservesReplacement(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	t.Cleanup(ClearActive)
-	setActiveWithStamp(&EffectiveCatalog{}, "stale")
+	_, err := ApplyCatalog(t.Context(), nil, nil)
+	testutil.FailErr(t, "apply", err)
+	path, err := DeviceDesiredPath()
+	testutil.FailErr(t, "device path", err)
+	testutil.FailErr(t, "external write", os.WriteFile(path, []byte("format: 1\ndisabled: [guidance/some-note]\n"), 0o600))
 	oldCalls, newCalls := 0, 0
 	releaseOld := SetActiveRefresher(func(context.Context) { oldCalls++ })
 	releaseNew := SetActiveRefresher(func(context.Context) { newCalls++ })

@@ -101,7 +101,6 @@ func TestExtensionCacheClearReplacesDerivedCatalog(t *testing.T) {
 	extpacks.SetActive(&extpacks.EffectiveCatalog{Desired: extpacks.DesiredState{
 		Disabled: []string{"sentinel/stale-catalog"},
 	}})
-	t.Cleanup(extpacks.ClearActive)
 
 	body, err := json.Marshal(wire.LocalDataClearRequest{
 		Buckets: []wire.LocalDataBucketId{wire.LocalDataBucketExtensionCache},

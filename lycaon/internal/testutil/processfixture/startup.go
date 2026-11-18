@@ -11,10 +11,13 @@ import (
 const startupCase = "PAINTEDWOLF_TEST_STARTUP_CASE"
 
 // Startup returns true only in the fresh process running this test.
-func Startup(t *testing.T) bool {
+func Startup(t *testing.T, prepare func()) bool {
 	t.Helper()
 	if os.Getenv(startupCase) == t.Name() {
 		return true
+	}
+	if prepare != nil {
+		prepare()
 	}
 	executable, err := os.Executable()
 	if err != nil {

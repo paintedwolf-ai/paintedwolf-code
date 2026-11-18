@@ -18,7 +18,6 @@ import (
 
 func TestSessionLoadUsesEffectiveCatalog(t *testing.T) {
 	root := configlayout.FindModuleRoot()
-	defer extpacks.ClearActive()
 
 	eff, err := extpackstest.Resolve(t.Context(), extpackstest.Disabled("painted-wolf/security"), nil)
 	testutil.FailErr(t, "extpacks.effective catalog resolve failed", err)
@@ -59,13 +58,11 @@ func TestSessionLoadUsesEffectiveCatalog(t *testing.T) {
 		}
 	}
 
-	extpacks.ClearActive()
 	unit := extpacks.GuidanceUnitID("coordinator-gate-blocked")
 	desired := extpacks.EmptyDesired()
 	desired.Disabled = []string{unit}
 	eff2, err := extpackstest.Resolve(t.Context(), desired, nil)
 	testutil.FailErr(t, "extpacks.effective catalog resolve failed", err)
-	extpacks.SetActive(eff2)
 	if eff2.HasLoaded(unit) {
 		t.Fatal("disabled guidance must not keep")
 	}
@@ -75,7 +72,7 @@ func TestSessionLoadUsesEffectiveCatalog(t *testing.T) {
 }
 
 func TestRefreshEffectiveForProject(t *testing.T) {
-	defer extpacks.ClearActive()
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 
 	projectDir := t.TempDir()
 	lycaonDir := filepath.Join(projectDir, settingsoverlay.DirName())
@@ -89,7 +86,6 @@ func TestRefreshEffectiveForProject(t *testing.T) {
 
 	eff, err := extpacks.ResolveCatalog(t.Context(), []string{projectDir}, nil)
 	testutil.FailErr(t, "extpacks.ResolveCatalog failed", err)
-	extpacks.SetActive(eff)
 	if eff.HasLoaded(extpacks.GuidanceUnitID("coordinator-gate-blocked")) {
 		t.Fatal("project desired must disable the named guidance unit")
 	}

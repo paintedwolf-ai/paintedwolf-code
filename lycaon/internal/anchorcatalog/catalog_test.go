@@ -44,7 +44,7 @@ func TestLoadAndInstall(t *testing.T) {
 }
 
 func TestRequireBeforeInstall(t *testing.T) {
-	if !processfixture.Startup(t) {
+	if !processfixture.Startup(t, nil) {
 		return
 	}
 	err := anchorcatalog.Require("leg.finished")
