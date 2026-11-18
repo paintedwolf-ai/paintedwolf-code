@@ -31,6 +31,11 @@ export class TextWindow {
     return this.doc.sliceString(from, to);
   }
 
+  startsWithFolded(pos: number, lower: string, end: number): boolean {
+    return pos + lower.length <= end && this.at(pos) === lower.charCodeAt(0)
+      && this.slice(pos, pos + lower.length).toLowerCase() === lower;
+  }
+
   private load(pos: number): void {
     const from = Math.max(0, pos - 256);
     this.text = this.doc.sliceString(from, Math.min(this.doc.length, from + CHUNK));

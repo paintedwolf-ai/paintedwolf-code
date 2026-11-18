@@ -3,6 +3,7 @@ import type { PrettyBlockFacts } from "./pretty-scan-state.ts";
 
 export const PROTECTED_START = 1;
 export const PROTECTED_END = 2;
+export const EMBEDDED_END = 3;
 
 export class FactEvent extends RangeValue {
   private static readonly kinds = new Map<number, FactEvent>();

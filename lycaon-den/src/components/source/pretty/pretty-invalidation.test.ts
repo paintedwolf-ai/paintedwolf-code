@@ -35,6 +35,16 @@ describe("incremental block facts", () => {
     compare(completed, { from: at, to: at + 2 });
   });
 
+  it("ends unfinished embedded groups at their closing tag", () => {
+    const before = `<style>.rule{${"a:b,c:d,".repeat(500)}`;
+    const text = before + "</style><p>text}</p>";
+    const state = open(text, "page.html");
+    const edited = compare(state, { from: text.indexOf("text}"), insert: ";" }, "page.html");
+    expect(layout(edited).ranges.filter(([from]) => from < before.length))
+      .toEqual(layout(state).ranges.filter(([from]) => from < before.length));
+    compare(edited, { from: before.length + 3, insert: "x" }, "page.html");
+  });
+
   it("rewinds past JSX disambiguation that read across a checkpoint", () => {
     const generic = "Type".repeat(1500);
     const text = `const id=<${generic},>(x)=>x;const lookup={${fields}result:1}`;

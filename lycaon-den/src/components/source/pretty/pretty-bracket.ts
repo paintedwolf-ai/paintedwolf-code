@@ -317,8 +317,10 @@ function blockFact(cursor: ScanCursor, openPos: number): boolean {
   const lineEnd = state.lineEnd;
   const lexer = state.lexer!.copy();
   const stack: Array<{ kind: number; open: number; semicolon: boolean }> = [{ kind: OPEN_BRACE, open: openPos, semicolon: false }];
+  const closeTag = state.markup.embedded?.closeTag;
   let pos = openPos + 1;
   while (pos < lineEnd && stack.length > 0) {
+    if (closeTag && closeTag !== "---" && !lexer.inProtected() && text.startsWithFolded(pos, closeTag, lineEnd)) break;
     const skipped = lexer.skip(text, pos, lineEnd, lineEnd);
     if (skipped > pos) {
       state.visits += skipped - pos;
@@ -338,8 +340,8 @@ function blockFact(cursor: ScanCursor, openPos: number): boolean {
     }
     pos += 1;
   }
-  // A group still open at the line end lays out as a container would.
-  for (const frame of stack) if (frame.kind === OPEN_BRACE) facts.set(frame.open, lineEnd, false);
+  // Unclosed groups end at the source line or the embedded region.
+  for (const frame of stack) if (frame.kind === OPEN_BRACE) facts.set(frame.open, pos, false);
   // The fact range tracks these reads independently of the lexical checkpoint.
   text.readTo = readTo;
   return facts.get(openPos) ?? false;

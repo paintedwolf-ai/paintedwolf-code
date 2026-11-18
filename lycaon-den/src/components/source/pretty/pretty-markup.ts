@@ -1,3 +1,4 @@
+import { EMBEDDED_END, PROTECTED_END } from "./pretty-block-facts.ts";
 import { stepBracket } from "./pretty-bracket.ts";
 import { JSX_SCRIPT_RULE, stepJsx } from "./pretty-jsx.ts";
 import { DataLexer, ScriptLexer, StyleLexer } from "./pretty-lexers.ts";
@@ -165,11 +166,12 @@ export function stepMarkup(cursor: ScanCursor, pos: number, end: number): number
           state.col += lineEnd - pos;
           return lineEnd;
         }
-      } else if (
-        text.at(pos) === LESS &&
-        pos + emb.closeTag.length <= lineEnd &&
-        text.slice(pos, pos + emb.closeTag.length).toLowerCase() === emb.closeTag
-      ) {
+      } else if (text.startsWithFolded(pos, emb.closeTag, lineEnd)) {
+        if (state.protectedRun) {
+          cursor.options.factEvent?.(pos, PROTECTED_END);
+          state.protectedRun = false;
+        }
+        if (emb.rule.statements) cursor.options.factEvent?.(pos, EMBEDDED_END);
         if (state.laidOut && state.hasContent) cursor.emitBreak(pos, cursor.columns(Math.max(0, m.depth)));
         state.lexer = null;
         state.frames = null;
