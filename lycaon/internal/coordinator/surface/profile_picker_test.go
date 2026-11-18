@@ -83,7 +83,13 @@ func TestSelectSurfaceInvestigateHardBlockWorkersInFlight(t *testing.T) {
 
 func TestSelectSurfaceInvestigateHardBlockPlanCatalog(t *testing.T) {
 	profile := resolvePickerTurnProfile(
-		api.CoordinatorRunContext{WorkflowID: "plan", CurrentPhase: "research", SurfaceProfile: "plan", WorkflowInvestigateEligible: new(false), PhaseCoordinatorSurface: "plan_research", PhaseSurfaceTemplate: "agents/coordinator-surface-plan.md", PhaseModeRefs: []string{"plan-research"}},
+		api.CoordinatorRunContext{
+			WorkflowID: "plan", CurrentPhase: "research", SurfaceProfile: "plan",
+			WorkflowInvestigateEligible: new(false),
+			PhaseCoordinatorSurface:     "plan_research",
+			PhaseSurfaceTemplate:        "agents/coordinator-surface-plan.md",
+			PhaseModeRefs:               []string{"plan-research"},
+		},
 		&api.Session{Posture: api.SessionPostureSpec},
 		nil,
 		"research the repo",
