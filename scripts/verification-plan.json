@@ -1324,6 +1324,22 @@
       "setup": "shell",
       "runtime_engines": false
     },
+    "native-macos": {
+      "targets": [
+        "den:test:rust",
+        "decide:test"
+      ],
+      "minutes": 90,
+      "profiles": [
+        "integration",
+        "nightly"
+      ],
+      "suite": "behavior",
+      "setup": "shell",
+      "platform": "macos",
+      "runner": "macos-15",
+      "runtime_engines": false
+    },
     "webkit": {
       "targets": [
         "den:webkit:scroll"

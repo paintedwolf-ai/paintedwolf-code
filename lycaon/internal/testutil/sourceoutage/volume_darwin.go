@@ -135,8 +135,8 @@ type changeFS struct {
 }
 
 func (f changeFS) Chmod(name string, mode os.FileMode) error { return os.Chmod(f.path(name), mode) }
-func (f changeFS) Lchown(name string, uid, gid int) error  { return os.Lchown(f.path(name), uid, gid) }
-func (f changeFS) Chown(name string, uid, gid int) error   { return os.Chown(f.path(name), uid, gid) }
+func (f changeFS) Lchown(name string, uid, gid int) error    { return os.Lchown(f.path(name), uid, gid) }
+func (f changeFS) Chown(name string, uid, gid int) error     { return os.Chown(f.path(name), uid, gid) }
 func (f changeFS) Chtimes(name string, atime, mtime time.Time) error {
 	return os.Chtimes(f.path(name), atime, mtime)
 }

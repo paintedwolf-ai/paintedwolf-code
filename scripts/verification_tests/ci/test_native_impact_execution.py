@@ -17,6 +17,8 @@ class NativeImpactTests(unittest.TestCase):
         baseline = {"build", "behavior"}
         cases = {
             "lycaon-den/src-tauri/src/lib.rs": {"native", "frontend", "webkit-gtk"},
+            "lycaon-den/src-tauri/src/update_service/installer/macos.rs": {"native", "native-macos", "frontend",
+                                                                           "webkit-gtk"},
             "lycaon/internal/decide/native/src/main.rs": {"native"},
             "lycaon/internal/documentcore/native/src/main.rs": {"frontend"},
         }

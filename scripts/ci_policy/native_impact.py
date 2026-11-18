@@ -3,6 +3,9 @@ from pathlib import PurePosixPath
 
 # Manifests, fixtures, generated inputs, and build scripts keep the full gate.
 DEPENDENCIES = {
+    # The updater's install path is compiled only for macOS.
+    "lycaon-den/src-tauri/src/update_service/": {"lanes": {"native", "native-macos", "frontend", "webkit-gtk"},
+                                                 "go": ()},
     "lycaon-den/src-tauri/src/": {"lanes": {"native", "frontend", "webkit-gtk"}, "go": ()},
     "lycaon/internal/decide/native/src/": {"lanes": {"native"}, "go": ()},
     "lycaon/internal/documentcore/native/src/": {"lanes": {"frontend"}, "go": ("lycaon/internal/documentcore",)},

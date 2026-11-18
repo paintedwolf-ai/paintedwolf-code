@@ -19,7 +19,9 @@ SETUPS = {"verification", "shell", "harness", "frontend", "analysis"}
 # A platform lane runs a check that only its platform can run, so the cross-platform check gate,
 # which every development host runs, leaves it out; the merge queue runs it beside that gate.
 # Each platform names the runners it may use: architecture-specific code needs each architecture.
-PLATFORMS = {"linux": {"ubuntu-24.04", "ubuntu-24.04-arm"}}
+PLATFORMS = {"linux": {"ubuntu-24.04", "ubuntu-24.04-arm"}, "macos": {"macos-15"}}
+# The check gate's own platform: a lane there repeating a gate stage would run it twice.
+GATE_PLATFORM = "linux"
 # Runs its probe in container images that an offline lane must find already provisioned.
 CONTAINER_TARGET = "den:webkit:atspi"
 # Runs the pinned browser, which an offline lane must find already provisioned.
@@ -116,7 +118,8 @@ def lanes():
                      for stage in expand(lane["targets"]))
     if actual != expected:
         raise ValueError(f"integration partition differs from check: {expected - actual}, {actual - expected}")
-    platform = {stage["name"] for lane in values.values() if "platform" in lane for stage in expand(lane["targets"])}
+    platform = {stage["name"] for lane in values.values() if lane.get("platform") == GATE_PLATFORM
+                for stage in expand(lane["targets"])}
     repeated = platform & {stage["name"] for stage in expand([GATE])}
     if repeated:
         raise ValueError(f"platform lanes repeat {GATE} stages: {sorted(repeated)}")

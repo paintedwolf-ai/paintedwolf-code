@@ -133,7 +133,8 @@ class HostedPlanTests(unittest.TestCase):
                     self.assertLess(row["job_minutes"], 360)
                     # macOS hosts only the lanes that test macOS-specific behavior, and arm64 only
                     # architecture-specific confinement.
-                    runner = {"webkit": "macos-15", "confinement-arm64": "ubuntu-24.04-arm"}.get(row["lane"], "ubuntu-24.04")
+                    runner = {"webkit": "macos-15", "native-macos": "macos-15",
+                              "confinement-arm64": "ubuntu-24.04-arm"}.get(row["lane"], "ubuntu-24.04")
                     self.assertEqual(row["runner"], runner)
 
     def test_linux_verification_uses_the_declared_release_build_baseline(self):
@@ -195,6 +196,14 @@ class HostedPlanTests(unittest.TestCase):
         for mutation, mutate in mutations.items():
             with self.subTest(mutation=mutation), self.catalog_patch(lambda d: mutate(d["ci"]["webkit-gtk"])), self.assertRaises(ValueError):
                 ci.lanes()
+
+    def test_a_platform_lane_off_the_gate_platform_runs_gate_stages_there(self):
+        lane = ci.lanes()["native-macos"]
+        self.assertEqual((lane["platform"], lane["runner"]), ("macos", "macos-15"))
+        self.assertTrue(set(lane["targets"]) <= {stage["name"] for stage in planning.expand([ci.GATE])})
+        with self.catalog_patch(lambda d: d["ci"]["native-macos"].update(runner="ubuntu-24.04")), \
+                self.assertRaises(ValueError):
+            ci.lanes()
 
     def test_offline_lanes_learn_which_container_images_they_need(self):
         for profile in ci.PROFILES:
