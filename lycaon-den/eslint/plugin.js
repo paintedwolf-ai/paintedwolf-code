@@ -3,7 +3,7 @@ import noHttpErrorStatusBranching from "./rules/no-http-error-status-branching.j
 import noKeyedSettingsDraft from "./rules/no-keyed-settings-draft.js";
 import noNativeSmoothScroll from "./rules/no-native-smooth-scroll.js";
 import noShowAccessorPropLeak from "./rules/no-show-accessor-prop-leak.js";
-import sourceLaws from "./rules/source-laws.js";
+import invariants from "./rules/invariants.js";
 
 export default {
   rules: {
@@ -12,6 +12,6 @@ export default {
     "no-keyed-settings-draft": noKeyedSettingsDraft,
     "no-native-smooth-scroll": noNativeSmoothScroll,
     "no-show-accessor-prop-leak": noShowAccessorPropLeak,
-    "source-laws": sourceLaws,
+    invariants,
   },
 };
