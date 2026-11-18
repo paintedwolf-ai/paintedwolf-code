@@ -143,6 +143,7 @@ func renderCoordinatorTripartiteForRunContextWithRoots(
 	}, "", vars)
 	contractcheck.FailErr(t, "merge coordinator prompt vars", err)
 	reader := coordinatorTestReader(t, profile.SurfaceID, len(roots))
+	mergeReachableSkillRoster(t, vars, reader)
 	if err := capability.MergeForTurn(vars, reader, runCtx.AllowedAgents); err != nil {
 		t.Fatalf("MergeForTurn: %v", err)
 	}

@@ -62,7 +62,6 @@ func ActivateStockCatalog(t *testing.T) {
 	t.Helper()
 	eff := StockCatalog(t)
 	extpacks.SetActive(eff)
-	t.Cleanup(extpacks.ClearActive)
 	prompts.ResetPersonaContractCache()
 }
 

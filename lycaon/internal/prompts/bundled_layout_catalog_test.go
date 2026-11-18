@@ -30,15 +30,13 @@ func stageTwoPacks(t *testing.T) {
 // An `own:` entry resolves a guidance collision.
 func TestResolveBundledHonorsOwn(t *testing.T) {
 	stageTwoPacks(t)
-	t.Cleanup(extpacks.ClearActive)
 
 	desired := extpacks.EmptyDesired()
 	desired.Own = map[string]string{"guidance/dup": "painted-wolf/fork"}
 	eff, err := extpackstest.Resolve(t.Context(), desired, nil)
 	testutil.FailErr(t, "resolve", err)
-	extpacks.SetActive(eff)
 
-	body, at, err := (BundledLayout{}).ReadBundled("guidance/dup")
+	body, at, err := (BundledLayout{Catalog: eff}).ReadBundled("guidance/dup")
 	testutil.FailErr(t, "resolve guidance/dup", err)
 	if filepath.Base(at.Parent().Parent().String()) != "fork" {
 		t.Fatalf("own winner not used: %s", at)
@@ -51,20 +49,18 @@ func TestResolveBundledHonorsOwn(t *testing.T) {
 // Disabled units return their structured catalog error.
 func TestResolveBundledRefusesDisabledUnit(t *testing.T) {
 	stageTwoPacks(t)
-	t.Cleanup(extpacks.ClearActive)
 
 	desired := extpacks.EmptyDesired()
 	desired.Disabled = []string{"guidance/fork-only"}
 	eff, err := extpackstest.Resolve(t.Context(), desired, nil)
 	testutil.FailErr(t, "resolve", err)
-	extpacks.SetActive(eff)
 
-	_, _, err = (BundledLayout{}).ReadBundled("guidance/fork-only")
+	_, _, err = (BundledLayout{Catalog: eff}).ReadBundled("guidance/fork-only")
 	if !errors.Is(err, ErrTemplateNotEffective) {
 		t.Fatalf("err = %v, want ErrTemplateNotEffective", err)
 	}
 
-	if _, _, err := (BundledLayout{}).ReadBundled("guidance/stockish-only"); err != nil {
+	if _, _, err := (BundledLayout{Catalog: eff}).ReadBundled("guidance/stockish-only"); err != nil {
 		t.Fatalf("sibling unit must still resolve: %v", err)
 	}
 }
@@ -72,15 +68,13 @@ func TestResolveBundledRefusesDisabledUnit(t *testing.T) {
 // Prompt layers honor effective-catalog filtering.
 func TestPromptLayersDoNotServeDisabledUnit(t *testing.T) {
 	stageTwoPacks(t)
-	t.Cleanup(extpacks.ClearActive)
 
 	desired := extpacks.EmptyDesired()
 	desired.Disabled = []string{"guidance/fork-only"}
 	eff, err := extpackstest.Resolve(t.Context(), desired, nil)
 	testutil.FailErr(t, "resolve", err)
-	extpacks.SetActive(eff)
 
-	layers := PromptLayers{}
+	layers := PromptLayers{Catalog: eff}
 	if _, err := layers.ReadFile("guidance/fork-only"); !errors.Is(err, ErrTemplateNotEffective) {
 		t.Fatalf("err = %v, want ErrTemplateNotEffective", err)
 	}
