@@ -19,5 +19,7 @@
     "schemas/guidance_registry.json",
     "third_party/regexp2"
   ],
-  "forbid": {}
+  "forbid": {
+    "development-history": "(?i)\\b(?:as of (?:PR|commit)|(?:added|removed|changed|introduced|fixed|replaced) in (?:PR|commit))\\b"
+  }
 }
