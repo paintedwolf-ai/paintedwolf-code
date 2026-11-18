@@ -2,6 +2,8 @@ package sourcecontracts
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -128,9 +129,9 @@ func TestDeletedSourceKeepsContentAvailabilityAndScreening(t *testing.T) {
 
 func TestDeletedWorkerSourceDoesNotOpenThePrimaryReplacement(t *testing.T) {
 	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
-	queue := worker.NewInMemoryQueue(1)
+	queue := worker.NewSQLQueue(ledgerDB, 1)
 	srv := contractfixture.NewTestServer(t, withLedger, contractfixture.WithWorkers(queue))
-	primary, branchRoot := t.TempDir(), t.TempDir()
+	primary, branchRoot := t.TempDir(), workertest.NewBranch(t, ledgerDB)
 	p := contractfixture.CreateProjectForTest(t, srv, primary)
 	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
@@ -138,7 +139,7 @@ func TestDeletedWorkerSourceDoesNotOpenThePrimaryReplacement(t *testing.T) {
 	testutil.FailErr(t, "worker metadata", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branchRoot), workspace.JobMeta{
 		Roots: []workspace.JobMetaRoot{{ID: rootID, Label: rootID, Path: primary, IsPrimary: true}}, SnapshotComplete: true,
 	}))
-	workerID := contractfixture.EnqueueBranchJob(t, queue, p.ID, branchRoot)
+	workerID := contractfixture.EnqueueBranchJob(t, queue, ledgerDB, p.ID, branchRoot)
 	branch, err := sourcebranch.ForWorker(workerID)
 	testutil.FailErr(t, "worker identity", err)
 	testutil.FailErr(t, "record worker deletion", ledger.Record(t.Context(), sourceledger.RecordInput{

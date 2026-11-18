@@ -277,7 +277,7 @@ func fillHost(t *testing.T, d *Deps) {
 func fillWorkers(t *testing.T, d *Deps) {
 	t.Helper()
 	if d.Workers == nil {
-		d.Workers = worker.NewInMemoryQueue(2)
+		d.Workers = worker.NewSQLQueue(d.Database, 2)
 	}
 	if d.WorkerCancel == nil {
 		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Events: d.Sessions.Coordinator.Workers, Graceful: d.Sessions.Workers.Cancel, Cancellations: d.Sessions.Workers.Cancellations}

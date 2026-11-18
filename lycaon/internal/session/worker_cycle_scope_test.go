@@ -2,6 +2,7 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"strings"
 	"testing"
 
@@ -11,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -43,7 +43,7 @@ func TestObserveCoordinatorTaskReadRepoWideAllowed(t *testing.T) {
 		AgentType:     "coordinator",
 	}
 	deps := workeradmission.WorkerCycleGuardDeps{
-		Workers: worker.NewInMemoryQueue(8),
+		Workers: workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1"),
 	}
 	gc := observeTaskInFlight(t, ctx, deps, sess, map[string]any{
 		"agent_type": "path-explorer",
@@ -72,7 +72,7 @@ func TestObserveCoordinatorTaskMutationAgentRequiresWriteScope(t *testing.T) {
 	testutil.FailErr(t, "LoadHintConfig", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	deps := workeradmission.WorkerCycleGuardDeps{
-		Workers: worker.NewInMemoryQueue(8),
+		Workers: workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1"),
 	}
 	for _, agentType := range []string{"implementer", "plan-writer"} {
 		capable, known := prompts.AgentMutationCapable(agentType)
@@ -117,7 +117,7 @@ func TestObserveCoordinatorTaskReadOnlyProfileRejectsWriteScope(t *testing.T) {
 	testutil.FailErr(t, "LoadHintConfig", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	deps := workeradmission.WorkerCycleGuardDeps{
-		Workers: worker.NewInMemoryQueue(8),
+		Workers: workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1"),
 	}
 	gc := observeTaskInFlight(t, ctx, deps, sess, map[string]any{
 		"agent_type": "repo-researcher",
@@ -146,7 +146,7 @@ func TestObserveCoordinatorTaskImplementerWriteScopeAllowed(t *testing.T) {
 		AgentType:     "coordinator",
 	}
 	deps := workeradmission.WorkerCycleGuardDeps{
-		Workers: worker.NewInMemoryQueue(8),
+		Workers: workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1"),
 	}
 	gc := observeTaskInFlight(t, ctx, deps, sess, map[string]any{
 		"agent_type": "implementer",
@@ -172,7 +172,7 @@ func TestObserveCoordinatorTaskWritePathsOptional(t *testing.T) {
 		AgentType:     "coordinator",
 	}
 	deps := workeradmission.WorkerCycleGuardDeps{
-		Workers: worker.NewInMemoryQueue(8),
+		Workers: workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1"),
 	}
 	gc := observeTaskInFlight(t, ctx, deps, sess, map[string]any{
 		"agent_type": "implementer",
@@ -197,7 +197,7 @@ func TestObserveCoordinatorTaskRepoWideSuggestionAllowed(t *testing.T) {
 		AgentType:     "coordinator",
 	}
 	deps := workeradmission.WorkerCycleGuardDeps{
-		Workers: worker.NewInMemoryQueue(8),
+		Workers: workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1"),
 	}
 	gc := observeTaskInFlight(t, ctx, deps, sess, map[string]any{
 		"agent_type": "implementer",
@@ -214,7 +214,7 @@ func TestObserveCoordinatorTaskRepoWideSuggestionAllowed(t *testing.T) {
 
 func TestParallelWriteWorkersNonOverlappingAllowed(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	sess := &api.Session{
 		ID:            "parent-1",
@@ -251,7 +251,7 @@ func TestParallelWriteWorkersNonOverlappingAllowed(t *testing.T) {
 
 func TestParallelWriteWorkersOverlappingAllowed(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	sess := &api.Session{
 		ID:            "parent-1",
@@ -288,7 +288,7 @@ func TestParallelWriteWorkersOverlappingAllowed(t *testing.T) {
 
 func TestParallelReadScoutsAllowedUnderReadCap(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	sess := &api.Session{
 		ID:            "parent-1",
@@ -347,7 +347,7 @@ func TestObserveCoordinatorTaskRejectsExploreReadonlyOnEmptyRepo(t *testing.T) {
 	testutil.FailErr(t, "LoadHintConfig", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	deps := workeradmission.WorkerCycleGuardDeps{
-		Workers: worker.NewInMemoryQueue(8),
+		Workers: workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1"),
 		RepoKnownEmpty: func(context.Context, string) bool {
 			return true
 		},
@@ -419,7 +419,7 @@ func TestObserveCoordinatorTaskAllowsMissingSuggestedPath(t *testing.T) {
 		Posture:       api.SessionPostureBuild,
 		AgentType:     "coordinator",
 	}
-	deps := workeradmission.WorkerCycleGuardDeps{Workers: worker.NewInMemoryQueue(8)}
+	deps := workeradmission.WorkerCycleGuardDeps{Workers: workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-missing-scope")}
 	gc := observeTaskInFlight(t, ctx, deps, sess, map[string]any{
 		"agent_type": "path-explorer",
 		"brief":      testTaskBrief("survey the providers"),

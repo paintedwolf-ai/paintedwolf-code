@@ -57,16 +57,17 @@ type PromoteAssessment struct {
 
 func expandOverlayPromoteFiles(promote PromoteRoots, roots []string) ([]string, error) {
 	if len(promote.Roots) <= 1 {
-		return expandOverlayPromoteFilesFlat(promote.BranchRoot, roots)
+		return expandOverlayPromoteFilesFlat(promote, roots)
 	}
 	return expandOverlayPromoteFilesMultiRoot(promote, roots)
 }
 
-func expandOverlayPromoteFilesFlat(workspaceRoot string, roots []string) ([]string, error) {
+func expandOverlayPromoteFilesFlat(promote PromoteRoots, roots []string) ([]string, error) {
 	seen := map[string]struct{}{}
 	var files []string
 	add := func(rel string) {
 		rel = filepath.ToSlash(filepath.Clean(strings.TrimSpace(rel)))
+		rel = projectroot.BaselineDisplayPath(promote.Roots, promote.singleRootID(), rel)
 		if rel == "" || rel == "." || sandbox.HasParentTraversal(rel) {
 			return
 		}
@@ -81,7 +82,7 @@ func expandOverlayPromoteFilesFlat(workspaceRoot string, roots []string) ([]stri
 		if raw == "" {
 			continue
 		}
-		abs := filepath.Join(workspaceRoot, filepath.FromSlash(raw))
+		abs := filepath.Join(promote.BranchRoot, filepath.FromSlash(raw))
 		info, err := os.Stat(abs)
 		if err != nil {
 			if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
@@ -100,7 +101,7 @@ func expandOverlayPromoteFilesFlat(workspaceRoot string, roots []string) ([]stri
 			if d.IsDir() {
 				return nil
 			}
-			rel, relErr := filepath.Rel(workspaceRoot, walked)
+			rel, relErr := filepath.Rel(promote.BranchRoot, walked)
 			if relErr != nil {
 				return oswalk.Skip(relErr)
 			}
@@ -119,7 +120,7 @@ func expandOverlayPromoteFilesMultiRoot(promote PromoteRoots, roots []string) ([
 	seen := map[string]struct{}{}
 	var files []string
 	add := func(qualified string) {
-		qualified = filepath.ToSlash(filepath.Clean(strings.TrimSpace(qualified)))
+		qualified = filepath.ToSlash(strings.TrimSpace(qualified))
 		if qualified == "" || qualified == "." || sandbox.HasParentTraversal(qualified) {
 			return
 		}

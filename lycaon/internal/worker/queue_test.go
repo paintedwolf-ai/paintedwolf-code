@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func localClaim(ctx context.Context, q *InMemoryQueue, projectDir string) (*api.WorkerTask, error) {
+func localClaim(ctx context.Context, q *SQLQueue) (*api.WorkerTask, error) {
 	return q.ClaimNext(ctx, ClaimRequest{
 		ProjectID:       testdbseed.DefaultProjectID,
 		ExecutionTarget: api.ExecutionTargetLocal,
@@ -21,7 +21,7 @@ func localClaim(ctx context.Context, q *InMemoryQueue, projectDir string) (*api.
 }
 
 func TestGetLatestByChildSessionIDReturnsNewestRun(t *testing.T) {
-	q := NewInMemoryQueue(2)
+	q := newTestQueue(t, 2, testdbseed.DefaultProjectID, "parent", "child-1")
 	created := time.Now().UTC()
 	for _, task := range []api.WorkerTask{
 		{ID: "job-old", ChildSessionID: "child-1", CreatedAt: created},
@@ -43,7 +43,7 @@ func TestGetLatestByChildSessionIDReturnsNewestRun(t *testing.T) {
 }
 
 func TestQueueLifecycle(t *testing.T) {
-	q := NewInMemoryQueue(10)
+	q := newTestQueue(t, 10, testdbseed.DefaultProjectID, "sess-1")
 	ctx := context.Background()
 
 	id, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
@@ -54,7 +54,7 @@ func TestQueueLifecycle(t *testing.T) {
 	})
 	testutil.FailErr(t, "q.EnqueueWithProjectID failed", err)
 
-	claimed, err := localClaim(ctx, q, "/tmp/proj")
+	claimed, err := localClaim(ctx, q)
 	testutil.FailErr(t, "localClaim failed", err)
 	if claimed.ID != id {
 		t.Fatalf("id = %q want %q", claimed.ID, id)
@@ -88,7 +88,7 @@ func TestQueueLifecycle(t *testing.T) {
 }
 
 func TestQueueMaxWorkers(t *testing.T) {
-	q := NewInMemoryQueue(2)
+	q := newTestQueue(t, 2, testdbseed.DefaultProjectID, "s")
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
@@ -102,19 +102,19 @@ func TestQueueMaxWorkers(t *testing.T) {
 		testutil.FailErr(t, "q.EnqueueWithProjectID failed", err)
 	}
 
-	if _, err := localClaim(ctx, q, ""); err != nil {
+	if _, err := localClaim(ctx, q); err != nil {
 		testutil.FailErr(t, "localClaim failed", err)
 	}
-	if _, err := localClaim(ctx, q, ""); err != nil {
+	if _, err := localClaim(ctx, q); err != nil {
 		testutil.FailErr(t, "localClaim failed", err)
 	}
-	if _, err := localClaim(ctx, q, ""); !errors.Is(err, ErrMaxWorkers) {
+	if _, err := localClaim(ctx, q); !errors.Is(err, ErrMaxWorkers) {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestQueueCancel(t *testing.T) {
-	q := NewInMemoryQueue(10)
+	q := newTestQueue(t, 10, testdbseed.DefaultProjectID, "s")
 	ctx := context.Background()
 
 	id, _ := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
@@ -124,7 +124,7 @@ func TestQueueCancel(t *testing.T) {
 		ProjectID:       testdbseed.DefaultProjectID,
 		ExecutionTarget: api.ExecutionTargetLocal,
 	})
-	_, _ = localClaim(ctx, q, "")
+	_, _ = localClaim(ctx, q)
 
 	if err := q.Cancel(ctx, id, nil); err != nil {
 		testutil.FailErr(t, "q.Cancel failed", err)
@@ -136,7 +136,7 @@ func TestQueueCancel(t *testing.T) {
 }
 
 func TestConcurrentWorkerCap(t *testing.T) {
-	q := NewInMemoryQueue(5)
+	q := newTestQueue(t, 5, testdbseed.DefaultProjectID, "s")
 	ctx := context.Background()
 
 	for i := 0; i < 10; i++ {
@@ -155,7 +155,7 @@ func TestConcurrentWorkerCap(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			task, err := localClaim(ctx, q, "")
+			task, err := localClaim(ctx, q)
 			if err == nil {
 				claimed <- task.ID
 			}
@@ -174,7 +174,7 @@ func TestConcurrentWorkerCap(t *testing.T) {
 }
 
 func TestRunnerTargetNotClaimedLocally(t *testing.T) {
-	q := NewInMemoryQueue(10)
+	q := newTestQueue(t, 10, testdbseed.DefaultProjectID, "s")
 	ctx := context.Background()
 
 	_, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
@@ -187,7 +187,7 @@ func TestRunnerTargetNotClaimedLocally(t *testing.T) {
 	})
 	testutil.FailErr(t, "q.EnqueueWithProjectID failed", err)
 
-	if _, err := localClaim(ctx, q, ""); !errors.Is(err, ErrNoPendingJobs) {
+	if _, err := localClaim(ctx, q); !errors.Is(err, ErrNoPendingJobs) {
 		t.Fatalf("err = %v", err)
 	}
 }
