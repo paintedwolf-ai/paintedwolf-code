@@ -27,7 +27,7 @@ func (b *orientOnceBoard) PrependBoardIfChanged(context.Context, *api.Session, a
 	return fmt.Sprintf("board render %d", b.renders), true
 }
 func (b *orientOnceBoard) WorkerBoard(context.Context, *api.Session) (string, bool) { return "", false }
-func (b *orientOnceBoard) BoardInjectHash(string) string                            { return "" }
+func (b *orientOnceBoard) BoardInjectHash(string) string                            { return "board-hash" }
 func (b *orientOnceBoard) InvalidateOrientation(string)                             { b.oriented = false }
 
 type countingOrientRecorder struct{ records int }
