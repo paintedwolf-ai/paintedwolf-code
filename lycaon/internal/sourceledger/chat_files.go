@@ -98,7 +98,7 @@ func (s *Store) OutsideFileHeld(ctx context.Context, projectID, rel string) (boo
 	if err != nil {
 		return false, err
 	}
-	return s.outsideFileReferenced(ctx, projectID, head.FileID)
+	return s.outsideFileReferenced(ctx, projectID, fileID)
 }
 
 // HeldFileAddress follows an outside file through address changes.
@@ -128,5 +128,5 @@ func (s *Store) HeldFileAddress(ctx context.Context, projectID, fileID string) (
 
 func (s *Store) outsideFileReferenced(ctx context.Context, projectID, fileID string) (bool, error) {
 	referenced, err := s.queries.SourceFileReferencedInProject(ctx, db.SourceFileReferencedInProjectParams{FileID: fileID, ProjectID: projectID})
-	return referenced != 0, err
+	return referenced.Valid && referenced.Bool, err
 }
