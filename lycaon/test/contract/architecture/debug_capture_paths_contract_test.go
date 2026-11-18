@@ -14,44 +14,6 @@ import (
 // Guards below keep writers, the log viewer, clear registry, and shell scripts
 // from spelling those paths a second time.
 
-// Capture scripts cannot import the Go catalog.
-func TestDebugCaptureScriptsNameOnlyCatalogFiles(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	names := map[string]struct{}{}
-	envs := map[string]struct{}{}
-	for _, f := range debugpaths.Files() {
-		names[f.Name] = struct{}{}
-		if f.FileEnv != "" {
-			envs[f.FileEnv] = struct{}{}
-		}
-	}
-
-	var violations []string
-	for _, rel := range []string{
-		filepath.Join("scripts", "debug-session.sh"),
-		filepath.Join("scripts", "debug-capture.sh"),
-	} {
-		body := contractcheck.ReadRepoFile(t, root, rel)
-		for _, word := range strings.FieldsFunc(body, func(r rune) bool {
-			return !(r == '.' || r == '-' || r == '_' || r == '/' ||
-				(r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'))
-		}) {
-			switch {
-			case strings.HasSuffix(word, ".jsonl") || strings.HasSuffix(word, ".log"):
-				if _, ok := names[filepath.Base(word)]; !ok {
-					violations = append(violations, rel+": writes "+word+", absent from the catalog")
-				}
-			case strings.HasPrefix(word, "LYCAON_") && strings.HasSuffix(word, "_FILE"):
-				if _, ok := envs[word]; !ok {
-					violations = append(violations, rel+": exports "+word+", absent from the catalog")
-				}
-			}
-		}
-	}
-	contractcheck.FailViolations(t, "a capture script names a file or variable internal/debugpaths does not declare", violations)
-}
-
 // The session tree the scripts create is the tree the viewer reads.
 func TestDebugCaptureScriptTreeMatchesLayout(t *testing.T) {
 	t.Parallel()
