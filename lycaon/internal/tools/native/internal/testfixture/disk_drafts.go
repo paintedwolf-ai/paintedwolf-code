@@ -80,6 +80,10 @@ func (d *DiskDrafts) OpenDocument(context.Context, string, sourcebranch.ID, stri
 	return tools.EditorDocumentText{}, false, nil
 }
 
+func (d *DiskDrafts) VisitAgentPublications(context.Context, string, sourcebranch.ID, string, int, string, func(tools.EditorDocumentPublicationCandidate) error) error {
+	return nil
+}
+
 // VisitUnsavedDocuments offers the drafts no save has published.
 func (d *DiskDrafts) VisitUnsavedDocuments(_ context.Context, _ string, _ sourcebranch.ID, _, path string, descendants bool, visit func(tools.EditorDocumentState) error) error {
 	d.mu.Lock()
