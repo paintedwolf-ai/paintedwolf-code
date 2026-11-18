@@ -2,6 +2,7 @@ package orchestration_test
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 	"testing"
@@ -44,7 +45,7 @@ func TestPipelineTopologyLegAgentTypes(t *testing.T) {
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 
 	reg := orchestration.NewMemoryAgentRegistryForTest()
-	rec := &recordingWorkers{MemoryTopologyWorkers: orchestration.NewMemoryTopologyWorkers()}
+	rec := &recordingWorkers{TopologyWorkers: orchestration.NewMemoryTopologyWorkers()}
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
 		Workers: rec,
 		Agents:  reg,
@@ -135,8 +136,8 @@ func newPipelineIntegrationOrchestrator(t *testing.T) (*orchestration.Orchestrat
 	sessStore := store.NewMemory()
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	rec := &recordingWorkers{
-		MemoryTopologyWorkers: orchestration.NewMemoryTopologyWorkers(),
-		order:                 make([]string, 0, 8),
+		TopologyWorkers: orchestration.NewMemoryTopologyWorkers(),
+		order:           make([]string, 0, 8),
 	}
 
 	reg := loadAgentRegistryFromConfig(t)
@@ -244,19 +245,21 @@ func TestPipelineFullDefaultPipelineMockRun(t *testing.T) {
 }
 
 type recordingWorkers struct {
-	*orchestration.MemoryTopologyWorkers
-	mu           sync.Mutex
-	units        map[string]orchestration.TopologyUnit
-	order        []string
-	failStage    string
-	failStages   map[string]bool
-	dispatched   chan<- struct{}
-	holdOutcomes <-chan struct{}
-	settled      chan<- struct{}
-	holdReturns  <-chan struct{}
-	barrierSet   map[string]bool
-	barrierReady chan struct{}
-	barrierSeen  int
+	orchestration.TopologyWorkers
+	claimMu           sync.Mutex
+	dispatchAndSettle func(context.Context, string, string, api.WorkerResult) (*orchestration.TopologyUnit, error)
+	mu                sync.Mutex
+	units             map[string]orchestration.TopologyUnit
+	order             []string
+	failStage         string
+	failStages        map[string]bool
+	dispatched        chan<- struct{}
+	holdOutcomes      <-chan struct{}
+	settled           chan<- struct{}
+	holdReturns       <-chan struct{}
+	barrierSet        map[string]bool
+	barrierReady      chan struct{}
+	barrierSeen       int
 }
 
 func (r *recordingWorkers) DispatchUnit(ctx context.Context, batchID, unitID string) (*orchestration.TopologyUnit, error) {
@@ -293,7 +296,25 @@ func (r *recordingWorkers) DispatchUnit(ctx context.Context, batchID, unitID str
 			return nil, ctx.Err()
 		}
 	}
-	if _, err := r.MemoryTopologyWorkers.DispatchUnit(ctx, batchID, unitID); err != nil {
+	status := "complete"
+	if r.shouldFail(unit.WorkID) {
+		status = "failed"
+	}
+	result := api.WorkerResult{Status: status, Summary: unit.WorkID + " done"}
+	if r.dispatchAndSettle != nil {
+		r.claimMu.Lock()
+		updated, err := r.dispatchAndSettle(ctx, batchID, unitID, result)
+		r.claimMu.Unlock()
+		if err != nil {
+			return nil, err
+		}
+		return r.afterSettle(ctx, updated)
+	}
+	fixture, ok := r.TopologyWorkers.(*orchestration.MemoryTopologyWorkers)
+	if !ok {
+		return nil, fmt.Errorf("topology fixture cannot settle outcomes")
+	}
+	if _, err := fixture.DispatchUnit(ctx, batchID, unitID); err != nil {
 		return nil, err
 	}
 	if r.holdOutcomes != nil {
@@ -303,14 +324,7 @@ func (r *recordingWorkers) DispatchUnit(ctx context.Context, batchID, unitID str
 			return nil, ctx.Err()
 		}
 	}
-	status := "complete"
-	if r.shouldFail(unit.WorkID) {
-		status = "failed"
-	}
-	updated, err := r.SettleUnit(batchID, unitID, api.WorkerResult{
-		Status:  status,
-		Summary: unit.WorkID + " done",
-	})
+	updated, err := fixture.SettleUnit(batchID, unitID, result)
 	if err != nil {
 		return nil, err
 	}
