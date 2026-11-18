@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
+	"gopkg.in/yaml.v3"
 )
 
 func copyDir(t *testing.T, src, dst string) {
