@@ -47,7 +47,7 @@ func runObservedPromotion(t *testing.T, reg Registry) (fired bool, before, after
 
 func TestPromotionCommitNotifiesRootsChangedObserver(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	fired, before, after := runObservedPromotion(t, NewMemoryRegistry())
+	fired, before, after := runObservedPromotion(t, newProjectRegistry(t))
 	if !fired {
 		t.Fatal("promotion commit did not notify the roots-changed observer")
 	}

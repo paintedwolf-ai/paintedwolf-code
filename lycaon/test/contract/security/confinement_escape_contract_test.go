@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/rootfacts"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -351,7 +352,7 @@ func TestConfinedLaunchStaysOutOfEditorOnlyRoots(t *testing.T) {
 	for _, root := range facts.EditorOnly() {
 		params.Roots = append(params.Roots, project.AttachRootParams{Path: root.Path})
 	}
-	p, err := project.NewMemoryRegistry().Create(t.Context(), params)
+	p, err := projecttest.NewRegistry(t).Create(t.Context(), params)
 	testutil.FailErr(t, "create project", err)
 	c := confine.Confinement{Roots: project.RootPaths(p)}
 	assertInProjectWriteOK(t, self, c, facts.Work)

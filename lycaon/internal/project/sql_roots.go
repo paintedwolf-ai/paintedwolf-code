@@ -51,7 +51,7 @@ func (r *SQLRegistry) AttachRoot(ctx context.Context, id string, params AttachRo
 	if blockers > 0 {
 		return nil, ErrProjectBusy
 	}
-	added, err := attachRootTx(ctx, q, before, params, RootKindAttached)
+	added, err := attachRootTx(ctx, q, id, before.Roots, params, RootKindAttached)
 	if err != nil {
 		return nil, err
 	}
@@ -322,37 +322,30 @@ func (r *SQLRegistry) PatchRoot(ctx context.Context, id, rootID string, params P
 	}, nil
 }
 
-func attachRootTx(ctx context.Context, q *db.Queries, p *Project, params AttachRootParams, kind RootKind) (Root, error) {
+func attachRootTx(ctx context.Context, q *db.Queries, projectID string, roots []Root, params AttachRootParams, kind RootKind) (Root, error) {
 	abs, err := ResolveExistingDir(params.Path)
 	if err != nil {
 		return Root{}, err
 	}
 	if _, err := q.GetProjectRootByPath(ctx, db.GetProjectRootByPathParams{
-		ProjectID: p.ID,
+		ProjectID: projectID,
 		Path:      abs,
 	}); err == nil {
 		return Root{}, fmt.Errorf("%w: %s", ErrDuplicateRoot, abs)
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return Root{}, err
 	}
-	count, err := q.CountProjectRoots(ctx, p.ID)
-	if err != nil {
-		return Root{}, err
-	}
-	wantPrimary := count == 0 || params.IsPrimary != nil && *params.IsPrimary
-	if wantPrimary && count > 0 {
-		if err := q.ClearProjectPrimary(ctx, p.ID); err != nil {
+	wantPrimary := len(roots) == 0 || params.IsPrimary != nil && *params.IsPrimary
+	if wantPrimary && len(roots) > 0 {
+		if err := q.ClearProjectPrimary(ctx, projectID); err != nil {
 			return Root{}, err
-		}
-		for i := range p.Roots {
-			p.Roots[i].IsPrimary = false
 		}
 	}
 	now := time.Now().UTC()
 	rootLabel := strings.TrimSpace(params.Label)
 	if rootLabel == "" {
-		existing := make([]string, 0, len(p.Roots))
-		for _, r := range p.Roots {
+		existing := make([]string, 0, len(roots))
+		for _, r := range roots {
 			existing = append(existing, r.Label)
 		}
 		rootLabel = deriveUniqueRootLabel(existing, abs)
@@ -361,14 +354,14 @@ func attachRootTx(ctx context.Context, q *db.Queries, p *Project, params AttachR
 		if err != nil {
 			return Root{}, err
 		}
-		if rootLabelTaken(p.Roots, normalized, "") {
+		if rootLabelTaken(roots, normalized, "") {
 			return Root{}, fmt.Errorf("%w: %s", ErrDuplicateRootLabel, normalized)
 		}
 		rootLabel = normalized
 	}
 	root := Root{
 		ID:            uuid.NewString(),
-		ProjectID:     p.ID,
+		ProjectID:     projectID,
 		Path:          abs,
 		Label:         rootLabel,
 		IsPrimary:     wantPrimary,
@@ -391,7 +384,6 @@ func attachRootTx(ctx context.Context, q *db.Queries, p *Project, params AttachR
 		}
 		return Root{}, err
 	}
-	p.Roots = append(p.Roots, root)
 	return root, nil
 }
 

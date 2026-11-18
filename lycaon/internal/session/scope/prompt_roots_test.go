@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -17,7 +18,7 @@ import (
 func promptRootsService(t *testing.T, rootCount int) (*scope.Service, *api.Session, string) {
 	t.Helper()
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	base := t.TempDir()
 	roots := make([]project.AttachRootParams, rootCount)
 	for i := range roots {

@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/scope"
@@ -298,7 +299,7 @@ func workspaceRootsContractFixture(t *testing.T, rootCount int) (scope.Projects,
 		contractcheck.FailErr(t, fmt.Sprintf("mkdir root %d", i), os.MkdirAll(dir, 0o755))
 		roots[i] = project.AttachRootParams{Path: dir, Label: workspaceRootLabel(i, rootCount)}
 	}
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	created, err := reg.Create(context.Background(), project.CreateParams{Roots: roots})
 	contractcheck.FailErr(t, "create project", err)
 	refs, active := workspaceRootsActive(t, project.RootRefsFrom(created), rootCount)
