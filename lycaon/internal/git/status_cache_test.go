@@ -266,7 +266,7 @@ func TestManager_CheckoutNotifiesHeadMoved(t *testing.T) {
 	mgr := git.NewManager()
 	// Create a second branch with raw git (Manager.Checkout only switches).
 	cmd := exec.CommandContext(context.Background(), "git", "-C", dir, "branch", "topic")
-	cmd.Env = lyexec.LocalGitEnv()
+	cmd.Env = lyexec.InheritedEnviron()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git branch topic: %v %s", err, out)
 	}

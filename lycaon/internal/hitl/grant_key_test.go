@@ -138,7 +138,7 @@ func TestGrantIdentityRefusesUnencodableArguments(t *testing.T) {
 			if offer := hitl.ExactActionOffer(action); offer.ID != "" || offer.Grant.ID != "" {
 				t.Fatalf("unencodable action minted offer: %+v", offer)
 			}
-			if offer := hitl.ExactActionSetOffer(action, []string{"valid-key", key}); offer.ID != "" {
+			if offer := hitl.ExactActionSetOfferAtScope(action, []string{"valid-key", key}, hitl.ApprovalGrantScopeChat); offer.ID != "" {
 				t.Fatalf("unencodable member minted action-set offer: %+v", offer)
 			}
 			decision := &gate.Decision{Primary: api.GateExplicitApprovalRequest, ReasonKey: "explicit_approval_request:constant"}

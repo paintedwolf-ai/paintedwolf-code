@@ -105,7 +105,7 @@ func TestRuleApprovalGateSessionGrantNeverClearsSubstrate(t *testing.T) {
 			SessionID:  "chat-1",
 		},
 	}
-	offer := hitl.ExactActionSetOffer(unconfined, []string{hitl.GrantKey(unconfined)})
+	offer := hitl.ExactActionSetOfferAtScope(unconfined, []string{hitl.GrantKey(unconfined)}, hitl.ApprovalGrantScopeChat)
 	_, err = approvalGate.ApplyGrant(offer.Grant)
 	testutil.FailErr(t, "approvalGate.ApplyGrant", err)
 	res, err := approvalGate.Evaluate(context.Background(), unconfined)
@@ -140,7 +140,7 @@ func TestRuleApprovalGateSessionGrantCoversWorker(t *testing.T) {
 			Contained: contained,
 		},
 	}
-	offer := hitl.ExactActionSetOffer(coordinator, []string{hitl.GrantKey(coordinator)})
+	offer := hitl.ExactActionSetOfferAtScope(coordinator, []string{hitl.GrantKey(coordinator)}, hitl.ApprovalGrantScopeChat)
 	_, err = approvalGate.ApplyGrant(offer.Grant)
 	testutil.FailErr(t, "approvalGate.ApplyGrant", err)
 

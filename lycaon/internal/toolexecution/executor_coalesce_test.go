@@ -424,7 +424,7 @@ func TestExactLeaseSilencesDetection(t *testing.T) {
 			Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{tmp}},
 		},
 	}
-	offer := hitl.ExactActionSetOffer(action, []string{hitl.GrantKey(action)})
+	offer := hitl.ExactActionSetOfferAtScope(action, []string{hitl.GrantKey(action)}, hitl.ApprovalGrantScopeChat)
 	_, err = approvals.ApplyGrant(offer.Grant)
 	testutil.FailErr(t, "ApplyGrant", err)
 	res, err := approvals.Evaluate(context.Background(), action)

@@ -20,7 +20,7 @@ func TestGitManagerCloneCopiesRepo(t *testing.T) {
 		t.Helper()
 		cmd := exec.CommandContext(t.Context(), "git", args...)
 		cmd.Dir = dir
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v (%s)", args, err, out)
 		}

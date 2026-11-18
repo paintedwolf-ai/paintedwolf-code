@@ -83,7 +83,7 @@ func TestZxcvbnPasswordsVendorCheckMatchesLedger(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	cmd := exec.Command(filepath.Join(root, "scripts", "vendor-zxcvbn-passwords.sh"), "--check")
 	cmd.Dir = root
-	cmd.Env = lyexec.LocalGitEnv()
+	cmd.Env = lyexec.InheritedEnviron()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("vendor-zxcvbn-passwords.sh --check failed: %v\n%s", err, out)

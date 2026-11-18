@@ -35,14 +35,6 @@ func (a SocketAddress) dialAddress() string {
 	return a.Path
 }
 
-// String renders the address for diagnostics.
-func (a SocketAddress) String() string {
-	if a.Abstract {
-		return "abstract:" + a.Path
-	}
-	return a.Path
-}
-
 // Session is the explicit session bus selection for this process.
 type Session struct {
 	Source SessionSource

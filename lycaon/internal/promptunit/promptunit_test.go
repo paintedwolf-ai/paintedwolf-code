@@ -219,8 +219,9 @@ func TestRevisionTracksDescriptions(t *testing.T) {
 	if a.Revision() == b.Revision() || a.Revision() == "" {
 		t.Fatalf("revisions %q %q", a.Revision(), b.Revision())
 	}
-	if Fingerprint(a.Rendered(Selection{Host: HostCoordinator})) != "x" {
-		t.Fatal("fingerprint should list rendered ids")
+	units := a.Rendered(Selection{Host: HostCoordinator})[SlotConduct]
+	if len(units) != 1 || units[0].ID != "x" {
+		t.Fatalf("rendered conduct units = %+v", units)
 	}
 }
 
