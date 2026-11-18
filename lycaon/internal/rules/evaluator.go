@@ -1,33 +1,14 @@
 package rules
 
 import (
-	"context"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 )
 
-// SimpleEngine evaluates ordered whitelist rules from YAML config.
-type SimpleEngine struct {
-	rules    []RuleEntry
-	registry *conditions.ConditionRegistry
-}
-
-// NewSimpleEngine loads rules from config and optional condition registry.
-func NewSimpleEngine(cfg *RulesConfig, registry *conditions.ConditionRegistry) *SimpleEngine {
-	if cfg == nil {
-		return &SimpleEngine{registry: registry}
-	}
-	return &SimpleEngine{rules: append([]RuleEntry(nil), cfg.Rules...), registry: registry}
-}
-
-// Evaluate returns the first matching rule outcome or allow.
-func (e *SimpleEngine) Evaluate(_ context.Context, eval EvalContext) (*RuleOutcome, error) {
-	if e == nil {
-		return &RuleOutcome{Allowed: true}, nil
-	}
-	for _, rule := range e.rules {
-		ok, err := MatchWhen(e.registry, rule.When, eval)
+func evaluateOrderedRules(registry *conditions.ConditionRegistry, rules []RuleEntry, eval EvalContext) (*RuleOutcome, error) {
+	for _, rule := range rules {
+		ok, err := MatchWhen(registry, rule.When, eval)
 		if err != nil {
 			return nil, err
 		}
