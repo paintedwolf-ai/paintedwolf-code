@@ -4,7 +4,7 @@ import {
   denScrollDebugLog,
   isStreamScrollDebugEnabled,
 } from "../../stream/den-scroll-debug.ts";
-import type { ActivitySpanEntry, TranscriptItem } from "../projection/transcript-item-model.ts";
+import { activitySpanEntryKey, type ActivitySpanEntry, type TranscriptItem } from "../projection/transcript-item-model.ts";
 
 /** Tool rows from one message share a continuity key. */
 function toolRowContinuityKey(partId: string): string {
@@ -80,6 +80,61 @@ export function noteTranscriptRowWithdrawals(
       kind: row.kind,
       rows: items.length,
     });
+  }
+  return gone;
+}
+
+type ActivitySpanRow = { kind: ActivitySpanEntry["kind"]; source: string };
+type ActivitySpanRowWithdrawal = RowWithdrawal & ActivitySpanRow;
+
+const MAX_ACTIVITY_SPAN_SCOPES = 8;
+const MAX_ACTIVITY_SPAN_ROWS = 4096;
+const lastActivityRowsByScope = new Map<string, Map<string, ActivitySpanRow>>();
+
+export function visibleActivitySpanRows(
+  entries: readonly ActivitySpanEntry[],
+): Map<string, ActivitySpanRow> {
+  return new Map(entries.map(entry => {
+    const key = activitySpanEntryKey(entry);
+    const source = entry.kind === "tool" ? entry.part.commandActivity?.calls[0]?.id ?? key : key;
+    return [key, { kind: entry.kind, source }];
+  }));
+}
+
+export function noteActivitySpanRowWithdrawals(
+  scope: string,
+  sources: readonly ActivitySpanEntry[],
+  entries: readonly ActivitySpanEntry[],
+): ActivitySpanRowWithdrawal[] {
+  if (!isStreamScrollDebugEnabled()) {
+    lastActivityRowsByScope.clear();
+    return [];
+  }
+  const sourceKeys = new Set(sources.map(activitySpanEntryKey));
+  const current = visibleActivitySpanRows(entries);
+  const previous = lastActivityRowsByScope.get(scope) ?? new Map<string, ActivitySpanRow>();
+  const gone: ActivitySpanRowWithdrawal[] = [];
+  for (const [key, row] of previous) {
+    if (current.has(key) || !sourceKeys.has(row.source)) continue;
+    previous.delete(key);
+    gone.push({ key, ...row });
+    denScrollDebugLog("scroll", "row-withdrawn", {
+      surface: "activity-span",
+      row_key: key,
+      kind: row.kind,
+      source_key: row.source,
+      rows: entries.length,
+    });
+  }
+  for (const [key, row] of current) {
+    previous.delete(key);
+    previous.set(key, row);
+  }
+  while (previous.size > MAX_ACTIVITY_SPAN_ROWS) previous.delete(previous.keys().next().value!);
+  lastActivityRowsByScope.delete(scope);
+  lastActivityRowsByScope.set(scope, previous);
+  while (lastActivityRowsByScope.size > MAX_ACTIVITY_SPAN_SCOPES) {
+    lastActivityRowsByScope.delete(lastActivityRowsByScope.keys().next().value!);
   }
   return gone;
 }

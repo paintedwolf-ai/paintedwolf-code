@@ -5,6 +5,7 @@ import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import type { ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
 import { openRunningStage } from "../../platform/navigation/open-running.ts";
 import { openInSearch } from "../../search/search-nav.ts";
+import { turnLoadRowSummary } from "../../chat/turnload/turn-load-rows.ts";
 import { useToolContent } from "../../chat/tool/tool-content.tsx";
 import { ToolContentLink } from "../tool/ToolContentLink.tsx";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
@@ -36,6 +37,12 @@ export function ActionLinks(props: Props) {
     if (content?.revealedCallId?.() !== props.part.toolCallId) return undefined;
     return kind === "input" ? content.argsOffset() : kind === "output" ? content.outputOffset() : undefined;
   };
+  const links = (): readonly ActionLink[] => {
+    const links = props.action.links;
+    return props.part.commandActivity?.receiptScopes.length && !links.some(link => link.kind === "receipt")
+      ? [...links, { kind: "receipt" }]
+      : links;
+  };
   const opener = createMemo(() => props.action.opener, undefined, { equals: sameShape });
   // The call's output as a chat attachment, citing its session and call.
   const outputRef = createMemo(() => chatRefForToolRaw({
@@ -45,7 +52,7 @@ export function ActionLinks(props: Props) {
   return (
     <nav class="den-action-card__links" aria-label="Activity records" data-testid="action-links"
       draggable={outputRef() ? true : undefined} onDragStart={(event) => startChatAttachmentDrag(event, outputRef())}>
-      <Index each={props.action.links}>
+      <Index each={links()}>
         {(link) => {
           // Descriptors arrive as new objects on every update; a link stays mounted while it opens the same record.
           const document = createMemo(() => linkContent(link(), props.part), undefined, { equals: sameShape });
@@ -65,12 +72,28 @@ export function ActionLinks(props: Props) {
           );
         }}
       </Index>
+      <Show when={hostDecisions(props.part)}>
+        {(text) => (
+          <ToolContentLink short label="Host decisions" testId="command-activity-decisions"
+            projectId={props.projectId} pane={`action:${props.part.id}:decisions`}
+            content={{ kind: "inline", text: text() }} />
+        )}
+      </Show>
       {props.evidence}
       <Show when={opener()} keyed>
         {(opener) => <Opener opener={opener} part={props.part} projectId={props.projectId} rootRefs={props.rootRefs} />}
       </Show>
     </nav>
   );
+}
+
+function hostDecisions(part: ToolPartView): string | undefined {
+  const decisions = [part, ...(part.foldMembers ?? [])].flatMap(member => member.commandActivity?.decisions ?? []);
+  if (!decisions.length) return undefined;
+  return decisions.map(decision => {
+    const summary = turnLoadRowSummary(decision.row);
+    return `${summary.title} · ${summary.operation} · ${summary.state}`;
+  }).join("\n");
 }
 
 /** What a record link opens: a retained reference, the call's own text, a process, or receipts. */
@@ -83,10 +106,12 @@ function linkContent(link: ActionLink, part: ToolPartView): ChatContentDocument[
       if (link.process_handle) return { kind: "process", handle: link.process_handle };
       if (link.content_ref) return { kind: "retained", reference: link.content_ref };
       return part.output ? { kind: "inline", text: part.output, redaction: part.redaction ?? undefined } : undefined;
-    case "receipt":
-      return link.receipts?.length
-        ? { kind: "command_receipts", scopes: link.receipts.map((scope) => ({ programId: scope.program_id, ...(scope.activity_id ? { activityId: scope.activity_id } : {}) })) }
-        : undefined;
+    case "receipt": {
+      const scopes = part.commandActivity?.receiptScopes.length
+        ? part.commandActivity.receiptScopes
+        : link.receipts?.map(scope => ({ programId: scope.program_id, ...(scope.activity_id ? { activityId: scope.activity_id } : {}) }));
+      return scopes?.length ? { kind: "command_receipts", scopes } : undefined;
+    }
   }
 }
 

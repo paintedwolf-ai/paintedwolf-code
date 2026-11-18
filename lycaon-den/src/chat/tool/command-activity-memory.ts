@@ -79,12 +79,20 @@ export class CommandActivityMemory {
 
   orderRows(projected: readonly ProjectedRow[]): ActivitySpanEntry[] {
     const ordered = orderPinnedRows(projected, this.rows);
-    const lastSeen = ordered.findLastIndex(row => this.rows.has(row.key));
-    const lastKey = ordered[lastSeen]?.key;
+    const seen: ProjectedRow[] = [];
+    const unseen: ProjectedRow[] = [];
+    let late = false;
+    for (const row of ordered) {
+      if (this.rows.has(row.key)) {
+        seen.push(row);
+        late ||= unseen.length > 0;
+      } else {
+        unseen.push(row);
+      }
+    }
+    const lastKey = seen.at(-1)?.key;
     let after = lastKey === undefined ? undefined : { key: lastKey, order: this.rows.get(lastKey)!.order };
-    const late = lastSeen >= 0 && ordered.slice(0, lastSeen).some(row => !this.rows.has(row.key));
-    const unseen = ordered.filter(row => !this.rows.has(row.key));
-    const result = late ? [...ordered.filter(row => this.rows.has(row.key)), ...unseen] : ordered;
+    const result = late ? [...seen, ...unseen] : ordered;
 
     for (const row of result) {
       if (row.entry.kind !== "tool") this.touchBookkeepingRow(row.key);
