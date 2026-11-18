@@ -114,18 +114,27 @@ func awaitFile(t *testing.T, ctx context.Context, path string) {
 }
 
 func TestCommandEntryTimeoutEndsTheInnerCommandWith124(t *testing.T) {
-	for _, tc := range []struct{ name, program, stdout string }{
-		{"native sleep", `timeout 1 sleep 5; echo "status $?"`, "status 124\n"},
-		{"native sleep preserving status", `timeout --preserve-status 1 sleep 5; echo "status $?"`, "status 143\n"},
-		{"external sleep", `timeout 1 /bin/sleep 5; echo "status $?"`, "status 124\n"},
-		{"external sleep preserving status", `timeout -s INT --preserve-status 1 /bin/sleep 5; echo "status $?"`, "status 130\n"},
+	// An external child signals that it started, so the deadline fires at the
+	// running process; expiry before launch is RunTimeout's own test.
+	for _, tc := range []struct {
+		name, program, stdout string
+		external              bool
+	}{
+		{"native sleep", `timeout 1 sleep 5; echo "status $?"`, "status 124\n", false},
+		{"native sleep preserving status", `timeout --preserve-status 1 sleep 5; echo "status $?"`, "status 143\n", false},
+		{"external sleep", `timeout 1 /bin/sh -c ': > ready; exec /bin/sleep 5'; echo "status $?"`, "status 124\n", true},
+		{"external sleep preserving status", `timeout -s INT --preserve-status 1 /bin/sh -c ': > ready; exec /bin/sleep 5'; echo "status $?"`, "status 130\n", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newPathsFixture(t)
 			clock := newSupervisionClock()
 			f.Runtime.Clock = clock
 			done := callAsync(t, t.Context(), f, tc.program)
-			clock.fireNext(time.Second)
+			expire := clock.await(time.Second)
+			if tc.external {
+				awaitFile(t, t.Context(), filepath.Join(f.Dir, "ready"))
+			}
+			expire.fire()
 			got := <-done
 			// The program only settles once the inner command is gone.
 			if got.err != nil || got.outcome.Status != 0 || got.outcome.Stdout != tc.stdout || got.outcome.Refusal != nil {
