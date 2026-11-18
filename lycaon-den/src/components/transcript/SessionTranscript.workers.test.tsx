@@ -57,6 +57,7 @@ describe("SessionTranscript workers and synthesis", () => {
       ] },
     }]);
     expect(container.querySelector('[data-testid="diff-group"]')?.getAttribute("data-files")).toBe("2");
+    fireEvent.click(disclosureToggle(container.querySelector('[data-testid="diff-group"]')));
     container.querySelector<HTMLButtonElement>('[data-path="new.ts"] [data-testid="file-edit-diff-toggle"]')!.click();
     const links = container.querySelectorAll<HTMLButtonElement>('[data-testid="source-path-link"]');
     expect(links).toHaveLength(1);
