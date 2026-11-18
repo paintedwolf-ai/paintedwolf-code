@@ -184,21 +184,32 @@ export class ChatContentEditor {
     this.stopRestore = undefined;
   }
 
-  private async restorePlace(place: ChatReadingPlace): Promise<void> {
+  private async withTarget(match: ChatContentMatch, apply: (row: number, from: number, to: number) => void): Promise<void> {
+    this.cancelNavigation();
     const generation = this.revealGeneration;
     try {
-      const target = await this.access.revealTarget(place.target, this.abort.signal);
+      const target = await this.access.revealTarget(match, this.abort.signal);
       if (!target || this.abort.signal.aborted || generation !== this.revealGeneration) return;
       this.current = target.row;
       for (const row of target.rows) this.rows.set(row.index, row);
       this.publish();
-      const entry = this.reader.document.rowAt(MAIN_SECTION, target.row);
-      if (entry) this.stopRestore = restoreScrollAnchor(this.reader.view, {
-        pos: Math.min(entry.to, entry.from + target.from), offset: place.offset, left: place.left,
-      });
+      apply(target.row, target.from, target.to);
     } catch (cause) {
       if (!this.abort.signal.aborted && generation === this.revealGeneration) this.error(cause);
     }
+  }
+
+  private restorePlace(place: ChatReadingPlace): Promise<void> {
+    const reader = this.reader;
+    return this.withTarget(place.target, (row, from) => {
+      const entry = reader.document.rowAt(MAIN_SECTION, row);
+      if (!entry) return;
+      this.stopRestore = restoreScrollAnchor(reader.view, {
+        // Materializing neighboring rows shifts the target within the paged editor.
+        get pos() { return (reader.document.rowAt(MAIN_SECTION, row) ?? entry).from + from; },
+        offset: place.offset, left: place.left,
+      });
+    });
   }
 
   async revealRow(index: number, column = 1): Promise<void> {
@@ -208,17 +219,10 @@ export class ChatContentEditor {
     if (!this.abort.signal.aborted && generation===this.revealGeneration) this.reader.reveal(MAIN_SECTION,index,{row:index,from:column-1,to:column-1});
   }
 
-  async revealMatch(match: ChatContentMatch): Promise<void> {
-    this.cancelNavigation();
-    const generation = this.revealGeneration;
-    try {
-      const target=await this.access.revealTarget(match,this.abort.signal);
-      if (this.abort.signal.aborted || generation!==this.revealGeneration || !target) return;
-      this.current=target.row;
-      for (const row of target.rows) this.rows.set(row.index,row);
-      this.publish();
-      this.reader.reveal(MAIN_SECTION,target.row,{ row:target.row,from:target.from,to:target.to });
-    } catch (cause) { if (!this.abort.signal.aborted && generation===this.revealGeneration) this.error(cause); }
+  revealMatch(match: ChatContentMatch): Promise<void> {
+    return this.withTarget(match, (row, from, to) => {
+      this.reader.reveal(MAIN_SECTION, row, { row, from, to });
+    });
   }
 
   clearMatch(): void { this.cancelNavigation(); this.reader.clearMatch(); }

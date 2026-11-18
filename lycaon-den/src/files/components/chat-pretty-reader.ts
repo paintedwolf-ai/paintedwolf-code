@@ -20,7 +20,9 @@ export function useChatPrettyReader(
   inline: Accessor<EditorView | undefined>, onChanging: (cause: unknown) => void,
 ) {
   const [snapshot, setSnapshot] = createSignal<ChatContentBoundedSnapshot>();
-  const target = createMemo(() => prettyTargetFor(document().path, document().language));
+  const path = createMemo(() => document().path);
+  const language = createMemo(() => document().language);
+  const target = createMemo(() => prettyTargetFor(path(), language()));
   let shownAccess: ChatContentAccess | undefined;
   let handoff: Handoff | undefined;
   const takePlace = (source: ChatContentAccess) => {
@@ -34,7 +36,7 @@ export function useChatPrettyReader(
     const current = untrack(snapshot);
     if (current && source && current.revision === revision && source === shownAccess) {
       const view = untrack(inline);
-      const place = view && inlineReadingPlace(view, document().content.kind === "command_receipts");
+      const place = view && inlineReadingPlace(view, untrack(document).content.kind === "command_receipts");
       handoff = place && { access: source, revision, place };
     } else {
       handoff = undefined;

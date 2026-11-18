@@ -51,3 +51,15 @@ describe("chat content navigation", () => {
     expect(f.error).not.toHaveBeenCalled();
   });
 });
+
+it("resolves the visible rank inside a placeholder to its retained rune offset", async () => {
+  const f = fixture();
+  Object.defineProperty(f.editor.reader.view.scrollDOM, "clientHeight", { value: 200, configurable: true });
+  try {
+    vi.spyOn(f.editor.reader, "viewportAnchor").mockReturnValue({ rank: 100, fraction: 0 });
+    const pending = f.editor.capturePlace(new AbortController().signal);
+    expect(f.getRows.mock.calls[0]?.slice(3, 4)).toEqual([{ row: 100 }]);
+    f.finish();
+    expect(await pending).toEqual({ offset: 0, left: 0, target: { offset: 800, length: 0 } });
+  } finally { Reflect.deleteProperty(f.editor.reader.view.scrollDOM, "clientHeight"); }
+});
