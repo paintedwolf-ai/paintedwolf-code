@@ -68,8 +68,8 @@ func TestDiscoveryKeepSetCoversKnownStrategies(t *testing.T) {
 			t.Fatalf("keep-set missing %q", s)
 		}
 	}
-	if len(DiscoveryKeepSetSnapshot()) != len(want) {
-		t.Fatalf("discoveryKeepSet size = %d, want %d", len(DiscoveryKeepSetSnapshot()), len(want))
+	if len(discoveryKeepSet) != len(want) {
+		t.Fatalf("discoveryKeepSet size = %d, want %d", len(discoveryKeepSet), len(want))
 	}
 }
 

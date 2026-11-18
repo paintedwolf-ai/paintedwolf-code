@@ -25,30 +25,14 @@ func TestDiscoveryStrategyConstsInKeepSet(t *testing.T) {
 	if len(consts) == 0 {
 		t.Fatal("no DiscoveryStrategy consts found in providerprofile/profile.go")
 	}
-	keep := llm.DiscoveryKeepSetSnapshot()
 	for name, value := range consts {
-		gap, ok := keep[providerprofile.DiscoveryStrategy(value)]
+		gap, ok := llm.DiscoveryKeepSetGap(providerprofile.DiscoveryStrategy(value))
 		if !ok {
 			t.Errorf("%s (%q) missing from discoveryKeepSet — document the feature gap before minting", name, value)
 			continue
 		}
 		if strings.TrimSpace(gap) == "" {
 			t.Errorf("%s (%q) has empty keep-set gap text", name, value)
-		}
-	}
-	for strategy, gap := range keep {
-		if strings.TrimSpace(gap) == "" {
-			t.Errorf("discoveryKeepSet[%q] has empty gap text", strategy)
-		}
-		found := false
-		for _, value := range consts {
-			if value == string(strategy) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("discoveryKeepSet has orphan strategy %q not declared in providerprofile/profile.go", strategy)
 		}
 	}
 }

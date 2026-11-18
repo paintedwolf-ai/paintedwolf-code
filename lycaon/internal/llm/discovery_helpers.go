@@ -70,15 +70,6 @@ var discoveryKeepSet = map[providerprofile.DiscoveryStrategy]string{
 		"supportedActions.openGenerationAiStudio; OpenAI-compat /models is not the Garden catalog.",
 }
 
-// DiscoveryKeepSetSnapshot returns a copy of the mint-rule table.
-func DiscoveryKeepSetSnapshot() map[providerprofile.DiscoveryStrategy]string {
-	out := make(map[providerprofile.DiscoveryStrategy]string, len(discoveryKeepSet))
-	for k, v := range discoveryKeepSet {
-		out[k] = v
-	}
-	return out
-}
-
 const discoverModelsTimeout = 2 * time.Second
 
 func catalogPricingForID(kind string, catalog []modelinfo.Entry, id string) (modelinfo.Entry, bool) {
