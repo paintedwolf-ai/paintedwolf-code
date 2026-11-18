@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
@@ -22,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/toolcontext"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/session/turnguards"
@@ -35,8 +37,30 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type ContextRepository interface {
+type Sessions interface {
 	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Transcript interface {
+	AppendDraftVersion(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error)
+	CountDraftVersions(ctx context.Context, sessionID, slotID string) (int, error)
+	GetMessages(ctx context.Context, id string) ([]api.Message, error)
+}
+
+type Turns interface {
+	AdmitModelResponse(ctx context.Context, sessionID, attemptID string) error
+	CheckpointTurn(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error
+	MarkModelOutputProjected(ctx context.Context, outputID string) error
+	SettleModelOutput(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error)
+	SettledModelOutputIteration(ctx context.Context, attemptID string) (int, error)
+	TouchTurnProgress(ctx context.Context, turnID string) error
+}
+
+type Evidence interface {
+	CommitEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content string) (string, string, error)
+	CommitProgramHTTPProvenance(ctx context.Context, target evidence.ProgramProvenanceTarget, prov evidence.ProgramHTTPProvenance) (string, error)
+	CommitProgramObservation(ctx context.Context, sessionID, tool string, receipt *api.CommandProgramReceipt, content string) (string, error)
+	CommitVisualEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content, artifactID string) (string, string, error)
 }
 type Context struct {
 	PolicyIndex *policyindex.Service
@@ -50,7 +74,7 @@ type Context struct {
 	Profiles    *profiles.Service
 	Prompts     prompts.PromptTemplateEngine
 	Runtime     *coordinator.Runtime
-	Sessions    ContextRepository
+	Sessions    Sessions
 	ToolContext *toolcontext.Service
 	Tools       tools.ToolRegistry
 	WebResearch *webresearch.ConfigStore

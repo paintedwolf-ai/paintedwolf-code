@@ -16,17 +16,18 @@ import (
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func boardInjectManager(t *testing.T) (*session.Host, *llm.RecordingClient, *store.Memory, repoinfo.Provider) {
+func boardInjectManager(t *testing.T) (*session.Host, *llm.RecordingClient, *store.Repositories, repoinfo.Provider) {
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	dir := t.TempDir()
@@ -34,15 +35,15 @@ func boardInjectManager(t *testing.T) (*session.Host, *llm.RecordingClient, *sto
 		testutil.FailErr(t, "write file", err)
 	}
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	reconP := repotest.NewProvider(t)
 	builder := &board.SnapshotBuilder{
 		Repo:    reconP,
-		Workers: worker.NewInMemoryQueue(10),
+		Workers: workertest.NewQueue(t, 10, testdbseed.DefaultProjectID),
 	}
 	mgr.Coordinator.ConfigureBoard(&board.InjectBuilder{SnapshotBuilder: builder}, board.DefaultInjectFormatter(), mgr.Promotion)
 	return mgr, rec, store, reconP
@@ -81,9 +82,8 @@ func TestInjectOnImplementDefaultFirstTurn(t *testing.T) {
 	}
 	materializeRepoBrief(t, repo, dir)
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
 	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
@@ -101,7 +101,7 @@ func TestInjectSkipsWhenHashUnchanged(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 	materializeRepoBrief(t, repo, dir)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "one"); err != nil {
@@ -123,7 +123,7 @@ func TestInjectForcesOnPhaseChange(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 	materializeRepoBrief(t, repo, dir)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
 	mgr.SetCoordinatorTurnFrameSource(&phaseStubCoordinator{phase: "plan"})
@@ -147,16 +147,16 @@ func TestInjectOmitsWorkflowWhenRunContext(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 	rec2 := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	store := store.NewMemory()
-	mgr2 := session.NewHost(store, session.Models{Client: rec2, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr2 := session.NewHost(store, session.Models{Client: rec2, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr2)
 	wirePromptTestManager(t, mgr2)
 	mgr2.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	builder := &board.SnapshotBuilder{Repo: repotest.NewProvider(t), Workers: worker.NewInMemoryQueue(10)}
+	builder := &board.SnapshotBuilder{Repo: repotest.NewProvider(t), Workers: workertest.NewQueue(t, 10, testdbseed.DefaultProjectID)}
 	mgr2.Coordinator.ConfigureBoard(&board.InjectBuilder{SnapshotBuilder: builder}, board.DefaultInjectFormatter(), mgr2.Promotion)
 	mgr2.SetCoordinatorTurnFrameSource(&phaseStubCoordinator{phase: "implement"})
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
 	if _, err := mgr2.Submissions.Prompt(ctx, sess.ID, "go"); err != nil {
@@ -188,15 +188,15 @@ func (p *phaseStubCoordinator) BuildCoordinatorTurnFrame(_ context.Context, _ st
 
 func TestLegFinishedKickIncludesRelativeTime(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	done := time.Now().UTC().Add(-2 * time.Minute)
 	mgr.Coordinator.Guidance.Emit(context.Background(), sess.ID, anchor.LegFinished, anchor.Envelope{CompletedAt: &done})

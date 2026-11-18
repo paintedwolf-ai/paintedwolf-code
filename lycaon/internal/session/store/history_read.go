@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/messageview"
@@ -46,32 +45,6 @@ func decodeMessageRows[T db.ListSessionMessagesAfterOrdRow | db.ListSessionMessa
 	return out, nil
 }
 
-func (s *memoryTranscript) ReadMessageWindow(ctx context.Context, id string, window messageview.MessageWindow) ([]api.Message, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	core := s.core
-	core.mu.RLock()
-	defer core.mu.RUnlock()
-	if _, ok := core.sessions[id]; !ok {
-		return nil, ErrSessionNotFound
-	}
-	if window.Limit <= 0 {
-		return []api.Message{}, nil
-	}
-	rows := core.messages[id]
-	end := len(rows)
-	if !window.After && window.BeforeOrd > 0 {
-		end = sort.Search(len(rows), func(i int) bool { return rows[i].Ord >= window.BeforeOrd })
-	}
-	start := max(0, end-window.Limit)
-	if window.After {
-		start = sort.Search(len(rows), func(i int) bool { return rows[i].Ord > window.AfterOrd })
-		end = start + min(window.Limit, len(rows)-start)
-	}
-	return append([]api.Message(nil), rows[start:end]...), nil
-}
-
 // ReadSourceTurn resolves a permanent turn identity; zero selects the newest live turn.
 func (s *sqlTranscript) ReadSourceTurn(ctx context.Context, id string, number int) (messageview.SourceTurn, error) {
 	if number < 0 {
@@ -89,25 +62,4 @@ func (s *sqlTranscript) ReadSourceTurn(ctx context.Context, id string, number in
 		return messageview.SourceTurn{}, nil
 	}
 	return messageview.SourceTurn{Number: number, OpeningMessageID: opening}, err
-}
-
-func (s *memoryTranscript) ReadSourceTurn(ctx context.Context, id string, number int) (messageview.SourceTurn, error) {
-	if err := ctx.Err(); err != nil {
-		return messageview.SourceTurn{}, err
-	}
-	if number < 0 {
-		return messageview.SourceTurn{}, fmt.Errorf("source turn must be nonnegative")
-	}
-	core := s.core
-	core.mu.RLock()
-	defer core.mu.RUnlock()
-	if number == 0 {
-		number = currentUserTurnLocked(core, id)
-	}
-	for opening, turn := range core.userTurns[id] {
-		if turn == number {
-			return messageview.SourceTurn{Number: number, OpeningMessageID: opening}, nil
-		}
-	}
-	return messageview.SourceTurn{}, nil
 }

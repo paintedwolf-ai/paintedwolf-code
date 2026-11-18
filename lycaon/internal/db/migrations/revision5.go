@@ -25,9 +25,9 @@ type Part struct {
 func Revision5(target Baseline) Step {
 	return composeStep(Step{
 		ID:       "source-manifests-and-command-records",
-		Checksum: "8e1afb6494bcc70516ccbb226a0128d9d2d566bac1d05a829ed98aa7daeb93ae",
+		Checksum: "d2a5deb29cffcab14d32cc9c36ac050695fd7fcda024d2cd03e07988bdaf9aae",
 		From:     manifestLayoutSource, To: target,
-	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords())
+	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords(), ProgramPublications())
 }
 
 func composeStep(step Step, parts ...Part) Step {
@@ -79,5 +79,18 @@ func Briefings() Part {
 	return Part{Source: briefingsSQL, Apply: func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, string(briefingsSQL))
 		return err
+	}}
+}
+
+//go:embed program_publications.sql
+var programPublicationsSQL []byte
+
+// ProgramPublications adds the journal for command evidence and output.
+func ProgramPublications() Part {
+	return Part{Source: programPublicationsSQL, Apply: func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, string(programPublicationsSQL))
+		return err
+	}, Writes: func(context.Context, DBTX, uint64) (uint64, error) {
+		return 1 << 20, nil
 	}}
 }

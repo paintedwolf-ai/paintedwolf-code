@@ -22,7 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -122,7 +122,7 @@ func NewWorktreeTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, *se
 	database := testdbfixture.Open(t, "worktree.db")
 	mem := store.NewSQL(database)
 	mock := llm.NewMockProvider(TestMockConfig(t))
-	mgr := session.NewHost(mem, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(mem, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	WireTestBindingRegistry(t)
 	reg := project.NewSQLRegistry(database)
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
@@ -140,7 +140,7 @@ func PostWorktreeJSON(t *testing.T, srv *hostapi.Server, path string, body any) 
 }
 
 type PutFailStore struct {
-	session.Store
+	store.SessionRepository
 	FailPut bool
 }
 
@@ -148,7 +148,7 @@ func (s *PutFailStore) PutWorktreeBinding(ctx context.Context, b store.WorktreeB
 	if s.FailPut {
 		return errors.New("injected put failure")
 	}
-	return s.Store.PutWorktreeBinding(ctx, b)
+	return s.SessionRepository.PutWorktreeBinding(ctx, b)
 }
 
 func RemoveWorktree(t *testing.T, srv *hostapi.Server, sessionID string) *httptest.ResponseRecorder {

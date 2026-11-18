@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/naming"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -37,7 +37,7 @@ func TestWorkflowRequestsCurateRootChatAfterAdmission(t *testing.T) {
 				manifest.Request.Default = text
 			}
 			mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"request-curation@1.0.0": manifest})
-			curator := session.NewHost(sessions, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+			curator := session.NewHost(sessions, session.Models{Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 			defer curator.Runner.Curation.Wait(t.Context())
 			if surface == "manual title" {
 				_, err := curator.Chats.Naming.SetTitle(t.Context(), "sess-1", "Manual irrigation decision")
@@ -82,15 +82,15 @@ func TestWorkflowRequestsCurateRootChatAfterAdmission(t *testing.T) {
 				}
 				run, err := mgr.Store.Runs.ActiveBySession(t.Context(), "sess-1")
 				testutil.FailErr(t, "get pending run", err)
-				_, err = mgr.Feedback.ResolveUserFeedback(workflowCaller(t, mgr), "sess-1", run.ID, runstate.WorkflowRequestFeedbackID, text)
+				_, err = mgr.Feedback.ResolveUserFeedback(workflowCaller(t, sessions), "sess-1", run.ID, runstate.WorkflowRequestFeedbackID, text)
 				testutil.FailErr(t, "answer workflow request", err)
-				_, err = mgr.Feedback.ResolveUserFeedback(workflowCaller(t, mgr), "sess-1", run.ID, runstate.WorkflowRequestFeedbackID, text)
+				_, err = mgr.Feedback.ResolveUserFeedback(workflowCaller(t, sessions), "sess-1", run.ID, runstate.WorkflowRequestFeedbackID, text)
 				if err == nil {
 					t.Fatal("duplicate answer accepted")
 				}
 			}
 			curator.Runner.Curation.Wait(t.Context())
-			got, err := sessions.Get(t.Context(), "sess-1")
+			got, err := sessions.Sessions.Get(t.Context(), "sess-1")
 			testutil.FailErr(t, "get named session", err)
 			want := naming.NameSession(t.Context(), nil, text)
 			if surface == "manual title" {

@@ -3,7 +3,6 @@ package sourcecontracts
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,7 +23,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
-	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/timelayout"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -33,7 +33,6 @@ func TestRestoreProjectSourceVersionMakesSelectedBytesCurrent(t *testing.T) {
 	srv := contractfixture.NewTestServer(t, withLedger, contractfixture.WithSessionStore(sessionstore.NewSQL(ledgerDB)))
 	rootPath := t.TempDir()
 	p := contractfixture.CreateProjectForTest(t, srv, rootPath)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 	oldContent, currentContent := []byte("old\n"), []byte("current\n")
 	testutil.FailErr(t, "write current source", os.WriteFile(filepath.Join(rootPath, "note.txt"), currentContent, 0o640))
@@ -83,11 +82,10 @@ func TestRestoreProjectSourceVersionMakesSelectedBytesCurrent(t *testing.T) {
 }
 
 func TestRestoreProjectSourceVersionRejectsUnavailableBytesWithoutMutation(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	rootPath := t.TempDir()
 	p := contractfixture.CreateProjectForTest(t, srv, rootPath)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 	testutil.FailErr(t, "record uncaptured source", ledger.Record(t.Context(), sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "missing.bin"},
@@ -114,10 +112,9 @@ func TestRestoreProjectSourceVersionRejectsUnavailableBytesWithoutMutation(t *te
 }
 
 func TestProjectSourceVersionsListsCompleteFileHistory(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 
 	for _, revision := range []struct {
@@ -217,10 +214,9 @@ func TestProjectSourceVersionsListsCompleteFileHistory(t *testing.T) {
 }
 
 func TestProjectSourceListsRejectInvalidPageQuery(t *testing.T) {
-	_, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	_, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	tests := map[string]string{
 		"walk malformed limit":      "/source/walk?limit=many",
 		"walk zero limit":           "/source/walk?limit=0",
@@ -244,10 +240,9 @@ func TestProjectSourceListsRejectInvalidPageQuery(t *testing.T) {
 }
 
 func TestMarkUserEditsRejectsQueriesItCannotAnswer(t *testing.T) {
-	_, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	_, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	tests := map[string]string{
 		"walk malformed":          "/source/walk?mark_user_edits=yes",
 		"walk commit baseline":    "/source/walk?baseline=commit&mark_user_edits=false",
@@ -279,7 +274,7 @@ func TestWorkerChangesReturnsLedgerRowsByRoot(t *testing.T) {
 	`, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert ledger root", err)
 
-	q := worker.NewInMemoryQueue(1)
+	q := workertest.NewQueue(t, 1, "p1", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 	parent := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 	jobID, err := q.EnqueueWithProjectID(t.Context(), "p1", wire.WorkerTask{
 		Prompt:          "fixture",
@@ -316,10 +311,9 @@ func TestWorkerChangesReturnsLedgerRowsByRoot(t *testing.T) {
 }
 
 func TestCreateProjectSourcePinRejectsMalformedJSONWithoutMutation(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	contractfixture.PrepareLedgerInventory(t, srv, ledger, p)
 
 	req := contractfixture.NewAuthedRequest(http.MethodPost, "/v1/projects/"+p.ID+"/source/pins", strings.NewReader(`{"label":`))
@@ -343,10 +337,9 @@ func TestCreateProjectSourcePinRejectsMalformedJSONWithoutMutation(t *testing.T)
 }
 
 func TestSourcePinsPageWithoutExpiringHistory(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	contractfixture.PrepareLedgerInventory(t, srv, ledger, p)
 	for i := 0; i < 3; i++ {
 		_, err := ledger.Checkpoints.CreatePin(t.Context(), p.ID, "pin "+strconv.Itoa(i))
@@ -386,10 +379,9 @@ func TestSourcePinsPageWithoutExpiringHistory(t *testing.T) {
 }
 
 func TestSourcePinsExcludeStructuralCheckpoints(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	contractfixture.PrepareLedgerInventory(t, srv, ledger, p)
 
 	req := contractfixture.NewAuthedRequest(
@@ -485,7 +477,6 @@ func TestProjectSourcePresentationStopsAtDisplayedRevision(t *testing.T) {
 	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 
 	for _, after := range []string{"first\n", "second\n"} {
@@ -525,7 +516,7 @@ func TestProjectSourcePresentationStopsAtDisplayedRevision(t *testing.T) {
 func TestWorkerChangesRejectsUnknownWorker(t *testing.T) {
 	_, _, withLedger := contractfixture.TestSourceLedger(t)
 
-	q := worker.NewInMemoryQueue(1)
+	q := workertest.NewQueue(t, 1, "p1", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 	parent := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 	_, err := q.EnqueueWithProjectID(t.Context(), "p1", wire.WorkerTask{
 		Prompt:          "fixture",
@@ -549,7 +540,7 @@ func TestWorkerChangesRejectsUnknownWorker(t *testing.T) {
 }
 
 func TestWorkerChangesWithoutRecordedEditsIsEmpty(t *testing.T) {
-	q := worker.NewInMemoryQueue(1)
+	q := workertest.NewQueue(t, 1, "p1", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 	parent := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 	jobID, err := q.EnqueueWithProjectID(t.Context(), "p1", wire.WorkerTask{
 		Prompt:          "fixture",

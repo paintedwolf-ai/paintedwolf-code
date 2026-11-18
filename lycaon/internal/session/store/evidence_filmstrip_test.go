@@ -11,15 +11,15 @@ import (
 )
 
 func TestCommitEvidenceToolResult_filmstripMintsFrameHandles(t *testing.T) {
-	store := NewMemory()
+	store := newSQLTestStore(t, "proj")
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, "proj")
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, "proj")
 	testutil.FailErr(t, "create session in store", err)
 	body := `{"capture":"filmstrip","mime":"application/vnd.lycaon.filmstrip+zip","log":[],"state":{},"snapshot":{},"frames":[
 		{"index":0,"caption":"initial","state":{"n":0},"snapshot":{"text":"empty"}},
 		{"index":1,"caption":"click #load","state":{"n":1},"snapshot":{"text":"gamma"}}
 	]}`
-	handle, patched, err := store.CommitEvidenceToolResult(ctx, sess.ID, "/tmp", "capture_page", map[string]any{"capture": "filmstrip"}, body)
+	handle, patched, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, "/tmp", "capture_page", map[string]any{"capture": "filmstrip"}, body)
 	testutil.FailErr(t, "store.CommitEvidenceToolResult failed", err)
 	if handle != "page#3" {
 		t.Fatalf("parent handle=%q want page#3 (2 frames + parent)", handle)
@@ -27,7 +27,7 @@ func TestCommitEvidenceToolResult_filmstripMintsFrameHandles(t *testing.T) {
 	if !strings.Contains(patched, `"evidence_handle":"page#1"`) || !strings.Contains(patched, `"evidence_handle":"page#2"`) {
 		t.Fatalf("patched frames: %s", patched)
 	}
-	ledger, err := store.LoadLedger(ctx, sess.ID)
+	ledger, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "store.LoadLedger failed", err)
 	fr1, ok := ledger.Handles["page#1"]
 	if !ok || fr1.FrameIndex != 1 {

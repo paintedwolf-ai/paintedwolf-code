@@ -19,12 +19,14 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/toolcontext"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -40,11 +42,11 @@ func TestLiveProjectionCoalescesAndSkipsOutbox(t *testing.T) {
 	st := store.NewSQL(sqlDB)
 	st.SetEventOutbox(outbox)
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	waitOutboxEmpty(t, sqlDB)
 
@@ -53,7 +55,7 @@ func TestLiveProjectionCoalescesAndSkipsOutbox(t *testing.T) {
 	t.Cleanup(unsub)
 
 	msgID := "live-draft-1"
-	testutil.FailErr(t, "append placeholder", st.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "append placeholder", st.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		ID:          msgID,
 		Role:        api.MessageRoleAssistant,
 		DraftStatus: api.DraftStatusLive,
@@ -80,7 +82,7 @@ func TestLiveProjectionCoalescesAndSkipsOutbox(t *testing.T) {
 		t.Fatalf("unexpected appends after placeholder drain: %d", n)
 	}
 
-	stored, err := st.GetMessages(ctx, sess.ID)
+	stored, err := st.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(stored) != 1 || stored[0].Content != "token-body-20" {
 		t.Fatalf("stored live content = %q want last token body", contentOrEmpty(stored))
@@ -120,16 +122,16 @@ func TestLiveProjectionPersistsLongRunningToolCallsWithoutWiping(t *testing.T) {
 	st := store.NewSQL(sqlDB)
 	st.SetEventOutbox(outbox)
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	waitOutboxEmpty(t, sqlDB)
 
 	msgID := "live-draft-calls"
-	testutil.FailErr(t, "append placeholder", st.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "append placeholder", st.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		ID:          msgID,
 		Role:        api.MessageRoleAssistant,
 		DraftStatus: api.DraftStatusLive,
@@ -149,7 +151,7 @@ func TestLiveProjectionPersistsLongRunningToolCallsWithoutWiping(t *testing.T) {
 		}},
 	}))
 	mgr.Runner.Transcript.Streams.Flush(ctx, sess.ID)
-	withCalls, err := st.GetMessages(ctx, sess.ID)
+	withCalls, err := st.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after tool_calls", err)
 	if len(withCalls[0].ToolCalls) != 1 || withCalls[0].ToolCalls[0].Name != "command" {
 		t.Fatalf("live tool_calls = %+v", withCalls[0].ToolCalls)
@@ -160,7 +162,7 @@ func TestLiveProjectionPersistsLongRunningToolCallsWithoutWiping(t *testing.T) {
 		Content: "still running",
 	}))
 	mgr.Runner.Transcript.Streams.Flush(ctx, sess.ID)
-	kept, err := st.GetMessages(ctx, sess.ID)
+	kept, err := st.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after content-only", err)
 	if kept[0].Content != "still running" {
 		t.Fatalf("content after content-only live patch = %q", kept[0].Content)
@@ -266,7 +268,7 @@ func TestAdmittedTurnCarriesUtilityOccupancyToProvider(t *testing.T) {
 	mgr, st := newTestManager(t)
 	client := &occupancyTurnClient{LLMClient: mgr.Coordinator.Model.LLM}
 	mgr.Coordinator.Model.LLM = client
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create admitted session", err)
 	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "Continue the investigation.")
 	testutil.FailErr(t, "execute admitted prompt", err)
@@ -288,10 +290,10 @@ const messageStorageSecret = "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
 
 func TestUpdateMessageReappliesStorageRedaction(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.Runner.Transcript.SetRedactor(redactMessageStorageFixture)
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	placeholder := api.Message{ID: "assistant-1", Role: api.MessageRoleAssistant}
@@ -303,7 +305,7 @@ func TestUpdateMessageReappliesStorageRedaction(t *testing.T) {
 	}}
 	testutil.FailErr(t, "update assistant tool call", mgr.Runner.Transcript.Update(ctx, sess.ID, raw.ID, raw))
 
-	messages, err := mem.GetMessages(ctx, sess.ID)
+	messages, err := sessionStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read messages", err)
 	if len(messages) != 1 || len(messages[0].ToolCalls) != 1 {
 		t.Fatalf("stored messages = %+v", messages)
@@ -343,13 +345,13 @@ func redactMessageStorageFixture(_ context.Context, msg api.Message) (api.Messag
 // A phase the coordinator enters with its own tool call is taught on its next
 // model call, even while another kick waits for the next turn start.
 func TestPhaseGuidanceIsDeliveredOnTheNextModelCall(t *testing.T) {
-	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	st := storetest.New(t, "project-1")
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	const phaseGuidance = "claims phase fixture"
 	testutil.FailErr(t, "register phase fixture", engine.Register("kicks/coordinator-security-claims.md", phaseGuidance))
 	mgr.SetPromptEngine(engine)
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 	kicks := mgr.Coordinator.Runtime.Kicks()
 	staged := anchor.InformRender(anchor.ComposeDone)
@@ -364,7 +366,7 @@ func TestPhaseGuidanceIsDeliveredOnTheNextModelCall(t *testing.T) {
 	if len(msgs) != 1 || msgs[0].Content != phaseGuidance || msgs[0].Visibility != api.MessageVisibilityInternal {
 		t.Fatalf("delivered = %+v, want the claims phase guidance", msgs)
 	}
-	stored, err := st.GetMessage(t.Context(), sess.ID, msgs[0].ID)
+	stored, err := st.Transcript.GetMessage(t.Context(), sess.ID, msgs[0].ID)
 	testutil.FailErr(t, "read delivered guidance", err)
 	if stored.Content != msgs[0].Content {
 		t.Fatal("phase guidance was not persisted")

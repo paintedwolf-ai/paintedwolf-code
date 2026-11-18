@@ -9,7 +9,7 @@ import (
 )
 
 func (m *Service) Append(ctx context.Context, sessionID string, msgs ...api.Message) error {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.turnStore == nil || m.people == nil) {
 		return fmt.Errorf("session store not configured")
 	}
 	if len(msgs) == 0 {
@@ -22,7 +22,7 @@ func (m *Service) Append(ctx context.Context, sessionID string, msgs ...api.Mess
 	if m.workflows != nil {
 		err = m.workflows.Transcript.StampAndAppendMessages(ctx, sessionID, stamped...)
 	} else {
-		err = m.store.AppendMessages(ctx, sessionID, stamped...)
+		err = m.transcriptStore.AppendMessages(ctx, sessionID, stamped...)
 	}
 	if err != nil {
 		return err
@@ -42,13 +42,13 @@ func (m *Service) AppendMessage(ctx context.Context, sessionID string, msg api.M
 }
 
 func (m *Service) Update(ctx context.Context, sessionID, messageID string, msg api.Message) error {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.turnStore == nil || m.people == nil) {
 		return fmt.Errorf("session store not configured")
 	}
 	if msg.ID == "" {
 		msg.ID = messageID
 	}
-	existing, err := m.store.GetMessage(ctx, sessionID, messageID)
+	existing, err := m.transcriptStore.GetMessage(ctx, sessionID, messageID)
 	if err != nil {
 		return err
 	}
@@ -66,7 +66,7 @@ func (m *Service) Update(ctx context.Context, sessionID, messageID string, msg a
 	if m.events != nil {
 		m.events.FlushMessagePatches(ctx, sessionID)
 	}
-	stored, err := m.store.UpdateMessage(ctx, sessionID, messageID, merged)
+	stored, err := m.transcriptStore.UpdateMessage(ctx, sessionID, messageID, merged)
 	if err != nil {
 		return err
 	}
@@ -76,14 +76,14 @@ func (m *Service) Update(ctx context.Context, sessionID, messageID string, msg a
 
 // SupersedeWorkerReport retains rejected reports for search and collapsed history.
 func (m *Service) SupersedeWorkerReport(ctx context.Context, sessionID, messageID string) error {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.turnStore == nil || m.people == nil) {
 		return fmt.Errorf("session store not configured")
 	}
 	messageID = strings.TrimSpace(messageID)
 	if messageID == "" {
 		return fmt.Errorf("message id required")
 	}
-	existing, err := m.store.GetMessage(ctx, sessionID, messageID)
+	existing, err := m.transcriptStore.GetMessage(ctx, sessionID, messageID)
 	if err != nil {
 		return err
 	}

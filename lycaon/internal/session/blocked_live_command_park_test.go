@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -19,12 +18,13 @@ import (
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/promptsource"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
@@ -35,6 +35,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -48,7 +49,7 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 	t.Cleanup(func() {
 		testutil.FailErr(t, "dispose process", reg.Lifecycle.DisposeSession(ctx, "session-1", bgprocess.TerminationChatDeleted))
 	})
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetBackgroundRegistry(reg)
 	handle, err := reg.StartPipeline(ctx, bgprocess.PipelineSpec{
 		SessionID:  "session-1",
@@ -83,7 +84,7 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 }
 
 func TestParkBlockedLiveCommandsDoesNothingWithoutVisibleJob(t *testing.T) {
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetBackgroundRegistry(bgprocess.NewRegistry(bgprocess.Config{}, bgprocess.Hooks{}))
 	if (&promptsource.Control{Processes: mgr.Processes, Runtime: mgr.Coordinator.Runtime}).ParkBlockedLiveCommands(context.Background(), "session-1") {
 		t.Fatal("empty process registry must not arm a wait")
@@ -176,9 +177,9 @@ func (jobLister) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, er
 }
 
 func TestCloseoutEvidenceListsDispatchedLegsSinceTheIntent(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
+	parent, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create parent", err)
 	intent := time.Unix(1_000, 0).UTC()
 	mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{
@@ -213,9 +214,9 @@ func (v *evidenceWorkflowView) ActiveBySession(context.Context, string) (*api.Wo
 
 func TestWorkflowEvidenceSurvivesLaterUserMessagesAndCompaction(t *testing.T) {
 	mgr, st := newTestManager(t)
-	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
+	parent, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	child, err := st.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "skeptic", Prompt: "Review"})
+	child, err := st.Sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "skeptic", Prompt: "Review"})
 	testutil.FailErr(t, "create reviewer", err)
 	run := &api.WorkflowRun{ID: "review-run", CurrentPhase: "challenge"}
 	mgr.SetWorkflowDomains(workflowDomainFixture(&evidenceWorkflowView{run: run}))
@@ -256,11 +257,11 @@ func TestFailedSynthesisKeepsPublishedRecoveryAndCanonicalHistory(t *testing.T) 
 	cfg.ChunkTokenThreshold = 1_000_000
 	cfg.KeepRecentMessages = 2
 
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, failedCompactionSummarizer{}))
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	block := strings.Repeat("retained fact ", 120)
@@ -272,18 +273,18 @@ func TestFailedSynthesisKeepsPublishedRecoveryAndCanonicalHistory(t *testing.T) 
 		}
 		seed = append(seed, api.Message{ID: fmt.Sprintf("seed-%d", i), Role: role, Content: block})
 	}
-	testutil.FailErr(t, "append canonical history", mem.AppendMessages(t.Context(), sess.ID, seed...))
+	testutil.FailErr(t, "append canonical history", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, seed...))
 	mgr.Runner.History.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, 1000, 1000)
 
 	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "first attempt")
 	testutil.FailErr(t, "first prompt", err)
 	mgr.Runner.History.Wait()
-	got, err := mem.Get(t.Context(), sess.ID)
+	got, err := sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get session after failure", err)
 	if got.CompactionGeneration == 0 {
 		t.Fatalf("failed synthesis lost its independent baseline: generation %d", got.CompactionGeneration)
 	}
-	if _, ok, viewErr := mem.GetCompactionView(t.Context(), sess.ID); viewErr != nil || !ok {
+	if _, ok, viewErr := sessionStore.Compaction.GetCompactionView(t.Context(), sess.ID); viewErr != nil || !ok {
 		t.Fatalf("failed synthesis did not retain a view: ok=%v err=%v", ok, viewErr)
 	}
 
@@ -292,12 +293,12 @@ func TestFailedSynthesisKeepsPublishedRecoveryAndCanonicalHistory(t *testing.T) 
 	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "retry")
 	testutil.FailErr(t, "retry prompt", err)
 	mgr.Runner.History.Wait()
-	got, err = mem.Get(t.Context(), sess.ID)
+	got, err = sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get session after retry", err)
 	if got.CompactionGeneration == 0 {
 		t.Fatal("successful retry did not persist a compaction view")
 	}
-	if _, ok, viewErr := mem.GetCompactionView(t.Context(), sess.ID); viewErr != nil || !ok {
+	if _, ok, viewErr := sessionStore.Compaction.GetCompactionView(t.Context(), sess.ID); viewErr != nil || !ok {
 		t.Fatalf("successful retry view: ok=%v err=%v", ok, viewErr)
 	}
 }
@@ -307,10 +308,10 @@ func TestWorkerChildProjectDirIsDelegationNotOverlay(t *testing.T) {
 	dir := t.TempDir()
 	overlay := filepath.Join(dir, settingsoverlay.DirName(), "overlays", "job-write")
 
-	store := store.NewMemory()
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer", Prompt: "write leg"})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer", Prompt: "write leg"})
 	testutil.FailErr(t, "create child", err)
 
 	if child.WorkspacePath != parent.WorkspacePath {
@@ -322,11 +323,11 @@ func TestWorkerChildProjectDirIsDelegationNotOverlay(t *testing.T) {
 }
 
 func TestRecentSiblingNotesExcludesPriorRunFindings(t *testing.T) {
-	transcript := store.NewMemory()
-	parent, err := transcript.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	transcript := storetest.New(t, testdbseed.DefaultProjectID)
+	parent, err := transcript.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	root := parent.ID
-	testutil.FailErr(t, "record human intent", transcript.AppendMessages(t.Context(), root, api.Message{ID: "intent", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser, Content: "build modules", CreatedAt: time.Now().UTC().Add(-time.Hour)}))
+	testutil.FailErr(t, "record human intent", transcript.Transcript.AppendMessages(t.Context(), root, api.Message{ID: "intent", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser, Content: "build modules", CreatedAt: time.Now().UTC().Add(-time.Hour)}))
 	sqlDB := testdbfixture.Open(t, "findings.db")
 	findingsStore := findings.NewSQLStore(sqlDB)
 	testdbseed.InsertSession(t, sqlDB, root, testdbseed.DefaultProjectID)
@@ -341,7 +342,7 @@ func TestRecentSiblingNotesExcludesPriorRunFindings(t *testing.T) {
 	_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO findings(session_id,agent,summary,ref,created_at) VALUES (?,?,?,?,?)`, root, "job-before", "contract before spawn", "module.go", time.Now().UTC().Add(-time.Minute).Format(time.RFC3339))
 	testutil.FailErr(t, "insert current batch contract", err)
 	spawnAt := time.Now().UTC()
-	m := workeroutcomes.NewNotes(transcript, findingsStore, &stubSiblingTaskQueue{byChild: map[string]*api.WorkerTask{root: {ID: "job-b", CreatedAt: spawnAt}}}, nil)
+	m := workeroutcomes.NewNotes(transcript.Sessions, transcript.Transcript, findingsStore, &stubSiblingTaskQueue{byChild: map[string]*api.WorkerTask{root: {ID: "job-b", CreatedAt: spawnAt}}}, nil)
 
 	ctx := workercontext.WithJob(context.Background(), "job-b")
 	notes, _, err := m.RecentSiblingNotes(ctx, root, 0, 5)

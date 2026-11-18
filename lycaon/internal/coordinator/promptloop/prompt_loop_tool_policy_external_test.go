@@ -16,12 +16,13 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -34,17 +35,17 @@ func TestLoopRuleRejectAppendsToolMessage(t *testing.T) {
 			Args: map[string]any{"path": "x"},
 		}},
 	}}})
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
 	deps.Context.Policy = denyToolPolicy{}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "explore_readonly"})
 	testutil.FailErr(t, "loop.Run failed", err)
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	if len(msgs) < 2 || msgs[1].Role != api.MessageRoleTool {
 		t.Fatalf("expected tool reject message, got %+v", msgs)
@@ -74,7 +75,7 @@ func TestPromptLoop_SpecDenyToolMessageShape(t *testing.T) {
 		}}},
 		{Content: "Plan workflow continues."},
 	}}
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
 	deps.Context.Policy = listedEvaluatingPolicy{
@@ -86,12 +87,12 @@ func TestPromptLoop_SpecDenyToolMessageShape(t *testing.T) {
 	}}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	sess.WorkspacePath = t.TempDir()
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "coordinator"})
 	testutil.FailErr(t, "loop.Run failed", err)
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var got string
 	for _, msg := range msgs {
@@ -116,8 +117,8 @@ func TestLoopDoomLoopRejectKeepsCallResultPair(t *testing.T) {
 	guard := loopguard.NewMemoryDoomLoopGuard()
 	ctx := context.Background()
 	args := map[string]any{"path": "README.md"}
-	store := store.NewMemory()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	for i := 0; i < loopguard.DoomLoopMaxAttempts; i++ {
 		_ = guard.RecordAttempt(ctx, sess.ID, uuid.NewString(), "read", args, nil, false)
@@ -133,7 +134,7 @@ func TestLoopDoomLoopRejectKeepsCallResultPair(t *testing.T) {
 	})
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
-	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Tools = toolstest.NewRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Nudges.DoomLoop = guard
 	deps.Closeout.RejectFmt = fmttr
@@ -159,7 +160,7 @@ func TestLoopDoomLoopRejectKeepsCallResultPair(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 
 	var paired bool
@@ -178,8 +179,8 @@ func TestLoopDoomLoopRejectKeepsCallResultPair(t *testing.T) {
 func TestLoopTruncatesLargeToolResult(t *testing.T) {
 	limits := settings.DefaultSessionLimits()
 	limits.MaxToolResultBytes = 20
-	store := store.NewMemory()
-	reg := tools.NewStubRegistry()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("command", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return strings.Repeat("x", 100), nil
 	})
@@ -196,7 +197,7 @@ func TestLoopTruncatesLargeToolResult(t *testing.T) {
 	deps.Context.Policy = &recordingToolPolicy{}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if _, err := loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID,
@@ -209,7 +210,7 @@ func TestLoopTruncatesLargeToolResult(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "loop.Run failed", err)
 	}
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	foundToolResult := false
 	for _, msg := range msgs {
@@ -241,13 +242,13 @@ func TestLoopRejectsUnofferedToolCalls(t *testing.T) {
 			if !withRead {
 				client.completions[0].ToolCalls = client.completions[0].ToolCalls[1:]
 			}
-			mem := store.NewMemory()
+			sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 			ctx := context.Background()
-			sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			sess.ParentSessionID = "parent-1"
 			sess.AgentType = orchestration.ProfileImplementer
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			_ = reg.Register("read", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 				readCalls++
 				return "ok", nil
@@ -256,7 +257,7 @@ func TestLoopRejectsUnofferedToolCalls(t *testing.T) {
 				progressCalls++
 				return `{"status":"updated"}`, nil
 			})
-			deps := promptloop.StoreDeps(mem)
+			deps := promptloop.StoreDeps(sessionStore)
 			deps.Model.LLM = client
 			deps.Context.Policy = &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "read"}}}
 			deps.Context.Tools = reg

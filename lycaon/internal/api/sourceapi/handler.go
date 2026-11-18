@@ -9,18 +9,20 @@ import (
 	"github.com/lycaon/lycaon/internal/api/editoradmin"
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/briefinghost"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/fileops"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcecomparison"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -28,7 +30,16 @@ import (
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workscope"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
+
+type TranscriptReader interface {
+	GetMessage(context.Context, string, string) (wire.Message, error)
+	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
+}
+type AttachmentUsage interface {
+	PromptAttachmentStorageUsage(context.Context, string) (int64, error)
+}
 
 type Deps struct {
 	Git          *gitadmin.Handler
@@ -48,7 +59,7 @@ type Deps struct {
 	ProjectRegistry project.Registry
 	ScanCadence     *scancadence.Service
 	SecretSpans     *secretspan.Screener
-	SessionStore    session.Store
+	SessionStore    *sessionstore.Repositories
 	// SourceInventory tracks workspace drift; nil leaves inventory to callers.
 	SourceInventory InventoryService
 	SourceLedger    *sourceledger.Store
@@ -78,7 +89,7 @@ type Handler struct {
 
 type Analysis struct {
 	ProjectRegistry project.Registry
-	SessionStore    session.Store
+	SessionQueries  requestscope.Sessions
 	Workspace       *Workspace
 	responses       *httpio.Responder
 	sourceIndexes   *projectsource.SourceIndexCache
@@ -97,31 +108,34 @@ type ComparisonViews struct {
 }
 
 type Comparisons struct {
-	EditorDocuments *editordoc.Service
-	Git             *gitadmin.Handler
-	ManagedSecrets  *secretcap.Service
-	ProjectRegistry project.Registry
-	Review          *Review
-	SecretSpans     *secretspan.Screener
-	SessionStore    session.Store
-	SourceLedger    *sourceledger.Store
-	Views           *Views
-	Workspace       *Workspace
-	responses       *httpio.Responder
-	sourceReaders   *sourcecomparison.Cache
+	EditorDocuments   *editordoc.Service
+	Git               *gitadmin.Handler
+	ManagedSecrets    *secretcap.Service
+	ProjectRegistry   project.Registry
+	Review            *Review
+	SecretSpans       *secretspan.Screener
+	SessionQueries    requestscope.Sessions
+	TranscriptQueries TranscriptReader
+	SourceLedger      *sourceledger.Store
+	Views             *Views
+	Workspace         *Workspace
+	responses         *httpio.Responder
+	sourceReaders     *sourcecomparison.Cache
 }
 
 type History struct {
-	AttachmentStore func(context.Context, string) (blobstore.Store, bool)
-	Comparisons     *Comparisons
-	ProjectRegistry project.Registry
-	Review          *Review
-	SessionStore    session.Store
-	SourceLedger    *sourceledger.Store
-	VisualStore     visual.Store
-	Watch           *Watch
-	Workers         worker.WorkerQueue
-	Workspace       *Workspace
+	AttachmentStore   func(context.Context, string) (blobstore.Store, bool)
+	Comparisons       *Comparisons
+	ProjectRegistry   project.Registry
+	Review            *Review
+	SessionQueries    requestscope.Sessions
+	TranscriptQueries TranscriptReader
+	AttachmentBlobs   AttachmentUsage
+	SourceLedger      *sourceledger.Store
+	VisualStore       visual.Store
+	Watch             *Watch
+	Workers           worker.WorkerQueue
+	Workspace         *Workspace
 	// Briefings serves stored step briefings beside a Walk page.
 	Briefings *briefinghost.Host
 	responses *httpio.Responder
@@ -134,7 +148,7 @@ type Mutations struct {
 	Git             *gitadmin.Handler
 	MutationGate    *project.MutationGate
 	ProjectRegistry project.Registry
-	SessionStore    session.Store
+	SessionQueries  requestscope.Sessions
 	SourceLedger    *sourceledger.Store
 	SourceMutations *projectsource.SourceMutationService
 	Workspace       *Workspace
@@ -152,7 +166,7 @@ type Review struct {
 	Comparisons     *Comparisons
 	Git             *gitadmin.Handler
 	ProjectRegistry project.Registry
-	SessionStore    session.Store
+	SessionQueries  requestscope.Sessions
 	SourceLedger    *sourceledger.Store
 	// ArrivalAnchorTimeBound caps the ancestry checks behind one lineage page;
 	// zero leaves the request context as the only bound.
@@ -177,7 +191,7 @@ type Views struct {
 	Comparisons     *Comparisons
 	Events          events.ReplayHub
 	ProjectRegistry project.Registry
-	SessionStore    session.Store
+	SessionQueries  requestscope.Sessions
 	Trees           *Trees
 	Workspace       *Workspace
 	background      *taskgroup.Group
@@ -208,7 +222,7 @@ type Workspace struct {
 	MutationGate    *project.MutationGate
 	ProjectRegistry project.Registry
 	SecretSpans     *secretspan.Screener
-	SessionStore    session.Store
+	SessionQueries  requestscope.Sessions
 	SourceLedger    *sourceledger.Store
 	Watch           *Watch
 	Workers         worker.WorkerQueue
@@ -243,22 +257,22 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	// Editor publications share source path reservations.
 	deps.EditorDocuments.SetSourcePaths(deps.SourceMutations.Paths)
 
-	editor := editoradmin.New(responses, background, editoradmin.Dependencies{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, ProjectViews: deps.ProjectViews, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, TryRunPromotion: deps.TryRunPromotion})
+	editor := editoradmin.New(responses, background, editoradmin.Dependencies{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, ProjectViews: deps.ProjectViews, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore.Sessions, TryRunPromotion: deps.TryRunPromotion})
 	sourceViews := &sourceViewService{}
-	sourceReaders := &sourcecomparison.Cache{}
+	sourceReaders := sourcecomparison.NewCache(nil)
 	warmupPolls := newWarmupClock()
 	h := Handler{Editor: editor}
-	h.Analysis = &Analysis{ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, responses: responses, sourceIndexes: projectsource.NewSourceIndexCache(), warmupPolls: warmupPolls}
+	h.Analysis = &Analysis{ProjectRegistry: deps.ProjectRegistry, SessionQueries: deps.SessionStore.Sessions, responses: responses, sourceIndexes: projectsource.NewSourceIndexCache(), warmupPolls: warmupPolls}
 	h.ComparisonViews = &ComparisonViews{ManagedSecrets: deps.ManagedSecrets, SecretSpans: deps.SecretSpans, background: background, sourceReaders: sourceReaders, sourceViews: sourceViews}
-	h.Comparisons = &Comparisons{EditorDocuments: deps.EditorDocuments, Git: deps.Git, ManagedSecrets: deps.ManagedSecrets, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, responses: responses, sourceReaders: sourceReaders}
-	h.History = &History{AttachmentStore: deps.AttachmentStore, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, VisualStore: deps.VisualStore, Workers: deps.Workers, Briefings: deps.Briefings.Host, responses: responses}
-	h.Mutations = &Mutations{EditorDocuments: deps.EditorDocuments, FileOperations: deps.FileOperations, Git: deps.Git, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, SourceMutations: deps.SourceMutations, background: background, operations: operations, responses: responses}
+	h.Comparisons = &Comparisons{EditorDocuments: deps.EditorDocuments, Git: deps.Git, ManagedSecrets: deps.ManagedSecrets, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionQueries: deps.SessionStore.Sessions, TranscriptQueries: deps.SessionStore.Transcript, SourceLedger: deps.SourceLedger, responses: responses, sourceReaders: sourceReaders}
+	h.History = &History{AttachmentStore: deps.AttachmentStore, ProjectRegistry: deps.ProjectRegistry, SessionQueries: deps.SessionStore.Sessions, TranscriptQueries: deps.SessionStore.Transcript, AttachmentBlobs: deps.SessionStore.Attachments, SourceLedger: deps.SourceLedger, VisualStore: deps.VisualStore, Workers: deps.Workers, Briefings: deps.Briefings.Host, responses: responses}
+	h.Mutations = &Mutations{EditorDocuments: deps.EditorDocuments, FileOperations: deps.FileOperations, Git: deps.Git, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SessionQueries: deps.SessionStore.Sessions, SourceLedger: deps.SourceLedger, SourceMutations: deps.SourceMutations, background: background, operations: operations, responses: responses}
 	h.Presentation = &Presentation{responses: responses}
-	h.Review = &Review{Git: deps.Git, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, ArrivalAnchorTimeBound: arrivalAnchorTimeBound, responses: responses}
+	h.Review = &Review{Git: deps.Git, ProjectRegistry: deps.ProjectRegistry, SessionQueries: deps.SessionStore.Sessions, SourceLedger: deps.SourceLedger, ArrivalAnchorTimeBound: arrivalAnchorTimeBound, responses: responses}
 	h.Trees = &Trees{ProjectRegistry: deps.ProjectRegistry, SourceLedger: deps.SourceLedger, background: background, responses: responses, sourceViews: sourceViews}
-	h.Views = &Views{Events: deps.Events, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, background: background, responses: responses, sourceReaders: sourceReaders, sourceViews: sourceViews}
+	h.Views = &Views{Events: deps.Events, ProjectRegistry: deps.ProjectRegistry, SessionQueries: deps.SessionStore.Sessions, background: background, responses: responses, sourceReaders: sourceReaders, sourceViews: sourceViews}
 	h.Watch = &Watch{CatalogSnapshot: deps.CatalogSnapshot, EditorDocuments: deps.EditorDocuments, ProjectRegistry: deps.ProjectRegistry, ScanCadence: deps.ScanCadence, SourceInventory: deps.SourceInventory, WatchNeedsSeed: deps.WatchNeedsSeed, background: background, responses: responses, sourceWatchJobs: make(map[string]*sourceWatchJob)}
-	h.Workspace = &Workspace{ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, Workers: deps.Workers, responses: responses}
+	h.Workspace = &Workspace{ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionQueries: deps.SessionStore.Sessions, SourceLedger: deps.SourceLedger, Workers: deps.Workers, responses: responses}
 	h.Analysis.Workspace = h.Workspace
 	h.ComparisonViews.Comparisons = h.Comparisons
 	h.ComparisonViews.Views = h.Views
@@ -283,7 +297,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	h.Views.Trees = h.Trees
 	h.Views.Workspace = h.Workspace
 	h.Workspace.Watch = h.Watch
-	h.Briefings = briefingadmin.New(responses, briefingadmin.Dependencies{EditorDocuments: deps.EditorDocuments, Briefings: deps.Briefings, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, WorkerBranchRoot: h.Workspace.WorkerBranchRoot})
+	h.Briefings = briefingadmin.New(responses, briefingadmin.Dependencies{EditorDocuments: deps.EditorDocuments, Briefings: deps.Briefings, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore.Sessions, SourceLedger: deps.SourceLedger, WorkerBranchRoot: h.Workspace.WorkerBranchRoot})
 	return h
 }
 

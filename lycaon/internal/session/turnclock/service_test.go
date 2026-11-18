@@ -7,7 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -15,12 +15,12 @@ import (
 
 func TestCheckpointWaitIsActiveButNotWorkTime(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		sessions := store.NewMemory()
-		clocks := New(sessions)
+		sessions := storetest.New(t, testdbseed.DefaultProjectID)
+		clocks := New(sessions.Sessions, sessions.Turns)
 		ctx := t.Context()
-		root, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+		root, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 		testutil.FailErr(t, "create root", err)
-		child, err := sessions.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
+		child, err := sessions.Sessions.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
 		testutil.FailErr(t, "create child", err)
 		t.Cleanup(func() { progress.ForgetClock(root.ID) })
 
@@ -39,12 +39,12 @@ func TestCheckpointWaitIsActiveButNotWorkTime(t *testing.T) {
 
 func TestTurnClockOpensOnlyForNewRootUserTurn(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		sessions := store.NewMemory()
-		clocks := New(sessions)
+		sessions := storetest.New(t, testdbseed.DefaultProjectID)
+		clocks := New(sessions.Sessions, sessions.Turns)
 		ctx := t.Context()
-		root, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+		root, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 		testutil.FailErr(t, "create root", err)
-		child, err := sessions.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
+		child, err := sessions.Sessions.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
 		testutil.FailErr(t, "create child", err)
 		t.Cleanup(func() { progress.ForgetClock(root.ID) })
 

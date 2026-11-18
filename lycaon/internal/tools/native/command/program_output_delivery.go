@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/lycaon/lycaon/internal/captureprojection"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -50,6 +51,31 @@ func splitStreamBudgets(totalBudget, stdoutBytes, stderrBytes int) (stdoutBudget
 }
 
 func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *invocation.ProgramOutputRetention, result toolcontract.ProducerResult, stdout, stderr *programStream, scope captureprojection.Scope) (ProgramOutcome, error) {
+	programID := run.root.Identity.ProgramID
+	staged, err := r.screenProgramOutputs(ctx, run, stdout, stderr, scope)
+	if err != nil {
+		return ProgramOutcome{}, err
+	}
+	defer staged.close()
+	target := evidence.ProgramProvenanceTarget{SessionID: run.tc.Identity.SessionID, ChatSessionID: run.tc.ChatSessionID(), ProjectDir: run.projectDir()}
+	for i := range staged {
+		if err := r.attachProgramStream(ctx, run, outputs, &staged[i]); err != nil {
+			return ProgramOutcome{}, err
+		}
+	}
+	prov, err := r.programHTTPProvenance(ctx, run, staged.hasVisibleOutput())
+	if err != nil {
+		return ProgramOutcome{}, err
+	}
+	if err := r.Provenance.StageProgramPublication(ctx, target, prov); err != nil {
+		return ProgramOutcome{}, err
+	}
+	if err := r.Provenance.CommitProgramPublication(ctx, target.SessionID, programID); err != nil {
+		return ProgramOutcome{}, err
+	}
+	if err := r.materializeProgramOutputs(ctx, outputs, target.SessionID, programID, run.tc.Host.SessionOutputDir); err != nil {
+		return ProgramOutcome{}, err
+	}
 	projection, err := r.Recorder.ProjectProgram(ctx, run.tc.Identity.SessionID, run.root.Identity.ProgramID, 4)
 	if err != nil {
 		return ProgramOutcome{}, err
@@ -61,7 +87,6 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 		}
 		run.tc.Effects.Out.CommandProgram = &receipt
 	}
-	programID := run.root.Identity.ProgramID
 	out := ProgramOutcome{
 		ProgramID:                programID,
 		DetailRef:                projection.DetailReference,
@@ -89,32 +114,26 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 		}
 		out.NonzeroExecutions = append(out.NonzeroExecutions, observed)
 	}
-	stdoutBudget, stderrBudget := splitStreamBudgets(CommandOutputBudget(run.tc.Host.ModelContextWindow), int(stdout.Len()), int(stderr.Len()))
-	for i, stream := range []*programStream{stdout, stderr} {
-		if stream.Len() == 0 {
-			continue
-		}
-		name, budget := "stdout", stdoutBudget
-		if i == 1 {
-			name, budget = "stderr", stderrBudget
-		}
-		delivered, window, err := r.deliverProgramStream(ctx, run, outputs, stream, name, budget, scope)
-		if err != nil {
+	for _, stream := range staged {
+		if err := r.recordProgramStreamDelivery(ctx, run, stream); err != nil {
 			return ProgramOutcome{}, err
 		}
-		if i == 0 {
-			out.Stdout, out.StdoutRef = delivered, window.Ref
+		window := stream.window
+		if stream.name == "stdout" {
+			out.Stdout, out.StdoutRef = stream.inline, window.Ref
 		} else {
-			out.Stderr, out.StderrRef = delivered, window.Ref
+			out.Stderr, out.StderrRef = stream.inline, window.Ref
 		}
 		out.Outputs = append(out.Outputs, window)
 		out.Truncated = out.Truncated || window.Truncated
 	}
+	if err := r.Provenance.MarkProgramPublicationMaterialized(ctx, target.SessionID, programID); err != nil {
+		return ProgramOutcome{}, err
+	}
+	run.statePrintedPages()
 	if run.tc.Effects.Out != nil && run.tc.Effects.Out.CommandProgram != nil {
 		run.tc.Effects.Out.CommandProgram.Outputs = append([]api.CommandProgramOutputWindow(nil), out.Outputs...)
 	}
-	r.commitProgramHTTPProvenance(ctx, run, out.Stdout != "" || out.Stderr != "")
-	run.statePrintedPages()
 	return out, nil
 }
 
@@ -171,49 +190,89 @@ func retainOutcome(spill *tooloutput.StreamSpill, screenErr error) (*tooloutput.
 	return spill, screenErr
 }
 
-func (r *ProgramRuntime) deliverProgramStream(ctx context.Context, run *programRun, outputs *invocation.ProgramOutputRetention, stream *programStream, name string, budget int, scope captureprojection.Scope) (string, api.CommandProgramOutputWindow, error) {
-	spill, redacted, err := r.retainProgramStream(ctx, run, stream, name, scope)
-	if err != nil {
-		if spill != nil {
-			_ = spill.Close()
+type screenedProgramOutput struct {
+	stream        *programStream
+	spill         *tooloutput.StreamSpill
+	name          string
+	budget        int
+	redacted      bool
+	inline        string
+	window        api.CommandProgramOutputWindow
+	ranges        []deliveredOutputPart
+	releaseSample func()
+}
+
+type screenedProgramOutputs []screenedProgramOutput
+
+func (outputs screenedProgramOutputs) close() {
+	for _, output := range outputs {
+		if output.releaseSample != nil {
+			output.releaseSample()
 		}
-		return "", api.CommandProgramOutputWindow{}, err
+		_ = output.spill.Close()
 	}
-	defer func() { _ = spill.Close() }()
+}
+
+func (outputs screenedProgramOutputs) hasVisibleOutput() bool {
+	for _, output := range outputs {
+		if output.inline != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *ProgramRuntime) screenProgramOutputs(ctx context.Context, run *programRun, stdout, stderr *programStream, scope captureprojection.Scope) (screenedProgramOutputs, error) {
+	stdoutBudget, stderrBudget := splitStreamBudgets(CommandOutputBudget(run.tc.Host.ModelContextWindow), int(stdout.Len()), int(stderr.Len()))
+	var outputs screenedProgramOutputs
+	for _, output := range []screenedProgramOutput{
+		{stream: stdout, name: "stdout", budget: stdoutBudget},
+		{stream: stderr, name: "stderr", budget: stderrBudget},
+	} {
+		if output.stream.Len() == 0 {
+			continue
+		}
+		spill, redacted, err := r.retainProgramStream(ctx, run, output.stream, output.name, scope)
+		if err != nil {
+			if spill != nil {
+				_ = spill.Close()
+			}
+			outputs.close()
+			return nil, err
+		}
+		output.spill, output.redacted = spill, redacted
+		outputs = append(outputs, output)
+	}
+	return outputs, nil
+}
+
+func (r *ProgramRuntime) attachProgramStream(ctx context.Context, run *programRun, outputs *invocation.ProgramOutputRetention, output *screenedProgramOutput) error {
+	stream, spill, name, redacted := output.stream, output.spill, output.name, output.redacted
 	program := run.root.Identity.ProgramID
 	reference := "output:program:" + program + ":" + name
 	outputPath := "@output/" + program + "." + name
 	body, err := spill.Open(ctx)
 	if err != nil {
-		return "", api.CommandProgramOutputWindow{}, err
+		return err
 	}
-	err = scratch.PublishCommandOutput(run.tc.Host.SessionOutputDir, scratch.CommandOutput{ProgramID: program, Stream: name}, body)
-	closeErr := body.Close()
-	if err != nil || closeErr != nil {
-		return "", api.CommandProgramOutputWindow{}, errors.Join(err, closeErr)
-	}
-	body, err = spill.Open(ctx)
-	if err != nil {
-		return "", api.CommandProgramOutputWindow{}, err
-	}
-	releaseSample, err := run.memory.Reserve(ctx, int64(2*budget+64<<10))
+	releaseSample, err := run.memory.Reserve(ctx, int64(2*output.budget+64<<10))
 	if err != nil {
 		_ = body.Close()
-		return "", api.CommandProgramOutputWindow{}, err
+		return err
 	}
-	defer releaseSample()
-	sample, err := sampleOutput(body, budget)
-	closeErr = body.Close()
-	if err != nil || closeErr != nil {
-		return "", api.CommandProgramOutputWindow{}, errors.Join(err, closeErr)
+	output.releaseSample = releaseSample
+	sample, err := sampleOutput(body, output.budget)
+	if err := errors.Join(err, body.Close()); err != nil {
+		return err
 	}
-	delivered, window, ranges, err := sample.window(ctx, name, reference, outputPath, !stream.truncated && spill.Complete)
+	complete := !stream.truncated && spill.Complete
+	output.inline, output.window, output.ranges, err = sample.window(ctx, name, reference, outputPath, complete)
 	if err != nil {
-		return "", api.CommandProgramOutputWindow{}, err
+		return err
 	}
-	window.Limit = outputDeliveryLimit(spill.Failure)
+	output.window.Limit = outputDeliveryLimit(spill.Failure)
 	var mappings []toolcontract.StreamSourceMapping
-	if !redacted && !stream.truncated && spill.Complete {
+	if !redacted && complete {
 		snapshot, err := stream.snapshotMappings(ctx, spill.Blob.Size)
 		if err == nil && snapshot != nil {
 			resolved := r.resolveOutputMappings(ctx, run, snapshot.Mappings, spill.Blob.Size)
@@ -222,19 +281,27 @@ func (r *ProgramRuntime) deliverProgramStream(ctx context.Context, run *programR
 			mappings = resolved.values
 		}
 	}
-	retained := invocation.RetainedOutput{Stream: name, Reference: reference, Complete: !stream.truncated && spill.Complete, Redacted: redacted, Mappings: mappings}
-	mappings, err = outputs.Attach(ctx, program, retained, spill)
+	retained := invocation.RetainedOutput{Stream: name, Reference: reference, Complete: complete, Redacted: redacted, Mappings: mappings}
+	if _, err := outputs.Attach(ctx, program, retained, spill); err != nil {
+		return err
+	}
+	return outputs.AttachDeliveryWindow(ctx, program, output.window)
+}
+
+func (r *ProgramRuntime) recordProgramStreamDelivery(ctx context.Context, run *programRun, output screenedProgramOutput) error {
+	program := run.root.Identity.ProgramID
+	session := run.tc.Identity.SessionID
+	window := output.window
+	resolved, err := r.Recorder.ReadProgramOutputMappings(ctx, session, program, window.Ref, run.memory)
 	if err != nil {
-		return "", api.CommandProgramOutputWindow{}, err
+		return err
 	}
-	if err := outputs.AttachDeliveryWindow(ctx, program, window); err != nil {
-		return "", api.CommandProgramOutputWindow{}, err
+	defer resolved.Close()
+	for _, part := range output.ranges {
+		r.commitStreamSourceDeliveries(ctx, run, program, window.Ref, part.data, resolved.Mappings, [][2]int64{{part.start, part.start + int64(len(part.data))}})
 	}
-	for _, part := range ranges {
-		r.commitStreamSourceDeliveries(ctx, run, program, reference, part.data, mappings, [][2]int64{{part.start, part.start + int64(len(part.data))}})
+	if window.Stream == "stdout" {
+		r.commitProgramWindows(ctx, run, program, window.Ref, output.ranges)
 	}
-	if name == "stdout" {
-		r.commitProgramWindows(ctx, run, program, reference, ranges)
-	}
-	return delivered, window, nil
+	return nil
 }

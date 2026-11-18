@@ -16,7 +16,8 @@ import (
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -99,6 +100,8 @@ func newProviderTestServerAt(t *testing.T, discoveryBaseURL string, opts ...test
 }
 
 func newProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string, opts ...testDeps) (*Server, string) {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	tmp := t.TempDir()
 	// Live instances and global policy use host files.
@@ -134,11 +137,11 @@ func newProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string,
 		Mock:        llm.NewMockProvider(testMockConfig(t)),
 	}
 
-	store := store.NewMemory()
+	store := sessionFixture
 	mock := llm.NewMockProvider(testMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	hub := events.NewMemoryHub()
-	deps := Dependencies{Core: CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}, Providers: ProvidersDependencies{LLM: svc}, Host: HostDependencies{Events: hub}}
+	deps := Dependencies{Core: CoreDependencies{Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: mgr}, Providers: ProvidersDependencies{LLM: svc}, Host: HostDependencies{Events: hub}}
 	for _, opt := range opts {
 		opt(&deps)
 	}
@@ -166,7 +169,7 @@ func (f *recordingInventoryService) snapshot() []sourceledger.InventoryRequest {
 
 const testProviderID = "prov-a"
 
-func withSessionStore(store session.Store) testDeps {
+func withSessionStore(store *sessionstore.Repositories) testDeps {
 	return func(d *Dependencies) { d.Core.Store = store }
 }
 

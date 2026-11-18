@@ -80,7 +80,7 @@ func (q *sweepQueue) raiseBase(root string, base uint64) uint64 {
 // SweepSessionTree re-screens transcript rows and their search index.
 // Other durable surfaces retain their write-time screening.
 func (m *Service) SweepSessionTree(ctx context.Context, rootSessionID string, evidenceRevision uint64) {
-	if m == nil || m.store == nil || m.redactMessageForStorage == nil || rootSessionID == "" {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.turnStore == nil || m.people == nil) || m.redactMessageForStorage == nil || rootSessionID == "" {
 		return
 	}
 	if !m.secretSweeps.claim(rootSessionID, evidenceRevision) {
@@ -100,7 +100,7 @@ func (m *Service) SweepSessionTree(ctx context.Context, rootSessionID string, ev
 func (m *Service) screenGeneration(ctx context.Context, rootSessionID string, evidenceRevision uint64) (uint64, error) {
 	base, ok := m.secretSweeps.baseFor(rootSessionID)
 	if !ok {
-		stamped, err := m.store.MaxMessageScreenGenerationInTree(ctx, rootSessionID)
+		stamped, err := m.transcriptStore.MaxMessageScreenGenerationInTree(ctx, rootSessionID)
 		if err != nil {
 			return 0, err
 		}
@@ -116,7 +116,7 @@ func (m *Service) sweepSessionTreeOnce(ctx context.Context, rootSessionID string
 			"root_session_id", observability.ShortSessionID(rootSessionID), "error", err)
 		return
 	}
-	sessionIDs, err := m.store.SessionTreeIDs(ctx, rootSessionID)
+	sessionIDs, err := m.sessionStore.SessionTreeIDs(ctx, rootSessionID)
 	if err != nil {
 		secretSweepLog.WarnContext(ctx, "secret sweep could not resolve the session tree",
 			"root_session_id", observability.ShortSessionID(rootSessionID), "error", err)
@@ -141,7 +141,7 @@ func (m *Service) sweepSessionTreeOnce(ctx context.Context, rootSessionID string
 
 // sweepSession rescreens one session's stale rows, returning the rewrite count.
 func (m *Service) sweepSession(ctx context.Context, sessionID string, generation uint64) (int, error) {
-	stale, err := m.store.MessageIDsBelowScreenGeneration(ctx, sessionID, generation)
+	stale, err := m.transcriptStore.MessageIDsBelowScreenGeneration(ctx, sessionID, generation)
 	if err != nil || len(stale) == 0 {
 		return 0, err
 	}
@@ -149,7 +149,7 @@ func (m *Service) sweepSession(ctx context.Context, sessionID string, generation
 	for _, id := range stale {
 		staleIDs[id] = struct{}{}
 	}
-	messages, err := m.store.GetMessages(ctx, sessionID)
+	messages, err := m.transcriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return 0, err
 	}
@@ -178,15 +178,15 @@ func (m *Service) sweepSession(ctx context.Context, sessionID string, generation
 func (m *Service) rescreenStoredMessage(ctx context.Context, sessionID string, msg api.Message, generation uint64) (bool, error) {
 	screened, changed := m.redactMessageForStorage(m.SecretContext(ctx, sessionID), msg)
 	if !changed {
-		return false, m.store.StampMessageScreenGeneration(ctx, sessionID, msg.ID, generation)
+		return false, m.transcriptStore.StampMessageScreenGeneration(ctx, sessionID, msg.ID, generation)
 	}
 	// Seq advances so a client holding the earlier row accepts the rewrite; ord
 	// and ts are creation-time.
 	screened.Seq = msg.Seq + 1
-	if _, err := m.store.UpdateMessage(ctx, sessionID, msg.ID, screened); err != nil {
+	if _, err := m.transcriptStore.UpdateMessage(ctx, sessionID, msg.ID, screened); err != nil {
 		return false, err
 	}
-	if err := m.store.StampMessageScreenGeneration(ctx, sessionID, msg.ID, generation); err != nil {
+	if err := m.transcriptStore.StampMessageScreenGeneration(ctx, sessionID, msg.ID, generation); err != nil {
 		return true, err
 	}
 	// Observers render from the row, so a silent rewrite would leave a value on

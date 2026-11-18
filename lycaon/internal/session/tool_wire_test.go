@@ -9,12 +9,12 @@ import (
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tokenest"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -25,7 +25,7 @@ func TestPrepareToolWireContentRetainsLargeFilesWithoutCompactor(t *testing.T) {
 	}
 	raw, err := json.Marshal(map[string]any{"files": files, "dirty": true})
 	testutil.FailErr(t, "json.Marshal failed", err)
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild}
 	out, meta := mgr.Runner.History.ToolWire(context.Background(), sess, "git_status", string(raw), compaction.CompactToolWireOpts{})
 	if meta != nil {
@@ -43,13 +43,13 @@ func TestPrepareToolWireContentRetainsLargeFilesWithoutCompactor(t *testing.T) {
 }
 
 func TestPrepareToolWirePreservesBoundedRecallBody(t *testing.T) {
-	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	st := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled: true, ChunkTokenThreshold: 50, ChunkTargetTokens: 20,
 	}, compaction.MockSummarizer{Text: "summary"}))
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	body := strings.Repeat("observed line\n", 30) + "historical value: 7119\n" + strings.Repeat("observed line\n", 30)
 	raw, err := json.Marshal(map[string]any{
@@ -63,8 +63,8 @@ func TestPrepareToolWirePreservesBoundedRecallBody(t *testing.T) {
 }
 
 func TestPrepareToolWireContentCompactsBeforeStore(t *testing.T) {
-	store := store.NewMemory()
-	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,
@@ -74,7 +74,7 @@ func TestPrepareToolWireContentCompactsBeforeStore(t *testing.T) {
 
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
@@ -93,15 +93,15 @@ func TestPrepareToolWireContentCompactsBeforeStore(t *testing.T) {
 }
 
 func TestPrepareToolWireContentPreservesOutputBeyondSpillBound(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	limits := settings.DefaultSessionLimits()
 	limits.MaxToolSpillBytes = 1024
-	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: limits, Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: limits, Cost: nil}, toolstest.NewRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled: true, ChunkTokenThreshold: 100, ChunkTargetTokens: 200,
 	}, nil))
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session with spill bound", err)
 	content := `{"files":[{"path":"a.go","diff":"` + strings.Repeat("x", 20000) + `"}]}`
 	out, meta := mgr.Runner.History.ToolWire(t.Context(), sess, "git_diff", content, compaction.CompactToolWireOpts{})
@@ -111,8 +111,8 @@ func TestPrepareToolWireContentPreservesOutputBeyondSpillBound(t *testing.T) {
 }
 
 func TestPrepareToolWireContentHandlePrefixedFind(t *testing.T) {
-	store := store.NewMemory()
-	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,
@@ -121,7 +121,7 @@ func TestPrepareToolWireContentHandlePrefixedFind(t *testing.T) {
 	}, nil))
 
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
@@ -153,8 +153,8 @@ func TestPrepareToolWireContentHandlePrefixedFind(t *testing.T) {
 }
 
 func TestPrepareToolWireContentSummarizeSpillsFullPack(t *testing.T) {
-	store := store.NewMemory()
-	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,
@@ -164,7 +164,7 @@ func TestPrepareToolWireContentSummarizeSpillsFullPack(t *testing.T) {
 
 	ctx := context.Background()
 	dir := t.TempDir()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
@@ -221,8 +221,8 @@ func TestPrepareToolWireContentSummarizeSpillsFullPack(t *testing.T) {
 }
 
 func TestPrepareToolWireContentSummarizeWireFittedLandsInline(t *testing.T) {
-	store := store.NewMemory()
-	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,
@@ -232,7 +232,7 @@ func TestPrepareToolWireContentSummarizeWireFittedLandsInline(t *testing.T) {
 
 	ctx := context.Background()
 	dir := t.TempDir()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)

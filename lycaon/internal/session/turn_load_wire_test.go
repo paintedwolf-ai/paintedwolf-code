@@ -214,7 +214,7 @@ func TestTargetedCheckDoesNotSatisfyDifferentProjectCheck(t *testing.T) {
 }
 
 func TestVerificationAttemptBudgetSurvivesConcurrentEdits(t *testing.T) {
-	mgr, sess, history := verifyGateHarness(t, "project-check")
+	mgr, sess, history, _ := verifyGateHarness(t, "project-check")
 	for range sessionverification.MaxAttemptsPerRun {
 		recordCommand(t, mgr, sess, "project-check", 1)
 		repochange.Advance(sess.WorkspacePath)

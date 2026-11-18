@@ -49,11 +49,11 @@ func (m *Service) Abort(ctx context.Context, id, reason string) error {
 	if id == "" {
 		return fmt.Errorf("session id required")
 	}
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.submissionStore == nil) {
 		return fmt.Errorf("session manager not configured")
 	}
 	stopCtx := context.WithoutCancel(ctx)
-	if _, err := m.store.Get(stopCtx, id); err != nil {
+	if _, err := m.sessionStore.Get(stopCtx, id); err != nil {
 		return err
 	}
 	preserveQueueSessionID := ""
@@ -69,7 +69,7 @@ func (m *Service) Abort(ctx context.Context, id, reason string) error {
 }
 
 func (m *Service) hasAddressedQueuedTurn(ctx context.Context, sessionID string) bool {
-	if m == nil || m.queue == nil || m.store == nil {
+	if m == nil || m.queue == nil || (m.sessionStore == nil || m.submissionStore == nil) {
 		return false
 	}
 	for _, item := range m.queue.Snapshot(sessionID).QueueItems {
@@ -77,7 +77,7 @@ func (m *Service) hasAddressedQueuedTurn(ctx context.Context, sessionID string) 
 		if itemID == "" {
 			continue
 		}
-		receipt, err := m.store.GetPromptSubmission(ctx, itemID)
+		receipt, err := m.submissionStore.GetPromptSubmission(ctx, itemID)
 		if err == nil && receipt.SessionID == sessionID && receipt.Status == store.PromptSubmissionQueued {
 			return true
 		}
@@ -109,7 +109,7 @@ func (m *Service) stopSessionTree(ctx context.Context, rootID, reason string, op
 	if strings.TrimSpace(reason) == "" {
 		reason = "user stopped"
 	}
-	tree, err := m.store.SessionTreeMembers(ctx, rootID)
+	tree, err := m.sessionStore.SessionTreeMembers(ctx, rootID)
 	if err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func (m *Service) stopSessionTree(ctx context.Context, rootID, reason string, op
 	errs = m.stopTreeWorkers(workerCtx, tree, reason, errs)
 
 	// Include children admitted before stop began.
-	if refreshed, refreshErr := m.store.SessionTreeMembers(ctx, rootID); refreshErr != nil {
+	if refreshed, refreshErr := m.sessionStore.SessionTreeMembers(ctx, rootID); refreshErr != nil {
 		errs = appendStopError(errs, "refresh session tree", rootID, refreshErr)
 	} else {
 		tree = refreshed
@@ -152,7 +152,7 @@ func (m *Service) stopSessionTree(ctx context.Context, rootID, reason string, op
 	// Catch workers admitted by turns already draining.
 	errs = m.stopTreeWorkers(workerCtx, tree, reason, errs)
 	for _, sess := range tree {
-		if err := m.store.SetSessionStatus(ctx, sess.ID, api.SessionStatusIdle); err != nil {
+		if err := m.sessionStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusIdle); err != nil {
 			errs = appendStopError(errs, "mark session idle", sess.ID, err)
 		}
 	}
@@ -214,13 +214,13 @@ func (m *Service) StopRuntime(ctx context.Context, sess store.SessionTreeMember,
 	}
 	ctx = bgprocess.WithTerminationReason(ctx, fallback)
 	preserveQueue := sess.ID == preserveQueueSessionID
-	if m.store != nil {
+	if m.sessionStore != nil && m.submissionStore != nil {
 		if preserveQueue {
 			errs = appendStopError(errs, "interrupt running prompt submissions", sess.ID,
-				m.store.InterruptRunningPromptSubmissionsBySession(ctx, sess.ID))
+				m.submissionStore.InterruptRunningPromptSubmissionsBySession(ctx, sess.ID))
 		} else {
 			errs = appendStopError(errs, "interrupt prompt submissions", sess.ID,
-				m.store.InterruptPromptSubmissionsBySession(ctx, sess.ID))
+				m.submissionStore.InterruptPromptSubmissionsBySession(ctx, sess.ID))
 		}
 	}
 	if isWorkerChild {

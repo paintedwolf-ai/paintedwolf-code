@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -20,25 +21,26 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestRecoverOrphanedTurnsClearsStuckBusy(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	hub := events.NewMemoryHub()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub})
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
-	testutil.FailErr(t, "busy", mem.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "busy", sessionStore.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	ch, unsub, err := hub.Subscribe(ctx, events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "Subscribe", err)
 	t.Cleanup(unsub)
 
 	testutil.FailErr(t, "RecoverOrphanedTurns", mgr.Stops.Recovery.RecoverOrphanedTurns(ctx))
-	got, err := mem.Get(ctx, sess.ID)
+	got, err := sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "Get", err)
 	if got.Status != api.SessionStatusIdle {
 		t.Fatalf("status = %s want idle", got.Status)
@@ -85,15 +87,15 @@ func TestRecoverInterruptedToolResultsAppendsMissingToolRows(t *testing.T) {
 	recorder := invocation.NewSQLRecorder(database)
 	mgr.SetInvocationRecorder(recorder)
 
-	sess, err := sqlStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sqlStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
-	testutil.FailErr(t, "busy", sqlStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "busy", sqlStore.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	contract, ok := toolcontract.Lookup("command")
 	if !ok {
 		t.Fatal("command contract is not declared")
 	}
-	testutil.FailErr(t, "append draft", sqlStore.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "append draft", sqlStore.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		ID: "asst-1", Role: api.MessageRoleAssistant, Kind: api.MessageKindDraft,
 		Content:   "working",
 		ToolCalls: []api.ToolCall{{ID: "call-cmd", Name: "command"}},
@@ -112,12 +114,12 @@ func TestRecoverInterruptedToolResultsAppendsMissingToolRows(t *testing.T) {
 	testutil.FailErr(t, "RecoverInterruptedToolResults", mgr.Stops.Recovery.RecoverInterruptedToolResults(ctx))
 	testutil.FailErr(t, "RecoverInterruptedToolResults replay", mgr.Stops.Recovery.RecoverInterruptedToolResults(ctx))
 
-	got, err := sqlStore.Get(ctx, sess.ID)
+	got, err := sqlStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "Get", err)
 	if got.Status != api.SessionStatusIdle {
 		t.Fatalf("status = %s want idle", got.Status)
 	}
-	msgs, err := sqlStore.GetMessages(ctx, sess.ID)
+	msgs, err := sqlStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	found := 0
 	for _, msg := range msgs {
@@ -156,11 +158,11 @@ func (r *reviewCheckpointRecorder) CreateStructuralCheckpoint(
 
 func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 	ctx := t.Context()
-	sessions := store.NewMemory()
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	recorder := &reviewCheckpointRecorder{}
 	mgr.SetSourceLedger(recorder, tools.SourceHistory{}, nil, nil, recorder, nil)
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -174,11 +176,11 @@ func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 	}
 	first := message("user-1", api.MessageOriginUser, api.MessageVisibilityTranscript, "")
 	mgr.Runner.Instructions.ReviewCheckpoint(ctx, sess.ID, first)
-	testutil.FailErr(t, "append first user turn", sessions.AppendMessages(ctx, sess.ID, first))
+	testutil.FailErr(t, "append first user turn", sessions.Transcript.AppendMessages(ctx, sess.ID, first))
 
 	hostKick := message("host-kick", api.MessageOriginHost, api.MessageVisibilityInternal, api.MessageKindHostKick)
 	mgr.Runner.Instructions.ReviewCheckpoint(ctx, sess.ID, hostKick)
-	testutil.FailErr(t, "append host kick", sessions.AppendMessages(ctx, sess.ID, hostKick))
+	testutil.FailErr(t, "append host kick", sessions.Transcript.AppendMessages(ctx, sess.ID, hostKick))
 
 	second := message("user-2", api.MessageOriginUser, api.MessageVisibilityTranscript, "")
 	mgr.Runner.Instructions.ReviewCheckpoint(ctx, sess.ID, second)
@@ -200,7 +202,7 @@ func TestReviewGuidanceFollowsLiveVerdictGate(t *testing.T) {
 		for _, pending := range []bool{false, true} {
 			for _, staged := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/pending=%v/staged=%v", id, pending, staged), func(t *testing.T) {
-					mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+					mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 					mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 					kicks := mgr.Coordinator.Runtime.Kicks()
 					review := anchor.InformRender(id)

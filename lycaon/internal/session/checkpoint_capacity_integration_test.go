@@ -15,17 +15,18 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/profiles"
-	"github.com/lycaon/lycaon/internal/session/store"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestOverCapTurnMarksTheCheckpointTruncated(t *testing.T) {
-	mgr, sessionID, dir := newCheckpointTestSession(t)
+	mgr, sessionID, dir, repositories := newCheckpointTestSession(t)
 	ctx := context.Background()
 	testutil.FailErr(t, "mkdir src", os.MkdirAll(filepath.Join(dir, "src"), 0o755))
 
@@ -40,7 +41,7 @@ func TestOverCapTurnMarksTheCheckpointTruncated(t *testing.T) {
 		mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", rel)
 	}
 
-	man, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store)).Load(t.Context(), sessionID, anchor)
+	man, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, repositories.Rewind).Load(t.Context(), sessionID, anchor)
 	testutil.FailErr(t, "load manifest", err)
 	if len(man.Paths) != sessioncheckpoint.MaxPaths {
 		t.Fatalf("captured %d paths, want the cap %d", len(man.Paths), sessioncheckpoint.MaxPaths)
@@ -67,14 +68,15 @@ postures:
 		testutil.FailErr(t, "write file", err)
 	}
 
-	mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	persistence := storetest.New(t)
+	mgr := NewHost(persistence, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.Profiles.SetPostureRegistry(reg)
 	if err := mgr.Profiles.WarmPostureOverlay(dir); err != nil {
 		testutil.FailErr(t, "mgr.Profiles.WarmPostureOverlay failed", err)
 	}
 
 	// Project postures require project settings trust.
-	projectID := RegisterProjectContextForTest(t, mgr, dir)
+	projectID := RegisterProjectContextForTest(t, mgr, persistence.DB(), dir)
 	sess := &api.Session{ID: "overlay", ProjectID: projectID, Posture: api.SessionPostureVet, WorkspacePath: dir}
 
 	effective, err := mgr.Profiles.EffectivePostures(t.Context(), sess)
@@ -101,7 +103,7 @@ postures:
 `), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Profiles.SetPostureRegistry(reg)
 	if err := mgr.Profiles.WarmPostureOverlay(dir); err == nil {
 		t.Fatal("expected unknown overlay posture error")
@@ -109,7 +111,7 @@ postures:
 }
 
 type feedbackReadFailureStore struct {
-	Store
+	sessionstore.TranscriptRepository
 	failRead bool
 }
 
@@ -118,14 +120,15 @@ func (s *feedbackReadFailureStore) GetMessage(ctx context.Context, sessionID, me
 		s.failRead = false
 		return api.Message{}, errors.New("injected feedback read failure")
 	}
-	return s.Store.GetMessage(ctx, sessionID, messageID)
+	return s.TranscriptRepository.GetMessage(ctx, sessionID, messageID)
 }
 
 func TestPolicyFeedbackRetriesRenderingAndPersistenceWithoutLoss(t *testing.T) {
-	mem := store.NewMemory()
-	storage := &feedbackReadFailureStore{Store: mem}
-	mgr := NewHost(storage, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	storage := &feedbackReadFailureStore{TranscriptRepository: sessionStore.Transcript}
+	sessionStore.Transcript = storage
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	decision := &oar.Decision{Effect: oar.EffectNudge, Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "frozen observation"}}
 	testutil.FailErr(t, "queue before renderer", mgr.Coordinator.Guidance.DeliverAdvisories(t.Context(), sess.ID, oar.AnchorCoordinatorPostTurn, decision))
@@ -144,7 +147,7 @@ func TestPolicyFeedbackRetriesRenderingAndPersistenceWithoutLoss(t *testing.T) {
 	}
 	messages, err := mgr.Coordinator.Guidance.TakePolicy(t.Context(), sess.ID)
 	testutil.FailErr(t, "retry persisted feedback", err)
-	stored, err := mem.GetMessages(t.Context(), sess.ID)
+	stored, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read transcript", err)
 	if len(messages) != 1 || len(stored) != 1 || messages[0].ID != lease.ID {
 		t.Fatalf("retry duplicated feedback: returned=%d stored=%d", len(messages), len(stored))
@@ -186,8 +189,8 @@ func TestPolicyAdvisoryRoutingAtEveryHostBoundary(t *testing.T) {
 }
 
 func TestPolicyAdvisoryPersistenceUsesScreenedBytesAndAcknowledgesOnce(t *testing.T) {
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	renderer := advisoryTestManager(t).Coordinator.Feedback.Renderer()
 	mgr.SetOARPipeline(nil, renderer)
 	mgr.Runner.Transcript.SetRedactor(func(_ context.Context, msg api.Message) (api.Message, bool) {
@@ -197,7 +200,7 @@ func TestPolicyAdvisoryPersistenceUsesScreenedBytesAndAcknowledgesOnce(t *testin
 		}
 		return msg, true
 	})
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for _, id := range []string{"first", "second"} {
 		decision := &oar.Decision{Effect: oar.EffectNudge, Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "private-fixture"}, Data: map[string]any{"subject": map[string]any{"kind": "task", "id": id}, "observation": "private-fixture"}}
@@ -208,7 +211,7 @@ func TestPolicyAdvisoryPersistenceUsesScreenedBytesAndAcknowledgesOnce(t *testin
 	if len(messages) != 1 || strings.Contains(messages[0].Content, "private-fixture") || !strings.Contains(messages[0].Content, "second") {
 		t.Fatalf("delivery lost screening or subjects: %#v", messages)
 	}
-	stored, err := mem.GetMessage(t.Context(), sess.ID, messages[0].ID)
+	stored, err := sessionStore.Transcript.GetMessage(t.Context(), sess.ID, messages[0].ID)
 	testutil.FailErr(t, "read stored feedback", err)
 	if stored.Content != messages[0].Content {
 		t.Fatal("model received different bytes from history")

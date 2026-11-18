@@ -27,7 +27,7 @@ func (m *Service) attemptControl() attemptController {
 // capture reads the last row and the mutation clock together. A row appended after
 // this is seen by the scan yet still counts as new, which at worst repeats one attempt.
 func (c attemptController) capture(ctx context.Context, sess *api.Session, sc *compaction.SimpleCompactor) (attemptPass, error) {
-	tail, err := c.m.store.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 1})
+	tail, err := c.m.transcriptStore.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 1})
 	if err != nil {
 		return attemptPass{}, err
 	}
@@ -58,7 +58,7 @@ func (c attemptController) key(ctx context.Context, sess *api.Session, sc *compa
 // admit runs before any candidate scan. Store reads here are bounded by one row
 // plus attemptResumeRows, and a failed read admits the pass rather than stalling it.
 func (c attemptController) admit(ctx context.Context, sessionID string, sc *compaction.SimpleCompactor) (attemptPass, bool) {
-	sess, err := c.m.store.Get(ctx, sessionID)
+	sess, err := c.m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return attemptPass{}, true
 	}
@@ -70,11 +70,11 @@ func (c attemptController) admit(ctx context.Context, sessionID string, sc *comp
 	if !found || prior.key != pass.key {
 		return pass, true
 	}
-	current, err := c.m.store.CompactionViewCurrent(ctx, sessionID, prior.source.ord, prior.source.id, prior.source.seq)
+	current, err := c.m.compactionStore.CompactionViewCurrent(ctx, sessionID, prior.source.ord, prior.source.id, prior.source.seq)
 	if err != nil || !current {
 		return pass, true
 	}
-	appended, err := c.m.store.ReadMessageWindow(ctx, sessionID, messageview.MessageWindow{After: true, AfterOrd: prior.source.ord, Limit: attemptResumeRows})
+	appended, err := c.m.transcriptStore.ReadMessageWindow(ctx, sessionID, messageview.MessageWindow{After: true, AfterOrd: prior.source.ord, Limit: attemptResumeRows})
 	if err != nil {
 		return pass, true
 	}
@@ -175,7 +175,7 @@ func (c attemptController) settle(ctx context.Context, sc *compaction.SimpleComp
 		c.saveMemo(ctx, sessionID, result.memo)
 		return
 	}
-	sess, err := c.m.store.Get(ctx, sessionID)
+	sess, err := c.m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return
 	}
@@ -183,7 +183,7 @@ func (c attemptController) settle(ctx context.Context, sc *compaction.SimpleComp
 	if err != nil || key != pass.key {
 		return
 	}
-	current, err := c.m.store.CompactionViewCurrent(ctx, sessionID, pass.source.ord, pass.source.id, pass.source.seq)
+	current, err := c.m.compactionStore.CompactionViewCurrent(ctx, sessionID, pass.source.ord, pass.source.id, pass.source.seq)
 	if err != nil || !current {
 		return
 	}
@@ -207,7 +207,7 @@ func (c attemptController) saveMemo(ctx context.Context, sessionID string, memo 
 	if memo == nil {
 		return
 	}
-	if err := c.m.store.PutCompactionAttempt(ctx, sessionID, *memo); err != nil {
+	if err := c.m.compactionStore.PutCompactionAttempt(ctx, sessionID, *memo); err != nil {
 		slog.WarnContext(ctx, "compaction attempt memo save failed", "session_id", sessionID, "error", err)
 	}
 }
@@ -229,7 +229,7 @@ func (c attemptController) fire(sessionID string) {
 		return
 	}
 	defer finish()
-	sess, err := c.m.store.Get(ctx, sessionID)
+	sess, err := c.m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return
 	}

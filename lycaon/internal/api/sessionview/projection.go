@@ -12,9 +12,11 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
+type Evidence interface{ SessionUntrustedContent(string) bool }
+
 type Projector struct {
 	Workflows *workflow.RunManager
-	Store     session.Store
+	Evidence  Evidence
 	Sessions  *session.Host
 	Projects  project.Registry
 }
@@ -24,7 +26,7 @@ func New(p Projector) Projector {
 	httpio.RequireDependencies("sessionview",
 		httpio.Required{Name: "Projects", Present: p.Projects != nil},
 		httpio.Required{Name: "Sessions", Present: p.Sessions != nil},
-		httpio.Required{Name: "Store", Present: p.Store != nil},
+		httpio.Required{Name: "Evidence", Present: p.Evidence != nil},
 		httpio.Required{Name: "Workflows", Present: p.Workflows != nil},
 	)
 	return p
@@ -35,7 +37,7 @@ func (s *Projector) EnrichSession(ctx context.Context, sess *wire.Session) {
 		return
 	}
 	s.HydrateSessionWorkspace(ctx, sess)
-	sess.UntrustedContent = s.Store.SessionUntrustedContent(sess.ID)
+	sess.UntrustedContent = s.Evidence.SessionUntrustedContent(sess.ID)
 	sess.PromptPending = s.Sessions.Runner.SubmissionState.PromptPending(ctx, sess.ID)
 	if ui, err := s.Workflows.Presentation.ComputeSessionUI(ctx, sess.ID); err == nil {
 		sess.UI = ui

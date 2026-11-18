@@ -24,18 +24,18 @@ func TestProjectReasoningSurvivesRelocatedBackupRestore(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	history := store.NewSQL(database)
 	history.SetDataDir(source)
-	session, err := history.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	session, err := history.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create retained chat", err)
-	turn, err := history.BeginTurn(t.Context(), store.TurnStart{SessionID: session.ID, ProjectID: session.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
+	turn, err := history.Turns.BeginTurn(t.Context(), store.TurnStart{SessionID: session.ID, ProjectID: session.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
 	testutil.FailErr(t, "begin retained turn", err)
 	want := &api.ModelReasoning{ProviderID: "provider", Model: "model", Text: "Inspect the declaration.", Details: []json.RawMessage{json.RawMessage(`{"type":"thinking","thinking":"Inspect the declaration.","signature":"original-signature"}`)}}
 	reasoning, err := json.Marshal(want)
 	testutil.FailErr(t, "encode signed reasoning", err)
-	output, err := history.SettleModelOutput(t.Context(), store.ModelOutput{ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: session.ID, Iteration: 1, MessageID: uuid.NewString(), ProviderID: want.ProviderID, Model: want.Model, Content: "Complete.", ReasoningJSON: string(reasoning)})
+	output, err := history.Turns.SettleModelOutput(t.Context(), store.ModelOutput{ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: session.ID, Iteration: 1, MessageID: uuid.NewString(), ProviderID: want.ProviderID, Model: want.Model, Content: "Complete.", ReasoningJSON: string(reasoning)})
 	testutil.FailErr(t, "settle retained output", err)
-	testutil.FailErr(t, "project retained output", history.AppendMessages(t.Context(), session.ID, api.Message{ID: output.MessageID, Role: api.MessageRoleAssistant, Content: output.Content, ModelReasoning: want}))
-	testutil.FailErr(t, "acknowledge retained output", history.MarkModelOutputProjected(t.Context(), output.ID))
-	_, err = history.FinishTurn(t.Context(), turn.Turn.ID, turn.Attempt.ID, store.TurnStatusComplete, output.ID, "{}", "")
+	testutil.FailErr(t, "project retained output", history.Transcript.AppendMessages(t.Context(), session.ID, api.Message{ID: output.MessageID, Role: api.MessageRoleAssistant, Content: output.Content, ModelReasoning: want}))
+	testutil.FailErr(t, "acknowledge retained output", history.Turns.MarkModelOutputProjected(t.Context(), output.ID))
+	_, err = history.Turns.FinishTurn(t.Context(), turn.Turn.ID, turn.Attempt.ID, store.TurnStatusComplete, output.ID, "{}", "")
 	testutil.FailErr(t, "finish retained turn", err)
 	archive, _, err := createArchive(t, t.Context(), backup.CreateOpts{ConfigDir: source, DBPath: sourcePath, SQLDB: database, SchemaUserVersion: db.SchemaVersion, AppVersion: "test"})
 	testutil.FailErr(t, "capture project reasoning", err)
@@ -49,7 +49,7 @@ func TestProjectReasoningSurvivesRelocatedBackupRestore(t *testing.T) {
 	restored := testdbfixture.OpenPath(t, targetPath)
 	restoredHistory := store.NewSQL(restored)
 	restoredHistory.SetDataDir(target)
-	messages, err := restoredHistory.GetMessages(t.Context(), session.ID)
+	messages, err := restoredHistory.Transcript.GetMessages(t.Context(), session.ID)
 	testutil.FailErr(t, "reload restored chat", err)
 	if len(messages) != 1 || !reflect.DeepEqual(messages[0].ModelReasoning, want) {
 		t.Fatal("restored chat lost exact reasoning or provenance")
@@ -65,7 +65,7 @@ func TestProjectReasoningSurvivesRelocatedBackupRestore(t *testing.T) {
 	if string(envelope.Reasoning) != string(reasoning) {
 		t.Fatal("canonical reasoning changed during restore")
 	}
-	testutil.FailErr(t, "delete restored chat", restoredHistory.Delete(t.Context(), session.ID))
+	testutil.FailErr(t, "delete restored chat", restoredHistory.Sessions.Delete(t.Context(), session.ID))
 	var count int
 	testutil.FailErr(t, "count restored reasoning after deletion", restored.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM messages WHERE reasoning_json IS NOT NULL`).Scan(&count))
 	if count != 0 {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -17,7 +18,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -84,7 +84,7 @@ func taskTool(t *testing.T, sqlDB *db.Store, wrap func(worker.WorkerQueue) worke
 	deps.Queue, deps.WorkerRecords = queue, workerrecords.New(sqlDB)
 	deps.Reviews = &workerops.Service{Reader: workerops.Reader{Records: deps.WorkerRecords, Jobs: queue}}
 	if deps.Agents == nil {
-		deps.Agents = orchestration.NewMemoryAgentRegistryForTest()
+		deps.Agents = orchestrationtest.Registry(t)
 	}
 	deps.Workers = worker.DefaultWorkersConfig()
 	if deps.Plan == nil {

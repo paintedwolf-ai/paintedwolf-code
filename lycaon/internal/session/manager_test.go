@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
-
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -15,12 +14,14 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -35,9 +36,9 @@ func testMockConfig(t *testing.T) *llm.MockConfig {
 }
 
 // newStubCommandRegistry adds a command stub to the read and write stubs.
-func newStubCommandRegistry(t *testing.T) *tools.StubRegistry {
+func newStubCommandRegistry(t *testing.T) *toolstest.Registry {
 	t.Helper()
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command stub", registry.Register("command", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 		program, _ := args["command"].(string)
 		return "ran " + program, nil
@@ -45,13 +46,13 @@ func newStubCommandRegistry(t *testing.T) *tools.StubRegistry {
 	return registry
 }
 
-func newTestManager(t *testing.T) (*Host, *store.Memory) {
+func newTestManager(t *testing.T) (*Host, *store.Repositories) {
 	t.Helper()
-	memory := store.NewMemory()
-	return newTestManagerWithStore(t, memory), memory
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	return newTestManagerWithStore(t, sessionStore), sessionStore
 }
 
-func newTestManagerWithStore(t *testing.T, persistence Store) *Host {
+func newTestManagerWithStore(t *testing.T, persistence *store.Repositories) *Host {
 	t.Helper()
 	registry := newStubCommandRegistry(t)
 	mgr := NewHost(persistence, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
@@ -62,15 +63,15 @@ func newTestManagerWithStore(t *testing.T, persistence Store) *Host {
 	return mgr
 }
 
-func newRootedTestManager(t *testing.T) (*Host, *store.Memory, string) {
+func newRootedTestManager(t *testing.T) (*Host, *store.Repositories, string) {
 	t.Helper()
 	mgr, store := newTestManager(t)
-	return mgr, store, attachTestProject(t, mgr)
+	return mgr, store, attachTestProject(t, mgr, store)
 }
 
-func attachTestProject(t *testing.T, mgr *Host) string {
+func attachTestProject(t *testing.T, mgr *Host, persistence *store.Repositories) string {
 	t.Helper()
-	projects := project.NewMemoryRegistry()
+	projects := project.NewSQLRegistry(persistence.DB())
 	created, err := projects.Create(context.Background(), project.CreateParams{Roots: []project.AttachRootParams{{
 		Path: t.TempDir(),
 	}}})
@@ -83,7 +84,7 @@ func TestPromptTextResponse(t *testing.T) {
 	mgr, store := newTestManager(t)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
@@ -117,7 +118,7 @@ func TestPromptWithToolCall(t *testing.T) {
 	mgr.SetOARPipeline(pipeline, oar.NewRenderer(rejectFmt, nil))
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, projectID)
 	testutil.FailErr(t, "create session in store", err)
@@ -164,7 +165,7 @@ func TestMaxIterationCap(t *testing.T) {
 	mgr.Limits.SetMaxIterations(3)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, projectID)
 	testutil.FailErr(t, "create session in store", err)
@@ -181,7 +182,7 @@ func TestMaxIterationCap(t *testing.T) {
 	if !strings.Contains(last.Content, "ended without a final answer") {
 		t.Fatalf("closing does not say the answer is missing: %q", last.Content)
 	}
-	settled, err := store.Get(ctx, sess.ID)
+	settled, err := store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read failed closeout session", err)
 	if settled.Status != api.SessionStatusIdle {
 		t.Fatalf("failed closeout status = %q, want idle", settled.Status)
@@ -192,7 +193,7 @@ func TestSessionHistoryAccumulation(t *testing.T) {
 	mgr, store := newTestManager(t)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
@@ -223,16 +224,16 @@ func TestSessionHistoryAccumulation(t *testing.T) {
 }
 
 func TestToolCallError(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	reg := newStubCommandRegistry(t)
 	reg.SetFail("command", fmt.Errorf("command failed"))
 	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
-	projectID := attachTestProject(t, mgr)
+	projectID := attachTestProject(t, mgr, store)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, projectID)
 	testutil.FailErr(t, "create session in store", err)
@@ -258,7 +259,7 @@ func TestConcurrentPrompts(t *testing.T) {
 	mgr, store := newTestManager(t)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)

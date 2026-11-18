@@ -25,7 +25,6 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/platform"
-	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -49,7 +48,8 @@ type ProgramRuntime struct {
 	Evaluate func(context.Context, commandsurface.ProgramSnapshot, commandprogram.EvaluationPorts) (commandprogram.ProgramOutcome, error)
 	Boundary *sandbox.Boundary
 	// Sessions names the person who started the session; the program acts for them.
-	Sessions SessionOwners
+	Sessions   SessionOwners
+	Provenance ProgramProvenance
 	// SourceObserver confirms delivered source windows into the evidence ledger.
 	SourceObserver invocation.ProgramSourceObserver
 	// Builtins supplies host utilities for one invocation; nested runs their command operands.
@@ -78,7 +78,6 @@ type ProgramRuntime struct {
 	mu        sync.Mutex
 	outputs   map[string]*invocation.ProgramOutputRetention
 	resources map[string]*sessionOutputResources
-	disabled  atomic.Bool
 }
 
 func (r *ProgramRuntime) clock() commandprogram.Clock {
@@ -136,7 +135,7 @@ type programRun struct {
 	// envelope carries the call's launch capability requests to each launch.
 	envelope   map[string]any
 	window     *programWindow
-	sessions   SessionOwners
+	custody    programCustodyReader
 	provenance programProvenanceState
 }
 
@@ -149,10 +148,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	if source == "" {
 		return "", toolrejection.RejectInvalidArguments("COMMAND_ARGV_REQUIRED", map[string]any{"field": "command"})
 	}
-	if r != nil && r.disabled.Load() {
-		return "", toolrejection.RejectInvalidArguments("COMMAND_PROGRAMS_DISABLED", map[string]any{"tool": tool})
-	}
-	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Sessions == nil || r.Projector == nil {
+	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Sessions == nil || r.Projector == nil || r.Provenance == nil || r.SourceObserver == nil {
 		return "", fmt.Errorf("command program runtime is not configured")
 	}
 	catalog, err := toolcontract.ReadOnlyLanguageV1()
@@ -227,7 +223,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 		}
 	}
 	run.executor, run.registry, run.recorder, run.supervisor, run.progress = r.Executor, r.Registry, r.Recorder, r.Supervisor, r.Progress
-	run.sessions = r.Sessions
+	run.custody = r.Provenance
 	run.externalHidden = r.ExternalHidden
 	run.publishDocument = owners.PublishDocument
 	if err := r.bindProgramCapture(ctx, run); err != nil {
@@ -346,6 +342,9 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: invocation.MaximumProgramInputBytes, OutputBytes: invocation.MaximumProgramInputBytes, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
 	var retainSerial sync.Mutex
 	run.retainOutput = func(ctx context.Context, executionID, stream string, data []byte, complete bool) error {
+		if err := run.custodyError(); err != nil {
+			return err
+		}
 		// Retentions serialize per run: each pass leases the zstd stream
 		// reader's 32 MiB working window, and concurrent leases overflow the
 		// program's working account before either publication finishes.
@@ -358,15 +357,8 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 			return err
 		}
 		output := invocation.RetainedOutput{ExecutionID: executionID, Stream: stream, Reference: "output:" + executionID + ":" + stream, Complete: complete && spill.Complete, Redacted: redacted}
-		if _, err := outputs.Attach(ctx, root.Identity.ProgramID, output, spill); err != nil {
-			return errors.Join(err, spill.Close())
-		}
-		body, err := outputs.Open(ctx, tc.Identity.SessionID, root.Identity.ProgramID, output.Reference)
-		if err != nil {
-			return err
-		}
-		err = scratch.PublishCommandOutput(tc.Host.SessionOutputDir, scratch.CommandOutput{ProgramID: root.Identity.ProgramID, ExecutionID: executionID, Stream: stream}, body.Reader)
-		return errors.Join(err, body.Reader.Close())
+		_, err = outputs.Attach(ctx, root.Identity.ProgramID, output, spill)
+		return errors.Join(err, spill.Close())
 	}
 	maximumNodes := 0
 	for _, limit := range run.catalog.Language.Limits {
@@ -526,7 +518,10 @@ func (r *ProgramRuntime) beginProgram(ctx context.Context, run *programRun, outp
 	if err != nil {
 		return err
 	}
-	return outputs.BeginProgram(ctx, start, spill, redacted)
+	if err := outputs.BeginProgram(ctx, start, spill, redacted); err != nil {
+		return err
+	}
+	return r.Provenance.BeginProgramPublication(ctx, run.tc.Identity.SessionID, run.root.Identity.ProgramID)
 }
 
 func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontract.ProgramMemory, claim string, content []byte, scope captureprojection.Scope, screening captureprojection.StreamOptions) (*tooloutput.StreamSpill, bool, error) {

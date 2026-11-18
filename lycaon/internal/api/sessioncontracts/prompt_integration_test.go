@@ -5,12 +5,12 @@ package sessioncontracts
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -33,7 +33,7 @@ func TestPromptEndToEnd(t *testing.T) {
 
 func TestPromptDoesNotInventToolOutsideCurrentCapabilitySurface(t *testing.T) {
 	dir := t.TempDir()
-	reg := contractfixture.WithoutTools(tools.NewStubRegistry(), "read")
+	reg := contractfixture.WithoutTools(toolstest.NewRegistry(), "read")
 	baseURL := contractfixture.StartTestHTTPServer(t, contractfixture.NewTestServerWithWorkflowRegistry(t, reg))
 	sess := contractfixture.CreateTestSession(t, baseURL, dir)
 

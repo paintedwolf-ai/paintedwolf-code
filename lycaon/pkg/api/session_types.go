@@ -140,36 +140,6 @@ type PromptReferenceSearchHitPart struct {
 	HitKind   string              `json:"hit_kind,omitempty"`
 }
 
-func NewPromptReferencePathFile(part PromptReferencePathFilePart) PromptReferencePart {
-	part.Kind = PromptReferencePathFile
-	return PromptReferencePart{PathFile: &part}
-}
-
-func NewPromptReferencePathFolder(part PromptReferencePathFolderPart) PromptReferencePart {
-	part.Kind = PromptReferencePathFolder
-	return PromptReferencePart{PathFolder: &part}
-}
-
-func NewPromptReferenceExternalFile(part PromptReferenceExternalFilePart) PromptReferencePart {
-	part.Kind = PromptReferenceExternalFile
-	return PromptReferencePart{ExternalFile: &part}
-}
-
-func NewPromptReferenceExternalFolder(part PromptReferenceExternalFolderPart) PromptReferencePart {
-	part.Kind = PromptReferenceExternalFolder
-	return PromptReferencePart{ExternalFolder: &part}
-}
-
-func NewPromptReferenceArtifact(part PromptReferenceArtifactPart) PromptReferencePart {
-	part.Kind = PromptReferenceArtifact
-	return PromptReferencePart{Artifact: &part}
-}
-
-func NewPromptReferenceSearchHit(part PromptReferenceSearchHitPart) PromptReferencePart {
-	part.Kind = PromptReferenceSearchHit
-	return PromptReferencePart{SearchHit: &part}
-}
-
 // ProjectID reports the project the active variant belongs to.
 func (p PromptReferencePart) ProjectID() string {
 	switch {

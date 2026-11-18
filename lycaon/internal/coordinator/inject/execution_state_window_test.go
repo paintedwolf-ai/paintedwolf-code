@@ -110,7 +110,7 @@ func TestAgesSurviveCompactionAndRestartInTheStore_ACEXEC04(t *testing.T) {
 	database := testdbfixture.Open(t, "execution-state.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st := store.NewSQL(database)
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	assistant := func(id string) api.Message {
 		return api.Message{ID: id, Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "call-" + id, Name: "read"}}}
@@ -119,7 +119,7 @@ func TestAgesSurviveCompactionAndRestartInTheStore_ACEXEC04(t *testing.T) {
 		m.ID = "result-" + m.ToolResult.ToolCallID
 		return m
 	}
-	testutil.FailErr(t, "append opening rows", st.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append opening rows", st.Transcript.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "user", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "go"},
 		assistant("batch-failed"),
 		tool(rejectedWrite("failed", "a.go"))))
@@ -132,16 +132,16 @@ func TestAgesSurviveCompactionAndRestartInTheStore_ACEXEC04(t *testing.T) {
 	}
 	for age := 1; age <= MaxRejectedOperationStepAge; age++ {
 		appendBatch(st, age)
-		rows, err := st.GetMessages(t.Context(), sess.ID)
+		rows, err := st.Transcript.GetMessages(t.Context(), sess.ID)
 		testutil.FailErr(t, "read canonical", err)
 		last := rows[len(rows)-1]
 		// Every pass publishes a view covering all rows, then reopens the store.
-		testutil.FailErr(t, "publish view", st.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
+		testutil.FailErr(t, "publish view", st.Compaction.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
 			Generation: age, CoveredThroughOrd: last.Ord, CoveredThroughID: last.ID, SourceSeq: last.Seq,
 			Messages: []api.Message{{ID: "summary", Role: api.MessageRoleAssistant, ContentParts: []api.MessageContentPart{{Source: "compaction_summary"}}}},
 		}))
 		st = store.NewSQL(database)
-		window, err := ReadExecutionStateWindow(t.Context(), st.ReadMessageWindow, sess.ID)
+		window, err := ReadExecutionStateWindow(t.Context(), st.Transcript.ReadMessageWindow, sess.ID)
 		testutil.FailErr(t, "read window", err)
 		got := projectExecutionState(window, "")
 		if age < MaxRejectedOperationStepAge {

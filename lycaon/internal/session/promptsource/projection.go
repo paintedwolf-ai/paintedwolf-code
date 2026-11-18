@@ -14,28 +14,19 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type ProjectionRepository interface {
-	AdmitModelResponse(context.Context, string, string) error
-	AppendDraftVersion(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error)
-	CheckpointTurn(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error
-	TouchTurnProgress(ctx context.Context, turnID string) error
-	CountDraftVersions(ctx context.Context, sessionID, slotID string) (int, error)
-	MarkModelOutputProjected(ctx context.Context, outputID string) error
-	SettleModelOutput(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error)
-}
-
 type WorkflowReviews interface {
 	RecordReviewToolResult(ctx context.Context, sessionID string, msg api.Message) error
 }
 
 type Projection struct {
-	Events     *events.Publisher
-	Rejections *workeroutcomes.PeerRejectionFeed
-	Sessions   ProjectionRepository
-	Stash      *toolpresentation.Stash
-	Transcript *transcript.Service
-	Workflow   WorkflowAsks
-	Reviews    WorkflowReviews
+	Events          *events.Publisher
+	Rejections      *workeroutcomes.PeerRejectionFeed
+	TranscriptStore Transcript
+	TurnStore       Turns
+	Stash           *toolpresentation.Stash
+	Transcript      *transcript.Service
+	Workflow        WorkflowAsks
+	Reviews         WorkflowReviews
 }
 
 func (m *Projection) Build() promptloop.ProjectionDeps {
@@ -79,45 +70,43 @@ func (m *Projection) Build() promptloop.ProjectionDeps {
 		return m.Transcript.Update(ctx, sessionID, messageID, msg)
 	}
 
-	deps.AdmitModelResponse = m.Sessions.AdmitModelResponse
-	deps.SettledModelOutputIteration = func(ctx context.Context, attemptID string) (int, error) {
-		return store.SettledModelOutputIteration(ctx, m.Sessions, attemptID)
-	}
+	deps.AdmitModelResponse = m.TurnStore.AdmitModelResponse
+	deps.SettledModelOutputIteration = m.TurnStore.SettledModelOutputIteration
 	deps.SettleModelOutput = func(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error) {
-		if m == nil || m.Sessions == nil {
+		if m == nil || (m.TranscriptStore == nil || m.TurnStore == nil) {
 			return store.ModelOutput{}, fmt.Errorf("session store not configured")
 		}
-		return m.Sessions.SettleModelOutput(ctx, out)
+		return m.TurnStore.SettleModelOutput(ctx, out)
 	}
 	deps.MarkModelOutputProjected = func(ctx context.Context, outputID string) error {
-		if m == nil || m.Sessions == nil {
+		if m == nil || (m.TranscriptStore == nil || m.TurnStore == nil) {
 			return fmt.Errorf("session store not configured")
 		}
-		return m.Sessions.MarkModelOutputProjected(ctx, outputID)
+		return m.TurnStore.MarkModelOutputProjected(ctx, outputID)
 	}
 	deps.CheckpointTurn = func(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error {
-		if m == nil || m.Sessions == nil {
+		if m == nil || (m.TranscriptStore == nil || m.TurnStore == nil) {
 			return fmt.Errorf("session store not configured")
 		}
-		return m.Sessions.CheckpointTurn(ctx, turnID, attemptID, phase, checkpointJSON)
+		return m.TurnStore.CheckpointTurn(ctx, turnID, attemptID, phase, checkpointJSON)
 	}
 	deps.TouchTurnProgress = func(ctx context.Context, turnID string) error {
-		if m == nil || m.Sessions == nil {
+		if m == nil || (m.TranscriptStore == nil || m.TurnStore == nil) {
 			return fmt.Errorf("session store not configured")
 		}
-		return m.Sessions.TouchTurnProgress(ctx, turnID)
+		return m.TurnStore.TouchTurnProgress(ctx, turnID)
 	}
 	deps.AppendDraftVersion = func(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error) {
 		if m == nil {
 			return 0, fmt.Errorf("session store not configured")
 		}
-		return m.Sessions.AppendDraftVersion(ctx, sessionID, slotID, body, outcomeCode)
+		return m.TranscriptStore.AppendDraftVersion(ctx, sessionID, slotID, body, outcomeCode)
 	}
 	deps.CountDraftVersions = func(ctx context.Context, sessionID, slotID string) (int, error) {
 		if m == nil {
 			return 0, fmt.Errorf("session store not configured")
 		}
-		return m.Sessions.CountDraftVersions(ctx, sessionID, slotID)
+		return m.TranscriptStore.CountDraftVersions(ctx, sessionID, slotID)
 	}
 
 	return deps

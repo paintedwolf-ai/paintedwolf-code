@@ -15,7 +15,7 @@ import (
 
 // SpawnChild creates a child session whose messages stay isolated from the parent.
 func (m *Service) SpawnChild(ctx context.Context, parentID string, req api.SpawnChildRequest) (*api.Session, error) {
-	parent, err := m.store.Get(ctx, parentID)
+	parent, err := m.sessionStore.Get(ctx, parentID)
 	if err != nil {
 		return nil, err
 	}
@@ -24,21 +24,21 @@ func (m *Service) SpawnChild(ctx context.Context, parentID string, req api.Spawn
 	}
 	var child *api.Session
 	err = m.gate.WithSessionTreeAdmission(ctx, parentID, func() error {
-		parentUntrusted, untrustedErr := m.store.SessionUntrustedContentResult(ctx, parentID)
+		parentUntrusted, untrustedErr := m.evidenceStore.SessionUntrustedContentResult(ctx, parentID)
 		if untrustedErr != nil {
 			return fmt.Errorf("read parent untrusted-content state: %w", untrustedErr)
 		}
-		parentSecret, exposureErr := m.store.SessionSecretExposure(ctx, parentID)
+		parentSecret, exposureErr := m.evidenceStore.SessionSecretExposure(ctx, parentID)
 		if exposureErr != nil {
 			return fmt.Errorf("read parent secret-exposure state: %w", exposureErr)
 		}
 		var createErr error
-		child, createErr = m.store.CreateChild(ctx, parent, req)
+		child, createErr = m.sessionStore.CreateChild(ctx, parent, req)
 		if createErr != nil {
 			return createErr
 		}
 		rollbackChild := func(cause error) error {
-			deleteErr := m.store.Delete(context.WithoutCancel(ctx), child.ID)
+			deleteErr := m.sessionStore.Delete(context.WithoutCancel(ctx), child.ID)
 			child = nil
 			if deleteErr != nil {
 				return errors.Join(cause, fmt.Errorf("remove partially initialized child: %w", deleteErr))
@@ -49,13 +49,13 @@ func (m *Service) SpawnChild(ctx context.Context, parentID string, req api.Spawn
 			return rollbackChild(err)
 		}
 		if parentUntrusted {
-			if err := m.store.SeedUntrustedContent(ctx, child.ID); err != nil {
+			if err := m.evidenceStore.SeedUntrustedContent(ctx, child.ID); err != nil {
 				return rollbackChild(fmt.Errorf("inherit untrusted-content state: %w", err))
 			}
 			child.UntrustedContent = true
 		}
 		if parentSecret {
-			if err := m.store.SeedSecretExposure(ctx, child.ID); err != nil {
+			if err := m.evidenceStore.SeedSecretExposure(ctx, child.ID); err != nil {
 				return rollbackChild(fmt.Errorf("inherit secret-exposure state: %w", err))
 			}
 		}
@@ -77,7 +77,7 @@ func (m *Service) assignWorkerModel(ctx context.Context, parent, child *api.Sess
 	if err != nil {
 		return fmt.Errorf("select worker model: %w", err)
 	}
-	if err := m.store.UpdateSession(ctx, child.ID, func(s *api.Session) {
+	if err := m.sessionStore.UpdateSession(ctx, child.ID, func(s *api.Session) {
 		s.ProviderID, s.Model = selection.ProviderID, selection.Model
 	}); err != nil {
 		return fmt.Errorf("save worker model: %w", err)
@@ -119,7 +119,7 @@ func (m *Service) WorkerSummaryFinalizeOpts(ctx context.Context, sess *api.Sessi
 		WorkflowHints:    m.workflowHints,
 		RenderWorkerKick: m.RenderKick,
 		WorkspaceCheck:   m.WorkspaceCheck,
-		Ledger:           m.store,
+		Ledger:           m.evidenceStore,
 		Pipeline:         m.pipeline,
 		DecisionPending:  m.DecisionPending,
 	}

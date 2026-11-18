@@ -2,19 +2,19 @@ package review_test
 
 import (
 	"context"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
+	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -29,7 +29,7 @@ func testRunStore(t *testing.T, sqlDB db.Handle) *runstate.Repository {
 	return s
 }
 
-func testManager(t *testing.T) (*workflow.RunManager, session.Store, *blueprint.Manager, string) {
+func testManager(t *testing.T) (*workflow.RunManager, *store.Repositories, *blueprint.Manager, string) {
 	t.Helper()
 	projectDir := t.TempDir()
 	sqlDB := testdbfixture.Open(t, "store.db")
@@ -39,7 +39,7 @@ func testManager(t *testing.T) (*workflow.RunManager, session.Store, *blueprint.
 	sessStore := store.NewSQL(sqlDB)
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs failed", err)
-	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
+	blueprintStore := blueprinttest.NewFileStore(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	blueprintMgr.Approvals = blueprint.NewApprovalStore(sqlDB, authzcontext.SQLRecorder(sqlDB))
 	mgr := workflow.NewManager(testRunStore(t, sqlDB), sessStore, manifestRegistry, nil)
@@ -95,7 +95,7 @@ func setTestRegistry(t *testing.T, mgr *workflow.RunManager, blueprintMgr *bluep
 	mgr.SetConditionRegistry(reg)
 }
 
-func testManagerWithRegistry(t *testing.T) (*workflow.RunManager, session.Store, *blueprint.Manager, string) {
+func testManagerWithRegistry(t *testing.T) (*workflow.RunManager, *store.Repositories, *blueprint.Manager, string) {
 	t.Helper()
 	mgr, store, blueprintMgr, projectDir := testManager(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())

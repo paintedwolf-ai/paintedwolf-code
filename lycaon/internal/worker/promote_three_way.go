@@ -29,14 +29,16 @@ type promotePathVerdict struct {
 }
 
 func assessPromotePath3Way(ctx context.Context, promote PromoteRoots, task *api.WorkerTask, rel string, baseline *workspacebaseline.Reader) (out promotePathVerdict) {
-	rel = filepath.ToSlash(filepath.Clean(strings.TrimSpace(rel)))
+	rel = filepath.ToSlash(strings.TrimSpace(rel))
 	if rel == "" {
 		return promotePathVerdict{}
 	}
-	primaryAbs, branchAbs, err := promote.fileAbs(task, rel)
+	identity, err := promote.locateIdentity(task, rel)
 	if err != nil {
 		return promotePathVerdict{isConflict: true, conflict: PromoteConflict{Path: rel, Reason: "unreadable merge inputs"}}
 	}
+	rel = projectroot.BaselineDisplayPath(promote.Roots, identity.RootID, identity.ScopeRel)
+	primaryAbs, branchAbs := identity.Primary, identity.Branch
 	primaryBytes, primaryExists, primaryMode, err := readOptionalPromoteFile(primaryAbs)
 	if err != nil {
 		return promotePathVerdict{
@@ -95,7 +97,7 @@ func assessPromotePath3Way(ctx context.Context, promote PromoteRoots, task *api.
 }
 
 func assessPromotePathWithContent(ctx context.Context, primary, branch, rel string, baseline *workspacebaseline.Reader, branchPresent, branchAvailable bool) promotePathVerdict {
-	rel = filepath.ToSlash(filepath.Clean(strings.TrimSpace(rel)))
+	rel = filepath.ToSlash(strings.TrimSpace(rel))
 	if rel == "" {
 		return promotePathVerdict{}
 	}

@@ -33,7 +33,7 @@ func TestStatusRuntimeDerivedNeverPersisted(t *testing.T) {
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 
 	rapid.Check(t, func(t *rapid.T) {
-		sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		failErr(t, "create isolated session", err)
 
 		count := rapid.IntRange(1, 5).Draw(t, "count")
@@ -41,7 +41,7 @@ func TestStatusRuntimeDerivedNeverPersisted(t *testing.T) {
 		for i := 0; i < count; i++ {
 			id := sess.ID + "-message-" + strconv.Itoa(i)
 			ids = append(ids, id)
-			failErr(t, "append", store.AppendMessages(ctx, sess.ID, api.Message{
+			failErr(t, "append", store.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 				ID:          id,
 				Role:        api.MessageRoleAssistant,
 				Content:     rapid.StringMatching(`[a-z ]{0,20}`).Draw(t, "body"),

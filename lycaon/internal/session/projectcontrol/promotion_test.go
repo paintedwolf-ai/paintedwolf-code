@@ -2,10 +2,11 @@ package projectcontrol
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/messageview"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type promotionSessions struct{ Sessions }
@@ -38,7 +39,7 @@ func (*promotionFixture) RejectOverlay(context.Context, string, string, string) 
 
 func TestPromotionAndRejectionRecordHostEventsAtCurrentTurn(t *testing.T) {
 	f := &promotionFixture{}
-	s := New(promotionSessions{}, nil, nil, f, f, f, f)
+	s := New(promotionSessions{}, promotionSessions{}, nil, nil, f, f, f, f)
 	s.SetOverlayPromoter(f)
 	result, err := s.PromoteOverlay(t.Context(), "session", "overlay", api.PromoteOverlayInput{})
 	if err != nil || result.Status != api.WorkerMergeStatusMerged || f.input.UserTurn != 7 {

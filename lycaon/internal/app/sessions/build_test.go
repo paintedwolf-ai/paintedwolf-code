@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -324,12 +324,12 @@ func newWiredSkillHost(t *testing.T) (*toolhost.Runtime, string) {
 		Catalog:    cat,
 	})
 	testutil.FailErr(t, "build native runtime", err)
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	root := configlayout.FindModuleRoot()
 	mgr.SetEffectiveCatalogDeps(root, cat, nil)
 	mgr.Catalog.SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create probe session", err)
 	extpacks.SetActive(cat)
 	t.Cleanup(extpacks.ClearActive)

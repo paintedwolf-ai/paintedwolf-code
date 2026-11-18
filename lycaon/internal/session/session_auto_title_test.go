@@ -12,26 +12,29 @@ import (
 	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/naming"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestAutoTitleSessionIdempotentOnReplay(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	store := store.NewMemory()
+	store := sessionFixture
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".*", Text: "ok"},
 	}})
-	mgr := NewHost(store, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, Lookup: project.ScopeLookup{Registry: reg}})
@@ -49,7 +52,7 @@ func TestAutoTitleSessionIdempotentOnReplay(t *testing.T) {
 	mgr.Chats.Naming.SessionFromPrompt(ctx, sess, userText)
 	hub.FlushDebounced()
 
-	got, err := store.Get(ctx, sess.ID)
+	got, err := store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session", err)
 	want := naming.NameSession(ctx, nil, userText)
 	if got.Title != want {
@@ -80,22 +83,24 @@ func TestAutoTitleSessionIdempotentOnReplay(t *testing.T) {
 }
 
 func TestPublishSessionTitleUsesStoreStatus(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	store := store.NewMemory()
-	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := sessionFixture
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, Lookup: project.ScopeLookup{Registry: reg}})
 
 	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
-	if err := store.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy); err != nil {
+	if err := store.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "set session busy", err)
 	}
 
@@ -132,10 +137,12 @@ func TestPublishSessionTitleUsesStoreStatus(t *testing.T) {
 }
 
 func TestAutoNameProjectSkipsNonDraft(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: t.TempDir()}},
 	})
@@ -144,11 +151,11 @@ func TestAutoNameProjectSkipsNonDraft(t *testing.T) {
 		t.Fatal("expected folder-backed project to have a name")
 	}
 
-	store := store.NewMemory()
+	store := sessionFixture
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".*", Text: "ignored"},
 	}})
-	mgr := NewHost(store, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 
 	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
@@ -195,14 +202,16 @@ func (*blockingNamingLLM) Models() []modelcall.ModelInfo {
 func (*blockingNamingLLM) Profile() providerprofile.Profile { return providerprofile.Profile{} }
 
 func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	mem := store.NewMemory()
+	sessionStore := sessionFixture
 	blocker := &blockingNamingLLM{
 		entered: make(chan struct{}, 2),
 		release: make(chan struct{}),
@@ -218,7 +227,7 @@ func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
 		}),
 		Utility: llm.NewUtilityPlane(),
 	}
-	mgr := NewHost(mem, Models{Client: blocker, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(sessionStore, Models{Client: blocker, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 	t.Cleanup(func() {
 		select {
@@ -256,7 +265,7 @@ func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
 		t.Fatal("naming LLM never started")
 	}
 
-	got, err := mem.Get(ctx, sess.ID)
+	got, err := sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session mid-name", err)
 	if got.Title != "" {
 		t.Fatalf("title set before naming finished: %q", got.Title)
@@ -269,7 +278,7 @@ func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
 		t.Fatal("naming work did not finish after provider release")
 	}
 
-	got, err = mem.Get(ctx, sess.ID)
+	got, err = sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session after name", err)
 	if got.Title != "Background title" {
 		t.Fatalf("title = %q want %q", got.Title, "Background title")
@@ -284,7 +293,7 @@ func TestCurationSharesLocalCoordinator(t *testing.T) {
 		Coordinator: llm.ModelRef{ProviderID: "ollama-1", Model: "gemma4:e2b"},
 		Lite:        llm.ModelRef{ProviderID: "ollama-1", Model: "gemma4:e2b"},
 	})
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.Runner.Curation.SetModelSources(policy, registry)
 
 	if !mgr.Runner.Curation.SharesCoordinatorCapacity(ctx, &api.Session{ProviderID: "ollama-1"}) {
@@ -301,26 +310,26 @@ func TestCurationSharesLocalCoordinator(t *testing.T) {
 
 func TestWorkflowRequestCurationPreservesManualTitlesAndExcludesWorkers(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	parent, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
+	sessionStore := storetest.New(t, "project-1")
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	parent, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
 	testutil.FailErr(t, "create root chat", err)
 	_, err = mgr.Chats.Naming.SetTitle(t.Context(), parent.ID, "Manual orchard title")
 	testutil.FailErr(t, "set manual title", err)
-	child, err := mem.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "researcher"})
+	child, err := sessionStore.Sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "researcher"})
 	testutil.FailErr(t, "create worker", err)
-	before, err := mem.Get(t.Context(), child.ID)
+	before, err := sessionStore.Sessions.Get(t.Context(), child.ID)
 	testutil.FailErr(t, "get worker title", err)
 	mgr.Runner.Curation.AcceptedWorkflowRequest(t.Context(), parent.ID, "A different workflow request")
 	mgr.Runner.Curation.AcceptedWorkflowRequest(t.Context(), child.ID, "A worker request")
 	mgr.Runner.Curation.AcceptedWorkflowRequest(t.Context(), "missing-session", "A missing request")
 	mgr.Runner.Curation.Wait(t.Context())
-	got, err := mem.Get(t.Context(), parent.ID)
+	got, err := sessionStore.Sessions.Get(t.Context(), parent.ID)
 	testutil.FailErr(t, "get root title", err)
 	if got.Title != "Manual orchard title" {
 		t.Fatalf("manual title changed to %q", got.Title)
 	}
-	worker, err := mem.Get(t.Context(), child.ID)
+	worker, err := sessionStore.Sessions.Get(t.Context(), child.ID)
 	testutil.FailErr(t, "get worker after curation", err)
 	if worker.Title != before.Title {
 		t.Fatalf("worker title changed from %q to %q", before.Title, worker.Title)
@@ -329,16 +338,16 @@ func TestWorkflowRequestCurationPreservesManualTitlesAndExcludesWorkers(t *testi
 
 func TestAcceptedWorkflowRequestCurationSurvivesInitiatingTurnCancellation(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
+	sessionStore := storetest.New(t, "project-1")
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
 	testutil.FailErr(t, "create chat", err)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	text := "Review the orchard irrigation choices"
 	mgr.Runner.Curation.AcceptedWorkflowRequest(ctx, sess.ID, text)
 	mgr.Runner.Curation.Wait(t.Context())
-	got, err := mem.Get(t.Context(), sess.ID)
+	got, err := sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get named chat", err)
 	if got.Title != naming.NameSession(t.Context(), nil, text) {
 		t.Fatalf("accepted workflow title = %q", got.Title)
@@ -346,18 +355,20 @@ func TestAcceptedWorkflowRequestCurationSurvivesInitiatingTurnCancellation(t *te
 }
 
 func TestEngineShutdownCancelsAndDrainsDetachedNaming(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "")
 	ctx := t.Context()
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
-	mem := store.NewMemory()
+	sessionStore := sessionFixture
 	blocker := &blockingNamingLLM{entered: make(chan struct{}, 2), release: make(chan struct{}), text: "Should never publish"}
 	providers := &llm.Registry{}
 	providers.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	testutil.FailErr(t, "register naming provider", providers.Register(blocker))
 	svc := &llm.Service{Registry: providers, Policy: llm.NewInMemoryPolicyStore(llm.ModelPolicy{Lite: llm.ModelRef{ProviderID: blocker.ID(), Model: "naming-model"}}), Utility: llm.NewUtilityPlane()}
-	mgr := NewHost(mem, Models{Client: blocker, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(sessionStore, Models{Client: blocker, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
@@ -376,7 +387,7 @@ func TestEngineShutdownCancelsAndDrainsDetachedNaming(t *testing.T) {
 	}
 	mgr.BeginEngineShutdown()
 	testutil.FailErr(t, "drain engine naming", mgr.WaitForEngineShutdown(ctx))
-	got, err := mem.Get(ctx, sess.ID)
+	got, err := sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read settled session", err)
 	if got.Title != "" {
 		t.Fatalf("cancelled naming published title %q", got.Title)

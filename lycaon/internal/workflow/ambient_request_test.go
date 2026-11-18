@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/hostctx"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -77,7 +77,7 @@ func TestEnsureSessionWorkflowConcurrentRequestsShareRun(t *testing.T) {
 }
 
 type workflowSessionReadStub struct {
-	session.Store
+	sessionstore.SessionRepository
 	sess *api.Session
 	err  error
 }
@@ -88,7 +88,7 @@ func (s workflowSessionReadStub) Get(context.Context, string) (*api.Session, err
 
 func TestEnsureSessionWorkflowWorkersAndReadFailures(t *testing.T) {
 	mgr, sessions, _, _ := testManager(t)
-	workerSessions := workflowSessionReadStub{Store: sessions, sess: &api.Session{ID: "worker", ParentSessionID: "sess-1"}}
+	workerSessions := workflowSessionReadStub{SessionRepository: sessions.Sessions, sess: &api.Session{ID: "worker", ParentSessionID: "sess-1"}}
 	mgr.Policy.Sessions = workerSessions
 	mgr.Ambient.Sessions = workerSessions
 	run, err := mgr.Ambient.EnsureSessionWorkflow(t.Context(), "worker")
@@ -98,10 +98,10 @@ func TestEnsureSessionWorkflowWorkersAndReadFailures(t *testing.T) {
 	}
 	testutil.FailErr(t, "worker runnable without ambient", mgr.Policy.AssertSessionRunnable(t.Context(), "worker"))
 	failure := errors.New("session read failed")
-	failedSessions := workflowSessionReadStub{Store: sessions, err: failure}
+	failedSessions := workflowSessionReadStub{SessionRepository: sessions.Sessions, err: failure}
 	mgr.Policy.Sessions = failedSessions
 	mgr.Ambient.Sessions = failedSessions
-	mgr.Requests.Sessions = failedSessions
+	mgr.Requests.SessionStore = failedSessions
 	_, _, _, err = mgr.Requests.PrepareUserRequest(t.Context(), "sess-1", "follow up")
 	if !errors.Is(err, failure) {
 		t.Fatalf("prepare error = %v, want session read failure", err)

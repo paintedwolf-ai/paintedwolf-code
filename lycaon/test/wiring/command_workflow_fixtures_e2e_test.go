@@ -151,7 +151,7 @@ func (f *commandWorkflowFixture) run(t *testing.T) {
 
 func (f *commandWorkflowFixture) outcome(t *testing.T, callID string) command.ProgramOutcome {
 	t.Helper()
-	msgs, err := f.h.Store.GetMessages(t.Context(), f.session)
+	msgs, err := f.h.Store.Transcript.GetMessages(t.Context(), f.session)
 	testutil.FailErr(t, "get messages", err)
 	for _, raw := range msgs {
 		msg := messageview.RedactMessage(raw)

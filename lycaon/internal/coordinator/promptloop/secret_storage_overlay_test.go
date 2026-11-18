@@ -3,7 +3,6 @@ package promptloop
 import (
 	"bytes"
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -181,7 +181,7 @@ func TestToolResultSecretIsRedactedBeforeEveryDurableConsumer(t *testing.T) {
 	sqlDB := testdbfixture.OpenPath(t, dbPath)
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	sqlStore := storepkg.NewSQL(sqlDB)
-	sess, err := sqlStore.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := sqlStore.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)
@@ -195,10 +195,10 @@ func TestToolResultSecretIsRedactedBeforeEveryDurableConsumer(t *testing.T) {
 			RedactMessageForStorage: testStorageRedactor,
 			AppendMessages: func(ctx context.Context, sessionID string, msgs ...api.Message) error {
 				appended = append(appended, msgs...)
-				return sqlStore.AppendMessages(ctx, sessionID, msgs...)
+				return sqlStore.Transcript.AppendMessages(ctx, sessionID, msgs...)
 			},
 			UpdateMessage: func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
-				_, err := sqlStore.UpdateMessage(ctx, sessionID, messageID, msg)
+				_, err := sqlStore.Transcript.UpdateMessage(ctx, sessionID, messageID, msg)
 				return err
 			},
 		},
@@ -206,7 +206,7 @@ func TestToolResultSecretIsRedactedBeforeEveryDurableConsumer(t *testing.T) {
 			CommitEvidenceToolResult: func(ctx context.Context, sessionID string, _ *api.Session, toolName string, args map[string]any, content, _ string) (string, string, error) {
 				evidence = content
 				evidenceArg, _ = args["token"].(string)
-				return sqlStore.CommitEvidenceToolResult(ctx, sessionID, dir, toolName, args, content)
+				return sqlStore.Evidence.CommitEvidenceToolResult(ctx, sessionID, dir, toolName, args, content)
 			},
 			CompactToolWire: func(_ context.Context, _ *api.Session, _ string, content string, _ compaction.CompactToolWireOpts) (string, *api.CompactedChunkMeta) {
 				compacted = content

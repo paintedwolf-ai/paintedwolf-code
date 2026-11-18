@@ -29,6 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/projectignore"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -36,7 +37,7 @@ import (
 
 func (s *commandProgramSession) outcome(t *testing.T, callID string) command.ProgramOutcome {
 	t.Helper()
-	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
+	msgs, err := s.h.Store.Transcript.GetMessages(t.Context(), s.session)
 	testutil.FailErr(t, "get messages", err)
 	for _, raw := range msgs {
 		msg := messageview.RedactMessage(raw)
@@ -255,13 +256,13 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 			testutil.FailErr(t, "seed expected", os.WriteFile(filepath.Join(s.dir, "expected.txt"), []byte(body), 0o600))
 			testutil.FailErr(t, "run command", s.prompt(t.Context()))
 
-			untrusted, err := s.h.Sessions.Store.SessionUntrustedContentResult(t.Context(), s.session)
+			untrusted, err := store.NewSQL(s.h.DB).Evidence.SessionUntrustedContentResult(t.Context(), s.session)
 			testutil.FailErr(t, "SessionUntrustedContentResult", err)
 			if untrusted != tc.wantUntrusted {
 				t.Fatalf("SessionUntrustedContentResult = %v, want %v", untrusted, tc.wantUntrusted)
 			}
 			if tc.wantURL != "" {
-				ev, err := s.h.Sessions.Store.LoadLedger(t.Context(), s.session)
+				ev, err := s.h.Store.Evidence.LoadLedger(t.Context(), s.session)
 				testutil.FailErr(t, "LoadLedger", err)
 				urls := evidence.ObservedURLsSorted(ev)
 				if !strings.Contains(strings.Join(urls, ","), tc.wantURL) {
@@ -294,7 +295,8 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 		_, err := s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, "step 1 download")
 		testutil.FailErr(t, "step 1 download", err)
 
-		untrustedAfterDownload, err := s.h.Sessions.Store.SessionUntrustedContentResult(t.Context(), s.session)
+		// Each reader observes durable app commits without retaining a separate cache.
+		untrustedAfterDownload, err := store.NewSQL(s.h.DB).Evidence.SessionUntrustedContentResult(t.Context(), s.session)
 		testutil.FailErr(t, "SessionUntrustedContentResult after download", err)
 		if untrustedAfterDownload {
 			t.Fatal("file-only download must not mark model ingestion before file is read")
@@ -303,13 +305,13 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 		_, err = s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, "step 2 inspect")
 		testutil.FailErr(t, "step 2 inspect", err)
 
-		untrustedAfterRead, err := s.h.Sessions.Store.SessionUntrustedContentResult(t.Context(), s.session)
+		untrustedAfterRead, err := store.NewSQL(s.h.DB).Evidence.SessionUntrustedContentResult(t.Context(), s.session)
 		testutil.FailErr(t, "SessionUntrustedContentResult after cat", err)
 		if !untrustedAfterRead {
 			t.Fatal("subsequent cat of external custody file must mark untrusted ingestion")
 		}
 
-		ev, err := s.h.Sessions.Store.LoadLedger(t.Context(), s.session)
+		ev, err := s.h.Store.Evidence.LoadLedger(t.Context(), s.session)
 		testutil.FailErr(t, "LoadLedger", err)
 		urls := evidence.ObservedURLsSorted(ev)
 		if !strings.Contains(strings.Join(urls, ","), apiBase+"/v1/saved") {
@@ -351,7 +353,7 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 		testutil.FailErr(t, "step 1 download", err)
 		_, err = s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, "step 2 partial sed")
 		testutil.FailErr(t, "step 2 partial sed", err)
-		evAfterPartial, err := s.h.Sessions.Store.LoadLedger(t.Context(), s.session)
+		evAfterPartial, err := s.h.Store.Evidence.LoadLedger(t.Context(), s.session)
 		testutil.FailErr(t, "LoadLedger after sed -i", err)
 		custodyAfterPartial := evidence.ExternalCustodyURLs(evAfterPartial, []string{"saved.txt"})
 		if !slices.Contains(custodyAfterPartial, apiBase+"/v1/saved") {
@@ -360,7 +362,7 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 
 		_, err = s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, "step 3 full overwrite")
 		testutil.FailErr(t, "step 3 full overwrite", err)
-		evAfterOverwrite, err := s.h.Sessions.Store.LoadLedger(t.Context(), s.session)
+		evAfterOverwrite, err := s.h.Store.Evidence.LoadLedger(t.Context(), s.session)
 		testutil.FailErr(t, "LoadLedger after > overwrite", err)
 		custodyAfterOverwrite := evidence.ExternalCustodyURLs(evAfterOverwrite, []string{"saved.txt"})
 		if len(custodyAfterOverwrite) != 0 {
@@ -369,7 +371,7 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 
 		_, err = s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, "step 4 cat after overwrite")
 		testutil.FailErr(t, "step 4 cat after overwrite", err)
-		untrustedAfterCleanRead, err := s.h.Sessions.Store.SessionUntrustedContentResult(t.Context(), s.session)
+		untrustedAfterCleanRead, err := store.NewSQL(s.h.DB).Evidence.SessionUntrustedContentResult(t.Context(), s.session)
 		testutil.FailErr(t, "SessionUntrustedContentResult after cat of overwritten file", err)
 		if untrustedAfterCleanRead {
 			t.Fatal("cat of file after full local overwrite must not mark untrusted ingestion")

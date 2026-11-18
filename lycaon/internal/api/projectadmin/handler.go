@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/extensionadmin"
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/board"
@@ -22,6 +23,7 @@ import (
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspace"
@@ -41,7 +43,7 @@ type Deps struct {
 	Registry       project.Registry
 	ProjectRules   *rules.ProjectRulesOverlay
 	ScanCadence    *scancadence.Service
-	Store          session.Store
+	Store          *sessionstore.Repositories
 	Sessions       *session.Host
 	Settings       *settings.Service
 	// WorkerBranchRoot holds host-only worker storage.
@@ -70,7 +72,7 @@ type Projects struct {
 	Roots           *Roots
 	Sessions        *session.Host
 	Settings        *settings.Service
-	Store           session.Store
+	SessionStore    requestscope.Sessions
 	Verification    *Verification
 	responses       *httpio.Responder
 	sourceWorkspace *sourceapi.Workspace
@@ -117,7 +119,7 @@ type Roots struct {
 	ScanCadence     *scancadence.Service
 	Sessions        *session.Host
 	Settings        *settings.Service
-	Store           session.Store
+	RewindStore     sessionstore.RewindRepository
 	Verification    *Verification
 	background      *taskgroup.Group
 	responses       *httpio.Responder
@@ -178,13 +180,14 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 		httpio.Required{Name: "Sessions", Present: deps.Sessions != nil},
 		httpio.Required{Name: "Settings.TrustSurfaces", Present: deps.Settings != nil && deps.Settings.TrustSurfaces != nil},
 		httpio.Required{Name: "Settings.Verify", Present: deps.Settings != nil && deps.Settings.Verify != nil},
-		httpio.Required{Name: "Store", Present: deps.Store != nil},
+		httpio.Required{Name: "Store.Rewind", Present: deps.Store != nil && deps.Store.Rewind != nil},
+		httpio.Required{Name: "Store.Sessions", Present: deps.Store != nil && deps.Store.Sessions != nil},
 	)
 	h := Handler{}
-	h.Projects = &Projects{Events: deps.Events, Extensions: deps.Extensions.Mutations, MutationGate: deps.MutationGate, Registry: deps.Registry, Sessions: deps.Sessions, Settings: deps.Settings, Store: deps.Store, responses: responses, sourceWorkspace: deps.Sources.Workspace}
+	h.Projects = &Projects{Events: deps.Events, Extensions: deps.Extensions.Mutations, MutationGate: deps.MutationGate, Registry: deps.Registry, Sessions: deps.Sessions, Settings: deps.Settings, SessionStore: deps.Store.Sessions, responses: responses, sourceWorkspace: deps.Sources.Workspace}
 	h.Promotion = &Promotion{Git: deps.Git, MutationGate: deps.MutationGate, Registry: deps.Registry, Sessions: deps.Sessions, responses: responses, sourceViews: deps.Sources.Views}
 	h.Removal = &Removal{background: background, DataDir: deps.DataDir, Database: deps.Database, Extensions: deps.Extensions.Mutations, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, Registry: deps.Registry, Sessions: deps.Sessions, Settings: deps.Settings, responses: responses, sourceViews: deps.Sources.Views, sourceWatch: deps.Sources.Watch}
-	h.Roots = &Roots{DataDir: deps.DataDir, Git: deps.Git, MutationGate: deps.MutationGate, ProjectRules: deps.ProjectRules, Registry: deps.Registry, ScanCadence: deps.ScanCadence, Sessions: deps.Sessions, Settings: deps.Settings, Store: deps.Store, background: background, responses: responses, sourceEditor: deps.Sources.Editor, sourceViews: deps.Sources.Views, sourceWatch: deps.Sources.Watch, sourceWorkspace: deps.Sources.Workspace}
+	h.Roots = &Roots{DataDir: deps.DataDir, Git: deps.Git, MutationGate: deps.MutationGate, ProjectRules: deps.ProjectRules, Registry: deps.Registry, ScanCadence: deps.ScanCadence, Sessions: deps.Sessions, Settings: deps.Settings, RewindStore: deps.Store.Rewind, background: background, responses: responses, sourceEditor: deps.Sources.Editor, sourceViews: deps.Sources.Views, sourceWatch: deps.Sources.Watch, sourceWorkspace: deps.Sources.Workspace}
 	h.Sandboxes = &Sandboxes{Board: deps.Board, Sessions: deps.Sessions, WorkerBranchRoot: deps.WorkerBranchRoot, Workers: deps.Workers, background: background}
 	h.Secrets = &Secrets{ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, Registry: deps.Registry, SecretIgnores: deps.SecretIgnores, responses: responses}
 	h.Trust = &Trust{Events: deps.Events, Extensions: deps.Extensions.Mutations, Registry: deps.Registry, Settings: deps.Settings, responses: responses}

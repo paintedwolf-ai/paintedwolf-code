@@ -144,7 +144,6 @@ func TestEffortLevelsRejectPartialOrInvalidYAML(t *testing.T) {
 
 // Explicit off is distinct from omitting the reasoning field.
 func TestReasoningFallbackReachesExplicitOffOnTheWire(t *testing.T) {
-	t.Cleanup(openaicompat.ResetReasoningProbeForTest)
 
 	var efforts []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -168,7 +167,7 @@ func TestReasoningFallbackReachesExplicitOffOnTheWire(t *testing.T) {
 
 	built, err := driverFactories.Build(context.Background(), "openai", providerBuild{
 		entry: CatalogEntry{
-			ID:      "openai-1",
+			ID:      t.Name() + srv.URL,
 			Kind:    "openai",
 			BaseURL: srv.URL,
 			Models:  []modelinfo.Entry{{ID: "m", MaxTokens: 4096}},

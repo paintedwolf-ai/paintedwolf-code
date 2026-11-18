@@ -11,9 +11,11 @@ import (
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/repochange"
-	"github.com/lycaon/lycaon/internal/session/store"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -26,10 +28,11 @@ var exitZero = 0
 func (s stubVerifyConfig) VerifyTestCommand(string) string { return s.cmd }
 
 // verifyGateHarness creates a session with persistent evidence.
-func verifyGateHarness(t *testing.T, declared string) (*Host, *api.Session, []api.Message) {
+func verifyGateHarness(t *testing.T, declared string) (*Host, *api.Session, []api.Message, *sessionstore.Repositories) {
 	t.Helper()
 	ctx := context.Background()
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessions := storetest.New(t, "verify-proj")
+	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
 	mgr.Verification.SetRevisionSource(func(_ context.Context, root string) (string, string) {
@@ -38,17 +41,16 @@ func verifyGateHarness(t *testing.T, declared string) (*Host, *api.Session, []ap
 	if declared != "" {
 		mgr.Verification.SetVerifyConfig(stubVerifyConfig{cmd: declared})
 	}
-	sess, err := mgr.Coordinator.Context.Sessions.(Store).Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "verify-proj")
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	sess.ProjectID = "verify-proj"
-	sess.WorkspacePath = t.TempDir()
+
 	history := []api.Message{{Role: api.MessageRoleUser, Content: "do the work", CreatedAt: time.Now().Add(-time.Minute)}}
-	return mgr, sess, history
+	return mgr, sess, history, sessions
 }
 
-// statedRun is the subsystem owner's invocation result.
+// statedRun supplies a terminal invocation result.
 func statedRun(command string, exitCode int) tools.SourceRunCapture {
 	verdict := api.SourceVerdictPassed
 	if exitCode != 0 {
@@ -92,7 +94,7 @@ func (s verifyWorkflowStub) ActivePhaseRequiresEvidence(context.Context, string,
 }
 
 func TestWorkflowVerifyGateStateRequiresExplicitWorkflowEvidence(t *testing.T) {
-	mgr, sess, history := verifyGateHarness(t, "")
+	mgr, sess, history, _ := verifyGateHarness(t, "")
 	history = workSince(history)
 	if required, passed, repair, unverified := mgr.Verification.WorkflowGateState(context.Background(), sess, history); required || passed || repair || unverified {
 		t.Fatalf("changed source invented a workflow gate: (%v,%v,%v,%v)", required, passed, repair, unverified)
@@ -105,7 +107,7 @@ func TestWorkflowVerifyGateStateRequiresExplicitWorkflowEvidence(t *testing.T) {
 }
 
 func TestVerifyGateState_undeclaredReadOnlyHasNothingToVerify(t *testing.T) {
-	mgr, sess, history := verifyGateHarness(t, "")
+	mgr, sess, history, _ := verifyGateHarness(t, "")
 	if p, r, u := mgr.Verification.GateState(context.Background(), sess, history); p || r || u {
 		t.Fatalf("no command, no work = (pass %v, repair %v, unverified %v) want all false", p, r, u)
 	}
@@ -117,7 +119,7 @@ func TestVerifyGateState_undeclaredReadOnlyHasNothingToVerify(t *testing.T) {
 }
 
 func TestVerifyGateState_undeclaredWithWorkIsUnverified(t *testing.T) {
-	mgr, sess, history := verifyGateHarness(t, "")
+	mgr, sess, history, _ := verifyGateHarness(t, "")
 	history = workSince(history)
 	if p, r, u := mgr.Verification.GateState(context.Background(), sess, history); p || r || u {
 		t.Fatalf("work, no attempt = (pass %v, repair %v, unverified %v) want all false", p, r, u)
@@ -129,7 +131,7 @@ func TestVerifyGateState_undeclaredWithWorkIsUnverified(t *testing.T) {
 }
 
 func TestVerifyGateState_failingExitIsRepair(t *testing.T) {
-	mgr, sess, history := verifyGateHarness(t, "go test ./...")
+	mgr, sess, history, _ := verifyGateHarness(t, "go test ./...")
 	recordVerify(t, mgr, sess, "go test ./...", 1)
 	p, r, u := mgr.Verification.GateState(context.Background(), sess, history)
 	if p || !r || u {
@@ -138,7 +140,7 @@ func TestVerifyGateState_failingExitIsRepair(t *testing.T) {
 }
 
 func TestVerifyGateState_capExhaustedIsUnverified(t *testing.T) {
-	mgr, sess, history := verifyGateHarness(t, "go test ./...")
+	mgr, sess, history, _ := verifyGateHarness(t, "go test ./...")
 	// Under the cap: still repair.
 	recordVerify(t, mgr, sess, "go test ./...", 1)
 	recordVerify(t, mgr, sess, "go test ./...", 1)
@@ -159,7 +161,7 @@ func TestVerifyGateState_capExhaustedIsUnverified(t *testing.T) {
 }
 
 func TestVerifyGateState_declaredCommandMatch(t *testing.T) {
-	mgr, sess, history := verifyGateHarness(t, "./task check")
+	mgr, sess, history, _ := verifyGateHarness(t, "./task check")
 	// A selected command narrows the gate's accepted evidence.
 	recordVerify(t, mgr, sess, "go test ./...", 0)
 	if p, _, _ := mgr.Verification.GateState(context.Background(), sess, history); p {
@@ -172,7 +174,7 @@ func TestVerifyGateState_declaredCommandMatch(t *testing.T) {
 }
 
 func TestVerifyGateState_sourceChangeInvalidatesPass(t *testing.T) {
-	mgr, sess, history := verifyGateHarness(t, "./task check")
+	mgr, sess, history, _ := verifyGateHarness(t, "./task check")
 	recordVerify(t, mgr, sess, "./task check", 0)
 	if passed, _, _ := mgr.Verification.GateState(context.Background(), sess, history); !passed {
 		t.Fatal("current revision did not accept its verify evidence")
@@ -192,7 +194,7 @@ func TestVerifyGateState_sourceChangeInvalidatesPass(t *testing.T) {
 func TestRecordSourceRunEvidenceIgnoresLaunchOnlyCapture(t *testing.T) {
 	for _, producer := range []string{verification.ProducerVerify, verification.ProducerCommand} {
 		t.Run(producer, func(t *testing.T) {
-			mgr, sess, history := verifyGateHarness(t, "./task check")
+			mgr, sess, history, _ := verifyGateHarness(t, "./task check")
 			mgr.Verification.RecordSourceRunEvidence(t.Context(), sess.ID, sess, producer, tools.SourceRunCapture{})
 			if passed, repair, exhausted := mgr.Verification.GateState(t.Context(), sess, history); passed || repair || exhausted {
 				t.Fatalf("launch recorded as terminal evidence: pass=%v repair=%v exhausted=%v", passed, repair, exhausted)
@@ -202,7 +204,7 @@ func TestRecordSourceRunEvidenceIgnoresLaunchOnlyCapture(t *testing.T) {
 }
 
 func TestVerifyGateState_undeclaredCommandPassSatisfies(t *testing.T) {
-	mgr, sess, history := verifyGateHarness(t, "")
+	mgr, sess, history, _ := verifyGateHarness(t, "")
 	history = workSince(history)
 	recordCommand(t, mgr, sess, "./ntp_check.py --json", 0)
 	if p, _, u := mgr.Verification.GateState(context.Background(), sess, history); !p || u {
@@ -211,7 +213,7 @@ func TestVerifyGateState_undeclaredCommandPassSatisfies(t *testing.T) {
 }
 
 func TestVerifyGateStateDeclaredAcceptsMatchingCommandPass(t *testing.T) {
-	mgr, sess, history := verifyGateHarness(t, "./task check")
+	mgr, sess, history, _ := verifyGateHarness(t, "./task check")
 	recordCommand(t, mgr, sess, "./task check", 0)
 	if p, _, _ := mgr.Verification.GateState(context.Background(), sess, history); !p {
 		t.Fatal("declared gate must accept its command through either execution tool")
@@ -219,7 +221,7 @@ func TestVerifyGateStateDeclaredAcceptsMatchingCommandPass(t *testing.T) {
 }
 
 func TestVerifyGateState_commandUnverifiableCountsAsAttempt(t *testing.T) {
-	mgr, sess, history := verifyGateHarness(t, "")
+	mgr, sess, history, _ := verifyGateHarness(t, "")
 	mgr.Verification.RecordSourceRunEvidence(context.Background(), sess.ID, sess, verification.ProducerCommand, tools.SourceRunCapture{
 		Command: "./ntp_check.py --json", ExitCode: 1, Verdict: api.SourceVerdictUnverifiable,
 		IsCheck: true,
@@ -232,17 +234,19 @@ func TestVerifyGateState_commandUnverifiableCountsAsAttempt(t *testing.T) {
 
 func TestWorkflowSourceVerifyPassedReadsCurrentSessionEvidence(t *testing.T) {
 	ctx := t.Context()
-	memory := store.NewMemory()
-	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessionStore := storetest.New(t, "verify-proj")
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
 	mgr.Verification.SetRevisionSource(func(_ context.Context, root string) (string, string) {
 		return invocation.SourceRevisionForRoot(root)
 	})
-	sess, err := memory.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
 	testutil.FailErr(t, "create verify session", err)
-	sess.WorkspacePath = t.TempDir()
-	testutil.FailErr(t, "append user boundary", memory.AppendMessages(ctx, sess.ID, api.Message{
+	testdbseed.BindSessionWorkspace(t, sessionStore, sess.ID, t.TempDir())
+	sess, err = sessionStore.Sessions.Get(ctx, sess.ID)
+	testutil.FailErr(t, "reload session workspace", err)
+	testutil.FailErr(t, "append user boundary", sessionStore.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		ID: "user-1", Role: api.MessageRoleUser, Content: "fix it", CreatedAt: time.Now().Add(-time.Minute),
 	}))
 	recordVerify(t, mgr, sess, "go test ./...", 0)
@@ -257,7 +261,7 @@ func TestWorkflowSourceVerifyPassedReadsCurrentSessionEvidence(t *testing.T) {
 func TestSourceRunEvidenceRequiresTerminalVerdict(t *testing.T) {
 	for _, outcome := range []string{"", "unknown"} {
 		t.Run(outcome, func(t *testing.T) {
-			mgr, sess, history := verifyGateHarness(t, "project-check")
+			mgr, sess, history, _ := verifyGateHarness(t, "project-check")
 			run := statedRun("project-check", 0)
 			run.Verdict = outcome
 			run.SourceRevision, run.SourceRootDigest = invocation.SourceRevisionForRoot(sess.WorkspacePath)
@@ -276,12 +280,12 @@ func TestSourceRunEvidenceRequiresTerminalVerdict(t *testing.T) {
 
 func TestCommandCompletionRecordsPromotedCommandEvidence(t *testing.T) {
 	ctx := context.Background()
-	memory := store.NewMemory()
-	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessionStore := storetest.New(t, "verify-proj")
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	evidenceStore := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 	mgr.Verification.SetEvidenceStore(evidenceStore)
-	sess, err := memory.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
 	testutil.FailErr(t, "create completion session", err)
 
 	finishedAt := time.Now().UTC()
@@ -310,12 +314,12 @@ func TestCommandCompletionRecordsPromotedCommandEvidence(t *testing.T) {
 
 func TestCommandCompletionRecordsPromotedVerifyEvidence(t *testing.T) {
 	ctx := context.Background()
-	memory := store.NewMemory()
-	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessionStore := storetest.New(t, "verify-proj")
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	evidenceStore := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 	mgr.Verification.SetEvidenceStore(evidenceStore)
-	sess, err := memory.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
 	testutil.FailErr(t, "create completion session", err)
 
 	finishedAt := time.Now().UTC()
@@ -350,7 +354,7 @@ func TestVerifyGateStatePreservesSelectedBashSemantics(t *testing.T) {
 		{"control operator", `check && report`, `check || report`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			mgr, sess, history := verifyGateHarness(t, tc.selected)
+			mgr, sess, history, _ := verifyGateHarness(t, tc.selected)
 			recordVerify(t, mgr, sess, tc.executed, 0)
 			if passed, _, _ := mgr.Verification.GateState(t.Context(), sess, history); passed != tc.passed {
 				t.Fatalf("selected=%q executed=%q passed=%v", tc.selected, tc.executed, passed)
@@ -362,7 +366,7 @@ func TestVerifyGateStatePreservesSelectedBashSemantics(t *testing.T) {
 func TestVerifyGateRejectsIncompleteSourceEvidence(t *testing.T) {
 	for _, missing := range []string{"revision", "root", "verdict"} {
 		t.Run(missing, func(t *testing.T) {
-			mgr, sess, history := verifyGateHarness(t, "./task check")
+			mgr, sess, history, _ := verifyGateHarness(t, "./task check")
 			run := statedRun("./task check", 0)
 			run.SourceRevision, run.SourceRootDigest = invocation.SourceRevisionForRoot(sess.WorkspacePath)
 			switch missing {
@@ -384,7 +388,7 @@ func TestVerifyGateRejectsIncompleteSourceEvidence(t *testing.T) {
 func TestProgramVerificationEvidenceRetainsVerdictScope(t *testing.T) {
 	for _, program := range []string{"", "019af176-8bc7-7000-8000-000000000001"} {
 		t.Run(program, func(t *testing.T) {
-			mgr, sess, _ := verifyGateHarness(t, "")
+			mgr, sess, _, _ := verifyGateHarness(t, "")
 			evidenceStore := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 			mgr.Verification.SetEvidenceStore(evidenceStore)
 			run := statedRun("false; printf reported", 0)

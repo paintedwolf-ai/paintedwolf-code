@@ -20,15 +20,18 @@ import (
 )
 
 type Sessions interface {
-	Get(context.Context, string) (*api.Session, error)
-	CreateChild(context.Context, *api.Session, api.SpawnChildRequest) (*api.Session, error)
-	Delete(context.Context, string) error
-	UpdateSession(context.Context, string, func(*api.Session)) error
-	SessionUntrustedContentResult(context.Context, string) (bool, error)
-	SessionSecretExposure(context.Context, string) (bool, error)
-	SeedUntrustedContent(context.Context, string) error
-	SeedSecretExposure(context.Context, string) error
-	LoadLedger(context.Context, string) (evidence.Ledger, error)
+	CreateChild(ctx context.Context, parent *api.Session, req api.SpawnChildRequest) (*api.Session, error)
+	Delete(ctx context.Context, id string) error
+	Get(ctx context.Context, id string) (*api.Session, error)
+	UpdateSession(ctx context.Context, id string, fn func(*api.Session)) error
+}
+
+type Evidence interface {
+	LoadLedger(ctx context.Context, sessionID string) (evidence.Ledger, error)
+	SeedSecretExposure(ctx context.Context, sessionID string) error
+	SeedUntrustedContent(ctx context.Context, sessionID string) error
+	SessionSecretExposure(ctx context.Context, sessionID string) (bool, error)
+	SessionUntrustedContentResult(ctx context.Context, sessionID string) (bool, error)
 }
 type Workspace interface {
 	SettingsRoots(context.Context, *api.Session) []string
@@ -59,7 +62,8 @@ type Service struct {
 	Notes         *workeroutcomes.Notes
 	Rejections    *workeroutcomes.PeerRejectionFeed
 
-	store          Sessions
+	sessionStore   Sessions
+	evidenceStore  Evidence
 	workspace      Workspace
 	gate           Admission
 	guidance       Guidance
@@ -73,11 +77,11 @@ type Service struct {
 	decisions      Decisions
 }
 
-func New(sessions Sessions, workspace Workspace, gate Admission, guidance Guidance, limits Limits, router *llm.StaticModelRouter, peers PeerServices) *Service {
-	return &Service{Workspaces: peers.Workspaces, Cancel: peers.Cancel, Cards: peers.Cards, Cancellations: peers.Cancellations, Delivery: peers.Delivery, Summaries: peers.Summaries, Results: peers.Results, Digests: peers.Digests, State: peers.State, Notes: peers.Notes, Rejections: peers.Rejections, store: sessions, workspace: workspace, gate: gate, guidance: guidance, limits: limits, router: router}
+func New(sessionStore Sessions, evidenceStore Evidence, workspace Workspace, gate Admission, guidance Guidance, limits Limits, router *llm.StaticModelRouter, peers PeerServices) *Service {
+	return &Service{Workspaces: peers.Workspaces, Cancel: peers.Cancel, Cards: peers.Cards, Cancellations: peers.Cancellations, Delivery: peers.Delivery, Summaries: peers.Summaries, Results: peers.Results, Digests: peers.Digests, State: peers.State, Notes: peers.Notes, Rejections: peers.Rejections, sessionStore: sessionStore, evidenceStore: evidenceStore, workspace: workspace, gate: gate, guidance: guidance, limits: limits, router: router}
 }
 func (m *Service) SessionByID(ctx context.Context, id string) (*api.Session, error) {
-	return m.store.Get(ctx, id)
+	return m.sessionStore.Get(ctx, id)
 }
 func (m *Service) SetPromptEngine(engine prompts.PromptTemplateEngine) { m.prompts = engine }
 func (m *Service) SetContext(context assembly.WorkerContextBuilder)    { m.workerContext = context }

@@ -2,8 +2,8 @@ package workflow
 
 import (
 	"context"
+
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/promptstate"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -22,7 +22,7 @@ type Fanout struct {
 	Vars             *runstate.Variables
 	Resolver         *catalog.Resolver
 	Journal          *runstate.Journal
-	Sessions         session.Store
+	TranscriptStore  TranscriptReader
 	Phases           *workflowphases.Service
 	Questions        *workflowreview.Questions
 	Assignments      *workflowreview.Assignments

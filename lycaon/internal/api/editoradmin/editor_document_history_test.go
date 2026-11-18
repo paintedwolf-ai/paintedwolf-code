@@ -11,14 +11,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/pagecursor"
-	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // failingSessions cannot read any chat.
-type failingSessions struct{ session.Store }
+type failingSessions struct{ sessionstore.SessionRepository }
 
 func (failingSessions) Get(context.Context, string) (*wire.Session, error) {
 	return nil, errors.New("session store offline")
@@ -26,10 +26,10 @@ func (failingSessions) Get(context.Context, string) (*wire.Session, error) {
 
 func TestChangeHistoryPagesNewestFirstAndRevertsARestore(t *testing.T) {
 	f := newEditorFixture(t)
-	chat, err := f.sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, f.project.ID)
+	chat, err := f.sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, f.project.ID)
 	testutil.FailErr(t, "create chat", err)
-	testutil.FailErr(t, "mark chat busy", f.sessions.SetSessionStatus(t.Context(), chat.ID, wire.SessionStatusBusy))
-	testutil.FailErr(t, "start chat turn", f.sessions.AppendMessages(t.Context(), chat.ID, wire.Message{
+	testutil.FailErr(t, "mark chat busy", f.sessions.Sessions.SetSessionStatus(t.Context(), chat.ID, wire.SessionStatusBusy))
+	testutil.FailErr(t, "start chat turn", f.sessions.Transcript.AppendMessages(t.Context(), chat.ID, wire.Message{
 		ID: "user-1", Role: wire.MessageRoleUser, Content: "edit the file",
 		Origin: wire.MessageOriginUser, Authority: wire.ContentAuthorityUser,
 		TrustTier: wire.ContentTrustTierTrusted, Visibility: wire.MessageVisibilityTranscript,
@@ -88,7 +88,9 @@ func TestChangeHistoryRefusesForeignCursorsAndLimits(t *testing.T) {
 }
 
 func TestUnreadableChatStopsAffiliatedCommands(t *testing.T) {
-	f := newEditorFixture(t, withSessions(failingSessions{Store: store.NewMemory()}))
+	sessions := storetest.New(t)
+	sessions.Sessions = failingSessions{SessionRepository: sessions.Sessions}
+	f := newEditorFixture(t, withSessions(sessions))
 	d := f.open(t, "a.txt", "window")
 	chat := uuid.NewString()
 	command := wire.EditorDocumentCommandRequest{SessionID: chat, OperationID: uuid.NewString(), ClientID: "window", ExpectedRevision: d.Revision}

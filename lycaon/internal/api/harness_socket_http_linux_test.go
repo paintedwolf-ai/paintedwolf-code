@@ -15,13 +15,14 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestHarnessSocketHTTPUsesActualTargetAndRejectsChangedIdentity(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv(configdir.EnvDev, "1")
 	t.Setenv(configdir.EnvHarness, "1")
 	root, err := os.MkdirTemp("/tmp", "hsc-") //nolint:usetesting // Kernel socket addresses are bounded.
@@ -31,14 +32,13 @@ func TestHarnessSocketHTTPUsesActualTargetAndRejectsChangedIdentity(t *testing.T
 	listener, err := net.Listen("unix", path)
 	testutil.FailErr(t, "listen on actual service", err)
 	t.Cleanup(func() { _ = listener.Close() })
-	projects := project.NewMemoryRegistry()
+	projects := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := projects.Create(t.Context(), project.CreateParams{Draft: true, Name: "Socket approval fixture"})
 	testutil.FailErr(t, "create project", err)
-	sessions := store.NewMemory()
-	chat, err := sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
+	sessions := sessionFixture
+	chat, err := sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create chat", err)
 	deps := requiredTestDeps(t, Dependencies{Core: CoreDependencies{Projects: projects, Store: sessions}})
-	testdbseed.InsertSession(t, deps.Core.Database, chat.ID, p.ID)
 	server := NewServer(deps, nil, "harness-test-token")
 	for _, tc := range []struct {
 		name, approved, resolved string

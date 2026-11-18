@@ -7,13 +7,14 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type publicationOnlyStore struct {
-	Store
+	Sessions
 	reads   int
 	release <-chan struct{}
 }
@@ -27,19 +28,19 @@ func (s *publicationOnlyStore) Get(ctx context.Context, id string) (*api.Session
 			return nil, ctx.Err()
 		}
 	}
-	return s.Store.Get(ctx, id)
+	return s.Sessions.Get(ctx, id)
 }
 
 func TestPreparedPublicationDoesNotSubmitWorkUnderItsAdmissionGate(t *testing.T) {
-	mem := store.NewMemory()
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append source", mem.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: "assistant", Content: "original source"}))
-	rows, err := mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "append source", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: "assistant", Content: "original source"}))
+	rows, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read source", err)
 	release := make(chan struct{})
-	st := &publicationOnlyStore{Store: mem, release: release}
-	svc := &Service{store: st, Gate: lifecycle.New(mem), Runner: NewRunner(), Compactor: compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), nil)}
+	st := &publicationOnlyStore{Sessions: sessionStore.Sessions, release: release}
+	svc := &Service{sessionStore: st, transcriptStore: sessionStore.Transcript, compactionStore: sessionStore.Compaction, Gate: lifecycle.New(sessionStore.Sessions), Runner: NewRunner(), Compactor: compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), nil)}
 	defer func() {
 		close(release)
 		svc.Runner.Stop()

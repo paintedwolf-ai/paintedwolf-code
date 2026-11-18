@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 	"testing"
 	"time"
@@ -22,12 +21,15 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -62,10 +64,10 @@ func TestHandleCommandRefusalWakesWithDigest(t *testing.T) {
 }
 
 func testHandleCommandRefusalWakesWithDigest(t *testing.T, offered []string) {
-	memory := store.NewMemory()
-	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Processes.ToolPolicy = newPostToolGuidanceManager(t).ToolPolicy
-	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "")
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create waiting session", err)
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	reports := make(chan anchor.Envelope, 1)
@@ -201,11 +203,11 @@ func TestMixedPathRecoveryKeepsTerminalPathsOutsideRequestedGrants(t *testing.T)
 }
 
 func TestCommandCompletionWakesWorkerProcessWait(t *testing.T) {
-	memory := store.NewMemory()
-	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "")
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create waiting worker session", err)
-	testutil.FailErr(t, "mark worker session", memory.UpdateSession(t.Context(), sess.ID, func(s *api.Session) {
+	testutil.FailErr(t, "mark worker session", sessionStore.Sessions.UpdateSession(t.Context(), sess.ID, func(s *api.Session) {
 		s.ParentSessionID = "parent"
 	}))
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
@@ -222,18 +224,20 @@ func TestCommandCompletionWakesWorkerProcessWait(t *testing.T) {
 }
 
 func TestAutoNameProjectIdempotentOnReplay(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)
 
-	store := store.NewMemory()
+	store := sessionFixture
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".*", Text: "ok"},
 	}})
-	mgr := NewHost(store, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, Lookup: project.ScopeLookup{Registry: reg}})
@@ -294,7 +298,7 @@ func TestInterruptedToolProjectionRetainsIdentityAcrossRecoveryPaths(t *testing.
 			manager := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 			recorder := invocation.NewSQLRecorder(database)
 			manager.SetInvocationRecorder(recorder)
-			sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+			sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create interrupted session", err)
 			for _, tool := range []string{"read", "command", "http_request"} {
 				seedInterruptedTool(t, st, recorder, sess.ID, tool)
@@ -309,20 +313,20 @@ func TestInterruptedToolProjectionRetainsIdentityAcrossRecoveryPaths(t *testing.
 				}
 				testutil.FailErr(t, "recover tool projections", err)
 			}
-			messages, err := st.GetMessages(t.Context(), sess.ID)
+			messages, err := st.Transcript.GetMessages(t.Context(), sess.ID)
 			testutil.FailErr(t, "read recovered transcript", err)
 			assertRecoveredToolIdentities(t, messages)
 		})
 	}
 }
 
-func seedInterruptedTool(t *testing.T, st *store.SQL, recorder *invocation.SQLRecorder, sessionID, tool string) {
+func seedInterruptedTool(t *testing.T, st *store.Repositories, recorder *invocation.SQLRecorder, sessionID, tool string) {
 	t.Helper()
 	contract, ok := toolcontract.Lookup(tool)
 	if !ok {
 		t.Fatalf("missing tool contract %s", tool)
 	}
-	testutil.FailErr(t, "append tool request", st.AppendMessages(t.Context(), sessionID, api.Message{
+	testutil.FailErr(t, "append tool request", st.Transcript.AppendMessages(t.Context(), sessionID, api.Message{
 		ID: "assistant-" + tool, Role: api.MessageRoleAssistant,
 		ToolCalls: []api.ToolCall{{ID: "call-" + tool, Name: tool}},
 	}))

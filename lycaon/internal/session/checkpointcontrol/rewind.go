@@ -43,7 +43,7 @@ var ErrRewindOperationConflict = errors.New("rewind operation id was already use
 
 // RewindToPrompt undoes the source contributions from an idle session's prompt onward.
 func (m *Rewinds) RewindToPrompt(ctx context.Context, operationID, sessionID, anchorMessageID, planDigest string) (*RewindResult, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.rewindStore == nil) {
 		return nil, fmt.Errorf("session manager not configured")
 	}
 	operationID = strings.TrimSpace(operationID)
@@ -65,7 +65,7 @@ func (m *Rewinds) RewindToPrompt(ctx context.Context, operationID, sessionID, an
 	if replayed, ok, err := m.replayRewind(ctx, operationID, sessionID, anchorMessageID, digest); err != nil || ok {
 		return replayed, err
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (m *Rewinds) RewindToPrompt(ctx context.Context, operationID, sessionID, an
 		return nil, err
 	}
 
-	msgs, err := m.store.GetMessages(ctx, sessionID)
+	msgs, err := m.transcriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func (m *Rewinds) RewindToPrompt(ctx context.Context, operationID, sessionID, an
 	if err != nil {
 		return nil, err
 	}
-	rootID := sessiontree.RootID(ctx, m.store, sessionID)
+	rootID := sessiontree.RootID(ctx, m.sessionStore, sessionID)
 	anchorIDs := eligibleAnchorIDsFrom(msgs, anchorMessageID)
 	removed, err := m.executeRewind(ctx, cpStore, rootID, operationID, digest, sessionID, anchorMessageID, anchorIDs, planDigest, result)
 	if err != nil {
@@ -137,7 +137,7 @@ func rewindResultFromAPI(response api.RewindSessionResponse) *RewindResult {
 }
 
 func (m *Rewinds) replayRewind(ctx context.Context, operationID, sessionID, anchorMessageID, digest string) (*RewindResult, bool, error) {
-	op, err := m.store.GetRewindOperation(ctx, operationID)
+	op, err := m.rewindStore.GetRewindOperation(ctx, operationID)
 	if err != nil || op == nil {
 		return nil, false, err
 	}
@@ -171,7 +171,7 @@ func (m *Rewinds) executeRewind(ctx context.Context, cpStore *sessioncheckpoint.
 	if err != nil {
 		return 0, err
 	}
-	messages, err := m.store.GetMessages(ctx, sessionID)
+	messages, err := m.transcriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return 0, err
 	}
@@ -184,7 +184,7 @@ func (m *Rewinds) executeRewind(ctx context.Context, cpStore *sessioncheckpoint.
 		_ = journal.Cleanup(cpStore)
 		return 0, ErrRewindPlanChanged
 	}
-	err = m.store.PrepareRewind(ctx, store.RewindOperation{
+	err = m.rewindStore.PrepareRewind(ctx, store.RewindOperation{
 		ID: operationID, SessionID: sessionID, AnchorMessageID: anchorMessageID,
 		InputDigest: inputDigest, ProjectDir: cpStore.ProjectDir(), Status: string(sessioncheckpoint.PhasePrepared),
 		CheckpointAnchorIDs: anchorIDs,
@@ -192,7 +192,7 @@ func (m *Rewinds) executeRewind(ctx context.Context, cpStore *sessioncheckpoint.
 	if err != nil {
 		return 0, err
 	}
-	if err := m.store.SetRewindPhase(ctx, operationID, string(sessioncheckpoint.PhaseApplying), ""); err != nil {
+	if err := m.rewindStore.SetRewindPhase(ctx, operationID, string(sessioncheckpoint.PhaseApplying), ""); err != nil {
 		return 0, err
 	}
 	rollback := func(cause error) error {
@@ -203,7 +203,7 @@ func (m *Rewinds) executeRewind(ctx context.Context, cpStore *sessioncheckpoint.
 			status = "diverged"
 			detail = rollbackErr.Error()
 		}
-		_ = m.store.SetRewindPhase(ctx, operationID, status, detail)
+		_ = m.rewindStore.SetRewindPhase(ctx, operationID, status, detail)
 		if rollbackErr != nil {
 			return errors.Join(cause, rollbackErr)
 		}
@@ -214,13 +214,13 @@ func (m *Rewinds) executeRewind(ctx context.Context, cpStore *sessioncheckpoint.
 		return 0, rollback(err)
 	}
 	result.RestoredPaths = restored
-	if err := m.store.SetRewindPhase(ctx, operationID, string(sessioncheckpoint.PhaseFilesApplied), ""); err != nil {
+	if err := m.rewindStore.SetRewindPhase(ctx, operationID, string(sessioncheckpoint.PhaseFilesApplied), ""); err != nil {
 		return 0, rollback(err)
 	}
-	removed, err := m.store.CommitRewind(ctx, operationID, sessionID, anchorMessageID, rewindResultAPI(result))
+	removed, err := m.rewindStore.CommitRewind(ctx, operationID, sessionID, anchorMessageID, rewindResultAPI(result))
 	if err != nil {
 		// Resolve an ambiguous commit before changing the filesystem.
-		committed, getErr := m.store.GetRewindOperation(ctx, operationID)
+		committed, getErr := m.rewindStore.GetRewindOperation(ctx, operationID)
 		if getErr != nil {
 			return 0, errors.Join(err, fmt.Errorf("resolve ambiguous rewind commit: %w", getErr))
 		}
@@ -245,10 +245,10 @@ func (m *Rewinds) executeRewind(ctx context.Context, cpStore *sessioncheckpoint.
 // RecoverRewinds resolves interrupted rewind operations at boot, then sweeps
 // committed operations with pending journal or checkpoint cleanup.
 func (m *Rewinds) RecoverRewinds(ctx context.Context) error {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.rewindStore == nil) {
 		return fmt.Errorf("session manager not configured")
 	}
-	operations, err := m.store.RewindOperationsForRecovery(ctx)
+	operations, err := m.rewindStore.RewindOperationsForRecovery(ctx)
 	if err != nil {
 		return err
 	}
@@ -259,10 +259,10 @@ func (m *Rewinds) RecoverRewinds(ctx context.Context) error {
 // RecoverRewindsForSession resolves one session's interrupted rewinds.
 // Committed-operation cleanup is boot-scoped.
 func (m *Rewinds) RecoverRewindsForSession(ctx context.Context, sessionID string) error {
-	if m == nil || m.store == nil || strings.TrimSpace(sessionID) == "" {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.rewindStore == nil) || strings.TrimSpace(sessionID) == "" {
 		return nil
 	}
-	operations, err := m.store.RewindOperationsForRecoverySession(ctx, sessionID)
+	operations, err := m.rewindStore.RewindOperationsForRecoverySession(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -284,10 +284,10 @@ func (m *Rewinds) resolveRewindOperations(ctx context.Context, operations []stor
 // Applied files recover forward; earlier phases roll back.
 func (m *Rewinds) resolveOneRewindOperation(ctx context.Context, op store.RewindOperation) error {
 	// Each journal resolves against its project checkpoint store.
-	checkpoint := sessioncheckpoint.New(m.captures.dataDir, op.ProjectDir, m.store)
+	checkpoint := sessioncheckpoint.New(m.captures.dataDir, op.ProjectDir, m.rewindStore)
 	if checkpoint == nil {
 		err := fmt.Errorf("rewind operation %s names no project root", op.ID)
-		_ = m.store.SetRewindPhase(ctx, op.ID, "diverged", err.Error())
+		_ = m.rewindStore.SetRewindPhase(ctx, op.ID, "diverged", err.Error())
 		return err
 	}
 	journal, loadErr := sessioncheckpoint.LoadOperationJournal(m.captures.dataDir, op)
@@ -301,10 +301,10 @@ func (m *Rewinds) resolveOneRewindOperation(ctx context.Context, op store.Rewind
 		return m.completeRecoveredRewind(ctx, op, journal, checkpoint)
 	}
 	if err := journal.Rollback(); err != nil {
-		_ = m.store.SetRewindPhase(ctx, op.ID, "diverged", err.Error())
+		_ = m.rewindStore.SetRewindPhase(ctx, op.ID, "diverged", err.Error())
 		return fmt.Errorf("rollback rewind %s: %w", op.ID, err)
 	}
-	if err := m.store.SetRewindPhase(ctx, op.ID, "rolled_back", "recovered interrupted rewind"); err != nil {
+	if err := m.rewindStore.SetRewindPhase(ctx, op.ID, "rolled_back", "recovered interrupted rewind"); err != nil {
 		return fmt.Errorf("resolve rewind %s: %w", op.ID, err)
 	}
 	return nil
@@ -316,11 +316,11 @@ func (m *Rewinds) completeRecoveredRewind(ctx context.Context, op store.RewindOp
 		return err
 	}
 	if err := journal.VerifyTargets(); err != nil {
-		_ = m.store.SetRewindPhase(ctx, op.ID, "diverged", err.Error())
+		_ = m.rewindStore.SetRewindPhase(ctx, op.ID, "diverged", err.Error())
 		return fmt.Errorf("verify rewind %s: %w", op.ID, err)
 	}
 	if op.Status != string(sessioncheckpoint.PhaseFilesApplied) {
-		if err := m.store.SetRewindPhase(ctx, op.ID, string(sessioncheckpoint.PhaseFilesApplied), ""); err != nil {
+		if err := m.rewindStore.SetRewindPhase(ctx, op.ID, string(sessioncheckpoint.PhaseFilesApplied), ""); err != nil {
 			return fmt.Errorf("advance rewind %s: %w", op.ID, err)
 		}
 	}
@@ -328,13 +328,13 @@ func (m *Rewinds) completeRecoveredRewind(ctx context.Context, op store.RewindOp
 	if err != nil {
 		return fmt.Errorf("build rewind %s receipt: %w", op.ID, err)
 	}
-	if _, err := m.store.CommitRewind(ctx, op.ID, op.SessionID, op.AnchorMessageID, response); err != nil {
+	if _, err := m.rewindStore.CommitRewind(ctx, op.ID, op.SessionID, op.AnchorMessageID, response); err != nil {
 		return fmt.Errorf("commit rewind %s: %w", op.ID, err)
 	}
 	if err := journal.Cleanup(checkpoint); err != nil {
 		return fmt.Errorf("cleanup rewind %s: %w", op.ID, err)
 	}
-	rootID := sessiontree.RootID(ctx, m.store, op.SessionID)
+	rootID := sessiontree.RootID(ctx, m.sessionStore, op.SessionID)
 	m.captures.Capture.DropAnchors(ctx, checkpoint, rootID, op.CheckpointAnchorIDs)
 	return nil
 }
@@ -344,30 +344,30 @@ const rewindCommittedRetention = 24 * time.Hour
 
 // Startup removes committed journals and anchors before expiring their receipts.
 func (m *Rewinds) sweepCommittedRewinds(ctx context.Context) error {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.rewindStore == nil) {
 		return nil
 	}
-	rows, err := m.store.CommittedRewindOperationsForSweep(ctx)
+	rows, err := m.rewindStore.CommittedRewindOperationsForSweep(ctx)
 	if err != nil {
 		return err
 	}
 	cutoff := time.Now().UTC().Add(-rewindCommittedRetention)
 	var sweepErr error
 	for _, row := range rows {
-		checkpoint := sessioncheckpoint.New(m.captures.dataDir, row.ProjectDir, m.store)
+		checkpoint := sessioncheckpoint.New(m.captures.dataDir, row.ProjectDir, m.rewindStore)
 		if checkpoint != nil {
 			if journal, loadErr := sessioncheckpoint.LoadOperationJournal(m.captures.dataDir, store.RewindOperation{ID: row.ID, SessionID: row.SessionID, AnchorMessageID: row.AnchorMessageID, ProjectDir: row.ProjectDir}); loadErr == nil {
 				sweepErr = errors.Join(sweepErr, journal.Cleanup(checkpoint))
 			} else if !errors.Is(loadErr, os.ErrNotExist) {
 				sweepErr = errors.Join(sweepErr, fmt.Errorf("sweep rewind %s journal: %w", row.ID, loadErr))
 			}
-			rootID := sessiontree.RootID(ctx, m.store, row.SessionID)
+			rootID := sessiontree.RootID(ctx, m.sessionStore, row.SessionID)
 			m.captures.Capture.DropAnchors(ctx, checkpoint, rootID, row.CheckpointAnchorIDs)
 		}
 		if row.CreatedAt.After(cutoff) {
 			continue
 		}
-		if err := m.store.DeleteRewindOperation(ctx, row.ID, cutoff); err != nil {
+		if err := m.rewindStore.DeleteRewindOperation(ctx, row.ID, cutoff); err != nil {
 			sweepErr = errors.Join(sweepErr, fmt.Errorf("delete swept rewind %s: %w", row.ID, err))
 		}
 	}
@@ -375,7 +375,7 @@ func (m *Rewinds) sweepCommittedRewinds(ctx context.Context) error {
 }
 
 func (m *Rewinds) rewindRecoveryResponse(ctx context.Context, op store.RewindOperation, journal *sessioncheckpoint.Journal) (api.RewindSessionResponse, error) {
-	messages, err := m.store.GetMessages(ctx, op.SessionID)
+	messages, err := m.transcriptStore.GetMessages(ctx, op.SessionID)
 	if err != nil {
 		return api.RewindSessionResponse{}, err
 	}
@@ -445,14 +445,14 @@ func applyRewindJournal(journal *sessioncheckpoint.Journal) (restored []string, 
 
 // publishRewound invalidates the transcript after rows are removed.
 func (m *Rewinds) publishRewound(ctx context.Context, sessionID string) {
-	if m == nil || m.events == nil || m.store == nil {
+	if m == nil || m.events == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.rewindStore == nil) {
 		return
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return
 	}
-	lastMessage, _ := m.store.LastTurnMessageContent(ctx, sessionID)
+	lastMessage, _ := m.transcriptStore.LastTurnMessageContent(ctx, sessionID)
 	m.events.PublishSession(ctx, sess.ProjectID, sessionID,
 		sess.Status, lastMessage)
 }

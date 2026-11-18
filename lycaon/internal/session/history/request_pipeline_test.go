@@ -63,12 +63,12 @@ func commonPrefix(a, b []string) int {
 func TestLongTurnThroughLoadPublishFitAndWire_AC_KV_06_AC_KV_07_AC_KV_09(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
 	cfg.ModelContextWindow, cfg.HardCeilingTokens, cfg.TargetTokens = 196608, 60000, 30000
-	svc, mem, sess := stableTurnSession(t, cfg)
+	svc, sqlStore, sess := stableTurnSession(t, cfg)
 	svc.SetCompactor(compaction.NewSimpleCompactor(cfg, &scriptedProvider{script: []func() (string, error){answerShort}}))
 	// Recall lets a fit project oversized bodies, the path this request must hold across.
 	svc.recallAvailable = func(context.Context, *api.Session) bool { return true }
-	canonical := seedTurn(t, mem, sess.ID, 40, strings.Repeat("early observation ", 30))
-	publishCoverage(t, mem, sess.ID, canonical, canonical[30].Ord, 1, cfg.ModelContextWindow)
+	canonical := seedTurn(t, sqlStore, sess.ID, 40, strings.Repeat("early observation ", 30))
+	publishCoverage(t, sqlStore, sess.ID, canonical, canonical[30].Ord, 1, cfg.ModelContextWindow)
 
 	request := wireRequest{svc: svc, sess: sess, frame: strings.Repeat("Standing instructions. ", 400), budgets: fixedBudgets{window: cfg.ModelContextWindow},
 		provider: openaicompat.New("fixture", "http://127.0.0.1:1", "fixture", []modelinfo.Entry{{ID: "fixture-model"}}).WithProfile(providerprofile.Fireworks())}
@@ -78,7 +78,7 @@ func TestLongTurnThroughLoadPublishFitAndWire_AC_KV_06_AC_KV_07_AC_KV_09(t *test
 	const appends = 480
 	for step := range appends {
 		body := strings.Repeat("observation ", sizes[step%len(sizes)]/12+1)
-		testutil.FailErr(t, "append exchange", mem.AppendMessages(t.Context(), sess.ID, turnExchange(5000+step, fmt.Sprintf("%d %s", step, body))...))
+		testutil.FailErr(t, "append exchange", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID, turnExchange(5000+step, fmt.Sprintf("%d %s", step, body))...))
 		rows, wire := request.render(t)
 		if input := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(rows)); input > cfg.HardCeilingTokens {
 			t.Fatalf("step %d: %d tokens over the %d ceiling", step, input, cfg.HardCeilingTokens)
@@ -117,15 +117,15 @@ func TestRowBoundHoldsAcrossALongActiveTurn_AC_KV_03(t *testing.T) {
 	cfg.ModelContextWindow = 196608
 	normalized, err := compaction.NormalizeConfig(cfg)
 	testutil.FailErr(t, "normalize", err)
-	svc, mem, sess := stableTurnSession(t, normalized)
-	seedTurn(t, mem, sess.ID, 200, "small")
+	svc, sqlStore, sess := stableTurnSession(t, normalized)
+	seedTurn(t, sqlStore, sess.ID, 200, "small")
 	maxRows := canonicalTailBounds(normalized).maxRows
 	if maxRows >= 600 {
 		t.Fatalf("row bound %d is out of the fixture's reach", maxRows)
 	}
 	starts := map[int64]bool{}
 	for step := range 200 {
-		testutil.FailErr(t, "append exchange", mem.AppendMessages(t.Context(), sess.ID, turnExchange(5000+step, "small")...))
+		testutil.FailErr(t, "append exchange", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID, turnExchange(5000+step, "small")...))
 		loaded, err := svc.Load(t.Context(), sess)
 		testutil.FailErr(t, "load", err)
 		starts[firstRetainedOrd(loaded)] = true
@@ -141,18 +141,18 @@ func TestRowBoundHoldsAcrossALongActiveTurn_AC_KV_03(t *testing.T) {
 func TestFitHoldsItsCutWhenBodiesBoundIt_AC_KV_04(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
 	cfg.ModelContextWindow, cfg.HardCeilingTokens, cfg.TargetTokens = 196608, 60000, 30000
-	svc, mem, sess := stableTurnSession(t, cfg)
+	svc, sqlStore, sess := stableTurnSession(t, cfg)
 	svc.recallAvailable = func(context.Context, *api.Session) bool { return true }
 	body := strings.Repeat("observation ", 125)
-	seedTurn(t, mem, sess.ID, 200, body)
-	testutil.FailErr(t, "append oversized body", mem.AppendMessages(t.Context(), sess.ID, turnExchange(4999, strings.Repeat("large observation ", 400))...))
+	seedTurn(t, sqlStore, sess.ID, 200, body)
+	testutil.FailErr(t, "append oversized body", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID, turnExchange(4999, strings.Repeat("large observation ", 400))...))
 	request := wireRequest{svc: svc, sess: sess, frame: strings.Repeat("Standing instructions. ", 400), budgets: fixedBudgets{window: cfg.ModelContextWindow},
 		provider: openaicompat.New("fixture", "http://127.0.0.1:1", "fixture", []modelinfo.Entry{{ID: "fixture-model"}}).WithProfile(providerprofile.Fireworks())}
 	var previous []string
 	moved := 0
 	const appends = 64
 	for step := range appends {
-		testutil.FailErr(t, "append exchange", mem.AppendMessages(t.Context(), sess.ID, turnExchange(5000+step, body)...))
+		testutil.FailErr(t, "append exchange", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID, turnExchange(5000+step, body)...))
 		_, wire := request.render(t)
 		if previous != nil && commonPrefix(previous, wire) != len(previous) {
 			moved++

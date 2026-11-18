@@ -67,7 +67,7 @@ func captureAgentView(t *testing.T, h *Harness, sess *wire.Session) agentView {
 	t.Helper()
 	ctx := t.Context()
 	manager := h.Sessions.Manager
-	current, err := h.Store.Get(ctx, sess.ID)
+	current, err := h.Store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "reload session", err)
 	tctx, err := manager.ToolContext.Build(ctx, current, "implement", inject.Machine{})
 	testutil.FailErr(t, "build tool context", err)

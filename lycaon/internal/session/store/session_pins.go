@@ -4,12 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/lycaon/lycaon/internal/timelayout"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -19,7 +18,7 @@ import (
 
 // PinSession appends a chat to its project's pinned order; pinning a pinned
 // chat changes nothing.
-func (s *sqlSessionViews) PinSession(ctx context.Context, id string) error {
+func (s *sqlSessions) PinSession(ctx context.Context, id string) error {
 	return writePins(ctx, s.core, id, func(ctx context.Context, qtx *db.Queries, state db.GetSessionPinStateRow) ([]string, error) {
 		if err := pinnable(state); err != nil {
 			return nil, err
@@ -41,7 +40,7 @@ func (s *sqlSessionViews) PinSession(ctx context.Context, id string) error {
 }
 
 // UnpinSession removes a chat from its project's pinned order.
-func (s *sqlSessionViews) UnpinSession(ctx context.Context, id string) error {
+func (s *sqlSessions) UnpinSession(ctx context.Context, id string) error {
 	return writePins(ctx, s.core, id, func(ctx context.Context, qtx *db.Queries, state db.GetSessionPinStateRow) ([]string, error) {
 		if !state.PinRank.Valid {
 			return nil, nil
@@ -57,7 +56,7 @@ func (s *sqlSessionViews) UnpinSession(ctx context.Context, id string) error {
 
 // MovePinnedSession places a pinned chat at a 1-based position in its
 // project's pinned order and renumbers the project's pins 1…n.
-func (s *sqlSessionViews) MovePinnedSession(ctx context.Context, id string, position int) error {
+func (s *sqlSessions) MovePinnedSession(ctx context.Context, id string, position int) error {
 	return writePins(ctx, s.core, id, func(ctx context.Context, qtx *db.Queries, state db.GetSessionPinStateRow) ([]string, error) {
 		if !state.PinRank.Valid {
 			return nil, ErrSessionNotPinned
@@ -188,96 +187,4 @@ func movedPinOrder(current []pinnedRank, id string, position int) []pinnedRank {
 	copy(next[at+1:], next[at:])
 	next[at] = *moved
 	return next
-}
-
-// PinSession matches SQL pin ordering in memory.
-func (s *memorySessionViews) PinSession(ctx context.Context, id string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	core := s.core
-	core.mu.Lock()
-	defer core.mu.Unlock()
-	sess, ok := core.sessions[strings.TrimSpace(id)]
-	if !ok {
-		return ErrSessionNotFound
-	}
-	if sess.IsWorkerChild() {
-		return ErrWorkerChildPin
-	}
-	if sess.ArchivedAt != nil {
-		return ErrSessionArchived
-	}
-	if sess.PinRank != nil {
-		return nil
-	}
-	rank := 1
-	for _, other := range core.sessions {
-		if other.ProjectID == sess.ProjectID && other.PinRank != nil && *other.PinRank >= rank {
-			rank = *other.PinRank + 1
-		}
-	}
-	sess.PinRank = &rank
-	sess.UpdatedAt = time.Now().UTC()
-	return nil
-}
-
-// UnpinSession matches SQL pin ordering in memory.
-func (s *memorySessionViews) UnpinSession(ctx context.Context, id string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	core := s.core
-	core.mu.Lock()
-	defer core.mu.Unlock()
-	sess, ok := core.sessions[strings.TrimSpace(id)]
-	if !ok {
-		return ErrSessionNotFound
-	}
-	if sess.PinRank == nil {
-		return nil
-	}
-	sess.PinRank = nil
-	sess.UpdatedAt = time.Now().UTC()
-	return nil
-}
-
-// MovePinnedSession matches SQL pin ordering in memory.
-func (s *memorySessionViews) MovePinnedSession(ctx context.Context, id string, position int) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	core := s.core
-	core.mu.Lock()
-	defer core.mu.Unlock()
-	sess, ok := core.sessions[strings.TrimSpace(id)]
-	if !ok {
-		return ErrSessionNotFound
-	}
-	if sess.PinRank == nil {
-		return ErrSessionNotPinned
-	}
-	current := []pinnedRank{}
-	for otherID, other := range core.sessions {
-		if other.ProjectID == sess.ProjectID && other.PinRank != nil {
-			current = append(current, pinnedRank{id: otherID, rank: int64(*other.PinRank)})
-		}
-	}
-	sort.Slice(current, func(i, j int) bool {
-		if current[i].rank != current[j].rank {
-			return current[i].rank < current[j].rank
-		}
-		return current[i].id < current[j].id
-	})
-	now := time.Now().UTC()
-	for i, pin := range movedPinOrder(current, sess.ID, position) {
-		rank := i + 1
-		if int64(rank) == pin.rank {
-			continue
-		}
-		other := core.sessions[pin.id]
-		other.PinRank = &rank
-		other.UpdatedAt = now
-	}
-	return nil
 }

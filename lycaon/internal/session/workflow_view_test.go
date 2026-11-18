@@ -11,9 +11,10 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -192,11 +193,11 @@ func (r *recordingWorkflowView) ForgetSession(sessionID string) {
 func TestApplyPromptUserTurnPropagatesFeedbackFailure(t *testing.T) {
 	ctx := t.Context()
 	wantErr := errors.New("feedback store unavailable")
-	st := store.NewMemory()
+	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	workflowFixture1 := &recordingWorkflowView{feedbackErr: wantErr}
 	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 
 	_, err = mgr.Runner.Instructions.Apply(ctx, sess.ID, promptinput.Input{Text: "answer"})
@@ -207,7 +208,7 @@ func TestApplyPromptUserTurnPropagatesFeedbackFailure(t *testing.T) {
 
 func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 	view := &recordingWorkflowView{}
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	workflowFixture2 := view
 	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture2, Policy: workflowFixture2, Ambient: workflowFixture2, Blueprints: workflowFixture2, Batch: workflowFixture2, Slash: workflowFixture2, Requests: workflowFixture2, Feedback: workflowFixture2, Transcript: workflowFixture2, Asks: workflowFixture2, Fanout: workflowFixture2, Phases: workflowFixture2, Reports: workflowFixture2, Recovery: workflowFixture2, Cleanup: workflowFixture2})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
@@ -254,7 +255,7 @@ func TestKickGateObligationsFollowTheRunArchive(t *testing.T) {
 	frame := inject.CoordinatorTurnFrame{}
 	frame.RunContext.FailedLeaves = []string{"evidence_passed:survey_challenged"}
 	satisfy := func(archive string) string {
-		mgr := NewHost(store.NewMemory(), Models{Limits: settings.DefaultSessionLimits()}, nil)
+		mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Limits: settings.DefaultSessionLimits()}, nil)
 		mgr.SetWorkflowHints(nil, gateFeedback)
 		mgr.SetWorkflowDomains(workflowDomainFixture(&recordingWorkflowView{archive: archive}))
 		rows := mgr.Coordinator.Guidance.GateObligations(t.Context(), "session", frame)
@@ -283,7 +284,7 @@ func (r *recordingWorkflowView) ReconcileWorkerCycle(context.Context, string) er
 }
 
 func TestWorkflowCompositionRequiresCompletionAndRecovery(t *testing.T) {
-	mgr := NewHost(store.NewMemory(), Models{Limits: settings.DefaultSessionLimits()}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Limits: settings.DefaultSessionLimits()}, nil)
 	if mgr.Workers.Results.ValidateWorkflow() == nil {
 		t.Fatal("accepted absent workflow completion services")
 	}

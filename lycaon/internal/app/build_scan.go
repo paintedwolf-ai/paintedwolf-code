@@ -47,5 +47,5 @@ func (b *serveBuilder) wireScan() error {
 	if err := b.scanning.RegisterTools(b.execution.Host.Registry, b.execution.Rejections, b.settings.Service, workflow.InventoryAccounting{RunManager: b.workflows.Manager}); err != nil {
 		return err
 	}
-	return b.workflows.RegisterTools(b.execution.Host.Registry, b.execution.Host.Boundary, b.storage.Sessions, b.settings.ProjectSurfaceGate(projectcontrib.SurfaceScanConfig, b.storage.Projects))
+	return b.workflows.RegisterTools(b.execution.Host.Registry, b.execution.Host.Boundary, b.storage.Sessions.Sessions, b.settings.ProjectSurfaceGate(projectcontrib.SurfaceScanConfig, b.storage.Projects))
 }

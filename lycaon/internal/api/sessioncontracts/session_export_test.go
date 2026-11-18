@@ -8,13 +8,15 @@ import (
 	"testing"
 
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestExportSessionTranscriptFormats(t *testing.T) {
 	dir := t.TempDir()
-	srv := contractfixture.NewTestServer(t)
+	repositories := storetest.New(t)
+	srv := contractfixture.NewTestServer(t, contractfixture.WithSessionStore(repositories))
 	created := contractfixture.CreateSessionAtPathOnServer(t, srv, dir, wire.SessionPostureBuild)
 
 	patchBody := `{"title":"Ship readiness"}`
@@ -26,19 +28,22 @@ func TestExportSessionTranscriptFormats(t *testing.T) {
 		t.Fatalf("patch status=%d body=%s", patchRec.Code, patchRec.Body.String())
 	}
 
-	testutil.FailErr(t, "append user", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), created.ID, wire.Message{
+	testutil.FailErr(t, "append user", srv.Admin.SessionAdmin.Transcript.TranscriptStore.AppendMessages(t.Context(), created.ID, wire.Message{
 		Role:    wire.MessageRoleUser,
 		Content: "please ship",
 	}))
-	testutil.FailErr(t, "append chrome", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), created.ID, wire.Message{
+	var runID string
+	err := repositories.DB().QueryRowContext(t.Context(), `SELECT id FROM workflow_runs WHERE session_id = ? ORDER BY created_at DESC LIMIT 1`, created.ID).Scan(&runID)
+	testutil.FailErr(t, "read session workflow", err)
+	testutil.FailErr(t, "append chrome", srv.Admin.SessionAdmin.Transcript.TranscriptStore.AppendMessages(t.Context(), created.ID, wire.Message{
 		Role:           wire.MessageRoleSystem,
 		Kind:           wire.MessageKindProgressUpdate,
 		Content:        "should not appear in md",
-		WorkflowRunID:  "run-export-chrome",
+		WorkflowRunID:  runID,
 		ProgressUpdate: &wire.ProgressUpdateMeta{},
 		Visibility:     wire.MessageVisibilityTranscript,
 	}))
-	testutil.FailErr(t, "append assistant", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), created.ID, wire.Message{
+	testutil.FailErr(t, "append assistant", srv.Admin.SessionAdmin.Transcript.TranscriptStore.AppendMessages(t.Context(), created.ID, wire.Message{
 		Role:    wire.MessageRoleAssistant,
 		Content: "working on it",
 	}))

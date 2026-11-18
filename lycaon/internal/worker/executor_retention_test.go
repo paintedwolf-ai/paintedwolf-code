@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -26,7 +26,7 @@ func (s *cycleDeliverySessions) Terminal(ctx context.Context, _, _ string) {
 }
 
 func TestWorkerBridgeReleasesParentAfterQueueAcknowledgement(t *testing.T) {
-	queue := NewInMemoryQueue(1)
+	queue := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent-1")
 	id, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ParentSessionID: "parent-1",
 		ProjectID: testdbseed.DefaultProjectID, ExecutionTarget: api.ExecutionTargetLocal,
@@ -57,16 +57,16 @@ func TestWorkerBridgeReleasesParentAfterQueueAcknowledgement(t *testing.T) {
 
 func TestExecuteRetainsChildSessionForDenTranscript(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 
 	var childID string
 	runner := &fakePromptRunner{
 		spawnChild: func(ctx context.Context, parentID string, req api.SpawnChildRequest) (*api.Session, error) {
-			parent, err := store.Get(ctx, parentID)
+			parent, err := store.Sessions.Get(ctx, parentID)
 			if err != nil {
 				return nil, err
 			}
-			child, err := store.CreateChild(ctx, parent, req)
+			child, err := store.Sessions.CreateChild(ctx, parent, req)
 			if err != nil {
 				return nil, err
 			}
@@ -78,24 +78,30 @@ func TestExecuteRetainsChildSessionForDenTranscript(t *testing.T) {
 	exec := NewLocalWorkerExecutor(runner, binder, runner, runner, runner, runner, runner, runner)
 	exec.SetPromptInjects(promptstest.InjectRenderer(t))
 
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	_, err = exec.Execute(ctx, api.WorkerTask{
-		ID:              "job-1",
+	queue := NewSQLQueue(store.DB(), 1)
+	jobID, err := queue.EnqueueWithProjectID(ctx, parent.ProjectID, api.WorkerTask{
 		ParentSessionID: parent.ID,
 		Prompt:          "do work",
 		Brief:           "fixture",
 		AgentType:       "implementer",
-	}, WorkerRunContext{ProjectDir: "/p"})
+	})
+	testutil.FailErr(t, "enqueue worker", err)
+	task, ok := queue.Get(jobID)
+	if !ok {
+		t.Fatal("enqueued worker missing")
+	}
+	_, err = exec.Execute(ctx, *task, WorkerRunContext{ProjectDir: parent.WorkspacePath})
 	testutil.FailErr(t, "exec.Execute failed", err)
 	if childID == "" {
 		t.Fatal("child session id not captured")
 	}
-	if binder.jobID != "job-1" || binder.childID != childID {
+	if binder.jobID != jobID || binder.childID != childID {
 		t.Fatalf("child binding = %q/%q", binder.jobID, binder.childID)
 	}
-	if _, err := store.Get(ctx, childID); err != nil {
+	if _, err := store.Sessions.Get(ctx, childID); err != nil {
 		t.Fatalf("child session removed after worker completion: %v", err)
 	}
 }

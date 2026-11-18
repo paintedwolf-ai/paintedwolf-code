@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
 	"github.com/lycaon/lycaon/internal/api/extensionadmin"
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
@@ -38,9 +37,9 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 	}
 	requireDependencies(deps)
 	s := &Server{
-		responses:      httpio.Responder{Logger: logger, Notices: deps.Core.UserNotices},
-		apiToken:       strings.TrimSpace(token),
-		sessionStore:   deps.Core.Store,
+		responses:    httpio.Responder{Logger: logger, Notices: deps.Core.UserNotices},
+		apiToken:     strings.TrimSpace(token),
+		sessionStore: deps.Core.Store.Sessions, peopleStore: deps.Core.Store.People,
 		personActions:  deps.Core.PersonActions,
 		sessions:       deps.Core.Sessions,
 		fileBriefings:  deps.Source.Briefings.Files,
@@ -59,7 +58,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 			minDenVersion:      strings.TrimSpace(deps.Storage.MinDenVersion),
 		},
 	}
-	s.Admin.SessionView = sessionview.New(sessionview.Projector{Workflows: deps.Workflow.Workflows, Store: deps.Core.Store, Sessions: deps.Core.Sessions, Projects: deps.Core.Projects})
+	s.Admin.SessionView = sessionview.New(sessionview.Projector{Workflows: deps.Workflow.Workflows, Evidence: deps.Core.Store.Evidence, Sessions: deps.Core.Sessions, Projects: deps.Core.Projects})
 	s.Admin.Git = gitadmin.New(&s.responses, gitadmin.Deps{
 		Board: deps.Workflow.Board, CommitDrafter: deps.Providers.CommitDrafter, LLMService: deps.Providers.LLM, ProjectRegistry: deps.Core.Projects,
 		RepoSetCache: deps.Workflow.RepoSetCache, SessionStore: deps.Core.Store, Sessions: deps.Core.Sessions, DataDir: s.dataDir,
@@ -105,7 +104,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 	s.Admin.Extensions = extensionadmin.New(&s.responses, &s.background, extensionadmin.Deps{
 		Owner: &extensionstate.Owner{Views: deps.Extensions.ExtensionViews, Scanners: deps.Extensions.ExtensionScanners,
 			Journal: deps.Extensions.ExtensionJournal}, Runtime: deps.Extensions.Contributions, Events: deps.Host.Events, MCPRegistry: deps.External.MCP,
-		ModuleRoot: deps.Storage.ModuleRoot, Projects: deps.Core.Projects, Store: deps.Core.Store, Sessions: deps.Core.Sessions,
+		ModuleRoot: deps.Storage.ModuleRoot, Projects: deps.Core.Projects, Store: deps.Core.Store.Sessions, Sessions: deps.Core.Sessions,
 		Settings: deps.Core.Settings, Workflow: &s.Admin.Workflow, Prompt: &s.Admin.Prompt, Scan: &s.Admin.Scan,
 	})
 	s.Admin.Project = projectadmin.New(&s.responses, &s.background, projectadmin.Deps{

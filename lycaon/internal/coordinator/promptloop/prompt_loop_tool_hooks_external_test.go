@@ -9,19 +9,20 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestLoopBeforeToolRunSkipsRegistryRun(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	reg.Register("state_update", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return `{"updated":true}`, nil
 	})
@@ -46,7 +47,7 @@ func TestLoopBeforeToolRunSkipsRegistryRun(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	found := false
 	for _, msg := range msgs {
@@ -64,10 +65,10 @@ func TestLoopBeforeToolRunSkipsRegistryRun(t *testing.T) {
 
 func TestLoopAfterToolRunMutatesSuccessOutput(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "raw", nil
 	})
@@ -89,7 +90,7 @@ func TestLoopAfterToolRunMutatesSuccessOutput(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	for _, msg := range msgs {
 		if msg.Role == api.MessageRoleTool && strings.Contains(msg.Content, "mutated") {
@@ -101,11 +102,11 @@ func TestLoopAfterToolRunMutatesSuccessOutput(t *testing.T) {
 
 func TestLoopBeforeToolRunRejectDoesNotInvokeTool(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	sess.WorkspacePath = "/tmp/repo"
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	reg.Register("write", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		t.Fatal("write should not run")
 		return "", nil
@@ -129,7 +130,7 @@ func TestLoopBeforeToolRunRejectDoesNotInvokeTool(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var settledAssistant *api.Message
 	var rejectResults int

@@ -17,7 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
-	"github.com/lycaon/lycaon/internal/session/store"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -30,14 +31,14 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newSynthesisDelayManager(t *testing.T) (*Host, *api.Session) {
+func newSynthesisDelayManager(t *testing.T) (*Host, *api.Session, *sessionstore.Repositories) {
 	t.Helper()
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load hint registry", err)
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 
-	sess, err := store.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create coordinator session", err)
@@ -56,7 +57,7 @@ func newSynthesisDelayManager(t *testing.T) (*Host, *api.Session) {
 	pipeline.EnableAnchor(oar.AnchorCoordinatorMidTurnNote)
 	pipeline.EnableAnchor(oar.AnchorWorkerReportCheck)
 	mgr.SetOARPipeline(pipeline, oar.NewRenderer(rejectFmt, synthesisDelayNudge{f: rejectFmt}))
-	return mgr, sess
+	return mgr, sess, store
 }
 
 type synthesisDelayNudge struct {
@@ -74,7 +75,7 @@ func rejectCloseout(t *testing.T, mgr *Host, sess *api.Session, surfaceID string
 }
 
 func TestCloseoutSkipsOpenProgressWhenInvokeGated(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [ ] review")
 
 	if _, block := mgr.Coordinator.Guards.OpenProgress(
@@ -85,7 +86,7 @@ func TestCloseoutSkipsOpenProgressWhenInvokeGated(t *testing.T) {
 }
 
 func TestCloseoutBlocksOnOpenSteps(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [x] survey\n- [ ] review")
 
 	reject, block := rejectCloseout(t, mgr, sess, "implement_investigate", true)
@@ -98,7 +99,7 @@ func TestCloseoutBlocksOnOpenSteps(t *testing.T) {
 }
 
 func TestCloseoutAllowsWhenTerminal(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	// Done, skipped, and optional steps do not block closeout.
 	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [x] survey\n- [~] review\n- [>] synthesize report")
 
@@ -108,7 +109,7 @@ func TestCloseoutAllowsWhenTerminal(t *testing.T) {
 }
 
 func TestCloseoutSkipsReadOnlySynthesisAndNonProseSurfaces(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [ ] review")
 
 	if _, block := rejectCloseout(t, mgr, sess, "implement_synthesis", true); block {
@@ -124,7 +125,7 @@ func TestCloseoutSkipsReadOnlySynthesisAndNonProseSurfaces(t *testing.T) {
 }
 
 func TestCloseoutBoundedPerPrompt(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [ ] review")
 	ctx := context.Background()
 
@@ -143,7 +144,7 @@ func TestCloseoutBoundedPerPrompt(t *testing.T) {
 }
 
 func TestCloseoutPendingProgressDoesNotArmWorkerCompletionLatch(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register progress", native.RegisterUpdateProgressTool(reg, mgr.RewindRuntime.Progress, func(_ context.Context, id string) string { return id }, nil))
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
@@ -196,8 +197,8 @@ func loadAgentsForTest(t *testing.T) profiles.AgentProfileResolver {
 
 func TestBuildSessionCreateDefaultsCoordinatorProfile(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if sess.AgentType != orchestration.ProfileCoordinator {
 		t.Fatalf("agent_type = %q want coordinator", sess.AgentType)
@@ -217,7 +218,7 @@ func TestBuildSessionCreateDefaultsCoordinatorProfile(t *testing.T) {
 func TestManagerPromptToolProfileUsesWorkflowManifest(t *testing.T) {
 	reg, err := profiles.LoadPostureRegistry()
 	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Profiles.SetPostureRegistry(reg)
 	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
 	mgr.SetWorkflowDomains(workflowDomainFixture(stubWorkflowManifest{
@@ -248,10 +249,11 @@ postures:
 	if err := os.WriteFile(filepath.Join(overlayDir, "postures.yaml"), overlay, 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	persistence := storetest.New(t)
+	mgr := NewHost(persistence, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Profiles.SetPostureRegistry(reg)
 	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
-	projectID := RegisterProjectContextForTest(t, mgr, dir)
+	projectID := RegisterProjectContextForTest(t, mgr, persistence.DB(), dir)
 	sess := &api.Session{ID: "s1", ProjectID: projectID, Posture: api.SessionPostureSpec, AgentType: orchestration.ProfileCoordinator, WorkspacePath: dir}
 	got, err := mgr.Profiles.PromptToolProfile(context.Background(), sess)
 	testutil.FailErr(t, "mgr.Profiles.PromptToolProfile failed", err)

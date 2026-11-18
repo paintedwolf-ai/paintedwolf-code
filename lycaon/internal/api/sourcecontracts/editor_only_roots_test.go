@@ -17,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/project"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/rootfacts"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -42,7 +41,6 @@ func TestEditorOperationsWorkInEditorOnlyRoots(t *testing.T) {
 				t.Fatalf("%s is admitted; the case needs an editor-only root", class.Path)
 			}
 			root := p.Roots[0].ID
-			testdbseed.InsertProjectRootWithID(t, database, p.ID, root, class.Path)
 			rel := filepath.Base(dir)
 			do := editorClient{t: t, srv: srv, base: "/v1/projects/" + p.ID + "/source"}
 

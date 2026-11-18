@@ -1,21 +1,21 @@
 package runtime_test
 
 import (
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/session/workflowfacts"
-	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -27,7 +27,7 @@ func newCloseoutGateHarness(t *testing.T) (*workflow.RunManager, *api.Session, *
 	sessionStore := store.NewSQL(sqlDB)
 	dir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureSpec,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "sessionStore.Create", err)
@@ -35,7 +35,7 @@ func newCloseoutGateHarness(t *testing.T) (*workflow.RunManager, *api.Session, *
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	mgr := workflow.NewManager(workflowpersistence.New(sqlDB), sessionStore, manifestRegistry, nil)
-	workflow.WireBlueprintDepsForTest(mgr, dir)
+	workflowtest.WireBlueprintDeps(mgr, dir)
 
 	// plan@ research declares gated closeout with research_satisfied.
 	run, err := startRun(ctx, mgr, sess.ID, "plan", "1.0.1")

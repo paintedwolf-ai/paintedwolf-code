@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"runtime"
 	"strings"
 	"testing"
@@ -14,10 +13,12 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/session/chats"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -43,11 +44,11 @@ func (g *growingRedactor) redact(_ context.Context, msg api.Message) (api.Messag
 // Sweeping removes newly recognized secrets from existing transcript rows.
 func TestSweepRewritesRowsScreenedBeforeTheEvidenceGrew(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	evidence := &growingRedactor{}
 	mgr.Runner.Transcript.SetRedactor(evidence.redact)
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	// The minting call lands while nothing recognizes the value.
@@ -57,7 +58,7 @@ func TestSweepRewritesRowsScreenedBeforeTheEvidenceGrew(t *testing.T) {
 	}
 	testutil.FailErr(t, "append mint row", mgr.Runner.Transcript.Append(ctx, sess.ID, mint))
 
-	stored, err := mem.GetMessages(ctx, sess.ID)
+	stored, err := sessionStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read messages", err)
 	if !strings.Contains(stored[0].Content, sweepSecret) {
 		t.Fatal("precondition failed: the row was redacted before the evidence existed")
@@ -67,7 +68,7 @@ func TestSweepRewritesRowsScreenedBeforeTheEvidenceGrew(t *testing.T) {
 	evidence.known = true
 	mgr.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 1)
 
-	swept, err := mem.GetMessages(ctx, sess.ID)
+	swept, err := sessionStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read swept messages", err)
 	exposure.Absent(t, swept[0].Content, sweepSecret)
 	if swept[0].HostSecretRedaction == nil || swept[0].HostSecretRedaction.Occurrences() != 1 {
@@ -83,11 +84,11 @@ func TestSweepRewritesRowsScreenedBeforeTheEvidenceGrew(t *testing.T) {
 // growing evidence base from re-walking settled history.
 func TestSweepSkipsRowsAlreadyStampedAtTheGeneration(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	evidence := &growingRedactor{known: true}
 	mgr.Runner.Transcript.SetRedactor(evidence.redact)
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	testutil.FailErr(t, "append row", mgr.Runner.Transcript.Append(ctx, sess.ID, api.Message{
@@ -95,10 +96,10 @@ func TestSweepSkipsRowsAlreadyStampedAtTheGeneration(t *testing.T) {
 	}))
 	mgr.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 1)
 
-	afterFirst, err := mem.GetMessages(ctx, sess.ID)
+	afterFirst, err := sessionStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read after first sweep", err)
 	mgr.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 1)
-	afterSecond, err := mem.GetMessages(ctx, sess.ID)
+	afterSecond, err := sessionStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read after second sweep", err)
 
 	if afterFirst[0].Seq != afterSecond[0].Seq {
@@ -109,12 +110,12 @@ func TestSweepSkipsRowsAlreadyStampedAtTheGeneration(t *testing.T) {
 
 func TestSweepRevisitsRowsStampedByAnEarlierRun(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	blind := &growingRedactor{}
-	first := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	first := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	first.Runner.Transcript.SetRedactor(blind.redact)
 	testutil.FailErr(t, "append mint row", first.Runner.Transcript.Append(ctx, sess.ID, api.Message{
 		ID: "tool-1", Role: api.MessageRoleTool, Content: "token " + sweepSecret,
@@ -125,18 +126,18 @@ func TestSweepRevisitsRowsStampedByAnEarlierRun(t *testing.T) {
 	}
 
 	// Restart with an empty revision counter.
-	second := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	second := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	second.Runner.Transcript.SetRedactor((&growingRedactor{known: true}).redact)
 	second.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 1)
 
-	swept, err := mem.GetMessages(ctx, sess.ID)
+	swept, err := sessionStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read swept messages", err)
 	exposure.Absent(t, swept[0].Content, sweepSecret)
 }
 
 // failingUpdateStore refuses to rewrite one row.
 type failingUpdateStore struct {
-	*store.Memory
+	store.TranscriptRepository
 	messageID string
 }
 
@@ -144,26 +145,27 @@ func (s *failingUpdateStore) UpdateMessage(ctx context.Context, sessionID, messa
 	if messageID == s.messageID {
 		return api.Message{}, errors.New("row is locked")
 	}
-	return s.Memory.UpdateMessage(ctx, sessionID, messageID, msg)
+	return s.TranscriptRepository.UpdateMessage(ctx, sessionID, messageID, msg)
 }
 
 func TestSweepContinuesPastARowTheStoreRefuses(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	blocked := &failingUpdateStore{Memory: mem, messageID: "tool-1"}
-	mgr := NewHost(blocked, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	blocked := &failingUpdateStore{TranscriptRepository: sessionStore.Transcript, messageID: "tool-1"}
+	sessionStore.Transcript = blocked
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.Runner.Transcript.SetRedactor((&growingRedactor{known: true}).redact)
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for _, id := range []string{"tool-1", "tool-2"} {
-		testutil.FailErr(t, "append row", mem.AppendMessages(ctx, sess.ID, api.Message{
+		testutil.FailErr(t, "append row", sessionStore.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 			ID: id, Role: api.MessageRoleTool, Content: "token " + sweepSecret,
 		}))
 	}
 
 	mgr.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 1)
 
-	swept, err := mem.GetMessages(ctx, sess.ID)
+	swept, err := sessionStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read swept messages", err)
 	if !strings.Contains(swept[0].Content, sweepSecret) {
 		t.Fatalf("precondition failed: the refused row was rewritten anyway:\n%s", swept[0].Content)
@@ -172,7 +174,7 @@ func TestSweepContinuesPastARowTheStoreRefuses(t *testing.T) {
 	// The refused row keeps its earlier stamp, so the next pass finds it again.
 	blocked.messageID = ""
 	mgr.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 2)
-	retried, err := mem.GetMessages(ctx, sess.ID)
+	retried, err := sessionStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read retried messages", err)
 	exposure.Absent(t, retried[0].Content, sweepSecret)
 }
@@ -181,21 +183,21 @@ func TestSweepContinuesPastARowTheStoreRefuses(t *testing.T) {
 // candidate set.
 func TestScreenGenerationStampNarrowsTheCandidateSet(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append row", mgr.Runner.Transcript.Append(ctx, sess.ID, api.Message{
 		ID: "m-1", Role: api.MessageRoleTool, Content: "plain",
 	}))
 
-	stale, err := mem.MessageIDsBelowScreenGeneration(ctx, sess.ID, 3)
+	stale, err := sessionStore.Transcript.MessageIDsBelowScreenGeneration(ctx, sess.ID, 3)
 	testutil.FailErr(t, "list stale", err)
 	if len(stale) != 1 {
 		t.Fatalf("unstamped rows = %d, want 1", len(stale))
 	}
-	testutil.FailErr(t, "stamp", mem.StampMessageScreenGeneration(ctx, sess.ID, "m-1", 3))
-	stale, err = mem.MessageIDsBelowScreenGeneration(ctx, sess.ID, 3)
+	testutil.FailErr(t, "stamp", sessionStore.Transcript.StampMessageScreenGeneration(ctx, sess.ID, "m-1", 3))
+	stale, err = sessionStore.Transcript.MessageIDsBelowScreenGeneration(ctx, sess.ID, 3)
 	testutil.FailErr(t, "list stale after stamp", err)
 	if len(stale) != 0 {
 		t.Fatalf("stamped row still listed as stale: %v", stale)
@@ -203,9 +205,9 @@ func TestScreenGenerationStampNarrowsTheCandidateSet(t *testing.T) {
 }
 
 func TestDeleteSessionSharesTurnLifecycleGate(t *testing.T) {
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild, ProjectID: "p1"}, "p1")
+	sessionStore := storetest.New(t, "p1")
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild, ProjectID: "p1"}, "p1")
 	testutil.FailErr(t, "create session", err)
 	turnLock := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 	turnLock.Lock()
@@ -214,7 +216,7 @@ func TestDeleteSessionSharesTurnLifecycleGate(t *testing.T) {
 	if !errors.Is(err, chats.ErrSessionBusy) {
 		t.Fatalf("DeleteSession = %v, want chats.ErrSessionBusy", err)
 	}
-	_, err = mem.Get(t.Context(), sess.ID)
+	_, err = sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "session retained after busy delete", err)
 }
 
@@ -222,11 +224,11 @@ func TestDeleteSessionDisposesBackgroundRuntimeBeforeRow(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("sleep fixture is unix-oriented")
 	}
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessionStore := storetest.New(t, "p1")
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	mgr.SetBackgroundRegistry(reg)
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild, ProjectID: "p1"}, "p1")
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild, ProjectID: "p1"}, "p1")
 	testutil.FailErr(t, "create session", err)
 	_, err = reg.StartPipeline(t.Context(), bgprocess.PipelineSpec{
 		SessionID: sess.ID,
@@ -247,15 +249,15 @@ func TestDeleteSessionDisposesBackgroundRuntimeBeforeRow(t *testing.T) {
 }
 
 func TestDeleteSession_refusesWhileBound(t *testing.T) {
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessionStore := storetest.New(t, "p1")
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	ctx := context.Background()
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: "p1",
 	}, "p1")
 	testutil.FailErr(t, "create", err)
-	testutil.FailErr(t, "bind", mem.PutWorktreeBinding(ctx, store.WorktreeBinding{
+	testutil.FailErr(t, "bind", sessionStore.Sessions.PutWorktreeBinding(ctx, store.WorktreeBinding{
 		SessionID:    sess.ID,
 		ProjectID:    "p1",
 		RepoID:       "r1",
@@ -269,27 +271,27 @@ func TestDeleteSession_refusesWhileBound(t *testing.T) {
 	if !errors.Is(err, chats.ErrSessionWorktreeBound) {
 		t.Fatalf("DeleteSession = %v want chats.ErrSessionWorktreeBound", err)
 	}
-	if _, getErr := mem.Get(ctx, sess.ID); getErr != nil {
+	if _, getErr := sessionStore.Sessions.Get(ctx, sess.ID); getErr != nil {
 		t.Fatalf("session must still exist: %v", getErr)
 	}
 
-	testutil.FailErr(t, "unbind", mem.DeleteWorktreeBinding(ctx, sess.ID))
+	testutil.FailErr(t, "unbind", sessionStore.Sessions.DeleteWorktreeBinding(ctx, sess.ID))
 	testutil.FailErr(t, "delete after unbind", mgr.Chats.Delete(ctx, sess.ID))
-	if _, getErr := mem.Get(ctx, sess.ID); !errors.Is(getErr, store.ErrSessionNotFound) {
+	if _, getErr := sessionStore.Sessions.Get(ctx, sess.ID); !errors.Is(getErr, store.ErrSessionNotFound) {
 		t.Fatalf("session should be gone: %v", getErr)
 	}
 }
 
 func TestBoundSession_archivePinRenameUnaffected(t *testing.T) {
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sessionStore := storetest.New(t, "p1")
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	ctx := context.Background()
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: "p1",
 	}, "p1")
 	testutil.FailErr(t, "create", err)
-	testutil.FailErr(t, "bind", mem.PutWorktreeBinding(ctx, store.WorktreeBinding{
+	testutil.FailErr(t, "bind", sessionStore.Sessions.PutWorktreeBinding(ctx, store.WorktreeBinding{
 		SessionID:    sess.ID,
 		ProjectID:    "p1",
 		RepoID:       "r1",
@@ -314,11 +316,11 @@ func TestBoundSession_archivePinRenameUnaffected(t *testing.T) {
 	if pinned.PinRank == nil {
 		t.Fatal("expected pin_rank")
 	}
-	testutil.FailErr(t, "rename", mem.UpdateSession(ctx, sess.ID, func(s *api.Session) {
+	testutil.FailErr(t, "rename", sessionStore.Sessions.UpdateSession(ctx, sess.ID, func(s *api.Session) {
 		s.Title = "renamed"
 		s.UpdatedAt = time.Now().UTC()
 	}))
-	got, err := mem.Get(ctx, sess.ID)
+	got, err := sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get", err)
 	if got.Title != "renamed" {
 		t.Fatalf("title = %q", got.Title)

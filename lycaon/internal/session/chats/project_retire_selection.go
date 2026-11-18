@@ -2,6 +2,7 @@ package chats
 
 import (
 	"context"
+
 	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -17,17 +18,17 @@ type retirementPlan struct {
 
 // Selection uses project metadata and indexed tree identities, never full
 // presentation hydration for unrelated projects or retained transcript history.
-func planProjectRetirement(ctx context.Context, sessions Store, projectID string) (retirementPlan, error) {
+func planProjectRetirement(ctx context.Context, sessionStore Sessions, projectID string) (retirementPlan, error) {
 	plan := retirementPlan{}
 	for _, archived := range []bool{false, true} {
 		query := store.SummaryQuery{ProjectID: projectID, Archived: archived, Sort: wire.SessionListSortCreated, Order: wire.SessionListOrderAsc, Limit: wire.MaxSessionListLimit}
 		for {
-			page, err := sessions.ListProjectSummaries(ctx, query)
+			page, err := sessionStore.ListProjectSummaries(ctx, query)
 			if err != nil {
 				return plan, err
 			}
 			for _, row := range page.Sessions {
-				tree, err := sessions.SessionTreeIDs(ctx, row.ID)
+				tree, err := sessionStore.SessionTreeIDs(ctx, row.ID)
 				if err != nil {
 					return plan, err
 				}

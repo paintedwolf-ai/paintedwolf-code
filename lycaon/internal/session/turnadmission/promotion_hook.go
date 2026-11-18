@@ -16,10 +16,10 @@ func (m *Service) SetPromotion(fn promotionHook) {
 }
 
 func (m *Service) MaybePromote(ctx context.Context, sessionID string) {
-	if m == nil || m.promotionHook == nil || m.store == nil {
+	if m == nil || m.promotionHook == nil || (m.sessionStore == nil || m.submissionStore == nil) {
 		return
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return
 	}

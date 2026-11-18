@@ -53,10 +53,10 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 			return nil
 		}
 	}
-	if m.Sessions == nil {
+	if m.TranscriptStore == nil {
 		return fmt.Errorf("review repair requires transcript storage")
 	}
-	messages, err := m.Sessions.GetMessages(ctx, sessionID)
+	messages, err := m.TranscriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -133,7 +133,7 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 // Recover closes the crash window between transcript commit and repair
 // accounting. Accepted submissions delimit the current repair sequence.
 func (m ReviewRepairs) Recover(ctx context.Context) error {
-	if m.Sessions == nil {
+	if m.TranscriptStore == nil {
 		return nil
 	}
 	runs, err := m.Store.Runs.ListRunning(ctx)
@@ -141,7 +141,7 @@ func (m ReviewRepairs) Recover(ctx context.Context) error {
 		return err
 	}
 	for _, run := range runs {
-		messages, err := m.Sessions.GetMessages(ctx, run.SessionID)
+		messages, err := m.TranscriptStore.GetMessages(ctx, run.SessionID)
 		if err != nil {
 			return err
 		}

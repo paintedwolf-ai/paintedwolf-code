@@ -29,6 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
@@ -46,9 +47,9 @@ func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
 	sessionStore := store.NewSQL(sqlDB)
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "mark session busy", sessionStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark session busy", sessionStore.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load manifests", err)
@@ -62,7 +63,7 @@ func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
 	}
 	testutil.FailErr(t, "create workflow state", wfStore.State.CreateState(ctx, run, projectDir, nil))
 
-	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	workersRt := workerruntime.New(sqlDB, nil, worker.WorkersConfig{})
 	starts := 0
@@ -108,9 +109,9 @@ func TestTerminalCompletionSettlesWithoutAmbientWake(t *testing.T) {
 	sessionStore := store.NewSQL(sqlDB)
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "mark parked session busy", sessionStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark parked session busy", sessionStore.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load manifests", err)
@@ -124,13 +125,13 @@ func TestTerminalCompletionSettlesWithoutAmbientWake(t *testing.T) {
 	}
 	testutil.FailErr(t, "create workflow state", wfStore.State.CreateState(ctx, run, projectDir, nil))
 
-	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	workersRt := workerruntime.New(sqlDB, nil, worker.WorkersConfig{})
 	workersRt.SetDependencies(workerruntime.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}})
 	workersRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "select", "done")
 	workersRt.OnWorkflowRunCompleted(ctx, run)
-	settled, err := sessionStore.Get(ctx, sess.ID)
+	settled, err := sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read completed session", err)
 	if settled.Status != api.SessionStatusIdle {
 		t.Fatalf("status = %q, want idle after workflow approval", settled.Status)
@@ -148,9 +149,9 @@ func TestHumanApprovalAdvanceQueuesWakeForRunningChild(t *testing.T) {
 	sessionStore := store.NewSQL(sqlDB)
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "mark session busy", sessionStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark session busy", sessionStore.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load manifests", err)
@@ -171,7 +172,7 @@ func TestHumanApprovalAdvanceQueuesWakeForRunningChild(t *testing.T) {
 	}
 	testutil.FailErr(t, "create child workflow state", wfStore.State.CreateState(ctx, child, projectDir, nil))
 
-	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	workersChildRt := workerruntime.New(sqlDB, nil, worker.WorkersConfig{})
 	workersChildRt.SetDependencies(workerruntime.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}})
@@ -191,12 +192,12 @@ func TestPhaseEntryGuidanceUsesTheRunWorkflowVersion(t *testing.T) {
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
 	sessionsStore := store.NewSQL(sqlDB)
-	sess, err := sessionsStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionsStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create phase guidance session", err)
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load phase guidance workflows", err)
 	manager := workflow.NewManager(workflowpersistence.New(sqlDB), sessionsStore, manifests, nil)
-	host := session.NewHost(sessionsStore, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	host := session.NewHost(sessionsStore, session.Models{Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	registry, err := anchor.LoadRegistryFromConfigRoot()
 	testutil.FailErr(t, "load versioned phase guidance bindings", err)
 	runtime := workerruntime.New(sqlDB, nil, worker.WorkersConfig{})
@@ -237,7 +238,7 @@ func TestPhaseHandoffCarriesDurableEvidenceAndResetsPreviousRunProgress(t *testi
 	run := &api.WorkflowRun{ID: "handoff", SessionID: "chat", ProjectID: testdbseed.DefaultProjectID, WorkflowID: "security-survey", WorkflowVersion: "1.0.0", Status: api.WorkflowRunStatusRunning, CurrentPhase: "claims", CreatedAt: now, UpdatedAt: now}
 	vars := map[string]any{"evidence_digest": "retained-evidence-identity", "topology_outputs": map[string]any{"fan_out": "retained-topology-output"}, "options": map[string]any{"criterion": "explicit-selection-criterion"}, "review_verdict": map[string]any{"claim": "approved"}}
 	testutil.FailErr(t, "create handoff state", wfStore.State.CreateState(ctx, run, root, vars))
-	host := session.NewHost(sessionsStore, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	host := session.NewHost(sessionsStore, session.Models{Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	kicks := &kick.KickEngine{}
 	bus := anchor.NewBus(kicks)
 	registry, err := anchor.LoadRegistryFromConfigRoot()
@@ -278,9 +279,9 @@ func TestFeedbackAndReviewCallbacksRetainGuidanceUntilCoordinatorWake(t *testing
 	database := testdbfixture.Open(t, "feedback-guidance.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	sessionStore := store.NewSQL(database)
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create coordinator feedback session", err)
-	host := session.NewHost(sessionStore, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	host := session.NewHost(sessionStore, session.Models{Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load feedback workflow catalog", err)
 	manager := workflow.NewManager(workflowpersistence.New(database), sessionStore, manifests, nil)
@@ -328,9 +329,9 @@ func TestComposeWorkerAssignmentRendersNamedFollowUpAndWorkflowContext(t *testin
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", projectDir)
 	sessionStore := store.NewSQL(database)
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create coordinator session", err)
-	childSess, err := sessionStore.CreateChild(ctx, sess, api.SpawnChildRequest{AgentType: "skeptic"})
+	childSess, err := sessionStore.Sessions.CreateChild(ctx, sess, api.SpawnChildRequest{AgentType: "skeptic"})
 	testutil.FailErr(t, "create child session", err)
 
 	records := workerrecords.New(database)

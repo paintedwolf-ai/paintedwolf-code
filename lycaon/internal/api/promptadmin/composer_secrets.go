@@ -27,11 +27,11 @@ func (s *Submission) HandleCreateComposerSecret(w http.ResponseWriter, r *http.R
 		return
 	}
 	sessionID := strings.TrimSpace(chi.URLParam(r, "id"))
-	sess, ok := requestscope.Session(s.Store, s.responses, w, r, sessionID)
+	sess, ok := requestscope.Session(s.SessionQueries, s.responses, w, r, sessionID)
 	if !ok {
 		return
 	}
-	chatSessionID := sessiontree.RootID(r.Context(), s.Store, sessionID)
+	chatSessionID := sessiontree.RootID(r.Context(), s.SessionQueries, sessionID)
 	put, err := s.ManagedSecrets.Put(r.Context(), secretcap.PutRequest{
 		ProjectID: sess.ProjectID, ChatSessionID: chatSessionID, SessionID: sessionID,
 		OperationID: operationID.String(), Name: strings.TrimSpace(body.Name),

@@ -16,24 +16,26 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestPromptHTTPReturnsSpendRejectionBeforeAcceptedReceipt(t *testing.T) {
 	// The session is created by an ordinary server; the spend-capped manager then
 	// serves the same store and projects.
-	fixture := contractfixture.NewTestServer(t)
+	repositories := storetest.New(t)
+	fixture := contractfixture.NewTestServer(t, contractfixture.WithSessionStore(repositories))
 	sess := contractfixture.CreateSessionAtPathOnServer(t, fixture, t.TempDir(), wire.SessionPostureBuild)
 	tracker := costtest.NewTracker(t, nil)
 	limits := settings.DefaultSessionLimits()
 	limits.SpendCeilingEnabled = true
 	limits.SessionSpendCeilingUSD = 5
 	srv := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) {
-		d.Core.Store, d.Core.Projects = fixture.Sources.Workspace.SessionStore, fixture.Sources.Workspace.ProjectRegistry
-		d.Core.Sessions = session.NewHost(d.Core.Store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: limits, Cost: tracker}, tools.NewStubRegistry())
+		d.Core.Store, d.Core.Projects = repositories, fixture.Sources.Workspace.ProjectRegistry
+		d.Core.Sessions = session.NewHost(d.Core.Store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: limits, Cost: tracker}, toolstest.NewRegistry())
 	})
 
 	spent := int64(6_000_000_000)

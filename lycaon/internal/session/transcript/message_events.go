@@ -12,7 +12,7 @@ import (
 
 // AppendPlain stamps and persists messages, then publishes their append events.
 func (m *Service) AppendPlain(ctx context.Context, sessionID string, msgs ...api.Message) error {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.turnStore == nil || m.people == nil) {
 		return fmt.Errorf("session store not configured")
 	}
 	if len(msgs) == 0 {
@@ -22,7 +22,7 @@ func (m *Service) AppendPlain(ctx context.Context, sessionID string, msgs ...api
 	if err != nil {
 		return err
 	}
-	if err := m.store.AppendMessages(ctx, sessionID, stamped...); err != nil {
+	if err := m.transcriptStore.AppendMessages(ctx, sessionID, stamped...); err != nil {
 		return err
 	}
 	m.PublishAppends(ctx, sessionID, stamped...)
@@ -49,7 +49,7 @@ func (m *Service) PublishAppends(ctx context.Context, sessionID string, msgs ...
 	if m.Outboxed() {
 		return
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return
 	}
@@ -70,7 +70,7 @@ func (m *Service) PublishPatch(ctx context.Context, sessionID string, msg api.Me
 	if m.Outboxed() {
 		return
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return
 	}
@@ -78,8 +78,8 @@ func (m *Service) PublishPatch(ctx context.Context, sessionID string, msg api.Me
 }
 
 func (m *Service) Outboxed() bool {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.turnStore == nil || m.people == nil) {
 		return false
 	}
-	return m.store.MutationEventsOutboxed()
+	return m.transcriptStore.MessageEventsOutboxed()
 }

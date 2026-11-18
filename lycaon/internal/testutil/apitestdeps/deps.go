@@ -56,7 +56,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -75,7 +75,7 @@ type Deps struct {
 	}
 	ApprovalGate      hitl.ApprovalGate
 	Database          db.Handle
-	Store             session.Store
+	Store             *sessionstore.Repositories
 	Projects          project.Registry
 	Sessions          *session.Host
 	Settings          *settings.Service
@@ -130,14 +130,18 @@ type Deps struct {
 // kept; the ones it builds share one disposable database.
 func Fill(t *testing.T, d *Deps) {
 	t.Helper()
-	if d.Database == nil {
-		d.Database = storeDatabase(d.Store)
+	if d.Database == nil && d.Store != nil {
+		d.Database = d.Store.DB()
 	}
 	if d.Database == nil {
 		d.Database = testdbfixture.Open(t, "api-deps.db")
 	}
 	if d.Store == nil {
-		d.Store = sessionstore.NewMemory()
+		database, ok := d.Database.(db.ReadHandle)
+		if !ok {
+			t.Fatal("session fixtures require a database with consistent read snapshots")
+		}
+		d.Store = sessionstore.NewSQL(database)
 	}
 	if d.Projects == nil {
 		// Source ledger rows reference the project table in the same database.
@@ -277,7 +281,7 @@ func fillHost(t *testing.T, d *Deps) {
 func fillWorkers(t *testing.T, d *Deps) {
 	t.Helper()
 	if d.Workers == nil {
-		d.Workers = worker.NewInMemoryQueue(2)
+		d.Workers = worker.NewSQLQueue(d.Database, 2)
 	}
 	if d.WorkerCancel == nil {
 		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Events: d.Sessions.Coordinator.Workers, Graceful: d.Sessions.Workers.Cancel, Cancellations: d.Sessions.Workers.Cancellations}
@@ -310,7 +314,7 @@ func fillHarness(t *testing.T, d *Deps) {
 		d.HarnessWorkers = scripted
 	}
 	if d.LLM.Preparation == nil {
-		preparation, err := harnessfixture.NewPreludeController(t.TempDir(), d.Store)
+		preparation, err := harnessfixture.NewPreludeController(t.TempDir(), d.Store.Transcript)
 		testutil.FailErr(t, "conversation preparation", err)
 		d.LLM.Preparation = preparation
 	}
@@ -325,13 +329,6 @@ func (refusingExecutor) Execute(context.Context, wire.WorkerTask, worker.WorkerR
 
 func (refusingExecutor) AbortWorkerRuntime(context.Context, wire.WorkerTask) error { return nil }
 
-func storeDatabase(store session.Store) db.Handle {
-	if owner, ok := store.(interface{ DB() db.Handle }); ok {
-		return owner.DB()
-	}
-	return nil
-}
-
 func fillSessions(t *testing.T, d *Deps) {
 	t.Helper()
 	// Every coordinator reply on a report surface passes the closeout check, so a
@@ -344,7 +341,7 @@ func fillSessions(t *testing.T, d *Deps) {
 	if d.Sessions != nil {
 		return
 	}
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	d.Sessions = session.NewHost(d.Store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	d.Sessions.SetDataDir(t.TempDir())
 	d.Sessions.SetProjectRegistry(d.Projects)

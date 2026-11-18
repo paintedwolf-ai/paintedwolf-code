@@ -13,6 +13,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -80,7 +81,7 @@ func blueprintCall(t *testing.T, srv *hostapi.Server, method, target, body strin
 func TestBlueprintRoutesEditAndRemoveABlueprint(t *testing.T) {
 	dir := t.TempDir()
 	srv := contractfixture.NewTestServerWithWorkflows(t, func(d *hostapi.Dependencies) {
-		d.Workflow.Blueprints = blueprint.NewManager(blueprint.NewFileStoreForTest(dir))
+		d.Workflow.Blueprints = blueprint.NewManager(blueprinttest.NewFileStore(dir))
 	})
 	opened := contractfixture.CreateProjectForTest(t, srv, dir)
 	base := "/v1/projects/" + opened.ID + "/blueprints"
@@ -235,7 +236,7 @@ func TestCreateProviderRejectsInvalidBaseURL(t *testing.T) {
 // List endpoints encode empty collections as arrays.
 
 func TestWorkersEmptyListReturnsArrayNotNull(t *testing.T) {
-	srv := contractfixture.NewInMemoryWorkersServer(t)
+	srv := contractfixture.NewWorkersServer(t)
 	projectDir := t.TempDir()
 	opened := contractfixture.CreateProjectForTest(t, srv, projectDir)
 
@@ -255,18 +256,22 @@ func TestWorkersEmptyListReturnsArrayNotNull(t *testing.T) {
 }
 
 func TestListWorkersFiltersBySessionID(t *testing.T) {
-	srv := contractfixture.NewInMemoryWorkersServer(t)
+	srv := contractfixture.NewWorkersServer(t)
 	projectDir := t.TempDir()
 	opened := contractfixture.CreateProjectForTest(t, srv, projectDir)
 
 	ctx := context.Background()
+	first, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, opened.ID)
+	testutil.FailErr(t, "create first parent", err)
+	second, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, opened.ID)
+	testutil.FailErr(t, "create second parent", err)
 	now := time.Now().UTC()
-	queue := srv.Admin.Project.Sandboxes.Workers.(*worker.InMemoryQueue)
+	queue := srv.Admin.Project.Sandboxes.Workers.(*worker.SQLQueue)
 	if _, err := queue.Enqueue(ctx, wire.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",
 		ID:              "worker-a",
-		ParentSessionID: "sess-a",
+		ParentSessionID: first.ID,
 		ProjectID:       opened.ID,
 		WorkspacePath:   contractfixture.PrimaryRootPath(opened),
 		AgentType:       "implementer",
@@ -279,7 +284,7 @@ func TestListWorkersFiltersBySessionID(t *testing.T) {
 		Prompt:          "fixture",
 		Brief:           "fixture",
 		ID:              "worker-b",
-		ParentSessionID: "sess-b",
+		ParentSessionID: second.ID,
 		ProjectID:       opened.ID,
 		WorkspacePath:   contractfixture.PrimaryRootPath(opened),
 		AgentType:       "implementer",
@@ -291,7 +296,7 @@ func TestListWorkersFiltersBySessionID(t *testing.T) {
 
 	req := contractfixture.NewAuthedRequest(
 		http.MethodGet,
-		"/v1/workers?project_id="+opened.ID+"&session_id=sess-a",
+		"/v1/workers?project_id="+opened.ID+"&session_id="+first.ID,
 		nil,
 	)
 	w := httptest.NewRecorder()

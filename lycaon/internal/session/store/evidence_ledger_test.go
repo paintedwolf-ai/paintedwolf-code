@@ -39,7 +39,7 @@ func TestEvidenceLedgerStore_roundTrip(t *testing.T) {
 
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	body := []string{"line 42: token check"}
@@ -54,9 +54,9 @@ func TestEvidenceLedgerStore_roundTrip(t *testing.T) {
 		LineRanges: ranges,
 		Body:       body,
 	}
-	testutil.FailErr(t, "UpsertEvidenceRecord", store.UpsertEvidenceRecord(ctx, sess.ID, rec))
+	testutil.FailErr(t, "UpsertEvidenceRecord", store.Evidence.UpsertEvidenceRecord(ctx, sess.ID, rec))
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	got, ok := evidence.ResolveHandle(ev, "read#1")
 	if !ok {
@@ -77,14 +77,14 @@ func TestEvidenceLedgerStore_upsertIdempotent(t *testing.T) {
 
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	rec := evidence.Record{Handle: "read#1", Kind: "read", Path: "a.go", Body: []string{"x"}}
-	testutil.FailErr(t, "UpsertEvidenceRecord first", store.UpsertEvidenceRecord(ctx, sess.ID, rec))
-	testutil.FailErr(t, "UpsertEvidenceRecord retry", store.UpsertEvidenceRecord(ctx, sess.ID, rec))
+	testutil.FailErr(t, "UpsertEvidenceRecord first", store.Evidence.UpsertEvidenceRecord(ctx, sess.ID, rec))
+	testutil.FailErr(t, "UpsertEvidenceRecord retry", store.Evidence.UpsertEvidenceRecord(ctx, sess.ID, rec))
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	if len(ev.Handles) != 1 {
 		t.Fatalf("handles = %d want 1", len(ev.Handles))
@@ -98,16 +98,16 @@ func TestEvidenceLedgerStore_markSuperseded(t *testing.T) {
 
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	old := evidence.Record{Handle: "read#1", Kind: "read", Path: "src/a.go", Body: []string{"old"}}
 	newRec := evidence.Record{Handle: "read#2", Kind: "read", Path: "src/a.go", Body: []string{"new"}}
-	testutil.FailErr(t, "UpsertEvidenceRecord old", store.UpsertEvidenceRecord(ctx, sess.ID, old))
-	testutil.FailErr(t, "UpsertEvidenceRecord new", store.UpsertEvidenceRecord(ctx, sess.ID, newRec))
-	testutil.FailErr(t, "MarkSuperseded", markSuperseded(ctx, store.queries, sess.ID, "read#1", "read#2"))
+	testutil.FailErr(t, "UpsertEvidenceRecord old", store.Evidence.UpsertEvidenceRecord(ctx, sess.ID, old))
+	testutil.FailErr(t, "UpsertEvidenceRecord new", store.Evidence.UpsertEvidenceRecord(ctx, sess.ID, newRec))
+	testutil.FailErr(t, "MarkSuperseded", markSuperseded(ctx, store.core.queries, sess.ID, "read#1", "read#2"))
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	if rec, ok := evidence.ResolveHandle(ev, "read#1"); !ok || rec.SupersededBy != "read#2" || rec.Body[0] != "old" {
 		t.Fatalf("historical observation lost: %+v", rec)
@@ -121,45 +121,47 @@ func TestEvidenceLedgerStore_markSuperseded(t *testing.T) {
 	}
 }
 
-func TestMemoryStoreCommitEvidenceSequentialOrdinals(t *testing.T) {
-	store := NewMemory()
+func TestStoreCommitEvidenceSequentialOrdinals(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 	dir := t.TempDir()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
-	h1, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "a.go"}, "contents of a.go")
+	h1, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "a.go"}, "contents of a.go")
 	testutil.FailErr(t, "first commit", err)
-	h2, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "b.go"}, "contents of b.go")
+	h2, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "b.go"}, "contents of b.go")
 	testutil.FailErr(t, "second commit", err)
 	if h1 != "read#1" || h2 != "read#2" {
 		t.Fatalf("handles = %q, %q want read#1, read#2", h1, h2)
 	}
 }
 
-func TestMemoryStoreCommitEvidenceOrdinalSurvivesCrossKindSupersession(t *testing.T) {
-	store := NewMemory()
+func TestStoreCommitEvidenceOrdinalSurvivesCrossKindSupersession(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 	dir := t.TempDir()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	readBody := func(body string) string {
 		return `{"path":"a.go","content":"1|` + body + `","offset":1,"end_line":1}`
 	}
-	first, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "a.go"}, readBody("before"))
+	first, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "a.go"}, readBody("before"))
 	testutil.FailErr(t, "first read", err)
-	_, _, err = store.CommitEvidenceToolResult(ctx, sess.ID, dir, "write", map[string]any{"path": "a.go"}, "wrote a.go")
+	_, _, err = store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "write", map[string]any{"path": "a.go"}, "wrote a.go")
 	testutil.FailErr(t, "write", err)
-	second, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "a.go"}, readBody("after"))
+	second, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "a.go"}, readBody("after"))
 	testutil.FailErr(t, "second read", err)
 
 	if first != "read#1" || second != "read#2" {
 		t.Fatalf("read handles = %q, %q want read#1, read#2", first, second)
 	}
-	row, ok := store.evidence[sess.ID]["read#1"]
-	if !ok || row.supersededBy != "write#1" {
-		t.Fatalf("historical read#1 = %+v ok=%v", row, ok)
+	var supersededBy string
+	err = store.DB().QueryRowContext(ctx, `SELECT superseded_by FROM evidence_records WHERE session_id = ? AND handle = ?`, sess.ID, "read#1").Scan(&supersededBy)
+	testutil.FailErr(t, "read historical evidence", err)
+	if supersededBy != "write#1" {
+		t.Fatalf("historical read superseded by %q", supersededBy)
 	}
 }
 
@@ -170,17 +172,17 @@ func TestCommitEvidenceToolResult_assignsOrdinalAndPersists(t *testing.T) {
 
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	readJSON := `{"path":"src/a.go","content":"1|package a","offset":1,"end_line":1}`
-	handle, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "src/a.go"}, readJSON)
+	handle, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "src/a.go"}, readJSON)
 	testutil.FailErr(t, "CommitEvidenceToolResult", err)
 	if handle != "read#1" {
 		t.Fatalf("handle = %q want read#1", handle)
 	}
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	if !evidence.PathObserved(ev, "src/a.go") {
 		t.Fatalf("paths = %v", evidence.ObservedPathsSorted(ev))
@@ -194,17 +196,17 @@ func TestCommitEvidenceToolResult_surveyFlagRoundTrip(t *testing.T) {
 
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	overflowGrep := `{"distribution":[{"count":200,"dir":"."}],"truncated":true,"total":200,"selected":0}`
-	handle, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "grep", map[string]any{"pattern": "needle"}, overflowGrep)
+	handle, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "grep", map[string]any{"pattern": "needle"}, overflowGrep)
 	testutil.FailErr(t, "CommitEvidenceToolResult overflow grep", err)
 	if handle != "grep#1" {
 		t.Fatalf("handle = %q want grep#1", handle)
 	}
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	got, ok := evidence.ResolveHandle(ev, handle)
 	if !ok {
@@ -215,12 +217,12 @@ func TestCommitEvidenceToolResult_surveyFlagRoundTrip(t *testing.T) {
 	}
 
 	literalGrep := `{"matches":[{"path":"a.go","line":1,"content":"x"}]}`
-	handle2, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "grep", map[string]any{"pattern": "x", "max_matches": 20}, literalGrep)
+	handle2, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "grep", map[string]any{"pattern": "x", "max_matches": 20}, literalGrep)
 	testutil.FailErr(t, "CommitEvidenceToolResult literal grep", err)
 	if handle2 != "grep#2" {
 		t.Fatalf("handle = %q want grep#2", handle2)
 	}
-	ev, err = store.LoadLedger(ctx, sess.ID)
+	ev, err = store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger after literal", err)
 	got2, ok := evidence.ResolveHandle(ev, handle2)
 	if !ok {
@@ -240,7 +242,7 @@ func TestCommitEvidenceToolResult_webSearchURLsPersist(t *testing.T) {
 
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	searchJSON := `{"results":[` +
@@ -248,10 +250,10 @@ func TestCommitEvidenceToolResult_webSearchURLsPersist(t *testing.T) {
 		`{"url":"https://medium.com/@fa.ouardirhi/cowrie-honeypot-in-action"},` +
 		`{"url":"https://docs.cowrie.org/"}` +
 		`],"provider":"brave"}`
-	_, _, err = store.CommitEvidenceToolResult(ctx, sess.ID, dir, "web_search", map[string]any{"query": "cowrie"}, searchJSON)
+	_, _, err = store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "web_search", map[string]any{"query": "cowrie"}, searchJSON)
 	testutil.FailErr(t, "CommitEvidenceToolResult", err)
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	for _, want := range []string{
 		"https://github.com/cowrie/cowrie",
@@ -271,20 +273,20 @@ func TestCommitEvidenceToolResult_reReadSupersedesPriorLiveRow(t *testing.T) {
 
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	read1 := `{"path":"src/a.go","content":"1|old body","offset":1,"end_line":1}`
 	read2 := `{"path":"src/a.go","content":"1|new body","offset":1,"end_line":1}`
-	h1, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "src/a.go"}, read1)
+	h1, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "src/a.go"}, read1)
 	testutil.FailErr(t, "first read commit", err)
-	h2, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "src/a.go"}, read2)
+	h2, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "src/a.go"}, read2)
 	testutil.FailErr(t, "second read commit", err)
 	if h1 != "read#1" || h2 != "read#2" {
 		t.Fatalf("handles = %q, %q", h1, h2)
 	}
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	if rec, ok := evidence.ResolveHandle(ev, "read#1"); !ok || rec.SupersededBy != "read#2" {
 		t.Fatalf("historical observation lost: %+v", rec)
@@ -311,19 +313,19 @@ func TestCommitEvidenceToolResult_mutationSupersedesRead(t *testing.T) {
 
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	readJSON := `{"path":"src/a.go","content":"1|before edit","offset":1,"end_line":1}`
-	readHandle, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "src/a.go"}, readJSON)
+	readHandle, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "src/a.go"}, readJSON)
 	testutil.FailErr(t, "read commit", err)
-	writeHandle, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "write", map[string]any{"path": "src/a.go"}, "wrote src/a.go")
+	writeHandle, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "write", map[string]any{"path": "src/a.go"}, "wrote src/a.go")
 	testutil.FailErr(t, "write commit", err)
 	if readHandle != "read#1" || writeHandle != "write#1" {
 		t.Fatalf("handles = %q, %q", readHandle, writeHandle)
 	}
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	if rec, ok := evidence.ResolveHandle(ev, "read#1"); !ok || rec.SupersededBy != "write#1" {
 		t.Fatalf("historical observation lost: %+v", rec)
@@ -341,19 +343,19 @@ func TestCommitEvidenceToolResult_reReadPreservesMutation(t *testing.T) {
 
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
-	writeHandle, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "write", map[string]any{"path": "game.py"}, "wrote game.py")
+	writeHandle, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "write", map[string]any{"path": "game.py"}, "wrote game.py")
 	testutil.FailErr(t, "write commit", err)
 	readJSON := `{"path":"game.py","content":"1|import math","offset":1,"end_line":1}`
-	readHandle, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "game.py"}, readJSON)
+	readHandle, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "game.py"}, readJSON)
 	testutil.FailErr(t, "read commit", err)
 	if writeHandle != "write#1" || readHandle != "read#1" {
 		t.Fatalf("handles = %q, %q", writeHandle, readHandle)
 	}
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	if _, ok := evidence.ResolveHandle(ev, "write#1"); !ok {
 		t.Fatal("read of a written path must not supersede the write mutation handle")
@@ -363,24 +365,23 @@ func TestCommitEvidenceToolResult_reReadPreservesMutation(t *testing.T) {
 	}
 }
 
-// Memory store parity for reReadPreservesMutation.
-func TestMemoryStoreCommitEvidence_reReadPreservesMutation(t *testing.T) {
-	store := NewMemory()
+func TestStoreCommitEvidence_reReadPreservesMutation(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 	dir := t.TempDir()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
-	_, _, err = store.CommitEvidenceToolResult(ctx, sess.ID, dir, "write", map[string]any{"path": "game.py"}, "wrote game.py")
+	_, _, err = store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "write", map[string]any{"path": "game.py"}, "wrote game.py")
 	testutil.FailErr(t, "write commit", err)
 	readJSON := `{"path":"game.py","content":"1|import math","offset":1,"end_line":1}`
-	_, _, err = store.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "game.py"}, readJSON)
+	_, _, err = store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "game.py"}, readJSON)
 	testutil.FailErr(t, "read commit", err)
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	if _, ok := evidence.ResolveHandle(ev, "write#1"); !ok {
-		t.Fatal("read of a written path must not supersede the write mutation handle (memory store)")
+		t.Fatal("read of a written path must not supersede the write mutation handle")
 	}
 }
 
@@ -393,25 +394,25 @@ func TestCommitEvidenceToolResult_grepDoesNotRetireReadOnPartialOverlap(t *testi
 
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	readJSON := `{"path":"README.md","content":"1|# title\n25\t| Engine | load |\n","offset":1,"end_line":25}`
-	readHandle, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "README.md"}, readJSON)
+	readHandle, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "README.md"}, readJSON)
 	testutil.FailErr(t, "read commit", err)
 	if readHandle != "read#1" {
 		t.Fatalf("read handle = %q", readHandle)
 	}
 
 	grepTouchREADME := `{"matches":[{"path":"README.md","line":25,"content":"| Engine | load |"},{"path":"vocab.py","line":1,"content":"profiles"}]}`
-	_, _, err = store.CommitEvidenceToolResult(ctx, sess.ID, dir, "grep", map[string]any{"pattern": "Engine", "path": "."}, grepTouchREADME)
+	_, _, err = store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "grep", map[string]any{"pattern": "Engine", "path": "."}, grepTouchREADME)
 	testutil.FailErr(t, "grep touch README", err)
 
 	grepTestsOnly := `{"matches":[{"path":"tests/a.py","line":1,"content":"def test_x():"}]}`
-	_, _, err = store.CommitEvidenceToolResult(ctx, sess.ID, dir, "grep", map[string]any{"pattern": "test_", "path": "tests"}, grepTestsOnly)
+	_, _, err = store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "grep", map[string]any{"pattern": "test_", "path": "tests"}, grepTestsOnly)
 	testutil.FailErr(t, "grep tests only", err)
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	got, ok := evidence.ResolveHandle(ev, "read#1")
 	if !ok {
@@ -432,11 +433,11 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	// 1. External http_request with response_path records external custody on saved.txt without marking model ingestion.
-	_, _, err = store.CommitEvidenceToolResult(
+	_, _, err = store.Evidence.CommitEvidenceToolResult(
 		ctx,
 		sess.ID,
 		dir,
@@ -446,7 +447,7 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 	)
 	testutil.FailErr(t, "http_request response_path", err)
 
-	untrusted, err := store.SessionUntrustedContentResult(ctx, sess.ID)
+	untrusted, err := store.Evidence.SessionUntrustedContentResult(ctx, sess.ID)
 	testutil.FailErr(t, "SessionUntrustedContentResult after download", err)
 	if untrusted {
 		t.Fatal("response_path download must not mark model ingestion before saved.txt is read into model context")
@@ -454,16 +455,16 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 
 	// 2. Subsequent read of saved.txt marks untrusted ingestion and propagates the observed URL.
 	readJSON := `{"path":"saved.txt","content":"1|remote payload\n","offset":1,"end_line":1}`
-	readHandle, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "saved.txt"}, readJSON)
+	readHandle, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "saved.txt"}, readJSON)
 	testutil.FailErr(t, "read saved.txt", err)
 
-	untrusted, err = store.SessionUntrustedContentResult(ctx, sess.ID)
+	untrusted, err = store.Evidence.SessionUntrustedContentResult(ctx, sess.ID)
 	testutil.FailErr(t, "SessionUntrustedContentResult after read", err)
 	if !untrusted {
 		t.Fatal("reading external custody file into model context must mark untrusted ingestion")
 	}
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	gotRead, ok := evidence.ResolveHandle(ev, readHandle)
 	gotURLs := evidence.ObservedURLsForRecord(gotRead)
@@ -471,23 +472,17 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 		t.Fatalf("read record = %+v urls=%v, want UntrustedContent=true and propagated ObservedURLs", gotRead, gotURLs)
 	}
 
-	// An edit keeps external custody and a full write clears it, in SQL and memory alike.
-	// clears it; verify SQL and Memory parity.
+	// An edit keeps external custody; a full write clears it.
 	for _, backend := range []struct {
 		name string
-		s    interface {
-			Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-			CommitEvidenceToolResult(context.Context, string, string, string, map[string]any, string) (string, string, error)
-			LoadLedger(context.Context, string) (evidence.Ledger, error)
-		}
+		s    *Repositories
 	}{
 		{"sql", store},
-		{"memory", NewMemory()},
 	} {
 		t.Run(backend.name+"_partial_vs_full_replacement", func(t *testing.T) {
-			s2, err := backend.s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			s2, err := backend.s.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "Create", err)
-			_, _, err = backend.s.CommitEvidenceToolResult(
+			_, _, err = backend.s.Evidence.CommitEvidenceToolResult(
 				ctx, s2.ID, dir, "http_request",
 				map[string]any{"url": "https://api.external.example/v1/item.txt", "response_path": "item.txt"},
 				`{"status":200,"url":"https://api.external.example/v1/item.txt","response_path":"item.txt","written":true}`,
@@ -495,13 +490,13 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 			testutil.FailErr(t, "download item.txt", err)
 
 			// Partial edit preserves external custody.
-			_, _, err = backend.s.CommitEvidenceToolResult(
+			_, _, err = backend.s.Evidence.CommitEvidenceToolResult(
 				ctx, s2.ID, dir, "edit",
 				map[string]any{"path": "item.txt"},
 				`{"path":"item.txt","applied":true}`,
 			)
 			testutil.FailErr(t, "edit item.txt", err)
-			r1Handle, _, err := backend.s.CommitEvidenceToolResult(
+			r1Handle, _, err := backend.s.Evidence.CommitEvidenceToolResult(
 				ctx, s2.ID, dir, "read",
 				map[string]any{"path": "item.txt"},
 				`{"path":"item.txt","content":"1|edited payload\n","offset":1,"end_line":1}`,
@@ -509,20 +504,20 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 			testutil.FailErr(t, "read after edit", err)
 
 			// A full write replaces external custody, so a later read inherits nothing stale.
-			_, _, err = backend.s.CommitEvidenceToolResult(
+			_, _, err = backend.s.Evidence.CommitEvidenceToolResult(
 				ctx, s2.ID, dir, "write",
 				map[string]any{"path": "item.txt"},
 				`{"path":"item.txt","bytes_written":10}`,
 			)
 			testutil.FailErr(t, "full write item.txt", err)
-			r2Handle, _, err := backend.s.CommitEvidenceToolResult(
+			r2Handle, _, err := backend.s.Evidence.CommitEvidenceToolResult(
 				ctx, s2.ID, dir, "read",
 				map[string]any{"path": "item.txt"},
 				`{"path":"item.txt","content":"1|clean local\n","offset":1,"end_line":1}`,
 			)
 			testutil.FailErr(t, "read after full write", err)
 
-			ev2, err := backend.s.LoadLedger(ctx, s2.ID)
+			ev2, err := backend.s.Evidence.LoadLedger(ctx, s2.ID)
 			testutil.FailErr(t, "LoadLedger", err)
 			rec1, ok1 := evidence.ResolveHandle(ev2, r1Handle)
 			rec2, ok2 := evidence.ResolveHandle(ev2, r2Handle)
@@ -537,7 +532,7 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 
 	// Rows without custody are skipped, not retained.
 	// buildMetadataLedgerFromRows.
-	rows, err := store.queries.ListEvidenceRecords(ctx, sess.ID)
+	rows, err := store.core.queries.ListEvidenceRecords(ctx, sess.ID)
 	testutil.FailErr(t, "ListEvidenceRecords", err)
 	metaLedger, err := buildMetadataLedgerFromRows(rows, evidence.CitationRoots{})
 	testutil.FailErr(t, "buildMetadataLedgerFromRows", err)
@@ -614,7 +609,7 @@ func TestStoredLineRangesPayload_LegacyDecodeAndVersionGate(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 	_, err = sqlDB.ExecContext(ctx, `
 		INSERT INTO evidence_records (
@@ -625,7 +620,7 @@ func TestStoredLineRangesPayload_LegacyDecodeAndVersionGate(t *testing.T) {
 	`, sess.ID, testdbseed.DefaultProjectID, legacyRaw)
 	testutil.FailErr(t, "insert legacy row", err)
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger legacy row", err)
 	got, ok := evidence.ResolveHandle(ev, "http_response#1")
 	if !ok || got.UntrustedContent || got.HasExternalCustody() || got.Path != "saved.txt" {
@@ -640,7 +635,7 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	// 1. Seed 120 historical read/grep rows plus command, partial edit, and pathless inline http_response rows
@@ -718,7 +713,7 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 	// the 2 custody-candidate rows
 	// so poisoned ranges and missing blobs elsewhere cannot fail it.
 	// rows) and retains only those 2 handles.
-	rows, err := store.queries.ListEvidenceRecords(ctx, sess.ID)
+	rows, err := store.core.queries.ListEvidenceRecords(ctx, sess.ID)
 	testutil.FailErr(t, "ListEvidenceRecords", err)
 	if len(rows) != 125 {
 		t.Fatalf("len(rows) = %d, want 125", len(rows))
@@ -737,13 +732,13 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 
 	// Custody lookups succeed without decoding other rows or reading blobs.
 	// without decoding non-custody rows or reading blobs.
-	urls, err := store.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"saved.txt"})
+	urls, err := store.Evidence.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"saved.txt"})
 	testutil.FailErr(t, "ExternalCustodyURLsForPaths", err)
 	if !slices.Equal(urls, []string{"https://api.external.example/v1/payload.txt"}) {
 		t.Fatalf("ExternalCustodyURLsForPaths(saved.txt) = %v, want [https://api.external.example/v1/payload.txt]", urls)
 	}
 
-	grepHandle, _, err := store.CommitEvidenceToolResult(
+	grepHandle, _, err := store.Evidence.CommitEvidenceToolResult(
 		ctx,
 		sess.ID,
 		dir,
@@ -755,7 +750,7 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 	if grepHandle != "grep#61" {
 		t.Fatalf("grepHandle = %q, want grep#61", grepHandle)
 	}
-	untrusted, err := store.SessionUntrustedContentResult(ctx, sess.ID)
+	untrusted, err := store.Evidence.SessionUntrustedContentResult(ctx, sess.ID)
 	testutil.FailErr(t, "SessionUntrustedContentResult after grep", err)
 	if !untrusted {
 		t.Fatal("grep exposing lines from external-custody saved.txt must mark untrusted content")
@@ -779,15 +774,7 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 	}
 }
 
-// chronologyBackend is the store surface exercised by the chronology-skew parity test.
-type chronologyBackend interface {
-	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-	CommitEvidenceToolResult(context.Context, string, string, string, map[string]any, string) (string, string, error)
-	CommitProgramHTTPProvenance(context.Context, string, string, evidence.ProgramHTTPProvenance) (string, error)
-	ExternalCustodyURLsForPaths(context.Context, string, string, []string) ([]string, error)
-	SessionUntrustedContentResult(context.Context, string) (bool, error)
-	LoadLedger(context.Context, string) (evidence.Ledger, error)
-}
+// *Repositories is the store surface exercised by the chronology-skew parity test.
 
 func TestEvidenceLedgerStore_CrossKindChronologySkewAndReloadParity(t *testing.T) {
 	ctx := context.Background()
@@ -795,19 +782,14 @@ func TestEvidenceLedgerStore_CrossKindChronologySkewAndReloadParity(t *testing.T
 
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "chronology_skew.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	memStore := NewMemory()
 
 	for _, tc := range []struct {
 		name   string
-		reopen func() chronologyBackend
+		reopen func() *Repositories
 	}{
 		{
 			name:   "sql_with_reopen",
-			reopen: func() chronologyBackend { return NewSQL(sqlDB) },
-		},
-		{
-			name:   "memory",
-			reopen: func() chronologyBackend { return memStore },
+			reopen: func() *Repositories { return NewSQL(sqlDB) },
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -820,12 +802,12 @@ func TestEvidenceLedgerStore_CrossKindChronologySkewAndReloadParity(t *testing.T
 
 // chronologySkewCaseA covers a high write ordinal (write#4) followed by a fresh external
 // download with a lower http_response ordinal (http_response#2).
-func chronologySkewCaseA(t *testing.T, ctx context.Context, s chronologyBackend, reopen func() chronologyBackend, dir string) {
-	sessA, err := s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+func chronologySkewCaseA(t *testing.T, ctx context.Context, s *Repositories, reopen func() *Repositories, dir string) {
+	sessA, err := s.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create sessA", err)
 
 	// Seed initial download on alpha.txt (http_response#1, stale URL) to establish same-kind history.
-	h1, _, err := s.CommitEvidenceToolResult(
+	h1, _, err := s.Evidence.CommitEvidenceToolResult(
 		ctx, sessA.ID, dir, "http_request",
 		map[string]any{"url": "https://stale-alpha.external.example/v0/init.txt", "response_path": "alpha.txt"},
 		`{"status":200,"url":"https://stale-alpha.external.example/v0/init.txt","response_path":"alpha.txt","written":true}`,
@@ -839,7 +821,7 @@ func chronologySkewCaseA(t *testing.T, ctx context.Context, s chronologyBackend,
 	// (write#4, ordinal=4).
 	for i := 1; i <= 3; i++ {
 		unrel := fmt.Sprintf("unrelated_%d.go", i)
-		wh, _, err := s.CommitEvidenceToolResult(
+		wh, _, err := s.Evidence.CommitEvidenceToolResult(
 			ctx, sessA.ID, dir, "write",
 			map[string]any{"path": unrel},
 			fmt.Sprintf(`{"path":%q,"bytes_written":16}`, unrel),
@@ -849,7 +831,7 @@ func chronologySkewCaseA(t *testing.T, ctx context.Context, s chronologyBackend,
 			t.Fatalf("wh = %q, want write#%d", wh, i)
 		}
 	}
-	w4, _, err := s.CommitEvidenceToolResult(
+	w4, _, err := s.Evidence.CommitEvidenceToolResult(
 		ctx, sessA.ID, dir, "write",
 		map[string]any{"path": "alpha.txt"},
 		`{"path":"alpha.txt","bytes_written":24}`,
@@ -862,7 +844,7 @@ func chronologySkewCaseA(t *testing.T, ctx context.Context, s chronologyBackend,
 	// After reopening, a fresh download replaces alpha.txt.
 	// < write#4 ordinal=4).
 	s = reopen()
-	h2, _, err := s.CommitEvidenceToolResult(
+	h2, _, err := s.Evidence.CommitEvidenceToolResult(
 		ctx, sessA.ID, dir, "http_request",
 		map[string]any{"url": "https://fresh-alpha.external.example/v1/fresh.txt", "response_path": "alpha.txt"},
 		`{"status":200,"url":"https://fresh-alpha.external.example/v1/fresh.txt","response_path":"alpha.txt","written":true}`,
@@ -875,24 +857,24 @@ func chronologySkewCaseA(t *testing.T, ctx context.Context, s chronologyBackend,
 	// After reopening, alpha.txt carries only the fresh URL and a read ingests it.
 	// read as untrusted ingestion.
 	s = reopen()
-	alphaURLs, err := s.ExternalCustodyURLsForPaths(ctx, sessA.ID, dir, []string{"alpha.txt"})
+	alphaURLs, err := s.Evidence.ExternalCustodyURLsForPaths(ctx, sessA.ID, dir, []string{"alpha.txt"})
 	testutil.FailErr(t, "ExternalCustodyURLsForPaths alpha.txt", err)
 	if !slices.Equal(alphaURLs, []string{"https://fresh-alpha.external.example/v1/fresh.txt"}) {
 		t.Fatalf("ExternalCustodyURLsForPaths(alpha.txt) = %v, want [https://fresh-alpha.external.example/v1/fresh.txt]", alphaURLs)
 	}
 
-	readAlphaHandle, _, err := s.CommitEvidenceToolResult(
+	readAlphaHandle, _, err := s.Evidence.CommitEvidenceToolResult(
 		ctx, sessA.ID, dir, "read",
 		map[string]any{"path": "alpha.txt"},
 		`{"path":"alpha.txt","content":"1|fresh remote payload\n","offset":1,"end_line":1}`,
 	)
 	testutil.FailErr(t, "read alpha.txt", err)
-	untrustedA, err := s.SessionUntrustedContentResult(ctx, sessA.ID)
+	untrustedA, err := s.Evidence.SessionUntrustedContentResult(ctx, sessA.ID)
 	testutil.FailErr(t, "SessionUntrustedContentResult sessA", err)
 	if !untrustedA {
 		t.Fatal("reading alpha.txt after fresh download (http_response#2 after write#4) must mark untrusted ingestion")
 	}
-	ledgerA, err := s.LoadLedger(ctx, sessA.ID)
+	ledgerA, err := s.Evidence.LoadLedger(ctx, sessA.ID)
 	testutil.FailErr(t, "LoadLedger sessA", err)
 	readAlphaRec, ok := evidence.ResolveHandle(ledgerA, readAlphaHandle)
 	if !ok || !readAlphaRec.UntrustedContent || !readAlphaRec.HasExternalCustody() ||
@@ -913,23 +895,23 @@ func chronologySkewCaseA(t *testing.T, ctx context.Context, s chronologyBackend,
 // chronologySkewCaseB covers high download ordinals (http_response#3 on beta.txt,
 // http_response#4 on gamma.txt) followed by whole-file local writes with lower write ordinals
 // (write#1 on beta.txt, write#2 on gamma.txt), plus unrelated path other_dl.txt.
-func chronologySkewCaseB(t *testing.T, ctx context.Context, s chronologyBackend, reopen func() chronologyBackend, dir string) {
-	sessB, err := s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+func chronologySkewCaseB(t *testing.T, ctx context.Context, s *Repositories, reopen func() *Repositories, dir string) {
+	sessB, err := s.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create sessB", err)
 
-	_, _, err = s.CommitEvidenceToolResult(
+	_, _, err = s.Evidence.CommitEvidenceToolResult(
 		ctx, sessB.ID, dir, "http_request",
 		map[string]any{"url": "https://other.external.example/v1/keep.txt", "response_path": "other_dl.txt"},
 		`{"status":200,"url":"https://other.external.example/v1/keep.txt","response_path":"other_dl.txt","written":true}`,
 	)
 	testutil.FailErr(t, "download other_dl.txt", err)
-	_, _, err = s.CommitEvidenceToolResult(
+	_, _, err = s.Evidence.CommitEvidenceToolResult(
 		ctx, sessB.ID, dir, "http_request",
 		map[string]any{"url": "https://beta.external.example/v1/old.txt", "response_path": "beta.txt"},
 		`{"status":200,"url":"https://beta.external.example/v1/old.txt","response_path":"beta.txt","written":true}`,
 	)
 	testutil.FailErr(t, "download beta.txt v1", err)
-	bh3, _, err := s.CommitEvidenceToolResult(
+	bh3, _, err := s.Evidence.CommitEvidenceToolResult(
 		ctx, sessB.ID, dir, "http_request",
 		map[string]any{"url": "https://beta.external.example/v2/newer.txt", "response_path": "beta.txt"},
 		`{"status":200,"url":"https://beta.external.example/v2/newer.txt","response_path":"beta.txt","written":true}`,
@@ -938,7 +920,7 @@ func chronologySkewCaseB(t *testing.T, ctx context.Context, s chronologyBackend,
 	if bh3 != "http_response#3" {
 		t.Fatalf("bh3 = %q, want http_response#3", bh3)
 	}
-	gh4, err := s.CommitProgramHTTPProvenance(ctx, sessB.ID, dir, evidence.ProgramHTTPProvenance{
+	gh4, err := s.Evidence.CommitProgramHTTPProvenance(ctx, evidence.ProgramProvenanceTarget{SessionID: sessB.ID, ProjectDir: dir}, evidence.ProgramHTTPProvenance{
 		ObservedURLs: []string{"https://gamma.external.example/v1/curl.txt"},
 		CustodyPaths: []string{"gamma.txt"},
 	})
@@ -950,7 +932,7 @@ func chronologySkewCaseB(t *testing.T, ctx context.Context, s chronologyBackend,
 	// After reopening, clean local writes replace beta.txt and gamma.txt.
 	// ordinal=2 < 4) with clean local content.
 	s = reopen()
-	bw1, _, err := s.CommitEvidenceToolResult(
+	bw1, _, err := s.Evidence.CommitEvidenceToolResult(
 		ctx, sessB.ID, dir, "write",
 		map[string]any{"path": "beta.txt"},
 		`{"path":"beta.txt","bytes_written":12}`,
@@ -959,7 +941,7 @@ func chronologySkewCaseB(t *testing.T, ctx context.Context, s chronologyBackend,
 	if bw1 != "write#1" {
 		t.Fatalf("bw1 = %q, want write#1", bw1)
 	}
-	gw2, _, err := s.CommitEvidenceToolResult(
+	gw2, _, err := s.Evidence.CommitEvidenceToolResult(
 		ctx, sessB.ID, dir, "write",
 		map[string]any{"path": "gamma.txt"},
 		`{"path":"gamma.txt","bytes_written":12}`,
@@ -971,33 +953,33 @@ func chronologySkewCaseB(t *testing.T, ctx context.Context, s chronologyBackend,
 
 	// Reopen/reload store: beta.txt and gamma.txt must be clean, while unrelated other_dl.txt keeps its external custody.
 	s = reopen()
-	if urls, err := s.ExternalCustodyURLsForPaths(ctx, sessB.ID, dir, []string{"beta.txt", "gamma.txt"}); err != nil || len(urls) != 0 {
+	if urls, err := s.Evidence.ExternalCustodyURLsForPaths(ctx, sessB.ID, dir, []string{"beta.txt", "gamma.txt"}); err != nil || len(urls) != 0 {
 		t.Fatalf("ExternalCustodyURLsForPaths(beta.txt, gamma.txt) = %v, err=%v, want empty", urls, err)
 	}
-	if urls, err := s.ExternalCustodyURLsForPaths(ctx, sessB.ID, dir, []string{"other_dl.txt"}); err != nil ||
+	if urls, err := s.Evidence.ExternalCustodyURLsForPaths(ctx, sessB.ID, dir, []string{"other_dl.txt"}); err != nil ||
 		!slices.Equal(urls, []string{"https://other.external.example/v1/keep.txt"}) {
 		t.Fatalf("ExternalCustodyURLsForPaths(other_dl.txt) = %v, err=%v, want [https://other.external.example/v1/keep.txt]", urls, err)
 	}
 
-	readBetaHandle, _, err := s.CommitEvidenceToolResult(
+	readBetaHandle, _, err := s.Evidence.CommitEvidenceToolResult(
 		ctx, sessB.ID, dir, "read",
 		map[string]any{"path": "beta.txt"},
 		`{"path":"beta.txt","content":"1|clean local beta\n","offset":1,"end_line":1}`,
 	)
 	testutil.FailErr(t, "read beta.txt", err)
-	readGammaHandle, _, err := s.CommitEvidenceToolResult(
+	readGammaHandle, _, err := s.Evidence.CommitEvidenceToolResult(
 		ctx, sessB.ID, dir, "read",
 		map[string]any{"path": "gamma.txt"},
 		`{"path":"gamma.txt","content":"1|clean local gamma\n","offset":1,"end_line":1}`,
 	)
 	testutil.FailErr(t, "read gamma.txt", err)
-	untrustedB, err := s.SessionUntrustedContentResult(ctx, sessB.ID)
+	untrustedB, err := s.Evidence.SessionUntrustedContentResult(ctx, sessB.ID)
 	testutil.FailErr(t, "SessionUntrustedContentResult sessB after clean reads", err)
 	if untrustedB {
 		t.Fatal("reading beta.txt and gamma.txt after whole-file local writes (write#1, write#2) must not mark untrusted ingestion")
 	}
 
-	ledgerB, err := s.LoadLedger(ctx, sessB.ID)
+	ledgerB, err := s.Evidence.LoadLedger(ctx, sessB.ID)
 	testutil.FailErr(t, "LoadLedger sessB", err)
 	for _, h := range []string{readBetaHandle, readGammaHandle} {
 		rec, ok := evidence.ResolveHandle(ledgerB, h)
@@ -1007,7 +989,7 @@ func chronologySkewCaseB(t *testing.T, ctx context.Context, s chronologyBackend,
 	}
 
 	// Positive re-download on gamma.txt after local write attaches only the new URL.
-	gh5, _, err := s.CommitEvidenceToolResult(
+	gh5, _, err := s.Evidence.CommitEvidenceToolResult(
 		ctx, sessB.ID, dir, "http_request",
 		map[string]any{"url": "https://gamma.external.example/v2/redownload.txt", "response_path": "gamma.txt"},
 		`{"status":200,"url":"https://gamma.external.example/v2/redownload.txt","response_path":"gamma.txt","written":true}`,
@@ -1017,13 +999,13 @@ func chronologySkewCaseB(t *testing.T, ctx context.Context, s chronologyBackend,
 		t.Fatalf("gh5 = %q, want http_response#5", gh5)
 	}
 	s = reopen()
-	readGamma2Handle, _, err := s.CommitEvidenceToolResult(
+	readGamma2Handle, _, err := s.Evidence.CommitEvidenceToolResult(
 		ctx, sessB.ID, dir, "read",
 		map[string]any{"path": "gamma.txt"},
 		`{"path":"gamma.txt","content":"1|redownloaded gamma\n","offset":1,"end_line":1}`,
 	)
 	testutil.FailErr(t, "read gamma.txt after re-download", err)
-	ledgerB2, err := s.LoadLedger(ctx, sessB.ID)
+	ledgerB2, err := s.Evidence.LoadLedger(ctx, sessB.ID)
 	testutil.FailErr(t, "LoadLedger sessB after re-download", err)
 	readGamma2Rec, ok := evidence.ResolveHandle(ledgerB2, readGamma2Handle)
 	if !ok || !readGamma2Rec.UntrustedContent || !readGamma2Rec.HasExternalCustody() ||
@@ -1040,7 +1022,7 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	store := NewSQL(sqlDB)
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	// 1. Seed a legacy external-custody row WITHOUT custody_seq (CustodySeq == 0) via raw SQL.
@@ -1053,14 +1035,14 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 	`, sess.ID, testdbseed.DefaultProjectID, legacyCustodyJSON)
 	testutil.FailErr(t, "insert legacy custody row", err)
 
-	if urls, err := store.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"legacy.txt"}); err != nil ||
+	if urls, err := store.Evidence.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"legacy.txt"}); err != nil ||
 		!slices.Equal(urls, []string{"https://legacy.external.example/v0/seed.txt"}) {
 		t.Fatalf("ExternalCustodyURLsForPaths(legacy.txt) = %v, err=%v, want legacy URL", urls, err)
 	}
 
 	// A whole-file write takes a later sequence than the legacy download and
 	// supersedes it across a reopen.
-	w1, _, err := store.CommitEvidenceToolResult(
+	w1, _, err := store.Evidence.CommitEvidenceToolResult(
 		ctx, sess.ID, dir, "write",
 		map[string]any{"path": "legacy.txt"},
 		`{"path":"legacy.txt","bytes_written":10}`,
@@ -1070,7 +1052,7 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		t.Fatalf("w1 = %q, want write#1", w1)
 	}
 	store = NewSQL(sqlDB)
-	if urls, err := store.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"legacy.txt"}); err != nil || len(urls) != 0 {
+	if urls, err := store.Evidence.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"legacy.txt"}); err != nil || len(urls) != 0 {
 		t.Fatalf("ExternalCustodyURLsForPaths(legacy.txt) after write#1 = %v, err=%v, want empty", urls, err)
 	}
 
@@ -1088,25 +1070,25 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		{"grep", map[string]any{"pattern": "clean", "path": "legacy.txt"}, `{"matches":[{"path":"legacy.txt","line":1,"content":"clean"}]}`},
 		{"edit", map[string]any{"path": "legacy.txt"}, `{"path":"legacy.txt","start_line":1,"end_line":1}`},
 	} {
-		_, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, nc.tool, nc.args, nc.content)
+		_, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, nc.tool, nc.args, nc.content)
 		testutil.FailErr(t, "non-custody "+nc.tool, err)
 	}
-	_, err = store.CommitProgramObservation(ctx, sess.ID, "command_output", &api.CommandProgramReceipt{ID: "prog_1", ParentReceiptID: "rcpt_1", State: "exited"}, "ok\n")
+	_, err = store.Evidence.CommitProgramObservation(ctx, sess.ID, "command_output", &api.CommandProgramReceipt{ID: "prog_1", ParentReceiptID: "rcpt_1", State: "exited"}, "ok\n")
 	testutil.FailErr(t, "CommitProgramObservation", err)
-	_, err = store.CommitProgramHTTPProvenance(ctx, sess.ID, dir, evidence.ProgramHTTPProvenance{
+	_, err = store.Evidence.CommitProgramHTTPProvenance(ctx, evidence.ProgramProvenanceTarget{SessionID: sess.ID, ProjectDir: dir}, evidence.ProgramHTTPProvenance{
 		UntrustedContent: true,
 		ObservedURLs:     []string{"https://inline-curl.external.example/v1/stdout"},
 	})
 	testutil.FailErr(t, "inline CommitProgramHTTPProvenance", err)
 
 	// The next custody-replacing download takes the next sequence.
-	h4, _, err := store.CommitEvidenceToolResult(
+	h4, _, err := store.Evidence.CommitEvidenceToolResult(
 		ctx, sess.ID, dir, "http_request",
 		map[string]any{"url": "https://reseeded.external.example/v1/new.txt", "response_path": "legacy.txt"},
 		`{"status":200,"url":"https://reseeded.external.example/v1/new.txt","response_path":"legacy.txt","written":true}`,
 	)
 	testutil.FailErr(t, "re-download legacy.txt", err)
-	ledger, err := store.LoadLedger(ctx, sess.ID)
+	ledger, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	w1Rec := ledger.Handles[w1]
 	h4Rec := ledger.Handles[h4]
@@ -1133,8 +1115,8 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		URL:        "https://attacker-overwrite.external.example/ignored",
 		Custody:    evidence.FileCustody{External: true, Seq: 99},
 	}
-	testutil.FailErr(t, "duplicate UpsertEvidenceRecord", store.UpsertEvidenceRecord(ctx, sess.ID, dup))
-	ledgerAfterDup, err := store.LoadLedger(ctx, sess.ID)
+	testutil.FailErr(t, "duplicate UpsertEvidenceRecord", store.Evidence.UpsertEvidenceRecord(ctx, sess.ID, dup))
+	ledgerAfterDup, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger after dup", err)
 	if got := ledgerAfterDup.Handles[h4]; got.CustodySeq() != 3 || got.URL != "https://reseeded.external.example/v1/new.txt" {
 		t.Fatalf("duplicate UpsertEvidenceRecord mutated existing record: %+v", got)
@@ -1150,15 +1132,15 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		Path:       "legacy.txt",
 		Custody:    evidence.FileCustody{Seq: 20},
 	}
-	testutil.FailErr(t, "upsert write#10", store.UpsertEvidenceRecord(ctx, sess.ID, highWrite))
-	testutil.FailErr(t, "mark write#10 superseded", markSuperseded(ctx, store.queries, sess.ID, "write#10", "write#11"))
-	delHandle, _, err := store.CommitEvidenceToolResult(
+	testutil.FailErr(t, "upsert write#10", store.Evidence.UpsertEvidenceRecord(ctx, sess.ID, highWrite))
+	testutil.FailErr(t, "mark write#10 superseded", markSuperseded(ctx, store.core.queries, sess.ID, "write#10", "write#11"))
+	delHandle, _, err := store.Evidence.CommitEvidenceToolResult(
 		ctx, sess.ID, dir, "delete",
 		map[string]any{"path": "legacy.txt"},
 		`{"path":"legacy.txt","deleted":true}`,
 	)
 	testutil.FailErr(t, "delete legacy.txt", err)
-	ledgerAfterDel, err := store.LoadLedger(ctx, sess.ID)
+	ledgerAfterDel, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger after delete", err)
 	if gotSeq := ledgerAfterDel.Handles[delHandle].CustodySeq(); gotSeq != 21 {
 		t.Fatalf("CustodySeq after superseded Seq=20 row = %d, want 21", gotSeq)
@@ -1171,22 +1153,22 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 	_, err = sqlDB.ExecContext(ctx, `UPDATE evidence_records SET line_ranges = '{"v":99}' WHERE session_id = ? AND handle = ?`, sess.ID, h4)
 	testutil.FailErr(t, "poison h4 line_ranges", err)
 
-	if _, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "command", map[string]any{"command": "true"}, "ok\n"); err != nil {
+	if _, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "command", map[string]any{"command": "true"}, "ok\n"); err != nil {
 		t.Fatalf("non-custody command commit must not scan/decode custody rows, got err: %v", err)
 	}
-	if _, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "list_dir", map[string]any{"path": "."}, "legacy.txt\n"); err != nil {
+	if _, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "list_dir", map[string]any{"path": "."}, "legacy.txt\n"); err != nil {
 		t.Fatalf("non-custody list_dir commit must not scan/decode custody rows, got err: %v", err)
 	}
-	if _, err := store.CommitProgramObservation(ctx, sess.ID, "command_output", &api.CommandProgramReceipt{ID: "prog_2", ParentReceiptID: "rcpt_2", State: "exited"}, "ok\n"); err != nil {
+	if _, err := store.Evidence.CommitProgramObservation(ctx, sess.ID, "command_output", &api.CommandProgramReceipt{ID: "prog_2", ParentReceiptID: "rcpt_2", State: "exited"}, "ok\n"); err != nil {
 		t.Fatalf("CommitProgramObservation must not scan/decode custody rows, got err: %v", err)
 	}
-	if _, err := store.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"legacy.txt"}); err == nil {
+	if _, err := store.Evidence.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"legacy.txt"}); err == nil {
 		t.Fatal("ExternalCustodyURLsForPaths must fail closed when a live custody-candidate row has corrupt metadata")
 	}
-	if _, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "write", map[string]any{"path": "legacy.txt"}, `{"path":"legacy.txt","bytes_written":4}`); err == nil {
+	if _, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "write", map[string]any{"path": "legacy.txt"}, `{"path":"legacy.txt","bytes_written":4}`); err == nil {
 		t.Fatal("whole-file write commit must fail closed when allocating CustodySeq over corrupt custody metadata")
 	}
-	if _, err := store.CommitProgramHTTPProvenance(ctx, sess.ID, dir, evidence.ProgramHTTPProvenance{
+	if _, err := store.Evidence.CommitProgramHTTPProvenance(ctx, evidence.ProgramProvenanceTarget{SessionID: sess.ID, ProjectDir: dir}, evidence.ProgramHTTPProvenance{
 		ObservedURLs: []string{"https://blocked.external.example/v1/file.txt"},
 		CustodyPaths: []string{"legacy.txt"},
 	}); err == nil {

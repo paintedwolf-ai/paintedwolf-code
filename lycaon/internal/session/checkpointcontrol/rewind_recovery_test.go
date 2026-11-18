@@ -2,6 +2,10 @@ package checkpointcontrol
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/people"
@@ -18,15 +22,12 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"testing"
 )
 
 // Startup reclaims anchors left behind after the rewind commit.
 func TestSweepCommittedRewindsReclaimsOrphanedAnchor(t *testing.T) {
 	rewinds, repository, ledger, sessionID, dir := newRewindControlFixture(t)
-	owner, err := repository.HostOwner(t.Context())
+	owner, err := repository.People.HostOwner(t.Context())
 	testutil.FailErr(t, "host owner", err)
 	ctx := people.WithCaller(t.Context(), owner)
 
@@ -35,31 +36,31 @@ func TestSweepCommittedRewindsReclaimsOrphanedAnchor(t *testing.T) {
 		Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser,
 		TrustTier: api.ContentTrustTierTrusted,
 	}
-	testutil.FailErr(t, "append", repository.AppendMessages(ctx, sessionID, anchor))
+	testutil.FailErr(t, "append", repository.Transcript.AppendMessages(ctx, sessionID, anchor))
 
 	path := filepath.Join(dir, "file.txt")
 	testutil.FailErr(t, "seed", os.WriteFile(path, []byte("before"), 0o640))
-	cpStore := sessioncheckpoint.New(rewinds.captures.dataDir, dir, repository)
+	cpStore := sessioncheckpoint.New(rewinds.captures.dataDir, dir, repository.Rewind)
 	_, err = cpStore.Open(t.Context(), sessionID, anchor.ID)
 	testutil.FailErr(t, "open checkpoint", err)
 	testutil.FailErr(t, "capture", cpStore.CapturePreImage(t.Context(), sessionID, anchor.ID, "file.txt", ""))
 	testutil.FailErr(t, "turn writes", os.WriteFile(path, []byte("after"), 0o640))
 	project, err := rewinds.rewindProject(ctx, sessionID)
 	testutil.FailErr(t, "resolve project", err)
-	turnSource, err := repository.ReadSourceTurn(ctx, sessionID, 0)
+	turnSource, err := repository.Transcript.ReadSourceTurn(ctx, sessionID, 0)
 	turn := turnSource.Number
 	testutil.FailErr(t, "resolve turn", err)
 	testutil.FailErr(t, "record effect", ledger.Record(ctx, sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: project.Roots[0].ID, Path: "file.txt"}, ProjectID: project.ID, Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, SessionID: sessionID, Turn: turn, Before: []byte("before"), After: []byte("after")}))
 
-	rootID := sessiontree.RootID(ctx, repository, sessionID)
+	rootID := sessiontree.RootID(ctx, repository.Sessions, sessionID)
 	// The existence check below fails loudly if this checkpoint layout changes.
 	anchorDir := filepath.Join(enginepaths.ProjectCheckpointDir(enginepaths.SessionCheckpointsRootUnder(rewinds.captures.dataDir), filepath.Clean(dir)), "anchors", rootID, anchor.ID)
 	if _, err := os.Stat(anchorDir); err != nil {
 		t.Fatalf("anchor dir missing before rewind: %v", err)
 	}
 
-	msgs, err := repository.GetMessages(ctx, sessionID)
+	msgs, err := repository.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "get messages", err)
 	anchorIDs := eligibleAnchorIDsFrom(msgs, anchor.ID)
 	operationID := uuid.NewString()
@@ -79,29 +80,29 @@ func TestSweepCommittedRewindsReclaimsOrphanedAnchor(t *testing.T) {
 	}
 
 	// Retained receipts remain available for retries.
-	op, err := repository.GetRewindOperation(ctx, operationID)
+	op, err := repository.Rewind.GetRewindOperation(ctx, operationID)
 	testutil.FailErr(t, "get rewind operation", err)
 	if op == nil || op.Status != "committed" {
 		t.Fatalf("operation = %+v, want still committed (within retention)", op)
 	}
 }
 
-func newRewindControlFixture(t *testing.T) (*Rewinds, *sessionstore.SQL, *sourceledger.Store, string, string) {
+func newRewindControlFixture(t *testing.T) (*Rewinds, *sessionstore.Repositories, *sourceledger.Store, string, string) {
 	t.Helper()
 	database := testdbfixture.Open(t, "session.db")
 	dir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, dir)
 	repository := sessionstore.NewSQL(database)
 	projects := project.NewSQLRegistry(database)
-	workspace := sessionscope.New(repository)
+	workspace := sessionscope.New(repository.Sessions)
 	workspace.SetProjects(projects)
-	captures := NewCapture(t.TempDir(), repository, workspace)
+	captures := NewCapture(t.TempDir(), repository.Sessions, repository.Rewind, workspace)
 	ledger := sourceledger.New(database, filepath.Join(captures.dataDir, "source-content"))
 	mutations := projectsource.NewSourceMutationService(database, ledger)
-	rewinds := NewRewinds(repository, captures, &promptstate.MutexRegistry{}, workspace, projects, &sourcerewind.Service{Planner: ledger.Comparisons, Mutations: mutations}, nil, Runtime{WorkersInFlight: func(context.Context, *api.Session) int { return 0 }})
-	session, err := repository.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	rewinds := NewRewinds(repository.Sessions, repository.Transcript, repository.Rewind, captures, &promptstate.MutexRegistry{}, workspace, projects, &sourcerewind.Service{Planner: ledger.Comparisons, Mutations: mutations}, nil, Runtime{WorkersInFlight: func(context.Context, *api.Session) int { return 0 }})
+	session, err := repository.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "bind workspace", repository.UpdateSession(t.Context(), session.ID, func(s *api.Session) { s.WorkspacePath = dir }))
+	testutil.FailErr(t, "bind workspace", repository.Sessions.UpdateSession(t.Context(), session.ID, func(s *api.Session) { s.WorkspacePath = dir }))
 	return rewinds, repository, ledger, session.ID, dir
 }
 func controlPreviewDigest(t *testing.T, r *Rewinds, ctx context.Context, id, anchor string) string {

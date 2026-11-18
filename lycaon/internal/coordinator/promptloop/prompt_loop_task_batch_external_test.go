@@ -10,24 +10,25 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestLoopContinuesAfterTaskEnqueue(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	if err := store.AppendMessages(ctx, sess.ID, api.Message{
+	if err := store.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		Role: api.MessageRoleUser, Content: "go", CreatedAt: time.Now().UTC(),
 	}); err != nil {
 		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	reg.Register("task", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 		tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: "job-1"}
 		return `{"job_id":"job-1","status":"enqueued"}`, nil
@@ -46,7 +47,7 @@ func TestLoopContinuesAfterTaskEnqueue(t *testing.T) {
 	deps.Context.Tools = reg
 	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
 	deps.Projection.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
-		_, err := store.UpdateMessage(ctx, sess.ID, messageID, msg)
+		_, err := store.Transcript.UpdateMessage(ctx, sess.ID, messageID, msg)
 		return err
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
@@ -63,7 +64,7 @@ func TestLoopContinuesAfterTaskEnqueue(t *testing.T) {
 	if result.LastAssistantContent != "continued" || result.TasksDispatchedCount != 1 {
 		t.Fatal("loop did not continue after task() enqueue")
 	}
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var toolContent string
 	for _, msg := range msgs {
@@ -78,11 +79,11 @@ func TestLoopContinuesAfterTaskEnqueue(t *testing.T) {
 
 func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	var taskCalls int
 	reg.Register("task", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 		taskCalls++
@@ -108,7 +109,7 @@ func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 	deps.Context.Tools = reg
 	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
 	deps.Projection.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
-		_, err := store.UpdateMessage(ctx, sess.ID, messageID, msg)
+		_, err := store.Transcript.UpdateMessage(ctx, sess.ID, messageID, msg)
 		return err
 	}
 
@@ -129,7 +130,7 @@ func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 	if taskCalls != 3 {
 		t.Fatalf("taskCalls = %d want 3", taskCalls)
 	}
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	for _, msg := range msgs {
 		if msg.Role == api.MessageRoleTool && strings.Contains(msg.Content, `"status":"enqueued"`) {
@@ -143,11 +144,11 @@ func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 
 func TestLoopBatchTaskAndReadSameTurn(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	reg.Register("task", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 		tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: "job-1"}
 		return `{"job_id":"job-1","status":"enqueued"}`, nil
@@ -170,7 +171,7 @@ func TestLoopBatchTaskAndReadSameTurn(t *testing.T) {
 	deps.Context.Tools = reg
 	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
 	deps.Projection.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
-		_, err := store.UpdateMessage(ctx, sess.ID, messageID, msg)
+		_, err := store.Transcript.UpdateMessage(ctx, sess.ID, messageID, msg)
 		return err
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
@@ -188,7 +189,7 @@ func TestLoopBatchTaskAndReadSameTurn(t *testing.T) {
 	if result.LastAssistantContent != "continued" || result.TasksDispatchedCount != 1 {
 		t.Fatal("loop did not continue after mixed batch")
 	}
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var hasTask, hasRead bool
 	for _, msg := range msgs {
@@ -212,11 +213,11 @@ func TestLoopReloadsHistoryAfterToolBatchCompaction(t *testing.T) {
 		{ToolCalls: []api.ToolCall{{ID: "tc1", Name: "read", Args: map[string]any{"path": "x.go"}}}},
 		{Content: "done"},
 	}}
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("read", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return "ok", nil
 	})
@@ -231,7 +232,7 @@ func TestLoopReloadsHistoryAfterToolBatchCompaction(t *testing.T) {
 		return nil
 	}
 	deps.Tools.ReloadHistory = func(ctx context.Context, sessionID string, sess *api.Session, surfaceID string) ([]api.Message, error) {
-		return store.GetMessages(ctx, sessionID)
+		return store.Transcript.GetMessages(ctx, sessionID)
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	result, err := loop.Run(ctx, promptloop.PromptRunInput{

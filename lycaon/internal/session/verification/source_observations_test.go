@@ -15,9 +15,10 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session/scope"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -52,11 +53,11 @@ func TestSourceObservationsIntentBoundaryUsesUserTimestamp(t *testing.T) {
 
 func TestSourceObservationsTrackExactContentAcrossTime(t *testing.T) {
 	ctx := t.Context()
-	sessions := store.NewMemory()
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	sess.ProjectID, sess.WorkspacePath = "project", t.TempDir()
-	m := New(sessions, scope.New(sessions), nil)
+	m := New(sessions.Sessions, sessions.Transcript, scope.New(sessions.Sessions), nil)
 	m.SetDataDir(t.TempDir())
 	m.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
 	ledger := sourceledger.New(testdbfixture.Open(t, "store.db"), t.TempDir())
@@ -137,10 +138,10 @@ func (unavailableCheckRecords) ReadAll(context.Context, string, string, string, 
 }
 
 func TestSourceObservationsReportUnavailableRecords(t *testing.T) {
-	sessions := store.NewMemory()
-	sess, err := sessions.Create(t.Context(), api.CreateSessionRequest{}, "")
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	m := New(sessions, scope.New(sessions), nil)
+	m := New(sessions.Sessions, sessions.Transcript, scope.New(sessions.Sessions), nil)
 	m.SetEvidenceStore(unavailableCheckRecords{})
 	m.SetRevisionSource(func(context.Context, string) (string, string) {
 		t.Fatal("unread evidence cannot establish current source")
@@ -154,12 +155,12 @@ func TestSourceObservationsReportUnavailableRecords(t *testing.T) {
 
 func TestObservedDependencyAndIncompleteAttributionInvalidateVerificationChecks(t *testing.T) {
 	ctx := t.Context()
-	sessions := store.NewMemory()
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	sess.ProjectID, sess.WorkspacePath = "project", t.TempDir()
 
-	m := New(sessions, scope.New(sessions), nil)
+	m := New(sessions.Sessions, sessions.Transcript, scope.New(sessions.Sessions), nil)
 	m.SetDataDir(t.TempDir())
 	m.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
 	m.SetRevisionSource(func(context.Context, string) (string, string) {

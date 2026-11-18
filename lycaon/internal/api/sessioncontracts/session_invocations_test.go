@@ -21,10 +21,7 @@ func TestListSessionInvocations(t *testing.T) {
 		Evidence: wire.InvocationEvidence{Kind: "result", Ref: "message-1"}, StartedAt: started,
 	}}}
 	srv := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) { d.Core.Invocations = recorder })
-	sess, err := srv.Sources.Workspace.SessionStore.Create(t.Context(), wire.CreateSessionRequest{
-		Posture: wire.SessionPostureBuild,
-	}, "project-1")
-	testutil.FailErr(t, "create session", err)
+	sess := contractfixture.CreateSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/sessions/"+sess.ID+"/invocations", nil)
 	rec := httptest.NewRecorder()

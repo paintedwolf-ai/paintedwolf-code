@@ -3,19 +3,19 @@ package session
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/cost/costtest"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/decisions/decisionstest"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -23,13 +23,13 @@ import (
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func sourceEvidenceCloseoutHarness(t *testing.T) (*Host, *api.Session, []api.Message) {
 	t.Helper()
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetDataDir(t.TempDir())
 	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
 	mgr.Verification.SetRevisionSource(func(_ context.Context, root string) (string, string) {
@@ -105,7 +105,7 @@ func (q sourceEvidenceWorkerQueue) ListBySession(context.Context, string, string
 
 func workerSourceEvidenceCloseoutHarness(t *testing.T) (*Host, *api.Session, *api.WorkerTask, []api.Message) {
 	t.Helper()
-	mgr, parent := newSynthesisDelayManager(t)
+	mgr, parent, repositories := newSynthesisDelayManager(t)
 	mgr.Verification.SetRevisionSource(func(_ context.Context, root string) (string, string) {
 		return invocation.SourceRevisionForRoot(root)
 	})
@@ -116,7 +116,7 @@ func workerSourceEvidenceCloseoutHarness(t *testing.T) (*Host, *api.Session, *ap
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"a.go"}}
 	snap := testbaseline.Capture(t, primary)
 	raw := snap
-	child, err := mgr.Coordinator.Context.Sessions.(Store).CreateChild(context.Background(), parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := repositories.Sessions.CreateChild(context.Background(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild", err)
 	task := &api.WorkerTask{
 		ID: "job-worker", ParentSessionID: parent.ID, ChildSessionID: child.ID,
@@ -203,7 +203,7 @@ func TestCheckSpendCeiling(t *testing.T) {
 		lim := settings.DefaultSessionLimits()
 		lim.SpendCeilingEnabled = false
 		lim.SessionSpendCeilingUSD = 1
-		mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
+		mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, toolstest.NewRegistry())
 		sess := &api.Session{ID: "s1", ProjectID: "p1"}
 		if err := mgr.Runner.Spend.Check(ctx, "s1", sess); err != nil {
 			t.Fatalf("disabled ceiling must not enforce: %v", err)
@@ -218,7 +218,7 @@ func TestCheckSpendCeiling(t *testing.T) {
 		lim := settings.DefaultSessionLimits()
 		lim.SpendCeilingEnabled = true
 		lim.SessionSpendCeilingUSD = 1
-		mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
+		mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, toolstest.NewRegistry())
 		sess := &api.Session{ID: "s2", ProjectID: "p1"}
 		if err := mgr.Runner.Spend.Check(ctx, "s2", sess); err != nil {
 			t.Fatalf("unpriced must not enforce: %v", err)
@@ -234,7 +234,7 @@ func TestCheckSpendCeiling(t *testing.T) {
 		lim := settings.DefaultSessionLimits()
 		lim.SpendCeilingEnabled = true
 		lim.SessionSpendCeilingUSD = 5
-		mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
+		mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, toolstest.NewRegistry())
 		sess := &api.Session{ID: "s3", ProjectID: "p1"}
 		if err := mgr.Runner.Spend.Check(ctx, "s3", sess); err != nil {
 			t.Fatalf("under ceiling must pass: %v", err)
@@ -254,7 +254,7 @@ func TestCheckSpendCeiling(t *testing.T) {
 		lim := settings.DefaultSessionLimits()
 		lim.SpendCeilingEnabled = true
 		lim.SessionSpendCeilingUSD = 5
-		mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
+		mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, toolstest.NewRegistry())
 		sess := &api.Session{ID: "s4", ProjectID: "p1"}
 		err := mgr.Runner.Spend.Check(ctx, "s4", sess)
 		if !errors.Is(err, spendguard.ErrCeiling) {
@@ -277,7 +277,7 @@ func TestSpendCeilingRetainsUnknownChargedCalls(t *testing.T) {
 	lim := settings.DefaultSessionLimits()
 	lim.SpendCeilingEnabled = true
 	lim.SessionSpendCeilingUSD = 5
-	mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, toolstest.NewRegistry())
 	err := mgr.Runner.Spend.Check(ctx, "s", &api.Session{ID: "s", ProjectID: "p"})
 	var reached *spendguard.CeilingReached
 	if !errors.As(err, &reached) || reached.UnknownChargedCalls != 1 || reached.UnpricedTokens != 0 || reached.Coverage != api.CostEstimateLowerBound {
@@ -289,11 +289,11 @@ func TestReviewedStopTransitionPreservesRuntimeOnRejection(t *testing.T) {
 	for _, accepted := range []bool{false, true} {
 		t.Run(map[bool]string{false: "rejected", true: "accepted"}[accepted], func(t *testing.T) {
 			ctx := t.Context()
-			st := store.NewMemory()
-			mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-			sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+			st := storetest.New(t, testdbseed.DefaultProjectID)
+			mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+			sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
-			testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+			testutil.FailErr(t, "mark busy", st.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 			token, err := mgr.Chats.Gate.Capture(ctx, sess.ID)
 			testutil.FailErr(t, "capture current turn", err)
 			refusal := errors.New("stale workflow revision")
@@ -308,7 +308,7 @@ func TestReviewedStopTransitionPreservesRuntimeOnRejection(t *testing.T) {
 			} else if !errors.Is(err, refusal) {
 				t.Fatalf("rejected exit error = %v", err)
 			}
-			current, err := st.Get(ctx, sess.ID)
+			current, err := st.Sessions.Get(ctx, sess.ID)
 			testutil.FailErr(t, "read session", err)
 			want := api.SessionStatusBusy
 			if accepted {
@@ -327,20 +327,20 @@ func TestReviewedStopTransitionPreservesRuntimeOnRejection(t *testing.T) {
 
 func TestReviewedStopTransitionStillStopsOtherSessionWorkflows(t *testing.T) {
 	ctx := t.Context()
-	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	st := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	workflows := &stubSessionWorkflowStop{}
 	mgr.Stops.SetWorkflowStop(workflows)
-	root, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	root, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create root", err)
-	child, err := st.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := st.Sessions.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 	testutil.FailErr(t, "exit root workflow", mgr.Stops.WithSessionTreeStop(ctx, root.ID, "reviewed exit", func(context.Context) error { return nil }))
 	if len(workflows.sessions) != 1 || workflows.sessions[0] != child.ID {
 		t.Fatalf("workflow stops = %v, want child only after committed root transition", workflows.sessions)
 	}
 	for _, id := range []string{root.ID, child.ID} {
-		current, err := st.Get(ctx, id)
+		current, err := st.Sessions.Get(ctx, id)
 		testutil.FailErr(t, "read stopped session", err)
 		if current.Status != api.SessionStatusIdle {
 			t.Fatalf("session %s status = %s", id, current.Status)

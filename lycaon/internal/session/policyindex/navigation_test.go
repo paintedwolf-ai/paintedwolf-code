@@ -6,16 +6,18 @@ import (
 	"github.com/lycaon/lycaon/internal/governance"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/scope"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestAgentsMDMessageRetainsActiveRootAndRenderedPaths(t *testing.T) {
-	registry := project.NewMemoryRegistry()
+	sessionFixture := storetest.New(t)
+
+	registry := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := registry.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: t.TempDir()}, {Path: t.TempDir()}}})
 	testutil.FailErr(t, "project roots", err)
-	roots := scope.New(store.NewMemory())
+	roots := scope.New(sessionFixture.Sessions)
 	roots.SetProjects(registry)
 	m := New(nil, roots)
 	sess := &api.Session{ProjectID: p.ID, WorkspaceRootID: p.Roots[1].ID}

@@ -31,7 +31,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -39,7 +39,7 @@ type projectBackgroundTestEnv struct {
 	srv      *Server
 	bgReg    *bgprocess.Registry
 	hub      *events.MemoryHub
-	store    session.Store
+	store    *store.Repositories
 	projects project.Registry
 	sessions *session.Host
 	setPorts func(handle string, addrs ...netip.AddrPort)
@@ -53,7 +53,7 @@ func newProjectBackgroundTestEnv(t *testing.T) *projectBackgroundTestEnv {
 	hub := events.NewMemoryHub()
 	publisher := &events.Publisher{Hub: hub}
 
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	mock := llm.NewMockProvider(testMockConfig(t))
 	mgr := session.NewHost(st, session.Models{
 		Client:   mock,
@@ -187,21 +187,21 @@ func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
 	})
 	testutil.FailErr(t, "create proj2", err)
 
-	sess1, err := env.store.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj1.ID)
+	sess1, err := env.store.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj1.ID)
 	testutil.FailErr(t, "create sess1", err)
-	testutil.FailErr(t, "name sess1", env.store.UpdateSession(ctx, sess1.ID, func(s *wire.Session) {
+	testutil.FailErr(t, "name sess1", env.store.Sessions.UpdateSession(ctx, sess1.ID, func(s *wire.Session) {
 		s.Title = "Initial Chat Title"
 	}))
 
-	sess2, err := env.store.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj1.ID)
+	sess2, err := env.store.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj1.ID)
 	testutil.FailErr(t, "create sess2", err)
 	archivedAt := time.Now().UTC()
-	testutil.FailErr(t, "archive sess2", env.store.UpdateSession(ctx, sess2.ID, func(s *wire.Session) {
+	testutil.FailErr(t, "archive sess2", env.store.Sessions.UpdateSession(ctx, sess2.ID, func(s *wire.Session) {
 		s.Title = "Archived Chat"
 		s.ArchivedAt = &archivedAt
 	}))
 
-	sessOther, err := env.store.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj2.ID)
+	sessOther, err := env.store.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj2.ID)
 	testutil.FailErr(t, "create sessOther", err)
 
 	runner := hostcmd.NewRunner()
@@ -298,7 +298,7 @@ func TestProjectBackgroundListLiveHydrationAndIsolation(t *testing.T) {
 
 	// Live hydration check: rename sess1 and archive it, then re-query GET /v1/projects/{proj1.ID}/background.
 	now := time.Now().UTC()
-	testutil.FailErr(t, "rename and archive sess1", env.store.UpdateSession(ctx, sess1.ID, func(s *wire.Session) {
+	testutil.FailErr(t, "rename and archive sess1", env.store.Sessions.UpdateSession(ctx, sess1.ID, func(s *wire.Session) {
 		s.Title = "Renamed Live Title"
 		s.ArchivedAt = &now
 	}))
@@ -403,9 +403,9 @@ func TestProjectBackgroundStopRecordsPersonActionAndNotifiesOwningChat(t *testin
 	proj1 := createProjectForTest(t, env.srv, dir1)
 	proj2 := createProjectForTest(t, env.srv, dir2)
 
-	sess1, err := env.store.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj1.ID)
+	sess1, err := env.store.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj1.ID)
 	testutil.FailErr(t, "create sess1", err)
-	sess2, err := env.store.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj2.ID)
+	sess2, err := env.store.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj2.ID)
 	testutil.FailErr(t, "create sess2", err)
 
 	runner := hostcmd.NewRunner()
@@ -521,9 +521,9 @@ func TestProjectBackgroundAuthorizationRejectsUnauthenticatedAndForbiddenCallers
 
 	dir := resolveTestPath(t, t.TempDir())
 	proj := createProjectForTest(t, env.srv, dir)
-	sess, err := env.store.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj.ID)
+	sess, err := env.store.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj.ID)
 	testutil.FailErr(t, "create sess", err)
-	testutil.FailErr(t, "title sess", env.store.UpdateSession(ctx, sess.ID, func(s *wire.Session) {
+	testutil.FailErr(t, "title sess", env.store.Sessions.UpdateSession(ctx, sess.ID, func(s *wire.Session) {
 		s.Title = "Confidential Chat Title"
 	}))
 
@@ -591,7 +591,7 @@ func TestProjectBackgroundEventsAndReconnectReplay(t *testing.T) {
 	baseURL := startTestHTTPServer(t, env.srv)
 	dir := resolveTestPath(t, t.TempDir())
 	proj := createProjectForTest(t, env.srv, dir)
-	sess, err := env.store.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj.ID)
+	sess, err := env.store.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj.ID)
 	testutil.FailErr(t, "create sess", err)
 
 	streamCtx, cancelStream := context.WithCancel(ctx)

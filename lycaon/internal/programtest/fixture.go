@@ -6,8 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
-	"github.com/lycaon/lycaon/internal/tooloutput"
 	"sync"
 	"testing"
 	"time"
@@ -26,12 +24,15 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -77,15 +78,15 @@ type Fixture struct {
 	delivered  []evidence.Record
 }
 
-type sessions struct {
-	fixture *Fixture
-}
+type sessions struct{}
+
+type sourceDeliveries struct{ fixture *Fixture }
 
 func (sessions) Get(_ context.Context, id string) (*api.Session, error) {
 	return &api.Session{ID: id, OwnerPersonID: "fixture-person"}, nil
 }
 
-func (s sessions) CommitDeliveredSource(_ context.Context, _ string, observation evidence.DeliveredSourceObservation) (string, error) {
+func (s sourceDeliveries) CommitDeliveredSource(_ context.Context, _ string, observation evidence.DeliveredSourceObservation) (string, error) {
 	s.fixture.mu.Lock()
 	defer s.fixture.mu.Unlock()
 	rec := observation.Record()
@@ -166,7 +167,8 @@ func New(t testing.TB, options Options) *Fixture {
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
-		Sessions: sessions{fixture: f}, Ports: ports,
+		Sessions: sessions{}, Ports: ports,
+		Provenance: store.NewSQL(database).Evidence, SourceObserver: sourceDeliveries{fixture: f},
 		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 			return command.ProgramOwners{Natives: natives, Input: input, Publication: func(tools.CommandOutputAdmission) commandprogram.OutputPublication { return publication }}, nil
 		},

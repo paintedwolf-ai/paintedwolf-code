@@ -7,8 +7,8 @@ import (
 )
 
 // MergeWorkerSecretExposureIntoParent propagates a child's secret exposure.
-func MergeWorkerSecretExposureIntoParent(ctx context.Context, store SummaryStore, parentID, childID string) error {
-	if store == nil {
+func MergeWorkerSecretExposureIntoParent(ctx context.Context, sessionStore Sessions, transcriptStore Transcript, evidenceStore Evidence, parentID, childID string) error {
+	if sessionStore == nil || transcriptStore == nil || evidenceStore == nil {
 		return nil
 	}
 	parentID = strings.TrimSpace(parentID)
@@ -16,12 +16,12 @@ func MergeWorkerSecretExposureIntoParent(ctx context.Context, store SummaryStore
 	if parentID == "" || childID == "" {
 		return nil
 	}
-	exposed, err := store.SessionSecretExposure(ctx, childID)
+	exposed, err := evidenceStore.SessionSecretExposure(ctx, childID)
 	if err != nil {
 		return fmt.Errorf("read child secret-exposure state: %w", err)
 	}
 	if !exposed {
 		return nil
 	}
-	return store.SeedSecretExposure(ctx, parentID)
+	return evidenceStore.SeedSecretExposure(ctx, parentID)
 }

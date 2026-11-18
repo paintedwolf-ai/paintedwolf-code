@@ -12,7 +12,7 @@ import (
 )
 
 func TestAdvanceToImplementRequiresWorkflowReady(t *testing.T) {
-	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
+	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
 	ctx := context.Background()
 
@@ -22,7 +22,7 @@ func TestAdvanceToImplementRequiresWorkflowReady(t *testing.T) {
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
 	run, err = advancePlanToApprovePhase(ctx, mgr, run)
 	testutil.FailErr(t, "advancePlanToApprovePhase", err)
-	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, mgr), run.ID, projectDir)
+	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, repositories), run.ID, projectDir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	if run.CurrentPhase != "execute" {
 		t.Fatalf("phase = %q want execute", run.CurrentPhase)
@@ -30,7 +30,7 @@ func TestAdvanceToImplementRequiresWorkflowReady(t *testing.T) {
 }
 
 func TestAdvanceToImplementInvokesChildWithoutEntryGate(t *testing.T) {
-	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
+	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
 	ctx := context.Background()
 
@@ -40,7 +40,7 @@ func TestAdvanceToImplementInvokesChildWithoutEntryGate(t *testing.T) {
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
 	run, err = advancePlanToApprovePhase(ctx, mgr, run)
 	testutil.FailErr(t, "advancePlanToApprovePhase", err)
-	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, mgr), run.ID, projectDir)
+	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, repositories), run.ID, projectDir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	parent, err := mgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get parent", err)

@@ -594,6 +594,9 @@
       }
     },
     "rejection_codes": {
+      "COMMAND_PROGRAMS_DISABLED": [
+        "TOOL_NOT_OFFERED"
+      ],
       "COORDINATOR_CLOSEOUT_ENVELOPE_ONLY": [
         "COORDINATOR_CLOSEOUT_NO_ANSWER"
       ],

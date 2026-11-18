@@ -12,7 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -96,17 +96,17 @@ func TestSynthesisGroundingInvariants_dispatchedLegEvidenceIsObserved(t *testing
 	t.Parallel()
 	root := t.TempDir()
 	ctx := context.Background()
-	store := store.NewMemory()
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create parent session", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "path-explorer", Prompt: "survey"})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "path-explorer", Prompt: "survey"})
 	testutil.FailErr(t, "CreateChild", err)
 
 	grepJSON := `{"matches":[{"path":"src/a.go","line":1,"content":"package a"}]}`
-	_, _, err = store.CommitEvidenceToolResult(ctx, child.ID, root, "grep", map[string]any{"path": ".", "pattern": "package"}, grepJSON)
+	_, _, err = store.Evidence.CommitEvidenceToolResult(ctx, child.ID, root, "grep", map[string]any{"path": ".", "pattern": "package"}, grepJSON)
 	testutil.FailErr(t, "CommitEvidenceToolResult", err)
 
-	ev, err := guidance.UnionLegEvidence(ctx, store, []guidance.EvidenceLeg{{ChildSessionID: child.ID}})
+	ev, err := guidance.UnionLegEvidence(ctx, store.Evidence, []guidance.EvidenceLeg{{ChildSessionID: child.ID}})
 	testutil.FailErr(t, "UnionLegEvidence", err)
 	if !evidence.PathObserved(ev.Ledger, "src/a.go") {
 		t.Fatalf("dispatched leg evidence not observed; paths=%v", evidence.ObservedPathsSorted(ev.Ledger))

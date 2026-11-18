@@ -2,19 +2,22 @@
   "category": "go_receiver_methods",
   "artifact": "lycaon/internal/tools/native/command/command.ProgramRuntime",
   "kind": "runtime_service",
-  "workstream": "command-verdict-evidence",
+  "workstream": "command-evidence-bindings",
   "disposition": "retain",
-  "reason": "Retain one program lifetime across command, verification, continuation and retained output recovery. Output views resolve session-scoped retained bodies; bounded child diagnostics use the existing retention and publication owners. Stream capture and result records have separate domain files.",
-  "reviewed_commit": "1a7da07d4d1fe89a90d55b3342e8c415c1093444",
-  "ceiling": 33,
+  "reason": "Retain one command lifetime across execution, verification, continuation and retained output recovery. Provenance and source delivery are explicit collaborators, separate from session identity. Per-run custody and detached effects use the same admitted execution and receipt lifetime. Construction rejection, custody, continuation and output recovery contracts support this boundary.",
+  "reviewed_commit": "3f27d5b6a78a222013f4053a94d4de30c15c824c",
+  "ceiling": 32,
   "boundaries": {
-    "lycaon/internal/tools/native/command/program_continue_test.go": "118121800a4e8683a057b6124e2da4ce1feb74a57f79a3ada58485285d5358e9",
+    "lycaon/internal/invocation/program_feedback_read_test.go": "863be3e6ed2e2c705fa94093ada8041a5f50a4805138db7f50157466c236844f",
+    "lycaon/internal/toolhost/command_output_recovery_test.go": "5006be33b8b047de6b26c2a280ea6aff285203a7e6e8235fd3fbb58dda04ffe4",
+    "lycaon/internal/toolhost/command_parking_test.go": "a5975f77bf7bd3b3941ff86a4387ecf710539d0cd874ecbb15ec58430f9f6a3f",
     "lycaon/internal/tools/native/command/program_continue_stream_test.go": "9bdbd8e4826f11e79583a9f1712b7341adff930d31c0dc2429ccbd68b3221582",
+    "lycaon/internal/tools/native/command/program_continue_test.go": "bef6f811337e3949902c265ec618d3f1270438863edfd547f7eca32478d2729f",
+    "lycaon/internal/tools/native/command/program_output_stream_test.go": "5bb41106d8e242f9db676a483e3b230591ded0766425af4a41d2663223ce49ac",
+    "lycaon/internal/tools/native/command/program_provenance_test.go": "4c7dbb497dff5953712b3296b292850edb2ff4b5bf94d807cfef7551bd2412de",
     "lycaon/internal/tools/native/command/verify_program_park_test.go": "6132c1a428b7d576743b2e797147fd2d674245d8aefe69998e4a81a356297919",
-    "lycaon/internal/toolhost/command_output_recovery_test.go": "90a27db2579beff4ff86abd9ebad423168c756f9913be7ceaf006e3622fd3a12",
-    "lycaon/internal/tools/native/command/program_output_stream_test.go": "55ddba59438b847a4c0dbb8eb5b7e0761648f218e2f89b4e2c9b7d4fb3e0ee07",
     "lycaon/internal/tools/native/verify_test.go": "8116e2ee7eb5ba471215557f875a59bae43d60e131f0d262ead38e2cc365da48",
-    "lycaon/internal/invocation/program_feedback_read_test.go": "d25a921acc4ff1993caea937f1f8bb49d007586ff91c459ddd3e226be6e531cd"
+    "lycaon/test/wiring/command_curl_data_path_e2e_test.go": "5bb4145d28ec2eff5d35d853e5cb780e54cfb4f5a61d33024abfc43bde274a4e"
   },
-  "reviewed_shape": "068c805056a8417945beb3bed08114b5011a2c654cbe5b9743e1adb8eaae70a8"
+  "reviewed_shape": "bddcf7c8e42b182709c17752ff1a9636354aa2f49d0085d3ae58c982a0384add"
 }

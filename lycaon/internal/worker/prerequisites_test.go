@@ -2,12 +2,13 @@ package worker
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -17,94 +18,80 @@ import (
 )
 
 func TestPrerequisitesWaitForPromotedSuccessfulOutput(t *testing.T) {
-	for _, sqlMode := range []bool{false, true} {
-		t.Run(map[bool]string{false: "memory", true: "sql"}[sqlMode], func(t *testing.T) {
-			var q WorkerQueue
-			var transition func(string, string, api.WorkerMergeStatus)
-			if sqlMode {
-				database := testdbfixture.Open(t, "workers.db")
-				testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
-				queue := NewSQLQueue(database, 2)
-				q = queue
-				transition = func(id, status string, merge api.WorkerMergeStatus) {
-					_, err := database.ExecContext(t.Context(), `UPDATE worker_jobs SET status='complete', result_json=json_object('status',?), merge_status=? WHERE id=?`, status, string(merge), id)
-					testutil.FailErr(t, "set producer outcome", err)
-				}
-			} else {
-				queue := NewInMemoryQueue(2)
-				q = queue
-				transition = func(id, status string, merge api.WorkerMergeStatus) {
-					queue.mu.Lock()
-					defer queue.mu.Unlock()
-					job := queue.jobs[id]
-					job.task.Status = api.WorkerStatusComplete
-					job.task.Result = &api.WorkerResult{Status: status}
-					job.task.MergeStatus = merge
-					delete(queue.running, id)
-				}
-			}
-			producer := api.WorkerTask{WorkspacePath: t.TempDir(), ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, Prompt: "produce module", Brief: "produce module", AgentType: "implementer", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}
-			id, err := q.Enqueue(t.Context(), producer)
-			testutil.FailErr(t, "enqueue producer", err)
-			consumer := producer
-			consumer.Brief = "integrate"
-			consumer.AfterWorkers = []string{id}
-			cid, err := q.Enqueue(t.Context(), consumer)
-			testutil.FailErr(t, "enqueue consumer", err)
-			claim, err := q.ClaimNext(t.Context(), ClaimRequest{})
-			testutil.FailErr(t, "claim producer", err)
-			if claim.ID != id {
-				t.Fatalf("claimed %s before producer %s", claim.ID, id)
-			}
-			transition(id, "complete", api.WorkerMergeStatusPending)
-			if task, err := q.ClaimNext(t.Context(), ClaimRequest{}); !errors.Is(err, ErrNoPendingJobs) {
-				t.Fatalf("premature consumer claim: %+v, %v", task, err)
-			}
-			transition(id, "complete", api.WorkerMergeStatusMerged)
-			claim, err = q.ClaimNext(t.Context(), ClaimRequest{})
-			testutil.FailErr(t, "claim ready consumer", err)
-			if claim.ID != cid {
-				t.Fatalf("claimed %s, want consumer %s", claim.ID, cid)
-			}
 
-			for _, outcome := range []struct {
-				status string
-				merge  api.WorkerMergeStatus
-			}{{"partial", api.WorkerMergeStatusMerged}, {"complete", api.WorkerMergeStatusRejected}, {"canceled", api.WorkerMergeStatusAborted}} {
-				pid, err := q.Enqueue(t.Context(), producer)
-				testutil.FailErr(t, "enqueue unusable producer", err)
-				consumer.AfterWorkers = []string{pid}
-				first, err := q.Enqueue(t.Context(), consumer)
-				testutil.FailErr(t, "enqueue blocked consumer", err)
-				consumer.AfterWorkers = []string{first}
-				second, err := q.Enqueue(t.Context(), consumer)
-				testutil.FailErr(t, "enqueue downstream consumer", err)
-				if outcome.status == "canceled" {
-					testutil.FailErr(t, "cancel producer", q.Cancel(t.Context(), pid, &api.WorkerResult{Status: "canceled"}))
-				} else {
-					transition(pid, outcome.status, outcome.merge)
-				}
-				// An unusable producer leaves its consumers waiting for the
-				// coordinator to replace or withdraw them; nothing cancels them.
-				_, err = q.RecoverExpiredClaims(t.Context())
-				testutil.FailErr(t, "recover", err)
-				if claim, err := q.ClaimNext(t.Context(), ClaimRequest{}); !errors.Is(err, ErrNoPendingJobs) || claim != nil {
-					t.Fatalf("claimed a blocked consumer: %+v, %v", claim, err)
-				}
-				for _, blocked := range []string{first, second} {
-					task, ok := q.Get(blocked)
-					if !ok || task.Status != api.WorkerStatusPending {
-						t.Fatalf("blocked consumer %s: %+v", blocked, task)
-					}
-					testutil.FailErr(t, "withdraw blocked consumer", q.Cancel(t.Context(), blocked, &api.WorkerResult{Status: "canceled"}))
-				}
-			}
-		})
+	var q WorkerQueue
+	var transition func(string, string, api.WorkerMergeStatus)
+
+	database := testdbfixture.Open(t, "workers.db")
+	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
+	queue := NewSQLQueue(database, 2)
+	q = queue
+	transition = func(id, status string, merge api.WorkerMergeStatus) {
+		_, err := database.ExecContext(t.Context(), `UPDATE worker_jobs SET status='complete', result_json=json_object('status',?), merge_status=? WHERE id=?`, status, string(merge), id)
+		testutil.FailErr(t, "set producer outcome", err)
 	}
+
+	producer := api.WorkerTask{WorkspacePath: t.TempDir(), ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, Prompt: "produce module", Brief: "produce module", AgentType: "implementer", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}
+	id, err := q.Enqueue(t.Context(), producer)
+	testutil.FailErr(t, "enqueue producer", err)
+	consumer := producer
+	consumer.Brief = "integrate"
+	consumer.AfterWorkers = []string{id}
+	cid, err := q.Enqueue(t.Context(), consumer)
+	testutil.FailErr(t, "enqueue consumer", err)
+	claim, err := q.ClaimNext(t.Context(), ClaimRequest{})
+	testutil.FailErr(t, "claim producer", err)
+	if claim.ID != id {
+		t.Fatalf("claimed %s before producer %s", claim.ID, id)
+	}
+	transition(id, "complete", api.WorkerMergeStatusPending)
+	if task, err := q.ClaimNext(t.Context(), ClaimRequest{}); !errors.Is(err, ErrNoPendingJobs) {
+		t.Fatalf("premature consumer claim: %+v, %v", task, err)
+	}
+	transition(id, "complete", api.WorkerMergeStatusMerged)
+	claim, err = q.ClaimNext(t.Context(), ClaimRequest{})
+	testutil.FailErr(t, "claim ready consumer", err)
+	if claim.ID != cid {
+		t.Fatalf("claimed %s, want consumer %s", claim.ID, cid)
+	}
+
+	for _, outcome := range []struct {
+		status string
+		merge  api.WorkerMergeStatus
+	}{{"partial", api.WorkerMergeStatusMerged}, {"complete", api.WorkerMergeStatusRejected}, {"canceled", api.WorkerMergeStatusAborted}} {
+		pid, err := q.Enqueue(t.Context(), producer)
+		testutil.FailErr(t, "enqueue unusable producer", err)
+		consumer.AfterWorkers = []string{pid}
+		first, err := q.Enqueue(t.Context(), consumer)
+		testutil.FailErr(t, "enqueue blocked consumer", err)
+		consumer.AfterWorkers = []string{first}
+		second, err := q.Enqueue(t.Context(), consumer)
+		testutil.FailErr(t, "enqueue downstream consumer", err)
+		if outcome.status == "canceled" {
+			testutil.FailErr(t, "cancel producer", q.Cancel(t.Context(), pid, &api.WorkerResult{Status: "canceled"}))
+		} else {
+			transition(pid, outcome.status, outcome.merge)
+		}
+		// An unusable producer leaves its consumers waiting for the
+		// coordinator to replace or withdraw them; nothing cancels them.
+		_, err = q.RecoverExpiredClaims(t.Context())
+		testutil.FailErr(t, "recover", err)
+		if claim, err := q.ClaimNext(t.Context(), ClaimRequest{}); !errors.Is(err, ErrNoPendingJobs) || claim != nil {
+			t.Fatalf("claimed a blocked consumer: %+v, %v", claim, err)
+		}
+		for _, blocked := range []string{first, second} {
+			task, ok := q.Get(blocked)
+			if !ok || task.Status != api.WorkerStatusPending {
+				t.Fatalf("blocked consumer %s: %+v", blocked, task)
+			}
+			testutil.FailErr(t, "withdraw blocked consumer", q.Cancel(t.Context(), blocked, &api.WorkerResult{Status: "canceled"}))
+		}
+	}
+
 }
 
 func TestPrerequisitesRejectCrossSessionAndResumedConsumers(t *testing.T) {
-	q := NewInMemoryQueue(2)
+	q := newTestQueue(t, 2, testdbseed.DefaultProjectID, "old-child", "other", "parent")
 	producer := api.WorkerTask{ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, Prompt: "fixture", Brief: "fixture"}
 	id, err := q.Enqueue(t.Context(), producer)
 	testutil.FailErr(t, "enqueue producer", err)
@@ -126,9 +113,10 @@ func TestConsumerCapturesPrimaryAfterProducerPromotion(t *testing.T) {
 	projects := project.NewMemoryRegistry()
 	p, err := projects.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: canonical, Label: "app"}}})
 	testutil.FailErr(t, "create project", err)
-	q := NewInMemoryQueue(2)
+	q := newTestQueue(t, 2, p.ID, "parent")
+	testdbseed.InsertProjectRootWithID(t, q.db, p.ID, p.Roots[0].ID, canonical)
 	q.SetProjectStore(projects)
-	q.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{})))
+	q.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(db.DataDir(q.db), "worker-branches"), platform.NewSelector(platform.Config{})))
 	producer := api.WorkerTask{ProjectID: p.ID, WorkspaceRootID: p.Roots[0].ID, WorkspacePath: canonical, ParentSessionID: "parent", AgentType: "implementer", Prompt: "produce", Brief: "produce", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}
 	id, err := q.Enqueue(t.Context(), producer)
 	testutil.FailErr(t, "enqueue producer", err)
@@ -140,11 +128,8 @@ func TestConsumerCapturesPrimaryAfterProducerPromotion(t *testing.T) {
 		t.Fatalf("premature snapshot: %v", err)
 	}
 	testutil.FailErr(t, "land producer output", os.WriteFile(filepath.Join(canonical, "producer.go"), []byte("package producer\n"), 0600))
-	q.mu.Lock()
-	q.jobs[id].task.Status = api.WorkerStatusComplete
-	q.jobs[id].task.Result = &api.WorkerResult{Status: "complete"}
-	q.jobs[id].task.MergeStatus = api.WorkerMergeStatusMerged
-	q.mu.Unlock()
+	_, err = q.db.ExecContext(t.Context(), `UPDATE worker_jobs SET status='complete', result_json='{"status":"complete"}', merge_status='merged' WHERE id=?`, id)
+	testutil.FailErr(t, "complete promoted producer", err)
 	branch, err := q.ClaimWorkerBranch(t.Context(), cid)
 	testutil.FailErr(t, "snapshot ready consumer", err)
 	body, err := os.ReadFile(filepath.Join(branch.WorkspaceRoot, "producer.go"))

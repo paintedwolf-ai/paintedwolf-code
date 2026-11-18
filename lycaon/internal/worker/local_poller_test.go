@@ -35,7 +35,7 @@ func TestPollerClaimsCommittedEnqueueWithoutWaitingForMaintenance(t *testing.T) 
 	cfg := DefaultWorkersConfig()
 	cfg.Poller.MaxConcurrency = 1
 	cfg.Poller.MaintenanceIntervalMs = int((time.Hour) / time.Millisecond)
-	queue := NewInMemoryQueue(1)
+	queue := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent")
 	executor := &countingStartExecutor{}
 	poller := NewLocalWorkerPoller(queue, executor, cfg, discardOutcomeRecorder{})
 	ctx, cancel := context.WithCancel(t.Context())
@@ -64,7 +64,7 @@ func TestPollerDrainsPendingWorkWhenCapacityReturns(t *testing.T) {
 	cfg := DefaultWorkersConfig()
 	cfg.Poller.MaxConcurrency = 1
 	cfg.Poller.MaintenanceIntervalMs = int((time.Hour) / time.Millisecond)
-	queue := NewInMemoryQueue(1)
+	queue := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent")
 	executor := &serialProbeExecutor{starts: make(chan string, 2), release: make(chan struct{}, 2)}
 	poller := NewLocalWorkerPoller(queue, executor, cfg, discardOutcomeRecorder{})
 	for i := 0; i < 2; i++ {
@@ -108,7 +108,7 @@ func (discardOutcomeRecorder) OnWorkerFailed(context.Context, string, error) err
 func (discardOutcomeRecorder) OnOutcomeDelivered(context.Context, api.WorkerTask) {}
 
 type flakyCompleteQueue struct {
-	*InMemoryQueue
+	*SQLQueue
 	attempts atomic.Int32
 }
 
@@ -190,14 +190,14 @@ func (q *flakyCompleteQueue) Complete(ctx context.Context, claimed *api.WorkerTa
 	if q.attempts.Add(1) == 1 {
 		return false, errors.New("database temporarily unavailable")
 	}
-	return q.InMemoryQueue.Complete(ctx, claimed, result)
+	return q.SQLQueue.Complete(ctx, claimed, result)
 }
 
 // A worker panic fails only its claimed job.
 func TestPollerRecoversExecutorPanic(t *testing.T) {
 	cfg := DefaultWorkersConfig()
 	cfg.Poller.MaxConcurrency = 1
-	queue := NewInMemoryQueue(cfg.Poller.MaxConcurrency)
+	queue := newTestQueue(t, cfg.Poller.MaxConcurrency, testdbseed.DefaultProjectID, "parent")
 	queue.SetWorkersConfig(cfg)
 	poller := NewLocalWorkerPoller(queue, panicExecutor{}, cfg, discardOutcomeRecorder{})
 
@@ -228,8 +228,8 @@ func TestPollerRecoversExecutorPanic(t *testing.T) {
 }
 
 func TestPollerRetriesTerminalCommit(t *testing.T) {
-	base := NewInMemoryQueue(1)
-	queue := &flakyCompleteQueue{InMemoryQueue: base}
+	base := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent")
+	queue := &flakyCompleteQueue{SQLQueue: base}
 	id, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",
@@ -262,7 +262,7 @@ func TestPollerRetriesTerminalCommit(t *testing.T) {
 }
 
 func TestPollerReplaysUnacknowledgedTerminalOutcome(t *testing.T) {
-	queue := NewInMemoryQueue(1)
+	queue := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent")
 	id, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ParentSessionID: "parent",
 		ProjectID: testdbseed.DefaultProjectID, ExecutionTarget: api.ExecutionTargetLocal,
@@ -295,7 +295,7 @@ func TestPollerReplaysUnacknowledgedTerminalOutcome(t *testing.T) {
 }
 
 func TestPollerDeliversTerminalOutcomeOutsideTheCanceledExecution(t *testing.T) {
-	queue := NewInMemoryQueue(1)
+	queue := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent-outcome-order")
 	parent := "parent-outcome-order"
 	_, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ParentSessionID: parent,
@@ -330,7 +330,7 @@ func TestPollerDeliversTerminalOutcomeOutsideTheCanceledExecution(t *testing.T) 
 
 // Delivery continues after an individual outcome fails.
 func TestPollerDeliversOutcomesBehindAFailingOne(t *testing.T) {
-	queue := NewInMemoryQueue(3)
+	queue := newTestQueue(t, 3, testdbseed.DefaultProjectID, "parent")
 	ids := make([]string, 0, 3)
 	for i := 0; i < 3; i++ {
 		id, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
@@ -368,7 +368,7 @@ func TestPollerDeliversOutcomesBehindAFailingOne(t *testing.T) {
 }
 
 func TestPollerKeepsRunningUntilDeferredOutcomeSucceeds(t *testing.T) {
-	queue := NewInMemoryQueue(1)
+	queue := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent")
 	_, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ParentSessionID: "parent",
 		ProjectID: testdbseed.DefaultProjectID, ExecutionTarget: api.ExecutionTargetLocal,
@@ -425,7 +425,7 @@ func (completeExecutor) Execute(context.Context, api.WorkerTask, WorkerRunContex
 func (completeExecutor) AbortWorkerRuntime(context.Context, api.WorkerTask) error { return nil }
 
 type failingCompleteQueue struct {
-	*InMemoryQueue
+	*SQLQueue
 	err error
 }
 
@@ -434,8 +434,8 @@ func (q *failingCompleteQueue) Complete(context.Context, *api.WorkerTask, api.Wo
 }
 
 func TestPollerTransitionsToRetryWhenCompletionCommitFailsWithAttemptsRemaining(t *testing.T) {
-	base := NewInMemoryQueue(1)
-	queue := &failingCompleteQueue{InMemoryQueue: base, err: errors.New("transient completion failure")}
+	base := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent")
+	queue := &failingCompleteQueue{SQLQueue: base, err: errors.New("transient completion failure")}
 	id, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ParentSessionID: "parent",
 		ProjectID: testdbseed.DefaultProjectID, ExecutionTarget: api.ExecutionTargetLocal,
@@ -462,8 +462,8 @@ func TestPollerTransitionsToRetryWhenCompletionCommitFailsWithAttemptsRemaining(
 }
 
 func TestPollerTransitionsToFailureWhenCompletionCommitFailsExhausted(t *testing.T) {
-	base := NewInMemoryQueue(1)
-	queue := &failingCompleteQueue{InMemoryQueue: base, err: errors.New("terminal completion failure")}
+	base := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent")
+	queue := &failingCompleteQueue{SQLQueue: base, err: errors.New("terminal completion failure")}
 	id, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ParentSessionID: "parent",
 		ProjectID: testdbseed.DefaultProjectID, ExecutionTarget: api.ExecutionTargetLocal,

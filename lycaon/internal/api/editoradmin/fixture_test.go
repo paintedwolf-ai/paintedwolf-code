@@ -25,9 +25,8 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
-	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	"github.com/lycaon/lycaon/internal/viewstate"
@@ -47,7 +46,7 @@ type editorFixture struct {
 	background *taskgroup.Group
 	project    *project.Project
 	root       string
-	sessions   session.Store
+	sessions   *sessionstore.Repositories
 	owner      people.Person
 	promotions *promotionLog
 }
@@ -71,8 +70,8 @@ func (l *promotionLog) count() int {
 
 type fixtureOption func(*apitestdeps.Deps)
 
-func withSessions(sessions session.Store) fixtureOption {
-	return func(d *apitestdeps.Deps) { d.Store = sessions }
+func withSessions(sessions *sessionstore.Repositories) fixtureOption {
+	return func(d *apitestdeps.Deps) { d.Store = sessions; d.Database = sessions.DB() }
 }
 
 func newEditorFixture(t *testing.T, opts ...fixtureOption) *editorFixture {
@@ -82,7 +81,8 @@ func newEditorFixture(t *testing.T, opts ...fixtureOption) *editorFixture {
 	fingerprints, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x5a}, 32))
 	testutil.FailErr(t, "build fingerprinter", err)
 	matcher.SetFingerprinter(fingerprints)
-	deps := apitestdeps.Deps{Store: store.NewMemory(), Database: testdbfixture.Open(t, "editor.db")}
+	sessions := storetest.New(t)
+	deps := apitestdeps.Deps{Store: sessions, Database: sessions.DB()}
 	for _, opt := range opts {
 		opt(&deps)
 	}
@@ -105,7 +105,7 @@ func newEditorFixture(t *testing.T, opts ...fixtureOption) *editorFixture {
 		MutationGate:    deps.MutationGate,
 		ProjectRegistry: deps.Projects,
 		SecretSpans:     secretspan.New(matcher),
-		SessionStore:    deps.Store,
+		SessionStore:    deps.Store.Sessions,
 		TryRunPromotion: promotions.record,
 	})
 	t.Cleanup(func() {

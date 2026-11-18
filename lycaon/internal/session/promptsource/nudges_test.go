@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/turnnudges"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -43,12 +43,12 @@ func (*nudgeSpendCosts) ClaimSpendWarning(context.Context, string, float64) (boo
 func (*nudgeSpendCosts) ClearSpendWarning(context.Context, string) error { return nil }
 
 func TestNudgesClassifiesActualSpendCeilingAndRetainsRunway(t *testing.T) {
-	memory := store.NewMemory()
-	session, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "project-spend")
+	sessionStore := storetest.New(t, "project-spend")
+	session, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project-spend")
 	testutil.FailErr(t, "create spend session", err)
 	costs := &nudgeSpendCosts{t: t, session: session.ID, nanoUSD: 900_000_000}
 	deps := (&Nudges{
-		Spend:  spendguard.New(memory, nudgeSpendLimits{}, costs),
+		Spend:  spendguard.New(sessionStore.Sessions, nudgeSpendLimits{}, costs),
 		Nudges: &turnnudges.Service{},
 	}).Build()
 	check, err := deps.CheckSpendCeiling(t.Context(), session.ID, session)

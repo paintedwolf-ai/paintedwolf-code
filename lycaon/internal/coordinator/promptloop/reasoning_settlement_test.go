@@ -33,17 +33,17 @@ func TestSettlementPreservesReasoningAndPresentationBoundaries(t *testing.T) {
 			db := testdbfixture.OpenPath(t, filepath.Join(directory, "store.db"))
 			testdbseed.InsertProjectRoot(t, db, testdbseed.DefaultProjectID, directory)
 			messages := store.NewSQL(db)
-			sess, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := messages.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
-			execution, err := messages.BeginTurn(ctx, store.TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
+			execution, err := messages.Turns.BeginTurn(ctx, store.TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
 			testutil.FailErr(t, "begin turn", err)
 			message := api.Message{ID: uuid.NewString(), Role: api.MessageRoleAssistant, CreatedAt: time.Now().UTC()}
-			testutil.FailErr(t, "append placeholder", messages.AppendMessages(ctx, sess.ID, message))
+			testutil.FailErr(t, "append placeholder", messages.Transcript.AppendMessages(ctx, sess.ID, message))
 			var replay string
 			loop := NewPromptLoopForTest(PromptLoopDeps{Projection: ProjectionDeps{
-				SettleModelOutput: messages.SettleModelOutput,
+				SettleModelOutput: messages.Turns.SettleModelOutput,
 				UpdateMessage: func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
-					_, err := messages.UpdateMessage(ctx, sessionID, messageID, msg)
+					_, err := messages.Transcript.UpdateMessage(ctx, sessionID, messageID, msg)
 					return err
 				},
 				Streams: &testMessageStreams{cachereplay: func(_ string, content string, _ []string) { replay = content }},
@@ -55,7 +55,7 @@ func TestSettlementPreservesReasoningAndPresentationBoundaries(t *testing.T) {
 			state := &promptLoopTurnState{attemptID: execution.Attempt.ID}
 			_, err = loop.Projection.settleAssistantStreamTurn(ctx, sess.ID, state, message, completion, nil, uuid.NewString(), nextModelIteration(state), false)
 			testutil.FailErr(t, "settle output", err)
-			pending, err := store.NewSQL(db).ListPendingModelOutputProjections(ctx)
+			pending, err := store.NewSQL(db).Turns.ListPendingModelOutputProjections(ctx)
 			testutil.FailErr(t, "reload canonical output", err)
 			if len(pending) != 1 || pending[0].Output.ID != state.output.id {
 				t.Fatalf("canonical output identity changed: %+v", pending)
@@ -66,7 +66,7 @@ func TestSettlementPreservesReasoningAndPresentationBoundaries(t *testing.T) {
 			if output.Content != tc.content || reasoning.Text != private || len(reasoning.Details) != 1 || reasoning.ProviderID != "fixture" {
 				t.Fatalf("canonical channels changed: content=%q reasoning=%+v", output.Content, reasoning)
 			}
-			reloaded, err := store.NewSQL(db).GetMessage(ctx, sess.ID, message.ID)
+			reloaded, err := store.NewSQL(db).Transcript.GetMessage(ctx, sess.ID, message.ID)
 			testutil.FailErr(t, "reload transcript", err)
 			if reloaded.Content != tc.content || reloaded.ModelReasoning == nil || reloaded.ModelReasoning.Text != private {
 				t.Fatalf("reload lost canonical channels: %+v", reloaded)

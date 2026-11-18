@@ -40,7 +40,7 @@ func TestCheckpointHandlersListAndResolve(t *testing.T) {
 	testutil.FailErr(t, "reg.Create failed", err)
 
 	store := store.NewSQL(sqlDB)
-	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{
+	sess, err := store.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		Posture:   wire.SessionPostureBuild,
 		ProjectID: p.ID,
 	}, p.ID)
@@ -234,7 +234,7 @@ func TestCheckpointGrantOfferCreatesProjectLease(t *testing.T) {
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	store := store.NewSQL(sqlDB)
-	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{
+	sess, err := store.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		Posture:   wire.SessionPostureBuild,
 		ProjectID: p.ID,
 	}, p.ID)
@@ -331,7 +331,7 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 	p, err := project.CreateWithRoot(t.Context(), reg, projectDir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	store := store.NewSQL(sqlDB)
-	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{
+	sess, err := store.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		Posture:   wire.SessionPostureBuild,
 		ProjectID: p.ID,
 	}, p.ID)

@@ -16,7 +16,7 @@ import (
 // Its work is bounded by interrupted/degraded projections, not project history.
 func (m *Service) RepairPendingOutputs(ctx context.Context) error {
 	for {
-		pending, err := m.store.ListPendingModelOutputProjections(ctx)
+		pending, err := m.turnStore.ListPendingModelOutputProjections(ctx)
 		if err != nil {
 			return fmt.Errorf("list pending model output projections: %w", err)
 		}
@@ -34,7 +34,7 @@ func (m *Service) RepairPendingOutputs(ctx context.Context) error {
 func (m *Service) repairModelOutputProjection(ctx context.Context, item store.PendingModelOutputProjection) error {
 	output := item.Output
 	ctx = workercontext.WithJob(ctx, item.WorkerJobID)
-	message, messageErr := m.store.GetMessage(ctx, output.SessionID, output.MessageID)
+	message, messageErr := m.transcriptStore.GetMessage(ctx, output.SessionID, output.MessageID)
 	if messageErr != nil {
 		if !errors.Is(messageErr, store.ErrMessageNotFound) {
 			return fmt.Errorf("read model output projection %s: %w", output.ID, messageErr)
@@ -65,7 +65,7 @@ func (m *Service) repairModelOutputProjection(ctx context.Context, item store.Pe
 	if err := m.Update(ctx, output.SessionID, output.MessageID, message); err != nil {
 		return fmt.Errorf("repair model output projection %s: %w", output.ID, err)
 	}
-	if err := m.store.MarkModelOutputProjected(ctx, output.ID); err != nil {
+	if err := m.turnStore.MarkModelOutputProjected(ctx, output.ID); err != nil {
 		return fmt.Errorf("acknowledge model output projection %s: %w", output.ID, err)
 	}
 	return nil

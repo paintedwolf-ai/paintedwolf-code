@@ -17,11 +17,12 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/policyfacts"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -93,7 +94,7 @@ func TestFirstPromptWithDeclaredURLFiresIndexWarmerAndAppendsMessage(t *testing.
 	}
 	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	userText := "summarize https://docs.example/widget"
@@ -134,7 +135,7 @@ func TestEachPromptOffersItsDeclaredURLsToWarming(t *testing.T) {
 	warmer := &fakeIndexWarmer{}
 	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	first := "summarize https://docs.example/widget"
@@ -158,7 +159,7 @@ func TestWarmDeclaredURLsWithoutCallbackResultAppendsNothing(t *testing.T) {
 	warmer := &fakeIndexWarmer{}
 	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "read https://docs.example/widget")
@@ -181,7 +182,7 @@ func TestHostTurnsDoNotWarm(t *testing.T) {
 	warmer := &fakeIndexWarmer{fire: true, meta: api.IndexWarmingMeta{Trigger: "declared_url", Pages: 1}}
 	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	_, err = mgr.Submissions.LoopWake(ctx, sess.ID)
@@ -205,7 +206,7 @@ func TestHostLoopWakeTextFromUserRemainsUserIntent(t *testing.T) {
 	warmer := &fakeIndexWarmer{}
 	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	_, err = mgr.Submissions.Prompt(ctx, sess.ID, surface.HostLoopWakeSentinel)
@@ -225,13 +226,15 @@ func TestHostLoopWakeTextFromUserRemainsUserIntent(t *testing.T) {
 }
 
 func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
-	registry := project.NewMemoryRegistry()
+	sessionFixture := storetest.New(t)
+
+	registry := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := registry.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: t.TempDir()}}})
 	testutil.FailErr(t, "create project", err)
-	mem := sessionstore.NewMemory()
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
+	sessionStore := sessionFixture
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create session", err)
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(registry)
 	ref := api.NavigationReference{ID: "ref-0", Syntax: "code", Mention: "same.go", ProjectID: p.ID, Path: "same.go", Status: api.NavigationAmbiguous, Line: 12, EndLine: 20,
 		Candidates: []api.NavigationTarget{
@@ -241,7 +244,11 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 		},
 	}
 	const content = "See `same.go`."
-	testutil.FailErr(t, "append ambiguous message", mem.AppendMessages(t.Context(), sess.ID, api.Message{ID: "m", Role: api.MessageRoleAssistant, Content: content, NavigationRefs: []api.NavigationReference{ref}}))
+	if err := sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{ID: "invalid", Role: api.MessageRoleAssistant, Content: content, NavigationRefs: []api.NavigationReference{ref}}); err == nil {
+		t.Fatal("cross-project candidate was persisted")
+	}
+	ref.Candidates = ref.Candidates[:2]
+	testutil.FailErr(t, "append ambiguous message", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{ID: "m", Role: api.MessageRoleAssistant, Content: content, NavigationRefs: []api.NavigationReference{ref}}))
 	index := 1
 	req := api.ResolveMessageNavigationRequest{MessageID: "m", ContentSHA256: sessionstore.NavigationContentHash(content), ReferenceID: ref.ID, CandidateIndex: &index}
 	calls := 0
@@ -258,9 +265,9 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 	if !out.References[0].Deleted || calls != 1 {
 		t.Fatalf("resolution = %+v, calls = %d", out, calls)
 	}
-	stored, err := mem.GetMessage(t.Context(), sess.ID, "m")
+	stored, err := sessionStore.Transcript.GetMessage(t.Context(), sess.ID, "m")
 	testutil.FailErr(t, "read original reference", err)
-	if stored.NavigationRefs[0].Status != api.NavigationAmbiguous || len(stored.NavigationRefs[0].Candidates) != 3 {
+	if stored.NavigationRefs[0].Status != api.NavigationAmbiguous || len(stored.NavigationRefs[0].Candidates) != 2 {
 		t.Fatal("candidate selection rewrote durable binding")
 	}
 	for _, invalid := range []int{-1, 2, 3, 32} {
@@ -275,17 +282,19 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 }
 
 func TestAssistantCommitAndNotePersistNavigationReferences(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	ctx := context.Background()
 	root := t.TempDir()
 	testutil.FailErr(t, "make scripts folder", os.Mkdir(filepath.Join(root, "scripts"), 0o755))
 	testutil.FailErr(t, "write findings", os.WriteFile(filepath.Join(root, "FINDINGS.md"), []byte("x"), 0o600))
-	registry := project.NewMemoryRegistry()
+	registry := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := registry.Create(ctx, project.CreateParams{Roots: []project.AttachRootParams{{Path: root}}})
 	testutil.FailErr(t, "create project", err)
-	mem := sessionstore.NewMemory()
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, p.ID)
+	sessionStore := sessionFixture
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create session", err)
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(registry)
 
 	testutil.FailErr(t, "append agent note", mgr.Runner.Transcript.Append(ctx, sess.ID, api.Message{
@@ -301,7 +310,7 @@ func TestAssistantCommitAndNotePersistNavigationReferences(t *testing.T) {
 		ID: "answer-1", Role: api.MessageRoleAssistant, Content: "See FINDINGS.md.",
 		Visibility: api.MessageVisibilityTranscript,
 	}))
-	msgs, err := mem.GetMessages(ctx, sess.ID)
+	msgs, err := sessionStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read messages", err)
 	if len(msgs) != 2 || len(msgs[0].NavigationRefs) != 1 || len(msgs[1].NavigationRefs) != 1 {
 		t.Fatalf("messages = %+v", msgs)
@@ -312,15 +321,17 @@ func TestAssistantCommitAndNotePersistNavigationReferences(t *testing.T) {
 }
 
 func TestNavigationParsesWorktreeAbsolutePathsWithoutFilesystemValidation(t *testing.T) {
-	registry := project.NewMemoryRegistry()
+	sessionFixture := storetest.New(t)
+
+	registry := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := registry.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: t.TempDir()}}})
 	testutil.FailErr(t, "project", err)
-	mem := sessionstore.NewMemory()
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
+	sessionStore := sessionFixture
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "session", err)
 	branch := filepath.Join(t.TempDir(), "not-materialized")
-	testutil.FailErr(t, "worktree binding", mem.PutWorktreeBinding(t.Context(), sessionstore.WorktreeBinding{SessionID: sess.ID, ProjectID: p.ID, Toplevel: p.Roots[0].Path, WorktreePath: branch, Branch: "work", BaseBranch: "main"}))
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	testutil.FailErr(t, "worktree binding", sessionStore.Sessions.PutWorktreeBinding(t.Context(), sessionstore.WorktreeBinding{SessionID: sess.ID, ProjectID: p.ID, Toplevel: p.Roots[0].Path, WorktreePath: branch, Branch: "work", BaseBranch: "main"}))
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(registry)
 	rows := []api.Message{{Role: api.MessageRoleAssistant, Content: "[file](" + filepath.ToSlash(filepath.Join(branch, "src/a.go")) + ")", Visibility: api.MessageVisibilityTranscript}}
 	mgr.Runner.Transcript.NavigationRefs(t.Context(), sess.ID, rows)

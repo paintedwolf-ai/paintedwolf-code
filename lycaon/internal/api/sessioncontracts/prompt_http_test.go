@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,7 +15,6 @@ import (
 	"github.com/google/uuid"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -177,7 +177,7 @@ func TestStreamUnknownMessage(t *testing.T) {
 }
 
 func TestUnavailableToolFixtureDoesNotExecuteHTTP(t *testing.T) {
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	reg.SetFail("read", fmt.Errorf("read failed"))
 	srv := contractfixture.NewTestServerWithWorkflowRegistry(t, contractfixture.WithoutTools(reg, "read"))
 	baseURL := contractfixture.StartTestHTTPServer(t, srv)

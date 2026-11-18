@@ -31,11 +31,11 @@ func TestContextPreparationProjectsWithoutAdvancingChat(t *testing.T) {
 	policy, err := llm.NewPolicyStoreAt(filepath.Join(dir, "model-policy.yaml"))
 	testutil.FailErr(t, "create preparation policy", err)
 	manager.Coordinator.Model.LLMService = &llm.Service{Registry: registry, Router: llm.NewStaticModelRouter(policy)}
-	testutil.FailErr(t, "select local model", fixture.Store.UpdateSession(t.Context(), fixture.Sess.ID, func(sess *api.Session) {
+	testutil.FailErr(t, "select local model", fixture.Store.Sessions.UpdateSession(t.Context(), fixture.Sess.ID, func(sess *api.Session) {
 		sess.Status = api.SessionStatusIdle
 		sess.ProviderID, sess.Model = "preparation-test", nativegen.DefaultModelID
 	}))
-	before, err := fixture.Store.Get(t.Context(), fixture.Sess.ID)
+	before, err := fixture.Store.Sessions.Get(t.Context(), fixture.Sess.ID)
 	testutil.FailErr(t, "read initial chat", err)
 	candidate, err := manager.Coordinator.BuildPreparation(t.Context(), fixture.Sess.ID)
 	testutil.FailErr(t, "project preparation candidate", err)
@@ -50,12 +50,12 @@ func TestContextPreparationProjectsWithoutAdvancingChat(t *testing.T) {
 	if repeated.Key != candidate.Key {
 		t.Fatal("unchanged host facts produced a different candidate")
 	}
-	after, err := fixture.Store.Get(t.Context(), fixture.Sess.ID)
+	after, err := fixture.Store.Sessions.Get(t.Context(), fixture.Sess.ID)
 	testutil.FailErr(t, "read projected chat", err)
 	if before.CurrentTurn != after.CurrentTurn || before.Status != after.Status || before.CompactionGeneration != after.CompactionGeneration {
 		t.Fatal("preparation changed authoritative chat state")
 	}
-	testutil.FailErr(t, "mark chat busy", fixture.Store.UpdateSession(t.Context(), fixture.Sess.ID, func(sess *api.Session) { sess.Status = api.SessionStatusBusy }))
+	testutil.FailErr(t, "mark chat busy", fixture.Store.Sessions.UpdateSession(t.Context(), fixture.Sess.ID, func(sess *api.Session) { sess.Status = api.SessionStatusBusy }))
 	busy, err := manager.Coordinator.BuildPreparation(t.Context(), fixture.Sess.ID)
 	testutil.FailErr(t, "skip busy chat", err)
 	if busy.Run != nil {

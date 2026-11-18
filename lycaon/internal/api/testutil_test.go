@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"io"
 	"net"
 	"net/http"
@@ -21,7 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
@@ -49,19 +50,26 @@ type testDeps func(*Dependencies)
 
 func newTestServer(t *testing.T, opts ...testDeps) *Server {
 	t.Helper()
-	return newTestServerWithRegistry(t, tools.NewStubRegistry(), opts...)
+	return newTestServerWithRegistry(t, toolstest.NewRegistry(), opts...)
 }
 
 func newTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...testDeps) *Server {
 	t.Helper()
-	store := store.NewMemory()
-	mock := llm.NewMockProvider(testMockConfig(t))
-	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
-	mgr.SetDataDir(t.TempDir())
-	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
-	// Stub bindings do not expose coordinator tools.
+	store := storetest.New(t)
+	deps := Dependencies{Core: CoreDependencies{Store: store, Projects: project.NewSQLRegistry(store.DB())}}
+	for _, opt := range opts {
+		opt(&deps)
+	}
+	if deps.Core.Sessions == nil {
+		mock := llm.NewMockProvider(testMockConfig(t))
+		mgr := session.NewHost(deps.Core.Store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
+		mgr.SetDataDir(t.TempDir())
+		mgr.SetProjectRegistry(deps.Core.Projects)
+		mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
+		deps.Core.Sessions = mgr
+	}
 	wireTestBindingRegistry(t)
-	return newServerForTest(t, Dependencies{Core: CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}, opts...)
+	return newServerForTest(t, deps)
 }
 
 // newServerForTest builds a server with the bundled user notices after opts

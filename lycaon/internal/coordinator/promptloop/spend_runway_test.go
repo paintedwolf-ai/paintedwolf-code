@@ -17,9 +17,11 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -179,11 +181,11 @@ func TestPromptLoopSoftStopAllowsOneToolRoundThenClosesOut(t *testing.T) {
 		{ToolCalls: []api.ToolCall{{Name: "read", ID: "landing", Args: map[string]any{"path": "b"}}}},
 		{Content: "Landed with the best usable result."},
 	}}
-	messages := store.NewMemory()
+	messages := storetest.New(t, testdbseed.DefaultProjectID, "project")
 	deps := StoreDeps(messages)
 	deps.Model.LLM = client
 	deps.Context.Policy = softStopToolPolicy{}
-	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Tools = toolstest.NewRegistry()
 	var checks int
 	deps.Nudges.CheckSpendCeiling = func(context.Context, string, *api.Session) (SpendCeilingCheck, error) {
 		checks++
@@ -208,7 +210,7 @@ func TestPromptLoopSoftStopAllowsOneToolRoundThenClosesOut(t *testing.T) {
 		return nil
 	}
 	loop := NewPromptLoopForTest(deps)
-	sess, err := messages.Create(
+	sess, err := messages.Sessions.Create(
 		context.Background(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project",
 	)
 	testutil.FailErr(t, "create session", err)

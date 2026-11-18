@@ -10,10 +10,11 @@ import (
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -37,8 +38,8 @@ func (s *stubOverlayPromoter) RebaseChildren(_ context.Context, _, _ string) ([]
 func setupHostEventManager(t *testing.T, promoter OverlayPromoter) (*Host, string) {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	store := store.NewMemory()
-	sess, err := store.Create(context.Background(), api.CreateSessionRequest{}, "")
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(context.Background(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
@@ -49,7 +50,7 @@ func setupHostEventManager(t *testing.T, promoter OverlayPromoter) (*Host, strin
 
 func transcriptContent(t *testing.T, mgr *Host, sessionID string) []string {
 	t.Helper()
-	msgs, err := mgr.Coordinator.Context.Sessions.(Store).GetMessages(context.Background(), sessionID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("get messages: %v", err)
 	}
@@ -78,7 +79,7 @@ func TestManagerPromoteOverlayAppendsHostEvent(t *testing.T) {
 	if out.Status != api.WorkerMergeStatusMerged {
 		t.Fatalf("status=%q want merged", out.Status)
 	}
-	messages, err := mgr.Coordinator.Context.Sessions.(Store).GetMessages(context.Background(), sessionID)
+	messages, err := mgr.Runner.Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "get promotion messages", err)
 	if len(messages) != 1 || messages[0].ToolResult.OverlayPromotion == nil || messages[0].ToolResult.OverlayPromotion.Files[0].After != "merged" {
 		t.Fatalf("promotion metadata missing from durable message: %#v", messages)
@@ -189,8 +190,8 @@ func TestManagerOverlayResolutionRetriesProjectPromotion(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-			st := store.NewMemory()
-			sess, err := st.Create(context.Background(), api.CreateSessionRequest{}, "project-1")
+			st := storetest.New(t, "project-1")
+			sess, err := st.Sessions.Create(context.Background(), api.CreateSessionRequest{}, "project-1")
 			testutil.FailErr(t, "create session", err)
 			mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 			mgr.ProjectControl.SetOverlayPromoter(&stubOverlayPromoter{
@@ -253,15 +254,15 @@ func TestFormatOverlayHostToolContent(t *testing.T) {
 
 func TestAppendHostEventPublishesOrd(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetEventPublisher(pub)
-	projectID := attachTestProject(t, mgr)
+	projectID := attachTestProject(t, mgr, store)
 
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: projectID}, projectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: projectID}, projectID)
 	testutil.FailErr(t, "create session", err)
 
 	ch, unsub, err := hub.Subscribe(ctx, events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})
@@ -270,7 +271,7 @@ func TestAppendHostEventPublishesOrd(t *testing.T) {
 
 	testutil.FailErr(t, "appendHostEvent", mgr.ProjectControl.AppendHostEvent(ctx, sess.ID, hostmarker.OverlayPromoteEventPrefix, map[string]any{"job_id": "j1"}, ""))
 
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) != 1 || msgs[0].Ord != 1 {
 		t.Fatalf("store msgs = %+v want one row ord=1", msgs)

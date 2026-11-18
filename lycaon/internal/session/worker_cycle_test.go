@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -20,8 +20,9 @@ import (
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -35,7 +36,7 @@ func TestParentSessionWorkerCycleIdleWithoutQueue(t *testing.T) {
 
 func TestParentSessionWorkerCycleIdle(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	parent := "parent-1"
 
@@ -70,7 +71,7 @@ func TestParentSessionWorkerCycleIdle(t *testing.T) {
 
 func TestParentSessionWorkerCycleWaitsForTerminalOutcomeDelivery(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(1)
+	q := workertest.NewQueue(t, 1, testdbseed.DefaultProjectID, "parent-outcome")
 	parent := "parent-outcome"
 	jobID, err := q.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: parent, ProjectID: testdbseed.DefaultProjectID,
@@ -99,7 +100,7 @@ func TestParentSessionWorkerCycleWaitsForTerminalOutcomeDelivery(t *testing.T) {
 
 func TestObserveCoordinatorTaskInFlightParallelCap(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	sess := &api.Session{
 		ID:            "parent-1",
@@ -146,7 +147,7 @@ func TestObserveCoordinatorTaskInFlightParallelCap(t *testing.T) {
 
 func TestObserveCoordinatorTaskInFlight(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	sess := &api.Session{
 		ID:            "parent-1",
@@ -203,7 +204,7 @@ func TestObserveCoordinatorTaskInFlight(t *testing.T) {
 
 func TestObserveCoordinatorTaskInFlightAllowsUnderCap(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	sess := &api.Session{
 		ID:            "parent-1",
@@ -234,10 +235,10 @@ func TestObserveCoordinatorTaskInFlightAllowsUnderCap(t *testing.T) {
 
 func TestShouldNudgeCoordinatorLoopAfterWorkerTask(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	parent := "parent-1"
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetWorkerQueue(q)
 
 	if !mgr.Workers.State.ShouldNudge(ctx, parent, testdbseed.DefaultProjectID, "") {
@@ -263,10 +264,10 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTask(t *testing.T) {
 
 func TestShouldNudgeCoordinatorLoopAfterWorkerTaskWriteDefersUntilIdle(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	parent := "parent-1"
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetWorkerQueue(q)
 
 	writeA, err := q.Enqueue(ctx, api.WorkerTask{
@@ -295,10 +296,10 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskWriteDefersUntilIdle(t *testin
 
 func TestShouldNudgeCoordinatorLoopAfterWorkerTaskPerJobWakeWhileSiblingsInFlight(t *testing.T) {
 	ctx := context.Background()
-	q := worker.NewInMemoryQueue(8)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	parent := "parent-1"
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetWorkerQueue(q)
 
 	jobA, err := q.Enqueue(ctx, api.WorkerTask{
@@ -326,11 +327,11 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskPerJobWakeWhileSiblingsInFligh
 func TestBuildImplementSessionStateLedgerOverridesStaleEnvelope(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	store := store.NewMemory()
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create parent", err)
 
-	q := worker.NewInMemoryQueue(4)
+	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID, parent.ID)
 	_, err = q.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: parent.ID,
 		ProjectID:       testdbseed.DefaultProjectID, WorkspacePath: dir,
@@ -345,14 +346,14 @@ func TestBuildImplementSessionStateLedgerOverridesStaleEnvelope(t *testing.T) {
 	testutil.FailErr(t, "Enqueue merged worker", err)
 
 	staleEnvelope := `<task job_id="job-stale" agent_type="implementer" state="complete" merge_status="pending"><summary>wrote</summary></task>`
-	if err := store.AppendMessages(ctx, parent.ID, api.Message{
+	if err := store.Transcript.AppendMessages(ctx, parent.ID, api.Message{
 		Role:    api.MessageRoleAssistant,
 		Content: staleEnvelope,
 	}); err != nil {
 		testutil.FailErr(t, "AppendMessages", err)
 	}
 
-	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetWorkerQueue(q)
 	state := mgr.Workers.State.ForSession(ctx, parent)
 	if len(state.PendingOverlayIDs) != 0 {

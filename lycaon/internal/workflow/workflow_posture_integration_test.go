@@ -26,7 +26,7 @@ func TestWorkflowModeIntegrationImplementOnEnter(t *testing.T) {
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
-	sess, err := sessStore.Get(ctx, "sess-1")
+	sess, err := sessStore.Sessions.Get(ctx, "sess-1")
 	testutil.FailErr(t, "sessStore.Get failed", err)
 	if sess.Posture != api.SessionPostureSpec {
 		t.Fatalf("start posture = %q want spec", sess.Posture)
@@ -34,12 +34,12 @@ func TestWorkflowModeIntegrationImplementOnEnter(t *testing.T) {
 
 	run, err = advancePlanToApprovePhase(ctx, mgr, run)
 	testutil.FailErr(t, "advancePlanToApprovePhase", err)
-	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, mgr), run.ID, projectDir)
+	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, sessStore), run.ID, projectDir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	if run.CurrentPhase != "execute" {
 		t.Fatalf("phase = %q want execute", run.CurrentPhase)
 	}
-	sess, err = sessStore.Get(ctx, "sess-1")
+	sess, err = sessStore.Sessions.Get(ctx, "sess-1")
 	testutil.FailErr(t, "sessStore.Get failed", err)
 	if sess.Posture != api.SessionPostureBuild {
 		t.Fatalf("implement posture = %q", sess.Posture)

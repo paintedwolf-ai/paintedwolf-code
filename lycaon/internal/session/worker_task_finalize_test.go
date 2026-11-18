@@ -8,14 +8,14 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerresults"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -37,9 +37,9 @@ func workerSummaryFixture(jobID, childSessionID, agentType string, status api.Wo
 
 func TestEnsureWorkerCardProjectionMintsEnqueuePair(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
 	if err := mgr.Workers.Cards.Ensure(ctx, parent.ID, workerresults.WorkerDispatchRowInput{
@@ -58,7 +58,7 @@ func TestEnsureWorkerCardProjectionMintsEnqueuePair(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "EnsureWorkerCardProjection retry", err)
 	}
-	msgs, err := store.GetMessages(ctx, parent.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) != 2 {
 		t.Fatalf("msgs = %d want one assistant/tool pair", len(msgs))
@@ -83,11 +83,11 @@ func TestEnsureWorkerCardProjectionMintsEnqueuePair(t *testing.T) {
 
 func TestEnsureWorkerCardProjectionSkipsExistingToolCall(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	if err := store.AppendMessages(ctx, parent.ID, api.Message{
+	if err := store.Transcript.AppendMessages(ctx, parent.ID, api.Message{
 		ID:     "a1",
 		Role:   api.MessageRoleAssistant,
 		Origin: api.MessageOriginModel,
@@ -106,7 +106,7 @@ func TestEnsureWorkerCardProjectionSkipsExistingToolCall(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "EnsureWorkerCardProjection", err)
 	}
-	msgs, err := store.GetMessages(ctx, parent.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) != 1 {
 		t.Fatalf("msgs = %d want the existing assistant call only", len(msgs))
@@ -115,12 +115,12 @@ func TestEnsureWorkerCardProjectionSkipsExistingToolCall(t *testing.T) {
 
 func TestCoordinatorDelegateDispatchOneCardThroughPatch(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
-	if err := store.AppendMessages(ctx, parent.ID, api.Message{
+	if err := store.Transcript.AppendMessages(ctx, parent.ID, api.Message{
 		ID:     "a1",
 		Role:   api.MessageRoleAssistant,
 		Origin: api.MessageOriginModel,
@@ -143,7 +143,7 @@ func TestCoordinatorDelegateDispatchOneCardThroughPatch(t *testing.T) {
 	tr := guidance.ComposeToolResult(enqueueJSON, guidance.ToolResultFacts{}, nil)
 	guidance.ApplyTaskDispatchMetadata("delegate_dispatch", tr, &api.WorkerDispatch{WorkerID: jobID, DelegationID: "dep-1", LegID: "leg-1"})
 	tr.ToolCallID = "tc-delegate"
-	if err := store.AppendMessages(ctx, parent.ID, api.Message{
+	if err := store.Transcript.AppendMessages(ctx, parent.ID, api.Message{
 		ID:         "t1",
 		Role:       api.MessageRoleTool,
 		Origin:     api.MessageOriginTool,
@@ -156,7 +156,7 @@ func TestCoordinatorDelegateDispatchOneCardThroughPatch(t *testing.T) {
 		workerSummaryFixture(jobID, "child-1", "path-explorer", api.WorkerSummaryStatusComplete)); err != nil {
 		testutil.FailErr(t, "ProjectWorkerCard", err)
 	}
-	msgs, err := store.GetMessages(ctx, parent.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	cards := 0
 	for _, msg := range msgs {
@@ -183,11 +183,11 @@ func TestCoordinatorDelegateDispatchOneCardThroughPatch(t *testing.T) {
 
 func TestAppendWorkerSummaryWiresJobIDOnMeta(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
 	if _, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
@@ -198,7 +198,7 @@ func TestAppendWorkerSummaryWiresJobIDOnMeta(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "AppendWorkerSummary", err)
 	}
-	msgs, err := store.GetMessages(ctx, parent.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	// Recovery without dispatch history mints the enqueue-shaped task pair, then patches summary.
 	if len(msgs) != 2 || msgs[1].Role != api.MessageRoleTool || msgs[1].WorkerSummary == nil {
@@ -223,9 +223,9 @@ func TestAppendWorkerSummaryWiresJobIDOnMeta(t *testing.T) {
 
 func TestProjectWorkerCardPreservesDispatchJobID(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
 	enqueueJSON := `{"agent_type":"implementer","job_id":"` + jobID + `","status":"enqueued"}`
@@ -237,14 +237,14 @@ func TestProjectWorkerCardPreservesDispatchJobID(t *testing.T) {
 		Content:    enqueueJSON,
 		ToolResult: tr,
 	}
-	if err := store.AppendMessages(ctx, parent.ID, toolMsg); err != nil {
+	if err := store.Transcript.AppendMessages(ctx, parent.ID, toolMsg); err != nil {
 		testutil.FailErr(t, "AppendMessages", err)
 	}
 	if err := mgr.Workers.Cards.Project(ctx, parent.ID, jobID,
 		workerSummaryFixture(jobID, "child-1", "implementer", api.WorkerSummaryStatusComplete)); err != nil {
 		testutil.FailErr(t, "ProjectWorkerCard", err)
 	}
-	msgs, err := store.GetMessages(ctx, parent.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) != 1 || msgs[0].ToolResult == nil {
 		t.Fatalf("msgs = %+v", msgs)
@@ -262,9 +262,9 @@ func TestProjectWorkerCardPreservesDispatchJobID(t *testing.T) {
 
 func TestProjectWorkerCardRejectsInvalidSummaryContract(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
 
@@ -287,16 +287,16 @@ func TestProjectWorkerCardRejectsInvalidSummaryContract(t *testing.T) {
 
 func TestProjectWorkerCardAfterDecisionResume(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	jobID := "550e8400-e29b-41d4-a716-446655440001"
 	enqueueJSON := `{"agent_type":"implementer","job_id":"` + jobID + `","status":"enqueued"}`
 	tr := guidance.ComposeToolResult(enqueueJSON, guidance.ToolResultFacts{}, nil)
 	guidance.ApplyTaskDispatchMetadata("task", tr, &api.WorkerDispatch{WorkerID: jobID, AgentType: "implementer"})
-	if err := store.AppendMessages(ctx, parent.ID, api.Message{
+	if err := store.Transcript.AppendMessages(ctx, parent.ID, api.Message{
 		ID:         "task-row",
 		Role:       api.MessageRoleTool,
 		Content:    enqueueJSON,
@@ -306,7 +306,7 @@ func TestProjectWorkerCardAfterDecisionResume(t *testing.T) {
 	}
 
 	decisionJSON := `{"status":"resumed","job_id":"` + jobID + `","option":"fix tests"}`
-	if err := store.AppendMessages(ctx, parent.ID, api.Message{
+	if err := store.Transcript.AppendMessages(ctx, parent.ID, api.Message{
 		ID:         "decision-row",
 		Role:       api.MessageRoleTool,
 		Content:    decisionJSON,
@@ -320,7 +320,7 @@ func TestProjectWorkerCardAfterDecisionResume(t *testing.T) {
 		testutil.FailErr(t, "ProjectWorkerCard", err)
 	}
 
-	msgs, err := store.GetMessages(ctx, parent.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) != 2 {
 		t.Fatalf("msgs = %d want task and answer_decision", len(msgs))

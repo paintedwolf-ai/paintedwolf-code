@@ -187,7 +187,7 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 
 	// Drain the final coordinator wake.
 	testutil.WaitFor(t, "the session is idle", func() bool {
-		got, err := h.Store.Get(ctx, sess.ID)
+		got, err := h.Store.Sessions.Get(ctx, sess.ID)
 		return err == nil && got != nil && got.Status == wire.SessionStatusIdle
 	})
 	t.Logf("stage 2 elapsed = %v; workerTaskFinishedCount=%d legFinishedCount=%d",
@@ -206,10 +206,10 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 func completeWorkerWrite(t *testing.T, h *Harness, sess *wire.Session, job wire.WorkerTask, dir, callID, content, note string) {
 	t.Helper()
 	ctx := context.Background()
-	child, err := h.Store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: job.Prompt})
+	child, err := h.Store.Sessions.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: job.Prompt})
 	testutil.FailErr(t, "CreateChild "+callID, err)
 	testutil.FailErr(t, "SetChildSessionID "+callID, h.Workers.Queue.SetChildSessionID(ctx, job.ID, child.ID))
-	testutil.FailErr(t, "AppendMessages child "+callID, h.Store.AppendMessages(ctx, child.ID,
+	testutil.FailErr(t, "AppendMessages child "+callID, h.Store.Transcript.AppendMessages(ctx, child.ID,
 		wire.Message{
 			Role: wire.MessageRoleAssistant,
 			ToolCalls: []wire.ToolCall{{
@@ -219,7 +219,7 @@ func completeWorkerWrite(t *testing.T, h *Harness, sess *wire.Session, job wire.
 		},
 		completedWriteToolResult(callID, note),
 	))
-	_, _, err = h.Store.CommitEvidenceToolResult(ctx, child.ID, dir, "write", map[string]any{"path": "main.go", "content": content}, note)
+	_, _, err = h.Store.Evidence.CommitEvidenceToolResult(ctx, child.ID, dir, "write", map[string]any{"path": "main.go", "content": content}, note)
 	testutil.FailErr(t, "CommitEvidenceToolResult "+callID, err)
 	testutil.FailErr(t, "DrainPendingWorkerJobs "+callID, DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID))
 	testutil.FailErr(t, "PromotePendingWriteOverlays "+callID, PromotePendingWriteOverlays(ctx, h, sess.ProjectID, sess.ID))

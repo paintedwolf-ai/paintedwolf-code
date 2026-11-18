@@ -105,6 +105,19 @@ func BuildProgramObservation(tool string, receipt *api.CommandProgramReceipt, co
 	return rec
 }
 
+// ProgramPublicationKey locates an unfinished publication.
+type ProgramPublicationKey struct {
+	SessionID string
+	ProgramID string
+}
+
+// ProgramProvenanceTarget binds the program's evidence and any shared chat custody.
+type ProgramProvenanceTarget struct {
+	SessionID     string
+	ChatSessionID string
+	ProjectDir    string
+}
+
 // ProgramHTTPProvenance describes external HTTP deliveries and file-custody writes
 // observed during a command program run.
 type ProgramHTTPProvenance struct {

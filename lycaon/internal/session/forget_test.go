@@ -3,9 +3,6 @@ package session
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolsurface"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -22,21 +19,26 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	anchortestsetup "github.com/lycaon/lycaon/internal/testsetup/anchor"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	guidancetestsetup "github.com/lycaon/lycaon/internal/testsetup/guidance"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -62,7 +64,10 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	m.Runner.Closeouts.RecordGroundingFriction(t.Context(), sid)
 	m.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sid, "citation", "offender", guidance.ParseCloseoutDraft("draft", citationmd.Options{}), nil)
 	m.Coordinator.Batch.AcceptSynthesis(t.Context(), sid)
-	checkpoints := sessioncheckpoint.New(t.TempDir(), t.TempDir(), sessionstore.NewMemory())
+	checkpointSessions := storetest.New(t)
+	checkpointRoot := t.TempDir()
+	testdbseed.InsertSessionWithRoot(t, checkpointSessions.DB(), sid, testdbseed.DefaultProjectID, checkpointRoot)
+	checkpoints := sessioncheckpoint.New(t.TempDir(), checkpointRoot, checkpointSessions.Rewind)
 	testutil.FailErr(t, "open checkpoint capture", m.Chats.Captures.Capture.Open(t.Context(), checkpoints, sid, "anchor"))
 	m.Promotion.SetMergeReconcilePaths(sid, []string{"a.go"})
 	calibrationSession := &api.Session{ID: sid}
@@ -191,7 +196,7 @@ func TestResolveToolProfileDelegationUsesCoordinator(t *testing.T) {
 }
 
 func TestResolveToolProfileWorkerAgent(t *testing.T) {
-	reg := orchestration.NewMemoryAgentRegistryForTest()
+	reg := orchestrationtest.Registry(t)
 	sess := &api.Session{Posture: api.SessionPostureOrchestrate, AgentType: "implementer"}
 	if got := profiles.ResolveToolProfile(sess, reg, ""); got != "implement" {
 		t.Fatalf("profile = %q want implement", got)
@@ -378,7 +383,7 @@ agent_pool:
 	limStore, err := settings.NewLimitsStoreAt(globalLimits)
 	testutil.FailErr(t, "NewLimitsStoreAt", err)
 
-	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: &llm.Service{Policy: policy}, Limits: settings.SessionLimits{}, Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: &llm.Service{Policy: policy}, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: limStore})
 
 	sess := &api.Session{WorkspacePath: tmp}

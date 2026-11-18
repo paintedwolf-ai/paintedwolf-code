@@ -4,22 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/timelayout"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 type failSecondMessageReadStore struct {
-	Store
+	store.TranscriptRepository
 	reads int
 }
 
@@ -28,19 +29,20 @@ func (s *failSecondMessageReadStore) GetMessage(ctx context.Context, sessionID, 
 	if s.reads > 1 {
 		return wire.Message{}, errors.New("read projection unavailable")
 	}
-	return s.Store.GetMessage(ctx, sessionID, messageID)
+	return s.TranscriptRepository.GetMessage(ctx, sessionID, messageID)
 }
 
 func TestUpdateMessageDoesNotConfirmCommittedCommandThroughReadProjection(t *testing.T) {
 	ctx := t.Context()
-	base := store.NewMemory()
-	sess, err := base.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	base := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := base.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append message", base.AppendMessages(ctx, sess.ID, wire.Message{
+	testutil.FailErr(t, "append message", base.Transcript.AppendMessages(ctx, sess.ID, wire.Message{
 		ID: "assistant-1", Role: wire.MessageRoleAssistant, Content: "draft", CreatedAt: time.Now().UTC(),
 	}))
-	wrapped := &failSecondMessageReadStore{Store: base}
-	mgr := NewHost(wrapped, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	wrapped := &failSecondMessageReadStore{TranscriptRepository: base.Transcript}
+	base.Transcript = wrapped
+	mgr := NewHost(base, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	err = mgr.Runner.Transcript.Update(ctx, sess.ID, "assistant-1", wire.Message{
 		ID: "assistant-1", Role: wire.MessageRoleAssistant, Content: "settled",
 	})
@@ -48,7 +50,7 @@ func TestUpdateMessageDoesNotConfirmCommittedCommandThroughReadProjection(t *tes
 	if wrapped.reads != 1 {
 		t.Fatalf("message reads = %d want one precondition read", wrapped.reads)
 	}
-	messages, err := base.GetMessages(ctx, sess.ID)
+	messages, err := base.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read committed message", err)
 	if got := messages[0].Content; got != "settled" {
 		t.Fatalf("content = %q want settled", got)
@@ -61,7 +63,7 @@ func TestUpdateMessagePatchPublishesStoredRow(t *testing.T) {
 	store := store.NewSQL(sqlDB)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()
@@ -69,7 +71,7 @@ func TestUpdateMessagePatchPublishesStoredRow(t *testing.T) {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session failed", err)
 
 	runID := "0ea26756-a763-4c2a-b933-fa6b64064a20"
@@ -82,7 +84,7 @@ func TestUpdateMessagePatchPublishesStoredRow(t *testing.T) {
 	`, runID, sess.ID, sess.ProjectID, timelayout.Format(now), timelayout.Format(now)); err != nil {
 		testutil.FailErr(t, "insert workflow run failed", err)
 	}
-	if err := store.AppendMessages(ctx, sess.ID, wire.Message{
+	if err := store.Transcript.AppendMessages(ctx, sess.ID, wire.Message{
 		ID:            msgID,
 		Role:          wire.MessageRoleAssistant,
 		WorkflowRunID: runID,
@@ -90,7 +92,7 @@ func TestUpdateMessagePatchPublishesStoredRow(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "append message failed", err)
 	}
-	before, err := store.GetMessages(ctx, sess.ID)
+	before, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "load pre-patch message", err)
 	if len(before) != 1 {
 		t.Fatalf("pre-patch message count = %d want 1", len(before))
@@ -139,7 +141,7 @@ func TestUpdateMessagePatchPublishesStoredRow(t *testing.T) {
 			if ev.Message.Seq <= beforeSeq {
 				t.Fatalf("patch event seq = %d want > %d", ev.Message.Seq, beforeSeq)
 			}
-			stored, getErr := store.GetMessages(ctx, sess.ID)
+			stored, getErr := store.Transcript.GetMessages(ctx, sess.ID)
 			testutil.FailErr(t, "load patched message", getErr)
 			if len(stored) != 1 || ev.Message.Seq != stored[0].Seq {
 				t.Fatalf("patch event seq = %d, stored seq = %d", ev.Message.Seq, stored[0].Seq)
@@ -157,7 +159,7 @@ func TestUpdateMessagePatchPersistsCoordinatorGrounding(t *testing.T) {
 	store := store.NewSQL(sqlDB)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()
@@ -165,7 +167,7 @@ func TestUpdateMessagePatchPersistsCoordinatorGrounding(t *testing.T) {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session failed", err)
 
 	msgID := "a-grounding-1"
@@ -175,7 +177,7 @@ func TestUpdateMessagePatchPersistsCoordinatorGrounding(t *testing.T) {
 			{ID: "path_citations", Label: "Path citations", Status: wire.CitationGroundingCheckStatusPassed, Summary: "1 citation(s) matched leg evidence"},
 		},
 	}
-	if err := store.AppendMessages(ctx, sess.ID, wire.Message{
+	if err := store.Transcript.AppendMessages(ctx, sess.ID, wire.Message{
 		ID:         msgID,
 		Role:       wire.MessageRoleAssistant,
 		Content:    "The fix landed in engine.py.",
@@ -195,7 +197,7 @@ func TestUpdateMessagePatchPersistsCoordinatorGrounding(t *testing.T) {
 		testutil.FailErr(t, "update message failed", err)
 	}
 
-	stored, err := store.GetMessages(ctx, sess.ID)
+	stored, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages failed", err)
 	if len(stored) != 1 {
 		t.Fatalf("messages = %d want 1", len(stored))
@@ -209,10 +211,10 @@ func TestUpdateMessagePatchPersistsRunCompletionReportScope(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "message-report.db")
 
 	messageStore := store.NewSQL(sqlDB)
-	mgr := NewHost(messageStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(messageStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	ctx := t.Context()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := messageStore.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := messageStore.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	const (
@@ -227,7 +229,7 @@ func TestUpdateMessagePatchPersistsRunCompletionReportScope(t *testing.T) {
 	`, runID, sess.ID, sess.ProjectID, timelayout.Format(now), timelayout.Format(now)); err != nil {
 		testutil.FailErr(t, "insert workflow run", err)
 	}
-	testutil.FailErr(t, "append report draft", messageStore.AppendMessages(ctx, sess.ID, wire.Message{
+	testutil.FailErr(t, "append report draft", messageStore.Transcript.AppendMessages(ctx, sess.ID, wire.Message{
 		ID: msgID, Role: wire.MessageRoleAssistant, Visibility: wire.MessageVisibilityInternal,
 		WorkflowRunID: runID, CreatedAt: now,
 	}))
@@ -242,7 +244,7 @@ func TestUpdateMessagePatchPersistsRunCompletionReportScope(t *testing.T) {
 		WorkflowRunID: runID, CompletionReport: meta, Grounding: grounding,
 	}))
 
-	stored, err := messageStore.GetMessages(ctx, sess.ID)
+	stored, err := messageStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read stored report", err)
 	if len(stored) != 1 {
 		t.Fatalf("messages = %d want 1", len(stored))
@@ -267,11 +269,11 @@ func TestUpdateMessagePatchPersistsMessageKind(t *testing.T) {
 	dir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session failed", err)
 
 	msgID := "a-draft-1"
-	if err := store.AppendMessages(ctx, sess.ID, wire.Message{
+	if err := store.Transcript.AppendMessages(ctx, sess.ID, wire.Message{
 		ID:         msgID,
 		Role:       wire.MessageRoleAssistant,
 		Content:    "The scan completed and the build baseline was collected.",
@@ -281,7 +283,7 @@ func TestUpdateMessagePatchPersistsMessageKind(t *testing.T) {
 		testutil.FailErr(t, "append message failed", err)
 	}
 
-	if _, err := store.UpdateMessage(ctx, sess.ID, msgID, wire.Message{
+	if _, err := store.Transcript.UpdateMessage(ctx, sess.ID, msgID, wire.Message{
 		ID:         msgID,
 		Role:       wire.MessageRoleAssistant,
 		Content:    "The scan completed and the build baseline was collected.",
@@ -292,7 +294,7 @@ func TestUpdateMessagePatchPersistsMessageKind(t *testing.T) {
 		testutil.FailErr(t, "update message failed", err)
 	}
 
-	stored, err := store.GetMessages(ctx, sess.ID)
+	stored, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages failed", err)
 	if len(stored) != 1 {
 		t.Fatalf("messages = %d want 1", len(stored))
@@ -306,9 +308,9 @@ func TestTranscriptUpdateStoresReasoningAndRecoveryRestoresIt(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "reasoning-patch.db")
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	st := store.NewSQL(sqlDB)
-	mgr := NewHost(st, Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	ctx := t.Context()
-	sess, err := st.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	trace := &wire.ModelReasoning{ProviderID: "p", Model: "m", Text: "read first", Details: []json.RawMessage{json.RawMessage(`{"type":"thinking","thinking":"read first","signature":"signed"}`)}}
 	message := wire.Message{ID: "assistant", Role: wire.MessageRoleAssistant, Content: "draft", CreatedAt: time.Now().UTC()}
@@ -318,41 +320,41 @@ func TestTranscriptUpdateStoresReasoningAndRecoveryRestoresIt(t *testing.T) {
 	message.ModelReasoning = trace
 	testutil.FailErr(t, "settle through update", mgr.Runner.Transcript.Update(ctx, sess.ID, message.ID, message))
 	reloaded := store.NewSQL(sqlDB)
-	got, err := reloaded.GetMessage(ctx, sess.ID, message.ID)
+	got, err := reloaded.Transcript.GetMessage(ctx, sess.ID, message.ID)
 	testutil.FailErr(t, "reload settled reasoning", err)
 	if got.ModelReasoning == nil || got.ModelReasoning.Text != trace.Text || string(got.ModelReasoning.Details[0]) != string(trace.Details[0]) {
 		t.Fatal("live patch lost reasoning")
 	}
 	message.ModelReasoning = nil
 	testutil.FailErr(t, "replace without reasoning", mgr.Runner.Transcript.Update(ctx, sess.ID, message.ID, message))
-	got, err = reloaded.GetMessage(ctx, sess.ID, message.ID)
+	got, err = reloaded.Transcript.GetMessage(ctx, sess.ID, message.ID)
 	testutil.FailErr(t, "reload cleared reasoning", err)
 	if got.ModelReasoning != nil {
 		t.Fatal("replacement retained stale reasoning")
 	}
-	execution, err := st.BeginTurn(ctx, store.TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: `{}`})
+	execution, err := st.Turns.BeginTurn(ctx, store.TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: `{}`})
 	testutil.FailErr(t, "begin recovery fixture", err)
 	reasoning, err := json.Marshal(trace)
 	testutil.FailErr(t, "encode replay state", err)
 	calls, err := json.Marshal(message.ToolCalls)
 	testutil.FailErr(t, "encode tool calls", err)
-	_, err = st.SettleModelOutput(ctx, store.ModelOutput{ID: "output", TurnAttemptID: execution.Attempt.ID, SessionID: sess.ID, Iteration: 1, MessageID: message.ID, ProviderID: "p", Model: "m", Content: message.Content, ToolCallsJSON: string(calls), ReasoningJSON: string(reasoning), CreatedAt: message.CreatedAt})
+	_, err = st.Turns.SettleModelOutput(ctx, store.ModelOutput{ID: "output", TurnAttemptID: execution.Attempt.ID, SessionID: sess.ID, Iteration: 1, MessageID: message.ID, ProviderID: "p", Model: "m", Content: message.Content, ToolCallsJSON: string(calls), ReasoningJSON: string(reasoning), CreatedAt: message.CreatedAt})
 	testutil.FailErr(t, "settle immutable output", err)
 	testutil.FailErr(t, "repair interrupted projection", mgr.Runner.Transcript.RepairPendingOutputs(ctx))
-	got, err = reloaded.GetMessage(ctx, sess.ID, message.ID)
+	got, err = reloaded.Transcript.GetMessage(ctx, sess.ID, message.ID)
 	testutil.FailErr(t, "reload repaired reasoning", err)
 	if got.ModelReasoning == nil || got.ModelReasoning.Text != trace.Text || len(got.ToolCalls) != 1 {
 		t.Fatal("recovery lost reasoning or tool association")
 	}
-	pending, err := st.ListPendingModelOutputProjections(ctx)
+	pending, err := st.Turns.ListPendingModelOutputProjections(ctx)
 	testutil.FailErr(t, "read projection acknowledgement", err)
 	if len(pending) != 0 {
 		t.Fatal("repaired output remained pending")
 	}
-	_, err = st.SettleModelOutput(ctx, store.ModelOutput{ID: "output-without-reasoning", TurnAttemptID: execution.Attempt.ID, SessionID: sess.ID, Iteration: 2, MessageID: message.ID, ProviderID: "p", Model: "m", Content: "replaced", ToolCallsJSON: `[]`, ReasoningJSON: `null`, CreatedAt: message.CreatedAt})
+	_, err = st.Turns.SettleModelOutput(ctx, store.ModelOutput{ID: "output-without-reasoning", TurnAttemptID: execution.Attempt.ID, SessionID: sess.ID, Iteration: 2, MessageID: message.ID, ProviderID: "p", Model: "m", Content: "replaced", ToolCallsJSON: `[]`, ReasoningJSON: `null`, CreatedAt: message.CreatedAt})
 	testutil.FailErr(t, "settle output without replay state", err)
 	testutil.FailErr(t, "repair replacement", mgr.Runner.Transcript.RepairPendingOutputs(ctx))
-	got, err = reloaded.GetMessage(ctx, sess.ID, message.ID)
+	got, err = reloaded.Transcript.GetMessage(ctx, sess.ID, message.ID)
 	testutil.FailErr(t, "reload replacement", err)
 	if got.ModelReasoning != nil {
 		t.Fatal("recovery revived reasoning absent from immutable output")

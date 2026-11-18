@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 
@@ -20,7 +21,7 @@ func TestOps8ToolResultPolicyControlsEveryDeliveredCapture(t *testing.T) {
 			name = "block"
 		}
 		t.Run(name, func(t *testing.T) {
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			testutil.FailErr(t, "register captured tool", reg.Register("recall", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				return "unreviewed-secret", nil
 			}))

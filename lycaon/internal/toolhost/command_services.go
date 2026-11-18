@@ -107,11 +107,13 @@ func (r *CommandServices) backgroundCommandLine(sessionID, handle string) string
 
 // ProgramServices are the host owners the command program entry composes.
 type ProgramServices struct {
-	Recorder  *invocation.SQLRecorder
-	Blobs     blobstore.Store
-	Projector *captureprojection.Projector
-	Progress  toolexecution.ProgramProgressFacts
-	Sessions  command.SessionOwners
+	Recorder       *invocation.SQLRecorder
+	Blobs          blobstore.Store
+	Projector      *captureprojection.Projector
+	Progress       toolexecution.ProgramProgressFacts
+	Sessions       command.SessionOwners
+	Provenance     command.ProgramProvenance
+	SourceObserver invocation.ProgramSourceObserver
 	// SourceRuns records the run evidence of a program that ended parked.
 	SourceRuns command.SourceRunRecorder
 	// ExternalHidden withdraws the explicit external selector.
@@ -135,6 +137,10 @@ func (r *CommandServices) SetProgramServices(services ProgramServices) error {
 	if programs == nil {
 		return nil
 	}
+	if services.Provenance == nil || services.SourceObserver == nil {
+		return fmt.Errorf("command program evidence services are not configured")
+	}
+	programs.Provenance, programs.SourceObserver = services.Provenance, services.SourceObserver
 	programs.Recorder, programs.Blobs, programs.Projector = services.Recorder, services.Blobs, services.Projector
 	programs.Progress, programs.Sessions, programs.SourceRuns = services.Progress, services.Sessions, services.SourceRuns
 	programs.Supervisor.Interrupter = services.Recorder
@@ -174,6 +180,14 @@ func (r *CommandServices) ProgramReceiptResult(ctx context.Context, sessionID, p
 		return "", fmt.Errorf("command program runtime is not configured")
 	}
 	return programs.ReceiptResult(ctx, sessionID, programID)
+}
+
+// RecoverProgramPublications reconciles staged output across a host restart.
+func (r *CommandServices) RecoverProgramPublications(ctx context.Context, outputDir func(context.Context, string) (string, error)) error {
+	if programs := r.programs(); programs != nil {
+		return programs.RecoverProgramPublications(ctx, outputDir)
+	}
+	return nil
 }
 
 // setProgramExecutor binds the executor that admits each native child.

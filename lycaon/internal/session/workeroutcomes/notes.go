@@ -12,11 +12,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type SessionHistory interface {
-	Get(context.Context, string) (*api.Session, error)
-	UserIntentBefore(context.Context, string, time.Time) (time.Time, error)
-}
-
 type FindingHistory interface {
 	Delivery(context.Context, string) (findings.Delivery, error)
 	CommitDelivery(context.Context, string, string, findings.Delivery) error
@@ -32,14 +27,15 @@ type PeerNotes interface {
 }
 
 type Notes struct {
-	sessions SessionHistory
-	findings FindingHistory
-	workers  TaskReader
-	peers    PeerNotes
+	sessionStore    Sessions
+	transcriptStore Transcript
+	findings        FindingHistory
+	workers         TaskReader
+	peers           PeerNotes
 }
 
-func NewNotes(sessions SessionHistory, findings FindingHistory, workers TaskReader, peers PeerNotes) *Notes {
-	return &Notes{sessions: sessions, findings: findings, workers: workers, peers: peers}
+func NewNotes(sessionStore Sessions, transcriptStore Transcript, findings FindingHistory, workers TaskReader, peers PeerNotes) *Notes {
+	return &Notes{sessionStore: sessionStore, transcriptStore: transcriptStore, findings: findings, workers: workers, peers: peers}
 }
 func (m *Notes) SetFindings(findings FindingHistory) { m.findings = findings }
 func (m *Notes) SetWorkers(workers TaskReader)       { m.workers = workers }
@@ -47,10 +43,10 @@ func (m *Notes) SetPeers(peers PeerNotes)            { m.peers = peers }
 
 // findingsBoundary includes agreements published before a sibling started.
 func (m *Notes) findingsBoundary(ctx context.Context, root string, spawned time.Time) (time.Time, error) {
-	if m.sessions == nil {
+	if m.sessionStore == nil || m.transcriptStore == nil {
 		return spawned, nil
 	}
-	return m.sessions.UserIntentBefore(ctx, root, spawned)
+	return m.transcriptStore.UserIntentBefore(ctx, root, spawned)
 }
 
 // PrepareSiblingNotes retains the last delivered page until new observations arrive.
@@ -101,7 +97,7 @@ func (m *Notes) PrepareSiblingNotes(ctx context.Context, child string, limit int
 	}
 	notes = append(retained, notes...)
 	if m.peers != nil {
-		for _, note := range m.peers.RecentForRoot(sessiontree.RootID(ctx, m.sessions, child), limit-len(notes)) {
+		for _, note := range m.peers.RecentForRoot(sessiontree.RootID(ctx, m.sessionStore, child), limit-len(notes)) {
 			size := len(note.Summary) + len(note.Ref) + len(note.Agent) + 128
 			if used+size > 4096 {
 				break
@@ -134,7 +130,7 @@ func (m *Notes) RecentSiblingNotes(ctx context.Context, childSessionID string, a
 	if m == nil || m.findings == nil || strings.TrimSpace(childSessionID) == "" {
 		return nil, afterID, nil
 	}
-	root := sessiontree.RootID(ctx, m.sessions, childSessionID)
+	root := sessiontree.RootID(ctx, m.sessionStore, childSessionID)
 	if strings.TrimSpace(root) == "" {
 		return nil, afterID, nil
 	}

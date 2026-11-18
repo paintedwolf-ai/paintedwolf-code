@@ -14,9 +14,11 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -64,18 +66,18 @@ func spendRunwayMgr(t *testing.T, tracker cost.CostTracker, ceilingUSD float64, 
 	return mgr
 }
 
-func spendRunwayHost(t *testing.T, tracker cost.CostTracker, ceilingUSD float64, enabled bool) (*Host, *store.Memory) {
+func spendRunwayHost(t *testing.T, tracker cost.CostTracker, ceilingUSD float64, enabled bool) (*Host, *store.Repositories) {
 	t.Helper()
 	lim := settings.DefaultSessionLimits()
 	lim.SpendCeilingEnabled = enabled
 	lim.SessionSpendCeilingUSD = ceilingUSD
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID, "project")
+	mgr := NewHost(sessionStore, Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, toolstest.NewRegistry())
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfigStock", err)
 	mgr.SetWorkflowHints(hints, nil)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	return mgr, mem
+	return mgr, sessionStore
 }
 
 func recordSessionSpend(t *testing.T, tracker cost.CostTracker, sessionID string, usd float64) {

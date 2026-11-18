@@ -19,7 +19,7 @@ func (s *Attachments) capturePromptAttachmentRetentions(ctx context.Context, ope
 	if retentions.operationID == "" {
 		return retentions, fmt.Errorf("prompt attachment operation id required")
 	}
-	claims, err := s.Store.ListOperationPromptAttachmentRetentions(ctx, retentions.operationID)
+	claims, err := s.AttachmentBlobs.ListOperationPromptAttachmentRetentions(ctx, retentions.operationID)
 	if err != nil {
 		return retentions, err
 	}

@@ -15,8 +15,9 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/llm"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -38,7 +39,7 @@ resources:
         connections:
           - mode: none
 `)
-	deps := contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}})
+	deps := contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}})
 	configtest.Only(t, map[config.Rel]string{config.HostResources: string(catalog)})
 	configDir := t.TempDir()
 	service, err := hostresources.NewService(configDir)
@@ -81,7 +82,7 @@ resources:
           environment: {names: [LYCAON_HOST_RESOURCE_API_POLICY_TEST]}
 `)
 	// The required test services load bundled config before it is replaced.
-	deps := contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}})
+	deps := contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}})
 	// Both the resource catalog and the approvals floor are bundled config, so
 	// they stage together — a second Only call would replace the first.
 	configtest.Only(t, map[config.Rel]string{

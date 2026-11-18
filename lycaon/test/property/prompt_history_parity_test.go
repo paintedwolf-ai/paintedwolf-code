@@ -20,13 +20,13 @@ import (
 // compared against the same writes without modelling the prompt loop.
 type historyWriter struct {
 	ctx       context.Context
-	store     *store.SQL
+	store     *store.Repositories
 	sessionID string
 	written   []api.Message
 }
 
 func (w *historyWriter) append(t *rapid.T, step string, msgs ...api.Message) {
-	failErr(t, step, w.store.AppendMessages(w.ctx, w.sessionID, msgs...))
+	failErr(t, step, w.store.Transcript.AppendMessages(w.ctx, w.sessionID, msgs...))
 	w.written = append(w.written, msgs...)
 }
 
@@ -37,7 +37,7 @@ func (w *historyWriter) patchDraftStatus(t *rapid.T, step, messageID string, sta
 		}
 		patch := w.written[i]
 		patch.DraftStatus = status
-		_, err := w.store.UpdateMessage(w.ctx, w.sessionID, messageID, patch)
+		_, err := w.store.Transcript.UpdateMessage(w.ctx, w.sessionID, messageID, patch)
 		failErr(t, step, err)
 		w.written[i] = patch
 		return
@@ -133,7 +133,7 @@ func TestPromptHistorySurvivesStoreRoundTrip(t *testing.T) {
 	st := store.NewSQL(sqlDB)
 
 	rapid.Check(t, func(t *rapid.T) {
-		sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		failErr(t, "create session", err)
 		writer := &historyWriter{ctx: ctx, store: st, sessionID: sess.ID}
 		for step, stepCount := 0, rapid.IntRange(3, 12).Draw(t, "step_count"); step < stepCount; step++ {
@@ -141,7 +141,7 @@ func TestPromptHistorySurvivesStoreRoundTrip(t *testing.T) {
 			action.write(t, writer)
 
 			written, _ := promptassembly.Assemble(sess, writer.written, promptassembly.Config{})
-			stored, err := st.GetMessages(ctx, sess.ID)
+			stored, err := st.Transcript.GetMessages(ctx, sess.ID)
 			failErr(t, "get messages from db", err)
 			rebuilt, _ := promptassembly.Assemble(sess, stored, promptassembly.Config{})
 

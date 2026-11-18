@@ -10,7 +10,7 @@ import (
 
 // DrainQueue bypasses round-idle gating for a ready draft.
 func (m *Service) DrainQueue(ctx context.Context, id string) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.submissionStore == nil || m.people == nil) {
 		return
 	}
 	ctx, unlockDispatch := m.LockDispatch(ctx, id)

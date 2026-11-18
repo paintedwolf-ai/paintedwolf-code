@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -147,9 +147,9 @@ func TestPromptObservationAcknowledgesOnlyDeliveredFrames(t *testing.T) {
 		for _, fail := range []bool{false, true} {
 			name := map[bool]string{false: "user", true: "host"}[hostTurn] + "/" + map[bool]string{false: "success", true: "failure"}[fail]
 			t.Run(name, func(t *testing.T) {
-				memory := store.NewMemory()
+				sessionStore := storetest.New(t, "project")
 				source := &countingCoordinatorFrameSource{}
-				deps := StoreDeps(memory)
+				deps := StoreDeps(sessionStore)
 				deps.Context.CoordinatorFrame = source
 				deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "done"}}})
 				if fail {
@@ -174,7 +174,7 @@ func TestPromptObservationAcknowledgesOnlyDeliveredFrames(t *testing.T) {
 					}
 					return history, nil
 				}
-				sess, err := memory.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
+				sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 				testutil.FailErr(t, "create session", err)
 				_, err = NewPromptLoopForTest(deps).Run(t.Context(), PromptRunInput{
 					SessionID: sess.ID, Session: sess, ProfileID: "coordinator", HostTurn: hostTurn,

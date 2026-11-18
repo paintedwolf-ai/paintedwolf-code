@@ -38,7 +38,7 @@ func TestResolveMultiChoiceAdvancesAndStampsAnswer(t *testing.T) {
 		},
 	})
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"choice-flow@1.0.0": manifest})
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, store)
 	run, err := startRun(ctx, mgr, "sess-1", "choice-flow", "1.0.0")
 	testutil.FailErr(t, "startRun", err)
 
@@ -49,7 +49,7 @@ func TestResolveMultiChoiceAdvancesAndStampsAnswer(t *testing.T) {
 		t.Fatalf("phase = %q want done (gate user_decision:pick,blue should match via membership)", run.CurrentPhase)
 	}
 
-	msgs, err := store.GetMessages(ctx, "sess-1")
+	msgs, err := store.Transcript.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "GetMessages", err)
 	fb := feedbackMessages(msgs)
 	if len(fb) != 1 || fb[0].WorkflowFeedback == nil {

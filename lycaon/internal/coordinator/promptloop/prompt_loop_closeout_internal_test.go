@@ -6,9 +6,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -98,14 +99,14 @@ func TestAppendTurnCloseoutNudgeDedupsVerbatim(t *testing.T) {
 }
 
 func TestEarlyWorkerCloseoutExecutesCompleteLeg(t *testing.T) {
-	memory := store.NewMemory()
-	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
+	sessionStore := storetest.New(t, "project-1")
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
 	testutil.FailErr(t, "create worker", err)
 	sess.ParentSessionID = "parent-1"
 	sess.AgentType = "security-reviewer"
 
 	completeCalls := 0
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register complete_leg", reg.Register("complete_leg", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		completeCalls++
 		return `{"recorded":true}`, nil
@@ -118,7 +119,7 @@ func TestEarlyWorkerCloseoutExecutesCompleteLeg(t *testing.T) {
 			}},
 		}},
 	})
-	deps := StoreDeps(memory)
+	deps := StoreDeps(sessionStore)
 	deps.Model.LLM = client
 	deps.Context.Tools = reg
 	deps.Context.Policy = &recordingToolPolicy{}

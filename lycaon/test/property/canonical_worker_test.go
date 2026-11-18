@@ -9,11 +9,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 	"pgregory.net/rapid"
 )
@@ -21,16 +21,17 @@ import (
 func TestOneCanonicalWorkerCardAndSupersedeInPlace(t *testing.T) {
 	ctx := context.Background()
 
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	rapid.Check(t, func(t *rapid.T) {
-		store := store.NewMemory()
-		mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-		sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+		sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		failErr(t, "create session", err)
+		defer func() { failErr(t, "delete property session", store.Sessions.Delete(ctx, sess.ID)) }()
 
 		jobID := uuid.NewString()
 		canonicalID := uuid.NewString()
 		enqueue := `{"job_id":"` + jobID + `","status":"enqueued"}`
-		failErr(t, "seed canonical row", store.AppendMessages(ctx, sess.ID, api.Message{
+		failErr(t, "seed canonical row", store.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 			ID:         canonicalID,
 			Role:       api.MessageRoleTool,
 			Content:    enqueue,
@@ -63,7 +64,7 @@ func TestOneCanonicalWorkerCardAndSupersedeInPlace(t *testing.T) {
 			}))
 		}
 
-		all, err := store.GetMessages(ctx, sess.ID)
+		all, err := store.Transcript.GetMessages(ctx, sess.ID)
 		failErr(t, "get messages", err)
 		toolRows := 0
 		var canonical *api.Message
@@ -100,7 +101,7 @@ func TestOneCanonicalWorkerCardAndSupersedeInPlace(t *testing.T) {
 		preCount := len(all)
 		preContent := canonical.Content
 		failErr(t, "supersede", mgr.Runner.Transcript.SupersedeWorkerReport(ctx, sess.ID, canonicalID))
-		after, err := store.GetMessages(ctx, sess.ID)
+		after, err := store.Transcript.GetMessages(ctx, sess.ID)
 		failErr(t, "get messages post-supersede", err)
 		if len(after) != preCount {
 			t.Fatalf("row count changed across supersede: was %d now %d — no physical delete on retract", preCount, len(after))

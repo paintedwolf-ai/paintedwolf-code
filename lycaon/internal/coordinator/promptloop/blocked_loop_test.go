@@ -14,10 +14,11 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -62,8 +63,8 @@ func TestBlockedLoopClosesOutInsteadOfSpinning(t *testing.T) {
 	ctx := context.Background()
 	args := map[string]any{"path": "README.md"}
 	guard := loopguard.NewMemoryDoomLoopGuard()
-	msgStore := store.NewMemory()
-	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := msgStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	// Put the guard past its threshold so every attempt is blocked from the start.
@@ -79,7 +80,7 @@ func TestBlockedLoopClosesOutInsteadOfSpinning(t *testing.T) {
 	client := &alwaysSameToolClient{args: args}
 	deps := promptloop.StoreDeps(msgStore)
 	deps.Model.LLM = client
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "ok", nil
 	}))
@@ -153,8 +154,8 @@ func TestBlockedLoopFinalTurnToolCallIsReportedAsTheModelsMiss(t *testing.T) {
 	ctx := context.Background()
 	args := map[string]any{"path": "a.go"}
 	guard := loopguard.NewMemoryDoomLoopGuard()
-	msgStore := store.NewMemory()
-	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := msgStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for i := 0; i < loopguard.DoomLoopMaxAttempts; i++ {
 		testutil.FailErr(t, "seed doom loop attempt", guard.RecordAttempt(ctx, sess.ID, uuid.NewString(), "read", args, nil, false))
@@ -163,7 +164,7 @@ func TestBlockedLoopFinalTurnToolCallIsReportedAsTheModelsMiss(t *testing.T) {
 	client := &alwaysSameToolClient{args: args, ignoreCloseout: true}
 	deps := promptloop.StoreDeps(msgStore)
 	deps.Model.LLM = client
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "ok", nil
 	}))
@@ -203,8 +204,8 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 	ctx := context.Background()
 	args := map[string]any{"path": "README.md"}
 	guard := loopguard.NewMemoryDoomLoopGuard()
-	msgStore := store.NewMemory()
-	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := msgStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	for i := 0; i < loopguard.DoomLoopMaxAttempts; i++ {
@@ -221,7 +222,7 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 
 	deps := promptloop.StoreDeps(msgStore)
 	deps.Model.LLM = clientWithSynth
-	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Tools = toolstest.NewRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Nudges.DoomLoop = guard
 	deps.Closeout.RejectFmt = fmttr
@@ -308,8 +309,8 @@ func TestBlockedLoopStreakResetsOnProgress(t *testing.T) {
 		t.Skip("cap too small for this scenario")
 	}
 	ctx := context.Background()
-	msgStore := store.NewMemory()
-	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := msgStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	// No doom-loop guard: every batch runs, so the streak never advances and the
@@ -321,7 +322,7 @@ func TestBlockedLoopStreakResetsOnProgress(t *testing.T) {
 	}}
 	deps := promptloop.StoreDeps(msgStore)
 	deps.Model.LLM = client
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "ok", nil
 	}))
@@ -349,11 +350,11 @@ func TestBlockedLoopStreakResetsOnProgress(t *testing.T) {
 // Schema rejection before the subsystem owner does not close the turn.
 func TestSchemaRejectsDoNotForceBlockedLoopCloseout(t *testing.T) {
 	ctx := context.Background()
-	msgStore := store.NewMemory()
-	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := msgStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "ok", nil
 	}))
@@ -440,8 +441,8 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 	// as an invoked rejection.
 	ctx := context.Background()
 	guard := loopguard.NewMemoryDoomLoopGuard()
-	msgStore := store.NewMemory()
-	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := msgStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	// Vary args every call — the way a model rewords a brief after each reject —
@@ -450,7 +451,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 	var escalateCalls int
 	deps := promptloop.StoreDeps(msgStore)
 	deps.Model.LLM = client
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "ok", nil
 	}))
@@ -498,7 +499,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 	if escalateCalls == 0 {
 		t.Fatal("expected the per-Code escalation to fire for repeated pre-invoke rejects")
 	}
-	msgs, err := msgStore.GetMessages(ctx, sess.ID)
+	msgs, err := msgStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	sawEscalation := false
 	for _, m := range msgs {

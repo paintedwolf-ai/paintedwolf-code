@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -35,13 +36,13 @@ func (panicSessionWorkerAbort) AbortWorkersForRoot(context.Context, string, stri
 // A stop panic still clears active state and releases waiters.
 func TestAbortRecoversPanicAndClearsStopState(t *testing.T) {
 	ctx := context.Background()
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetSessionWorkerAbort(panicSessionWorkerAbort{})
 
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "mark session busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark session busy", st.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	if err := mgr.Stops.Abort(ctx, sess.ID, "user stopped"); err == nil {
 		t.Fatal("Abort returned no error; want the panic surfaced as an error, not swallowed or left to crash the process")
@@ -91,7 +92,7 @@ func (s *stubSessionWorkerAbort) AbortAllWorkers(_ context.Context, sessionID, p
 
 func TestAbortStopsEntireSessionTreeAndClearsQueuedTurns(t *testing.T) {
 	ctx := context.Background()
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	abort := &stubSessionWorkerAbort{}
 	workflows := &stubSessionWorkflowStop{}
@@ -99,39 +100,39 @@ func TestAbortStopsEntireSessionTreeAndClearsQueuedTurns(t *testing.T) {
 	mgr.SetSessionWorkerAbort(abort)
 	mgr.Stops.SetWorkflowStop(workflows)
 	mgr.Chats.Research.SetWarmer(warmer)
-	root, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	root, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create root", err)
-	child, err := st.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := st.Sessions.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 	const queuedReceiptID = "queued-child-turn"
-	_, _, err = st.PutPromptSubmission(ctx, store.PromptSubmission{
+	_, _, err = st.Submissions.PutPromptSubmission(ctx, store.PromptSubmission{
 		ID: queuedReceiptID, SessionID: child.ID, ProjectID: child.ProjectID,
 		InputDigest: "digest", InputJSON: `{"text":"next turn"}`,
 		Origin: store.PromptSubmissionOriginUser, SubmittedBy: child.OwnerPersonID,
 	})
 	testutil.FailErr(t, "put queued prompt receipt", err)
 	const runningReceiptID = "running-root-turn"
-	_, _, err = st.PutPromptSubmission(ctx, store.PromptSubmission{
+	_, _, err = st.Submissions.PutPromptSubmission(ctx, store.PromptSubmission{
 		ID: runningReceiptID, SessionID: root.ID, ProjectID: root.ProjectID,
 		InputDigest: "running-digest", InputJSON: `{"text":"active turn"}`,
 		Origin: store.PromptSubmissionOriginUser, SubmittedBy: root.OwnerPersonID,
 	})
 	testutil.FailErr(t, "put running prompt receipt", err)
-	_, claimed, err := st.ClaimPromptSubmission(ctx, runningReceiptID)
+	_, claimed, err := st.Submissions.ClaimPromptSubmission(ctx, runningReceiptID)
 	testutil.FailErr(t, "claim running prompt receipt", err)
 	if !claimed {
 		t.Fatal("running prompt receipt was not claimed")
 	}
 	beforeQueueRevision := map[string]uint64{}
 	for _, id := range []string{root.ID, child.ID} {
-		testutil.FailErr(t, "mark tree busy", st.SetSessionStatus(ctx, id, api.SessionStatusBusy))
+		testutil.FailErr(t, "mark tree busy", st.Sessions.SetSessionStatus(ctx, id, api.SessionStatusBusy))
 		mgr.Resources.Queue.AppendOrdered(id, "queued-"+id, testutil.HostOwner().ID, "next turn", 0, time.Time{})
 		beforeQueueRevision[id] = mgr.Chats.Drafts.Snapshot(id).Revision
 	}
 
 	testutil.FailErr(t, "abort child tree", mgr.Stops.Abort(ctx, child.ID, "user stopped"))
 	for _, id := range []string{root.ID, child.ID} {
-		sess, err := st.Get(ctx, id)
+		sess, err := st.Sessions.Get(ctx, id)
 		testutil.FailErr(t, "get stopped session", err)
 		if sess.Status != api.SessionStatusIdle {
 			t.Fatalf("session %s status = %q, want idle", id, sess.Status)
@@ -158,12 +159,12 @@ func TestAbortStopsEntireSessionTreeAndClearsQueuedTurns(t *testing.T) {
 	if cancels := warmer.cancelsSeen(); len(cancels) != 2 || cancels[0] != child.ID || cancels[1] != root.ID {
 		t.Fatalf("index warm stops = %v, want child-first tree", cancels)
 	}
-	receipt, err := st.GetPromptSubmission(ctx, queuedReceiptID)
+	receipt, err := st.Submissions.GetPromptSubmission(ctx, queuedReceiptID)
 	testutil.FailErr(t, "get canceled prompt receipt", err)
 	if receipt.Status != store.PromptSubmissionCanceled {
 		t.Fatalf("queued receipt status = %q, want canceled", receipt.Status)
 	}
-	runningReceipt, err := st.GetPromptSubmission(ctx, runningReceiptID)
+	runningReceipt, err := st.Submissions.GetPromptSubmission(ctx, runningReceiptID)
 	testutil.FailErr(t, "get interrupted prompt receipt", err)
 	if runningReceipt.Status != store.PromptSubmissionInterrupted {
 		t.Fatalf("running receipt status = %q, want interrupted", runningReceipt.Status)
@@ -172,14 +173,14 @@ func TestAbortStopsEntireSessionTreeAndClearsQueuedTurns(t *testing.T) {
 
 func TestAbortRetainsAddressedQueuedTurn(t *testing.T) {
 	ctx := context.Background()
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark busy", st.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	const queuedReceiptID = "queued-new-direction"
-	_, _, err = st.PutPromptSubmission(ctx, store.PromptSubmission{
+	_, _, err = st.Submissions.PutPromptSubmission(ctx, store.PromptSubmission{
 		ID: queuedReceiptID, SessionID: sess.ID, ProjectID: sess.ProjectID,
 		InputDigest: "queued-digest", InputJSON: `{"text":"use the new direction"}`,
 		Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID,
@@ -188,13 +189,13 @@ func TestAbortRetainsAddressedQueuedTurn(t *testing.T) {
 	draft := mgr.Resources.Queue.AppendOrdered(sess.ID, queuedReceiptID, testutil.HostOwner().ID, "use the new direction", 1, time.Now())
 
 	const runningReceiptID = "running-old-direction"
-	_, _, err = st.PutPromptSubmission(ctx, store.PromptSubmission{
+	_, _, err = st.Submissions.PutPromptSubmission(ctx, store.PromptSubmission{
 		ID: runningReceiptID, SessionID: sess.ID, ProjectID: sess.ProjectID,
 		InputDigest: "running-digest", InputJSON: `{"text":"old direction"}`,
 		Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID,
 	})
 	testutil.FailErr(t, "put running prompt receipt", err)
-	_, claimed, err := st.ClaimPromptSubmission(ctx, runningReceiptID)
+	_, claimed, err := st.Submissions.ClaimPromptSubmission(ctx, runningReceiptID)
 	testutil.FailErr(t, "claim running prompt receipt", err)
 	if !claimed {
 		t.Fatal("running prompt receipt was not claimed")
@@ -204,12 +205,12 @@ func TestAbortRetainsAddressedQueuedTurn(t *testing.T) {
 	if after := mgr.Chats.Drafts.Snapshot(sess.ID); after.Revision != draft.Revision || len(after.QueueItems) != 1 || after.QueueItems[0].ID != queuedReceiptID {
 		t.Fatalf("queue after abort = %+v, want preserved draft %+v", after, draft)
 	}
-	queued, err := st.GetPromptSubmission(ctx, queuedReceiptID)
+	queued, err := st.Submissions.GetPromptSubmission(ctx, queuedReceiptID)
 	testutil.FailErr(t, "get preserved queued receipt", err)
 	if queued.Status != store.PromptSubmissionQueued {
 		t.Fatalf("queued receipt status = %q, want queued", queued.Status)
 	}
-	running, err := st.GetPromptSubmission(ctx, runningReceiptID)
+	running, err := st.Submissions.GetPromptSubmission(ctx, runningReceiptID)
 	testutil.FailErr(t, "get interrupted running receipt", err)
 	if running.Status != store.PromptSubmissionInterrupted {
 		t.Fatalf("running receipt status = %q, want interrupted", running.Status)
@@ -222,16 +223,16 @@ func (s *stubSessionWorkerAbort) AbortWorkersForRoot(_ context.Context, _, _ str
 
 func TestAbortCancelsWorkersAndMarksIdle(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	abort := &stubSessionWorkerAbort{}
 	mgr.SetSessionWorkerAbort(abort)
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create session", err)
-	if err := store.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy); err != nil {
+	if err := store.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "SetSessionStatus busy", err)
 	}
 
@@ -245,7 +246,7 @@ func TestAbortCancelsWorkersAndMarksIdle(t *testing.T) {
 		t.Fatalf("abort session = %q", abort.session)
 	}
 
-	got, err := store.Get(ctx, sess.ID)
+	got, err := store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "Get session", err)
 	if got.Status != api.SessionStatusIdle {
 		t.Fatalf("status = %q, want idle", got.Status)

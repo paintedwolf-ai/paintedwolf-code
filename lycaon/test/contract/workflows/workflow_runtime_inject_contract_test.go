@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -81,7 +82,7 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 	mgr.SetCoordinatorTurnFrameSource(frameLoader)
 
 	dir := t.TempDir()
-	blueprintMgr := blueprint.NewManager(blueprint.NewFileStoreForTest(dir))
+	blueprintMgr := blueprint.NewManager(blueprinttest.NewFileStore(dir))
 	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
 	wfMgr.Blueprints.Getter = blueprintMgr
 	wfMgr.Presentation.BlueprintGetter = blueprintMgr
@@ -89,7 +90,7 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "store.Create failed", err)
 	if _, err := wfMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "bugbash", WorkflowVersion: "1.1.0",

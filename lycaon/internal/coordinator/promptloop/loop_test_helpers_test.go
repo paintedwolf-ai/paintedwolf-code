@@ -43,8 +43,8 @@ func (s *testMessageStreams) Finish(ctx context.Context, sessionID string) {
 	}
 }
 
-// StoreDeps wires an in-memory store with an attached project and unchanged history.
-func StoreDeps(st *store.Memory) PromptLoopDeps {
+// StoreDeps keeps history unchanged while wiring the session repository.
+func StoreDeps(st *store.Repositories) PromptLoopDeps {
 	return PromptLoopDeps{
 		Context: ContextDeps{
 			Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
@@ -54,21 +54,19 @@ func StoreDeps(st *store.Memory) PromptLoopDeps {
 			ProjectRootCount: func(context.Context, *api.Session) int { return 1 },
 		},
 		Projection: ProjectionDeps{
-			AppendMessages: st.AppendMessages,
+			AppendMessages: st.Transcript.AppendMessages,
 			UpdateMessage: func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
-				_, err := st.UpdateMessage(ctx, sessionID, messageID, msg)
+				_, err := st.Transcript.UpdateMessage(ctx, sessionID, messageID, msg)
 				return err
 			},
 			Streams: &testMessageStreams{
 				project: func(ctx context.Context, sessionID string, msg api.Message) error {
-					return st.PatchLiveProjection(ctx, sessionID, msg.ID, msg.Content, msg.ToolCalls)
+					return st.Transcript.PatchLiveProjection(ctx, sessionID, msg.ID, msg.Content, msg.ToolCalls)
 				},
 			},
-			AppendDraftVersion: st.AppendDraftVersion,
-			CountDraftVersions: st.CountDraftVersions,
-			SettledModelOutputIteration: func(ctx context.Context, attemptID string) (int, error) {
-				return store.SettledModelOutputIteration(ctx, st, attemptID)
-			},
+			AppendDraftVersion:          st.Transcript.AppendDraftVersion,
+			CountDraftVersions:          st.Transcript.CountDraftVersions,
+			SettledModelOutputIteration: st.Turns.SettledModelOutputIteration,
 		},
 	}
 }

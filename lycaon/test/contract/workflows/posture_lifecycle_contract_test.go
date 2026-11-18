@@ -6,9 +6,9 @@ import (
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -50,7 +50,7 @@ func TestPlanWorkflowPostureLifecycleContract(t *testing.T) {
 	}
 	assertSessionPosture(t, ctx, sessStore, "sess-posture", api.SessionPostureSpec)
 
-	sess, err := sessStore.Get(ctx, "sess-posture")
+	sess, err := sessStore.Sessions.Get(ctx, "sess-posture")
 	contractcheck.FailErr(t, "store.Get failed", err)
 	run, err = mgr.Approvals.ApprovePlan(
 		ctx, run.ProjectID, run.BlueprintPath, sess.WorkspacePath,
@@ -119,7 +119,7 @@ func TestPostureRuleBehaviorMatrix(t *testing.T) {
 // newBundledPlanWorkflowManager builds the plan workflow stack over a
 // disposable store and returns the host owner's caller context, since plan
 // approval is an authenticated decision.
-func newBundledPlanWorkflowManager(t *testing.T) (context.Context, *workflow.RunManager, session.Store, *blueprint.Manager) {
+func newBundledPlanWorkflowManager(t *testing.T) (context.Context, *workflow.RunManager, *store.Repositories, *blueprint.Manager) {
 	t.Helper()
 	projectDir := t.TempDir()
 	sqlDB := testdbfixture.Open(t, "posture-lifecycle.db")
@@ -130,7 +130,7 @@ func newBundledPlanWorkflowManager(t *testing.T) (context.Context, *workflow.Run
 	sessStore := store.NewSQL(sqlDB)
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	contractcheck.FailErr(t, "workflow.RegistryFromDirs failed", err)
-	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
+	blueprintStore := blueprinttest.NewFileStore(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	runStore := workflowpersistence.New(sqlDB)
 	// The seal is a precondition of the grant, so the run store carries the same
@@ -155,9 +155,9 @@ func newBundledPlanWorkflowManager(t *testing.T) (context.Context, *workflow.Run
 	return ctx, mgr, sessStore, blueprintMgr
 }
 
-func assertSessionPosture(t *testing.T, ctx context.Context, store session.Store, id string, want api.SessionPosture) {
+func assertSessionPosture(t *testing.T, ctx context.Context, store *store.Repositories, id string, want api.SessionPosture) {
 	t.Helper()
-	sess, err := store.Get(ctx, id)
+	sess, err := store.Sessions.Get(ctx, id)
 	contractcheck.FailErr(t, "store.Get failed", err)
 	if sess.Posture != want {
 		t.Fatalf("session %s posture = %q want %q", id, sess.Posture, want)

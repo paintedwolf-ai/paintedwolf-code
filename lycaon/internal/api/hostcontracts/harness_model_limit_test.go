@@ -10,7 +10,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/configdir"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -18,8 +18,8 @@ import (
 func TestHarnessModelLimitAuthenticatesAndPreservesAllowance(t *testing.T) {
 	t.Setenv(configdir.EnvDev, "1")
 	t.Setenv(configdir.EnvHarness, "1")
-	sessions := store.NewMemory()
-	sess, err := sessions.Create(t.Context(), wire.CreateSessionRequest{}, "project-1")
+	sessions := storetest.New(t, "project-1")
+	sess, err := sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 	server := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessions}}), nil, hostapi.TestAPIToken)
 	for _, tc := range []struct {
@@ -49,5 +49,5 @@ func TestHarnessModelLimitAuthenticatesAndPreservesAllowance(t *testing.T) {
 			}
 		})
 	}
-	testutil.FailErr(t, "verify original allowance", sessions.ConfigureModelLimit(t.Context(), sess.ID, 2))
+	testutil.FailErr(t, "verify original allowance", sessions.Turns.ConfigureModelLimit(t.Context(), sess.ID, 2))
 }

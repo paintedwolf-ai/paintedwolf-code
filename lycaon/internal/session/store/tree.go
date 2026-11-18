@@ -14,7 +14,7 @@ type SessionTreeMember struct {
 
 // SessionTreeMembers returns descendants before their ancestors, without
 // hydrating transcripts, workspace paths, or presentation state.
-func (s *sqlSessionViews) SessionTreeMembers(ctx context.Context, rootID string) ([]SessionTreeMember, error) {
+func (s *sqlSessions) SessionTreeMembers(ctx context.Context, rootID string) ([]SessionTreeMember, error) {
 	rows, err := s.core.queries.ListSessionTreeMembers(ctx, rootID)
 	if err != nil {
 		return nil, err
@@ -22,21 +22,6 @@ func (s *sqlSessionViews) SessionTreeMembers(ctx context.Context, rootID string)
 	members := make([]SessionTreeMember, 0, len(rows))
 	for _, row := range rows {
 		members = append(members, SessionTreeMember{ID: row.ID, ProjectID: row.ProjectID, ParentSessionID: row.ParentSessionID.String})
-	}
-	return orderSessionTree(members, rootID)
-}
-
-func (s *memorySessionViews) SessionTreeMembers(ctx context.Context, rootID string) ([]SessionTreeMember, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	s.core.mu.RLock()
-	defer s.core.mu.RUnlock()
-	members := make([]SessionTreeMember, 0)
-	for _, id := range memorySessionTreeIDs(s.core.sessions, rootID) {
-		if row := s.core.sessions[id]; row != nil {
-			members = append(members, SessionTreeMember{ID: row.ID, ProjectID: row.ProjectID, ParentSessionID: row.ParentSessionID})
-		}
 	}
 	return orderSessionTree(members, rootID)
 }

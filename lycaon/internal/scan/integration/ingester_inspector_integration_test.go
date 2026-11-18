@@ -4,13 +4,14 @@ package integration
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -30,7 +31,7 @@ func TestIngesterInspectorIntegrationRecordEvidence(t *testing.T) {
 	}
 	_, err := ing.Ingest(context.Background(), scan.ScanSourceRegistry, &scanoutput.Result{
 		Findings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("gitleaks:github-pat", api.FindingLevelHigh, "", ".env", 0),
+			findingstest.Finding("gitleaks:github-pat", api.FindingLevelHigh, "", ".env", 0),
 		},
 	}, completeIngestMeta(t, scan.IngestMeta{
 		ScanID:           "scan-1",

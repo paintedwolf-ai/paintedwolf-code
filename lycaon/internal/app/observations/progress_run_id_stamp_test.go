@@ -2,7 +2,6 @@ package observations
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"testing"
 	"time"
 
@@ -10,17 +9,18 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func newStampStore(t *testing.T) (*store.SQL, string, db.Handle, progress.RunScopedStore) {
+func newStampStore(t *testing.T) (*store.Repositories, string, db.Handle, progress.RunScopedStore) {
 	t.Helper()
 	sqlDB := testdbfixture.Open(t, "stamp.db")
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	st := store.NewSQL(sqlDB)
-	sess, err := st.Create(context.Background(), wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(context.Background(), wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "store.Create failed", err)
 	return st, sess.ID, sqlDB, progress.NewSQLStore(sqlDB)
 }
@@ -59,7 +59,7 @@ func TestProgressUpdateStampedWithActiveRun(t *testing.T) {
 	const runID = "run-update-1"
 	seedWorkflowRun(t, sqlDB, sessionID, runID)
 
-	flush := newProgressChangeEmitter(st, &events.Publisher{}, fixedActiveRun(runID), prog)
+	flush := newProgressChangeEmitter(st.Sessions, st.Transcript, &events.Publisher{}, fixedActiveRun(runID), prog)
 	flush(progress.FlushPayload{
 		SessionID: sessionID,
 		Baseline:  progress.Snapshot{},
@@ -68,7 +68,7 @@ func TestProgressUpdateStampedWithActiveRun(t *testing.T) {
 		ChangedAt: time.Now().UTC(),
 	})
 
-	msgs, err := st.GetMessages(context.Background(), sessionID)
+	msgs, err := st.Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "GetMessages failed", err)
 	row := findMessageByKind(t, msgs, wire.MessageKindProgressUpdate)
 	if row.WorkflowRunID != runID {
@@ -87,7 +87,7 @@ func TestProgressCompleteStampedWithActiveRun(t *testing.T) {
 
 	emitProgressCompletion(context.Background(), st, &events.Publisher{}, prog, fixedActiveRun(runID), sessionID)
 
-	msgs, err := st.GetMessages(context.Background(), sessionID)
+	msgs, err := st.Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "GetMessages failed", err)
 	row := findMessageByKind(t, msgs, wire.MessageKindProgressComplete)
 	if row.WorkflowRunID != runID {
@@ -106,7 +106,7 @@ func TestProgressStampIgnoresStaleBoundRunID(t *testing.T) {
 	seedWorkflowRun(t, sqlDB, sessionID, childRun, parentRun)
 	prog.BindRun(sessionID, parentRun)
 
-	flush := newProgressChangeEmitter(st, &events.Publisher{}, fixedActiveRun(childRun), prog)
+	flush := newProgressChangeEmitter(st.Sessions, st.Transcript, &events.Publisher{}, fixedActiveRun(childRun), prog)
 	flush(progress.FlushPayload{
 		SessionID: sessionID,
 		Baseline:  progress.Snapshot{},
@@ -115,7 +115,7 @@ func TestProgressStampIgnoresStaleBoundRunID(t *testing.T) {
 		ChangedAt: time.Now().UTC(),
 	})
 
-	msgs, err := st.GetMessages(context.Background(), sessionID)
+	msgs, err := st.Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "GetMessages failed", err)
 	row := findMessageByKind(t, msgs, wire.MessageKindProgressUpdate)
 	if row.WorkflowRunID != childRun {
@@ -129,7 +129,7 @@ func TestProgressStampIgnoresStaleBoundRunID(t *testing.T) {
 func TestProgressRowsSkippedWhenNoActiveRun(t *testing.T) {
 	st, sessionID, _, prog := newStampStore(t)
 
-	flush := newProgressChangeEmitter(st, &events.Publisher{}, fixedActiveRun(""), prog)
+	flush := newProgressChangeEmitter(st.Sessions, st.Transcript, &events.Publisher{}, fixedActiveRun(""), prog)
 	flush(progress.FlushPayload{
 		SessionID: sessionID,
 		Baseline:  progress.Snapshot{},
@@ -140,7 +140,7 @@ func TestProgressRowsSkippedWhenNoActiveRun(t *testing.T) {
 	prog.Set(sessionID, "- [x] a\n")
 	emitProgressCompletion(context.Background(), st, &events.Publisher{}, prog, fixedActiveRun(""), sessionID)
 
-	msgs, err := st.GetMessages(context.Background(), sessionID)
+	msgs, err := st.Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "GetMessages failed", err)
 	for _, m := range msgs {
 		if m.Kind == wire.MessageKindProgressUpdate || m.Kind == wire.MessageKindProgressComplete {
@@ -151,7 +151,7 @@ func TestProgressRowsSkippedWhenNoActiveRun(t *testing.T) {
 
 func TestStoreRejectsUnstampedProgressUpdate(t *testing.T) {
 	st, sessionID, _, _ := newStampStore(t)
-	err := st.AppendMessages(context.Background(), sessionID, wire.Message{
+	err := st.Transcript.AppendMessages(context.Background(), sessionID, wire.Message{
 		Role:           wire.MessageRoleSystem,
 		Kind:           wire.MessageKindProgressUpdate,
 		Visibility:     wire.MessageVisibilityTranscript,

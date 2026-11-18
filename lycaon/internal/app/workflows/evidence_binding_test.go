@@ -105,9 +105,7 @@ func TestBuildEvidenceResolutionFailsBeforePublishing(t *testing.T) {
 	if _, err := runtime.Manager.Verdicts.EvidenceProjectDir(t.Context(), "session"); err == nil {
 		t.Fatal("verdict evidence ignored the blocked project directory")
 	}
-	f.deps.Sessions = nil
-	runtime, err = Build(t.Context(), f.deps, nil)
-	testutil.FailErr(t, "build runtime without project lookup services", err)
+	runtime.bindEvidence(nil, f.deps.Database, f.deps.DataDir)
 	if dir, err := runtime.Inspector.ProjectDir(t.Context(), f.runID); dir != "" || err != nil {
 		t.Fatalf("absent run lookup = %q, %v", dir, err)
 	}

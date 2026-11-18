@@ -23,21 +23,22 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/policyfacts"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type storeLedgerReader struct {
-	store Store
+	store *store.Repositories
 }
 
 func (r storeLedgerReader) LoadLedger(ctx context.Context, sessionID string) (evidence.Ledger, error) {
-	return r.store.LoadLedger(ctx, sessionID)
+	return r.store.Evidence.LoadLedger(ctx, sessionID)
 }
 
 type evidenceRowSnapshot struct {
@@ -87,10 +88,10 @@ type groundingAuditSnapshot struct {
 	UnverifiableCode    string
 }
 
-func runGroundingAudits(t *testing.T, ctx context.Context, store Store, sessionID, projectDir string) groundingAuditSnapshot {
+func runGroundingAudits(t *testing.T, ctx context.Context, store *store.Repositories, sessionID, projectDir string) groundingAuditSnapshot {
 	t.Helper()
 	ledger := storeLedgerReader{store: store}
-	ev, err := store.LoadLedger(ctx, sessionID)
+	ev, err := store.Evidence.LoadLedger(ctx, sessionID)
 	testutil.FailErr(t, "LoadLedger", err)
 
 	workerEval, workerEvalErr := workercompletion.EvaluateWorkerSummary(ctx, workercompletion.WorkerSummaryEvalInput{
@@ -139,10 +140,10 @@ func runGroundingAudits(t *testing.T, ctx context.Context, store Store, sessionI
 	}
 }
 
-func newSQLCompactionManager(t *testing.T, store Store, cfg compaction.CompactionConfig) *Host {
+func newSQLCompactionManager(t *testing.T, store *store.Repositories, cfg compaction.CompactionConfig) *Host {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "Continue from compacted context."}))
 	return mgr
 }
@@ -172,13 +173,13 @@ func TestEvidenceLedgerCompactionIndependence(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	readJSON := `{"path":"src/a.go","content":"1|package a","offset":1,"end_line":1,"limit":1}`
-	handle, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, projectDir, "read", map[string]any{"path": "src/a.go"}, readJSON)
+	handle, _, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, projectDir, "read", map[string]any{"path": "src/a.go"}, readJSON)
 	testutil.FailErr(t, "CommitEvidenceToolResult", err)
 	if handle != "read#1" {
 		t.Fatalf("handle = %q want read#1", handle)
@@ -188,7 +189,7 @@ func TestEvidenceLedgerCompactionIndependence(t *testing.T) {
 	beforeAudits := runGroundingAudits(t, ctx, store, sess.ID, projectDir)
 
 	huge := strings.Repeat("ERROR: build failed\n", 8000)
-	if err := store.AppendMessages(ctx, sess.ID,
+	if err := store.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "survey"},
 		api.Message{ID: "t-big", Role: api.MessageRoleTool, Content: huge},
 		api.Message{ID: "a1", Role: api.MessageRoleAssistant, Content: "seen"},
@@ -201,7 +202,7 @@ func TestEvidenceLedgerCompactionIndependence(t *testing.T) {
 	}
 	mgr.Runner.History.Wait()
 	// Messages stay canonical; the compacted chunk lives only in the applied view.
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	for _, m := range msgs {
 		if m.ID == "t-big" && m.Content != huge {
@@ -338,13 +339,16 @@ func (v *activeRunView) ActiveBySession(ctx context.Context, sessionID string) (
 
 func newHostEventManager(t *testing.T, run *api.WorkflowRun) (*Host, string) {
 	t.Helper()
-	store := store.NewMemory()
-	mgr := NewHost(store, Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	workflowFixture1 := &activeRunView{run: run}
 	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "store.Create failed", err)
+	if run != nil {
+		testdbseed.InsertSessionWorkflowRun(t, store.DB(), run.ID, sess.ID, "running")
+	}
 	return mgr, sess.ID
 }
 
@@ -358,7 +362,7 @@ func TestAppendHostEventStampedWithActiveRun(t *testing.T) {
 	if err := mgr.ProjectControl.AppendHostEvent(context.Background(), sessionID, hostmarker.OverlayPromoteEventPrefix, map[string]any{"overlay": "o1"}, ""); err != nil {
 		testutil.FailErr(t, "appendHostEvent failed", err)
 	}
-	msgs, err := mgr.Coordinator.Context.Sessions.(Store).GetMessages(context.Background(), sessionID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "GetMessages failed", err)
 	var found bool
 	for _, m := range msgs {
@@ -379,7 +383,7 @@ func TestAppendHostEventUnstampedWhenNoActiveRun(t *testing.T) {
 	if err := mgr.ProjectControl.AppendHostEvent(context.Background(), sessionID, hostmarker.OverlayRejectEventPrefix, map[string]any{"overlay": "o2"}, ""); err != nil {
 		testutil.FailErr(t, "appendHostEvent failed", err)
 	}
-	msgs, err := mgr.Coordinator.Context.Sessions.(Store).GetMessages(context.Background(), sessionID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "GetMessages failed", err)
 	for _, m := range msgs {
 		if m.Role == api.MessageRoleTool && m.WorkflowRunID != "" {

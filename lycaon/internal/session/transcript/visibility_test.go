@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session/promptinput"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -45,10 +45,10 @@ func TestStampUserMessageVisibilityLeavesNormalUserTranscript(t *testing.T) {
 }
 
 func TestAppendAndAppendContinuationStampCanonicalOrdinals(t *testing.T) {
-	mem := store.NewMemory()
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	svc := New(mem, nil)
+	svc := New(sessionStore.Sessions, sessionStore.Transcript, sessionStore.Turns, sessionStore.People, nil)
 
 	rows := []api.Message{{ID: "m1", Role: api.MessageRoleUser, Content: "first"}}
 	testutil.FailErr(t, "append slice", svc.Append(t.Context(), sess.ID, rows...))

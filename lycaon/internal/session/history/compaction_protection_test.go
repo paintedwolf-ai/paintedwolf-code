@@ -24,12 +24,12 @@ func TestWorkerCharterSurvivesBackgroundAndForcedCompaction(t *testing.T) {
 			cfg.ChunkStrategyDefault = "truncate"
 			cfg.TargetTokens = 100
 			mgr, st := newCompactionManager(t, cfg)
-			sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+			sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create worker", err)
-			testutil.FailErr(t, "set worker identity", st.UpdateSession(t.Context(), sess.ID, func(s *api.Session) { s.ParentSessionID = "parent" }))
+			testutil.FailErr(t, "set worker identity", st.Sessions.UpdateSession(t.Context(), sess.ID, func(s *api.Session) { s.ParentSessionID = "parent" }))
 			preamble := guidance.MarkerWorkerTaskPreamble + strings.Repeat("Assigned worker role.\n", 500)
 			charter := guidance.MarkerWorkerTaskAssignment + strings.Repeat("Preserve the assigned scope.\n", 500)
-			testutil.FailErr(t, "append worker history", st.AppendMessages(t.Context(), sess.ID,
+			testutil.FailErr(t, "append worker history", st.Transcript.AppendMessages(t.Context(), sess.ID,
 				api.Message{ID: "preamble", Role: api.MessageRoleUser, Content: preamble},
 				api.Message{ID: "charter", Role: api.MessageRoleUser, Content: charter},
 				api.Message{ID: "evidence", Role: api.MessageRoleAssistant, Content: strings.Repeat("Prior evidence\n", 1000)},
@@ -40,7 +40,7 @@ func TestWorkerCharterSurvivesBackgroundAndForcedCompaction(t *testing.T) {
 				_, err = mgr.ForceCompact(t.Context(), sess.ID)
 				testutil.FailErr(t, "compact worker", err)
 			}
-			published, ok, err := st.GetCompactionView(t.Context(), sess.ID)
+			published, ok, err := st.Compaction.GetCompactionView(t.Context(), sess.ID)
 			testutil.FailErr(t, "read published worker view", err)
 			if !ok {
 				t.Fatal("worker compaction did not publish a view")
@@ -69,12 +69,12 @@ func TestWorkerCharterSurvivesBackgroundAndForcedCompaction(t *testing.T) {
 
 func TestForceCompactDoesNotPublishUnchangedGeneration(t *testing.T) {
 	mgr, st := newCompactionManager(t, compaction.DefaultCompactionConfig())
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append short history", st.AppendMessages(t.Context(), sess.ID, api.Message{ID: "short", Role: api.MessageRoleUser, Content: "Hello"}))
+	testutil.FailErr(t, "append short history", st.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{ID: "short", Role: api.MessageRoleUser, Content: "Hello"}))
 	_, err = mgr.ForceCompact(t.Context(), sess.ID)
 	testutil.FailErr(t, "compact short history", err)
-	got, err := st.Get(t.Context(), sess.ID)
+	got, err := st.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read generation", err)
 	if got.CompactionGeneration != 0 {
 		t.Fatal("unchanged history advanced generation")
@@ -90,15 +90,15 @@ func TestForceCompactReportsStoredGenerationForChunksAndNoop(t *testing.T) {
 	cfg.ChunkTargetTokens = 50
 	cfg.ChunkStrategyDefault = "truncate"
 	mgr, st := newCompactionManager(t, cfg)
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append history", st.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append history", st.Transcript.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "old", Role: api.MessageRoleAssistant, Content: strings.Repeat("Earlier observations.\n", 3000)},
 		api.Message{ID: "request", Role: api.MessageRoleUser, Content: "Continue."}))
 	for attempt := range 2 {
 		report, err := mgr.ForceCompact(t.Context(), sess.ID)
 		testutil.FailErr(t, "force compact", err)
-		current, err := st.Get(t.Context(), sess.ID)
+		current, err := st.Sessions.Get(t.Context(), sess.ID)
 		testutil.FailErr(t, "stored generation", err)
 		if report.CompactionGeneration != current.CompactionGeneration || current.CompactionGeneration != 1 {
 			t.Fatalf("attempt %d: report=%+v stored=%d", attempt, report, current.CompactionGeneration)
@@ -111,8 +111,8 @@ func TestForceCompactReportsStoredGenerationForChunksAndNoop(t *testing.T) {
 
 func TestPublishedViewRetainsCanonicalActiveWorkingSet(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
-	svc, mem := newCompactionManager(t, cfg)
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	svc, sqlStore := newCompactionManager(t, cfg)
+	sess, err := sqlStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create active session", err)
 	rows := []api.Message{
 		{ID: "old", Role: api.MessageRoleAssistant, Content: "old transcript"},
@@ -122,11 +122,11 @@ func TestPublishedViewRetainsCanonicalActiveWorkingSet(t *testing.T) {
 		{ID: "read", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "current", Name: "read"}}},
 		{ID: "rejected", Role: api.MessageRoleTool, Content: "argument rejected", ToolResult: &api.ToolResult{Tool: "read", ToolCallID: "current", AssistantMessageID: "read"}},
 	}
-	testutil.FailErr(t, "append working exchanges", mem.AppendMessages(t.Context(), sess.ID, rows...))
-	canonical, err := mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "append working exchanges", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID, rows...))
+	canonical, err := sqlStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "load canonical rows", err)
 	last := canonical[len(canonical)-1]
-	testutil.FailErr(t, "publish view omitting recovered observation", mem.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
+	testutil.FailErr(t, "publish view omitting recovered observation", sqlStore.Compaction.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
 		Generation: 1, CoveredThroughOrd: last.Ord, CoveredThroughID: last.ID, SourceSeq: last.Seq,
 		Messages: []api.Message{{ID: "summary", Role: api.MessageRoleAssistant, Content: "references"}, canonical[1], canonical[4], canonical[5]},
 	}))

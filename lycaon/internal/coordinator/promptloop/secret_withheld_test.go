@@ -17,9 +17,11 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -51,7 +53,7 @@ func (c *withholdingLLMClient) Stream(ctx context.Context, req modelcall.Complet
 	return ch, nil
 }
 
-func withheldNudgeDeps(st *store.Memory, client modelcall.LLMClient) promptloop.PromptLoopDeps {
+func withheldNudgeDeps(st *store.Repositories, client modelcall.LLMClient) promptloop.PromptLoopDeps {
 	deps := promptloop.StoreDeps(st)
 	deps.Model.LLM = client
 	deps.Context.Policy = &recordingToolPolicy{}
@@ -62,11 +64,11 @@ func withheldNudgeDeps(st *store.Memory, client modelcall.LLMClient) promptloop.
 }
 
 func TestSecretWithheldTurnTellsModelAndContinues(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	client := &withholdingLLMClient{refusals: 1, reply: "carried on without the key"}
 	loop := promptloop.NewPromptLoopForTest(withheldNudgeDeps(st, client))
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
 	result, err := loop.Run(ctx, promptloop.PromptRunInput{
@@ -91,7 +93,7 @@ func TestSecretWithheldTurnTellsModelAndContinues(t *testing.T) {
 		t.Fatalf("retry request carried no refusal notice: %+v", client.requests[1].Messages)
 	}
 
-	msgs, err := st.GetMessages(ctx, sess.ID)
+	msgs, err := st.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	for _, msg := range msgs {
 		if strings.Contains(msg.Content, "user declined") && msg.Visibility != api.MessageVisibilityInternal {
@@ -102,11 +104,11 @@ func TestSecretWithheldTurnTellsModelAndContinues(t *testing.T) {
 
 // Retained user text can trigger the same secret approval on each retry.
 func TestSecretWithheldRepeatedRefusalEndsRunWithoutError(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	client := &withholdingLLMClient{refusals: 5, reply: "unreachable"}
 	loop := promptloop.NewPromptLoopForTest(withheldNudgeDeps(st, client))
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
 	result, err := loop.Run(ctx, promptloop.PromptRunInput{
@@ -142,7 +144,7 @@ func (c *ceilingFixtureClient) Stream(ctx context.Context, req modelcall.Complet
 }
 
 func TestLengthTruncatedToolCallRecoversOnceWithHostNotice(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	truncatedCall := api.ToolCall{
 		ID:            "call_trunc_1",
 		Name:          "write",
@@ -177,7 +179,7 @@ func TestLengthTruncatedToolCallRecoversOnceWithHostNotice(t *testing.T) {
 	}
 
 	var writeInvocations int
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register write", reg.Register("write", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		writeInvocations++
 		return "ok", nil
@@ -190,7 +192,7 @@ func TestLengthTruncatedToolCallRecoversOnceWithHostNotice(t *testing.T) {
 	loop := promptloop.NewPromptLoopForTest(deps)
 
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	result, err := loop.Run(ctx, promptloop.PromptRunInput{
@@ -245,7 +247,7 @@ func TestLengthTruncatedToolCallRecoversOnceWithHostNotice(t *testing.T) {
 }
 
 func TestSecondLengthTruncationEndsTurnWithTypedOutcomeAndVisibleNotice(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	truncatedCall := api.ToolCall{
 		ID:            "call_trunc_1",
 		Name:          "write",
@@ -285,7 +287,7 @@ func TestSecondLengthTruncationEndsTurnWithTypedOutcomeAndVisibleNotice(t *testi
 	loop := promptloop.NewPromptLoopForTest(deps)
 
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	result, err := loop.Run(ctx, promptloop.PromptRunInput{
@@ -316,7 +318,7 @@ func TestSecondLengthTruncationEndsTurnWithTypedOutcomeAndVisibleNotice(t *testi
 		t.Fatalf("visible terminal notice missing expected details: %q", result.LastAssistantContent)
 	}
 
-	msgs, err := st.GetMessages(ctx, sess.ID)
+	msgs, err := st.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	var sawVisibleNotice bool
 	for _, msg := range msgs {
@@ -378,14 +380,14 @@ func TestOpenAICompatSSEStreamLengthTruncatedToolCallRecoversInPromptLoop(t *tes
 		MaxTokens:         4096,
 		ProviderMaxTokens: 16384,
 	}})
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(st)
 	deps.Model.LLM = provider
 	deps.Context.Policy = &recordingToolPolicy{}
 	loop := promptloop.NewPromptLoopForTest(deps)
 
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	result, err := loop.Run(ctx, promptloop.PromptRunInput{

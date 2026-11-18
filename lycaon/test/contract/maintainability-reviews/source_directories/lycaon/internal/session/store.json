@@ -2,13 +2,17 @@
   "category": "source_directories",
   "artifact": "lycaon/internal/session/store",
   "kind": "module",
-  "workstream": "program-observation-evidence",
+  "workstream": "session-persistence-boundaries",
   "disposition": "retain",
-  "reason": "Session persistence retains its existing transaction and publication owners. The program observation writer uses the existing evidence schema and blob owner; splitting persistence into another package would obscure that transaction. Retain the measured immediate membership; further membership changes require review.",
-  "reviewed_commit": "62c955c3704aaefe1d48fc485b09e6201a4244cd",
+  "reason": "Eight named persistence repositories share database transactions and session mutation serialization. Consumers select domain interfaces at construction; no runtime bundle forwards persistence methods. Keep the 66-file SQL module together because child creation, transcript publication, rewind and evidence projection commit across its tables. Focused rollback, ordinal, submission and rewind contracts protect those boundaries.",
+  "reviewed_commit": "22943c4fadb7d24de06f32a8695e917b0da7ec3d",
   "ceiling": 66,
   "boundaries": {
-    "lycaon/internal/session/store/program_observation_test.go": "2fba82dd0e9440c1ec09271f5e164309e03ec58db2b6a93390d030fa9488e1c9"
+    "lycaon/internal/session/store/child_creation_test.go": "c28d7c33defd54f7c913835ad61e72aa6b69a0415b2cb1d7bc74ac2da15e377d",
+    "lycaon/internal/session/store/append_ids_test.go": "f65b2aeccb76d8d5ab9e31fe19e4772aa072a7529249b24792fa538c98628ba2",
+    "lycaon/internal/session/store/evidence_ledger_test.go": "16c92b7806675056ecc974f8521a785c54f652e8c5b7a66a44b49e90e2817aa0",
+    "lycaon/internal/session/store/rewind_test.go": "a34c60988764cc67b440b095ca2be589f5ec37e77a608085a0bc4e97ed48dff8",
+    "lycaon/internal/session/store/prompt_submission_test.go": "ace24186ec61bf66857bd8b6e7174b42f6ed8d1cfaf398602bf3d492540cab0d"
   },
-  "reviewed_shape": "967e0413635674e212b11ff16fca93a33781fcf80787ddac77be93139ece0257"
+  "reviewed_shape": "85d769c251c47f77ea897932d88fa706a1b2da5b8e9710bc2b4e82b867fff810"
 }

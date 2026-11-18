@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -27,14 +28,18 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
+
 	for _, anchor := range []string{oar.AnchorContentInput, oar.AnchorCoordinatorPreInvoke} {
 		t.Run(anchor, func(t *testing.T) {
+			sessionFixture := storetest.New(t)
+
 			t.Setenv("LYCAON_LLM_MOCK", "1")
-			mem := store.NewMemory()
+			sessionStore := sessionFixture
 			root := t.TempDir()
 			response := llm.MockResponseEntry{Pattern: ".", Text: "ok"}
 			if anchor == oar.AnchorCoordinatorPreInvoke {
@@ -42,12 +47,12 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 				response.FollowUpText = "complete"
 			}
 			recorder := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{response}}))
-			registry := tools.NewStubRegistry()
+			registry := toolstest.NewRegistry()
 			testutil.FailErr(t, "register command tool", registry.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				return "", nil
 			}))
-			mgr := session.NewHost(mem, session.Models{Client: recorder, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
-			projects := project.NewMemoryRegistry()
+			mgr := session.NewHost(sessionStore, session.Models{Client: recorder, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
+			projects := project.NewSQLRegistry(sessionFixture.DB())
 			proj, err := project.CreateWithRoot(t.Context(), projects, root)
 			testutil.FailErr(t, "create rooted project", err)
 			mgr.SetProjectRegistry(projects)
@@ -61,7 +66,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			pipeline.EnableAnchor(anchor)
 			pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
 			mgr.SetOARPipeline(pipeline, oar.NewRenderer(nil, nil))
-			sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, proj.ID)
+			sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, proj.ID)
 			testutil.FailErr(t, "create session", err)
 			_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "continue")
 			testutil.FailErr(t, "run prompt", err)
@@ -77,7 +82,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			if !found {
 				t.Fatalf("%s advisory absent from actual model request", anchor)
 			}
-			messages, err := mem.GetMessages(t.Context(), sess.ID)
+			messages, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 			testutil.FailErr(t, "read transcript", err)
 			found = false
 			for _, message := range messages {
@@ -123,10 +128,10 @@ func loadTestAgentRegistry(t *testing.T) *orchestration.MemoryAgentRegistry {
 	return reg
 }
 
-func newPromptTestManager(t *testing.T, llmClient modelcall.LLMClient) (*session.Host, *store.Memory) {
+func newPromptTestManager(t *testing.T, llmClient modelcall.LLMClient) (*session.Host, *store.Repositories) {
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	toolReg := tools.NewExecutorRegistry(nil, tools.NewDefaultRegistry())
 	mgr := session.NewHost(store, session.Models{Client: llmClient, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -154,7 +159,7 @@ func TestCompleteStreamInjectsAgentSystemPrompt(t *testing.T) {
 	rec := llm.NewRecordingClient(inner)
 	mgr, store := newPromptTestManager(t, rec)
 
-	coord, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	coord, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if _, err := mgr.Submissions.Prompt(ctx, coord.ID, "hello coordinator"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
@@ -197,8 +202,8 @@ func TestCoordinatorPromptIncludesPackBoardInject(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
@@ -211,7 +216,7 @@ func TestCoordinatorPromptIncludesPackBoardInject(t *testing.T) {
 		ctx: api.CoordinatorRunContext{WorkflowID: "plan", CurrentPhase: "stub"},
 	})
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "plan"); err != nil {
@@ -236,7 +241,7 @@ func TestCompleteStreamCoordinatorDefault(t *testing.T) {
 	}}}))
 	mgr, store := newPromptTestManager(t, rec)
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "plan something"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
@@ -260,7 +265,7 @@ func TestCompleteStreamMissingTemplateFails(t *testing.T) {
 		SystemPromptTemplate: "agents/missing.md",
 	}})
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	_ = mgr.Chats.SetAgentType(ctx, sess.ID, "broken")
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hi"); err == nil {

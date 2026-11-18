@@ -17,12 +17,12 @@ func TestSessionDraftVersionsOpenAPI(t *testing.T) {
 	sess := createSessionHTTP(t, h.Server, t.TempDir())
 	ctx := t.Context()
 	slotID := uuid.NewString()
-	testutil.FailErr(t, "append draft slot message", h.Store.AppendMessages(ctx, sess.ID, wire.Message{
+	testutil.FailErr(t, "append draft slot message", h.Store.Transcript.AppendMessages(ctx, sess.ID, wire.Message{
 		ID:      slotID,
 		Role:    wire.MessageRoleAssistant,
 		Content: "second draft",
 	}))
-	_, err := h.Store.AppendDraftVersion(ctx, sess.ID, slotID, "first draft", "")
+	_, err := h.Store.Transcript.AppendDraftVersion(ctx, sess.ID, slotID, "first draft", "")
 	testutil.FailErr(t, "append draft version", err)
 
 	req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/drafts/"+slotID+"/versions", nil)

@@ -3,6 +3,7 @@ package sessioncontracts
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,15 +18,14 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestCreateSessionReturnsBeforeInventoryAndDetachesCancellation(t *testing.T) {
-	// The project is created on the registry, not through the server: project
-	// creation schedules its own inventory, and the fake must see only the
-	// session's.
-	registry := project.NewMemoryRegistry()
+	// Direct project setup isolates session-triggered inventory.
+	database := testdbfixture.Open(t, "session-inventory.db")
+	sessions := store.NewSQL(database)
+	registry := project.NewSQLRegistry(database)
 	p, err := project.CreateWithRoot(t.Context(), registry, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	fake := &contractfixture.BlockingInventoryService{
@@ -33,6 +33,7 @@ func TestCreateSessionReturnsBeforeInventoryAndDetachesCancellation(t *testing.T
 	}
 	srv := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) {
 		d.Core.Projects = registry
+		d.Core.Store = sessions
 		d.Source.SourceInventory = fake
 	})
 
@@ -104,7 +105,7 @@ func TestFixtureStoreOverrideKeepsHostAndAPIAligned(t *testing.T) {
 					d.Core.Projects = project.NewSQLRegistry(database)
 				})
 				if tc.supplied {
-					supplied = session.NewHost(sessions, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+					supplied = session.NewHost(sessions, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 					opts = append(opts, func(d *hostapi.Dependencies) { d.Core.Sessions = supplied })
 				}
 			}

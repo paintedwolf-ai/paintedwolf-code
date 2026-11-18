@@ -16,10 +16,10 @@ var ErrCheckpointRootUnset = errors.New("checkpoint state root not configured")
 
 // ForSession binds checkpoints to the active primary root.
 func (m *Capture) ForSession(ctx context.Context, sessionID string) (*sessioncheckpoint.Store, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.rewindStore == nil) {
 		return nil, nil
 	}
-	sess, err := m.store.Get(ctx, strings.TrimSpace(sessionID))
+	sess, err := m.sessionStore.Get(ctx, strings.TrimSpace(sessionID))
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +30,7 @@ func (m *Capture) ForSession(ctx context.Context, sessionID string) (*sessionche
 	if strings.TrimSpace(root) == "" {
 		root = m.dataDir
 	}
-	store := sessioncheckpoint.New(m.dataDir, root, m.store)
+	store := sessioncheckpoint.New(m.dataDir, root, m.rewindStore)
 	if store == nil {
 		return nil, ErrCheckpointRootUnset
 	}
@@ -59,7 +59,7 @@ func (m *Capture) SealPromptCheckpoint(ctx context.Context, sessionID, anchorMes
 	if store == nil {
 		return nil
 	}
-	rootID := sessiontree.RootID(ctx, m.store, sessionID)
+	rootID := sessiontree.RootID(ctx, m.sessionStore, sessionID)
 	return m.Capture.Open(ctx, store, rootID, anchorMessageID)
 }
 
@@ -75,7 +75,7 @@ func (m *Capture) RecordPrimaryMutation(ctx context.Context, sessionID, projectR
 	if sessionID == "" || relPath == "" {
 		return
 	}
-	rootID := sessiontree.RootID(ctx, m.store, sessionID)
+	rootID := sessiontree.RootID(ctx, m.sessionStore, sessionID)
 	store, err := m.ForSession(ctx, sessionID)
 	if err != nil || store == nil {
 		return
@@ -93,7 +93,7 @@ func (m *Capture) RecordBlueprintBinding(ctx context.Context, sessionID, path st
 	if sessionID == "" || path == "" {
 		return
 	}
-	rootID := sessiontree.RootID(ctx, m.store, sessionID)
+	rootID := sessiontree.RootID(ctx, m.sessionStore, sessionID)
 	store, err := m.ForSession(ctx, sessionID)
 	if err != nil || store == nil {
 		return
@@ -110,10 +110,10 @@ func (m *Capture) RecordPromotedPrimaryPaths(ctx context.Context, sessionID stri
 
 // RemoveOrphanCheckpoints deletes checkpoint trees without live sessions.
 func (m *Capture) RemoveOrphanCheckpoints(ctx context.Context, projectDir string) int {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.rewindStore == nil) {
 		return 0
 	}
-	store := sessioncheckpoint.New(m.dataDir, projectDir, m.store)
+	store := sessioncheckpoint.New(m.dataDir, projectDir, m.rewindStore)
 	if store == nil {
 		return 0
 	}
@@ -121,7 +121,7 @@ func (m *Capture) RemoveOrphanCheckpoints(ctx context.Context, projectDir string
 	if err != nil || len(stored) == 0 {
 		return 0
 	}
-	live, err := m.store.ExistingSessionIDs(ctx, stored)
+	live, err := m.sessionStore.ExistingSessionIDs(ctx, stored)
 	if err != nil {
 		return 0
 	}

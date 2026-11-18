@@ -1,13 +1,13 @@
 package store
 
 import (
-	"context"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 const (
@@ -15,25 +15,11 @@ const (
 	workerRunB = "22222222-2222-4222-8222-222222222222"
 )
 
-type workerTranscriptStore interface {
-	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-	AppendMessages(context.Context, string, ...api.Message) error
-	GetWorkerJobMessages(context.Context, string, string) ([]api.Message, error)
-	GetTranscriptPage(context.Context, string, api.TranscriptPageQuery) (api.SessionTranscriptPage, error)
-}
-
-func TestMemoryWorkerJobTranscriptPagination(t *testing.T) {
-	store := NewMemory()
-	session, err := store.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create session", err)
-	assertWorkerJobTranscriptPagination(t, store, session.ID)
-}
-
-func TestSQLWorkerJobTranscriptPagination(t *testing.T) {
+func TestWorkerJobTranscriptPagination(t *testing.T) {
 	database := testdbfixture.Open(t, "worker-transcript.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	store := NewSQL(database)
-	session, err := store.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	session, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for _, jobID := range []string{workerRunA, workerRunB} {
 		_, err = database.ExecContext(t.Context(), `
@@ -46,13 +32,13 @@ func TestSQLWorkerJobTranscriptPagination(t *testing.T) {
 	assertWorkerJobTranscriptPagination(t, store, session.ID)
 }
 
-func assertWorkerJobTranscriptPagination(t *testing.T, store workerTranscriptStore, sessionID string) {
+func assertWorkerJobTranscriptPagination(t *testing.T, store *Repositories, sessionID string) {
 	t.Helper()
-	if _, err := store.GetWorkerJobMessages(t.Context(), sessionID, ""); err == nil {
+	if _, err := store.Transcript.GetWorkerJobMessages(t.Context(), sessionID, ""); err == nil {
 		t.Fatal("empty worker job id was accepted")
 	}
 	for index, jobID := range []string{workerRunA, workerRunB, workerRunA, workerRunB, workerRunA} {
-		err := store.AppendMessages(t.Context(), sessionID, api.Message{
+		err := store.Transcript.AppendMessages(t.Context(), sessionID, api.Message{
 			ID:       string(rune('a' + index)),
 			Role:     api.MessageRoleAssistant,
 			Content:  jobID,
@@ -60,13 +46,13 @@ func assertWorkerJobTranscriptPagination(t *testing.T, store workerTranscriptSto
 		})
 		testutil.FailErr(t, "append worker message", err)
 	}
-	all, err := store.GetWorkerJobMessages(t.Context(), sessionID, workerRunA)
+	all, err := store.Transcript.GetWorkerJobMessages(t.Context(), sessionID, workerRunA)
 	testutil.FailErr(t, "load worker transcript", err)
 	if got := messageIDs(all); len(got) != 3 || got[0] != "a" || got[1] != "c" || got[2] != "e" {
 		t.Fatalf("worker transcript ids = %v", got)
 	}
 
-	tail, err := store.GetTranscriptPage(t.Context(), sessionID, api.TranscriptPageQuery{
+	tail, err := store.Transcript.GetTranscriptPage(t.Context(), sessionID, api.TranscriptPageQuery{
 		Limit: 2, WorkerID: workerRunA,
 	})
 	testutil.FailErr(t, "load worker tail", err)
@@ -81,7 +67,7 @@ func assertWorkerJobTranscriptPagination(t *testing.T, store workerTranscriptSto
 	}
 
 	before := tail.Messages[0].Ord
-	older, err := store.GetTranscriptPage(t.Context(), sessionID, api.TranscriptPageQuery{
+	older, err := store.Transcript.GetTranscriptPage(t.Context(), sessionID, api.TranscriptPageQuery{
 		Before: &before, Limit: 2, WorkerID: workerRunA,
 	})
 	testutil.FailErr(t, "load older worker page", err)

@@ -166,7 +166,7 @@ func (s *Artifacts) HandleCreateSessionArtifact(w http.ResponseWriter, r *http.R
 		s.responses.Fail(w, wire.ApiErrorCodeArtifactEmpty, "live tool recording bytes required")
 		return
 	}
-	messages, err := s.sessionStore.GetMessages(r.Context(), sessionID)
+	messages, err := s.transcriptStore.GetMessages(r.Context(), sessionID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return

@@ -18,16 +18,16 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestDeletedSourceNavigationAndReadPreferCurrentPath(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	root := t.TempDir()
 	p := contractfixture.CreateProjectForTest(t, srv, root)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 	testutil.FailErr(t, "record deletion", ledger.Record(t.Context(), sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "gone.go"},
@@ -92,10 +92,9 @@ func TestDeletedSourceKeepsContentAvailabilityAndScreening(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 			testutil.FailErr(t, "build secret matcher", err)
-			ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+			ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 			srv := contractfixture.NewTestServer(t, withLedger, func(d *hostapi.Dependencies) { d.Approvals.SecretSpans = secretspan.New(matcher) })
 			p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-			contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 			testutil.FailErr(t, "record deletion", ledger.Record(t.Context(), sourceledger.RecordInput{
 				RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "gone"},
 				ProjectID:      p.ID, Op: wire.SourceChangeOpDelete,
@@ -128,17 +127,16 @@ func TestDeletedSourceKeepsContentAvailabilityAndScreening(t *testing.T) {
 
 func TestDeletedWorkerSourceDoesNotOpenThePrimaryReplacement(t *testing.T) {
 	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
-	queue := worker.NewInMemoryQueue(1)
+	queue := worker.NewSQLQueue(ledgerDB, 1)
 	srv := contractfixture.NewTestServer(t, withLedger, contractfixture.WithWorkers(queue))
-	primary, branchRoot := t.TempDir(), t.TempDir()
+	primary, branchRoot := t.TempDir(), workertest.NewBranch(t, ledgerDB)
 	p := contractfixture.CreateProjectForTest(t, srv, primary)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 	testutil.FailErr(t, "primary file", os.WriteFile(filepath.Join(primary, "gone.go"), []byte("primary replacement\n"), 0600))
 	testutil.FailErr(t, "worker metadata", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branchRoot), workspace.JobMeta{
 		Roots: []workspace.JobMetaRoot{{ID: rootID, Label: rootID, Path: primary, IsPrimary: true}}, SnapshotComplete: true,
 	}))
-	workerID := contractfixture.EnqueueBranchJob(t, queue, p.ID, branchRoot)
+	workerID := contractfixture.EnqueueBranchJob(t, queue, ledgerDB, p.ID, branchRoot)
 	branch, err := sourcebranch.ForWorker(workerID)
 	testutil.FailErr(t, "worker identity", err)
 	testutil.FailErr(t, "record worker deletion", ledger.Record(t.Context(), sourceledger.RecordInput{

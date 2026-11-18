@@ -12,12 +12,13 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -27,18 +28,18 @@ type queueRoundWorkerQueue struct {
 }
 
 type batchClaimFailStore struct {
-	*store.Memory
+	store.SubmissionRepository
 	err error
 }
 
 type receiptTransitionStore struct {
-	*store.Memory
+	store.SubmissionRepository
 	mu          sync.Mutex
 	transitions []string
 }
 
 func (s *receiptTransitionStore) ClaimPromptSubmission(ctx context.Context, id string) (*store.PromptSubmission, bool, error) {
-	row, claimed, err := s.Memory.ClaimPromptSubmission(ctx, id)
+	row, claimed, err := s.SubmissionRepository.ClaimPromptSubmission(ctx, id)
 	if claimed {
 		s.recordTransition("claim:" + id)
 	}
@@ -46,7 +47,7 @@ func (s *receiptTransitionStore) ClaimPromptSubmission(ctx context.Context, id s
 }
 
 func (s *receiptTransitionStore) ClaimPromptSubmissions(ctx context.Context, ids []string) ([]store.PromptSubmission, bool, error) {
-	rows, claimed, err := s.Memory.ClaimPromptSubmissions(ctx, ids)
+	rows, claimed, err := s.SubmissionRepository.ClaimPromptSubmissions(ctx, ids)
 	if claimed {
 		for _, id := range ids {
 			s.recordTransition("claim:" + id)
@@ -56,7 +57,7 @@ func (s *receiptTransitionStore) ClaimPromptSubmissions(ctx context.Context, ids
 }
 
 func (s *receiptTransitionStore) FinishPromptSubmission(ctx context.Context, id, token string, status store.PromptSubmissionStatus, result string, failure store.PromptSubmissionFailure) error {
-	err := s.Memory.FinishPromptSubmission(ctx, id, token, status, result, failure)
+	err := s.SubmissionRepository.FinishPromptSubmission(ctx, id, token, status, result, failure)
 	if err == nil {
 		s.recordTransition("finish:" + id)
 	}
@@ -101,9 +102,9 @@ func (q *queueRoundWorkerQueue) Get(jobID string) (*api.WorkerTask, bool) {
 
 func TestRunPromptSubmissionEnqueuesWhileBusy(t *testing.T) {
 	ctx := context.Background()
-	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	st := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	operationID := uuid.NewString()
@@ -142,9 +143,9 @@ func TestRunPromptSubmissionEnqueuesWhileBusy(t *testing.T) {
 
 func TestRunPromptSubmissionRoutesConcurrentReceiptsInAdmissionOrder(t *testing.T) {
 	ctx := context.Background()
-	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	st := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	base := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
@@ -159,7 +160,7 @@ func TestRunPromptSubmissionRoutesConcurrentReceiptsInAdmissionOrder(t *testing.
 	for _, item := range inputs {
 		raw, marshalErr := json.Marshal(promptinput.Input{Text: item.text})
 		testutil.FailErr(t, "encode input", marshalErr)
-		_, _, putErr := st.PutPromptSubmission(ctx, store.PromptSubmission{
+		_, _, putErr := st.Submissions.PutPromptSubmission(ctx, store.PromptSubmission{
 			ID: item.id, SessionID: sess.ID, ProjectID: sess.ProjectID,
 			InputDigest: item.id, InputJSON: string(raw), Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID,
 			CreatedAt: item.at,
@@ -181,13 +182,15 @@ func TestRunPromptSubmissionRoutesConcurrentReceiptsInAdmissionOrder(t *testing.
 
 func TestNextReceiptClaimsOnlyAfterPriorReceiptIsTerminal(t *testing.T) {
 	ctx := context.Background()
-	st := &receiptTransitionStore{Memory: store.NewMemory()}
-	registry := tools.NewStubRegistry()
-	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
+	repositories := storetest.New(t, testdbseed.DefaultProjectID)
+	st := &receiptTransitionStore{SubmissionRepository: repositories.Submissions}
+	repositories.Submissions = st
+	registry := toolstest.NewRegistry()
+	mgr := NewHost(repositories, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 	mgr.SetDataDir(t.TempDir())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := repositories.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	firstInput := promptinput.Input{ContentParts: []api.MessageContentPart{{
 		Content: "first", Origin: api.MessageOriginUser,
@@ -217,18 +220,20 @@ func TestNextReceiptClaimsOnlyAfterPriorReceiptIsTerminal(t *testing.T) {
 
 func TestMalformedReceiptFailsThenDispatcherRunsNextReceipt(t *testing.T) {
 	ctx := context.Background()
-	st := &receiptTransitionStore{Memory: store.NewMemory()}
-	registry := tools.NewStubRegistry()
-	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
+	repositories := storetest.New(t, testdbseed.DefaultProjectID)
+	st := &receiptTransitionStore{SubmissionRepository: repositories.Submissions}
+	repositories.Submissions = st
+	registry := toolstest.NewRegistry()
+	mgr := NewHost(repositories, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 	mgr.SetDataDir(t.TempDir())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := repositories.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	firstID := uuid.NewString()
 	first, _, err := st.PutPromptSubmission(ctx, store.PromptSubmission{
 		ID: firstID, SessionID: sess.ID, ProjectID: sess.ProjectID,
-		InputDigest: firstID, InputJSON: "{", Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID,
+		InputDigest: firstID, InputJSON: `"invalid prompt input"`, Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID,
 	})
 	testutil.FailErr(t, "put malformed receipt", err)
 	second, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "second", promptinput.Input{Text: "second"})
@@ -253,7 +258,7 @@ func TestMalformedReceiptFailsThenDispatcherRunsNextReceipt(t *testing.T) {
 func TestQueueDrainRunsSubmissionReceiptLifecycle(t *testing.T) {
 	mgr, st := newTestManager(t)
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	operationID := uuid.NewString()
@@ -288,16 +293,16 @@ func TestQueueDrainRunsSubmissionReceiptLifecycle(t *testing.T) {
 
 func TestTakeQueuedSendPersistsContinuationWithoutOpeningNewTurn(t *testing.T) {
 	ctx := t.Context()
-	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	st := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append opening user turn", st.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "append opening user turn", st.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		ID: uuid.NewString(), Role: api.MessageRoleUser, Content: "Start with old.go",
 		Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser,
 		TrustTier: api.ContentTrustTierTrusted, Visibility: api.MessageVisibilityTranscript,
 	}))
-	testutil.FailErr(t, "mark session busy", st.UpdateSession(ctx, sess.ID, func(current *api.Session) {
+	testutil.FailErr(t, "mark session busy", st.Sessions.UpdateSession(ctx, sess.ID, func(current *api.Session) {
 		current.Status = api.SessionStatusBusy
 	}))
 	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "send", promptinput.Input{Text: "Use new.go instead"})
@@ -320,13 +325,13 @@ func TestTakeQueuedSendPersistsContinuationWithoutOpeningNewTurn(t *testing.T) {
 	if api.IsUserIntentMessage(messages[0]) || !api.IsUserInstructionMessage(messages[0]) {
 		t.Fatalf("continuation boundary classification is wrong: %+v", messages[0])
 	}
-	turnSource, err := st.ReadSourceTurn(ctx, sess.ID, 0)
+	turnSource, err := st.Transcript.ReadSourceTurn(ctx, sess.ID, 0)
 	turn := turnSource.Number
 	testutil.FailErr(t, "read user turn ordinal", err)
 	if turn != 1 {
 		t.Fatalf("user turn ordinal = %d want 1", turn)
 	}
-	stored, err := st.GetPromptSubmission(ctx, row.ID)
+	stored, err := st.Submissions.GetPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "read prompt receipt", err)
 	if stored.Status != store.PromptSubmissionComplete {
 		t.Fatalf("prompt receipt = %s want complete", stored.Status)
@@ -339,14 +344,14 @@ func TestTakeQueuedSendPersistsContinuationWithoutOpeningNewTurn(t *testing.T) {
 func TestQueueSendWithoutActivePromptLoopStartsContinuationCycle(t *testing.T) {
 	ctx := t.Context()
 	mgr, st := newTestManager(t)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append opening user turn", st.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "append opening user turn", st.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		ID: uuid.NewString(), Role: api.MessageRoleUser, Content: "Begin the work",
 		Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser,
 		TrustTier: api.ContentTrustTierTrusted, Visibility: api.MessageVisibilityTranscript,
 	}))
-	testutil.FailErr(t, "mark session busy", st.UpdateSession(ctx, sess.ID, func(current *api.Session) {
+	testutil.FailErr(t, "mark session busy", st.Sessions.UpdateSession(ctx, sess.ID, func(current *api.Session) {
 		current.Status = api.SessionStatusBusy
 	}))
 	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "send", promptinput.Input{Text: "Change the approach"})
@@ -354,7 +359,7 @@ func TestQueueSendWithoutActivePromptLoopStartsContinuationCycle(t *testing.T) {
 	draft := mgr.Resources.Queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "Change the approach", row.AdmissionSeq, row.CreatedAt)
 	_, err = mgr.Chats.Drafts.Send(ctx, sess.ID, draft.Revision)
 	testutil.FailErr(t, "request send", err)
-	persisted, err := st.GetPromptSubmission(ctx, row.ID)
+	persisted, err := st.Submissions.GetPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "read reserved receipt", err)
 	var persistedInput promptinput.Input
 	testutil.FailErr(t, "decode reserved receipt", json.Unmarshal([]byte(persisted.InputJSON), &persistedInput))
@@ -367,7 +372,7 @@ func TestQueueSendWithoutActivePromptLoopStartsContinuationCycle(t *testing.T) {
 	if !drained {
 		t.Fatal("reserved send was not drained")
 	}
-	messages, err := st.GetMessages(ctx, sess.ID)
+	messages, err := st.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read messages", err)
 	found := false
 	for _, message := range messages {
@@ -381,7 +386,7 @@ func TestQueueSendWithoutActivePromptLoopStartsContinuationCycle(t *testing.T) {
 	if !found {
 		t.Fatalf("continuation row %s missing from transcript", row.ID)
 	}
-	turnSource, err := st.ReadSourceTurn(ctx, sess.ID, 0)
+	turnSource, err := st.Transcript.ReadSourceTurn(ctx, sess.ID, 0)
 	turn := turnSource.Number
 	testutil.FailErr(t, "read user turn ordinal", err)
 	if turn != 1 {
@@ -391,9 +396,9 @@ func TestQueueSendWithoutActivePromptLoopStartsContinuationCycle(t *testing.T) {
 
 func TestQueueRemoveCancelsSubmissionReceipt(t *testing.T) {
 	ctx := context.Background()
-	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	st := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), map[string]string{"text": "drop me"}, promptinput.Input{Text: "drop me"})
@@ -419,9 +424,9 @@ func TestQueueRemoveCancelsSubmissionReceipt(t *testing.T) {
 
 func TestMixedContentReceiptWaitsForPriorWorkerCycle(t *testing.T) {
 	ctx := context.Background()
-	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	st := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	dir := t.TempDir()
 	testdbseed.BindSessionWorkspace(t, st, sess.ID, dir)
@@ -439,7 +444,7 @@ func TestMixedContentReceiptWaitsForPriorWorkerCycle(t *testing.T) {
 	if resp == nil || resp.MessageID != "" {
 		t.Fatalf("response = %+v, want accepted queued response", resp)
 	}
-	stored, err := st.GetPromptSubmission(ctx, row.ID)
+	stored, err := st.Submissions.GetPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "get mixed receipt", err)
 	if stored.Status != store.PromptSubmissionQueued {
 		t.Fatalf("mixed receipt status = %s, want queued while prior worker cycle runs", stored.Status)
@@ -448,9 +453,9 @@ func TestMixedContentReceiptWaitsForPriorWorkerCycle(t *testing.T) {
 
 func TestQueueableReceiptJoinsDraftWhilePriorWorkerCycleRuns(t *testing.T) {
 	ctx := context.Background()
-	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	st := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	dir := t.TempDir()
 	testdbseed.BindSessionWorkspace(t, st, sess.ID, dir)
@@ -474,10 +479,10 @@ func TestQueueableReceiptJoinsDraftWhilePriorWorkerCycleRuns(t *testing.T) {
 
 func TestQueueRoundCompleteRequiresIdleWorkerCycle(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -504,7 +509,7 @@ func TestQueueRoundCompleteRequiresIdleWorkerCycle(t *testing.T) {
 }
 
 func TestDrainQueuedNextTurnRespectsHold(t *testing.T) {
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	const id = "sess-hold"
 
@@ -523,7 +528,7 @@ func TestDrainQueuedNextTurnRespectsHold(t *testing.T) {
 func TestDrainQueueRunsQueuedTurn(t *testing.T) {
 	mgr, sessions := newTestManager(t)
 	ctx := context.Background()
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
@@ -554,7 +559,7 @@ func TestDrainQueueRunsQueuedTurn(t *testing.T) {
 func TestDrainQueueRetainsItemWithoutReceipt(t *testing.T) {
 	mgr, sessions := newTestManager(t)
 	ctx := context.Background()
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
@@ -575,9 +580,11 @@ func TestDrainQueueRetainsItemWithoutReceipt(t *testing.T) {
 func TestDrainQueueRetainsDraftWhenReceiptClaimFails(t *testing.T) {
 	ctx := context.Background()
 	wantErr := errors.New("receipt store unavailable")
-	st := &batchClaimFailStore{Memory: store.NewMemory(), err: wantErr}
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	repositories := storetest.New(t, testdbseed.DefaultProjectID)
+	st := &batchClaimFailStore{SubmissionRepository: repositories.Submissions, err: wantErr}
+	repositories.Submissions = st
+	mgr := NewHost(repositories, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sess, err := repositories.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "queued work", promptinput.Input{Text: "queued work"})
 	testutil.FailErr(t, "admit prompt", err)
@@ -598,16 +605,16 @@ func TestDrainQueueRetainsDraftWhenReceiptClaimFails(t *testing.T) {
 
 func TestQueueHeadWaitsForEarlierMixedContentReceipt(t *testing.T) {
 	ctx := context.Background()
-	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	st := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	base := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 
 	put := func(id string, in promptinput.Input, at time.Time) *store.PromptSubmission {
 		raw, marshalErr := json.Marshal(in)
 		testutil.FailErr(t, "encode prompt input", marshalErr)
-		row, _, putErr := st.PutPromptSubmission(ctx, store.PromptSubmission{
+		row, _, putErr := st.Submissions.PutPromptSubmission(ctx, store.PromptSubmission{
 			ID: id, SessionID: sess.ID, ProjectID: sess.ProjectID, InputDigest: id,
 			InputJSON: string(raw), Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID, CreatedAt: at,
 		})
@@ -629,7 +636,7 @@ func TestQueueHeadWaitsForEarlierMixedContentReceipt(t *testing.T) {
 		t.Fatalf("later text draft changed while mixed receipt was first: %+v", draft.QueueItems)
 	}
 	for _, id := range []string{mixed.ID, text.ID} {
-		row, getErr := st.GetPromptSubmission(ctx, id)
+		row, getErr := st.Submissions.GetPromptSubmission(ctx, id)
 		testutil.FailErr(t, "get queued prompt submission", getErr)
 		if row.Status != store.PromptSubmissionQueued {
 			t.Fatalf("submission %s status = %s, want queued", id, row.Status)
@@ -640,7 +647,7 @@ func TestQueueHeadWaitsForEarlierMixedContentReceipt(t *testing.T) {
 func TestDrainQueueReplaysStoredInput(t *testing.T) {
 	mgr, sessions := newTestManager(t)
 	ctx := context.Background()
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
@@ -662,7 +669,7 @@ func TestDrainQueueReplaysStoredInput(t *testing.T) {
 func TestQueueUpdateTextRewritesStoredInput(t *testing.T) {
 	mgr, sessions := newTestManager(t)
 	ctx := context.Background()
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)

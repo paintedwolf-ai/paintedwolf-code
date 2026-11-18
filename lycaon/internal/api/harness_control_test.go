@@ -17,7 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/secretmatch"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -26,7 +27,7 @@ import (
 func TestHarnessControlsRegisterWithoutManualLLM(t *testing.T) {
 	t.Setenv(configdir.EnvDev, "1")
 	t.Setenv(configdir.EnvHarness, "1")
-	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory()}}), nil, "harness-test-token")
+	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}}), nil, "harness-test-token")
 
 	for _, path := range []string{"/harness/overlays", "/harness/upgrade-history"} {
 		fixture := httptest.NewRecorder()
@@ -46,13 +47,15 @@ func TestHarnessControlsRegisterWithoutManualLLM(t *testing.T) {
 }
 
 func TestHarnessPreviewPublishesThroughProjectEventHub(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv(configdir.EnvDev, "1")
 	t.Setenv(configdir.EnvHarness, "1")
-	projects := project.NewMemoryRegistry()
+	projects := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := projects.Create(t.Context(), project.CreateParams{Draft: true, Name: "Preview fixture"})
 	testutil.FailErr(t, "register preview project", err)
-	sessions := store.NewMemory()
-	sess, err := sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
+	sessions := sessionFixture
+	sess, err := sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create session", err)
 	hub := events.NewMemoryHub()
 	eventsCh, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: p.ID, Viewer: testutil.HostOwner()})
@@ -81,7 +84,7 @@ func TestHarnessPreviewPublishesThroughProjectEventHub(t *testing.T) {
 func TestHarnessControlsStayAbsentWithoutExplicitHarness(t *testing.T) {
 	t.Setenv(configdir.EnvDev, "1")
 	t.Setenv(configdir.EnvHarness, "")
-	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory()}}), nil, TestAPIToken)
+	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}}), nil, TestAPIToken)
 
 	for _, path := range []string{"/harness/overlays", "/harness/upgrade-history"} {
 		recorder := httptest.NewRecorder()
@@ -149,7 +152,7 @@ func TestHarnessResponsePreservesProviderStreamFailure(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "encode failed response", err)
-	server := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory()}, Harness: HarnessDependencies{ManualLLM: provider}}), nil, "harness-test-token")
+	server := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}, Harness: HarnessDependencies{ManualLLM: provider}}), nil, "harness-test-token")
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/harness/llm/respond", strings.NewReader(string(body)))
 	request.Header.Set("Content-Type", "application/json")
@@ -182,7 +185,7 @@ func manualHarnessServer(t *testing.T) (*Server, *llm.ManualProvider) {
 	t.Setenv(configdir.EnvHarness, "1")
 	provider := llm.NewManualProvider()
 	provider.SetAuto(false, "")
-	return NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory()}, Harness: HarnessDependencies{ManualLLM: provider}}), nil, "harness-test-token"), provider
+	return NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}, Harness: HarnessDependencies{ManualLLM: provider}}), nil, "harness-test-token"), provider
 }
 
 func manualHarnessRequest(s *Server, method, path, body string, authorized bool) *httptest.ResponseRecorder {

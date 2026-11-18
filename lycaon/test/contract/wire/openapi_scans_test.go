@@ -3,6 +3,10 @@ package contract
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/scan"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
+	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,36 +18,37 @@ import (
 	"github.com/lycaon/lycaon/internal/api/apitest"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/scan"
+
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestOpenAPIScansRealServer(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	root := t.TempDir()
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(root, "store.db"))
 
 	scanStore := scan.NewSQLStore(sqlDB)
 	coord := scantest.Coordinator(t, scanStore, nil)
-	mock := &scan.MockScanner{Result: &scanoutput.Result{
+	mock := &scannerfixture.MockScanner{Result: &scanoutput.Result{
 		FindingsCount: 2,
 		Findings: []wire.SecurityFinding{
-			scanfindings.FixtureFinding("mock:first", wire.FindingLevelHigh, "first finding", "main.go", 1),
-			scanfindings.FixtureFinding("mock:second", wire.FindingLevelMedium, "second finding", "main.go", 1),
+			findingstest.Finding("mock:first", wire.FindingLevelHigh, "first finding", "main.go", 1),
+			findingstest.Finding("mock:second", wire.FindingLevelMedium, "second finding", "main.go", 1),
 		},
 	}}
-	reg := &scan.MockRegistry{Scanner: mock}
+	reg := &scannerfixture.MockRegistry{Scanner: mock}
 	ing := &scan.IngesterImpl{
 		Module:                  scancfg.DefaultModuleConfig(),
 		Budget:                  scancfg.NewFindingBudget(scancfg.DefaultAgentBudget()),
@@ -79,15 +84,15 @@ func TestOpenAPIScansRealServer(t *testing.T) {
 	}
 	testutil.FailErr(t, "seed scan source", os.WriteFile(filepath.Join(projectDir, "main.go"), []byte("package main\n"), 0o600))
 
-	projReg := project.NewMemoryRegistry()
+	projReg := project.NewSQLRegistry(sessionFixture.DB())
 	proj, err := projReg.Create(t.Context(), project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: projectDir}},
 	})
 	testutil.FailErr(t, "create project", err)
 
-	sessStore := store.NewMemory()
+	sessStore := sessionFixture
 	mockLLM := llm.NewMockProvider(nil)
-	mgr := session.NewHost(sessStore, session.Models{Client: mockLLM, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(sessStore, session.Models{Client: mockLLM, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{
 		Core:  api.CoreDependencies{Store: sessStore, Projects: projReg, Sessions: mgr},
 		Scans: api.ScansDependencies{ScanCoordinator: coord, ScannerRegistry: reg},

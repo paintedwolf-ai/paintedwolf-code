@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,10 +15,12 @@ import (
 	"github.com/lycaon/lycaon/internal/isolation"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -152,7 +153,7 @@ func TestUnsuccessfulCommandWithoutRefusalAddsNoSandboxGuidance(t *testing.T) {
 
 // Rewind requires the checkpoint state root.
 func TestRewindRefusesWhenNoCheckpointRootIsConfigured(t *testing.T) {
-	mgr, sessionID, _ := newCheckpointTestSession(t)
+	mgr, sessionID, _, repositories := newCheckpointTestSession(t)
 	mgr.SetDataDir("")
 	ctx := context.Background()
 
@@ -161,9 +162,9 @@ func TestRewindRefusesWhenNoCheckpointRootIsConfigured(t *testing.T) {
 		Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser,
 		TrustTier: api.ContentTrustTierTrusted,
 	}
-	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(ctx, sessionID, anchor))
+	testutil.FailErr(t, "append", repositories.Transcript.AppendMessages(ctx, sessionID, anchor))
 
-	if _, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID); !errors.Is(err, checkpointcontrol.ErrCheckpointRootUnset) {
+	if _, err := rewindTest(t, mgr, repositories, ctx, uuid.NewString(), sessionID, anchor.ID); !errors.Is(err, checkpointcontrol.ErrCheckpointRootUnset) {
 		t.Fatalf("RewindToPrompt err = %v, want checkpointcontrol.ErrCheckpointRootUnset", err)
 	}
 	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sessionID)
@@ -174,9 +175,9 @@ func TestRewindRefusesWhenNoCheckpointRootIsConfigured(t *testing.T) {
 }
 
 func TestRewindOfTranscriptOnlyTurnNeedsNoFileCheckpoint(t *testing.T) {
-	mgr, id, _ := newCheckpointTestSession(t)
-	anchor := appendRewindAsk(t, mgr, id)
-	result, err := rewindTest(t, mgr, t.Context(), uuid.NewString(), id, anchor)
+	mgr, id, _, repositories := newCheckpointTestSession(t)
+	anchor := appendRewindAsk(t, mgr, repositories, id)
+	result, err := rewindTest(t, mgr, repositories, t.Context(), uuid.NewString(), id, anchor)
 	testutil.FailErr(t, "rewind transcript only turn", err)
 	if result.TruncatedMessageCount != 1 || len(result.RestoredPaths) != 0 {
 		t.Fatalf("result=%+v", result)
@@ -184,7 +185,7 @@ func TestRewindOfTranscriptOnlyTurnNeedsNoFileCheckpoint(t *testing.T) {
 }
 
 func TestRewindRestoredPromptIsUserInstructionOnly(t *testing.T) {
-	mgr, sessionID, dir := newCheckpointTestSession(t)
+	mgr, sessionID, dir, repositories := newCheckpointTestSession(t)
 	ctx := context.Background()
 
 	anchor := api.Message{
@@ -208,11 +209,11 @@ func TestRewindRestoredPromptIsUserInstructionOnly(t *testing.T) {
 		},
 		ArtifactIDs: []string{"art-1"},
 	}
-	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(ctx, sessionID, anchor))
-	_, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store)).Open(t.Context(), sessionID, anchor.ID)
+	testutil.FailErr(t, "append", repositories.Transcript.AppendMessages(ctx, sessionID, anchor))
+	_, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, repositories.Rewind).Open(t.Context(), sessionID, anchor.ID)
 	testutil.FailErr(t, "open checkpoint", err)
 
-	result, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID)
+	result, err := rewindTest(t, mgr, repositories, ctx, uuid.NewString(), sessionID, anchor.ID)
 	testutil.FailErr(t, "rewind", err)
 	if result.RestoredPrompt != "review this" {
 		t.Fatalf("RestoredPrompt = %q, want prose only", result.RestoredPrompt)
@@ -237,7 +238,7 @@ func (q decisionWorkerJobs) Get(id string) (*api.WorkerTask, bool) {
 func TestWorkerDecisionUsesBoundJobInsteadOfRenderedPreamble(t *testing.T) {
 	worker := &api.Session{ID: "child", ParentSessionID: "parent", AgentType: "builder"}
 	job := &api.WorkerTask{ID: "job", ChildSessionID: worker.ID, ParentSessionID: worker.ParentSessionID, AgentType: worker.AgentType, Brief: "Add Docker support", Prompt: strings.Repeat("host instructions ", 200)}
-	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetWorkerQueue(decisionWorkerJobs{job: job})
 	history := []api.Message{{ID: "opening", WorkerID: job.ID, Content: strings.Repeat("host instructions ", 200)}}
 	for _, jobID := range []string{job.ID, ""} {

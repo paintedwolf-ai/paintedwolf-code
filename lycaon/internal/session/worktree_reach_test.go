@@ -3,8 +3,6 @@ package session
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"go/parser"
 	"go/token"
 	"os"
@@ -18,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/project"
@@ -25,14 +24,17 @@ import (
 	"github.com/lycaon/lycaon/internal/scratch"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -51,40 +53,42 @@ func initReachRepo(t *testing.T) string {
 }
 
 type reachFixture struct {
-	mgr     *Host
-	mem     *store.Memory
-	reg     *project.MemoryRegistry
-	project *project.Project
-	sess    *api.Session
-	repoDir string
-	wtPath  string
-	gm      *git.Manager
+	mgr          *Host
+	sessionStore *store.Repositories
+	reg          *project.SQLRegistry
+	project      *project.Project
+	sess         *api.Session
+	repoDir      string
+	wtPath       string
+	gm           *git.Manager
 }
 
 func newReachFixture(t *testing.T, rootPath string) *reachFixture {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
-	mem := store.NewMemory()
+	sessionStore := sessionFixture
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	reg := project.NewMemoryRegistry()
+	mgr := NewHost(sessionStore, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, rootPath)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	mgr.SetProjectRegistry(reg)
 	// Command programs publish output beneath the host's per-session folders.
 	mgr.SetScratchFolders(scratch.New(t.TempDir()))
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: p.ID,
 	}, p.ID)
 	testutil.FailErr(t, "create session", err)
 	return &reachFixture{
-		mgr:     mgr,
-		mem:     mem,
-		reg:     reg,
-		project: p,
-		sess:    sess,
-		repoDir: rootPath,
-		gm:      git.NewManager(),
+		mgr:          mgr,
+		sessionStore: sessionStore,
+		reg:          reg,
+		project:      p,
+		sess:         sess,
+		repoDir:      rootPath,
+		gm:           git.NewManager(),
 	}
 }
 
@@ -98,7 +102,7 @@ func (f *reachFixture) bind(t *testing.T) {
 	branch := "session/" + f.sess.ID
 	testutil.FailErr(t, "AddWorktree", f.gm.AddWorktree(t.Context(), f.repoDir, wt, branch, base))
 	f.wtPath = wt
-	testutil.FailErr(t, "PutWorktreeBinding", f.mem.PutWorktreeBinding(t.Context(), store.WorktreeBinding{
+	testutil.FailErr(t, "PutWorktreeBinding", f.sessionStore.Sessions.PutWorktreeBinding(t.Context(), store.WorktreeBinding{
 		SessionID:    f.sess.ID,
 		ProjectID:    f.project.ID,
 		RepoID:       "r-test",
@@ -276,19 +280,21 @@ func TestWorktreeReach_foreignRootsUntouched(t *testing.T) {
 }
 
 func TestWorktreeReach_rootBelowToplevel(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	top := initReachRepo(t)
 	web := filepath.Join(top, "packages", "web")
 	testutil.FailErr(t, "mkdir web", os.MkdirAll(web, 0o755))
 	testutil.FailErr(t, "write pkg", os.WriteFile(filepath.Join(web, "app.js"), []byte("1\n"), 0o644))
 
-	mem := store.NewMemory()
+	sessionStore := sessionFixture
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	reg := project.NewMemoryRegistry()
+	mgr := NewHost(sessionStore, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, web)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	mgr.SetProjectRegistry(reg)
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild, ProjectID: p.ID,
 	}, p.ID)
 	testutil.FailErr(t, "create", err)
@@ -298,7 +304,7 @@ func TestWorktreeReach_rootBelowToplevel(t *testing.T) {
 	testutil.FailErr(t, "branch", err)
 	wt := filepath.Join(t.TempDir(), "wt")
 	testutil.FailErr(t, "AddWorktree", gm.AddWorktree(t.Context(), top, wt, "session/"+sess.ID, base))
-	testutil.FailErr(t, "bind", mem.PutWorktreeBinding(t.Context(), store.WorktreeBinding{
+	testutil.FailErr(t, "bind", sessionStore.Sessions.PutWorktreeBinding(t.Context(), store.WorktreeBinding{
 		SessionID: sess.ID, ProjectID: p.ID, RepoID: "r",
 		Toplevel: top, WorktreePath: wt, Branch: "session/" + sess.ID, BaseBranch: base,
 	}))
@@ -322,7 +328,7 @@ func TestWorktreeReach_workerInheritance(t *testing.T) {
 	if !sameReachPath(tctx.Source.Roots[0].Path, f.wtPath) {
 		t.Fatalf("substituted root = %q want %q", tctx.Source.Roots[0].Path, f.wtPath)
 	}
-	child, err := f.mem.CreateChild(t.Context(), f.sess, api.SpawnChildRequest{AgentType: "implementer", Prompt: "edit"})
+	child, err := f.sessionStore.Sessions.CreateChild(t.Context(), f.sess, api.SpawnChildRequest{AgentType: "implementer", Prompt: "edit"})
 	testutil.FailErr(t, "CreateChild", err)
 	childCtx, err := f.mgr.ToolContext.Build(t.Context(), child, "", inject.Machine{})
 	testutil.FailErr(t, "build child ToolContext", err)
@@ -363,7 +369,7 @@ func TestWorktreeReach_staleRefusesTurn(t *testing.T) {
 }
 
 type getFailStore struct {
-	Store
+	store.SessionRepository
 	failGet bool
 }
 
@@ -371,20 +377,23 @@ func (s *getFailStore) GetWorktreeBinding(ctx context.Context, sessionID string)
 	if s.failGet {
 		return nil, false, errors.New("injected get failure")
 	}
-	return s.Store.GetWorktreeBinding(ctx, sessionID)
+	return s.SessionRepository.GetWorktreeBinding(ctx, sessionID)
 }
 
 func TestWorktreeReach_getFailureRefuses(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	repoDir := initReachRepo(t)
-	mem := store.NewMemory()
-	failing := &getFailStore{Store: mem, failGet: true}
+	sessionStore := sessionFixture
+	failing := &getFailStore{SessionRepository: sessionStore.Sessions, failGet: true}
+	sessionStore.Sessions = failing
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	mgr := NewHost(failing, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	reg := project.NewMemoryRegistry()
+	mgr := NewHost(sessionStore, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, repoDir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	mgr.SetProjectRegistry(reg)
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: p.ID,
 	}, p.ID)

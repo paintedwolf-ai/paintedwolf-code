@@ -2,18 +2,18 @@ package contract
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/vocabulary/vocabularytest"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/vocabulary"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestWorkflowVocabularySchemaValidatesExport(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	entries := vocabulary.ExportCatalog()
+	entries := vocabularytest.ExportCatalog()
 	if len(entries) == 0 {
 		t.Fatal("expected non-empty vocabulary export")
 	}
@@ -33,7 +33,7 @@ func TestWorkflowVocabularySchemaValidatesExport(t *testing.T) {
 	contractcheck.FailErr(t, "read committed catalog", err)
 	validateJSONInstance(t, sch, catalogBytes)
 	var committed struct {
-		Entries []vocabulary.CatalogEntry `json:"entries"`
+		Entries []vocabularytest.CatalogEntry `json:"entries"`
 	}
 	if err := json.Unmarshal(catalogBytes, &committed); err != nil {
 		contractcheck.FailErr(t, "unmarshal committed catalog", err)

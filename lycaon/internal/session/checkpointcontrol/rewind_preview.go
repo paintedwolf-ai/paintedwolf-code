@@ -22,14 +22,14 @@ func (m *Rewinds) PreviewRewind(ctx context.Context, sessionID, anchorID string)
 		return nil, ErrSessionNotIdle
 	}
 	defer lock.Unlock()
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
 	if err := m.assertRewindIdle(ctx, sess); err != nil {
 		return nil, err
 	}
-	messages, err := m.store.GetMessages(ctx, sessionID)
+	messages, err := m.transcriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func (m *Rewinds) PreviewRewind(ctx context.Context, sessionID, anchorID string)
 	}
 	source, err := m.sourceRewinds.Prepare(ctx, p, sessionID, eligibleAnchorIDsFrom(messages, anchorID))
 	if err == nil {
-		err = sessioncheckpoint.CheckCoverage(ctx, m.store, p, sessiontree.RootID(ctx, m.store, sessionID), eligibleAnchorIDsFrom(messages, anchorID), source)
+		err = sessioncheckpoint.CheckCoverage(ctx, m.rewindStore, p, sessiontree.RootID(ctx, m.sessionStore, sessionID), eligibleAnchorIDsFrom(messages, anchorID), source)
 	}
 	var blocked *sourceledger.RewindBlockedError
 	if errors.As(err, &blocked) {

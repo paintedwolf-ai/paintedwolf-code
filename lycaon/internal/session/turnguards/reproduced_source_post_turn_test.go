@@ -21,11 +21,13 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -80,7 +82,7 @@ func (c *scriptedTurnClient) Requests() []modelcall.CompletionRequest {
 
 type reproducedSourceFixture struct {
 	mgr     *session.Host
-	store   *store.Memory
+	store   *store.Repositories
 	client  *scriptedTurnClient
 	rootDir string
 	projID  string
@@ -108,14 +110,16 @@ func loadStockGuardPipeline(t *testing.T) *oar.GuardPipeline {
 }
 
 func newReproducedSourceFixture(t *testing.T, completions []*modelcall.Completion) *reproducedSourceFixture {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 
 	rootDir := t.TempDir()
-	mem := store.NewMemory()
+	sessionStore := sessionFixture
 	client := &scriptedTurnClient{completions: completions}
 
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command tool", registry.Register("command", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 		cmd, _ := args["command"].(string)
 		rel := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(cmd), "cat "))
@@ -127,10 +131,10 @@ func newReproducedSourceFixture(t *testing.T, completions []*modelcall.Completio
 		return string(payload), err
 	}))
 
-	mgr := session.NewHost(mem, session.Models{Client: client, Limits: settings.DefaultSessionLimits()}, registry)
+	mgr := session.NewHost(sessionStore, session.Models{Client: client, Limits: settings.DefaultSessionLimits()}, registry)
 	mgr.SetDataDir(t.TempDir())
 
-	projects := project.NewMemoryRegistry()
+	projects := project.NewSQLRegistry(sessionFixture.DB())
 	proj, err := project.CreateWithRoot(t.Context(), projects, rootDir)
 	testutil.FailErr(t, "create rooted project", err)
 	mgr.SetProjectRegistry(projects)
@@ -152,7 +156,7 @@ func newReproducedSourceFixture(t *testing.T, completions []*modelcall.Completio
 	mgr.SetRejectFormatter(rejectFmt)
 	mgr.SetOARPipeline(loadStockGuardPipeline(t), oar.NewRenderer(rejectFmt, nil))
 
-	return &reproducedSourceFixture{mgr: mgr, store: mem, client: client, rootDir: rootDir, projID: proj.ID}
+	return &reproducedSourceFixture{mgr: mgr, store: sessionStore, client: client, rootDir: rootDir, projID: proj.ID}
 }
 
 func buildSourceFileLines(prefix string, n int) string {
@@ -203,7 +207,7 @@ func TestReproducedSourcePostTurnEndToEnd(t *testing.T) {
 		})
 		testutil.FailErr(t, "write 40-line workspace file", os.WriteFile(filepath.Join(fix.rootDir, "service.go"), []byte(source40), 0o600))
 
-		sess, err := fix.store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, fix.projID)
+		sess, err := fix.store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, fix.projID)
 		testutil.FailErr(t, "create coordinator session", err)
 
 		resp1, err := fix.mgr.Submissions.Prompt(t.Context(), sess.ID, "show me service.go")
@@ -215,7 +219,7 @@ func TestReproducedSourcePostTurnEndToEnd(t *testing.T) {
 			t.Fatalf("turn 1 LLM requests = %d, want 2 (answer delivered without retry)", got)
 		}
 
-		transcript1, err := fix.store.GetMessages(t.Context(), sess.ID)
+		transcript1, err := fix.store.Transcript.GetMessages(t.Context(), sess.ID)
 		testutil.FailErr(t, "read transcript after turn 1", err)
 		nudges1 := extractPolicyFeedbackByCode(t, transcript1, reproducedSourceRuleID)
 		if len(nudges1) != 1 {
@@ -240,7 +244,7 @@ func TestReproducedSourcePostTurnEndToEnd(t *testing.T) {
 		if turn2Final := extractPolicyFeedbackByCode(t, reqs[3].Messages, reproducedSourceRuleID); len(turn2Final) != 1 {
 			t.Fatalf("turn 2 post-tool final request nudges = %d, want 1", len(turn2Final))
 		}
-		transcript2, err := fix.store.GetMessages(t.Context(), sess.ID)
+		transcript2, err := fix.store.Transcript.GetMessages(t.Context(), sess.ID)
 		testutil.FailErr(t, "read transcript after turn 2", err)
 		if nudges2 := extractPolicyFeedbackByCode(t, transcript2, reproducedSourceRuleID); len(nudges2) != 1 {
 			t.Fatalf("persisted nudges after clean turn 2 = %d, want 1", len(nudges2))
@@ -262,7 +266,7 @@ func TestReproducedSourcePostTurnEndToEnd(t *testing.T) {
 		fix := newReproducedSourceFixture(t, nil)
 		testutil.FailErr(t, "write 40-line workspace file", os.WriteFile(filepath.Join(fix.rootDir, "service.go"), []byte(source40), 0o600))
 
-		parent, err := fix.store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, fix.projID)
+		parent, err := fix.store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, fix.projID)
 		testutil.FailErr(t, "create parent session", err)
 		workerSess, err := fix.mgr.Workers.SpawnChild(t.Context(), parent.ID, api.SpawnChildRequest{
 			AgentType: orchestration.ProfileImplementer,
@@ -270,7 +274,7 @@ func TestReproducedSourcePostTurnEndToEnd(t *testing.T) {
 		})
 		testutil.FailErr(t, "spawn worker session", err)
 
-		_, _, err = fix.store.CommitEvidenceToolResult(t.Context(), workerSess.ID, fix.rootDir, "read", map[string]any{"path": "service.go"}, source40)
+		_, _, err = fix.store.Evidence.CommitEvidenceToolResult(t.Context(), workerSess.ID, fix.rootDir, "read", map[string]any{"path": "service.go"}, source40)
 		testutil.FailErr(t, "commit worker read evidence", err)
 
 		reject, blocked := fix.mgr.Coordinator.Guards.AfterTurn(t.Context(), workerSess, pastedAnswer, true)
@@ -297,7 +301,7 @@ func TestReproducedSourcePostTurnEndToEnd(t *testing.T) {
 		})
 		testutil.FailErr(t, "write 40-line workspace file", os.WriteFile(filepath.Join(fix.rootDir, "service.go"), []byte(source40), 0o600))
 
-		sess, err := fix.store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, fix.projID)
+		sess, err := fix.store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, fix.projID)
 		testutil.FailErr(t, "create coordinator session", err)
 
 		_, err = fix.mgr.Submissions.Prompt(t.Context(), sess.ID, "write a 200-line example")
@@ -306,7 +310,7 @@ func TestReproducedSourcePostTurnEndToEnd(t *testing.T) {
 			t.Fatalf("LLM requests = %d, want 2", got)
 		}
 
-		transcript, err := fix.store.GetMessages(t.Context(), sess.ID)
+		transcript, err := fix.store.Transcript.GetMessages(t.Context(), sess.ID)
 		testutil.FailErr(t, "read transcript", err)
 		if nudges := extractPolicyFeedbackByCode(t, transcript, reproducedSourceRuleID); len(nudges) != 0 {
 			t.Fatalf("new code fence produced nudges: %+v", nudges)
@@ -329,7 +333,7 @@ func TestReproducedSourcePostTurnEndToEnd(t *testing.T) {
 		})
 		testutil.FailErr(t, "write 40-line workspace file", os.WriteFile(filepath.Join(fix.rootDir, "service.go"), []byte(source40), 0o600))
 
-		sess, err := fix.store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, fix.projID)
+		sess, err := fix.store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, fix.projID)
 		testutil.FailErr(t, "create coordinator session", err)
 
 		_, err = fix.mgr.Submissions.Prompt(t.Context(), sess.ID, "inspect service.go")
@@ -338,7 +342,7 @@ func TestReproducedSourcePostTurnEndToEnd(t *testing.T) {
 			t.Fatalf("LLM requests = %d, want 3", got)
 		}
 
-		transcript, err := fix.store.GetMessages(t.Context(), sess.ID)
+		transcript, err := fix.store.Transcript.GetMessages(t.Context(), sess.ID)
 		testutil.FailErr(t, "read transcript", err)
 		if nudges := extractPolicyFeedbackByCode(t, transcript, reproducedSourceRuleID); len(nudges) != 0 {
 			t.Fatalf("mid-turn text produced nudges: %+v", nudges)

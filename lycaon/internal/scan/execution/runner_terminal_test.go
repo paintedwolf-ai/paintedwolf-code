@@ -3,11 +3,12 @@ package execution_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/scan"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
@@ -41,7 +42,7 @@ func runTerminalRunner(t *testing.T, scanner scan.CodeScanner, runtime ...scanca
 	store := scan.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, nil)
 	cfg := scancfg.DefaultRunnerConfig()
-	registry := &scan.MockRegistry{Scanner: scanner}
+	registry := &scantest.MockRegistry{Scanner: scanner}
 	if len(runtime) > 0 {
 		registry.Runtime = runtime[0]
 	}
@@ -113,7 +114,7 @@ func (s *slowSuccessScanner) Run(ctx context.Context, _ scan.ScanRequest) (*scan
 }
 
 func TestRunnerOnTerminalFiresOnComplete(t *testing.T) {
-	scans := runTerminalRunner(t, &scan.MockScanner{IDVal: "mock", Result: &scanoutput.Result{FindingsCount: 3}})
+	scans := runTerminalRunner(t, &scantest.MockScanner{IDVal: "mock", Result: &scanoutput.Result{FindingsCount: 3}})
 	if scans[0].Status != api.CodeScanStatusComplete {
 		t.Fatalf("status = %q want complete", scans[0].Status)
 	}
@@ -123,7 +124,7 @@ func TestRunnerOnTerminalFiresOnComplete(t *testing.T) {
 }
 
 func TestRunnerOnTerminalFiresOnFailure(t *testing.T) {
-	scans := runTerminalRunner(t, &scan.MockScanner{IDVal: "mock", Err: errors.New("engine exploded")})
+	scans := runTerminalRunner(t, &scantest.MockScanner{IDVal: "mock", Err: errors.New("engine exploded")})
 	if scans[0].Status != api.CodeScanStatusFailed {
 		t.Fatalf("status = %q want failed", scans[0].Status)
 	}

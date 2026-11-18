@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/storageusage"
@@ -16,9 +17,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func ArtifactProject(t *testing.T) (*project.MemoryRegistry, string) {
+func ArtifactProject(t *testing.T, database db.Handle) (*project.SQLRegistry, string) {
 	t.Helper()
-	registry := project.NewMemoryRegistry()
+	registry := project.NewSQLRegistry(database)
 	p, err := registry.Create(t.Context(), project.CreateParams{Draft: true, Name: "Artifact fixture"})
 	testutil.FailErr(t, "register artifact project", err)
 	return registry, p.ID

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
@@ -32,7 +33,7 @@ func TestReloadHistoryReassemblesDiet(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -60,7 +61,7 @@ func TestReloadHistoryReassemblesDiet(t *testing.T) {
 			},
 		)
 	}
-	testutil.FailErr(t, "append messages", store.AppendMessages(ctx, sess.ID, msgs...))
+	testutil.FailErr(t, "append messages", store.Transcript.AppendMessages(ctx, sess.ID, msgs...))
 
 	assembled, err := mgr.Runner.History.Reload(ctx, sess.ID, sess, "")
 	testutil.FailErr(t, "reloadAssembledHistory", err)
@@ -86,13 +87,13 @@ func TestReloadHistoryDoesNotWriteStore(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	big := strings.Repeat("canonical-tool-body\n", 600)
-	testutil.FailErr(t, "append", store.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "append", store.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
 		api.Message{
 			ID:        "a1",
@@ -146,7 +147,7 @@ func TestReloadHistoryDoesNotWriteStore(t *testing.T) {
 		},
 	))
 
-	before, err := store.GetMessages(ctx, sess.ID)
+	before, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages before", err)
 	beforeLens := make([]int, len(before))
 	for i, m := range before {
@@ -159,7 +160,7 @@ func TestReloadHistoryDoesNotWriteStore(t *testing.T) {
 		t.Fatal("expected assembled projection")
 	}
 
-	after, err := store.GetMessages(ctx, sess.ID)
+	after, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after", err)
 	if len(after) != len(before) {
 		t.Fatalf("store message count changed: before=%d after=%d", len(before), len(after))
@@ -203,7 +204,7 @@ func rejectVerdictCloseout(t *testing.T, mgr *Host, sess *api.Session, workersId
 }
 
 func TestVerdictCloseoutSkipsWhenInvokeGated(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 
 	if _, block := mgr.Coordinator.Guards.MissingVerdict(
@@ -214,7 +215,7 @@ func TestVerdictCloseoutSkipsWhenInvokeGated(t *testing.T) {
 }
 
 func TestCloseoutBlocksOnMissingReviewVerdict(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 
 	reject, block := rejectVerdictCloseout(t, mgr, sess, true)
@@ -227,7 +228,7 @@ func TestCloseoutBlocksOnMissingReviewVerdict(t *testing.T) {
 }
 
 func TestCloseoutAllowsWhenVerdictRecorded(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: false}))
 
 	if _, block := rejectVerdictCloseout(t, mgr, sess, true); block {
@@ -236,7 +237,7 @@ func TestCloseoutAllowsWhenVerdictRecorded(t *testing.T) {
 }
 
 func TestVerdictCloseoutSkipsBusyWorkers(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 
 	if _, block := rejectVerdictCloseout(t, mgr, sess, false); block {
@@ -245,7 +246,7 @@ func TestVerdictCloseoutSkipsBusyWorkers(t *testing.T) {
 }
 
 func TestVerdictCloseoutHoldsRegardlessOfSurface(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 
 	if _, block := rejectVerdictCloseout(t, mgr, sess, true); !block {
@@ -254,7 +255,7 @@ func TestVerdictCloseoutHoldsRegardlessOfSurface(t *testing.T) {
 }
 
 func TestVerdictCloseoutBoundedPerPrompt(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 	ctx := context.Background()
 
@@ -275,30 +276,30 @@ func TestVerdictCloseoutBoundedPerPrompt(t *testing.T) {
 
 // A partial apply panic rolls back within the same request.
 func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
-	mgr, sessionID, dir := newCheckpointTestSession(t)
-	ctx := checkpointCaller(t, mgr)
+	mgr, sessionID, dir, repositories := newCheckpointTestSession(t)
+	ctx := checkpointCaller(t, mgr, repositories)
 
 	anchor := api.Message{
 		ID: "u-two-files", Role: api.MessageRoleUser, Content: "change two files",
 		Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser,
 		TrustTier: api.ContentTrustTierTrusted,
 	}
-	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(ctx, sessionID, anchor))
+	testutil.FailErr(t, "append", repositories.Transcript.AppendMessages(ctx, sessionID, anchor))
 
 	pathA := filepath.Join(dir, "a.txt")
 	pathB := filepath.Join(dir, "b.txt")
 	testutil.FailErr(t, "seed a", os.WriteFile(pathA, []byte("before-a"), 0o640))
 	testutil.FailErr(t, "seed b", os.WriteFile(pathB, []byte("before-b"), 0o640))
 
-	cpStore := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
+	cpStore := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, repositories.Rewind)
 	_, err := cpStore.Open(t.Context(), sessionID, anchor.ID)
 	testutil.FailErr(t, "open checkpoint", err)
 	testutil.FailErr(t, "capture a", cpStore.CapturePreImage(t.Context(), sessionID, anchor.ID, "a.txt", ""))
 	testutil.FailErr(t, "capture b", cpStore.CapturePreImage(t.Context(), sessionID, anchor.ID, "b.txt", ""))
 	testutil.FailErr(t, "turn writes a", os.WriteFile(pathA, []byte("after-a"), 0o640))
 	testutil.FailErr(t, "turn writes b", os.WriteFile(pathB, []byte("after-b"), 0o640))
-	recordRewindTestEffect(t, mgr, sessionID, "a.txt", []byte("before-a"), []byte("after-a"), api.SourceChangeOpWrite)
-	recordRewindTestEffect(t, mgr, sessionID, "b.txt", []byte("before-b"), []byte("after-b"), api.SourceChangeOpWrite)
+	recordRewindTestEffect(t, mgr, repositories, sessionID, "a.txt", []byte("before-a"), []byte("after-a"), api.SourceChangeOpWrite)
+	recordRewindTestEffect(t, mgr, repositories, sessionID, "b.txt", []byte("before-b"), []byte("after-b"), api.SourceChangeOpWrite)
 
 	// Apply a.txt before injecting a panic on b.txt.
 	originalSource := mgr.Chats.Rewinds.SourceRewinds()
@@ -310,7 +311,7 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 	mgr.Chats.Rewinds.SetSourceRewinds(faultSource)
 
 	operationID := uuid.NewString()
-	_, err = rewindTest(t, mgr, ctx, operationID, sessionID, anchor.ID)
+	_, err = rewindTest(t, mgr, repositories, ctx, operationID, sessionID, anchor.ID)
 	if err == nil {
 		t.Fatal("RewindToPrompt returned no error; want the panic surfaced as a rewind failure, not swallowed")
 	}
@@ -336,7 +337,7 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 		t.Fatal("a rolled-back rewind must leave the transcript intact")
 	}
 
-	op, err := mgr.Coordinator.Context.Sessions.(Store).GetRewindOperation(ctx, operationID)
+	op, err := repositories.Rewind.GetRewindOperation(ctx, operationID)
 	testutil.FailErr(t, "get rewind operation", err)
 	if op == nil || op.Status != "rolled_back" {
 		t.Fatalf("rewind operation status = %+v, want rolled_back", op)
@@ -344,7 +345,7 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 
 	// Retry in the same process after rollback.
 	mgr.Chats.Rewinds.SetSourceRewinds(originalSource)
-	result, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID)
+	result, err := rewindTest(t, mgr, repositories, ctx, uuid.NewString(), sessionID, anchor.ID)
 	testutil.FailErr(t, "rewind after recovery", err)
 	if result == nil {
 		t.Fatal("rewind after recovery returned a nil result")
@@ -367,13 +368,13 @@ func (j *rewindFaultJournal) PrepareEffect(ctx context.Context, p sourceeffect.P
 }
 
 // RegisterProjectContextForTest wires a project and its trust store.
-func RegisterProjectContextForTest(t *testing.T, m *Host, projectDir string) string {
+func RegisterProjectContextForTest(t *testing.T, m *Host, database db.Handle, projectDir string) string {
 	t.Helper()
 	surfaces, err := settings.NewTrustSurfacesStoreAt(
 		filepath.Join(t.TempDir(), "trust-surfaces.yaml"))
 	testutil.FailErr(t, "trust surfaces store", err)
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(database)
 	p, err := project.CreateWithRoot(t.Context(), reg, projectDir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	m.SetProjectRegistry(reg)

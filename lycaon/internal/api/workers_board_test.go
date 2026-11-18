@@ -8,14 +8,17 @@ import (
 
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestWorkersBoardAndCancelHandlers(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	for _, st := range []wire.WorkerStatus{
 		wire.WorkerStatusPending,
 		wire.WorkerStatusRunning,
@@ -49,15 +52,15 @@ func TestWorkersBoardAndCancelHandlers(t *testing.T) {
 
 	ctx := t.Context()
 	rootDir := resolveTestPath(t, t.TempDir())
-	projReg := project.NewMemoryRegistry()
+	projReg := project.NewSQLRegistry(sessionFixture.DB())
 	proj, err := project.CreateWithRoot(ctx, projReg, rootDir)
 	testutil.FailErr(t, "create project", err)
 
-	sessStore := store.NewMemory()
-	coord, err := sessStore.Create(ctx, wire.CreateSessionRequest{ProjectID: proj.ID, Posture: wire.SessionPostureBuild}, proj.ID)
+	sessStore := sessionFixture
+	coord, err := sessStore.Sessions.Create(ctx, wire.CreateSessionRequest{ProjectID: proj.ID, Posture: wire.SessionPostureBuild}, proj.ID)
 	testutil.FailErr(t, "create session", err)
 
-	queue := worker.NewInMemoryQueue(2)
+	queue := workertest.NewQueue(t, 2, proj.ID, coord.ID)
 	_, err = queue.Enqueue(ctx, wire.WorkerTask{
 		ID:              "job-pending",
 		ParentSessionID: coord.ID,

@@ -13,11 +13,12 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 	"gopkg.in/yaml.v3"
 )
@@ -60,16 +61,16 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 		Pattern: ".",
 		Text:    "ok",
 	}}}))
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{
 		ModuleRoot: moduleRoot,
 	}))
 
 	// AGENTS.md follows the project trust switch.
-	projectID := session.RegisterProjectContextForTest(t, mgr, projectDir)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, projectID)
+	projectID := session.RegisterProjectContextForTest(t, mgr, store.DB(), projectDir)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, projectID)
 	testutil.FailErr(t, "create session", err)
 	sess.WorkspacePath = projectDir
 	mgr.Coordinator.PolicyIndex.Warm(t.Context(), sess)
@@ -167,14 +168,15 @@ func TestManagerEffectiveLimitsUsesProjectOverlay(t *testing.T) {
 	limitsStore, err := settings.NewLimitsStoreAt(filepath.Join(t.TempDir(), "global-limits.yaml"))
 	testutil.FailErr(t, "settings.NewLimitsStoreAt failed", err)
 
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: llm.NewMockProvider(&llm.MockConfig{
+	persistence := storetest.New(t)
+	mgr := session.NewHost(persistence, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{
 		Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}},
-	}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: limitsStore})
 	mgr.Limits.SetMaxIterations(99)
 
 	// Project limits require project settings trust.
-	projectID := session.RegisterProjectContextForTest(t, mgr, projectDir)
+	projectID := session.RegisterProjectContextForTest(t, mgr, persistence.DB(), projectDir)
 	sess := &api.Session{ProjectID: projectID, WorkspacePath: projectDir}
 	limits := mgr.Limits.Effective(t.Context(), sess)
 	if limits.MaxIterations != 2 {
@@ -185,7 +187,7 @@ func TestManagerEffectiveLimitsUsesProjectOverlay(t *testing.T) {
 func TestManagerEffectiveLimitsWithoutProviderUsesStaticCfg(t *testing.T) {
 	cfg := settings.DefaultSessionLimits()
 	cfg.MaxIterations = 7
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: cfg, Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: cfg, Cost: nil}, toolstest.NewRegistry())
 	sess := &api.Session{WorkspacePath: t.TempDir()}
 	limits := mgr.Limits.Effective(t.Context(), sess)
 	if limits.MaxIterations != 7 {

@@ -2,13 +2,13 @@ package lifecycle_test
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -19,7 +19,7 @@ func TestRootWorkflowExitReleasesVisibleTurn(t *testing.T) {
 			t.Run(workflowID+map[bool]string{false: "/running", true: "/paused"}[paused], func(t *testing.T) {
 				ctx := t.Context()
 				mgr, st, _, _ := testManagerWithRegistry(t)
-				runtime := session.NewHost(st, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+				runtime := session.NewHost(st, session.Models{Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 				runtime.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: mgr.Store.Runs, Approvals: mgr.Policy, Obligations: mgr.Obligations})
 				runtime.Stops.SetWorkflowStop(mgr.Controls)
 				mgr.Starts.Barrier = runtime.Chats.Gate
@@ -39,18 +39,18 @@ func TestRootWorkflowExitReleasesVisibleTurn(t *testing.T) {
 					run, err = mgr.Controls.Pause(ctx, run.ID, "pause for review")
 					testutil.FailErr(t, "pause workflow", err)
 				}
-				testutil.FailErr(t, "mark visible turn busy", st.SetSessionStatus(ctx, "sess-1", api.SessionStatusBusy))
+				testutil.FailErr(t, "mark visible turn busy", st.Sessions.SetSessionStatus(ctx, "sess-1", api.SessionStatusBusy))
 				if _, err := mgr.Controls.Exit(ctx, "sess-1", run.ID, run.Revision+1, "stale review"); !errors.Is(err, runstate.ErrRevisionConflict) {
 					t.Fatalf("stale exit error = %v", err)
 				}
-				current, err := st.Get(ctx, "sess-1")
+				current, err := st.Sessions.Get(ctx, "sess-1")
 				testutil.FailErr(t, "read rejected exit", err)
 				if current.Status != api.SessionStatusBusy {
 					t.Fatal("stale exit stopped the current turn")
 				}
 				_, err = mgr.Controls.Exit(ctx, "sess-1", run.ID, run.Revision, "reviewed exit")
 				testutil.FailErr(t, "exit workflow", err)
-				current, err = st.Get(ctx, "sess-1")
+				current, err = st.Sessions.Get(ctx, "sess-1")
 				testutil.FailErr(t, "read settled session", err)
 				if current.Status != api.SessionStatusIdle {
 					t.Fatalf("session status = %s after exit", current.Status)

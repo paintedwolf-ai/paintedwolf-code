@@ -2,6 +2,10 @@ package backup_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/backup"
 	"github.com/lycaon/lycaon/internal/db"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
@@ -10,9 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"os"
-	"path/filepath"
-	"testing"
 )
 
 func TestRestoredRewindJournalUsesDestination(t *testing.T) {
@@ -20,11 +21,11 @@ func TestRestoredRewindJournalUsesDestination(t *testing.T) {
 	database := testdbfixture.OpenPath(t, filepath.Join(source, "store.db"))
 	testdbseed.InsertSessionWithRoot(t, database, "review-session", testdbseed.DefaultProjectID, project)
 	repository := store.NewSQL(database)
-	checkpoint := sessioncheckpoint.New(source, project, repository)
+	checkpoint := sessioncheckpoint.New(source, project, repository.Rewind)
 	journal, err := sessioncheckpoint.NewJournal(checkpoint, &sessioncheckpoint.Manifest{SessionID: "review-session", AnchorMessageID: "anchor", ProjectDir: project}, "review-rewind", "review-session", &sourcerewind.Operation{})
 	testutil.FailErr(t, "create journal", err)
 	testutil.FailErr(t, "write journal", journal.Write())
-	testutil.FailErr(t, "prepare receipt", repository.PrepareRewind(t.Context(), store.RewindOperation{ID: "review-rewind", SessionID: "review-session", AnchorMessageID: "anchor", InputDigest: "probe", ProjectDir: project}))
+	testutil.FailErr(t, "prepare receipt", repository.Rewind.PrepareRewind(t.Context(), store.RewindOperation{ID: "review-rewind", SessionID: "review-session", AnchorMessageID: "anchor", InputDigest: "probe", ProjectDir: project}))
 	archive, _, err := createArchive(t, t.Context(), backup.CreateOpts{ConfigDir: source, DBPath: filepath.Join(source, "store.db"), SQLDB: database, SchemaUserVersion: db.SchemaVersion, AppVersion: "test"})
 	testutil.FailErr(t, "export pending rewind", err)
 	target := t.TempDir()
@@ -34,7 +35,7 @@ func TestRestoredRewindJournalUsesDestination(t *testing.T) {
 	testutil.FailErr(t, "close destination", targetDB.Close())
 	testutil.FailErr(t, "restore", backup.ApplyPending(t.Context(), target))
 	restored := testdbfixture.OpenPath(t, filepath.Join(target, "store.db"))
-	row, err := store.NewSQL(restored).GetRewindOperation(t.Context(), "review-rewind")
+	row, err := store.NewSQL(restored).Rewind.GetRewindOperation(t.Context(), "review-rewind")
 	testutil.FailErr(t, "read restored receipt", err)
 	relative, err := filepath.Rel(source, journal.Path())
 	testutil.FailErr(t, "resolve journal", err)
@@ -53,10 +54,10 @@ func TestBackupRefusesMissingOrMismatchedRewindJournal(t *testing.T) {
 	database := testdbfixture.OpenPath(t, filepath.Join(config, "store.db"))
 	testdbseed.InsertSessionWithRoot(t, database, "session", testdbseed.DefaultProjectID, project)
 	repository := store.NewSQL(database)
-	checkpoint := sessioncheckpoint.New(config, project, repository)
+	checkpoint := sessioncheckpoint.New(config, project, repository.Rewind)
 	journal, err := sessioncheckpoint.NewJournal(checkpoint, &sessioncheckpoint.Manifest{SessionID: "session", AnchorMessageID: "anchor", ProjectDir: project}, "operation", "session", &sourcerewind.Operation{})
 	testutil.FailErr(t, "create journal", err)
-	testutil.FailErr(t, "prepare receipt", repository.PrepareRewind(t.Context(), store.RewindOperation{ID: "operation", SessionID: "session", AnchorMessageID: "anchor", InputDigest: "digest", ProjectDir: project}))
+	testutil.FailErr(t, "prepare receipt", repository.Rewind.PrepareRewind(t.Context(), store.RewindOperation{ID: "operation", SessionID: "session", AnchorMessageID: "anchor", InputDigest: "digest", ProjectDir: project}))
 	opts := backup.CreateOpts{ConfigDir: config, DBPath: filepath.Join(config, "store.db"), SQLDB: database, SchemaUserVersion: db.SchemaVersion}
 	destination := filepath.Join(t.TempDir(), "backup.zip")
 	for _, state := range []string{"missing", "mismatched", "unsupported"} {

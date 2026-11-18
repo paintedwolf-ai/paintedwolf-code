@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -17,14 +17,16 @@ import (
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestBeforeWorkerWriteRejectsReadScopedMutation(t *testing.T) {
-	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
-	q := worker.NewInMemoryQueue(8)
+	sessions := storetest.New(t)
+	testdbseed.InsertSessionWithRoot(t, sessions.DB(), "parent", testdbseed.DefaultProjectID, t.TempDir())
+	mgr := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
+	q := workertest.OnDatabase(t, sessions.DB(), 8)
 	mgr.SetWorkerQueue(q)
 	dir := t.TempDir()
 	readScope := api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"internal/**"}}
@@ -54,8 +56,10 @@ func TestBeforeWorkerWriteRejectsReadScopedMutation(t *testing.T) {
 }
 
 func TestBeforeWorkerWriteAllowsPathOutsideSuggestion(t *testing.T) {
-	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
-	q := worker.NewInMemoryQueue(8)
+	sessions := storetest.New(t)
+	testdbseed.InsertSessionWithRoot(t, sessions.DB(), "parent", testdbseed.DefaultProjectID, t.TempDir())
+	mgr := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
+	q := workertest.OnDatabase(t, sessions.DB(), 8)
 	mgr.SetWorkerQueue(q)
 	writeScope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"src/allowed/**"}}
 	_, err := q.Enqueue(context.Background(), api.WorkerTask{
@@ -92,12 +96,17 @@ func TestEnsureWorkerBranchFailsWriteScopeWithoutWorkspace(t *testing.T) {
 
 func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 	ctx := context.Background()
-	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
-	queue := worker.NewInMemoryQueue(8)
+	sessions := storetest.New(t)
+	testdbseed.InsertSessionWithRoot(t, sessions.DB(), "parent", testdbseed.DefaultProjectID, t.TempDir())
+	mgr := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
+	queue := workertest.OnDatabase(t, sessions.DB(), 8)
 	mgr.SetWorkerQueue(queue)
 	scope := api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"docs/README.md"}}
-	child := api.Session{ID: "child-read-discovery", ParentSessionID: "parent"}
-	_, err := queue.Enqueue(ctx, api.WorkerTask{
+	parent, err := sessions.Sessions.Get(ctx, "parent")
+	testutil.FailErr(t, "read parent", err)
+	child, err := sessions.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "repo-researcher"})
+	testutil.FailErr(t, "create child", err)
+	_, err = queue.Enqueue(ctx, api.WorkerTask{
 		ID: "job-read-discovery", ParentSessionID: child.ParentSessionID,
 		ChildSessionID: child.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: t.TempDir(), AgentType: "repo-researcher",
@@ -106,7 +115,7 @@ func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 	})
 	testutil.FailErr(t, "enqueue discovery worker", err)
 
-	tctx, err := mgr.Workers.Workspaces.Enrich(ctx, &child, tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "job-read-discovery"}})
+	tctx, err := mgr.Workers.Workspaces.Enrich(ctx, child, tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "job-read-discovery"}})
 	testutil.FailErr(t, "enrich worker context", err)
 	registry := tools.NewDefaultRegistry()
 	for _, name := range []string{"list_dir", "read"} {
@@ -133,8 +142,10 @@ func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 
 func readScopedWorkerManager(t *testing.T, jobID string, mode api.TaskScopeMode) (*session.Host, context.Context) {
 	t.Helper()
-	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
-	q := worker.NewInMemoryQueue(8)
+	sessions := storetest.New(t)
+	testdbseed.InsertSessionWithRoot(t, sessions.DB(), "parent", testdbseed.DefaultProjectID, t.TempDir())
+	mgr := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
+	q := workertest.OnDatabase(t, sessions.DB(), 8)
 	mgr.SetWorkerQueue(q)
 	scope := api.TaskScope{Mode: mode, Paths: []string{"."}}
 	ctx := context.Background()

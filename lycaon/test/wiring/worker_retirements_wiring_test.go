@@ -277,7 +277,7 @@ func TestRetirementsHistoricalTranscriptReadback(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 
 	now := time.Now().UTC()
-	testutil.FailErr(t, "append historical retired tool calls", h.Store.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "append historical retired tool calls", h.Store.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{
 			ID:      uuid.NewString(),
 			Role:    api.MessageRoleAssistant,
@@ -301,7 +301,7 @@ func TestRetirementsHistoricalTranscriptReadback(t *testing.T) {
 		},
 	))
 
-	msgs, err := h.Store.GetMessages(ctx, sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages with retired tool history", err)
 	if len(msgs) < 2 || len(msgs[0].ToolCalls) != 2 || msgs[0].ToolCalls[0].Name != "delegate_dispatch" {
 		t.Fatalf("historical tool calls did not round-trip: %+v", msgs)
@@ -325,6 +325,6 @@ func TestRetirementsHistoricalTranscriptReadback(t *testing.T) {
 			t.Fatalf("replacement tool %q failed to build structured evidence record: %+v", repl, replRec)
 		}
 	}
-	_, err = h.Store.LoadLedger(ctx, sess.ID)
+	_, err = h.Store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger with retired tool history", err)
 }

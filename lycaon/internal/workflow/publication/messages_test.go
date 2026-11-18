@@ -2,9 +2,10 @@ package publication
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 type publicationSessions struct{ rows []api.Message }
@@ -16,7 +17,7 @@ func (s *publicationSessions) AppendMessages(_ context.Context, _ string, msgs .
 	s.rows = append(s.rows, msgs...)
 	return nil
 }
-func (*publicationSessions) MutationEventsOutboxed() bool { return true }
+func (*publicationSessions) MessageEventsOutboxed() bool { return true }
 
 type publicationRuns struct{ runstate.RunsRepository }
 
@@ -26,7 +27,7 @@ func (publicationRuns) ActiveBySession(context.Context, string) (*api.WorkflowRu
 
 func TestWorkflowStampPreservesExplicitRunAndBoundaryMessages(t *testing.T) {
 	sessions := &publicationSessions{}
-	publisher := &Messages{Sessions: sessions, Runs: publicationRuns{}}
+	publisher := &Messages{SessionStore: sessions, TranscriptStore: sessions, Runs: publicationRuns{}}
 	err := publisher.StampAndAppendMessages(t.Context(), "session", api.Message{ID: "ordinary"}, api.Message{ID: "explicit", WorkflowRunID: "previous"}, api.Message{ID: "boundary", Kind: api.MessageKindWorkflowBoundary})
 	if err != nil {
 		t.Fatalf("operation failed: %v", err)

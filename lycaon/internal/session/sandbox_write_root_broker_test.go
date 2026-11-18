@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -149,15 +149,15 @@ func TestWriteRootAuthorizeSkipsCardWhenOverlayCovers(t *testing.T) {
 // A worker uses the write roots its chat approved without asking again.
 func TestWorkerUsesItsChatsApprovedWriteRoot(t *testing.T) {
 	t.Parallel()
-	store := sessionstore.NewMemory()
-	parent, err := store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create chat", err)
-	child, err := store.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := store.Sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create worker", err)
 	rt := approvalstate.NewSandboxPathGrantRuntime()
 	approved := filepath.Join(t.TempDir(), "approved")
 	rt.GrantChat(parent.ID, approved, "grant-approved", "cp-1", nil)
-	broker := &WriteRootCheckpointBroker{Checkpoints: unusedWriteRootCheckpoints{t: t}, Runtime: rt, Store: store}
+	broker := &WriteRootCheckpointBroker{Checkpoints: unusedWriteRootCheckpoints{t: t}, Runtime: rt, Store: store.Sessions}
 	got, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: child.ID, ParentSessionID: parent.ID, ProposedWriteRoot: approved,
 	})

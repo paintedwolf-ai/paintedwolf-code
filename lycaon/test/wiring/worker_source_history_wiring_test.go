@@ -377,7 +377,7 @@ func TestSourceHistoryACDF19CredentialDiffMarksTheWorkersSession(t *testing.T) {
 	if !ok || job.ChildSessionID == "" {
 		t.Fatalf("job = %+v, want its child session", job)
 	}
-	exposed, err := h.Store.SessionSecretExposure(context.Background(), job.ChildSessionID)
+	exposed, err := h.Store.Evidence.SessionSecretExposure(context.Background(), job.ChildSessionID)
 	testutil.FailErr(t, "secret exposure", err)
 	if !exposed {
 		t.Fatal("the worker's session is not marked as exposed")

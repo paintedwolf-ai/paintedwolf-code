@@ -136,7 +136,7 @@ func (s *commandProgramSession) promptUntilApproval(t *testing.T) (wire.Checkpoi
 
 func (s *commandProgramSession) result(t *testing.T) string {
 	t.Helper()
-	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
+	msgs, err := s.h.Store.Transcript.GetMessages(t.Context(), s.session)
 	testutil.FailErr(t, "read transcript", err)
 	// The messages API carries tool output only on the projected tool result.
 	for _, raw := range msgs {
@@ -289,7 +289,7 @@ func TestCommandProgramRefusesUnknownCapabilityRequestKeys(t *testing.T) {
 	testutil.FailErr(t, "set agent type", h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
 	_, err = h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "run the program")
 	testutil.FailErr(t, "prompt", err)
-	msgs, err := h.Store.GetMessages(t.Context(), sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read transcript", err)
 	for _, raw := range msgs {
 		content, _, err := messageview.RetainedContent(raw, "tool_output", "program-1")
