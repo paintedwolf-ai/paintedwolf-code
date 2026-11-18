@@ -77,4 +77,13 @@ func TestProjectTrustCachedDiscoveryDoesNotCacheSwitches(t *testing.T) {
 	if after.Surfaces[0].Count != 1 || after.Surfaces[0].Applying {
 		t.Fatalf("live switches: %+v", after)
 	}
+
+	srv.StopBackground(t.Context())
+	srv.WaitForBackground(t.Context())
+	response := httptest.NewRecorder()
+	srv.ServeHTTP(response, contractfixture.NewAuthedRequest(http.MethodGet, url, nil))
+	code := wire.ApiErrorCodeProjectInventoryUnavailable
+	if response.Code != code.HTTPStatus() || !strings.Contains(response.Body.String(), string(code)) {
+		t.Fatalf("GET after trust inventory shutdown: %d %s", response.Code, response.Body.String())
+	}
 }
