@@ -222,8 +222,7 @@ func DefaultLocalModelRef() ModelRef {
 	}
 }
 
-// CoordinatorRefWithLocalDefault returns the coordinator assignment, falling back to
-// the bundled local model when unset and localAvailable is true.
+// Unassigned coordinator roles follow the admitted local model.
 func CoordinatorRefWithLocalDefault(p ModelPolicy, model string) ModelRef {
 	if modelRefSet(p.Coordinator) {
 		return selectedLocalRef(p.Coordinator, model)
@@ -242,8 +241,7 @@ func SummarizerRef(p ModelPolicy) ModelRef {
 	return p.Coordinator
 }
 
-// SummarizerRefWithLocalDefault returns the lite override when set, falling back to
-// the bundled local model when localAvailable is true, or the coordinator default otherwise.
+// An unassigned summarizer uses the admitted local model before the coordinator.
 func SummarizerRefWithLocalDefault(p ModelPolicy, model string) ModelRef {
 	if ref := p.Lite; ref.ProviderID != "" && ref.Model != "" {
 		return selectedLocalRef(ref, model)

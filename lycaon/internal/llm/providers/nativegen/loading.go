@@ -14,6 +14,15 @@ import (
 const startupHostBytes = 512 << 20
 
 func (p *Runtime) ensureLoaded(ctx context.Context, model string) (err error) {
+	if p.loaded != nil && p.loaded.model != model {
+		selection, selectionErr := p.config.ModelStore.Selection()
+		if selectionErr != nil {
+			return selectionErr
+		}
+		if selection.Model != model {
+			return errors.New("native generation: requested tier is not selected")
+		}
+	}
 	defer func() { p.settleReadiness(err) }()
 	return p.loadModel(ctx, model)
 }
