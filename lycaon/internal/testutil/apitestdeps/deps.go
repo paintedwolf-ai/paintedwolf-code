@@ -183,10 +183,14 @@ func fillWebResearch(t *testing.T, d *Deps) {
 		d.WebResearch.Registry = registry
 	}
 	if d.WebResearch.Config == nil {
-		d.WebResearch.Config = webresearch.NewConfigStoreAt(filepath.Join(dir, "web-research.yaml"))
+		opened, openErr := webresearch.OpenConfigStore(filepath.Join(dir, "web-research.yaml"))
+		testutil.FailErr(t, "open web research store", openErr)
+		d.WebResearch.Config = opened
 	}
 	if d.WebResearch.Creds == nil {
-		d.WebResearch.Creds = webresearch.NewCredentialStoreAt(filepath.Join(dir, "web-research-vault.age"), d.WebResearch.Catalog)
+		opened, openErr := webresearch.OpenCredentialStore(credentialstore.Slot{Path: filepath.Join(dir, "web-research-vault.age"), Namespace: credentialstore.NamespaceWebResearch, Context: "web research"}, d.WebResearch.Catalog)
+		testutil.FailErr(t, "open web research store", openErr)
+		d.WebResearch.Creds = opened
 	}
 	if d.WebDiscoverer == nil {
 		rt := d.WebResearch

@@ -57,7 +57,8 @@ func TestWarmRunnerStackWarmCrawlOnlyNoSeed(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "Docs at https://example.com/docs/start\n")
 
-	cfg := NewConfigStoreAt(filepath.Join(t.TempDir(), "cfg.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
 	w := NewWarmer(index, nil, nil, cfg)
@@ -98,7 +99,8 @@ func TestWarmRunnerStackBudgetCountsFailedProbes(t *testing.T) {
 	writeFile(t, dir, "README.md", "Docs at "+srv.URL+"/missing-page\n")
 	writeFile(t, dir, "package.json", `{"dependencies":{"missing-page":"^1.0"}}`)
 
-	cfg := NewConfigStoreAt(filepath.Join(t.TempDir(), "cfg.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
 	w := NewWarmer(index, nil, nil, cfg)
@@ -137,7 +139,8 @@ func TestWarmRunnerIdleSkipsCycle(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "Docs at https://example.com/docs/start\n")
 
-	cfg := NewConfigStoreAt(filepath.Join(t.TempDir(), "cfg.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
 	w := NewWarmer(index, nil, nil, cfg)
@@ -239,7 +242,8 @@ func TestWarmRunnerBootstrapOnceWhenNearEmpty(t *testing.T) {
 func TestWarmRunnerOffModeNoCycleWork(t *testing.T) {
 	resetDirectState(2)
 	index := testIndex(t)
-	cfg := NewConfigStoreAt(filepath.Join(t.TempDir(), "cfg.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	warming := false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, nil, nil, nil))
 	runner := &WarmRunner{W: NewWarmer(index, nil, nil, cfg), Live: warmTestLive}
@@ -316,7 +320,8 @@ func TestWarmRunnerStackWarmCrawlsRegistryDocs(t *testing.T) {
 		config.StackRegistryDocs: "ecosystems:\n  go: https://registry.invalid/{name}\n",
 	})
 
-	cfg := NewConfigStoreAt(filepath.Join(t.TempDir(), "cfg.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
 	w := NewWarmer(index, nil, nil, cfg)

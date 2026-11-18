@@ -1,7 +1,9 @@
 package webresearch
 
 import (
+	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -97,7 +99,8 @@ func TestExtractHTMLTextPreservesResolvableLinks(t *testing.T) {
 
 func TestCredentialStoreReopen(t *testing.T) {
 	dir := t.TempDir()
-	store := NewCredentialStoreAt(dir+"/credential-vault.age", testCatalog(t))
+	store, openErr := OpenCredentialStore(credentialstore.Slot{Path: dir + "/credential-vault.age", Namespace: credentialstore.NamespaceWebResearch, Context: "web research"}, testCatalog(t))
+	testutil.FailErr(t, "open web research store", openErr)
 	if err := store.Set("brave-search", "secret"); err != nil {
 		testutil.FailErr(t, "Set", err)
 	}
@@ -117,7 +120,8 @@ func TestCredentialStoreReopen(t *testing.T) {
 }
 
 func TestValidID(t *testing.T) {
-	store := NewCredentialStoreAt(t.TempDir()+"/credential-vault.age", testCatalog(t))
+	store, openErr := OpenCredentialStore(credentialstore.Slot{Path: t.TempDir() + "/credential-vault.age", Namespace: credentialstore.NamespaceWebResearch, Context: "web research"}, testCatalog(t))
+	testutil.FailErr(t, "open web research store", openErr)
 	if !store.ValidID("brave-search") {
 		t.Fatal("brave-search should be valid")
 	}
@@ -130,10 +134,11 @@ func TestCredentialStoreRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "credential-vault.age")
 	cat := testCatalog(t)
 
-	first := NewCredentialStoreAt(path, cat)
+	first, openErr := OpenCredentialStore(credentialstore.Slot{Path: path, Namespace: credentialstore.NamespaceWebResearch, Context: "web research"}, cat)
+	testutil.FailErr(t, "open web research store", openErr)
 	testutil.FailErr(t, "Set", first.Set("brave-search", "stored-secret"))
 
-	reopened, err := openCredentialStore(credentialstore.Slot{
+	reopened, err := OpenCredentialStore(credentialstore.Slot{
 		Path:      path,
 		Namespace: credentialstore.NamespaceWebResearch,
 		Context:   credentialContext,
@@ -143,5 +148,21 @@ func TestCredentialStoreRoundTrip(t *testing.T) {
 	got, ok := reopened.Get("brave-search")
 	if !ok || got.Value() != "stored-secret" {
 		t.Fatalf("reopened credential = %q, %v", got.Value(), ok)
+	}
+}
+
+func TestOpenCredentialStorePreservesDamagedVault(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "credential-vault.age")
+	original := []byte("damaged encrypted vault")
+	testutil.FailErr(t, "write damaged vault", os.WriteFile(path, original, 0o600))
+	store, err := OpenCredentialStore(credentialstore.Slot{Path: path, Namespace: credentialstore.NamespaceWebResearch, Context: credentialContext}, testCatalog(t))
+	if err == nil || store != nil {
+		t.Fatal("damaged vault opened as empty credentials")
+	}
+	preserved, err := os.ReadFile(path)
+	testutil.FailErr(t, "read preserved vault", err)
+	if !bytes.Equal(preserved, original) {
+		t.Fatal("opening changed damaged vault")
 	}
 }

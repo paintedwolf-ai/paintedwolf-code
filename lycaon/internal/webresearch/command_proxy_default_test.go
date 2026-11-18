@@ -2,6 +2,7 @@ package webresearch_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"net/netip"
 	"testing"
 
@@ -17,7 +18,8 @@ func TestWebToolsUnaffectedByCommandProxyOnlyDefault(t *testing.T) {
 			webresearch.SearchToolName, webresearch.FetchURLToolName)
 	}
 
-	cfg := webresearch.NewConfigStoreAt(t.TempDir() + "/cfg.yaml")
+	cfg, openErr := webresearch.OpenConfigStore(t.TempDir() + "/cfg.yaml")
+	testutil.FailErr(t, "open web research store", openErr)
 	deny := webresearch.SearchToolRuntimeDeny(cfg)
 	if deny("web_search") || deny("fetch_url") {
 		t.Fatal("direct-search happy path must stay open across command proxy-only flip")

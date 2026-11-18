@@ -256,11 +256,19 @@ func WireRuntime(ctx context.Context) (Runtime, error) {
 	if err != nil {
 		return Runtime{}, err
 	}
-	creds, err := NewCredentialStore(cat)
+	slot, err := DefaultSlot()
+	if err != nil {
+		return Runtime{}, err
+	}
+	creds, err := OpenCredentialStore(slot, cat)
 	if err != nil {
 		return Runtime{}, fmt.Errorf("web research credentials: %w", err)
 	}
-	cfg, err := NewConfigStore()
+	configPath, err := userConfigPath(webResearchConfig)
+	if err != nil {
+		return Runtime{}, err
+	}
+	cfg, err := OpenConfigStore(configPath)
 	if err != nil {
 		return Runtime{}, err
 	}

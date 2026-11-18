@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -184,7 +185,8 @@ providers:
 `)
 	cat, err := LoadCatalog()
 	testutil.FailErr(t, "load catalog", err)
-	creds := NewCredentialStoreAt(filepath.Join(t.TempDir(), "credential-vault.age"), cat)
+	creds, openErr := OpenCredentialStore(credentialstore.Slot{Path: filepath.Join(t.TempDir(), "credential-vault.age"), Namespace: credentialstore.NamespaceWebResearch, Context: "web research"}, cat)
+	testutil.FailErr(t, "open web research store", openErr)
 	if got := creds.CredentialSource("github"); got != "none" {
 		t.Fatalf("initial source = %q", got)
 	}
@@ -232,7 +234,8 @@ providers:
 `)
 	cat, err := LoadCatalog()
 	testutil.FailErr(t, "LoadCatalog", err)
-	cfg := NewConfigStoreAt(filepath.Join(t.TempDir(), "web-research-config.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "web-research-config.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	s := DefaultSettings(nil, cfg, cat)
 	assertStringSetEqual(t, "enabled", []string{"direct"}, s.EnabledProviders)
 	assertStringSetEqual(t, "soft", []string{"arxiv"}, s.SoftProviderIDs)
@@ -280,9 +283,11 @@ providers:
 `)
 	cat, err := LoadCatalog()
 	testutil.FailErr(t, "LoadCatalog", err)
-	cfg := NewConfigStoreAt(filepath.Join(t.TempDir(), "web-research-config.yaml"))
+	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "web-research-config.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	testutil.FailErr(t, "ApplyPrefs", cfg.ApplyPrefs(nil, nil, nil, []string{}))
-	cfg = NewConfigStoreAt(cfg.path)
+	cfg, openErr = OpenConfigStore(cfg.path)
+	testutil.FailErr(t, "open web research store", openErr)
 	s := DefaultSettings(nil, cfg, cat)
 	if len(s.EnabledProviders) != 0 {
 		t.Fatalf("enabled = %v want empty", s.EnabledProviders)

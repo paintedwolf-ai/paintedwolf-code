@@ -15,7 +15,8 @@ func TestFilterSearchToolRemovesWebResearchTools(t *testing.T) {
 }
 
 func TestSearchToolRuntimeDeny(t *testing.T) {
-	cfg := webresearch.NewConfigStoreAt(t.TempDir() + "/cfg.yaml")
+	cfg, openErr := webresearch.OpenConfigStore(t.TempDir() + "/cfg.yaml")
+	testutil.FailErr(t, "open web research store", openErr)
 	deny := webresearch.SearchToolRuntimeDeny(cfg)
 	if deny("web_search") {
 		t.Fatal("search should be enabled by default")
