@@ -199,11 +199,11 @@ func TestConfinementIntegrityUnattributedProxy(t *testing.T) {
 		var dialer net.Dialer
 		return dialer.DialContext(ctx, "tcp", upstream.Listener.Addr().String())
 	}
-	_, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
 	testutil.FailErr(t, "proxy Start", err)
 	t.Cleanup(func() { _ = p.Close() })
 
-	pu, err := url.Parse("http://" + p.Addr())
+	pu, err := url.Parse("http://" + addrs.HTTP)
 	testutil.FailErr(t, "parse proxy", err)
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(pu)}}
 	resp, err := client.Get(upstream.URL)

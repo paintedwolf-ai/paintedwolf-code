@@ -108,7 +108,6 @@ type Broker struct {
 	dialEndpoint          DialEndpoint
 	reportDial            DialReporter
 	reportHTTP            HTTPReporter
-	httpLn                net.Listener
 	socksLn               net.Listener
 	server                *http.Server
 	serveCtx              context.Context
@@ -194,7 +193,6 @@ func (b *Broker) Start(opts ...Options) (Addrs, error) {
 	}
 
 	b.dialEndpoint = o.DialEndpoint
-	b.httpLn = httpLn
 	b.socksLn = socksLn
 	b.serveCtx, b.cancel = context.WithCancel(context.Background())
 	b.server = &http.Server{
@@ -226,14 +224,6 @@ func listenPreferred(listen ListenFunc, port uint16) (net.Listener, error) {
 		}
 	}
 	return listen("tcp", "127.0.0.1:0")
-}
-
-// Addr returns the loopback host:port commands point HTTP(S)_PROXY at.
-func (b *Broker) Addr() string {
-	if b == nil || b.httpLn == nil {
-		return ""
-	}
-	return b.httpLn.Addr().String()
 }
 
 // Close stops both listeners and waits for active connections and serve loops.
