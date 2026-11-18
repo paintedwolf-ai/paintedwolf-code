@@ -5,136 +5,164 @@ package contract
 
 import (
 	"go/ast"
-	"go/parser"
 	"go/token"
-	"os"
+	"path"
 	"path/filepath"
-	"strings"
+	"strconv"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/extpacks"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// anchorConstDecls maps const name → dotted id from a Go const file.
-func anchorConstDecls(t *testing.T, path string) map[string]string {
-	t.Helper()
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, 0)
-	contractcheck.FailErr(t, "parse "+path, err)
+// anchorDeclFiles are the Go files that declare named anchor ids, keyed by
+// corpus path under lycaon/internal, with their package import path.
+var anchorDeclFiles = map[string]string{
+	"coordinator/anchor/id.go": "github.com/lycaon/lycaon/internal/coordinator/anchor",
+	"oar/block.go":             "github.com/lycaon/lycaon/internal/oar",
+}
+
+// dottedAnchorConsts maps each top-level constant whose value is a dotted
+// string literal, directly or through a one-argument conversion, to that id.
+func dottedAnchorConsts(file *ast.File) map[string]string {
 	out := map[string]string{}
-	ast.Inspect(file, func(n ast.Node) bool {
-		spec, ok := n.(*ast.ValueSpec)
-		if !ok {
-			return true
+	for _, decl := range file.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.CONST {
+			continue
 		}
-		for i, name := range spec.Names {
-			if i >= len(spec.Values) {
+		for _, spec := range gen.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
 				continue
 			}
-			var lit *ast.BasicLit
-			switch v := spec.Values[i].(type) {
-			case *ast.BasicLit:
-				lit = v
-			case *ast.CallExpr: // ID("...") style
-				if len(v.Args) == 1 {
-					if bl, ok := v.Args[0].(*ast.BasicLit); ok {
-						lit = bl
-					}
+			for i, name := range vs.Names {
+				if i >= len(vs.Values) {
+					continue
+				}
+				value := vs.Values[i]
+				if call, ok := value.(*ast.CallExpr); ok && len(call.Args) == 1 {
+					value = call.Args[0]
+				}
+				if id, ok := stringLiteral(value); ok && path.Ext(id) != "" {
+					out[name.Name] = id
 				}
 			}
-			if lit == nil || lit.Kind != token.STRING {
-				continue
-			}
-			id := strings.Trim(lit.Value, `"`)
-			if strings.Contains(id, ".") {
-				out[name.Name] = id
-			}
 		}
-		return true
-	})
+	}
 	return out
 }
 
+func stringLiteral(expr ast.Expr) (string, bool) {
+	lit, ok := expr.(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return "", false
+	}
+	value, err := strconv.Unquote(lit.Value)
+	return value, err == nil
+}
+
+// declaringImports maps the local name of each imported declaring package to its path.
+func declaringImports(file *ast.File) map[string]string {
+	declaring := map[string]bool{}
+	for _, importPath := range anchorDeclFiles {
+		declaring[importPath] = true
+	}
+	out := map[string]string{}
+	for _, spec := range file.Imports {
+		importPath, err := strconv.Unquote(spec.Path.Value)
+		if err != nil || !declaring[importPath] {
+			continue
+		}
+		name := path.Base(importPath)
+		if spec.Name != nil {
+			name = spec.Name.Name
+		}
+		out[name] = importPath
+	}
+	return out
+}
+
+// TestEveryCatalogAnchorHasProductionReference requires every catalog anchor to
+// be named by production Go (a qualified reference to its declared constant, a
+// bare reference inside the declaring package, or its id as a string literal)
+// or bound by a stock workflow manifest.
 func TestEveryCatalogAnchorHasProductionReference(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
 	catalogIDs, _ := loadCatalogAnchors(t, root)
-
-	declFiles := map[string]string{
-		filepath.Join(lycaonRoot, "internal", "coordinator", "anchor", "id.go"): "anchor",
-		filepath.Join(lycaonRoot, "internal", "oar", "block.go"):                "oar",
+	if len(catalogIDs) == 0 {
+		t.Fatal("anchor catalog declares no anchors")
 	}
-	// dotted id → selector spellings that count as a reference.
-	refSpellings := map[string][]string{}
-	for path, pkg := range declFiles {
-		for constName, id := range anchorConstDecls(t, path) {
-			refSpellings[id] = append(refSpellings[id], pkg+"."+constName)
+	corpus, err := contractcheck.LoadGoASTCorpus(filepath.Join(root, "lycaon", "internal"))
+	contractcheck.FailErr(t, "load internal Go corpus", err)
+
+	consts := map[string]map[string]string{}
+	packageDirs := map[string]string{}
+	for rel, importPath := range anchorDeclFiles {
+		packageDirs[path.Dir(rel)] = importPath
+		for _, f := range corpus.Production() {
+			if f.Rel == rel {
+				consts[importPath] = dottedAnchorConsts(f.AST)
+			}
 		}
-	}
-
-	// Anchors referenced only through manifest/binding YAML resolve via
-	// ParseID on the dotted literal, so the literal itself also counts.
-	for id := range catalogIDs {
-		refSpellings[id] = append(refSpellings[id], `"`+id+`"`)
+		if len(consts[importPath]) == 0 {
+			t.Fatalf("%s declares no anchor constants", rel)
+		}
 	}
 
 	referenced := map[string]bool{}
-	skipDecl := map[string]bool{}
-	for path := range declFiles {
-		skipDecl[path] = true
-	}
-	err := filepath.Walk(filepath.Join(lycaonRoot, "internal"), func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
+	for _, f := range corpus.Production() {
+		if _, decl := anchorDeclFiles[f.Rel]; decl {
+			continue
 		}
-		if skipDecl[path] {
-			return nil
-		}
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return nil
-		}
-		body := string(raw)
-		for id, spellings := range refSpellings {
-			if referenced[id] {
-				continue
-			}
-			for _, s := range spellings {
-				if strings.Contains(body, s) {
+		imports := declaringImports(f.AST)
+		local := consts[packageDirs[path.Dir(f.Rel)]]
+		selectorNames := map[*ast.Ident]bool{}
+		ast.Inspect(f.AST, func(n ast.Node) bool {
+			switch node := n.(type) {
+			case *ast.SelectorExpr:
+				selectorNames[node.Sel] = true
+				if x, ok := node.X.(*ast.Ident); ok {
+					if id, ok := consts[imports[x.Name]][node.Sel.Name]; ok {
+						referenced[id] = true
+					}
+				}
+			case *ast.Ident:
+				if id, ok := local[node.Name]; ok && !selectorNames[node] {
 					referenced[id] = true
-					break
+				}
+			case *ast.BasicLit:
+				if id, ok := stringLiteral(node); ok && catalogIDs[id] {
+					referenced[id] = true
 				}
 			}
-		}
-		return nil
-	})
-	contractcheck.FailErr(t, "walk internal", err)
+			return true
+		})
+	}
 
-	// Workflow manifests may bind an anchor by dotted id (on: / inject_kick).
-	err = filepath.Walk(filepath.Join(lycaonRoot, "config", "packs"), func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(path, "workflow.yaml") {
-			return nil
+	catalog, err := extpacks.CatalogForConsumers()
+	contractcheck.FailErr(t, "catalog for consumers", err)
+	manifests, _, err := workflowdef.LoadManifestsFromCatalog(catalog)
+	contractcheck.FailErr(t, "load stock workflow manifests", err)
+	if len(manifests) == 0 {
+		t.Fatal("no stock workflow manifests loaded")
+	}
+	for _, m := range manifests {
+		for _, inject := range m.Injects {
+			referenced[inject.On] = true
 		}
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return nil
+		for _, phase := range m.PhaseDefs {
+			referenced[phase.OnReenter.InjectKick] = true
 		}
-		body := string(raw)
-		for id := range catalogIDs {
-			if !referenced[id] && strings.Contains(body, id) {
-				referenced[id] = true
-			}
-		}
-		return nil
-	})
-	contractcheck.FailErr(t, "walk workflow manifests", err)
+	}
 
 	var missing []string
 	for id := range catalogIDs {
 		if !referenced[id] {
-			missing = append(missing, id+": no production or manifest reference")
+			missing = append(missing, id)
 		}
 	}
-	contractcheck.FailViolations(t, "catalog anchors with no production reference", missing)
+	contractcheck.FailViolations(t, "catalog anchors with no production or manifest reference", missing)
 }

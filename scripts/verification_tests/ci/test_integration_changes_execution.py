@@ -17,7 +17,9 @@ class IntegrationChangesTests(unittest.TestCase):
             "lycaon/internal/parse/impl.go",
             "lycaon/internal/parse/fuzz_test.go",
             "lycaon/test/integration/git_parity_test.go",
-        ], DECLARED), ["./internal/parse", "./test/integration"])
+            "lycaon/internal/tools/native/survey/summarize_integration_test.go",
+            "lycaon/internal/tools/native/extract_archive_capacity_integration_test.go",
+        ], DECLARED), ["./internal/parse", "./internal/tools/native", "./internal/tools/native/survey", "./test/integration"])
 
     def test_testdata_belongs_to_the_package_above_it(self):
         self.assertEqual(integration_changes.edited_packages(
@@ -26,6 +28,9 @@ class IntegrationChangesTests(unittest.TestCase):
     def test_paths_the_recipe_does_not_cover_select_nothing(self):
         for path in ("lycaon/cmd/arch-lint/main.go", "lycaon-den/src/app.ts", "lycaon/go.mod",
                      "lycaon/internal/removed/gone.go", "docs/README.md",
+                     "lycaon/internal/decide/native/src/lib.rs",
+                     "lycaon/internal/generation/native/src/lib.rs",
+                     "lycaon/internal/documentcore/native/src/lib.rs",
                      "lycaon/test/fixtures/e2e/minimal-go-project/internal/app/app.go"):
             with self.subTest(path=path):
                 self.assertEqual(integration_changes.edited_packages([path], DECLARED), [])
