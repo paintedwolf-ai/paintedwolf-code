@@ -1,3 +1,4 @@
+import { operationPattern } from "./operation-contract.ts";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -63,11 +64,6 @@ function clientPathLiterals(): PathLiteral[] {
     });
   }
   return literals;
-}
-
-function operationPattern(template: string): RegExp {
-  const escaped = template.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`^${escaped.replace(/\\\{[^{}]+\\\}/g, "[^/]+")}$`);
 }
 
 const operationPatterns = Object.values(API_OPERATIONS).map((operation) =>

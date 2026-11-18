@@ -100,7 +100,7 @@ func resolveQueryReference(node yaml.Node, kind string, definitions map[string]y
 		}
 		for i := 0; i < len(node.Content); i += 2 {
 			switch node.Content[i].Value {
-			case "$ref", "summary", "description":
+			case "$ref", "summary", "description", "default":
 			default:
 				return yaml.Node{}, fmt.Errorf("unsupported sibling %q of reference %q", node.Content[i].Value, ref.Value)
 			}
@@ -240,7 +240,7 @@ func queryEnum(node *yaml.Node, kind string) ([]any, error) {
 			valid = kind == "boolean"
 		}
 		if !valid {
-			return nil, fmt.Errorf("enum value %q is not a %s", item.Value, kind)
+			return nil, fmt.Errorf("enum value %q does not match type %s", item.Value, kind)
 		}
 		values = append(values, value)
 	}
