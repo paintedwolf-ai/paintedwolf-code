@@ -64,7 +64,7 @@ func TestProgramChildStartRequiresFrozenDefinitionAndInputs(t *testing.T) {
 func TestProgramSettlementsKeepOwnerFacts(t *testing.T) {
 	completed := ProducerResult{Status: 0, Terminal: ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: NoEffect}
 	if err := (ProgramChildSettlement{Result: completed, OutputPublishable: true, DetailReference: "detail"}).Validate(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "validate a completed child settlement", err)
 	}
 	for name, settlement := range map[string]ProgramChildSettlement{
 		"invalid result":   {Result: ProducerResult{Status: -1}, DetailReference: "detail"},
@@ -78,7 +78,7 @@ func TestProgramSettlementsKeepOwnerFacts(t *testing.T) {
 	}
 	status := 3
 	if err := (ProgramSettlement{State: "failed", Status: &status, DetailReference: "detail"}).Validate(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "validate a failed program settlement", err)
 	}
 	invalid := 256
 	for name, settlement := range map[string]ProgramSettlement{

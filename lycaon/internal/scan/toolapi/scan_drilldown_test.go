@@ -43,7 +43,7 @@ func TestNativeScanListReturnsProjectScans(t *testing.T) {
 		FindingsCount: 3,
 		CreatedAt:     time.Now().UTC(),
 	}, nil, ""); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.Insert failed", err)
 	}
 
 	out, err := reg.Run(context.Background(), "scan_list", map[string]any{"limit": 10}, scanToolContext("sess-1", projectDir))
@@ -69,7 +69,7 @@ func TestNativeScanListOmitsGuidance(t *testing.T) {
 		FindingsCount: 1,
 		CreatedAt:     time.Now().UTC(),
 	}, nil, ""); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.Insert failed", err)
 	}
 	if err := store.SaveIngest(context.Background(), "scan-sca-guide", evidence.Record{
 		GateVerdict: string(evidence.GateVerdictPassed),
@@ -83,7 +83,7 @@ func TestNativeScanListOmitsGuidance(t *testing.T) {
 			"findings_stored": 0,
 		},
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.SaveIngest failed", err)
 	}
 
 	out, err := reg.Run(context.Background(), "scan_list", map[string]any{"limit": 10}, scanToolContext("sess-1", projectDir))
@@ -123,7 +123,7 @@ func TestNativeScanSummaryAndErrors(t *testing.T) {
 		FindingsCount: 3,
 		CreatedAt:     time.Now().UTC(),
 	}, nil, ""); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.Insert failed", err)
 	}
 	tctx := scanToolContext("sess-1", projectDir)
 
@@ -211,7 +211,7 @@ func TestNativeScanQueryOnCompleteScan(t *testing.T) {
 		Status:        wire.CodeScanStatusComplete,
 		CreatedAt:     time.Now().UTC(),
 	}, nil, ""); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.Insert failed", err)
 	}
 
 	out, err := reg.Run(context.Background(), "scan_query", map[string]any{"scan_ids": []any{"scan-sca-1"}}, scanToolContext("sess-1", projectDir))

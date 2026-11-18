@@ -127,24 +127,3 @@ func SchemasDir(moduleRoot string) string {
 	}
 	return ""
 }
-
-// allowedConfigRootEntries are the top-level names permitted under lycaon/config/.
-// The Go files are the package that embeds the tree; everything else is content.
-var allowedConfigRootEntries = []string{
-	"README.md",
-	"config.go",
-	"config_test.go",
-	"configtest",
-	"fixtures",
-	"gitengine",
-	"oar-portable-pack",
-	"packs",
-	"paths.go",
-	"rel.go",
-	"runtime",
-}
-
-// AllowedConfigRootEntries returns the permitted top-level names.
-func AllowedConfigRootEntries() []string {
-	return append([]string(nil), allowedConfigRootEntries...)
-}

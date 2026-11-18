@@ -46,3 +46,15 @@ modelIndependentWebE2e("an inline diff remount keeps the first following image i
     await expect.poll(async () => Math.abs(await sample() - before)).toBeLessThan(2);
   }
 });
+
+modelIndependentWebE2e("a diff in chat takes its natural height and passes vertical gestures to the stream", async ({ page }) => {
+  await page.goto("/e2e/fixtures/inline-diff-remount.html");
+  await expect(page.getByTestId("ready")).toHaveText("true");
+  const diff = page.locator(".den-file-edit-diff");
+  // Nothing scrolls inside the diff: it is as tall as its rows.
+  expect(await diff.locator(".cm-scroller").evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThan(2);
+  expect((await diff.boundingBox())!.height).toBeGreaterThan(500);
+  await diff.hover();
+  await page.mouse.wheel(0, 300);
+  await expect.poll(() => page.getByTestId("scroll").evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+});

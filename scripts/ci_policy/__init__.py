@@ -1,1 +1,1 @@
-"""Hosted admission, qualification, and recovery policy."""
+"""Hosted admission and qualification policy."""

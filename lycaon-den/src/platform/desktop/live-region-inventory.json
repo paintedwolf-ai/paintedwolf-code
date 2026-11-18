@@ -54,6 +54,7 @@
   "components/search/SearchHitDetail.tsx": 1,
   "components/search/SearchReplacePreview.tsx": 2,
   "components/search/SearchResultGroup.tsx": 1,
+  "components/settings/ProjectSettingsRejected.tsx": 1,
   "components/settings/appearance/GeneralSettingsPanel.tsx": 1,
   "components/settings/appearance/KeyboardSettingsPanel.tsx": 2,
   "components/settings/budgets/BudgetsEditor.tsx": 1,

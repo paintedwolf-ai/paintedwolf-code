@@ -63,7 +63,7 @@ func TestForgetSessionWaitsForFiringTimerBeforeFinalSweep(t *testing.T) {
 		close(finished)
 	}()
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the session's sleep is forgotten", func() bool {
 		_, ok := loop.Waits.sleep.Load(sessionID)
 		return !ok
 	})

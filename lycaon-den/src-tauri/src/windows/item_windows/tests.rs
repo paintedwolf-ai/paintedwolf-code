@@ -101,32 +101,3 @@ fn context_views_get_peer_labels() {
     assert_ne!(first, second);
 }
 
-#[test]
-fn peer_views_sort_by_their_host_assigned_number() {
-    let mut views = vec![
-        ItemWindowView {
-            label: "file:a:7".into(),
-            title: "a.rs".into(),
-            view_number: 7,
-            kind: "file".into(),
-            project_id: "p".into(),
-            session_id: None,
-            root_id: None,
-            path: None,
-            stage_id: None,
-        },
-        ItemWindowView {
-            label: "context:files:2".into(),
-            title: "Files".into(),
-            view_number: 2,
-            kind: "context".into(),
-            project_id: "p".into(),
-            session_id: None,
-            root_id: None,
-            path: None,
-            stage_id: None,
-        },
-    ];
-    views.sort_by_key(|view| view.view_number);
-    assert_eq!(views[0].view_number, 2);
-}

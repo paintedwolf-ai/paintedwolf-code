@@ -26,7 +26,7 @@ func (tc ToolContext) ResolveSourceCapture(sourceID string) (SourceCaptureLocati
 		return SourceCaptureLocation{}, false
 	}
 	var diskRoot string
-	if rootID == "worker-branch" {
+	if rootID == projectroot.WorkerBranchRootID {
 		diskRoot = tc.Source.WorkerBranchRoot
 	} else {
 		for _, root := range tc.Source.Roots {

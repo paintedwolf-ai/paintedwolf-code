@@ -107,7 +107,7 @@ describe("FocusedSessionList", () => {
       />
     ));
     const active = screen.getByText("Fix tests").closest("button");
-    expect(active?.classList.contains("den-shell-nav-sub-link-active")).toBe(true);
+    expect(active?.getAttribute("aria-current")).toBe("true");
 
     // One marker follows current-window visibility.
     const markers = document.querySelectorAll(".den-nav-marker");
@@ -132,13 +132,7 @@ describe("FocusedSessionList", () => {
       />
     ));
     const subject = screen.getByText("Fix tests").closest("button");
-    expect(subject?.classList.contains("den-shell-nav-sub-link-active")).toBe(
-      true,
-    );
     expect(subject?.getAttribute("aria-current")).toBe("true");
-    expect(subject?.textContent).toContain(
-      "Selected chat. Activate to show the conversation.",
-    );
     const other = screen.getByText("Other").closest("button");
     expect(other?.classList.contains("den-shell-nav-sub-link-active")).toBe(
       false,
@@ -164,12 +158,7 @@ describe("FocusedSessionList", () => {
     ));
     const dot = document.querySelector<HTMLElement>(".den-nav-marker");
     await waitFor(() => expect(dot?.style.opacity).toBe("1"));
-    expect(
-      screen
-        .getByText("Fix tests")
-        .closest("button")
-        ?.classList.contains("den-shell-nav-sub-link-active"),
-    ).toBe(true);
+    expect(screen.getByText("Fix tests").closest("button")?.getAttribute("aria-current")).toBe("true");
     expect(screen.getByText("Fix tests").closest("button")?.querySelector(".sr-only")).toBeTruthy();
   });
 

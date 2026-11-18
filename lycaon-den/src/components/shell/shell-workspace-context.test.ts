@@ -1,5 +1,6 @@
-import { createRoot } from "solid-js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createRoot, createSignal } from "solid-js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setChatTabRailBindings } from "../../chat/composer/chat-tab-rail-bindings.ts";
 import type { ActiveChat } from "../../shell/stage-scope.ts";
 import type { Nav } from "./shell-navigation-state.ts";
 import { createShellWorkspaceContext } from "./shell-workspace-context.ts";
@@ -29,36 +30,39 @@ vi.mock("../stage/stage-registry.tsx", () => ({
 
 function fixture() {
   let chat: ActiveChat | null = { projectId: "project", sessionId: "previous" };
-  let foreground: Nav = "files";
-  let conversation = true;
+  const [foreground, setForeground] = createSignal<Nav>("files");
+  const [conversation, setConversation] = createSignal(true);
+  const [split, setSplit] = createSignal(true);
   const showConversation = vi.fn(async () => true);
   const claim = vi.fn();
   const readProject = vi.fn(() => "project");
-  const closeWorkers = vi.fn();
+  const closeDrawer = vi.fn();
   const reopenFiles = vi.fn();
   const controller = createRoot(() => createShellWorkspaceContext({
     activeProjectId: readProject,
     presentedChat: () => chat,
     activeChat: () => ({ projectId: "project", sessionId: "next" }),
     projectPresentation: () => ({ projectId: "project", opening: false, ready: { identity: true, mounted: true, open: true } }),
-    conversationShown: () => conversation,
-    splitColumns: () => ({ conversation, stage: true }),
+    conversationShown: conversation,
+    splitColumns: () => ({ conversation: conversation(), stage: true }),
     stageColumnStageId: () => "files",
-    nav: () => foreground,
-    setNav: (value) => { foreground = value; },
+    stageSurfaceShown: () => true,
+    nav: foreground,
+    setNav: setForeground,
     routedReturn: () => ({ stage: "files", from: "projects" }),
-    splitLive: () => true,
+    splitLive: split,
     showConversation,
     splitFitClaim: { claim },
     stageHandoff: () => "files",
-    closeWorkers,
+    closeDrawer,
     reopenFiles,
   }));
   return {
-    controller, readProject, showConversation, claim, closeWorkers, reopenFiles,
+    controller, readProject, showConversation, claim, closeDrawer, reopenFiles,
     setPresented: (value: ActiveChat | null) => { chat = value; },
-    hideConversation: () => { conversation = false; },
-    foreground: () => foreground,
+    hideConversation: () => { setConversation(false); },
+    singleView: () => { setSplit(false); },
+    foreground,
   };
 }
 
@@ -124,8 +128,55 @@ describe("shell workspace context", () => {
     registry.placement = "stage";
     expect(f.controller.stageBack("files")).toBeNull();
     back!.onBack();
-    expect(f.closeWorkers).toHaveBeenCalledOnce();
+    expect(f.closeDrawer).toHaveBeenCalledOnce();
     await vi.waitFor(() => expect(f.reopenFiles).toHaveBeenCalledOnce());
+  });
+
+  describe("session tabs in the stage title bar", () => {
+    const claim = {};
+    const serveTabsFrom = (sessionId: string) =>
+      setChatTabRailBindings({ sessionId } as never, claim);
+    afterEach(() => setChatTabRailBindings(null, claim));
+
+    it("carries the presented session's tabs only while its conversation is off screen", () => {
+      const f = fixture();
+      serveTabsFrom("previous");
+      expect(f.controller.stageTabs.sessionId()).toBeNull();
+      f.hideConversation();
+      expect(f.controller.stageTabs.sessionId()).toBe("previous");
+    });
+
+    it("carries nothing while another session's chat serves the tab actions", () => {
+      const f = fixture();
+      serveTabsFrom("other");
+      f.hideConversation();
+      expect(f.controller.stageTabs.sessionId()).toBeNull();
+    });
+
+    it("restores a collapsed split conversation for an action that continues there", () => {
+      const f = fixture();
+      f.hideConversation();
+      registry.collapsed = true;
+      f.controller.stageTabs.showConversation();
+      expect(f.showConversation).toHaveBeenCalledOnce();
+      expect(f.foreground()).toBe("files");
+    });
+
+    it("claims room for a split conversation the narrow window dropped", () => {
+      const f = fixture();
+      f.hideConversation();
+      f.controller.stageTabs.showConversation();
+      expect(f.claim).toHaveBeenCalledOnce();
+      expect(f.showConversation).not.toHaveBeenCalled();
+    });
+
+    it("navigates to the chat in single view", () => {
+      const f = fixture();
+      f.singleView();
+      f.controller.stageTabs.showConversation();
+      expect(f.foreground()).toBe("projects");
+      expect(f.showConversation).not.toHaveBeenCalled();
+    });
   });
 
   it("offers no source return for another project", () => {

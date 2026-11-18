@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"errors"
-	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -42,13 +41,13 @@ func TestRegistryPrefixLeaseMakesSourceStateAndDefinitionsAtomic(t *testing.T) {
 		})
 	}()
 	<-started
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the definition transaction waits for the write lock", func() bool {
 		if !reg.dynamicMu.TryRLock() {
-			break
+			return true
 		}
 		reg.dynamicMu.RUnlock()
-		runtime.Gosched()
-	}
+		return false
+	})
 	select {
 	case <-callbackEntered:
 		t.Fatal("definition transaction crossed a live invocation lease")

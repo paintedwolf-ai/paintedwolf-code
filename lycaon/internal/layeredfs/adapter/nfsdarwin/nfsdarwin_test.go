@@ -186,8 +186,8 @@ func TestImmediateCoherenceAndNegativeLookup(t *testing.T) {
 }
 
 func TestBarrierFailsOnDeadServerAndPreservesEarlierCheckpoints(t *testing.T) {
-
-	adp := nfsdarwin.New(nfsdarwin.Config{})
+	// The shortest soft timeout ends calls against the killed server quickly.
+	adp := nfsdarwin.New(nfsdarwin.Config{Timeo: 2, Retrans: 1})
 	tmp := t.TempDir()
 	trunkDir := filepath.Join(tmp, "trunk")
 	backingDir := filepath.Join(tmp, "backing")

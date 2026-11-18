@@ -41,7 +41,7 @@ func TestCoordinatorBatchPhaseAdvancesOnTaskDispatch(t *testing.T) {
 	}
 
 	var phase string
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the batch reaches dispatch", func() bool {
 		state := h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 		phase = state.BatchPhase
 		return phase == batch.PhaseDispatch
@@ -95,7 +95,8 @@ func TestCoordinatorBatchPhaseSynthesizeAfterWorkerDrain(t *testing.T) {
 
 	// Worker completion wakes integration asynchronously.
 	state := h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the batch reaches integrate", func() bool {
+		FailOnEndedWorker(t, h, ctx, sess.ProjectID)
 		state = h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 		return state.BatchPhase == batch.PhaseIntegrate
 	})

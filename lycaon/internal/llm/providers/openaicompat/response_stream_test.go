@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/noticeerr"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -78,6 +79,40 @@ func TestOpenAIEmptyStreamRetainsWireTerminalFact(t *testing.T) {
 				t.Fatalf("terminal=%v error=%+v", test.terminal, err)
 			}
 		})
+	}
+}
+
+func TestOpenAIStreamErrorFrameEndsTheStreamWithTheProviderError(t *testing.T) {
+	body := "data: {\"choices\":[{\"delta\":{\"content\":\"Partial \"}}]}\n\n" +
+		"data: {\"choices\":[{\"delta\":{\"content\":\"response\"}}]}\n\n" +
+		"data: {\"error\":{\"message\":\"upstream overloaded\",\"type\":\"server_error\",\"code\":502}}\n\n"
+	provider := &Provider{id: "fixture"}
+	stream, err := provider.streamChatCompletionFromResponse(t.Context(), modelcall.CompletionRequest{Model: "model"}, &http.Response{Body: io.NopCloser(strings.NewReader(body))})
+	testutil.FailErr(t, "open stream", err)
+	var content string
+	var terminal error
+	for chunk := range stream {
+		if terminal != nil {
+			t.Fatalf("chunk after the error frame: %+v", chunk)
+		}
+		content += chunk.Content
+		if chunk.Err != nil {
+			if !chunk.Done {
+				t.Fatal("error frame did not terminate the stream")
+			}
+			terminal = chunk.Err
+		}
+	}
+	if content != "Partial response" {
+		t.Fatalf("content = %q, want the frames before the error", content)
+	}
+	var frame *providerretry.ProviderStreamError
+	if !errors.As(terminal, &frame) || frame.Type != "server_error" || frame.Code != "502" || frame.Message != "upstream overloaded" {
+		t.Fatalf("terminal = %v, want the provider's stream error fields", terminal)
+	}
+	interrupted, ok := failure.AsProviderResponseInterrupted(terminal)
+	if !ok || interrupted.ProviderID != "fixture" || interrupted.Model != "model" {
+		t.Fatalf("terminal = %v, want an interrupted response for fixture/model", terminal)
 	}
 }
 

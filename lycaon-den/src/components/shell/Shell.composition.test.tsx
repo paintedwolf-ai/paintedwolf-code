@@ -47,11 +47,12 @@ async function mountShell() {
   appStore.actions.setCurrentSession({ id: "session", project_id: "project", status: "idle", workspace_path: "/garden" } as never);
   appStore.actions.installTranscriptBaseline("session", [], 0);
   shell.commitStageScope({ projectId: "project", sessionId: "session" });
+  const notices = createNoticeStore();
   const view = render(() => <Shell appStore={appStore} shell={shell} projects={projects} recents={recents}
     projectSessions={projectSessions as never} attention={{ index: () => new Map(), state: { rows: [] } } as never}
-    notices={createNoticeStore()} settingsStore={createSettingsStore()} costStore={createCostStore()} />);
+    notices={notices} settingsStore={createSettingsStore()} costStore={createCostStore()} />);
   await waitFor(() => expect(seams.sidebar).toBeTruthy());
-  return { ...view, appStore, shell };
+  return { ...view, appStore, shell, notices };
 }
 
 describe("shell composition across navigation", () => {
@@ -87,5 +88,14 @@ describe("shell composition across navigation", () => {
     seams.overlays.setHelpOpen(true); expect(seams.overlays.helpOpen()).toBe(true);
     seams.sidebar.goHome(); expect(shell.state.activeProjectId).toBeNull();
     await waitFor(() => expect(seams.stages.has("home")).toBe(true));
+  });
+
+  it("announces standing notices while idle and stays quiet while a session is live", async () => {
+    const { appStore, notices } = await mountShell();
+    notices.publish({ code: "probe", title: "t", message: "m" }, { kind: "app" });
+    const stack = render(() => <>{seams.chat.notificationStack()}</>);
+    expect(stack.getByTestId("notice-rail").getAttribute("aria-live")).toBe("polite");
+    appStore.actions.setLLMCallStatus({ call_id: "c1", session_id: "session", provider: "mock", model: "mock", status: "active", tokens: {} } as never);
+    await waitFor(() => expect(stack.getByTestId("notice-rail").getAttribute("aria-live")).toBe("off"));
   });
 });

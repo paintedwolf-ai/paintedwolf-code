@@ -169,11 +169,18 @@ func TestConditionMonitorCannotResolveAfterDeadline(t *testing.T) {
 		return true
 	})
 	t.Cleanup(func() { confine.SetEgressResolver(nil) })
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(120 * time.Millisecond)
+	// Readiness is answered only after the monitor has returned at its deadline.
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(server.Close)
+	t.Cleanup(func() { close(release) })
 	target, err := url.Parse(server.URL)
 	testutil.FailErr(t, "parse delayed readiness server", err)
 	portNumber, err := strconv.Atoi(target.Port())

@@ -143,11 +143,12 @@ func TestConcurrencyCapEnforced(t *testing.T) {
 		})
 	}
 
-	pollCtx, cancel := context.WithTimeout(ctx, testutil.Timeout(time.Minute))
-	defer cancel()
-	go poller.Run(pollCtx)
+	pollCtx, stopPolling := context.WithCancel(ctx)
+	polled := make(chan struct{})
+	go func() { poller.Run(pollCtx); close(polled) }()
+	t.Cleanup(func() { stopPolling(); <-polled })
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "two tasks run at once", func() bool {
 		return atomic.LoadInt32(&running) >= 2
 	})
 
@@ -190,7 +191,7 @@ func TestParentMessageCapAfterWorkers(t *testing.T) {
 		testutil.FailErr(t, "queue.EnqueueWithProjectID failed", err)
 	}
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "five tasks complete", func() bool {
 		tasks, _ := queue.List(ctx, testdbseed.DefaultProjectID, api.WorkerStatusComplete)
 		return len(tasks) >= 5
 	})

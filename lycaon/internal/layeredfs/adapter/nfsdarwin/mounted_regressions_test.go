@@ -272,7 +272,7 @@ func TestSpentCapabilityRefusesASecondMountFromTheMountTable(t *testing.T) {
 	if err := os.MkdirAll(dup, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	out, err := exec.Command(nfsdarwin.DefaultMountNFSBin, "-o", nfsdarwin.FormatMountOptions(facts.ServerPort), facts.ExportSource, dup).CombinedOutput()
+	out, err := exec.Command(nfsdarwin.DefaultMountNFSBin, "-o", facts.MountOptions, facts.ExportSource, dup).CombinedOutput()
 	if err == nil {
 		_ = exec.Command(nfsdarwin.DefaultUmountBin, "-f", dup).Run()
 		t.Fatalf("a second client mounted the export from the mount table: %s", out)

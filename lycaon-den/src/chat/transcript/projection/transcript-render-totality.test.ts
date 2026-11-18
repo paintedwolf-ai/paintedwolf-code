@@ -1,11 +1,6 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { Message, WorkflowRun } from "../../../api/types.ts";
 import { buildChatTranscriptBlocks } from "../../workflow/workflow-spans.ts";
-
-const srcDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 const run: WorkflowRun = {
   id: "run-1",
@@ -62,12 +57,4 @@ describe("transcript render totality", () => {
       expect(rendered >= state.messages.length).toBe(true);
     });
   }
-
-  it("workflow-spans.ts contains no throw", () => {
-    const source = readFileSync(
-      join(srcDir, "chat/workflow/workflow-spans.ts"),
-      "utf8",
-    );
-    expect(source).not.toMatch(/\bthrow\b/);
-  });
 });

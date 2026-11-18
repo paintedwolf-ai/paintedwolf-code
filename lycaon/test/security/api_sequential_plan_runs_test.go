@@ -52,7 +52,7 @@ func TestSequentialPlanRunsE2E(t *testing.T) {
 	}
 	var accepted wire.PromptAcceptedResponse
 	testutil.FailErr(t, "decode admitted prompt", json.Unmarshal(w.Body.Bytes(), &accepted))
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the admitted prompt settles", func() bool {
 		submission, err := sessionStore.GetPromptSubmission(ctx, accepted.OperationID)
 		testutil.FailErr(t, "read admitted prompt", err)
 		if !submission.Status.Terminal() {

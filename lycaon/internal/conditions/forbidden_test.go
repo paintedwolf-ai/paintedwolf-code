@@ -31,7 +31,7 @@ func TestRegisterAllowsParameterizedEvidence(t *testing.T) {
 	if err := reg.RegisterParameterized("evidence_passed:", func(_ EvalContext) (bool, error) {
 		return true, nil
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "reg.RegisterParameterized failed", err)
 	}
 	ok, err := reg.Evaluate("evidence_passed:verify", EvalContext{})
 	if err != nil || !ok {

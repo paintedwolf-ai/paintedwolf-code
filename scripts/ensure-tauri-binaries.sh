@@ -12,7 +12,7 @@ if [[ ! -f "${ROOT}/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md" ]]; then
     echo "error: native resources are missing; run ./task setup-dev -- --frontend, then ./task setup-dev -- --shell-resources" >&2
     exit 1
   fi
-  cp "${ROOT}/THIRD-PARTY-NOTICES.md" "${ROOT}/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md"
+  python3 "${ROOT}/scripts/stage-notices.py" "${ROOT}/THIRD-PARTY-NOTICES.md" "${ROOT}/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md"
 fi
 
 for name in pw pw-logs pw-document-core bialy; do
