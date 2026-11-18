@@ -43,7 +43,7 @@ func TestTransactionRecovery(t *testing.T) {
 			testutil.FailErr(t, "publisher", err)
 			_, err = publisher.Publish(t.Context(), PublishRequest{CheckpointID: "checkpoint", Trigger: TriggerWorkerCompletion})
 			testutil.FailErr(t, "publish", err)
-			config := PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}}
+			config := PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}, PrimaryRoot: "primary"}
 			promoter, err := NewPromoter(config)
 			testutil.FailErr(t, "promoter", err)
 			preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "checkpoint"})
@@ -181,7 +181,7 @@ func publishAndApplyHostCheckpoint(t *testing.T, primary, checkpointID string, m
 	testutil.FailErr(t, "publisher", err)
 	_, err = pub.Publish(t.Context(), PublishRequest{CheckpointID: checkpointID, Trigger: TriggerWorkerCompletion})
 	testutil.FailErr(t, "publish", err)
-	cfg := PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}}
+	cfg := PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}, PrimaryRoot: "primary"}
 	promoter, err := NewPromoter(cfg)
 	testutil.FailErr(t, "promoter", err)
 	preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: checkpointID})
@@ -470,7 +470,7 @@ func TestTransactionRollbackPackedRefDelete(t *testing.T) {
 	})
 	testutil.FailErr(t, "publish", err)
 
-	promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}})
+	promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}, PrimaryRoot: "primary"})
 	testutil.FailErr(t, "promoter", err)
 	preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "cp-packed"})
 	testutil.FailErr(t, "preview", err)

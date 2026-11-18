@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
@@ -144,7 +143,7 @@ func TestEditorActionPathDisplayMatchesAttachmentFence(t *testing.T) {
 				t.Fatal("invoke accepted without a message id")
 			}
 
-			contractfixture.WaitForSessionIdle(t, baseURL, sess.ID, 30*time.Second)
+			contractfixture.WaitForSessionIdle(t, baseURL, sess.ID)
 			msgs := contractfixture.ListMessagesAtURL(t, baseURL, sess.ID)
 			var prompt *wire.Message
 			for i := range msgs {

@@ -4,10 +4,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -20,6 +20,28 @@ func canonicalTestDir(t *testing.T, dir string) string {
 	abs, err := filepath.Abs(dir)
 	testutil.FailErr(t, "abs", err)
 	return filepath.Clean(abs)
+}
+
+// ensureLiveRoot binds a watch on dir and returns once its stream reports a
+// write, so a test's own writes are not made while the platform stream is
+// still starting.
+func ensureLiveRoot(t *testing.T, dir string) {
+	t.Helper()
+	root := canonicalTestDir(t, dir)
+	const barrier = ".watch-barrier"
+	var seen atomic.Bool
+	unbind := repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+		if ev.ProjectDir == root && ev.Kind == repochange.WorktreeChanged && slices.Contains(ev.Paths, barrier) {
+			seen.Store(true)
+		}
+	})
+	defer unbind()
+	repochange.EnsureRoot(t.Context(), dir)
+	testutil.FailErr(t, "write the watch barrier", os.WriteFile(filepath.Join(dir, barrier), nil, 0o644))
+	testutil.WaitFor(t, "the watch reports its barrier write", func() bool {
+		repochange.ResetDebouncerForTest(t.Context())
+		return seen.Load()
+	})
 }
 
 func TestWatcher_EmitsWorktreeChanged(t *testing.T) {
@@ -38,26 +60,18 @@ func TestWatcher_EmitsWorktreeChanged(t *testing.T) {
 		if ev.ProjectDir != root {
 			return
 		}
-		if ev.Kind == repochange.WorktreeChanged && ev.Source == repochange.SourceWatcher {
+		if ev.Kind == repochange.WorktreeChanged && ev.Source == repochange.SourceWatcher && slices.Contains(ev.Paths, "watched.txt") {
 			n.Add(1)
 			src = ev.Source
 		}
 	})
 
-	repochange.EnsureRoot(t.Context(), dir)
-	time.Sleep(50 * time.Millisecond)
+	ensureLiveRoot(t, dir)
 	testutil.FailErr(t, "write file", os.WriteFile(filepath.Join(dir, "watched.txt"), []byte("hi"), 0o644))
-
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the watcher reports WorktreeChanged", func() bool {
 		repochange.ResetDebouncerForTest(t.Context())
-		if n.Load() > 0 {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if n.Load() == 0 {
-		t.Fatal("expected watcher WorktreeChanged")
-	}
+		return n.Load() > 0
+	})
 	if src != repochange.SourceWatcher {
 		t.Fatalf("source=%q", src)
 	}
@@ -87,8 +101,7 @@ func TestWatcherEmitsForFilesNamedLikeDirectories(t *testing.T) {
 		}
 	})
 
-	repochange.EnsureRoot(t.Context(), dir)
-	time.Sleep(50 * time.Millisecond)
+	ensureLiveRoot(t, dir)
 
 	want := []string{"build", "vendor", "target", "out", "coverage", "dist", ".git", ".paintedwolf"}
 	for _, name := range want {
@@ -107,16 +120,10 @@ func TestWatcherEmitsForFilesNamedLikeDirectories(t *testing.T) {
 		}
 		return missing
 	}
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the watcher reports every source-file write", func() bool {
 		repochange.ResetDebouncerForTest(t.Context())
-		if len(missingNames()) == 0 {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if missing := missingNames(); len(missing) > 0 {
-		t.Fatalf("watcher dropped source-file writes: %v", missing)
-	}
+		return len(missingNames()) == 0
+	})
 }
 
 func TestEnsureRootAcceptsRootWithNestedJunk(t *testing.T) {
@@ -152,27 +159,18 @@ func TestWatcherObservesHiddenAndMetadataChildren(t *testing.T) {
 			seen[path] = true
 		}
 	})
-	repochange.EnsureRoot(t.Context(), dir)
+	ensureLiveRoot(t, dir)
 	repochange.SeedWatch(t.Context(), dir, directories)
-	time.Sleep(50 * time.Millisecond)
 	for _, name := range []string{".hidden/new.txt", ".paintedwolf/new.txt", ".git/objects/new.txt", ".git/config"} {
 		testutil.FailErr(t, "write metadata child", os.WriteFile(filepath.Join(dir, name), nil, 0600))
 	}
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the hidden and tool-metadata writes are reported", func() bool {
 		repochange.ResetDebouncerForTest(t.Context())
 		mu.Lock()
-		complete := seen[".hidden/new.txt"] && seen[".paintedwolf/new.txt"]
-		lazyMetadata := seen[".git/objects/new.txt"] || seen[".git/config"]
-		mu.Unlock()
-		if lazyMetadata {
+		defer mu.Unlock()
+		if seen[".git/objects/new.txt"] || seen[".git/config"] {
 			t.Fatal("lazy Git metadata triggered source reconciliation")
 		}
-		if complete {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	t.Fatalf("missing metadata events: %+v", seen)
+		return seen[".hidden/new.txt"] && seen[".paintedwolf/new.txt"]
+	})
 }

@@ -255,52 +255,6 @@
   background: var(--den-tint-1);
 }
 
-.den-diff-group {
-  position: relative;
-  border-radius: var(--den-radius);
-  background: var(--den-surface);
-  overflow: hidden;
-}
-/* The overlay border adds no height to the row. */
-.den-diff-group::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border: 1px solid var(--den-line);
-  border-radius: inherit;
-  pointer-events: none;
-}
-.den-diff-group > .den-transcript-disclosure-header {
-  display: flex;
-  align-items: center;
-  min-height: var(--den-transcript-card-row-h);
-  padding: 0 var(--den-transcript-card-inset-x);
-  border-bottom: 1px solid transparent;
-  background: transparent;
-  cursor: pointer;
-}
-.den-diff-group > .den-transcript-disclosure-header:hover {
-  background: var(--den-tint-2);
-}
-.den-diff-group > .den-transcript-disclosure-header:focus-visible {
-  outline: 2px solid var(--den-accent-signal);
-  outline-offset: -2px;
-}
-.den-diff-group[data-expanded="true"] > .den-transcript-disclosure-header {
-  border-bottom-color: color-mix(in srgb, var(--den-line) 55%, transparent);
-}
-.den-diff-group-summary {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.den-diff-group-files {
-  font-size: var(--text-den-label);
-  font-weight: 600;
-  color: var(--den-text);
-}
 .den-diff-group-stat {
   flex-shrink: 0;
   font-family: var(--den-font-mono);
@@ -309,11 +263,14 @@
   white-space: nowrap;
 }
 .den-diff-group-writes {
-  margin-left: auto;
   flex-shrink: 0;
   font-size: var(--text-den-caption);
   color: var(--den-text-muted);
   white-space: nowrap;
+}
+.den-diff-group-writes::before {
+  content: "\00b7";
+  margin-inline-end: 6px;
 }
 .den-diff-group-list {
   display: flex;

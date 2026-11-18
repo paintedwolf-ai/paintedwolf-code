@@ -1,10 +1,11 @@
 package oar
 
 import (
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/configlayout"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -24,7 +25,7 @@ func TestHostCapabilityDocumentCoversEveryCoreAnchor(t *testing.T) {
 	if p.ProfileMap.Version != "1.0" {
 		t.Fatalf("oar_profile_version = %q, want 1.0", p.ProfileMap.Version)
 	}
-	for _, core := range CoreAnchors() {
+	for _, core := range coreAnchors {
 		_, mapped := p.ProfileMap.Core[core]
 		unsupported := false
 		for _, u := range p.ProfileMap.Unsupported {
@@ -136,9 +137,9 @@ func TestCapabilityDocumentRejectsMalformedMaps(t *testing.T) {
 	}
 }
 
-// TestResolveRuleAnchorThroughProfile proves core anchors resolve to local ids
+// TestResolveAnchorThroughProfile proves core anchors resolve to local ids
 // through the host capability document, including the model-IO family.
-func TestResolveRuleAnchorThroughProfile(t *testing.T) {
+func TestResolveAnchorThroughProfile(t *testing.T) {
 	ensureCatalog(t)
 	p, err := LoadEngineDeclaration(hostCapabilityDocumentPath(t))
 	testutil.FailErr(t, "load host profile", err)
@@ -146,17 +147,17 @@ func TestResolveRuleAnchorThroughProfile(t *testing.T) {
 	InstallEngineDeclaration(p)
 	t.Cleanup(func() { InstallEngineDeclaration(prev) })
 
-	got, err := ResolveRuleAnchor("R", CoreAnchorAgentPostTurn)
+	got, err := p.ResolveAnchor(CoreAnchorAgentPostTurn)
 	testutil.FailErr(t, "resolve agent.post_turn", err)
 	if got != "coordinator.post_turn" {
 		t.Fatalf("agent.post_turn resolved to %q", got)
 	}
-	got, err = ResolveRuleAnchor("R", "coordinator.pre_invoke")
+	got, err = p.ResolveAnchor("coordinator.pre_invoke")
 	testutil.FailErr(t, "resolve host-native anchor", err)
 	if got != "coordinator.pre_invoke" {
 		t.Fatalf("host-native anchor rewritten to %q", got)
 	}
-	got, err = ResolveRuleAnchor("R", CoreAnchorModelInput)
+	got, err = p.ResolveAnchor(CoreAnchorModelInput)
 	testutil.FailErr(t, "resolve model.input", err)
 	if got != "content.input" {
 		t.Fatalf("model.input resolved to %q, want content.input", got)
@@ -200,7 +201,7 @@ func TestShippedRuleAnchorsResolveThroughTheCapabilityDocument(t *testing.T) {
 		if IsCoreAnchor(r.Anchor) && !local[r.Anchor] {
 			t.Errorf("rule %s resolved to core anchor %q, which no local anchor implements", r.ID, r.Anchor)
 		}
-		if err := RequireKnownCatalogAnchor(r.Anchor); err != nil {
+		if err := anchorcatalog.Require(r.Anchor); err != nil {
 			t.Errorf("rule %s: %v", r.ID, err)
 		}
 	}
@@ -209,7 +210,7 @@ func TestShippedRuleAnchorsResolveThroughTheCapabilityDocument(t *testing.T) {
 	if len(p.UnsupportedCoreAnchors()) != 0 {
 		t.Fatalf("unsupported core anchors = %v, want none", p.UnsupportedCoreAnchors())
 	}
-	got, err := ResolveRuleAnchor("PROBE", CoreAnchorModelInput)
+	got, err := p.ResolveAnchor(CoreAnchorModelInput)
 	testutil.FailErr(t, "resolve model.input", err)
 	if got != "content.input" {
 		t.Fatalf("model.input → %q", got)

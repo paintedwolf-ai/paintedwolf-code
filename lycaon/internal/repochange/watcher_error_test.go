@@ -39,7 +39,7 @@ func TestWatcherErrorInvalidatesRootAndCoverage(t *testing.T) {
 	go func() { w.loop(t.Context()); close(finished) }()
 	defer func() { close(w.done); <-finished }()
 	platform.errors <- errors.New("watch stream failed")
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the watcher error is observed", func() bool {
 		ResetDebouncerForTest(t.Context())
 		return observed.Load()
 	})

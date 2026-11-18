@@ -141,7 +141,7 @@ func TestSpecToolFeedbackRejectShape(t *testing.T) {
 			}
 			block, err := formatter.FormatBlock(ctx, "spec-session", sc.tool, specOutcomeView{out: *out}, progress, refusal.Copy)
 			contractcheck.FailErr(t, "formatter.FormatBlock failed", err)
-			if parsed := guidance.HostRejectCode(block); parsed != sc.wantCode {
+			if parsed := contractcheck.HostRejectCode(block); parsed != sc.wantCode {
 				t.Fatalf("HostRejectCode = %q want %q", parsed, sc.wantCode)
 			}
 			if !strings.Contains(block, sc.tool) {
@@ -198,7 +198,7 @@ func TestSpecToolFeedbackCompletionBannerShape(t *testing.T) {
 			if !got.Facts.HasCode(sc.wantCode) {
 				t.Fatalf("raised codes do not include %q: %+v", sc.wantCode, got.Facts)
 			}
-			if parsed := guidance.HostRejectCode(got.Output); parsed != sc.wantCode {
+			if parsed := contractcheck.HostRejectCode(got.Output); parsed != sc.wantCode {
 				t.Fatalf("emitted code = %q want %q:\n%s", parsed, sc.wantCode, got.Output)
 			}
 		})

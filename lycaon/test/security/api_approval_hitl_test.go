@@ -100,7 +100,7 @@ func deniedCopy(t *testing.T) string {
 func (h *approvalHITLHarness) waitPending(t *testing.T, done <-chan error) string {
 	t.Helper()
 	var checkpointID string
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the approval is pending", func() bool {
 		select {
 		case err := <-done:
 			t.Fatalf("prompt completed before approval: %v", err)

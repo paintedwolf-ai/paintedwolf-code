@@ -171,7 +171,7 @@ export function SourceDiffRow(props: Props) {
         setFindRoot(el);
       }}
       class="den-file-edit-diff"
-      classList={{ "den-transcript-disclosure-card": !asRow() }}
+      classList={{ "den-transcript-card": !asRow(), "den-transcript-disclosure-card": !asRow() }}
       data-testid="file-edit-diff"
       data-path={path()}
       data-chrome={asRow() ? "row" : "card"}

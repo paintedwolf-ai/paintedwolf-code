@@ -64,7 +64,7 @@ func (r *WorkspaceTrackerRegistry) EnsureTracker(
 		if hasCaps {
 			facts = caps.Facts
 		}
-		rootSpecs := buildRootSpecs(workspacePath, roots)
+		rootSpecs := buildRootSpecs(roots)
 		tr, err := observation.NewTracker(observation.TrackerConfig{
 			ViewID: viewID,
 			Facts:  facts,
@@ -80,7 +80,7 @@ func (r *WorkspaceTrackerRegistry) EnsureTracker(
 			Bindings:          make(map[string]observation.VerificationBinding),
 		}
 	} else if st.Tracker != nil {
-		rootSpecs := buildRootSpecs(firstNonEmpty(workspacePath, st.WorkspacePath), roots)
+		rootSpecs := buildRootSpecs(roots)
 		if len(rootSpecs) > 0 {
 			st.Tracker.BindCore(nil, rootSpecs...)
 		}
@@ -250,7 +250,7 @@ func indexStateLocked(r *WorkspaceTrackerRegistry, st *WorkspaceObservationState
 	}
 }
 
-func buildRootSpecs(primaryPath string, roots []projectroot.RootRef) []layeredfs.RootSpec {
+func buildRootSpecs(roots []projectroot.RootRef) []layeredfs.RootSpec {
 	var specs []layeredfs.RootSpec
 	seen := make(map[string]bool)
 	for _, r := range roots {
@@ -261,9 +261,6 @@ func buildRootSpecs(primaryPath string, roots []projectroot.RootRef) []layeredfs
 		}
 		seen[id] = true
 		specs = append(specs, layeredfs.RootSpec{ID: id, TrunkPath: p})
-	}
-	if primaryPath != "" && !seen["primary"] {
-		specs = append(specs, layeredfs.RootSpec{ID: "primary", TrunkPath: primaryPath})
 	}
 	return specs
 }

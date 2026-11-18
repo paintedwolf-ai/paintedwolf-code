@@ -110,7 +110,7 @@ func TestDerivedVisibilityFromCurrentRoots(t *testing.T) {
 			CreatedAt:     time.Now().UTC(),
 			HeadSHA:       "head1",
 		}, nil, ""); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "store.Insert failed", err)
 		}
 	}
 	insertComplete(primary, "scan-primary")
@@ -144,7 +144,7 @@ func TestDetachAndProjectDeleteRetainScanRows(t *testing.T) {
 		Status:        api.CodeScanStatusComplete,
 		CreatedAt:     time.Now().UTC(),
 	}, nil, ""); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.Insert failed", err)
 	}
 
 	_, err := sqlDB.ExecContext(ctx, `DELETE FROM project_roots WHERE path = ?`, dir)

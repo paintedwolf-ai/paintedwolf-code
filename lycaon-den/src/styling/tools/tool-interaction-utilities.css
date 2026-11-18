@@ -35,15 +35,13 @@
 
 /* Disclosure chrome and content share one measured timeline. */
 .den-tool-part > .den-transcript-disclosure-header,
-.den-activity-span > .den-transcript-disclosure-header,
-.den-citation-evidence-chicklet > .den-transcript-disclosure-header {
+.den-activity-span > .den-transcript-disclosure-header {
   border-bottom: 1px solid transparent;
   transition: border-color var(--den-duration-drawer) var(--den-ease);
 }
 
 .den-tool-part[data-closing] > .den-transcript-disclosure-header,
-.den-activity-span[data-closing] > .den-transcript-disclosure-header,
-.den-citation-evidence-chicklet[data-closing] > .den-transcript-disclosure-header {
+.den-activity-span[data-closing] > .den-transcript-disclosure-header {
   border-bottom-color: transparent;
 }
 
@@ -59,7 +57,6 @@
 @media (prefers-reduced-motion: reduce) {
   .den-tool-part > .den-transcript-disclosure-header,
   .den-activity-span > .den-transcript-disclosure-header,
-  .den-citation-evidence-chicklet > .den-transcript-disclosure-header,
   .den-tool-part-chicklet {
     transition: none;
   }

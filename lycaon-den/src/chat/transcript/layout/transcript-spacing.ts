@@ -2,28 +2,28 @@ import { createEffect, createRoot, createSignal } from "solid-js";
 import { effectiveTextScale } from "../../../platform/desktop/accessibility-text-size.ts";
 
 /** The rungs a vertical seam in the stream may take. */
-export type TranscriptSeam = "row" | "section" | "turn";
+export type TranscriptSeam = "part" | "row" | "section" | "turn";
 
 /**
  * Shared CSS lengths and estimate inputs.
  *
- * Four rungs carry every vertical seam: `partGap` inside one row, then the
- * three `*Gap` placement rungs between rows. Placement never invalidates
- * interior heights. Lengths that separate or surround text are rem, so they
- * follow the accessibility text scale the root font size carries; content
- * maxima stay px.
+ * Four rungs carry every vertical seam: `partGap` inside one row and above
+ * a row that reports on the one before it, then the three `*Gap` placement
+ * rungs between rows. Placement never invalidates interior heights. Lengths
+ * that separate or surround text are rem, so they follow the accessibility
+ * text scale the root font size carries; content maxima stay px.
  */
 export const TRANSCRIPT_SPACING = {
   partGap: { value: 0.5714, unit: "rem", affects: "row" },
   rowGap: { value: 0.8571, unit: "rem", affects: "placement" },
-  sectionGap: { value: 1.4286, unit: "rem", affects: "placement" },
+  sectionGap: { value: 2, unit: "rem", affects: "placement" },
   turnGap: { value: 5.1429, unit: "rem", affects: "placement" },
   userWidth: { value: 78, unit: "%", affects: "row" },
   userPaddingX: { value: 0.9286, unit: "rem", affects: "row" },
   userPaddingY: { value: 0.6429, unit: "rem", affects: "row" },
   userLineHeight: { value: 1.45, unit: "", affects: "row" },
   proseLineHeight: { value: 1.55, unit: "", affects: "row" },
-  paragraphGap: { value: 0.65, unit: "em", affects: "row" },
+  paragraphGap: { value: 0.9, unit: "em", affects: "row" },
   headingBefore: { value: 1, unit: "em", affects: "row" },
   headingAfter: { value: 0.4, unit: "em", affects: "row" },
   headingLineHeight: { value: 1.25, unit: "", affects: "row" },
@@ -57,6 +57,7 @@ export const TRANSCRIPT_SPACING = {
 } as const;
 
 const SEAM_RUNG = {
+  part: "partGap",
   row: "rowGap",
   section: "sectionGap",
   turn: "turnGap",

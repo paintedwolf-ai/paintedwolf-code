@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -429,6 +430,43 @@ func TestPublicationPrecedesToolsAndToolsAlwaysRun(t *testing.T) {
 			}
 			if !tc.note && guard.DeriveWaitVisibility(out).Unpublished != (tc.notice != "") {
 				t.Fatalf("debt = %+v", guard.DeriveWaitVisibility(out))
+			}
+		})
+	}
+}
+
+// A reader sees the note above the calls it introduces, so the note is stored
+// before the carrier's calls reach the transcript.
+func TestNoteIsStoredBeforeItsCarrierShows(t *testing.T) {
+	seeded := []evidence.Record{{Handle: "read#3", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go", LineRanges: []evidence.LineRange{{Start: 40, End: 50}}}}
+	observed := api.Message{ID: "t0", Role: api.MessageRoleTool, EvidenceHandles: []string{"read#3"}, ToolResult: &api.ToolResult{Tool: "read"}}
+	for _, tc := range []struct {
+		name string
+		text string
+		want []string
+	}{
+		{name: "published text", text: "Found it in [read#3:42].", want: []string{"note", "carrier", "recall"}},
+		{name: "withheld text", text: "Still looking.", want: []string{"carrier", "recall"}},
+		{name: "no text", text: "", want: []string{"carrier", "recall"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newMidTurnHarness(t, publishingSurface)
+			h.ledger.records = seeded
+			h.loop.Projection.Deps.UpdateMessage = func(_ context.Context, _, id string, msg api.Message) error {
+				if id == "c1" && msg.Visibility == api.MessageVisibilityTranscript {
+					h.order = append(h.order, "carrier")
+				}
+				return nil
+			}
+			toolCalls := []api.ToolCall{{ID: "c1-a", Name: "recall", Args: map[string]any{"path": "a.go"}}}
+			history := []api.Message{midTurnUser(), observed, {
+				ID: "c1", Role: api.MessageRoleAssistant, Visibility: api.MessageVisibilityInternal, Content: tc.text, ToolCalls: toolCalls,
+			}}
+			_, err := h.loop.Batch.executeToolCallsInTurn(context.Background(), h.sess, h.sess.ID, toolCalls,
+				tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: h.sess.ID, Agent: "coordinator"}}, history, "go", "c1", publishingSurface, midTurnState(t, publishingSurface))
+			testutil.FailErr(t, "execute batch", err)
+			if !slices.Equal(h.order, tc.want) {
+				t.Fatalf("order = %v, want %v", h.order, tc.want)
 			}
 		})
 	}

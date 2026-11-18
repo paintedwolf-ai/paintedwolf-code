@@ -40,6 +40,11 @@ class ShellResourcesTests(unittest.TestCase):
             (scripts / "toolchain").mkdir(exist_ok=True)
             (scripts / "toolchain/decide-test.sh").write_text("#!/bin/bash\nexit 0\n")
             (scripts / "build-decide.sh").write_text("#!/bin/bash\nexit 0\n")
+            (scripts / "generation").mkdir()
+            (scripts / "generation/run.sh").write_text(
+                '#!/bin/bash\nset -eu\n'
+                'root="$(cd "$(dirname "$0")/../.." && pwd)"\n'
+                'printf "generation %s %s\\n" "$1" "$3" >> "$root/operations"\n')
             binary = root / "bin"
             binary.mkdir()
             cargo = binary / "cargo"
@@ -57,7 +62,8 @@ class ShellResourcesTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(notices.read_text(), "qualified notices")
                     operations = (root / "operations").read_text().splitlines()
-                    self.assertEqual(operations, ["notices"] if flag == "--shell-resources" else ["notices", "stage"])
+                    self.assertEqual(operations, ["notices"] if flag == "--shell-resources" else
+                                     ["notices", "stage", "generation prepare native", "generation build native"])
                     (root / "operations").unlink()
                     notices.unlink()
 

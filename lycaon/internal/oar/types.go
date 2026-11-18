@@ -2,9 +2,10 @@ package oar
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/oarcore"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/oarcore"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 )
