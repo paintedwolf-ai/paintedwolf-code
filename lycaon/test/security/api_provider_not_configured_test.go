@@ -74,14 +74,6 @@ func postPromptExpectNotConfigured(t *testing.T, srv *api.Server, sessionID stri
 	}
 }
 
-func TestPromptWithoutProviderReturnsNotConfigured(t *testing.T) {
-
-	_, projectDir := noMockServeEnv(t)
-	serveApp := buildNoMockServeApp(t)
-	sess := createSessionHTTP(t, serveApp.Server, projectDir)
-	postPromptExpectNotConfigured(t, serveApp.Server, sess.ID)
-}
-
 func TestPromptWithoutProviderLeavesNoAssistantMessage(t *testing.T) {
 
 	_, projectDir := noMockServeEnv(t)

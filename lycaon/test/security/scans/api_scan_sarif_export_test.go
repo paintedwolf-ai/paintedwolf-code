@@ -2,9 +2,9 @@ package scans
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/test/security"
@@ -33,9 +33,20 @@ func TestAPIScanSARIFExportHappyPath(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "application/sarif+json" {
 		t.Fatalf("content-type = %q", ct)
 	}
-	body := w.Body.String()
-	if !strings.Contains(body, `"version"`) || !strings.Contains(body, `"runs"`) {
-		t.Fatalf("body missing SARIF envelope: %s", body)
+	var sarif struct {
+		Version string `json:"version"`
+		Runs    []struct {
+			Results []json.RawMessage `json:"results"`
+		} `json:"runs"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &sarif); err != nil {
+		t.Fatalf("decode SARIF: %v body=%s", err, w.Body.String())
+	}
+	if got.FindingsCount == 0 {
+		t.Fatal("the secret fixture scan reported no findings")
+	}
+	if sarif.Version != "2.1.0" || len(sarif.Runs) != 1 || len(sarif.Runs[0].Results) != got.FindingsCount {
+		t.Fatalf("SARIF version %q with %d runs, want 2.1.0 with one run of %d results", sarif.Version, len(sarif.Runs), got.FindingsCount)
 	}
 	security.AssertResponseMatchesOpenAPI(t, w, http.MethodGet, "/v1/projects/{id}/scans/{scan_id}/sarif", map[string]string{"id": created.ProjectID, "scan_id": created.ID})
 }

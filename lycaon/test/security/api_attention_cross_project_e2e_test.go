@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/test/wiring"
 )
 
 // Attention events cross project filters. A pending checkpoint persists through publisher coalescing.
@@ -114,19 +113,41 @@ func waitAttentionClear(
 }
 
 func TestAttentionSnapshotEndpointE2E(t *testing.T) {
-	h := wiring.BuildForTest(t)
-	httpSrv := httptest.NewServer(h.Server)
+	h := newApprovalHITLHarness(t)
+	httpSrv := httptest.NewServer(h.srv)
 	t.Cleanup(httpSrv.Close)
 	base := httpSrv.URL
-
-	project := CreateAPIProjectAtPath(t, base, t.TempDir())
 	idle := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
-		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
+		`{"project_id":"`+h.sess.ProjectID+`","posture":"build"}`, http.StatusAccepted)
+
+	done := h.runPrompt(t)
+	decisionID := h.waitPending(t, done)
 
 	view := OpenAPIGetJSON[wire.AttentionView](t, base, "/v1/attention", nil, http.StatusOK)
-	for _, row := range view.Rows {
-		if row.SessionID == idle.ID {
-			t.Fatalf("a session that has done nothing must not be asking for attention: %+v", row)
+	var blocked *wire.AttentionRow
+	for i, row := range view.Rows {
+		switch row.SessionID {
+		case idle.ID:
+			t.Fatalf("a session that has done nothing is asking for attention: %+v", row)
+		case h.sess.ID:
+			blocked = &view.Rows[i]
 		}
 	}
+	if blocked == nil {
+		t.Fatalf("session with a pending checkpoint is missing from /v1/attention: %+v", view.Rows)
+	}
+	if blocked.Class != wire.AttentionClassNeedsYou || blocked.Reason != wire.AttentionReasonCheckpoint || blocked.ProjectID != h.sess.ProjectID {
+		t.Fatalf("attention row = %+v, want needs_you/checkpoint in project %s", *blocked, h.sess.ProjectID)
+	}
+
+	req := AuthedRequest(t, http.MethodPost,
+		"/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID,
+		strings.NewReader(`{"kind":"tool_approval","action":"approve","option_id":"approve_current_action"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("approve status = %d body = %s", w.Code, w.Body.String())
+	}
+	testutil.FailErr(t, "prompt", <-done)
 }

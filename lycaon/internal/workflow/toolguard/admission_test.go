@@ -28,7 +28,14 @@ func TestRequireSessionProjectUsesPersistedWorkspace(t *testing.T) {
 		session *api.Session
 		err     error
 		allow   bool
-	}{{"same workspace", &api.Session{WorkspacePath: "/project"}, nil, true}, {"unbound session", &api.Session{}, nil, true}, {"different workspace", &api.Session{WorkspacePath: "/other"}, nil, false}, {"missing session", nil, nil, false}, {"store cancellation", nil, context.Canceled, false}} {
+		want    error
+	}{
+		{"same workspace", &api.Session{WorkspacePath: "/project"}, nil, true, nil},
+		{"unbound session", &api.Session{}, nil, true, nil},
+		{"different workspace", &api.Session{WorkspacePath: "/other"}, nil, false, ErrProjectMismatch},
+		{"missing session", nil, nil, false, nil},
+		{"store cancellation", nil, context.Canceled, false, context.Canceled},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &boundSession{session: tc.session, err: tc.err}
 			ctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}}
@@ -37,8 +44,8 @@ func TestRequireSessionProjectUsesPersistedWorkspace(t *testing.T) {
 			if (err == nil) != tc.allow || store.id != "session" {
 				t.Fatalf("session project admission=%v lookup=%q", err, store.id)
 			}
-			if tc.err != nil && !errors.Is(err, tc.err) {
-				t.Fatalf("store error lost: %v", err)
+			if tc.want != nil && !errors.Is(err, tc.want) {
+				t.Fatalf("refusal = %v, want %v", err, tc.want)
 			}
 		})
 	}

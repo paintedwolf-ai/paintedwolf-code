@@ -92,7 +92,7 @@ func admissionJSONPath(t *testing.T, path string) string {
 func assertProjectRootEditorOnly(t *testing.T, base, path, code string) {
 	t.Helper()
 	created := createAPIProject(t, base, `{"roots":[{"path":`+admissionJSONPath(t, path)+`}]}`)
-	read := openAPIGetJSON[wire.Project](t, base, "/v1/projects/{id}", map[string]string{"id": created.ID}, http.StatusOK)
+	read := OpenAPIGetJSON[wire.Project](t, base, "/v1/projects/{id}", map[string]string{"id": created.ID}, http.StatusOK)
 	for name, p := range map[string]wire.Project{"created": created, "read back": read} {
 		if len(p.Roots) != 1 || p.Roots[0].Admitted || p.Roots[0].AdmissionCode == nil || *p.Roots[0].AdmissionCode != code {
 			t.Fatalf("%s root %s = %+v, want editor-only with %q", name, path, p.Roots, code)
@@ -107,7 +107,7 @@ func assertProjectRootEditorOnly(t *testing.T, base, path, code string) {
 // admitted with no code.
 func assertProjectRootAdmitted(t *testing.T, base string) {
 	t.Helper()
-	created := createAPIProjectAtPath(t, base, t.TempDir())
+	created := CreateAPIProjectAtPath(t, base, t.TempDir())
 	if len(created.Roots) != 1 || !created.Roots[0].Admitted || created.Roots[0].AdmissionCode != nil {
 		t.Fatalf("positive control: ordinary root = %+v, want admitted", created.Roots)
 	}
@@ -135,4 +135,13 @@ func TestConfinementIntegrityTokenHolderCannotAdmitControlPlaneRoot(t *testing.T
 	}
 	assertProjectRootEditorOnly(t, srv.URL, cfg, confine.WriteRootCodeSecretStore)
 	assertProjectRootAdmitted(t, srv.URL)
+}
+
+func offersTool(offered []tools.ToolMeta, name string) bool {
+	for _, tool := range offered {
+		if tool.Name == name {
+			return true
+		}
+	}
+	return false
 }

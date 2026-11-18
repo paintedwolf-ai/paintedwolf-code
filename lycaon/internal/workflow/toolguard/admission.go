@@ -2,6 +2,7 @@ package toolguard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -12,6 +13,10 @@ import (
 type Sessions interface {
 	Get(context.Context, string) (*api.Session, error)
 }
+
+// ErrProjectMismatch refuses a tool call whose active root is not the
+// session's bound workspace.
+var ErrProjectMismatch = errors.New("project_dir mismatch")
 
 func RequireSessionProject(ctx context.Context, store Sessions, tctx tools.ToolContext) error {
 	if strings.TrimSpace(tctx.ActiveRootPath()) == "" {
@@ -31,7 +36,7 @@ func RequireSessionProject(ctx context.Context, store Sessions, tctx tools.ToolC
 		return fmt.Errorf("session not found")
 	}
 	if strings.TrimSpace(sess.WorkspacePath) != "" && sess.WorkspacePath != tctx.ActiveRootPath() {
-		return fmt.Errorf("project_dir mismatch")
+		return ErrProjectMismatch
 	}
 	return nil
 }

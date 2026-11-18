@@ -153,3 +153,67 @@ func TestBindLegWorkspacesDestroysBindingsWhenLegUpdateFails(t *testing.T) {
 		t.Fatalf("destroyed = %v want the created unit-1 binding", binder.destroyed)
 	}
 }
+
+var errDispatchRefused = errors.New("dispatch refused by test")
+
+// refusingDispatchWorkers stops a run at its first dispatch so a test can
+// observe what the run wrote before it.
+type refusingDispatchWorkers struct {
+	*orchestration.MemoryTopologyWorkers
+}
+
+func (s *refusingDispatchWorkers) DispatchUnit(context.Context, string, string) (*orchestration.TopologyUnit, error) {
+	return nil, errDispatchRefused
+}
+
+func TestIsolatedFanOutRequiresWorkspaceBinder(t *testing.T) {
+	isolatedFanOut := func(sessionID string) orchestration.RunRequest {
+		return orchestration.RunRequest{
+			SessionID: sessionID,
+			Topology: orchestration.TopologySpec{
+				Pattern:       orchestration.TopologyFanOut,
+				WorkspaceMode: orchestration.WorkspaceIsolated,
+				FanOut: &orchestration.FanOutSpec{
+					ProfileID: orchestration.ProfileImplementer,
+					Subtasks:  []string{"approach A", "approach B"},
+				},
+			},
+			Input: map[string]any{"project_dir": t.TempDir(), "project_id": "proj-1"},
+		}
+	}
+
+	t.Run("without a binder the run is refused before any batch", func(t *testing.T) {
+		workers := &refusingDispatchWorkers{orchestration.NewMemoryTopologyWorkers()}
+		orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
+			Workers: workers,
+			Agents:  orchestration.NewMemoryAgentRegistryForTest(),
+		})
+		_, err := orch.Run(t.Context(), isolatedFanOut("sess-unbound"))
+		if !errors.Is(err, orchestration.ErrIsolationUnavailable) {
+			t.Fatalf("err = %v, want ErrIsolationUnavailable", err)
+		}
+		if id, ok, _ := workers.BatchBySession(t.Context(), "sess-unbound"); ok {
+			t.Fatalf("refused run wrote batch %q", id)
+		}
+	})
+
+	t.Run("with a binder every leg is bound before dispatch", func(t *testing.T) {
+		binder := &stubWorkspaceBinder{}
+		workers := &refusingDispatchWorkers{orchestration.NewMemoryTopologyWorkers()}
+		orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
+			Workers:    workers,
+			Workspaces: binder,
+			Agents:     orchestration.NewMemoryAgentRegistryForTest(),
+		})
+		_, err := orch.Run(t.Context(), isolatedFanOut("sess-bound"))
+		if !errors.Is(err, errDispatchRefused) {
+			t.Fatalf("err = %v, want the dispatch refusal", err)
+		}
+		if _, ok, _ := workers.BatchBySession(t.Context(), "sess-bound"); !ok {
+			t.Fatal("bound run wrote no batch")
+		}
+		if len(binder.created) != 2 || len(binder.destroyed) != 2 {
+			t.Fatalf("bindings created = %d destroyed = %d, want 2 and 2", len(binder.created), len(binder.destroyed))
+		}
+	})
+}

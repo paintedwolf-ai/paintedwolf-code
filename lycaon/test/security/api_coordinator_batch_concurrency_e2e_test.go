@@ -123,15 +123,26 @@ func TestHTTPCoordinatorBatchWorkersOnPackBoardE2E(t *testing.T) {
 	acceptPromptHTTP(t, h.Server, sess.ID, "HTTP_ROSTER")
 	waitTaskEnqueueCountHTTP(t, h.Server, sess.ID, 2)
 
-	_, err := h.Store.GetMessages(ctx, sess.ID)
-	testutil.FailErr(t, "GetMessages", err)
+	jobs, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending, api.WorkerStatusRunning)
+	testutil.FailErr(t, "ListBySession", err)
+	wantJobs := map[string]string{}
+	for _, job := range jobs {
+		wantJobs[job.ID] = job.AgentType
+	}
 
 	board, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"detail_level": "compact"}, SecurityToolContext(sess.ID, sess.WorkspacePath, "coordinator"))
 	testutil.FailErr(t, "pack_board", err)
 	var view api.BoardView
 	testutil.FailErr(t, "decode pack_board", json.Unmarshal([]byte(board), &view))
-	if len(view.Workers) != 2 {
-		t.Fatalf("pack_board workers = %+v, want the two dispatched workers", view.Workers)
+	gotAgents := map[string]bool{}
+	for _, w := range view.Workers {
+		gotAgents[w.AgentType] = true
+		if agent, ok := wantJobs[w.LatestJobID]; !ok || agent != w.AgentType {
+			t.Fatalf("pack_board worker %+v does not match an in-flight job %v", w, wantJobs)
+		}
+	}
+	if len(view.Workers) != 2 || !gotAgents["repo-researcher"] || !gotAgents["path-explorer"] {
+		t.Fatalf("pack_board workers = %+v, want repo-researcher and path-explorer", view.Workers)
 	}
 }
 

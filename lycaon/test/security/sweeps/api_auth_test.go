@@ -13,6 +13,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -142,17 +144,19 @@ func TestCreateProjectAllowsAnyExistingDirectoryWhileActionGuardStaysFailClosed(
 		return w.Code, string(security.DecodeAPIError(t, w).Code)
 	}
 
+	type refusal struct{ code, reason string }
+	secretStore := &refusal{isolation.CodeCapabilityRequestInvalid, confine.WriteRootCodeSecretStore}
 	cases := []struct {
-		name              string
-		path              string
-		expectActionBlock bool
+		name string
+		path string
+		want *refusal
 	}{
-		{"home directory", home, false},
-		{"dot-config directory", filepath.Join(home, ".config"), false},
-		{"ssh directory", filepath.Join(home, ".ssh"), true},
-		{"credential store", filepath.Join(home, "Library", "Keychains"), true},
-		{"device config root", cfgRoot, true},
-		{"ordinary folder", t.TempDir(), false},
+		{"home directory", home, nil},
+		{"dot-config directory", filepath.Join(home, ".config"), nil},
+		{"ssh directory", filepath.Join(home, ".ssh"), secretStore},
+		{"credential store", filepath.Join(home, "Library", "Keychains"), secretStore},
+		{"device config root", cfgRoot, secretStore},
+		{"ordinary folder", t.TempDir(), nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -161,8 +165,13 @@ func TestCreateProjectAllowsAnyExistingDirectoryWhileActionGuardStaysFailClosed(
 				t.Fatalf("%s (%s): status = %d code = %q, want 201 Created", tc.name, tc.path, status, code)
 			}
 			reject := tools.ValidateAttachedRootsForAction([]string{tc.path})
-			if tc.expectActionBlock && reject == nil {
-				t.Fatalf("%s (%s): expected ValidateAttachedRootsForAction to refuse execution root", tc.name, tc.path)
+			switch {
+			case tc.want == nil && reject != nil:
+				t.Fatalf("%s: action refused with %s %v, want allowed", tc.name, reject.Code, reject.Data)
+			case tc.want != nil && reject == nil:
+				t.Fatalf("%s: action allowed, want %s %s", tc.name, tc.want.code, tc.want.reason)
+			case tc.want != nil && (reject.Code != tc.want.code || reject.Data["reason"] != tc.want.reason):
+				t.Fatalf("%s: refusal = %s %v, want %s %s", tc.name, reject.Code, reject.Data["reason"], tc.want.code, tc.want.reason)
 			}
 		})
 	}

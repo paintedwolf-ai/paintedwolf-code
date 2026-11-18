@@ -37,6 +37,9 @@ func TestPromptUserImageRejectsURLMime(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
+	if code := DecodeAPIError(t, w).Code; code != "unsupported_attachment" {
+		t.Fatalf("code = %q want unsupported_attachment", code)
+	}
 }
 
 func TestPromptUserImageAcceptsSafePNG(t *testing.T) {
