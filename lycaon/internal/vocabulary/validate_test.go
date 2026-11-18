@@ -93,3 +93,26 @@ func TestBundledSpecRulesResolveViaRegistry(t *testing.T) {
 		t.Fatalf("code = %q", out.Code)
 	}
 }
+
+// A registered parameterized family validates with any argument; an
+// unregistered family with the same shape does not.
+func TestValidateBundledAcceptsParameterizedPhasePredicate(t *testing.T) {
+	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
+	testutil.FailErr(t, "build conditions registry", err)
+	validate := func(completeWhen string) []api.ComposeValidationError {
+		return ValidateBundled(reg, workflowdef.NewRegistry(map[string]workflowdef.Manifest{
+			"phase-skip@1.0.0": workflowdef.FinalizeManifest(workflowdef.Manifest{
+				ID:        "phase-skip",
+				Version:   "1.0.0",
+				PhaseDefs: []workflowdef.PhaseDef{{ID: "research", CompleteWhen: completeWhen}},
+			}),
+		}), nil)
+	}
+	if diags := validate("phase_skipped:research"); len(diags) > 0 {
+		t.Fatalf("parameterized phase predicate should validate: %v", diags)
+	}
+	diags := validate("phase_vanished:research")
+	if len(diags) != 1 || diags[0].Code != "unknown_predicate" {
+		t.Fatalf("unregistered family diagnostics = %+v want one unknown_predicate", diags)
+	}
+}

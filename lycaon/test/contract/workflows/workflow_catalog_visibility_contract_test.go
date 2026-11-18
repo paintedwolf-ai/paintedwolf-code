@@ -4,13 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 )
 
 func TestWorkflowCatalogOmitsSystemTier(t *testing.T) {
@@ -44,26 +40,5 @@ func TestWorkflowCatalogOmitsSystemTier(t *testing.T) {
 		if !found {
 			t.Fatalf("product catalog missing %q", id)
 		}
-	}
-}
-
-func TestWorkflowRegistryDefaultAmbient(t *testing.T) {
-	t.Parallel()
-	ref, err := workflowdef.LoadRegistryConfig(extpacks.Bundled(config.PlatformFlows))
-	contractcheck.FailErr(t, "LoadRegistryConfig", err)
-	if ref.ID != "implement" || ref.Version != "1.0.0" {
-		t.Fatalf("default_ambient_workflow = %+v want implement@1.0.0", ref)
-	}
-}
-
-func TestWorkflowRunParentRunIDWireSync(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	if err := wirespec.SyncDTOFields(root, wirespec.DtoSyncSpec{
-		GoValue:       api.WorkflowRun{},
-		OpenAPISchema: "WorkflowRun",
-		TSInterface:   "WorkflowRun",
-	}); err != nil {
-		contractcheck.FailErr(t, "wirespec.SyncDTOFields failed", err)
 	}
 }

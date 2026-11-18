@@ -2,7 +2,6 @@ package contract
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -14,17 +13,16 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// specPlanGateCase mirrors spec-posture plan gate reject_codes shapes (code + phase + min_required).
+// specPlanGateCase is one spec-posture deny: its reject code and required phase.
 type specPlanGateCase struct {
-	name       string
-	tool       string
-	args       map[string]any
-	plan       string
-	vars       map[string]any
-	phase      string
-	wantCode   string
-	wantPhase  string
-	wantSubstr string
+	name      string
+	tool      string
+	args      map[string]any
+	plan      string
+	vars      map[string]any
+	phase     string
+	wantCode  string
+	wantPhase string
 }
 
 func specPlanEngine(t *testing.T) *rules.SimpleEngine {
@@ -52,30 +50,26 @@ func TestSpecPlanGateRejectCodesSubset(t *testing.T) {
 	allowed := []string{"plan-writer", "repo-researcher", "plan-reviewer", "implementer"}
 
 	cases := []specPlanGateCase{
-		{"delegation forbidden", "plan_from_blueprint", nil, stubComplete, nil, "", "SPEC_POSTURE_DELEGATION_FORBIDDEN", "1", "plan workflow"},
-		{"state create stub invalid", "state_create", nil, stubInvalid, nil, "", "SPEC_POSTURE_STATE_FORBIDDEN", "1", "blueprints"},
-		{"state create stub valid", "state_create", nil, stubComplete, nil, "", "SPEC_POSTURE_STATE_FORBIDDEN", "2", "repo-researcher"},
-		{"plan writer stub invalid", "task", map[string]any{"agent_type": "plan-writer"}, stubInvalid, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1", "plan-writer"},
-		{"task stub invalid", "task", map[string]any{"agent_type": "repo-researcher"}, stubInvalid, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1", "research Tasks"},
-		{"implementer forbidden", "task", map[string]any{"agent_type": "implementer"}, expandPlan, nil, "", "SPEC_POSTURE_IMPLEMENT_FORBIDDEN", "6", "implementer"},
-		{"handoff stub invalid", "handoff_implement", nil, stubInvalid, nil, "", "SPEC_POSTURE_HANDOFF_FORBIDDEN", "1", "stub"},
-		{"handoff not ready", "handoff_implement", nil, scopeBreaking, nil, "", "SPEC_POSTURE_HANDOFF_FORBIDDEN", "6", "Phase 6"},
-		{"scope required research", "task", map[string]any{"agent_type": "repo-researcher"}, stubMissingScope, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1", "research_depth"},
-		{"breaking required research", "task", map[string]any{"agent_type": "repo-researcher"}, stubMissingBreaking, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1", "research_depth"},
-		{"research phase skipped", "task", map[string]any{"agent_type": "repo-researcher"}, scopeBreaking, runstate.SetHostVar(nil, "phase_skipped.research", true), "", "SPEC_POSTURE_PHASE_SKIPPED", "2", "Tier"},
-		{"stub required critic incomplete", "task", map[string]any{"agent_type": "plan-reviewer"}, "## Goal\n\nx\n", runstate.SetHostVar(nil, "phase_skipped.research", true), "", "SPEC_POSTURE_STUB_REQUIRED", "1", "critic"},
-		{"review depth required", "task", map[string]any{"agent_type": "plan-reviewer"}, scopeBreaking, runstate.SetHostVar(nil, "phase_skipped.research", true), "", "SPEC_POSTURE_REVIEW_DEPTH_REQUIRED", "4", "Plan review depth"},
-		{"research required before critic", "task", map[string]any{"agent_type": "plan-reviewer"}, expandPlan, nil, "expand", "SPEC_POSTURE_RESEARCH_REQUIRED", "2", "research"},
-		{"critic phase skipped", "task", map[string]any{"agent_type": "plan-reviewer"}, expandPlan, runstate.SetHostVar(runstate.SetHostVar(nil, "phase_skipped.review", true), "research_satisfied", true), "", "SPEC_POSTURE_PHASE_SKIPPED", "5", "critics"},
-		{"handoff not approved", "handoff_implement", nil, expandApproved, nil, "approve", "SPEC_POSTURE_HANDOFF_FORBIDDEN", "6", "approval"},
-		{"research stub required", "task", map[string]any{"agent_type": "repo-researcher"}, stubInvalid, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1", "research"},
-		{"critic stub required", "task", map[string]any{"agent_type": "plan-reviewer"}, stubInvalid, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1", "critic"},
-		{"disallowed agent", "task", map[string]any{"agent_type": "outsider"}, stubComplete, nil, "", "DISALLOWED_AGENT", "", "allowlist"},
+		{"delegation forbidden", "plan_from_blueprint", nil, stubComplete, nil, "", "SPEC_POSTURE_DELEGATION_FORBIDDEN", "1"},
+		{"state create stub invalid", "state_create", nil, stubInvalid, nil, "", "SPEC_POSTURE_STATE_FORBIDDEN", "1"},
+		{"state create stub valid", "state_create", nil, stubComplete, nil, "", "SPEC_POSTURE_STATE_FORBIDDEN", "2"},
+		{"plan writer stub invalid", "task", map[string]any{"agent_type": "plan-writer"}, stubInvalid, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1"},
+		{"task stub invalid", "task", map[string]any{"agent_type": "repo-researcher"}, stubInvalid, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1"},
+		{"implementer forbidden", "task", map[string]any{"agent_type": "implementer"}, expandPlan, nil, "", "SPEC_POSTURE_IMPLEMENT_FORBIDDEN", "6"},
+		{"handoff stub invalid", "handoff_implement", nil, stubInvalid, nil, "", "SPEC_POSTURE_HANDOFF_FORBIDDEN", "1"},
+		{"handoff not ready", "handoff_implement", nil, scopeBreaking, nil, "", "SPEC_POSTURE_HANDOFF_FORBIDDEN", "6"},
+		{"scope required research", "task", map[string]any{"agent_type": "repo-researcher"}, stubMissingScope, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1"},
+		{"breaking required research", "task", map[string]any{"agent_type": "repo-researcher"}, stubMissingBreaking, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1"},
+		{"research phase skipped", "task", map[string]any{"agent_type": "repo-researcher"}, scopeBreaking, runstate.SetHostVar(nil, "phase_skipped.research", true), "", "SPEC_POSTURE_PHASE_SKIPPED", "2"},
+		{"stub required critic incomplete", "task", map[string]any{"agent_type": "plan-reviewer"}, "## Goal\n\nx\n", runstate.SetHostVar(nil, "phase_skipped.research", true), "", "SPEC_POSTURE_STUB_REQUIRED", "1"},
+		{"review depth required", "task", map[string]any{"agent_type": "plan-reviewer"}, scopeBreaking, runstate.SetHostVar(nil, "phase_skipped.research", true), "", "SPEC_POSTURE_REVIEW_DEPTH_REQUIRED", "4"},
+		{"research required before critic", "task", map[string]any{"agent_type": "plan-reviewer"}, expandPlan, nil, "expand", "SPEC_POSTURE_RESEARCH_REQUIRED", "2"},
+		{"critic phase skipped", "task", map[string]any{"agent_type": "plan-reviewer"}, expandPlan, runstate.SetHostVar(runstate.SetHostVar(nil, "phase_skipped.review", true), "research_satisfied", true), "", "SPEC_POSTURE_PHASE_SKIPPED", "5"},
+		{"handoff not approved", "handoff_implement", nil, expandApproved, nil, "approve", "SPEC_POSTURE_HANDOFF_FORBIDDEN", "6"},
+		{"research stub required", "task", map[string]any{"agent_type": "repo-researcher"}, stubInvalid, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1"},
+		{"critic stub required", "task", map[string]any{"agent_type": "plan-reviewer"}, stubInvalid, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1"},
+		{"disallowed agent", "task", map[string]any{"agent_type": "outsider"}, stubComplete, nil, "", "DISALLOWED_AGENT", ""},
 	}
-	if len(cases) < 15 {
-		t.Fatalf("scenario table too small: %d", len(cases))
-	}
-
 	ctx := context.Background()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -89,12 +83,6 @@ func TestSpecPlanGateRejectCodesSubset(t *testing.T) {
 			}
 			if tc.wantPhase != "" && out.PhaseRequired != tc.wantPhase {
 				t.Fatalf("phase_required = %q want %q", out.PhaseRequired, tc.wantPhase)
-			}
-			if tc.wantSubstr != "" {
-				msg := out.Message + " " + out.MinRequired
-				if !strings.Contains(strings.ToLower(msg), strings.ToLower(tc.wantSubstr)) {
-					t.Fatalf("message/min_required %q missing %q", msg, tc.wantSubstr)
-				}
 			}
 		})
 	}

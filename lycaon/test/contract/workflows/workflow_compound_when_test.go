@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -28,27 +30,50 @@ func TestCompoundCompleteWhenValidInTestdata(t *testing.T) {
 	}
 }
 
+// The forbidden leaf alone decides the diagnostic: the same compound without it
+// validates clean.
 func TestCompoundCompleteWhenForbiddenLeafFailsLoad(t *testing.T) {
 	t.Parallel()
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	contractcheck.FailErr(t, "conditions.NewDefaultRegistry failed", err)
-	m := workflowdef.FinalizeManifest(workflowdef.Manifest{
-		ID:      "bad",
-		Version: "1.0.0",
-		PhaseDefs: []workflowdef.PhaseDef{{
-			ID:           "x",
-			CompleteWhen: "human_approval and stage_plan_complete",
-		}},
-	})
-	diags := vocabulary.ValidateBundled(reg, workflowdef.NewRegistry(map[string]workflowdef.Manifest{"bad@1.0.0": m}), nil)
-	if len(diags) == 0 {
-		t.Fatal("expected forbidden leaf in compound to fail load")
+	validate := func(completeWhen string) []api.ComposeValidationError {
+		m := workflowdef.FinalizeManifest(workflowdef.Manifest{
+			ID:        "bad",
+			Version:   "1.0.0",
+			PhaseDefs: []workflowdef.PhaseDef{{ID: "x", CompleteWhen: completeWhen}},
+		})
+		return vocabulary.ValidateBundled(reg, workflowdef.NewRegistry(map[string]workflowdef.Manifest{"bad@1.0.0": m}), nil)
+	}
+	if diags := validate("human_approval"); len(diags) > 0 {
+		t.Fatalf("control compound: %+v", diags)
+	}
+	diags := validate("human_approval and stage_plan_complete")
+	if len(diags) != 1 || diags[0].Code != "forbidden_predicate" || diags[0].Field != "workflow[bad@1.0.0].phases[x].complete_when" {
+		t.Fatalf("diagnostics = %+v want one forbidden_predicate on the complete_when", diags)
 	}
 }
 
+// A host-only condition in a rule when is refused at load; a registered key is not.
 func TestVarSetForbiddenInRuleWhen(t *testing.T) {
 	t.Parallel()
-	if !conditions.IsHostOnlyCondition("var_set:plan.status") {
-		t.Fatal("var_set must be host-only")
+	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
+	contractcheck.FailErr(t, "conditions.NewDefaultRegistry failed", err)
+	validate := func(key string) []api.ComposeValidationError {
+		cfg := &rules.RulesConfig{Rules: []rules.RuleEntry{{ID: "r", When: map[string]any{key: true}}}}
+		return vocabulary.ValidateBundled(reg, nil, []*rules.RulesConfig{cfg})
+	}
+	if diags := validate("human_approval"); len(diags) > 0 {
+		t.Fatalf("control rule: %+v", diags)
+	}
+	diags := validate("var_set:plan.status")
+	forbidden := false
+	for _, d := range diags {
+		if d.Field != "rules[0].r.when" {
+			t.Fatalf("diagnostic on another field: %+v", d)
+		}
+		forbidden = forbidden || d.Code == "forbidden_predicate"
+	}
+	if !forbidden {
+		t.Fatalf("diagnostics = %+v want forbidden_predicate on rules[0].r.when", diags)
 	}
 }

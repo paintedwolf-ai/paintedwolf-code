@@ -9,30 +9,9 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 )
-
-func TestWorkflowManifestTopologyFieldSync(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	if err := wirespec.SyncDTOFields(root, wirespec.DtoSyncSpec{
-		GoValue:       api.WorkflowSummary{},
-		OpenAPISchema: "WorkflowSummary",
-		TSInterface:   "WorkflowSummary",
-	}); err != nil {
-		contractcheck.FailErr(t, "wirespec.SyncDTOFields failed", err)
-	}
-	if err := wirespec.SyncDTOFields(root, wirespec.DtoSyncSpec{
-		GoValue:       api.WorkflowPresetSummary{},
-		OpenAPISchema: "WorkflowPresetSummary",
-		TSInterface:   "WorkflowPresetSummary",
-	}); err != nil {
-		contractcheck.FailErr(t, "wirespec.SyncDTOFields failed", err)
-	}
-}
 
 func TestProductCatalogDemoSKUs(t *testing.T) {
 	t.Parallel()

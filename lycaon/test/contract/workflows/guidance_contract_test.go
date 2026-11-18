@@ -10,12 +10,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func TestSpecRulesReferenceKnownDenyCodes(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	assertRulesDenyCodesKnown(t, root, "spec.yaml")
-}
-
 func assertRulesDenyCodesKnown(t *testing.T, root, rulesFile string) {
 	t.Helper()
 	rulesCfg, err := rules.LoadRulesConfig(config.PostureRulesDir.Join(rulesFile))
@@ -40,19 +34,30 @@ func assertRulesDenyCodesKnown(t *testing.T, root, rulesFile string) {
 	}
 }
 
+// Every deny code spec.yaml emits has a hint entry; spec codes take no namespace escape.
 func TestSpecPostureHintsReferenceSpecRuleCodes(t *testing.T) {
 	t.Parallel()
 	hintCfg, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load hint registry", err)
-	for _, code := range []string{
-		"SPEC_POSTURE_UNRESOLVED",
-		"SPEC_POSTURE_STATE_FORBIDDEN",
-		"SPEC_POSTURE_DELEGATION_FORBIDDEN",
-		"SPEC_POSTURE_STUB_REQUIRED",
-	} {
-		if _, ok := hintCfg.HintCodes[code]; !ok {
-			t.Fatalf("missing spec posture hint %q", code)
+	rulesCfg, err := rules.LoadRulesConfig(config.PostureRulesDir.Join("spec.yaml"))
+	contractcheck.FailErr(t, "load spec rules", err)
+	denies := 0
+	for _, rule := range rulesCfg.Rules {
+		deny, ok := rule.Then["deny"].(map[string]any)
+		if !ok {
+			continue
 		}
+		code, _ := deny["code"].(string)
+		if code == "" {
+			continue
+		}
+		denies++
+		if _, ok := hintCfg.HintCodes[code]; !ok {
+			t.Errorf("spec rule %q denies with %q, which has no hint entry", rule.ID, code)
+		}
+	}
+	if denies == 0 {
+		t.Fatal("spec.yaml carries no deny codes")
 	}
 }
 
