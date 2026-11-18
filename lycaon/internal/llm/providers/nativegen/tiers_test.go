@@ -2,6 +2,7 @@ package nativegen
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -100,5 +101,28 @@ func TestDiscoveryDoesNotProvisionPackagedSeed(t *testing.T) {
 	testutil.FailErr(t, "discover", err)
 	if len(entries) != 0 {
 		t.Fatal("discovery installed seed")
+	}
+}
+
+func TestOfflineSelectionLoadsAndDiscoversChosenTier(t *testing.T) {
+	rt := repairFixture(t)
+	prior := rt.loaded.process
+	signed := modelstore.SignedManifest{Manifest: prior.lease.Manifest, Signature: "fixture"}
+	signed.Manifest.Model = tiers[1].id
+	raw, err := json.Marshal(signed)
+	testutil.FailErr(t, "encode tier", err)
+	testutil.FailErr(t, "stage tier seed", os.WriteFile(filepath.Join(rt.config.SeedDirectory, "manifest.json"), raw, 0600))
+	rt.config.PhysicalBytes = 24 << 30
+	rt.config.DeviceMemory, _ = inference.NewMemoryBudget(12 << 30)
+	request := api.LocalModelSelectionRequest{Model: tiers[1].id, PackagedSeed: true}
+	notified := make(chan struct{})
+	testutil.FailErr(t, "start seed import", rt.StartSelection(request, func() { close(notified) }))
+	<-notified
+	status := api.LocalGenerationStatus{}
+	rt.SelectionStatus(&status)
+	entries, err := rt.DiscoverModels(t.Context())
+	testutil.FailErr(t, "discover selected revision", err)
+	if status.SelectedModel != request.Model || status.SeedModel != request.Model || len(entries) != 1 || entries[0].ID != request.Model || rt.loaded.process == prior {
+		t.Fatalf("tier switch: %+v %+v", status, entries)
 	}
 }

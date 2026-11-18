@@ -39,7 +39,8 @@ func (p *Runtime) SelectionStatus(status *api.LocalGenerationStatus) {
 		status.State = "opted_out"
 		status.RecoveryAction = "none"
 	}
-	status.SeedAvailable = p.seedAvailable()
+	status.SeedModel = p.seedModel()
+	status.SeedAvailable = status.SeedModel != ""
 	p.transfers.Lock()
 	defer p.transfers.Unlock()
 	if job := p.transfers.active; job != nil {
@@ -65,9 +66,12 @@ func (p *Runtime) StartSelection(req api.LocalModelSelectionRequest, settled fun
 		}
 	}
 	pin, available := p.pin(req.Model)
-	if req.BundlePath == ":seed:" {
-		if !p.seedAvailable() {
-			return errors.New("no packaged model is available")
+	if req.PackagedSeed {
+		if req.BundlePath != "" {
+			return errors.New("select one offline bundle source")
+		}
+		if p.seedModel() != req.Model {
+			return errors.New("the packaged seed does not match this tier")
 		}
 		req.BundlePath = p.config.SeedDirectory
 	}

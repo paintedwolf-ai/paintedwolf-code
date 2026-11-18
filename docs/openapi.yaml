@@ -39095,6 +39095,9 @@ components:
           type: integer
         total_bytes:
           type: integer
+        seed_model:
+          type: string
+          description: Tier contained in the packaged offline seed.
         seed_available:
           type: boolean
         available_models:
@@ -39196,6 +39199,9 @@ components:
       properties:
         model:
           type: string
+        packaged_seed:
+          type: boolean
+          description: Use the packaged offline seed for the requested tier.
         bundle_path:
           type: string
     LocalGenerationRepairResult:

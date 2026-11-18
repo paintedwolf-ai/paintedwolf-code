@@ -79,7 +79,7 @@ func (p *Runtime) settleReadiness(err error) {
 		status := p.config.ModelStore.Status(selection.Model, p.config.Backend)
 		if status.State != modelstore.StateReady {
 			result.State, result.Action = "repair_required", "repair"
-			if !p.seedAvailable() {
+			if p.seedModel() != selection.Model {
 				result.Action = "retry"
 			}
 		}

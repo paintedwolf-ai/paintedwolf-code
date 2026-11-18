@@ -15665,6 +15665,8 @@ export interface components {
             target_model?: string;
             downloaded_bytes?: number;
             total_bytes?: number;
+            /** @description Tier contained in the packaged offline seed. */
+            seed_model?: string;
             seed_available?: boolean;
             available_models?: components["schemas"]["LocalModelTier"][];
         };
@@ -15698,6 +15700,8 @@ export interface components {
         };
         LocalModelSelectionRequest: {
             model: string;
+            /** @description Use the packaged offline seed for the requested tier. */
+            packaged_seed?: boolean;
             bundle_path?: string;
         };
         LocalGenerationRepairResult: {

@@ -3,8 +3,6 @@ package nativegen
 import (
 	_ "embed"
 	"encoding/json"
-	"os"
-	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/modelstore"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -78,10 +76,13 @@ func (p *Runtime) ModelTiers() []api.LocalModelTier {
 	return out
 }
 
-func (p *Runtime) seedAvailable() bool {
+func (p *Runtime) seedModel() string {
 	if p.config.SeedDirectory == "" {
-		return false
+		return ""
 	}
-	fi, err := os.Stat(filepath.Join(p.config.SeedDirectory, "manifest.json"))
-	return err == nil && fi.Mode().IsRegular()
+	slot, err := modelstore.BundleSlot(p.lifetime, p.config.SeedDirectory)
+	if err != nil || slot.Device != p.config.Backend || !KnownModel(slot.Model) {
+		return ""
+	}
+	return slot.Model
 }
