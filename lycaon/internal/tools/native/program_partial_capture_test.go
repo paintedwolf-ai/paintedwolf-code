@@ -33,5 +33,5 @@ func partialEffectsCapture(t *testing.T, recorder *invocation.SQLRecorder, datab
 			t.Fatalf("capture fixture leaked resources: %+v", quota.InUse())
 		}
 	})
-	return invocation.ProgramInputCapture{Outputs: outputs, State: quota, Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), ProgramID: program, Scope: captureprojection.Scope{RootSessionID: session, SessionID: session, ProjectID: project}, Screening: captureprojection.StreamOptions{WorkingMemory: quota, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}, MaximumNodes: 1024, MaximumDepth: 64}
+	return invocation.ProgramInputCapture{Outputs: outputs, State: quota, Projector: captureprojection.New(&secretmatch.Matcher{}, nil), ProgramID: program, Scope: captureprojection.Scope{RootSessionID: session, SessionID: session, ProjectID: project}, Screening: captureprojection.StreamOptions{WorkingMemory: quota, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}, MaximumNodes: 1024, MaximumDepth: 64}
 }

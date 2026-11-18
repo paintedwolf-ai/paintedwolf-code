@@ -37,7 +37,7 @@ func TestProgramReviewedInputCaptureScreensOriginalBytesAndRetainsIndependentPro
 	testutil.FailErr(t, "admit real invocation output lifetime", err)
 	testutil.FailErr(t, "reconstruct prior durable outputs", outputs.Restore(t.Context()))
 	const protected = "fixture-protected-value"
-	matcher := secretmatch.NewInertMatcher()
+	matcher := &secretmatch.Matcher{}
 	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{Name: "token", Secret: protected, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true}}
 	})

@@ -166,13 +166,13 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	executor.Boundary.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
 
 	testutil.FailErr(t, "register http_request", Register(registry, Deps{
-		Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen, Secrets: service,
+		Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen, Secrets: service, Jars: service.Jars,
 	}))
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "load tool profiles", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, profiles)
 	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-	background.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	background.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	runner := hostcmd.NewRunner()
 	capturedCommand := &command.CommandTool{Runner: runner, Boundary: boundary, Background: background}
 	verify := &native.VerifyTool{Programs: program.Runtime}

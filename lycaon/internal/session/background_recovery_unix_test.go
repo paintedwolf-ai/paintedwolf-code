@@ -22,7 +22,7 @@ import (
 
 func TestBackgroundRecoveryPreservesSessionOwnershipAndCompletedOutput(t *testing.T) {
 	registry := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-	registry.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	registry.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	t.Cleanup(func() { _ = registry.Lifecycle.Close(t.Context()) })
 	manager := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Limits: settings.DefaultSessionLimits()}, nil)
 	manager.SetBackgroundRegistry(registry)

@@ -18,7 +18,7 @@ func TestLiveVersionNamesBytesARetiredVersionShares(t *testing.T) {
 	live := retired
 	live.Retired, live.Reference = false, reference
 	for _, order := range [][]secretmatch.HarvestedValue{{retired, live}, {live, retired}} {
-		m := secretmatch.NewInertMatcher()
+		m := &secretmatch.Matcher{}
 		m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue { return order })
 		hits := m.ScreenContext(context.Background(), "RELAY="+secret)
 		if len(hits) != 1 {
@@ -36,7 +36,7 @@ func TestRetiredEvidenceNeverBorrowsAReference(t *testing.T) {
 	const retiredSecret = "Pw4-retired-longer-overlap"
 	const liveSecret = "overlap-live-9x"
 	const reference = "{{paintedwolf-secret:5d2a9c7e-1b3f-4e8a-a6c0-9f8e7d6c5b4a}}"
-	m := secretmatch.NewInertMatcher()
+	m := &secretmatch.Matcher{}
 	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{
 			{Name: "old", Secret: retiredSecret, Fingerprint: "old", RuleID: secretmatch.ManagedRuleID,

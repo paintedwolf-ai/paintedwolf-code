@@ -14,7 +14,7 @@ import (
 
 // SaveCookieJar atomically commits accepted cookie operations and their receipt.
 // Only persistence is locked; unchanged values still receive an operation receipt.
-func (s *secretJarService) SaveCookieJar(ctx context.Context, req CookieJarRequest, jar *CookieJar) (*Metadata, error) {
+func (s *Jars) SaveCookieJar(ctx context.Context, req CookieJarRequest, jar *CookieJar) (*Metadata, error) {
 	if jar == nil {
 		return nil, nil
 	}
@@ -26,9 +26,9 @@ func (s *secretJarService) SaveCookieJar(ctx context.Context, req CookieJarReque
 	if changes.Empty() {
 		return nil, nil
 	}
-	defer s.invalidateScreening(ctx, req.ProjectID)
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+	defer s.repository.invalidateScreening(ctx, req.ProjectID)
+	s.repository.mutationMu.Lock()
+	defer s.repository.mutationMu.Unlock()
 
 	// Screen received credentials even if persistence fails.
 	s.rememberJarValues(req.ChatSessionID, "cookie", jar.id, changes.Values())
@@ -56,20 +56,20 @@ func (s *secretJarService) SaveCookieJar(ctx context.Context, req CookieJarReque
 		if err := validateValue(string(encoded)); err != nil {
 			return nil, err
 		}
-		err = s.replaceOnto(ctx, row, current, true, CustodyHost, string(encoded), record)
+		err = s.repository.replaceOnto(ctx, row, current, true, CustodyHost, string(encoded), record)
 	} else {
-		err = s.inTx(ctx, record)
+		err = s.repository.inTx(ctx, record)
 	}
 	if err != nil {
 		return nil, err
 	}
-	s.screeningGeneration.Add(1)
+	s.repository.screeningGeneration.Add(1)
 	jar.id, jar.Reference = row.ID, secretmatch.ReferenceToken(row.ID)
-	meta, err := s.metadataRow(ctx, row)
+	meta, err := s.repository.metadataRow(ctx, row)
 	return &meta, err
 }
 
-func (s *secretJarService) cookieJarSaveTarget(ctx context.Context, req CookieJarRequest, jar *CookieJar) (db.ManagedSecrets, bool, error) {
+func (s *Jars) cookieJarSaveTarget(ctx context.Context, req CookieJarRequest, jar *CookieJar) (db.ManagedSecrets, bool, error) {
 	var row db.ManagedSecrets
 	var found bool
 	var err error
@@ -79,7 +79,7 @@ func (s *secretJarService) cookieJarSaveTarget(ctx context.Context, req CookieJa
 		found = found && row.Scope == ScopeChat
 	} else {
 		// An open jar stays bound to its capability even if renamed or revoked.
-		row, err = s.rowForReference(ctx, secretmatch.ReferenceToken(jar.id))
+		row, err = s.repository.rowForReference(ctx, secretmatch.ReferenceToken(jar.id))
 		found = err == nil
 	}
 	if err == nil && found {
@@ -88,15 +88,15 @@ func (s *secretJarService) cookieJarSaveTarget(ctx context.Context, req CookieJa
 	return row, found, err
 }
 
-func (s *secretJarService) cookieJarCurrent(ctx context.Context, id string) (db.ManagedSecretVersions, []httpcookies.Cookie, error) {
-	current, found, err := s.currentVersion(ctx, id)
+func (s *Jars) cookieJarCurrent(ctx context.Context, id string) (db.ManagedSecretVersions, []httpcookies.Cookie, error) {
+	current, found, err := s.repository.currentVersion(ctx, id)
 	if err != nil {
 		return current, nil, err
 	}
 	if !found {
 		return current, nil, ErrValueMissing
 	}
-	entry, ok := s.values.get(current.ID)
+	entry, ok := s.repository.values.get(current.ID)
 	if !ok {
 		return current, nil, ErrValueMissing
 	}
@@ -107,9 +107,9 @@ func (s *secretJarService) cookieJarCurrent(ctx context.Context, id string) (db.
 	return current, cookies, nil
 }
 
-func (s *secretJarService) createCookieJar(ctx context.Context, req CookieJarRequest, jar *CookieJar, merged *httpcookies.Store) (*Metadata, error) {
+func (s *Jars) createCookieJar(ctx context.Context, req CookieJarRequest, jar *CookieJar, merged *httpcookies.Store) (*Metadata, error) {
 	if len(merged.Snapshot()) == 0 {
-		return nil, s.inTx(ctx, s.cookieJarSaveRecorder(ctx, req, ""))
+		return nil, s.repository.inTx(ctx, s.cookieJarSaveRecorder(ctx, req, ""))
 	}
 	encoded, err := merged.Encode()
 	if err != nil {
@@ -124,20 +124,20 @@ func (s *secretJarService) createCookieJar(ctx context.Context, req CookieJarReq
 	if err := validatePut(put); err != nil {
 		return nil, err
 	}
-	if err := s.createWithFirstVersion(ctx, id, put, s.now().UTC(), s.cookieJarSaveRecorder(ctx, req, id)); err != nil {
+	if err := s.repository.createWithFirstVersion(ctx, id, put, s.repository.now().UTC(), s.cookieJarSaveRecorder(ctx, req, id)); err != nil {
 		return nil, err
 	}
-	s.screeningGeneration.Add(1)
+	s.repository.screeningGeneration.Add(1)
 	jar.id, jar.Reference = id, secretmatch.ReferenceToken(id)
-	row, err := s.queries.GetManagedSecret(ctx, id)
+	row, err := s.repository.queries.GetManagedSecret(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	meta, err := s.metadataRow(ctx, row)
+	meta, err := s.repository.metadataRow(ctx, row)
 	return &meta, err
 }
 
-func (s *secretJarService) cookieJarSaveRecorder(ctx context.Context, req CookieJarRequest, id string) func(*db.Queries) error {
+func (s *Jars) cookieJarSaveRecorder(ctx context.Context, req CookieJarRequest, id string) func(*db.Queries) error {
 	return func(q *db.Queries) error {
 		return q.CreateCookieJarSave(ctx, db.CreateCookieJarSaveParams{
 			ProjectID: req.ProjectID, ChatSessionID: req.ChatSessionID, SessionID: req.SessionID,
@@ -146,8 +146,8 @@ func (s *secretJarService) cookieJarSaveRecorder(ctx context.Context, req Cookie
 	}
 }
 
-func (s *secretJarService) cookieJarSavedOperation(ctx context.Context, req CookieJarRequest, jar *CookieJar) (*Metadata, bool, error) {
-	saved, err := s.queries.GetCookieJarSave(ctx, db.GetCookieJarSaveParams{
+func (s *Jars) cookieJarSavedOperation(ctx context.Context, req CookieJarRequest, jar *CookieJar) (*Metadata, bool, error) {
+	saved, err := s.repository.queries.GetCookieJarSave(ctx, db.GetCookieJarSaveParams{
 		ProjectID: req.ProjectID, SessionID: req.SessionID, OperationID: req.OperationID,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
@@ -163,7 +163,7 @@ func (s *secretJarService) cookieJarSavedOperation(ctx context.Context, req Cook
 	if !saved.SecretID.Valid {
 		return nil, true, nil
 	}
-	row, err := s.rowForReference(ctx, secretmatch.ReferenceToken(saved.SecretID.String))
+	row, err := s.repository.rowForReference(ctx, secretmatch.ReferenceToken(saved.SecretID.String))
 	if err != nil {
 		return nil, true, err
 	}
@@ -171,6 +171,6 @@ func (s *secretJarService) cookieJarSavedOperation(ctx context.Context, req Cook
 		return nil, true, err
 	}
 	jar.id, jar.Reference = row.ID, secretmatch.ReferenceToken(row.ID)
-	meta, err := s.metadataRow(ctx, row)
+	meta, err := s.repository.metadataRow(ctx, row)
 	return &meta, true, err
 }

@@ -109,7 +109,7 @@ func TestHTTPRequestCookieJarPersistsALoginSessionWithoutDisclosingValues(t *tes
 		}
 	}))
 	t.Cleanup(server.Close)
-	deps := Deps{Boundary: testBoundary(), Secrets: secrets}
+	deps := Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars}
 	capability := loopbackCapability(t, server.URL)
 
 	login, err := runRequest(t, deps, map[string]any{

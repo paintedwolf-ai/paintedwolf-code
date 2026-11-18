@@ -12,7 +12,7 @@ import (
 func newTestRegistry(t *testing.T, cfg Config, hooks Hooks) *Registry {
 	t.Helper()
 	reg := NewRegistry(cfg, hooks)
-	reg.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	reg.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

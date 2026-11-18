@@ -37,7 +37,7 @@ func TestTokenJarCaptureJSONAndEcho(t *testing.T) {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	deps := Deps{Boundary: testBoundary(), Secrets: secrets}
+	deps := Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars}
 	root := t.TempDir()
 
 	// Step 1: Capture token from JSON response body
@@ -95,7 +95,7 @@ func TestTokenJarCaptureHeaderAndRedaction(t *testing.T) {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	deps := Deps{Boundary: testBoundary(), Secrets: secrets}
+	deps := Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars}
 	root := t.TempDir()
 
 	res, err := runRequest(t, deps, map[string]any{
@@ -132,7 +132,7 @@ func TestTokenJarRedactsResponsePath(t *testing.T) {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	deps := Deps{Boundary: testBoundary(), Secrets: secrets}
+	deps := Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars}
 	root := t.TempDir()
 
 	res, err := runRequest(t, deps, map[string]any{

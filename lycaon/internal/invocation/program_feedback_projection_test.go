@@ -47,7 +47,7 @@ const feedbackProtected = "fixture-protected-diagnostic"
 
 // diagnosticScreen is the actual bounded capture producer over owner data.
 func diagnosticScreen(f programReceiptFixture) invocation.ProgramInputCapture {
-	matcher := secretmatch.NewInertMatcher()
+	matcher := &secretmatch.Matcher{}
 	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{Name: "token", Secret: feedbackProtected, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true}}
 	})

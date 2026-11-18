@@ -12,7 +12,7 @@ import (
 func TestManagedEvidenceNamesSharedBytes(t *testing.T) {
 	const secret = "Pw4-generated-value-9"
 	const reference = "{{paintedwolf-secret:6f0c7f3e-0d59-4a55-9d64-1b2a3c4d5e6f}}"
-	m := secretmatch.NewInertMatcher()
+	m := &secretmatch.Matcher{}
 	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{
 			{Name: "POSTGRES_PASSWORD", Container: ".env", Secret: secret, Fingerprint: "fp",

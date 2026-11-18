@@ -29,7 +29,7 @@ func (b *Runtime) BuildPresence(authority interface{ SetVaultUnlocks(*presence.U
 	unlocks.SetObserver(presence.UnlockObserver{
 		Ended: func(unlock presence.Unlock, reason presence.EndReason, at time.Time) {
 			if b.Capabilities != nil {
-				b.Capabilities.RecordUnlockEnd(b.ctx, unlock, reason, at)
+				b.Capabilities.Reveals.RecordUnlockEnd(b.ctx, unlock, reason, at)
 			}
 		},
 		Changed: func(chatSessionID string) {

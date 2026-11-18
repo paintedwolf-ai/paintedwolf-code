@@ -12,7 +12,7 @@ import (
 
 func screenManagedEcho(t *testing.T, values []HarvestedValue, input io.Reader, policy StreamPolicy) string {
 	t.Helper()
-	m := NewInertMatcher()
+	m := &Matcher{}
 	m.SetHarvestSource(func(context.Context) []HarvestedValue { return values })
 	var output bytes.Buffer
 	_, err := m.ScreenBytes(t.Context(), input, &output, "", policy, StreamBounds{
@@ -71,7 +71,7 @@ func TestStreamManagedEchoEmbeddedBase64MasksAcrossChunkBoundaries(t *testing.T)
 func TestStreamManagedEchoPolicyLeavesDefaultAndUnknownBytesUnchanged(t *testing.T) {
 	const secret = "orchard-protected-value-7731"
 	value := managedValue(secret, testReference)
-	m := NewInertMatcher()
+	m := &Matcher{}
 	m.SetHarvestSource(func(context.Context) []HarvestedValue { return []HarvestedValue{value} })
 	for _, input := range []string{secret, base64.StdEncoding.EncodeToString([]byte(secret)), base64.StdEncoding.EncodeToString([]byte(secret + "?suffix"))} {
 		out := screenManagedEcho(t, []HarvestedValue{value}, strings.NewReader(input), StreamPolicy{})
@@ -104,7 +104,7 @@ func TestStreamManagedEchoCrossesPublicationWindows(t *testing.T) {
 
 func TestStreamManagedEchoWorkLimitDoesNotPublishUnscreenedBytes(t *testing.T) {
 	const secret = "orchard-protected-value-7731"
-	m := NewInertMatcher()
+	m := &Matcher{}
 	m.SetHarvestSource(func(context.Context) []HarvestedValue {
 		return []HarvestedValue{managedValue(secret, testReference)}
 	})
@@ -119,7 +119,7 @@ func TestStreamManagedEchoWorkLimitDoesNotPublishUnscreenedBytes(t *testing.T) {
 }
 
 func TestStreamManagedEchoWithoutEvidenceDoesNotDecode(t *testing.T) {
-	m := NewInertMatcher()
+	m := &Matcher{}
 	raw := strings.Repeat("QUJD", 1000)
 	var output bytes.Buffer
 	_, err := m.ScreenBytes(t.Context(), strings.NewReader(raw), &output, "", StreamPolicy{ManagedEchoes: true}, StreamBounds{InputBytes: 8192, OutputBytes: 8192, MemoryBytes: 32 << 20, DetectorWork: 1}, nil, nil, nil)
@@ -129,7 +129,7 @@ func TestStreamManagedEchoWithoutEvidenceDoesNotDecode(t *testing.T) {
 }
 
 func TestStreamManagedEchoScanRespectsWorkLimit(t *testing.T) {
-	m := NewInertMatcher()
+	m := &Matcher{}
 	m.SetHarvestSource(func(context.Context) []HarvestedValue {
 		return []HarvestedValue{managedValue("known-protected-value", testReference)}
 	})

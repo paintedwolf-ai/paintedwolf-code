@@ -56,7 +56,7 @@ type CreateSettingsSecretRequest struct {
 }
 
 // Generate mints random key material as a new capability.
-func (s *secretVersionService) Generate(ctx context.Context, req GenerateRequest) (Metadata, error) {
+func (s *Service) Generate(ctx context.Context, req GenerateRequest) (Metadata, error) {
 	req = normalizeGenerate(req)
 	if err := validateGenerate(req); err != nil {
 		return Metadata{}, err
@@ -77,8 +77,8 @@ func (s *secretVersionService) Generate(ctx context.Context, req GenerateRequest
 }
 
 // CreateSettingsSecret stores a project-scoped value entered in settings.
-func (s *secretVersionService) CreateSettingsSecret(ctx context.Context, req CreateSettingsSecretRequest) (Metadata, error) {
-	deadlineStamp, err := parseAgentUseDeadline(req.AgentUseEndsAt, s.now())
+func (s *Service) CreateSettingsSecret(ctx context.Context, req CreateSettingsSecretRequest) (Metadata, error) {
+	deadlineStamp, err := parseAgentUseDeadline(req.AgentUseEndsAt, s.repository.now())
 	if err != nil {
 		return Metadata{}, fmt.Errorf("%w: %w", ErrInvalidPut, err)
 	}
@@ -91,10 +91,10 @@ func (s *secretVersionService) CreateSettingsSecret(ctx context.Context, req Cre
 }
 
 // Put stores a value as a new capability, idempotent per operation id.
-func (s *secretVersionService) Put(ctx context.Context, req PutRequest) (PutResult, error) {
-	defer s.invalidateScreening(ctx, req.ProjectID)
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+func (s *Service) Put(ctx context.Context, req PutRequest) (PutResult, error) {
+	defer s.repository.invalidateScreening(ctx, req.ProjectID)
+	s.repository.mutationMu.Lock()
+	defer s.repository.mutationMu.Unlock()
 
 	req = normalizePut(req)
 	if err := validatePut(req); err != nil {
@@ -104,7 +104,7 @@ func (s *secretVersionService) Put(ctx context.Context, req PutRequest) (PutResu
 	if existing, ok, err := s.existingByOperation(ctx, req); err != nil {
 		return PutResult{}, err
 	} else if ok {
-		meta, metaErr := s.metadataRow(ctx, existing)
+		meta, metaErr := s.repository.metadataRow(ctx, existing)
 		return PutResult{Metadata: meta}, metaErr
 	}
 	if req.Origin == OriginFileMarked && s.Protects(req.ProjectID, req.Value) {
@@ -112,19 +112,19 @@ func (s *secretVersionService) Put(ctx context.Context, req PutRequest) (PutResu
 	}
 
 	id := uuid.NewString()
-	now := s.now().UTC()
-	if err := s.createWithFirstVersion(ctx, id, req, now, nil); err != nil {
+	now := s.repository.now().UTC()
+	if err := s.repository.createWithFirstVersion(ctx, id, req, now, nil); err != nil {
 		return PutResult{}, err
 	}
-	s.screeningGeneration.Add(1)
-	s.rememberValue(req.ChatSessionID, req.Name, id, req.Value)
+	s.repository.screeningGeneration.Add(1)
+	s.repository.rememberValue(req.ChatSessionID, req.Name, id, req.Value)
 	// Return the reference if metadata lookup fails.
 	created := PutResult{Metadata: Metadata{Reference: secretmatch.ReferenceToken(id)}, Created: true}
-	row, err := s.queries.GetManagedSecret(ctx, id)
+	row, err := s.repository.queries.GetManagedSecret(ctx, id)
 	if err != nil {
 		return created, err
 	}
-	meta, err := s.metadataRow(ctx, row)
+	meta, err := s.repository.metadataRow(ctx, row)
 	if err != nil {
 		return created, err
 	}
@@ -133,7 +133,7 @@ func (s *secretVersionService) Put(ctx context.Context, req PutRequest) (PutResu
 }
 
 // createWithFirstVersion records metadata only after storing its value.
-func (s *serviceCore) createWithFirstVersion(ctx context.Context, id string, req PutRequest, now time.Time, record func(*db.Queries) error) error {
+func (s *repository) createWithFirstVersion(ctx context.Context, id string, req PutRequest, now time.Time, record func(*db.Queries) error) error {
 	valueID := uuid.NewString()
 	// Publish protection before the metadata writer can make the value visible.
 	// A failed mint may still have supplied bytes to a diagnostic or tool result.
@@ -181,15 +181,15 @@ func (s *serviceCore) createWithFirstVersion(ctx context.Context, id string, req
 }
 
 // existingByOperation resolves session and project idempotency keys.
-func (s *secretVersionService) existingByOperation(ctx context.Context, req PutRequest) (db.ManagedSecrets, bool, error) {
+func (s *Service) existingByOperation(ctx context.Context, req PutRequest) (db.ManagedSecrets, bool, error) {
 	var row db.ManagedSecrets
 	var err error
 	if req.SessionID == "" {
-		row, err = s.queries.GetSessionlessManagedSecretByOperation(ctx, db.GetSessionlessManagedSecretByOperationParams{
+		row, err = s.repository.queries.GetSessionlessManagedSecretByOperation(ctx, db.GetSessionlessManagedSecretByOperationParams{
 			ProjectID: req.ProjectID, OperationID: req.OperationID,
 		})
 	} else {
-		row, err = s.queries.GetManagedSecretByOperation(ctx, db.GetManagedSecretByOperationParams{
+		row, err = s.repository.queries.GetManagedSecretByOperation(ctx, db.GetManagedSecretByOperationParams{
 			ProjectID: req.ProjectID, CreatedBySessionID: nullable(req.SessionID), OperationID: req.OperationID,
 		})
 	}
@@ -204,7 +204,7 @@ func (s *secretVersionService) existingByOperation(ctx context.Context, req PutR
 }
 
 // inTx commits one metadata mutation. Vault writes are reconciled separately.
-func (s *serviceCore) inTx(ctx context.Context, fn func(*db.Queries) error) error {
+func (s *repository) inTx(ctx context.Context, fn func(*db.Queries) error) error {
 	tx, err := s.handle.BeginTx(ctx, nil)
 	if err != nil {
 		return err
