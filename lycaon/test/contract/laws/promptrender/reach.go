@@ -45,10 +45,20 @@ var phaseKickPrefixes = []string{
 	"coordinator-review-loop-", "coordinator-security-",
 }
 
-// reportUnoffered reports each name text uses that held does not reach.
+// reportUnoffered reports each name text uses that held does not reach, and
+// each argument text attributes to a tool, as `tool(arg=…)` or `tool.arg`,
+// that the tool's schema lacks.
 func reportUnoffered(r *laws.Run, label, text string, held map[string]bool) {
-	for _, name := range toolvocab.UnreachableNames(stock(r).Names, text, held) {
+	s := stock(r)
+	for _, name := range toolvocab.UnreachableNames(s.Names, text, held) {
 		r.Report("%s names %s, which its reader is not offered: %s", label, name, lineNaming(text, name))
+	}
+	schema := func(tool string) (map[string]any, bool) {
+		meta, ok := s.Schemas.ToolMeta(tool)
+		return meta.ArgsSchema, ok
+	}
+	for _, claim := range toolvocab.UnacceptedArgs(s.Names, text, schema) {
+		r.Report("%s gives %s argument `%s`, which its schema lacks: %s", label, claim.Tool, claim.Arg, lineNaming(text, claim.Arg))
 	}
 }
 

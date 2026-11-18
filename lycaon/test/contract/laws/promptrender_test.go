@@ -3,6 +3,7 @@ package laws_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -76,13 +77,18 @@ func TestPromptRenderReachFailsOnASeededTemplate(t *testing.T) {
 	}
 	reworded := "To keep you oriented: " + strings.ReplaceAll(string(stockKick), "\n\n", "\n\nIn addition: ")
 	seeded := string(stockKick) + "\nTo settle this, call `complete_leg`.\n"
+	// No tool schema has wait_ms, so the argument is stale wherever it is
+	// attributed.
+	staleArg := string(stockKick) + "\nAsk again with `ask_user(prompt=…, wait_ms=500)`.\n"
 	for name, tc := range map[string]struct {
 		overlay string
 		want    outcome
+		names   []string
 	}{
-		"stock template": {want: passes},
-		"reworded":       {overlay: reworded, want: passes},
-		"seeded tool":    {overlay: seeded, want: violates},
+		"stock template":  {want: passes},
+		"reworded":        {overlay: reworded, want: passes},
+		"seeded tool":     {overlay: seeded, want: violates, names: []string{"complete_leg"}},
+		"seeded argument": {overlay: staleArg, want: violates, names: []string{"wait_ms", "ask_user"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -90,9 +96,12 @@ func TestPromptRenderReachFailsOnASeededTemplate(t *testing.T) {
 			res := laws.Evaluate(fixture(t, files), kicks)
 			expect(t, res, tc.want, 0)
 			for _, v := range res.Violations {
-				if !strings.Contains(v, "kick "+seededKick+" ") || !strings.Contains(v, "complete_leg") {
-					t.Errorf("violation outside the seeded template and tool: %s", v)
+				if !strings.Contains(v, "kick "+seededKick+" ") || !slices.ContainsFunc(tc.names, func(n string) bool { return strings.Contains(v, n) }) {
+					t.Errorf("violation outside the seeded template and %v: %s", tc.names, v)
 				}
+			}
+			if len(tc.names) > 0 && !slices.ContainsFunc(res.Violations, func(v string) bool { return strings.Contains(v, tc.names[0]) }) {
+				t.Errorf("no violation reports %s", tc.names[0])
 			}
 		})
 	}
