@@ -32,7 +32,7 @@ Wire contract: [`../docs/host-contract.md`](../docs/host-contract.md). `src/api/
 
 ## Testing
 
-Frontend tests via `./task den:test`; `./task den:coverage:changes` runs the same suite with the changed-coverage floor, as a ready pull request does. Styling invariants: `src/styling/styling-invariants.test.ts`. Source laws (import and syntax bans the compiler cannot express) are lint, not tests: add a row with its seeded violation to `eslint/laws/`, or a rule with its cases to `eslint/rules/`; `./task den:lint` runs the canary that proves each one still fails. E2E: `lycaon-den/e2e/` with `e2e/helpers.ts`; prefer `./task den:harness:test` for local iteration.
+Frontend tests via `./task den:test`; `./task den:coverage:changes` runs the same suite with the changed-coverage floor, as a ready pull request does. Styling invariants: `src/styling/styling-invariants.test.ts`. Source invariants (import and syntax bans the compiler cannot express) are lint, not tests: add a row with its seeded violation to `eslint/invariants/`, or a rule with its cases to `eslint/rules/`; `./task den:lint` runs the canary that proves each one still fails. E2E: `lycaon-den/e2e/` with `e2e/helpers.ts`; prefer `./task den:harness:test` for local iteration.
 
 Den verification shares the host queue and worker budget with Go checks. Submit
 one request at a time and wait for its result using the
