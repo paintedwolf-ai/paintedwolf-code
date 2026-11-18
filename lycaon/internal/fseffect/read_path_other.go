@@ -26,3 +26,5 @@ func (*ReadRoot) OpenChildDirectory(*os.File, string) (*os.File, error) { return
 func (*ReadRoot) DescriptorOpens() int64 { return 0 }
 
 func (*ReadRoot) DirectoryIdentityDescriptors() (int64, int64) { return 0, 0 }
+
+func (*ReadRoot) OpenCanonicalFile(string) (*os.File, error) { return nil, ErrUnsupported }

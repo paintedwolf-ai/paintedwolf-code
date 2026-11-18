@@ -103,7 +103,7 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 
 func sourceViewerRequest(r *http.Request) (projectsource.SourceReadRequest, bool, error) {
 	req := projectsource.SourceReadRequest{
-		Path:     strings.TrimSpace(r.URL.Query().Get("path")),
+		Path:     r.URL.Query().Get("path"),
 		RootID:   strings.TrimSpace(r.URL.Query().Get("root_id")),
 		DecodeAs: strings.TrimSpace(r.URL.Query().Get("decode_as")),
 	}
