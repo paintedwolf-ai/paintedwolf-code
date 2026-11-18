@@ -77,7 +77,8 @@ func TestProgramPublicationRespectsCurrentEffectAuthority(t *testing.T) {
 			if !current.Dirty || current.Draft != "agent held\n" {
 				t.Fatalf("held draft=%+v", current)
 			}
-			if c.name == "read only" && (result.Status != 0 || result.Stdout != "saved\n") {
+			// A read serves the held draft without publishing it.
+			if c.name == "read only" && (result.Status != 0 || result.Stdout != "agent held\n") {
 				t.Fatalf("read=%+v", result)
 			}
 			if c.review && (reviewCalls != 1 || result.StopCode != approvaloutcome.CodeApprovalDenied) {

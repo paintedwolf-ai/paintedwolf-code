@@ -107,9 +107,7 @@ type cursorRange struct{ start, end int64 }
 // completionResources stay owned by the process until transfer or discard.
 // Process-held resources move under the process table lock.
 type completionResources struct {
-	indexWatch           indexwatch.Snapshot
-	unsavedDocumentPaths []string
-	releaseNotices       func()
+	indexWatch indexwatch.Snapshot
 }
 
 func (r *completionResources) take() completionResources {
@@ -120,7 +118,4 @@ func (r *completionResources) take() completionResources {
 
 func (r completionResources) release() {
 	r.indexWatch.Release()
-	if r.releaseNotices != nil {
-		r.releaseNotices()
-	}
 }

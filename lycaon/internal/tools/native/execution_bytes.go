@@ -37,8 +37,8 @@ type ExecutionBytes struct {
 	release  func()
 }
 
-// CaptureBytes pins one literal byte input before the utility reads it. The
-// accepted document is encoded in its recorded representation; otherwise the
+// CaptureBytes pins one literal byte input before the utility reads it. Unsaved
+// text the person has open is encoded as a save would write it; otherwise the
 // published file bytes are captured. Inputs above maxBytes refuse with
 // READ_FILE_TOO_LARGE before materialization; nothing is truncated.
 func (e ExecutionRevisions) CaptureBytes(ctx context.Context, tctx tools.ToolContext, path string, maxBytes int64) (ExecutionBytes, error) {
@@ -61,6 +61,9 @@ func (e ExecutionRevisions) captureBytes(ctx context.Context, tctx tools.ToolCon
 	revision := toolcontract.ExecutionRevision{Role: toolcontract.SourceRevision, Mode: toolcontract.PublishedDiskRevision, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel, Representation: toolcontract.OriginalEncodedBytes}
 	if err := tools.ObserveCommandFileRead(ctx, resolved.Root.ID, resolved.ScopeRel); err != nil {
 		return nil, revision, nil, err
+	}
+	if content, document, release, ok, err := e.captureDocument(ctx, tctx, resolved, maxBytes); ok || err != nil {
+		return content, document, release, err
 	}
 	content, release, err := e.readCapturedBytes(ctx, resolved, maxBytes)
 	if err != nil {
@@ -122,6 +125,12 @@ func (e ExecutionRevisions) OpenWalkedStream(ctx context.Context, tctx tools.Too
 		classified = rel
 	}
 	if tctx.Effects.CredentialFiles != nil && protectedpath.IsCredentialFile(classified) {
+		return e.captureStream(ctx, tctx, resolved, maxBytes)
+	}
+	if unsaved, err := sourceview.HoldsUnsavedText(ctx, tctx, resolved); err != nil || unsaved {
+		if err != nil {
+			return ExecutionStream{}, err
+		}
 		return e.captureStream(ctx, tctx, resolved, maxBytes)
 	}
 	if resolved.Compressed {

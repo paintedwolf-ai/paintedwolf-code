@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -57,6 +58,7 @@ func ProbeGrepBatchRecords(
 	defer reads.Close()
 	searches := make([]*grepSearch, len(specs))
 	accumulators := make([]surveyGrepAccumulator, len(specs))
+	drafts := sourceview.DraftsFor(ctx, tctx)
 	for i, spec := range specs {
 		opts, err := parseGrepArgs(map[string]any{
 			"pattern": spec.Pattern, "path": relPath, "max_matches": maxMatches,
@@ -69,7 +71,7 @@ func ProbeGrepBatchRecords(
 			return nil, stats, err
 		}
 		searches[i] = &grepSearch{
-			ctx: ctx, boundary: boundary, tctx: tctx, reads: reads, pattern: opts.pattern, re: re,
+			ctx: ctx, boundary: boundary, tctx: tctx, reads: reads, drafts: drafts, pattern: opts.pattern, re: re,
 			structural: opts.structural, lang: opts.lang, maxMatches: maxMatches,
 			contextLines: 0, require: litprefilter.Extract(opts.pattern, opts.caseInsensitive),
 			resp: &grepResponse{Matches: []grepMatch{}},
@@ -175,7 +177,10 @@ func scanSurveyProbeFile(
 	searches []*grepSearch,
 	stats *SurveyGrepBatchStats,
 ) error {
-	content, binary, bytesTruncated, err := readGrepFile(ctx, reads, abs, info)
+	if len(searches) == 0 {
+		return nil
+	}
+	content, binary, bytesTruncated, err := readGrepInput(ctx, reads, searches[0].drafts, abs, info)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
