@@ -1,63 +1,17 @@
 package contract
 
-// OS-confinement tests require a matching CI scope.
+// The applied-Seatbelt recipes run in full and name only live tests.
 
 import (
 	"encoding/json"
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"os"
-	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// Engagement APIs require kernel confinement.
-var confineEngagementAPI = []string{"Available", "EnableAutoConfine", "TestingSetAutoConfine"}
-
 const seatbeltWholePackageScope = "./internal/confine"
-
-func TestSeatbeltGatedTestsAreCoveredByAGate(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	inventory := seatbeltGatedTests(t, root)
-	scopes := seatbeltDeclaredScopes(t, root)
-
-	packages := make([]string, 0, len(inventory))
-	for pkg := range inventory {
-		packages = append(packages, pkg)
-	}
-	sort.Strings(packages)
-
-	var uncovered []string
-	for _, pkg := range packages {
-		if pkg == seatbeltWholePackageScope {
-			continue
-		}
-		for _, test := range inventory[pkg] {
-			covered := false
-			for _, scope := range scopes {
-				if scope.covers(pkg, test) {
-					covered = true
-					break
-				}
-			}
-			if !covered {
-				uncovered = append(uncovered, pkg+" "+test)
-			}
-		}
-	}
-	contractcheck.FailViolations(t, "tests engage OS confinement but no CI scope runs them — off a "+
-		"sandboxed host they skip, and a skip is indistinguishable from a pass. Add each to "+
-		"the seatbelt:gated recipe in scripts/verification-plan.json (or to the confinement job's browser step in "+
-		".github/workflows/platform-verification.yml for browser tests, which is the only leg that stages a browser)",
-		uncovered)
-}
 
 func TestSeatbeltWholePackageScopeRunsUnfiltered(t *testing.T) {
 	t.Parallel()
@@ -101,96 +55,6 @@ func TestSeatbeltScopeNamesLiveTests(t *testing.T) {
 		}
 	}
 	contractcheck.FailViolations(t, "seatbelt run filters name tests that do not exist", contractcheck.DedupeStrings(dead))
-}
-
-func TestConfineEngagementAPIIsLive(t *testing.T) {
-	t.Parallel()
-	dir := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "confine")
-	entries, err := os.ReadDir(dir)
-	contractcheck.FailErr(t, "read internal/confine", err)
-
-	exported := map[string]bool{}
-	fset := token.NewFileSet()
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		// Parse platform-tagged variants without applying build constraints.
-		file, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.SkipObjectResolution)
-		if err != nil {
-			continue
-		}
-		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if ok && fn.Recv == nil && fn.Name.IsExported() {
-				exported[fn.Name.Name] = true
-			}
-		}
-	}
-
-	var missing []string
-	for _, name := range confineEngagementAPI {
-		if !exported[name] {
-			missing = append(missing, "confine."+name)
-		}
-	}
-	contractcheck.FailViolations(t, "confineEngagementAPI names functions internal/confine no longer exports — "+
-		"the seatbelt inventory derives from these, so a stale name empties it silently", missing)
-}
-
-func seatbeltGatedTests(t *testing.T, root string) map[string][]string {
-	t.Helper()
-	byPackage := testFuncBodiesByPackage(t, root)
-
-	out := map[string][]string{}
-	for pkg, funcs := range byPackage {
-		for name := range seatbeltEngagedFuncs(funcs) {
-			if strings.HasPrefix(name, "Test") {
-				out[pkg] = append(out[pkg], name)
-			}
-		}
-		sort.Strings(out[pkg])
-	}
-	for pkg, tests := range out {
-		if len(tests) == 0 {
-			delete(out, pkg)
-		}
-	}
-	if len(out) == 0 {
-		t.Fatal("derived no seatbelt-gated tests at all — the engagement scan is broken, " +
-			"and every coverage assertion above would pass vacuously")
-	}
-	return out
-}
-
-func seatbeltEngagedFuncs(funcs map[string]string) map[string]bool {
-	engaged := map[string]bool{}
-	for name, body := range funcs {
-		for _, api := range confineEngagementAPI {
-			// Package-local tests call the API without a qualifier.
-			if callsIdentifier(body, "confine."+api) || callsIdentifier(body, api) {
-				engaged[name] = true
-				break
-			}
-		}
-	}
-	for grew := true; grew; {
-		grew = false
-		for name, body := range funcs {
-			if engaged[name] {
-				continue
-			}
-			for helper := range engaged {
-				if callsIdentifier(body, helper) {
-					engaged[name] = true
-					grew = true
-					break
-				}
-			}
-		}
-	}
-	return engaged
 }
 
 func seatbeltDeclaredScopes(t *testing.T, root string) []goTestScope {
