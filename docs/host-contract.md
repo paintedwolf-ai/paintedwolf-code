@@ -357,7 +357,7 @@ Session creation commits the minimum durable identity and ambient workflow neede
 
 ## 11. API conventions
 
-These rules shape every `/v1` route. The mechanically checkable ones are laws with no exemptions: the `spec-sync/convention-*` rules in [`lycaon/test/contract/laws/specsync/conventions.go`](../lycaon/test/contract/laws/specsync/conventions.go), each violation prefixed by its operationId or schema name. Error codes and the envelope are in [§5](#5-error-handling).
+These rules shape every `/v1` route. The mechanically checkable ones are invariants with no exemptions: the `spec-sync/convention-*` rules in [`lycaon/test/contract/invariants/specsync/conventions.go`](../lycaon/test/contract/invariants/specsync/conventions.go), each violation prefixed by its operationId or schema name. Error codes and the envelope are in [§5](#5-error-handling).
 
 ### Addressing
 
