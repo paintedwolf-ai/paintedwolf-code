@@ -1,4 +1,4 @@
-package sweeps
+package auth
 
 import (
 	"io"
