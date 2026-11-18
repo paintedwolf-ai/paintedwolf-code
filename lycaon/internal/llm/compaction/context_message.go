@@ -14,6 +14,7 @@ type ContextMessage struct {
 	Ord          int64
 	ID           string
 	Role         string
+	Kind         api.MessageKind
 	Content      string
 	ContentParts []api.MessageContentPart
 	ToolCalls    []api.ToolCall
@@ -72,6 +73,7 @@ func ContextMessageFromAPI(m api.Message) ContextMessage {
 		Ord:             m.Ord,
 		ID:              m.ID,
 		Role:            string(m.Role),
+		Kind:            m.Kind,
 		Content:         m.Content,
 		ContentParts:    append([]api.MessageContentPart(nil), m.ContentParts...),
 		ToolCalls:       append([]api.ToolCall(nil), m.ToolCalls...),
@@ -135,6 +137,7 @@ func ContextMessageToAPI(m ContextMessage) api.Message {
 		Seq:                   m.Seq,
 		ID:                    m.ID,
 		Role:                  api.MessageRole(m.Role),
+		Kind:                  m.Kind,
 		Content:               m.Content,
 		Origin:                m.Origin,
 		Authority:             m.Authority,

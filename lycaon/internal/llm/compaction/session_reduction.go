@@ -147,6 +147,7 @@ func continuationFor(info SessionInfo, removed []ContextMessage, summary compact
 	if info.PriorContinuation != nil {
 		record.ThroughOrd = info.PriorContinuation.ThroughOrd
 		record.RemovedRows = info.PriorContinuation.RemovedRows
+		record.RecordedRows = info.PriorContinuation.RecordedRows
 		record.SummaryThroughOrd = info.PriorContinuation.SummaryThroughOrd
 	}
 	for _, row := range removed {
@@ -161,6 +162,9 @@ func continuationFor(info SessionInfo, removed []ContextMessage, summary compact
 		record.Reason = "references_only"
 	}
 	for _, source := range sources {
+		if hasRecordedDetail(source) && (info.PriorContinuation == nil || source.Ord > info.PriorContinuation.ThroughOrd) {
+			record.RecordedRows++
+		}
 		if source.Disposition != "reference" && source.Ord > record.SummaryThroughOrd {
 			record.SummaryThroughOrd = source.Ord
 		}

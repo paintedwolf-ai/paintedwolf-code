@@ -118,6 +118,7 @@ func continuationSegments(rows []ContextMessage, tokens int) ([]messageview.Cont
 	var sources []messageview.ContinuationSource
 	var segments []ContextMessage
 	var sourceErr error
+	commands := recordedCommandText(rows)
 	width := max(1, tokens*tokenest.DefaultDivisor)
 	for _, row := range rows {
 		if row.CompactionCheckpoint || isContinuationSummary(row) {
@@ -129,9 +130,16 @@ func continuationSegments(rows []ContextMessage, tokens int) ([]messageview.Cont
 		if tool == "" && len(row.ToolCalls) == 1 {
 			tool = row.ToolCalls[0].Name
 		}
-		sources = append(sources, messageview.ContinuationSource{MessageID: row.ID, Ord: row.Ord,
+		source := messageview.ContinuationSource{MessageID: row.ID, Ord: row.Ord,
 			Tool: tool, Handles: append([]string(nil), row.EvidenceHandles...),
-			Disposition: "reference", Tokens: tokenest.EstimateDefault(content), Execution: row.Execution})
+			Disposition: "reference", Tokens: tokenest.EstimateDefault(content), Execution: row.Execution}
+		if row.ToolName == "command" {
+			source.Command = commands[row.ToolCallID]
+		}
+		if row.Kind == api.MessageKindCompletionReport && row.Role == string(api.MessageRoleAssistant) {
+			source.Conclusion = continuationExcerpt(row.Content)
+		}
+		sources = append(sources, source)
 		runes := []rune(content)
 		for start := 0; start < len(runes); start += width {
 			segment := row

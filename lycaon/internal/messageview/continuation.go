@@ -15,6 +15,7 @@ type Continuation struct {
 	Format            int                  `json:"format"`
 	SummaryThroughOrd int64                `json:"summary_through_ord"`
 	ThroughOrd        int64                `json:"through_ord"`
+	RecordedRows      int                  `json:"recorded_rows,omitempty"`
 	RemovedRows       int                  `json:"removed_rows"`
 	Summary           ContinuationSummary  `json:"summary"`
 	Sources           []ContinuationSource `json:"sources"`
@@ -36,6 +37,8 @@ type ContinuationSummary struct {
 type ContinuationSource struct {
 	MessageID   string                 `json:"message_id"`
 	Ord         int64                  `json:"ord"`
+	Command     string                 `json:"command,omitempty"`
+	Conclusion  string                 `json:"conclusion,omitempty"`
 	Tool        string                 `json:"tool,omitempty"`
 	Handles     []string               `json:"handles,omitempty"`
 	Disposition string                 `json:"disposition"`
